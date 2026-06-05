@@ -1,16 +1,15 @@
 import { createStep } from '@mastra/core/workflows';
 
+import { createToolsAgent } from '../agents';
 import { routeTools } from '../handlers';
 import { configSchema, type Config, type StepFactoryArgs, type WorkflowInput } from '../types';
 
 /**
- * Route the selected tool entries into `tools` / `agents` / `workflows` by their
- * type in the available list. Takes the builder `model` for future LLM-backed
- * tool selection.
+ * Select and route the agent's tools/agents/workflows. Instantiates the scoped
+ * tools agent from the builder `model` and injects it into the handler (DI).
  */
-export const createSetToolsStep = ({ model }: StepFactoryArgs) => {
-  void model;
-  return createStep({
+export const createSetToolsStep = ({ model }: StepFactoryArgs) =>
+  createStep({
     id: 'set-agent-tools',
     description: 'Set the agent tools/agents/workflows',
     inputSchema: configSchema,
@@ -21,8 +20,8 @@ export const createSetToolsStep = ({ model }: StepFactoryArgs) => {
       if (!init.tools) {
         return config;
       }
-      const routed = routeTools(init.tools, init.availableAgentTools ?? []);
+      const agent = createToolsAgent({ model });
+      const routed = await routeTools(agent, init.tools, init.availableAgentTools ?? []);
       return { ...config, tools: routed.tools, agents: routed.agents, workflows: routed.workflows };
     },
   });
-};

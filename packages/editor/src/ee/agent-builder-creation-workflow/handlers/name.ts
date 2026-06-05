@@ -1,23 +1,25 @@
+import type { Agent } from '@mastra/core/agent';
+import { z } from 'zod-v4';
+
+const nameSchema = z.object({
+  name: z.string().min(1).describe('A short, memorable, Title Case agent name (2-4 words)'),
+});
+
 /**
- * Resolve the agent name. Uses an explicit name when provided, otherwise derives
- * a Title Case name from the description. Infra-agnostic — no workflow ctx.
+ * Resolve the agent name. Uses an explicit name when provided (no LLM call),
+ * otherwise asks the injected agent to name the agent from the description.
+ *
+ * Infra-agnostic: receives a ready-to-use `Agent` (dependency-injected by the
+ * step) and explicit domain args, never a workflow `ctx`.
  */
-export function resolveName(description: string, explicitName?: string): string {
+export async function resolveName(agent: Agent, description: string, explicitName?: string): Promise<string> {
   const trimmed = explicitName?.trim();
   if (trimmed) {
     return trimmed;
   }
 
-  const words = description
-    .trim()
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 4);
-
-  if (words.length === 0) {
-    return 'New Agent';
-  }
-
-  return words.map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+  const result = await agent.generate(`Name an agent described as:\n\n${description}`, {
+    structuredOutput: { schema: nameSchema },
+  });
+  return result.object.name.trim();
 }

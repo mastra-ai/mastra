@@ -1,16 +1,16 @@
 import { createStep } from '@mastra/core/workflows';
 
+import { createBrowserAgent } from '../agents';
 import { resolveBrowserEnabled } from '../handlers';
 import { configSchema, outputSchema, type Config, type StepFactoryArgs, type WorkflowInput } from '../types';
 
 /**
  * Terminal step: resolve `browserEnabled` and finalize the fully-resolved agent
- * configuration (`outputSchema`). Takes the builder `model` for signature
- * consistency with the other step factories.
+ * configuration (`outputSchema`). Instantiates the scoped browser agent from the
+ * builder `model` and injects it into the handler (DI).
  */
-export const createSetBrowserEnabledStep = ({ model }: StepFactoryArgs) => {
-  void model;
-  return createStep({
+export const createSetBrowserEnabledStep = ({ model }: StepFactoryArgs) =>
+  createStep({
     id: 'set-agent-browser-enabled',
     description: 'Set whether the agent has browser access',
     inputSchema: configSchema,
@@ -18,6 +18,7 @@ export const createSetBrowserEnabledStep = ({ model }: StepFactoryArgs) => {
     execute: async ({ inputData, getInitData }) => {
       const init = getInitData<WorkflowInput>();
       const config = inputData as Config;
+      const agent = createBrowserAgent({ model });
       return {
         name: config.name ?? '',
         description: config.description ?? '',
@@ -28,8 +29,7 @@ export const createSetBrowserEnabledStep = ({ model }: StepFactoryArgs) => {
         workflows: config.workflows,
         skills: config.skills,
         model: config.model,
-        browserEnabled: resolveBrowserEnabled(init.browserEnabled),
+        browserEnabled: await resolveBrowserEnabled(agent, config.description ?? init.description, init.browserEnabled),
       };
     },
   });
-};

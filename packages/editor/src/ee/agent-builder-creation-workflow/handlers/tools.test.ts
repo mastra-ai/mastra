@@ -1,4 +1,6 @@
-import { describe, it, expect } from 'vitest';
+import type { Agent } from '@mastra/core/agent';
+import { describe, it, expect, vi } from 'vitest';
+
 import { routeTools } from './tools';
 import type { AvailableAgentTool } from './types';
 
@@ -8,9 +10,16 @@ const available: AvailableAgentTool[] = [
   { id: 'workflow_c', name: 'Workflow C', type: 'workflow' },
 ];
 
+function makeAgent(ids: string[]) {
+  const generate = vi.fn().mockResolvedValue({ object: { ids } });
+  return { agent: { generate } as unknown as Agent, generate };
+}
+
 describe('routeTools', () => {
-  it('routes each entry into the bucket matching its available type', () => {
-    const result = routeTools(
+  it('routes each agent-selected entry into the bucket matching its type', async () => {
+    const { agent } = makeAgent(['tool_a', 'agent_b', 'workflow_c']);
+    const result = await routeTools(
+      agent,
       [
         { id: 'tool_a', name: 'Tool A' },
         { id: 'agent_b', name: 'Agent B' },
@@ -25,17 +34,36 @@ describe('routeTools', () => {
     });
   });
 
-  it('returns empty buckets when there are no entries', () => {
-    expect(routeTools([], available)).toEqual({ tools: {}, agents: {}, workflows: {} });
+  it('only routes the subset the agent selects', async () => {
+    const { agent } = makeAgent(['tool_a']);
+    const result = await routeTools(
+      agent,
+      [
+        { id: 'tool_a', name: 'Tool A' },
+        { id: 'agent_b', name: 'Agent B' },
+      ],
+      available,
+    );
+    expect(result).toEqual({ tools: { tool_a: true }, agents: {}, workflows: {} });
   });
 
-  it('skips entries whose id is not in the available list', () => {
-    const result = routeTools([{ id: 'unknown', name: 'Unknown' }], available);
+  it('returns empty buckets and skips the agent when there are no entries', async () => {
+    const { agent, generate } = makeAgent([]);
+    await expect(routeTools(agent, [], available)).resolves.toEqual({ tools: {}, agents: {}, workflows: {} });
+    expect(generate).not.toHaveBeenCalled();
+  });
+
+  it('drops entries not present in the available list before asking the agent', async () => {
+    const { agent, generate } = makeAgent(['unknown']);
+    const result = await routeTools(agent, [{ id: 'unknown', name: 'Unknown' }], available);
     expect(result).toEqual({ tools: {}, agents: {}, workflows: {} });
+    expect(generate).not.toHaveBeenCalled();
   });
 
-  it('skips entries with a missing or empty id', () => {
-    const result = routeTools(
+  it('skips entries with a missing or empty id', async () => {
+    const { agent } = makeAgent(['tool_a']);
+    const result = await routeTools(
+      agent,
       [
         { id: '', name: 'Empty' },
         { id: 'tool_a', name: 'Tool A' },
@@ -45,30 +73,16 @@ describe('routeTools', () => {
     expect(result).toEqual({ tools: { tool_a: true }, agents: {}, workflows: {} });
   });
 
-  it('routes multiple entries of the same type', () => {
-    const result = routeTools(
-      [
-        { id: 'tool_a', name: 'Tool A' },
-        { id: 'tool_d', name: 'Tool D' },
-      ],
-      [...available, { id: 'tool_d', name: 'Tool D', type: 'tool' }],
-    );
-    expect(result.tools).toEqual({ tool_a: true, tool_d: true });
-  });
-
-  it('returns empty buckets when nothing is available to classify against', () => {
-    const result = routeTools([{ id: 'tool_a', name: 'Tool A' }], []);
+  it('returns empty buckets when nothing is available to classify against', async () => {
+    const { agent, generate } = makeAgent(['tool_a']);
+    const result = await routeTools(agent, [{ id: 'tool_a', name: 'Tool A' }], []);
     expect(result).toEqual({ tools: {}, agents: {}, workflows: {} });
+    expect(generate).not.toHaveBeenCalled();
   });
 
-  it('de-duplicates repeated ids into a single true entry', () => {
-    const result = routeTools(
-      [
-        { id: 'tool_a', name: 'Tool A' },
-        { id: 'tool_a', name: 'Tool A again' },
-      ],
-      available,
-    );
-    expect(result.tools).toEqual({ tool_a: true });
+  it('ignores agent-selected ids that were not candidates', async () => {
+    const { agent } = makeAgent(['tool_a', 'agent_b']);
+    const result = await routeTools(agent, [{ id: 'tool_a', name: 'Tool A' }], available);
+    expect(result).toEqual({ tools: { tool_a: true }, agents: {}, workflows: {} });
   });
 });

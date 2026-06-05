@@ -1,16 +1,16 @@
 import { createStep } from '@mastra/core/workflows';
 
+import { createInstructionsAgent } from '../agents';
 import { resolveInstructions } from '../handlers';
 import { configSchema, type Config, type StepFactoryArgs, type WorkflowInput } from '../types';
 
 /**
- * Resolve the agent `instructions` (system prompt) from the explicit value or a
- * default generated from the name and description. Takes the builder `model` for
- * future LLM-backed prompt synthesis.
+ * Resolve the agent `instructions` (system prompt). Instantiates the scoped
+ * instructions agent from the builder `model` and injects it into the handler
+ * (DI).
  */
-export const createSetInstructionsStep = ({ model }: StepFactoryArgs) => {
-  void model;
-  return createStep({
+export const createSetInstructionsStep = ({ model }: StepFactoryArgs) =>
+  createStep({
     id: 'set-agent-instructions',
     description: 'Set the agent instructions',
     inputSchema: configSchema,
@@ -18,10 +18,10 @@ export const createSetInstructionsStep = ({ model }: StepFactoryArgs) => {
     execute: async ({ inputData, getInitData }) => {
       const init = getInitData<WorkflowInput>();
       const config = inputData as Config;
+      const agent = createInstructionsAgent({ model });
       return {
         ...config,
-        instructions: resolveInstructions(config.name ?? '', config.description ?? '', init.instructions),
+        instructions: await resolveInstructions(agent, config.name ?? '', config.description ?? '', init.instructions),
       };
     },
   });
-};

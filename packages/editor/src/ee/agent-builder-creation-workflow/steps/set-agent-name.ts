@@ -1,15 +1,15 @@
 import { createStep } from '@mastra/core/workflows';
 
+import { createNameAgent } from '../agents';
 import { resolveName } from '../handlers';
 import { configSchema, type Config, type StepFactoryArgs, type WorkflowInput } from '../types';
 
 /**
- * Resolve the agent `name` from the explicit name or the original description.
- * Takes the builder `model` for future LLM-backed naming.
+ * Resolve the agent `name`. Instantiates the scoped name agent from the builder
+ * `model` and injects it into the handler (DI).
  */
-export const createSetNameStep = ({ model }: StepFactoryArgs) => {
-  void model;
-  return createStep({
+export const createSetNameStep = ({ model }: StepFactoryArgs) =>
+  createStep({
     id: 'set-agent-name',
     description: 'Set the agent name',
     inputSchema: configSchema,
@@ -17,7 +17,7 @@ export const createSetNameStep = ({ model }: StepFactoryArgs) => {
     execute: async ({ inputData, getInitData }) => {
       const init = getInitData<WorkflowInput>();
       const config = inputData as Config;
-      return { ...config, name: resolveName(init.description, init.name) };
+      const agent = createNameAgent({ model });
+      return { ...config, name: await resolveName(agent, init.description, init.name) };
     },
   });
-};

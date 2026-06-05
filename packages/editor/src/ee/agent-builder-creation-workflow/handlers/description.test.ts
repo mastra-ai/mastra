@@ -1,24 +1,28 @@
-import { describe, it, expect } from 'vitest';
+import type { Agent } from '@mastra/core/agent';
+import { describe, it, expect, vi } from 'vitest';
+
 import { resolveDescription } from './description';
 
+function makeAgent(object: { description: string }) {
+  const generate = vi.fn().mockResolvedValue({ object });
+  return { agent: { generate } as unknown as Agent, generate };
+}
+
 describe('resolveDescription', () => {
-  it('returns the description unchanged when already trimmed', () => {
-    expect(resolveDescription('a helpful agent')).toBe('a helpful agent');
+  it('returns the agent-produced description', async () => {
+    const { agent, generate } = makeAgent({ description: 'Helps triage support tickets.' });
+    await expect(resolveDescription(agent, 'a support triage agent')).resolves.toBe('Helps triage support tickets.');
+    expect(generate).toHaveBeenCalledTimes(1);
   });
 
-  it('trims surrounding whitespace', () => {
-    expect(resolveDescription('  padded description  ')).toBe('padded description');
+  it('trims the agent-produced description', async () => {
+    const { agent } = makeAgent({ description: '  Padded sentence.  ' });
+    await expect(resolveDescription(agent, 'an agent')).resolves.toBe('Padded sentence.');
   });
 
-  it('trims newlines and tabs', () => {
-    expect(resolveDescription('\n\tdescription\t\n')).toBe('description');
-  });
-
-  it('preserves interior whitespace', () => {
-    expect(resolveDescription('  many   inner   spaces  ')).toBe('many   inner   spaces');
-  });
-
-  it('returns an empty string for whitespace-only input', () => {
-    expect(resolveDescription('   ')).toBe('');
+  it('passes a structured-output schema to the agent', async () => {
+    const { agent, generate } = makeAgent({ description: 'x' });
+    await resolveDescription(agent, 'an agent');
+    expect(generate.mock.calls[0]?.[1]).toMatchObject({ structuredOutput: { schema: expect.anything() } });
   });
 });

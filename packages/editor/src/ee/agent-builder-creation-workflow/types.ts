@@ -39,6 +39,10 @@ export const inputSchema = z.object({
     .describe('Available tools/agents/workflows used to classify the selected tool entries by type'),
   skills: z.array(idNameEntrySchema).optional().describe('Stored skills to attach, each as { id, name }'),
   model: modelSchema.optional().describe('Model to use, as { provider, name }'),
+  availableModels: z
+    .array(modelSchema)
+    .optional()
+    .describe('Available models the agent can choose from when no explicit model is supplied'),
   browserEnabled: z.boolean().optional().describe('Whether to enable browser access for the agent'),
 });
 
