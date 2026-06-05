@@ -202,7 +202,7 @@ type GithubPRSignal = {
 
 type GithubSignalAgent = {
   sendSignal(signal: AgentSignalInput, target: unknown): { accepted: unknown };
-  sendNotificationSignal?(notification: unknown, target: unknown): { accepted?: unknown } | Promise<unknown>;
+  sendNotificationSignal?(notification: unknown | unknown[], target: unknown): { accepted?: unknown } | Promise<unknown>;
 };
 
 type GithubNotificationStreamOptions = Record<string, unknown>;
@@ -455,6 +455,10 @@ const githubActivityNotificationPriority: Record<GithubActivityNotificationPlan[
   medium: 1,
 };
 
+function getGithubActivityNotificationRank(notification: GithubActivityNotificationPlan): number {
+  return notification.kind === 'pull-request-activity' ? 0 : 1;
+}
+
 function compareGithubActivityNotifications(
   a: GithubActivityNotificationPlan | undefined,
   b: GithubActivityNotificationPlan | undefined,
@@ -462,7 +466,9 @@ function compareGithubActivityNotifications(
   if (!a && !b) return 0;
   if (!a) return 1;
   if (!b) return -1;
-  return githubActivityNotificationPriority[a.priority] - githubActivityNotificationPriority[b.priority];
+  const priorityComparison = githubActivityNotificationPriority[a.priority] - githubActivityNotificationPriority[b.priority];
+  if (priorityComparison !== 0) return priorityComparison;
+  return getGithubActivityNotificationRank(a) - getGithubActivityNotificationRank(b);
 }
 
 function classifyGithubCommentActivityNotification(input: {
@@ -1462,16 +1468,14 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     }
   }
 
-  async #sendGithubNotification(input: {
-    agent?: GithubSignalAgent;
+  #createGithubNotificationInput(input: {
     subscription: GithubPRSubscription;
     snapshot: GithubPullRequestSnapshot;
     notification: { kind: string; priority: 'medium' | 'high'; summary: string };
-    target: { resourceId: string; threadId: string };
     dedupeSuffix: string;
     previousGithubUpdatedAt?: string;
     previousContentHash?: string;
-  }): Promise<void> {
+  }) {
     const failingChecks = getFailingChecks(input.snapshot);
     const pendingChecks = getPendingChecks(input.snapshot);
     const latestCommentExcerpt = input.snapshot.latestCommentBody
@@ -1543,6 +1547,20 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         },
       },
     };
+    return notificationInput;
+  }
+
+  async #sendGithubNotification(input: {
+    agent?: GithubSignalAgent;
+    subscription: GithubPRSubscription;
+    snapshot: GithubPullRequestSnapshot;
+    notification: GithubActivityNotificationPlan;
+    target: { resourceId: string; threadId: string };
+    dedupeSuffix: string;
+    previousGithubUpdatedAt?: string;
+    previousContentHash?: string;
+  }): Promise<void> {
+    const notificationInput = this.#createGithubNotificationInput(input);
     const streamOptions = await this.#agentOptions.getNotificationStreamOptions?.(input.target);
     await input.agent?.sendNotificationSignal?.(
       notificationInput,
@@ -1658,6 +1676,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     }
 
     const sent: GithubActivityNotificationPlan[] = [];
+    const notificationInputs = [];
     for (const notification of notifications.sort(compareGithubActivityNotifications)) {
       if (!notification) continue;
       if (AUTHOR_GATED_NOTIFICATION_KINDS.has(notification.kind)) {
@@ -1668,17 +1687,22 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         );
         if (!authorized) continue;
       }
-      await this.#sendGithubNotification({
-        agent,
-        subscription: input.subscription,
-        snapshot: input.snapshot,
-        notification,
-        target: { resourceId: input.polling.resourceId, threadId: input.polling.threadId },
-        dedupeSuffix: input.snapshot.contentHash ?? input.snapshot.githubUpdatedAt ?? String(Date.now()),
-        previousGithubUpdatedAt: input.previousGithubUpdatedAt,
-        previousContentHash: input.previousContentHash,
-      });
+      notificationInputs.push(
+        this.#createGithubNotificationInput({
+          subscription: input.subscription,
+          snapshot: input.snapshot,
+          notification,
+          dedupeSuffix: input.snapshot.contentHash ?? input.snapshot.githubUpdatedAt ?? String(Date.now()),
+          previousGithubUpdatedAt: input.previousGithubUpdatedAt,
+          previousContentHash: input.previousContentHash,
+        }),
+      );
       sent.push(notification);
+    }
+    if (notificationInputs.length > 0) {
+      const target = { resourceId: input.polling.resourceId, threadId: input.polling.threadId };
+      const streamOptions = await this.#agentOptions.getNotificationStreamOptions?.(target);
+      await agent.sendNotificationSignal(notificationInputs, streamOptions ? { ...target, ifIdle: { streamOptions } } : target);
     }
     return sent;
   }

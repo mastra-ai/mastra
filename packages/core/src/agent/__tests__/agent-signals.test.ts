@@ -1171,6 +1171,34 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('delivers batched idle notifications using one initial thread-state decision', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'notification-batch-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'notification-batch-agent',
+      name: 'Notification Batch Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('notification batch response'),
+    });
+    new Mastra({ agents: { notificationBatchAgent: agent }, storage, logger: false });
+
+    const results = await agent.sendNotificationSignal(
+      [
+        { source: 'github', kind: 'pull-request-ci-failure', priority: 'high', summary: 'CI failed' },
+        { source: 'github', kind: 'pull-request-activity', priority: 'high', summary: 'Devin commented' },
+      ],
+      { resourceId: 'notification-batch-user', threadId: 'notification-batch-thread' },
+    );
+
+    expect(results).toHaveLength(2);
+    expect(results[0]).toMatchObject({ accepted: true, decision: { action: 'deliver', reason: 'idle-high' } });
+    expect(results[0]?.signal).toMatchObject({ type: 'notification', tagName: 'notification' });
+    expect(results[0]?.record).toMatchObject({ status: 'delivered', deliveredSignalId: results[0]?.signal?.id });
+    expect(results[1]).toMatchObject({ accepted: true, decision: { action: 'deliver', reason: 'idle-high' } });
+    expect(results[1]?.signal).toMatchObject({ type: 'notification', tagName: 'notification' });
+    expect(results[1]?.record).toMatchObject({ status: 'delivered', deliveredSignalId: results[1]?.signal?.id });
+  });
+
   it('wakes idle threads for immediate medium-priority notification summaries', async () => {
     let streamCount = 0;
     const notifications = new InMemoryNotificationsStorage();

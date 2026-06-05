@@ -932,11 +932,13 @@ describe('GithubSignals', () => {
       expect.objectContaining({ owner: 'mastra-ai', repo: 'mastra', number: 123 }),
     );
     expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: 'github',
-        kind: 'pull-request-activity',
-        summary: 'mastra-ai/mastra#123 has new activity: Add GitHub signals',
-      }),
+      [
+        expect.objectContaining({
+          source: 'github',
+          kind: 'pull-request-activity',
+          summary: 'mastra-ai/mastra#123 has new activity: Add GitHub signals',
+        }),
+      ],
       expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
     );
     const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
@@ -1027,19 +1029,21 @@ describe('GithubSignals', () => {
     expect(subscription.lastNotificationAt).toEqual(expect.any(String));
     expect(subscription.lastSyncError).toBeUndefined();
     expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: 'github',
-        kind: 'pull-request-activity',
-        priority: 'medium',
-        summary: 'mastra-ai/mastra#123 has new activity: Add GitHub signals',
-        attributes: expect.objectContaining({
-          owner: 'mastra-ai',
-          repo: 'mastra',
-          number: 123,
-          previousGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
-          githubUpdatedAt: '2026-01-01T00:05:00.000Z',
+      [
+        expect.objectContaining({
+          source: 'github',
+          kind: 'pull-request-activity',
+          priority: 'medium',
+          summary: 'mastra-ai/mastra#123 has new activity: Add GitHub signals',
+          attributes: expect.objectContaining({
+            owner: 'mastra-ai',
+            repo: 'mastra',
+            number: 123,
+            previousGithubUpdatedAt: '2026-01-01T00:00:00.000Z',
+            githubUpdatedAt: '2026-01-01T00:05:00.000Z',
+          }),
         }),
-      }),
+      ],
       expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
     );
     expect(syncClient.syncPullRequest).toHaveBeenNthCalledWith(
@@ -1195,14 +1199,16 @@ describe('GithubSignals', () => {
     await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
 
     expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'pull-request-activity',
-        priority: 'high',
-        summary:
-          'devin-ai-integration[bot] commented on mastra-ai/mastra#17590: Acknowledged! Fourth test comment received. Rendered GitHub comment notifications with author and excerpt are working.',
-        dedupeKey:
-          'github:mastra-ai/mastra#17590:comment:https://github.com/mastra-ai/mastra/pull/17590#issuecomment-4635660157:2026-06-05T21:28:12.000Z',
-      }),
+      [
+        expect.objectContaining({
+          kind: 'pull-request-activity',
+          priority: 'high',
+          summary:
+            'devin-ai-integration[bot] commented on mastra-ai/mastra#17590: Acknowledged! Fourth test comment received. Rendered GitHub comment notifications with author and excerpt are working.',
+          dedupeKey:
+            'github:mastra-ai/mastra#17590:comment:https://github.com/mastra-ai/mastra/pull/17590#issuecomment-4635660157:2026-06-05T21:28:12.000Z',
+        }),
+      ],
       expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
     );
     const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
@@ -1262,14 +1268,15 @@ describe('GithubSignals', () => {
             contentHash: 'new-content-hash',
             threadContentHash: 'new-thread-hash',
             headSha: 'same-head-sha',
-            ciState: 'pending',
+            ciState: 'failure',
             mergeableState: 'blocked',
             unresolvedReviewThreads: 0,
             reviewStateHash: 'reviews-0',
             checks: [
               {
-                name: 'Analyze (javascript-typescript)',
-                status: 'in_progress',
+                name: 'Lint',
+                status: 'completed',
+                conclusion: 'failure',
                 updatedAt: '2026-06-05T22:13:47.000Z',
               },
             ],
@@ -1288,32 +1295,29 @@ describe('GithubSignals', () => {
 
     await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
 
-    expect(sendNotificationSignal).toHaveBeenCalledTimes(2);
-    expect(sendNotificationSignal).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        kind: 'pull-request-activity',
-        priority: 'high',
-        summary:
-          'devin-ai-integration[bot] commented on mastra-ai/mastra#17590: Nice follow-up! Thanks for the summary — those are solid improvements.',
-        dedupeKey:
-          'github:mastra-ai/mastra#17590:comment:https://github.com/mastra-ai/mastra/pull/17590#issuecomment-4635974623:2026-06-05T22:11:28.000Z',
-      }),
-      expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
-    );
-    expect(sendNotificationSignal).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        kind: 'pull-request-ci-pending',
-        summary: 'mastra-ai/mastra#17590 has CI still running: Analyze (javascript-typescript)',
-      }),
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      [
+        expect.objectContaining({
+          kind: 'pull-request-activity',
+          priority: 'high',
+          summary:
+            'devin-ai-integration[bot] commented on mastra-ai/mastra#17590: Nice follow-up! Thanks for the summary — those are solid improvements.',
+          dedupeKey:
+            'github:mastra-ai/mastra#17590:comment:https://github.com/mastra-ai/mastra/pull/17590#issuecomment-4635974623:2026-06-05T22:11:28.000Z',
+        }),
+        expect.objectContaining({
+          kind: 'pull-request-ci-failure',
+          summary: 'mastra-ai/mastra#17590 has failing CI: Lint',
+        }),
+      ],
       expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
     );
     const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
     const [subscription] = (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
     expect(subscription).toMatchObject({
       lastObservedGithubUpdatedAt: '2026-06-05T22:13:47.000Z',
-      lastObservedCiState: 'pending',
+      lastObservedCiState: 'failure',
       lastNotificationKind: 'pull-request-activity',
       lastNotificationPriority: 'high',
       lastNotificationSummary:
@@ -1473,31 +1477,33 @@ describe('GithubSignals', () => {
     expect(syncClient.syncPullRequest).toHaveBeenNthCalledWith(1, expect.objectContaining({ includeComments: true }));
     expect(syncClient.syncPullRequest).toHaveBeenNthCalledWith(2, expect.objectContaining({ includeComments: true }));
     expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: 'github',
-        kind: 'pull-request-activity',
-        priority: 'high',
-        summary:
-          'devin-ai-integration[bot] commented on mastra-ai/mastra#123: Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
-        attributes: expect.objectContaining({
-          latestCommentAuthor: 'devin-ai-integration[bot]',
-          latestCommentExcerpt:
-            'Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
-          latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/123#issuecomment-1',
-          latestCommentUpdatedAt: '2026-01-01T00:05:00.000Z',
-        }),
-        metadata: expect.objectContaining({
-          github: expect.objectContaining({
+      [
+        expect.objectContaining({
+          source: 'github',
+          kind: 'pull-request-activity',
+          priority: 'high',
+          summary:
+            'devin-ai-integration[bot] commented on mastra-ai/mastra#123: Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
+          attributes: expect.objectContaining({
             latestCommentAuthor: 'devin-ai-integration[bot]',
-            latestCommentBody:
-              'Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
             latestCommentExcerpt:
               'Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
             latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/123#issuecomment-1',
             latestCommentUpdatedAt: '2026-01-01T00:05:00.000Z',
           }),
+          metadata: expect.objectContaining({
+            github: expect.objectContaining({
+              latestCommentAuthor: 'devin-ai-integration[bot]',
+              latestCommentBody:
+                'Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
+              latestCommentExcerpt:
+                'Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
+              latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/123#issuecomment-1',
+              latestCommentUpdatedAt: '2026-01-01T00:05:00.000Z',
+            }),
+          }),
         }),
-      }),
+      ],
       expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
     );
     const savedThread = vi.mocked(threadStore.saveThread).mock.calls.at(-1)![0].thread;
@@ -1560,11 +1566,13 @@ describe('GithubSignals', () => {
     await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
 
     expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: 'github',
-        kind: 'pull-request-activity',
-        coalesceKey: 'github:mastra-ai/mastra#123:pull-request-activity',
-      }),
+      [
+        expect.objectContaining({
+          source: 'github',
+          kind: 'pull-request-activity',
+          coalesceKey: 'github:mastra-ai/mastra#123:pull-request-activity',
+        }),
+      ],
       expect.objectContaining({
         resourceId: thread.resourceId,
         threadId: thread.id,
@@ -1698,19 +1706,21 @@ describe('GithubSignals', () => {
     const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
     expect((savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions).toEqual([]);
     expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: 'github',
-        kind: 'pull-request-merged',
-        priority: 'high',
-        summary:
-          'mastra-ai/mastra#123: Fix duplicate reasoning IDs was merged. This thread has been automatically unsubscribed from this PR. Resubscribe if you still need updates.',
-        attributes: expect.objectContaining({
-          state: 'merged',
+      [
+        expect.objectContaining({
+          source: 'github',
+          kind: 'pull-request-merged',
+          priority: 'high',
+          summary:
+            'mastra-ai/mastra#123: Fix duplicate reasoning IDs was merged. This thread has been automatically unsubscribed from this PR. Resubscribe if you still need updates.',
+          attributes: expect.objectContaining({
+            state: 'merged',
+          }),
+          metadata: expect.objectContaining({
+            github: expect.objectContaining({ mergedAt: '2026-06-02T18:42:32Z' }),
+          }),
         }),
-        metadata: expect.objectContaining({
-          github: expect.objectContaining({ mergedAt: '2026-06-02T18:42:32Z' }),
-        }),
-      }),
+      ],
       expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
     );
   });
@@ -1820,7 +1830,7 @@ describe('GithubSignals', () => {
       lastNotificationKind: 'pull-request-closed',
     });
     expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'pull-request-closed' }),
+      [expect.objectContaining({ kind: 'pull-request-closed' })],
       expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
     );
   });
@@ -1885,16 +1895,18 @@ describe('GithubSignals', () => {
     });
     expect(subscription.lastNotificationAt).toEqual(expect.any(String));
     expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        source: 'github',
-        kind: 'pull-request-ci-failure',
-        priority: 'high',
-        summary: 'mastra-ai/mastra#123 has failing CI: Quality assurance',
-        attributes: expect.objectContaining({
-          ciState: 'failure',
-          failingChecks: 'Quality assurance',
+      [
+        expect.objectContaining({
+          source: 'github',
+          kind: 'pull-request-ci-failure',
+          priority: 'high',
+          summary: 'mastra-ai/mastra#123 has failing CI: Quality assurance',
+          attributes: expect.objectContaining({
+            ciState: 'failure',
+            failingChecks: 'Quality assurance',
+          }),
         }),
-      }),
+      ],
       expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
     );
   });
@@ -1960,7 +1972,7 @@ describe('GithubSignals', () => {
       ciState: 'success',
     });
     expect(ciRecovered).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'pull-request-ci-recovered', priority: 'medium' }),
+      [expect.objectContaining({ kind: 'pull-request-ci-recovered', priority: 'medium' })],
       expect.anything(),
     );
     const conflictBeatsRecovery = await runPoll(
@@ -1974,7 +1986,7 @@ describe('GithubSignals', () => {
       },
     );
     expect(conflictBeatsRecovery).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'pull-request-conflict', priority: 'high' }),
+      [expect.objectContaining({ kind: 'pull-request-conflict', priority: 'high' })],
       expect.anything(),
     );
     const dirtySuppressesCiPending = await runPoll(
@@ -2002,7 +2014,7 @@ describe('GithubSignals', () => {
       latestCommentAuthor: 'reviewer',
     });
     expect(reviewActivity).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'pull-request-review-activity', priority: 'medium' }),
+      [expect.objectContaining({ kind: 'pull-request-review-activity', priority: 'medium' })],
       expect.anything(),
     );
     const conflictsResolved = await runPoll(createThreadWithCursor({ lastObservedMergeableState: 'dirty' }), {
@@ -2013,7 +2025,7 @@ describe('GithubSignals', () => {
       mergeableState: 'clean',
     });
     expect(conflictsResolved).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'pull-request-conflict-resolved', priority: 'medium' }),
+      [expect.objectContaining({ kind: 'pull-request-conflict-resolved', priority: 'medium' })],
       expect.anything(),
     );
     const merged = await runPoll(createThreadWithCursor({ lastObservedState: 'open' }), {
@@ -2023,7 +2035,7 @@ describe('GithubSignals', () => {
       ciState: 'success',
     });
     expect(merged).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'pull-request-merged', priority: 'high' }),
+      [expect.objectContaining({ kind: 'pull-request-merged', priority: 'high' })],
       expect.anything(),
     );
     const botNoise = await runPoll(createThreadWithCursor({ lastObservedContentHash: 'old-hash' }), {
@@ -2146,7 +2158,7 @@ describe('GithubSignals', () => {
     } as any);
     await processor.pollThreadNow({ threadId: baseThread.id, resourceId: baseThread.resourceId });
     expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'pull-request-activity' }),
+      [expect.objectContaining({ kind: 'pull-request-activity' })],
       expect.anything(),
     );
   });
@@ -2205,7 +2217,7 @@ describe('GithubSignals', () => {
     } as any);
     await allowedProcessor.pollThreadNow({ threadId: baseThread.id, resourceId: baseThread.resourceId });
     expect(allowedNotify).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'pull-request-activity' }),
+      [expect.objectContaining({ kind: 'pull-request-activity' })],
       expect.anything(),
     );
 
@@ -2325,22 +2337,24 @@ describe('GithubSignals', () => {
     } as any);
     await processor.pollThreadNow({ threadId: baseThread.id, resourceId: baseThread.resourceId });
     expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: 'pull-request-ci-failure',
-        priority: 'high',
-        attributes: expect.not.objectContaining({
-          latestCommentAuthor: expect.any(String),
-          latestCommentExcerpt: expect.any(String),
-          latestCommentUrl: expect.any(String),
-        }),
-        metadata: expect.objectContaining({
-          github: expect.not.objectContaining({
+      [
+        expect.objectContaining({
+          kind: 'pull-request-ci-failure',
+          priority: 'high',
+          attributes: expect.not.objectContaining({
             latestCommentAuthor: expect.any(String),
-            latestCommentBody: expect.any(String),
+            latestCommentExcerpt: expect.any(String),
             latestCommentUrl: expect.any(String),
           }),
+          metadata: expect.objectContaining({
+            github: expect.not.objectContaining({
+              latestCommentAuthor: expect.any(String),
+              latestCommentBody: expect.any(String),
+              latestCommentUrl: expect.any(String),
+            }),
+          }),
         }),
-      }),
+      ],
       expect.anything(),
     );
   });
