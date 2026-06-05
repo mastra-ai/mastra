@@ -27,7 +27,7 @@
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "test:client": "vitest run ./src/client/client.test.ts ./src/client/configuration.test.ts",
-    "test:server": "vitest run ./src/server/server.test.ts",
+    "test:server": "vitest run ./src/server",
     "test:integration": "cd integration-tests && pnpm test:mcp",
     "test": "pnpm test:server && pnpm test:client && pnpm test:integration",
     "lint": "eslint ."
