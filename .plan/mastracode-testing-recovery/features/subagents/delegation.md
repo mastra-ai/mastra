@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13227](https://github.com/mastra-ai/mastra/pull/13227) — extracted built-in Explore, Plan, and Execute subagents plus dynamic workspace support.
-- Later changes: [#13331](https://github.com/mastra-ai/mastra/pull/13331) added an intended `audit-tests` subagent; [#13339](https://github.com/mastra-ai/mastra/pull/13339) added parallel-only subagent guidance and an audit-tests exception; [#13556](https://github.com/mastra-ai/mastra/pull/13556) made completed subagent output quiet-mode-sensitive; [#13700](https://github.com/mastra-ai/mastra/pull/13700) forwarded request context and skill/sandbox paths so subagents inherit the parent's filesystem access; [#13940](https://github.com/mastra-ai/mastra/pull/13940) moved subagents onto the parent Agent workspace instead of MC-local duplicate tool definitions; [#14804](https://github.com/mastra-ai/mastra/pull/14804) fixes `/subagents` so the picker reflects configured `createMastraCode({ subagents })` definitions and falls back to built-ins only when config is absent/empty.
+- Later changes: [#13331](https://github.com/mastra-ai/mastra/pull/13331) added an intended `audit-tests` subagent; [#13339](https://github.com/mastra-ai/mastra/pull/13339) added parallel-only subagent guidance and an audit-tests exception; [#13556](https://github.com/mastra-ai/mastra/pull/13556) made completed subagent output quiet-mode-sensitive; [#13700](https://github.com/mastra-ai/mastra/pull/13700) forwarded request context and skill/sandbox paths so subagents inherit the parent's filesystem access; [#13940](https://github.com/mastra-ai/mastra/pull/13940) moved subagents onto the parent Agent workspace instead of MC-local duplicate tool definitions; [#14804](https://github.com/mastra-ai/mastra/pull/14804) fixes `/subagents` so the picker reflects configured `createMastraCode({ subagents })` definitions and falls back to built-ins only when config is absent/empty; [#15088](https://github.com/mastra-ai/mastra/pull/15088) preserves configured subagent choices and seeds global subagent model defaults from both `default` and `_default` settings keys.
 
 ## User-visible behavior
 
 - What the user can do: delegate focused work to built-in or configured subagents and choose per-subagent model defaults from `/subagents`.
-- Success looks like: read-only subagents cannot edit; execute can make focused changes; parent chat shows subagent progress/results; configured subagents appear in the `/subagents` picker when supplied; subagents use the same Workspace instance and approved filesystem paths as the parent.
-- Must preserve: subagent model selection for configured and built-in types, workspace inheritance, tool boundaries, parallel-only usage guidance, audit-tests exception, request-context inheritance without parent thread/resource leakage, and loaded-history render of subagent activity.
+- Success looks like: read-only subagents cannot edit; execute can make focused changes; parent chat shows subagent progress/results; configured subagents appear in the `/subagents` picker when supplied; global default subagent model settings seed runtime state; subagents use the same Workspace instance and approved filesystem paths as the parent.
+- Must preserve: subagent model selection for configured and built-in types, `default`/`_default` global model default handling, workspace inheritance, tool boundaries, parallel-only usage guidance, audit-tests exception, request-context inheritance without parent thread/resource leakage, and loaded-history render of subagent activity.
 
 ## Entry points / commands
 
@@ -42,7 +42,7 @@
 | --- | --- | --- |
 | Subagent definitions | Harness config from `createMastraCode()`; `/subagents` maps configured `{ id, name, description }` definitions and falls back to built-ins only for missing/empty config | `subagent` tool, `/subagents` |
 | Read/write boundaries | Subagent `allowedWorkspaceTools` / instructions | Runtime tool availability |
-| Subagent model override | Harness state + settings | `/subagents`, runtime context |
+| Subagent model override | Harness state + settings; startup seeds `subagentModelId` from global `default` or `_default` keys and `subagentModelId_<id>` from configured IDs | `/subagents`, runtime context |
 | Request context | copied parent `RequestContext`; thread/resource stripped for non-forked runs, retargeted for forked runs | subagent `Agent.stream()` tools |
 | Filesystem access | parent `Workspace` plus skill paths + sandbox-approved paths from harness state | subagent workspace/file tools |
 | Rendered progress | Harness events/history + `TUIState.quietMode` | TUI subagent component |
@@ -57,6 +57,7 @@
 - `mastracode/src/agents/workspace.ts` — per-request workspace, skill paths, sandbox paths, and plan-mode write-tool disablement.
 - `mastracode/src/tools/utils.ts` — `getAllowedPathsFromContext()` merges computed skill paths with sandbox-approved paths.
 - `mastracode/src/tui/commands/subagents.ts` — `/subagents` model selection and configured-vs-built-in subagent type list.
+- `mastracode/src/index.ts` — startup seeding of global and per-subagent model defaults into Harness initial state.
 - `mastracode/src/tui/components/subagent-execution.ts` — TUI render component.
 - `mastracode/src/agents/prompts/base.ts` — top-level subagent usage rule.
 - `mastracode/src/agents/prompts/tool-guidance.ts` — tool-specific subagent guidance.

@@ -1634,3 +1634,26 @@ Focused evidence read: PR metadata/diff for #15082; current `mastracode/src/tui/
 Verification:
 
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/prune-chat.test.ts --bail=1 --reporter=dot` — 1 file / 2 tests passed.
+
+### PR #15036 / #15088 / #15083 / #15114 feature-map checkpoint
+
+Verified rows 186-189:
+
+- #15036 adds browser automation support for Mastra Code. Current source persists `BrowserSettings` in global settings, restores enabled browser instances at startup with `createBrowserFromSettings()`, passes Harness-level browser instances into mode agents, and exposes `/browser` status/on/off/set/clear/export plus an interactive setup wizard for Stagehand and Agent Browser providers.
+- #15088 fixes review follow-ups: `/subagents` keeps configured subagent choices visible, startup seeds global subagent model defaults from `default` and `_default` settings keys, and chat pruning uses count-based `splice(0, removeCount)` to reliably keep the newest 100 rendered children.
+- #15083 and #15114 are Changesets alpha package-version batches; skipped for feature mapping.
+
+Documentation actions:
+
+- Added `features/integrations/browser-automation.md` for #15036 browser settings, `/browser` command behavior, Harness/Agent browser ownership, tests, and risks.
+- Updated `features/settings/onboarding-and-global-settings.md`, `features/tui/help-and-shortcuts.md`, and `features/integrations/harness-api.md` for browser settings/help/Harness propagation.
+- Updated `features/subagents/delegation.md` and `features/tui/interactive-chat.md` for #15088 subagent default and prune follow-ups.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #15036 done, #15088 done, #15083 skipped, #15114 skipped, #15151 current.
+
+Focused evidence read: PR metadata/diffs for #15036/#15088/#15083/#15114; current `mastracode/src/tui/commands/browser.ts`, `mastracode/src/onboarding/settings.ts`, `mastracode/src/main.ts`, `mastracode/src/index.ts`, `mastracode/src/tui/commands/subagents.ts`, `mastracode/src/tui/prune-chat.ts`, `packages/core/src/harness/harness.ts`, `packages/core/src/agent/__tests__/browser.test.ts`, and `packages/core/src/browser/browser.test.ts`.
+
+Verification:
+
+- `pnpm --filter ./packages/core exec vitest run src/agent/__tests__/browser.test.ts src/browser/browser.test.ts --bail=1 --reporter=dot` — 2 files / 18 tests passed / no type errors.
+- `pnpm --filter ./mastracode exec vitest run src/tui/commands/__tests__/subagents.test.ts src/tui/__tests__/prune-chat.test.ts src/tui/components/__tests__/help-overlay.test.ts src/tui/__tests__/command-dispatch.test.ts --bail=1 --reporter=dot` — 4 files / 31 tests passed.

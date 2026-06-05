@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13353](https://github.com/mastra-ai/mastra/pull/13353) — changed public `Harness` methods to object-parameter calls and added the first Harness class reference page.
-- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — added `HarnessDisplayState`, `getDisplayState()`, `display_state_changed`, and `subscribeDisplayState()` for UI-agnostic rendering; [#13457](https://github.com/mastra-ai/mastra/pull/13457) — added/corrected workspace lifecycle methods and dynamic workspace caching; [#13519](https://github.com/mastra-ai/mastra/pull/13519) — initialized an internal Mastra instance from Harness storage so standalone-agent tool approvals can resume; [#13525](https://github.com/mastra-ai/mastra/pull/13525) — moved Mastra Code docs to the Code docs site and marked Harness reference docs as Alpha; [#13716](https://github.com/mastra-ai/mastra/pull/13716) — exposes Mastra Code `resolveModel` from `createMastraCode()` for external UI consumers; [#14433](https://github.com/mastra-ai/mastra/pull/14433) — forwards Harness thread/resource identity into model request headers during core LLM execution.
+- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — added `HarnessDisplayState`, `getDisplayState()`, `display_state_changed`, and `subscribeDisplayState()` for UI-agnostic rendering; [#13457](https://github.com/mastra-ai/mastra/pull/13457) — added/corrected workspace lifecycle methods and dynamic workspace caching; [#13519](https://github.com/mastra-ai/mastra/pull/13519) — initialized an internal Mastra instance from Harness storage so standalone-agent tool approvals can resume; [#13525](https://github.com/mastra-ai/mastra/pull/13525) — moved Mastra Code docs to the Code docs site and marked Harness reference docs as Alpha; [#13716](https://github.com/mastra-ai/mastra/pull/13716) — exposes Mastra Code `resolveModel` from `createMastraCode()` for external UI consumers; [#14433](https://github.com/mastra-ai/mastra/pull/14433) — forwards Harness thread/resource identity into model request headers during core LLM execution; [#15036](https://github.com/mastra-ai/mastra/pull/15036) — adds Harness-level browser storage and propagation to mode agents.
 
 ## User-visible behavior
 
@@ -45,13 +45,14 @@
 | Public API docs | `docs/src/content/en/reference/harness/harness-class.mdx` | External Harness consumers |
 | Display projection | `HarnessDisplayState` | TUI and external UI consumers |
 | Workspace instance/cache | Core Harness workspace fields/factory | Slash commands, agents, workspace tools, external consumers |
+| Browser instance/factory | Core Harness browser fields/factory + `setBrowser()` propagation | Mode agents, browser automation tools/context, external consumers |
 | Internal Mastra/storage registration | Core Harness `init()` / `getMastra()` | Standalone agents, approval/suspend resume, workflow snapshots |
 | Model request identity headers | Core LLM execution `_internal.threadId` / `_internal.resourceId` merged with model/modelSettings headers | Memory Gateway, provider requests, server-side memory enrichment |
 | Harness docs location | Docs reference sidebar + Code docs redirects | External Harness consumers and Mastra Code docs readers |
 
 ## Key files
 
-- `packages/core/src/harness/harness.ts` — current object-param public method implementation, display state, workspace cache methods, and internal Mastra registration for storage-backed standalone agents.
+- `packages/core/src/harness/harness.ts` — current object-param public method implementation, display state, workspace/browser cache methods, browser propagation to mode agents, and internal Mastra registration for storage-backed standalone agents.
 - `packages/core/src/harness/types.ts` — request context, display state, workspace config, and Harness types exposed to built-in tools/consumers.
 - `packages/core/src/harness/display-state-scheduler.ts` — coalesced display-state subscriber snapshots.
 - `packages/core/src/harness/tools.ts` — built-in tool callers using object-param Harness methods.
@@ -68,6 +69,7 @@
 ## Dependencies / related features
 
 - [Harness display state](./harness-display-state.md) — UI-agnostic display-state API added after the object-param refactor.
+- [Browser automation](./browser-automation.md) — Harness-level browser instances are propagated to agents.
 - [Skills command and workspace resolution](./skills-command.md) — `/skills` relies on dynamic workspace resolution and caching.
 - [Interactive TUI chat](../tui/interactive-chat.md) — live event projection depends on Harness methods.
 - [Persistent conversations](../threads/persistent-conversations.md) — thread APIs are part of this surface.
@@ -83,6 +85,7 @@
 - `packages/core/src/workflows/default.test.ts` — verifies `serializeRequestContext()` skips functions, circular objects, and RPC-like proxies before persistence.
 - `packages/core/src/harness/v1/mode.test.ts` — verifies current `listModes()` behavior in the v1 Harness surface.
 - `packages/core/src/loop/workflows/agentic-execution/llm-execution-step.test.ts` — verifies model header merge order and automatic `x-thread-id`/`x-resource-id` request headers.
+- `packages/core/src/agent/__tests__/browser.test.ts` — verifies browser propagation into Agent execution context and thread-aware browser sessions.
 - `mastracode/src/tui/__tests__/*`, `mastracode/src/tui/handlers/__tests__/*`, and command tests indirectly compile/run the migrated TUI call sites.
 - `mastracode/src/headless.test.ts` indirectly covers migrated non-TUI call sites.
 

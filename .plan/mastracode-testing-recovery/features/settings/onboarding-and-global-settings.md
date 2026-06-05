@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13421](https://github.com/mastra-ai/mastra/pull/13421) — interactive first-run `/setup` flow, persisted global settings, built-in/custom model packs, OM packs, and YOLO preference.
-- Later changes: [#13431](https://github.com/mastra-ai/mastra/pull/13431) — temporarily changed Codex defaults; current source now uses OpenAI `gpt-5.5` defaults; [#13435](https://github.com/mastra-ai/mastra/pull/13435) — added persisted storage backend settings for LibSQL/PostgreSQL; [#13487](https://github.com/mastra-ai/mastra/pull/13487) — added persisted theme preference; [#13494](https://github.com/mastra-ai/mastra/pull/13494) — fixed the supported-providers documentation URL in onboarding; [#13500](https://github.com/mastra-ai/mastra/pull/13500) — allows onboarding to proceed with API-key-only provider access instead of requiring OAuth/built-in packs; [#13505](https://github.com/mastra-ai/mastra/pull/13505) / [#13508](https://github.com/mastra-ai/mastra/pull/13508) — added and then strengthened an Anthropic OAuth warning, but current source has removed that flow via later #14605; [#13512](https://github.com/mastra-ai/mastra/pull/13512) — made `/models` the single pack flow and hardened custom pack settings updates; [#13566](https://github.com/mastra-ai/mastra/pull/13566) — expands provider access detection to all registry provider API-key env vars; [#13682](https://github.com/mastra-ai/mastra/pull/13682) — persists custom OpenAI-compatible providers in settings; [#13603](https://github.com/mastra-ai/mastra/pull/13603) — persists dismissed auto-update prompt versions in settings; [#13748](https://github.com/mastra-ai/mastra/pull/13748) — persists thinking-level changes from `/think`, `/settings`, and model-pack auto-bumps; [#13611](https://github.com/mastra-ai/mastra/pull/13611) — initializes shared provider auth storage and loads stored API keys into env before model/auth access checks; [#13953](https://github.com/mastra-ai/mastra/pull/13953) — persists/restores the OM observe-attachments preference (`auto`/on/off) through settings and thread metadata; [#13573](https://github.com/mastra-ai/mastra/pull/13573) — stores provider API keys collected by model-selection prompts and reloads them into env on startup without overriding real env vars; [#14604](https://github.com/mastra-ai/mastra/pull/14604) — updates built-in OpenAI mode/OM pack defaults; [#14605](https://github.com/mastra-ai/mastra/pull/14605) — removes the Claude Max OAuth warning acknowledgement field and modal flow from onboarding/login settings; [#14788](https://github.com/mastra-ai/mastra/pull/14788) — persists OM observation/reflection threshold defaults in global settings so new threads inherit the last `/om` history-size values; [#14952](https://github.com/mastra-ai/mastra/pull/14952) — persists the Memory Gateway base URL in global settings and stores its API key through AuthStorage/env; [#14936](https://github.com/mastra-ai/mastra/pull/14936) — masks sensitive settings/login/API-key input fields in TUI dialogs.
+- Later changes: [#13431](https://github.com/mastra-ai/mastra/pull/13431) — temporarily changed Codex defaults; current source now uses OpenAI `gpt-5.5` defaults; [#13435](https://github.com/mastra-ai/mastra/pull/13435) — added persisted storage backend settings for LibSQL/PostgreSQL; [#13487](https://github.com/mastra-ai/mastra/pull/13487) — added persisted theme preference; [#13494](https://github.com/mastra-ai/mastra/pull/13494) — fixed the supported-providers documentation URL in onboarding; [#13500](https://github.com/mastra-ai/mastra/pull/13500) — allows onboarding to proceed with API-key-only provider access instead of requiring OAuth/built-in packs; [#13505](https://github.com/mastra-ai/mastra/pull/13505) / [#13508](https://github.com/mastra-ai/mastra/pull/13508) — added and then strengthened an Anthropic OAuth warning, but current source has removed that flow via later #14605; [#13512](https://github.com/mastra-ai/mastra/pull/13512) — made `/models` the single pack flow and hardened custom pack settings updates; [#13566](https://github.com/mastra-ai/mastra/pull/13566) — expands provider access detection to all registry provider API-key env vars; [#13682](https://github.com/mastra-ai/mastra/pull/13682) — persists custom OpenAI-compatible providers in settings; [#13603](https://github.com/mastra-ai/mastra/pull/13603) — persists dismissed auto-update prompt versions in settings; [#13748](https://github.com/mastra-ai/mastra/pull/13748) — persists thinking-level changes from `/think`, `/settings`, and model-pack auto-bumps; [#13611](https://github.com/mastra-ai/mastra/pull/13611) — initializes shared provider auth storage and loads stored API keys into env before model/auth access checks; [#13953](https://github.com/mastra-ai/mastra/pull/13953) — persists/restores the OM observe-attachments preference (`auto`/on/off) through settings and thread metadata; [#13573](https://github.com/mastra-ai/mastra/pull/13573) — stores provider API keys collected by model-selection prompts and reloads them into env on startup without overriding real env vars; [#14604](https://github.com/mastra-ai/mastra/pull/14604) — updates built-in OpenAI mode/OM pack defaults; [#14605](https://github.com/mastra-ai/mastra/pull/14605) — removes the Claude Max OAuth warning acknowledgement field and modal flow from onboarding/login settings; [#14788](https://github.com/mastra-ai/mastra/pull/14788) — persists OM observation/reflection threshold defaults in global settings so new threads inherit the last `/om` history-size values; [#14952](https://github.com/mastra-ai/mastra/pull/14952) — persists the Memory Gateway base URL in global settings and stores its API key through AuthStorage/env; [#14936](https://github.com/mastra-ai/mastra/pull/14936) — masks sensitive settings/login/API-key input fields in TUI dialogs; [#15036](https://github.com/mastra-ai/mastra/pull/15036) — persists browser automation provider/profile/runtime settings and restores enabled browsers at startup.
 
 ## User-visible behavior
 
-- What the user can do: complete first-run setup or re-run `/setup`; use OAuth or configured API keys; choose mode model pack, OM pack, YOLO default, and Memory Gateway base URL/API key.
-- Success looks like: selected pack updates current run, thread metadata, global settings, subagent defaults, OM models/threshold defaults, Memory Gateway settings, and status line; API-key-only providers, including stored keys and non-hardcoded registry providers, do not get blocked at the auth step; OpenAI defaults resolve to the current pack IDs.
-- Must preserve: skipped/completed onboarding state, active model/OM pack IDs, custom packs, provider access detection, stored-key env precedence, YOLO preference, OM observe-attachments and threshold settings, masked sensitive settings prompts, removed Claude Max warning state, and settings migrations.
+- What the user can do: complete first-run setup or re-run `/setup`; use OAuth or configured API keys; choose mode model pack, OM pack, YOLO default, browser automation settings, and Memory Gateway base URL/API key.
+- Success looks like: selected pack updates current run, thread metadata, global settings, subagent defaults, browser defaults, OM models/threshold defaults, Memory Gateway settings, and status line; API-key-only providers, including stored keys and non-hardcoded registry providers, do not get blocked at the auth step; OpenAI defaults resolve to the current pack IDs.
+- Must preserve: skipped/completed onboarding state, active model/OM pack IDs, custom packs, provider access detection, stored-key env precedence, YOLO preference, browser settings, OM observe-attachments and threshold settings, masked sensitive settings prompts, removed Claude Max warning state, and settings migrations.
 
 ## Entry points / commands
 
@@ -49,6 +49,7 @@
 | OM pack/model/attachment observation/threshold defaults | Harness state + global settings OM fields + thread metadata | OM memory factory, `/om`, setup wizard, observer attachment filter, startup initial state |
 | YOLO/quiet/thinking preferences | Harness state + global settings preferences + quiet rollout flag | Permission prompts, tool/task/subagent rendering, `/settings`, `/think` |
 | Storage backend | Global settings + env overrides; connection-string prompt uses `MaskedInput` | Storage factory, memory/history persistence |
+| Browser automation settings | Global settings `browser` block parsed by `parseBrowserSettings()` | `/browser`, startup `createBrowserFromSettings()`, Harness browser state |
 | Memory Gateway settings | Global settings `memoryGateway.baseUrl` + AuthStorage `apikey:mastra-gateway` / `MASTRA_GATEWAY_API_KEY` and `MASTRA_GATEWAY_URL` env | `/memory-gateway`, model resolver, server gateway-memory proxy |
 | Theme preference | Global settings + `MASTRA_THEME` env override | Startup detection, `/theme`, TUI colors |
 | Dismissed update version | `settings.json` `updateDismissedVersion` | Startup auto-update prompt and manual update command |
@@ -63,7 +64,8 @@
 - `mastracode/src/tui/prompt-api-key.ts`, `components/api-key-dialog.ts`, `components/masked-input.ts` — model-selection API-key prompt and masked key entry.
 - `mastracode/src/tui/commands/memory-gateway.ts` — Memory Gateway API-key/base-URL settings flow.
 - `mastracode/src/tui/components/settings.ts` — storage backend settings, including masked connection-string input.
-- `mastracode/src/index.ts` — startup resolution of settings into Harness modes, registry provider API-key access, stored API-key env loading, OM state, thresholds, `observeAttachments`, subagents, storage, memory gateway, and preferences.
+- `mastracode/src/tui/commands/browser.ts` — `/browser` command settings wizard and quick updates.
+- `mastracode/src/index.ts` — startup resolution of settings into Harness modes, registry provider API-key access, stored API-key env loading, OM state, thresholds, `observeAttachments`, subagents, storage, browser, memory gateway, and preferences.
 - `mastracode/src/auth/storage.ts` — provider post-login default model IDs plus stored API-key helpers; current source has no Claude Max warning storage helpers.
 - `mastracode/src/tui/commands/login.ts` — current login flow goes directly through auth mode/provider dialogs without the removed warning overlay.
 
@@ -74,6 +76,7 @@
 - [Observational memory](../memory/observational-memory.md) — setup selects default OM model pack and `/om` writes global threshold defaults in the same settings file.
 - [Persistent conversations](../threads/persistent-conversations.md) — per-thread model-pack metadata overrides global defaults.
 - [Storage backend configuration](./storage-backend.md) — storage backend choice is persisted in the same global settings file.
+- [Browser automation](../integrations/browser-automation.md) — browser provider/profile/runtime settings are persisted in global settings.
 - [Terminal theme and contrast](../tui/terminal-theme.md) — theme preference is persisted in global settings.
 - [Auto-update prompts](../setup/auto-update-prompts.md) — dismissed update versions are persisted in global settings.
 - [Quiet mode](../tui/quiet-mode.md) — quiet preferences and rollout state are persisted in global settings.
@@ -87,6 +90,7 @@
 - `packages/core/src/harness/om-threshold-persistence.test.ts` — thread-level OM threshold restore/backfill behavior for state seeded from global settings.
 - `mastracode/src/agents/thread-caveman-state.test.ts` — thread metadata mirror/seed behavior for `observeAttachments`.
 - `mastracode/src/tui/commands/__tests__/memory-gateway.test.ts` — Memory Gateway base-URL and stored-key settings flow.
+- `packages/core/src/agent/__tests__/browser.test.ts` and `packages/core/src/browser/browser.test.ts` — core browser context/session and profile cleanup behavior.
 
 ## Missing tests
 
@@ -97,7 +101,8 @@
 - `/models` activation/import/share/delete/targeted-edit flow through real TUI overlay, not only helper functions.
 - Missing-key model selection flow through real TUI overlay, including storing a key, cancelling, masking the typed value, and preserving env-var precedence.
 - Direct MaskedInput regression for storage connection strings and login/API-key dialogs proving render output is masked while submitted value remains raw.
-- Headless startup with active model pack, custom pack settings, and Memory Gateway base URL/env values.
+- Headless startup with active model pack, custom pack settings, browser settings, and Memory Gateway base URL/env values.
+- Direct `/browser` settings regression for wizard save/clear/export flows and startup restore.
 
 ## Known risks / regressions
 
@@ -108,6 +113,7 @@
 - Built-in pack model IDs drift over time; current source uses OpenAI `gpt-5.5` build/plan and `gpt-5.4-mini` fast/OM even though #13431 temporarily lowered Codex defaults.
 - Earlier Slack regression around “No model selected” after reload likely lives near this settings/session boundary.
 - Custom pack rename/delete/import can leave stale global or thread pack IDs if cleanup misses one ownership layer.
+- Browser settings include full persisted fields that are not all mirrored into `activeBrowserSettings`; status/config-drift checks must not treat the state projection as the full source of truth.
 
 ## Verification checklist
 

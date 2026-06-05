@@ -205,11 +205,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 183 | 2026-04-04 | #15055 | `ee09cbf675` | likely skip | skipped | chore: version packages (alpha) (#15055) | 2 |
 | 184 | 2026-04-05 | #15059 | `f5b553c7a9` | likely skip | skipped | chore: version packages (alpha) (#15059) | 2 |
 | 185 | 2026-04-05 | #15082 | `0073994124` | review | done | fix: prune mastracode chat memory growth (#15082) | 13 |
-| 186 | 2026-04-05 | #15036 | `7d6f52164d` | review | current | feat(mastracode): add browser automation support (#15036) | 13 |
-| 187 | 2026-04-05 | #15088 | `9f58f3a305` | review | | fix: address mastracode review follow-ups (#15088) | 2 |
-| 188 | 2026-04-06 | #15083 | `679003c3f6` | likely skip | | chore: version packages (alpha) (#15083) | 2 |
-| 189 | 2026-04-06 | #15114 | `6c3e6c14a0` | likely skip | | chore: version packages (alpha) (#15114) | 2 |
-| 190 | 2026-04-08 | #15151 | `171c703862` | review | | feat: support Agent Skills spec skill directories (#15151) | 3 |
+| 186 | 2026-04-05 | #15036 | `7d6f52164d` | review | done | feat(mastracode): add browser automation support (#15036) | 13 |
+| 187 | 2026-04-05 | #15088 | `9f58f3a305` | review | done | fix: address mastracode review follow-ups (#15088) | 2 |
+| 188 | 2026-04-06 | #15083 | `679003c3f6` | likely skip | skipped | chore: version packages (alpha) (#15083) | 2 |
+| 189 | 2026-04-06 | #15114 | `6c3e6c14a0` | likely skip | skipped | chore: version packages (alpha) (#15114) | 2 |
+| 190 | 2026-04-08 | #15151 | `171c703862` | review | current | feat: support Agent Skills spec skill directories (#15151) | 3 |
 | 191 | 2026-04-07 | #15117 | `7f8d0efa83` | likely skip | | chore: version packages (alpha) (#15117) | 2 |
 | 192 | 2026-04-07 | #15165 | `44085a1ad0` | likely skip | | chore: version packages (alpha) (#15165) | 2 |
 | 193 | 2026-04-07 | #15172 | `2e325726f4` | likely skip | | chore: version packages (alpha) (#15172) | 2 |
