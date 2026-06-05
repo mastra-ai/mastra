@@ -150,10 +150,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 128 | 2026-03-13 | #14201 | `6fa8b85bf8` | likely skip | skipped | chore: version packages (alpha) (#14201) | 2 |
 | 129 | 2026-03-13 | #14266 | `057dbc0ddf` | likely skip | skipped | chore: version packages (alpha) (#14266) | 2 |
 | 130 | 2026-03-13 | #14250 | `5d6075b445` | review | done | fix: refine queued follow-up UX in Mastra Code (#14250) | 18 |
-| 131 | 2026-03-15 | #13573 | `d46c9e95a1` | review | current | feat: prompt for API keys in mastracode TUI (#13573) | 9 |
-| 132 | 2026-03-16 | #14260 | `bbcbbce4f0` | review | | chore: update dependencies and fix mcp build for @modelcontextprotocol/sdk@1.27.1 (#14260) | 1 |
-| 133 | 2026-03-16 | #14280 | `660aeff223` | likely skip | | chore: version packages (alpha) (#14280) | 2 |
-| 134 | 2026-03-16 | #14337 | `3f47335cac` | review | | feat(mastracode): theme with adaptive colors and refined TUI styling (#14337) | 37 |
+| 131 | 2026-03-15 | #13573 | `d46c9e95a1` | review | done | feat: prompt for API keys in mastracode TUI (#13573) | 9 |
+| 132 | 2026-03-16 | #14260 | `bbcbbce4f0` | review | skip: dependency/build-only for MC feature map | chore: update dependencies and fix mcp build for @modelcontextprotocol/sdk@1.27.1 (#14260) | 1 |
+| 133 | 2026-03-16 | #14280 | `660aeff223` | likely skip | skipped | chore: version packages (alpha) (#14280) | 2 |
+| 134 | 2026-03-16 | #14337 | `3f47335cac` | review | current | feat(mastracode): theme with adaptive colors and refined TUI styling (#14337) | 37 |
 | 135 | 2026-03-16 | #13933 | `531607166e` | review | | chore(deps): update build tools (#13933) | 1 |
 | 136 | 2026-03-16 | #14359 | `1179b045bb` | review | | fix(mastracode): replace editor border animation with solid mode color (#14359) | 2 |
 | 137 | 2026-03-17 | #14377 | `133ef20c39` | review | | feat(mastracode): improve MCP server management with interactive /mcp selector (#14377) | 9 |

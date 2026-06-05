@@ -1249,3 +1249,20 @@ Documentation actions:
 - Queue status: #14201 skipped, #14266 skipped, #14250 done, #13573 current.
 
 Focused evidence read: PR metadata/body/diff for #14250; current `mastra-tui.ts` (`getUserInput()`, `signalMessage()`, `queueFollowUpMessage()`), `setup.ts` Enter/Ctrl+F handlers, `agent-lifecycle.ts` `drainQueuedAction()`, `custom-editor.ts` autocomplete completion and first-match logic, `status-line.ts` queued-count label; tests in `mastra-tui-queueing.test.ts`, `custom-editor.test.ts`, `status-line.test.ts`, and `help-overlay.test.ts`.
+
+### PR #13573 / #14260 / #14280 feature-map checkpoint
+
+Verified rows 131-133:
+
+- #13573 adds missing provider API-key prompts to Mastra Code model-selection flows. Current source uses `promptForApiKeyIfNeeded()` from `/models`, `/om`, and subagent model selection; shows a masked `ApiKeyDialogComponent`; stores submitted keys through `AuthStorage.setStoredApiKey(provider, key, envVar)` under `apikey:<provider>`; and loads stored keys into `process.env` on startup without overriding real env vars. Headless `--model` validation fails early with the env-var hint instead of opening an interactive prompt.
+- #14260 is dependency/build-only for this Mastra Code feature map. The `mastracode/package.json` changes are dependency range/addition updates; the real SDK compatibility source changes are in `packages/mcp`, outside the MC user-feature queue.
+- #14280 is a Changesets alpha/version-package batch touching changelogs/package manifests; skipped for feature mapping.
+
+Documentation actions:
+
+- Updated `features/models/model-auth-and-modes.md` with #13573 API-key prompt/storage behavior, state ownership, key files, tests, missing tests, and env-precedence risk.
+- Updated `features/settings/onboarding-and-global-settings.md` with stored-key startup/env loading and model-selection prompt interactions.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #13573 done, #14260 dependency/build-only skip, #14280 skipped, #14337 current.
+
+Focused evidence read: PR metadata/diffs for #13573/#14260/#14280; current `auth/storage.ts`, `prompt-api-key.ts`, `components/api-key-dialog.ts`, `components/model-selector.ts`, `commands/models-pack.ts`, `commands/om.ts`, `commands/subagents.ts`, `headless.ts`, `index.ts`, `packages/mcp/src/client/client.ts`, `packages/mcp/src/server/server.ts`, and `packages/mcp/src/server/types.ts`; tests/fixtures from `model.test.ts`, `index.test.ts`, and command mocks around prompt/API-key storage.

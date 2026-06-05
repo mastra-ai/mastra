@@ -47,7 +47,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | TUI | File autocomplete | #13460 | editor autocomplete provider + `fd` detection | Partial | Medium | [page](./tui/file-autocomplete.md) |
 | TUI | Terminal theme and contrast | #13487, #13503 | settings preference + terminal detection + theme helper API | Partial | Medium | [page](./tui/terminal-theme.md) |
 | TUI | Quiet mode | #13556 | settings preference + TUI render state | Partial | High | [page](./tui/quiet-mode.md) |
-| Settings | Onboarding and global settings | #13421, #13431, #13487, #13494, #13500, #13505, #13508, #13512, #13566, #13603, #13611, #13748, #13953 | settings.json + thread settings + provider registry + AuthStorage | Partial | High | [page](./settings/onboarding-and-global-settings.md) |
+| Settings | Onboarding and global settings | #13421, #13431, #13487, #13494, #13500, #13505, #13508, #13512, #13566, #13603, #13611, #13748, #13953, #13573 | settings.json + thread settings + provider registry + AuthStorage/stored API keys | Partial | High | [page](./settings/onboarding-and-global-settings.md) |
 | Settings | Storage backend configuration | #13435, #13815 | env/settings/database config + storage factory | Partial | High | [page](./settings/storage-backend.md) |
 | TUI | Interactive chat | #13218, #13350, #13413, #13427, #13456, #13460, #13442, #13487, #13609, #13696, #13712, #13723, #13999 | TUI + Harness display state | Partial | High | [page](./tui/interactive-chat.md) |
 | TUI | Shell passthrough streaming | #13999 | TUI input router + shell subprocess + live output component | Partial | Medium | [page](./tui/shell-passthrough.md) |
@@ -58,7 +58,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Chat | Queued follow-ups and slash commands | #13345, #13493, #14250 | TUI transient queue state + command template processor + active-run signal/queue routing | Partial | High | [page](./chat/queued-followups.md) |
 | Threads | Persistent conversations / switching | #13218, #13334, #13343 | Harness session + thread metadata | Partial | High | [page](./threads/persistent-conversations.md) |
 | Threads | Resource ID switching | #13690 | Harness resource ID + resource-scoped threads | Partial | High | [page](./threads/resource-id-switching.md) |
-| Models | Model auth, selection, modes | #13218, #13307, #13490, #13512, #13566, #13600, #13611, #13695, #13716 | Settings + harness session + thread pack metadata + provider registry + AuthStorage | Partial | High | [page](./models/model-auth-and-modes.md) |
+| Models | Model auth, selection, modes | #13218, #13307, #13490, #13512, #13566, #13600, #13611, #13695, #13716, #13573 | Settings + harness session + thread pack metadata + provider registry + AuthStorage/stored API keys | Partial | High | [page](./models/model-auth-and-modes.md) |
 | Models | Custom OpenAI-compatible providers | #13682, #13611 | settings customProviders + Harness custom catalog | Partial | High | [page](./models/custom-providers.md) |
 | Models | Thinking and reasoning effort | #13490, #13563, #13748 | Harness/request context + settings | Partial | High | [page](./models/thinking-and-reasoning.md) |
 | Models | OpenAI strict schema compatibility | #13695, #14157 | schema-compat + core stream strict-mode preparation | Partial | High | [page](./models/openai-strict-schema-compat.md) |

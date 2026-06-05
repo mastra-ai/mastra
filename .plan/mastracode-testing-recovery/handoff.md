@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14250 (row 130) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, and #14266 recorded as version/dependency skips plus #12532 recorded as build-tool-dependency-only. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13573 (`d46c9e95a1`, API-key prompt in MastraCode TUI), then #14260 (`bbcbbce4f0`, MCP SDK dependency/build fix), then #14280 (`660aeff223`, likely version-package skip).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14280 (row 133) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, and #14280 recorded as version/dependency skips plus #12532 and #14260 recorded as build/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #14337 (`3f47335cac`, adaptive theme/refined TUI styling), then #13933 (`531607166e`, build tools dependency update), then #14359 (`1179b045bb`, editor border animation replacement).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 131: PR #13573 (prompt for API keys in Mastra Code TUI), then row 132: PR #14260 (dependency/build follow-up for MCP SDK), then row 133: PR #14280 (likely version-package skip).
+1. Continue at `_pr-queue.md` row 134: PR #14337 (adaptive colors and refined TUI styling), then row 135: PR #13933 (build-tool dependency update), then row 136: PR #14359 (solid mode-color editor border).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
