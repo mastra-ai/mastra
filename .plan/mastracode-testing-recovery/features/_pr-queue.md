@@ -320,11 +320,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 298 | 2026-05-15 | #16657 | `bbbf6d015a` | likely skip | skipped | chore: version packages (alpha) (#16657) | 2 |
 | 299 | 2026-05-16 | #16618 | `64c1e0b351` | review | done | feat(mastracode): add /skill/<name> command to activate skills explicitly (#16618) | 14 |
 | 300 | 2026-05-15 | #16622 | `40d83a90d9` | review | done | feat(core)!: simplify AgentSignalContents and fix multimodal signal handling (#16622) | 1 |
-| 301 | 2026-05-19 | #16690 | `7ab779ad87` | review | current | fix(mastracode): track active goal pursuit time (#16690) | 9 |
-| 302 | 2026-05-19 | #16691 | `359439bb8c` | review | | fix: inherit env for MastraCode commands (#16691) | 2 |
-| 303 | 2026-05-19 | #16676 | `5e16cf0c6b` | review | | feat(mastracode): return to plan after approved goal (#16676) | 7 |
-| 304 | 2026-05-19 | #16663 | `c272d50610` | review | | feat(memory): add provider-aware OM idle activation (#16663) | 12 |
-| 305 | 2026-05-19 | #16665 | `841a222560` | review | | fix(core): route agent thread stream subscriptions through pubsub (#16665) | 2 |
+| 301 | 2026-05-19 | #16690 | `7ab779ad87` | review | done | fix(mastracode): track active goal pursuit time (#16690) | 9 |
+| 302 | 2026-05-19 | #16691 | `359439bb8c` | review | done | fix: inherit env for MastraCode commands (#16691) | 2 |
+| 303 | 2026-05-19 | #16676 | `5e16cf0c6b` | review | done | feat(mastracode): return to plan after approved goal (#16676) | 7 |
+| 304 | 2026-05-19 | #16663 | `c272d50610` | review | done | feat(memory): add provider-aware OM idle activation (#16663) | 12 |
+| 305 | 2026-05-19 | #16665 | `841a222560` | review | current | fix(core): route agent thread stream subscriptions through pubsub (#16665) | 2 |
 | 306 | 2026-05-19 | #16682 | `c960279c56` | review | | feat(mastracode): /om toggle to skip attachments when observer is text-only (#16682) | 11 |
 | 307 | 2026-05-19 | #16667 | `8a52e03557` | likely skip | | chore: version packages (alpha) (#16667) | 2 |
 | 308 | 2026-05-19 | #15173 | `2c47b7e7a0` | review | | Add MastraCode product analytics (#15173) | 14 |

@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#16065](https://github.com/mastra-ai/mastra/pull/16065) — adds persistent `/goal` mode and judge-driven continuation loop.
-- Later changes: [#16322](https://github.com/mastra-ai/mastra/pull/16322) — keeps multiline `/goal` objectives, goal-enabled custom slash commands/skills, and user choices intact while goal mode is active; [#16340](https://github.com/mastra-ai/mastra/pull/16340) — ensures approving a plan as `/goal` first resolves the suspended plan approval, then starts the canonical goal reminder as a fresh build-mode run; [#16231](https://github.com/mastra-ai/mastra/pull/16231) — routes judge continuations through the same Agent signal path as active-run follow-ups; [#16654](https://github.com/mastra-ai/mastra/pull/16654) — improves judge UX with explicit `waiting` decisions, retry-on-empty-output, judge-failure resume, readonly judge-tool activity, and active judge status-line mode.
+- Later changes: [#16322](https://github.com/mastra-ai/mastra/pull/16322) — keeps multiline `/goal` objectives, goal-enabled custom slash commands/skills, and user choices intact while goal mode is active; [#16340](https://github.com/mastra-ai/mastra/pull/16340) — ensures approving a plan as `/goal` first resolves the suspended plan approval, then starts the canonical goal reminder as a fresh build-mode run; [#16231](https://github.com/mastra-ai/mastra/pull/16231) — routes judge continuations through the same Agent signal path as active-run follow-ups; [#16654](https://github.com/mastra-ai/mastra/pull/16654) — improves judge UX with explicit `waiting` decisions, retry-on-empty-output, judge-failure resume, readonly judge-tool activity, and active judge status-line mode; [#16690](https://github.com/mastra-ai/mastra/pull/16690) — tracks active pursuit time only while the agent/judge is actually working; [#16676](https://github.com/mastra-ai/mastra/pull/16676) — returns approved-plan goals to Plan mode after the goal is completed.
 
 ## User-visible behavior
 
@@ -40,18 +40,18 @@
 
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
-| Active goal | thread metadata key `goal` + `GoalManager` in `TUIState` | `/goal` command, status line, lifecycle continuation |
+| Active goal | thread metadata key `goal` + `GoalManager` in `TUIState`; `activeStartedAt` / `activeDurationMs` accumulate only while turns or judge retries are in flight | `/goal` command, status line duration label, lifecycle continuation |
 | Judge defaults | settings `models.goalJudgeModel` / `goalMaxTurns` | `/judge`, `startGoalWithDefaults()`, plan approval goal start |
 | Judge run state | `activeGoalJudge`, abort controller, `JudgeDisplayComponent`, `lastPauseWasJudgeFailure` | input lock, keyboard abort, lifecycle cleanup, `/goal resume` judge retry |
 | Goal continuations | `GoalManager.evaluateAfterTurn()` decision + structured Agent `system-reminder` signal | Harness signal path, subscribed chat history, next agent turn |
-| Approved-plan goal start | `handlePlanApproval().onGoal` resolves `respondToPlanApproval()` before `ctx.startGoal()` and records `planStartedGoalId` | suspended plan tool, Build-mode start, goal completion return-to-plan behavior |
+| Approved-plan goal start/return | `handlePlanApproval().onGoal` resolves `respondToPlanApproval()` before `ctx.startGoal()` and records `planStartedGoalId`; lifecycle switches back to Plan mode when that goal finishes | suspended plan tool, Build-mode start, goal completion return-to-plan behavior |
 | Goal command text | command-dispatch raw-arg handling + custom editor autocomplete completion | multiline `/goal` objectives, `/goal/<custom>` and `/goal/<skill>` routes |
 
 ## Key files
 
-- `mastracode/src/tui/goal-manager.ts` — goal persistence, judge agent creation, decision handling, continuation prompt construction, active-time tracking.
-- `mastracode/src/tui/commands/goal.ts` — `/goal` and `/judge` command flows, judge default prompts, plan-goal entrypoint helpers.
-- `mastracode/src/tui/handlers/agent-lifecycle.ts` — post-turn judge evaluation, queued-action precedence, continuation signal dispatch, done/waiting/pause handling.
+- `mastracode/src/tui/goal-manager.ts` — goal persistence, judge agent creation, decision handling, continuation prompt construction, active-time tracking via `startActiveTimer()` / `stopActiveTimer()`.
+- `mastracode/src/tui/commands/goal.ts` — `/goal` and `/judge` command flows, judge default prompts, plan-goal entrypoint helpers, and manual-goal/clear cleanup for `planStartedGoalId`.
+- `mastracode/src/tui/handlers/agent-lifecycle.ts` — post-turn judge evaluation, queued-action precedence, continuation signal dispatch, done/waiting/pause handling, active-timer stop on abort/error, and Plan-mode return when `planStartedGoalId` completes.
 - `mastracode/src/tui/goal-input-lock.ts` and `setup.ts` — input lock rules and keyboard abort during judge evaluation.
 - `mastracode/src/tui/handlers/prompts.ts` — plan approval `Use as /goal` ordering: resolve the suspended plan approval, start the goal, then remember `planStartedGoalId`.
 - `mastracode/src/tui/command-dispatch.ts` and `components/custom-editor.ts` — preserve raw multiline `/goal` objectives and slash autocomplete text.

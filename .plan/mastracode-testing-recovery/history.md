@@ -2326,3 +2326,31 @@ Verification:
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/goal-manager.test.ts src/tui/commands/__tests__/goal.test.ts src/tui/components/__tests__/judge-display.test.ts src/tui/__tests__/status-line.test.ts -t "pauses|retry|resume|waiting|activity|interrupted|status|JudgeDisplay|status line|does not auto-continue|tells the judge|clears stale|budget exhaustion|readonly" --bail=1 --reporter=dot` — 4 files / 25 tests passed / 31 skipped. A broader first run of the same goal files hit the known fragile `uses stream with structured output and judge memory thread parent-goalId` Zod matcher assertion.
 - `pnpm --filter ./mastracode exec vitest run src/tui/commands/__tests__/skills.test.ts src/tui/__tests__/command-dispatch.test.ts src/tui/components/__tests__/help-overlay.test.ts --bail=1 --reporter=dot` — 3 files / 33 tests passed.
 - `pnpm --filter ./packages/core exec vitest run src/agent/__tests__/agent-signals.test.ts src/harness/signal-history.test.ts src/harness/signal-messages.test.ts --bail=1 --reporter=dot` — 3 files / 102 tests passed / no type errors.
+
+### PR #16690 / #16691 / #16676 / #16663 feature-map checkpoint
+
+Verified rows 301-304:
+
+- #16690 tracks active goal pursuit time. Current source starts/stops `GoalManager` active timers around turn/judge work, accumulates `activeDurationMs`, stops timers on done/waiting/pause/abort/error, and renders elapsed active time in the status line without counting idle waiting time.
+- #16691 makes Mastra Code workspace commands inherit the parent environment. `buildSandboxEnv()` now spreads `process.env` before terminal/CI overrides, and workspace tracing keeps env-shaped fields and secret-pattern keys redacted.
+- #16676 returns approved-plan goals to Plan mode after completion. `handlePlanApproval().onGoal` records `planStartedGoalId`; lifecycle checks the completed goal id and switches back to Plan mode, while manual goals/clear reset the marker.
+- #16663 adds provider-aware OM idle activation plumbing. Current source forwards actor model context into OM activation, resolves `activateAfterIdle: 'auto'` from provider/model/cache-retention heuristics, skips duplicate local OM processing for Mastra Gateway models, emits TTL/provider-change activation metadata, and renders a TUI idle counter/activation markers.
+
+Documentation actions:
+
+- Updated `features/goals/persistent-goals.md` for #16690 active pursuit timer and #16676 approved-goal return-to-plan behavior.
+- Updated `features/tools/workspace-tools.md` for #16691 parent env inheritance and trace redaction coverage.
+- Updated `features/memory/observational-memory.md` for #16663 actor-model idle activation, Gateway skip, TUI idle counter, activation TTL details, and tests.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16690 done, #16691 done, #16676 done, #16663 done, #16665 current.
+
+Focused evidence read: PR metadata for #16690/#16691/#16676/#16663; current `mastracode/src/tui/goal-manager.ts`, `tui/handlers/agent-lifecycle.ts`, `tui/commands/goal.ts`, `tui/handlers/prompts.ts`, `tui/status-line.ts`, `agents/workspace.ts`, `packages/core/src/workspace/tools/tracing.ts`, `agents/memory.ts`, `tui/mastra-tui.ts`, `tui/components/idle-counter.ts`, `tui/components/om-marker.ts`, `tui/handlers/om.ts`, `packages/memory/src/processors/observational-memory/activation-ttl.ts`, `processor.ts`, `observational-memory.ts`, and focused tests under `agent-lifecycle-goal-timer.test.ts`, `workspace-env.test.ts`, `tracing.test.ts`, `activation-ttl.test.ts`, `observational-memory-api.test.ts`, and `memory-gateway-duck-typing.test.ts`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/agent-lifecycle-goal-timer.test.ts src/tui/__tests__/mastra-tui-queueing.test.ts src/tui/handlers/__tests__/prompts.test.ts src/tui/__tests__/status-line.test.ts --bail=1 --reporter=dot` — 4 files / 51 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/agents/__tests__/workspace-env.test.ts --bail=1 --reporter=dot` — 1 file / 1 test passed.
+- `pnpm --filter ./packages/core exec vitest run src/workspace/tools/__tests__/tracing.test.ts --bail=1 --reporter=dot` — 1 file / 6 tests passed / no type errors.
+- `pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/activation-ttl.test.ts src/processors/observational-memory/__tests__/observational-memory-api.test.ts -t "activateAfterIdle|resolveActivationTTL|auto ttl" --bail=1 --reporter=dot` — 2 files / 16 tests passed / 135 skipped.
+- `pnpm --filter ./packages/core exec vitest run src/agent/__tests__/memory-gateway-duck-typing.test.ts --bail=1 --reporter=dot` — 1 file / 1 test passed / no type errors.
+- `pnpm --filter ./mastracode exec vitest run src/tui/handlers/__tests__/om.test.ts --bail=1 --reporter=dot` — 1 file / 3 tests passed.
