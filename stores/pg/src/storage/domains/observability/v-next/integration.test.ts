@@ -596,82 +596,90 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
       }
     });
 
-    it('init() against an initialized schema does not block concurrent writes', async () => {
+    it('init() does not take AccessExclusiveLock on signal parent tables', async () => {
       // Regression for partition-lock-mode (M1): CREATE TABLE ... PARTITION OF
-      // takes ACCESS EXCLUSIVE on the parent, which blocks every concurrent
+      // takes AccessExclusiveLock on the parent, which blocks every concurrent
       // read AND write against the signal table for the duration of init().
       // The fix uses CREATE TABLE (LIKE parent INCLUDING ALL) + ALTER TABLE
-      // ATTACH PARTITION (SHARE UPDATE EXCLUSIVE since PG 12), which allows
+      // ATTACH PARTITION (ShareUpdateExclusiveLock since PG 12), which allows
       // INSERTs to continue against existing partitions in parallel.
       //
-      // We assert this by running a second init() that re-validates the
-      // schema (no-op DDLs all hit the IF NOT EXISTS branch) in parallel
-      // with a steady stream of createSpan() calls, and asserting (a) every
-      // write succeeds, and (b) the wall-clock time of the writes is not
-      // dominated by waiting on the init's parent locks.
+      // We assert this directly by polling pg_locks on a side connection
+      // while init() runs and proving the parent signal tables are never
+      // held under AccessExclusiveLock. This is unambiguous: under the old
+      // CREATE TABLE PARTITION OF path the snapshot would have captured the
+      // exclusive lock; under the ATTACH PARTITION path it can't.
       //
-      // Force native mode so we exercise the CREATE TABLE PARTITION OF path
+      // Force native mode so we exercise the partition creation path
       // (timescale and partman both go through their own DDL).
       const harness = await createHarness({
-        schemaPrefix: 'obs_vnext_init_under_writes',
-        partitioning: { mode: 'native' },
+        schemaPrefix: 'obs_vnext_init_lock_mode',
+        partitioning: { mode: 'native', futureDays: 30 },
       });
 
-      const writePool = new Pool({ connectionString, max: 4 });
-      const writeClient = new PoolAdapter(writePool);
+      // Use a separate connection for lock snapshots so we don't compete
+      // with the init() client.
+      const probePool = new Pool({ connectionString, max: 2 });
       const writer = new ObservabilityStoragePostgresVNext({
-        client: writeClient,
+        client: harness.client,
         schemaName: harness.schema,
-        partitioning: { mode: 'native' },
+        // Bump futureDays so the re-init has new partitions to ATTACH and
+        // actually exercises the partition-create code path under load.
+        partitioning: { mode: 'native', futureDays: 90 },
       });
-      // The writer shares the already-initialized schema — its init() is a
-      // no-op DDL pass that proves the SHARE UPDATE EXCLUSIVE lock is held.
-      // We don't call init() on the writer for the workload itself; we
-      // explicitly race it against the workload below.
+
+      const parentTables = ALL_SIGNAL_TABLES.map(table => `${harness.schema}.${table}`);
 
       try {
-        const writeCount = 50;
-        const writeStartedAt: number[] = [];
-        const writeFinishedAt: number[] = [];
-        const writes = Array.from({ length: writeCount }, (_, i) =>
-          (async () => {
-            const startedAt = Date.now();
-            writeStartedAt.push(startedAt);
-            await harness.domain.createSpan({
-              span: makeSpan({
-                traceId: `init-write-trace-${i}`,
-                spanId: `init-write-root-${i}`,
-                startedAt: dayAt(0, 10, 0, i % 60),
-                endedAt: dayAt(0, 10, 0, (i % 60) + 1),
-              }),
-            });
-            writeFinishedAt.push(Date.now() - startedAt);
-          })(),
+        const lockSnapshots: Array<{ relname: string; mode: string }> = [];
+        let polling = true;
+
+        const pollLocks = (async () => {
+          const probe = await probePool.connect();
+          try {
+            while (polling) {
+              const result = await probe.query<{ relname: string; mode: string }>(
+                `SELECT n.nspname || '.' || c.relname AS relname, l.mode
+                   FROM pg_locks l
+                   JOIN pg_class c ON c.oid = l.relation
+                   JOIN pg_namespace n ON n.oid = c.relnamespace
+                  WHERE n.nspname = $1
+                    AND c.relname = ANY($2::text[])
+                    AND l.locktype = 'relation'
+                    AND l.granted = true`,
+                [harness.schema, ALL_SIGNAL_TABLES.slice()],
+              );
+              for (const row of result.rows) {
+                lockSnapshots.push(row);
+              }
+              // Tight loop — we want to catch short-lived locks.
+              await new Promise(resolve => setImmediate(resolve));
+            }
+          } finally {
+            probe.release();
+          }
+        })();
+
+        await writer.init();
+        polling = false;
+        await pollLocks;
+
+        // The parent signal tables must never have been held under
+        // AccessExclusiveLock during init(). Any other mode is fine —
+        // ATTACH PARTITION takes ShareUpdateExclusiveLock, CREATE INDEX
+        // takes ShareLock, regular reads take AccessShareLock, etc.
+        const exclusiveOnParents = lockSnapshots.filter(
+          row => row.mode === 'AccessExclusiveLock' && parentTables.includes(row.relname),
         );
+        expect(exclusiveOnParents).toEqual([]);
 
-        const reinit = writer.init();
-
-        await Promise.all([reinit, ...writes]);
-
-        // Every write must succeed.
-        expect(writeFinishedAt).toHaveLength(writeCount);
-
-        // Every write must individually finish quickly. With ACCESS
-        // EXCLUSIVE on the parent, writes serialize behind the init's
-        // catalog lock and individual createSpan() calls regularly exceed
-        // 1s on a loaded test box. With SHARE UPDATE EXCLUSIVE they finish
-        // in single-digit ms. Use a generous threshold to keep the test
-        // stable on CI but catch the lock-mode regression.
-        const slowestWriteMs = Math.max(...writeFinishedAt);
-        expect(slowestWriteMs).toBeLessThan(2_000);
-
-        // Sanity-check that the rows actually landed.
-        for (let i = 0; i < writeCount; i++) {
-          const trace = await harness.domain.getTrace({ traceId: `init-write-trace-${i}` });
-          expect(trace?.spans.map(span => span.spanId)).toEqual([`init-write-root-${i}`]);
-        }
+        // Sanity-check that we actually observed *some* lock activity on
+        // the parents during init(), otherwise the test might pass because
+        // the poll missed every window.
+        const observedOnParents = lockSnapshots.filter(row => parentTables.includes(row.relname));
+        expect(observedOnParents.length).toBeGreaterThan(0);
       } finally {
-        await writePool.end();
+        await probePool.end();
         await harness.close();
       }
     });
