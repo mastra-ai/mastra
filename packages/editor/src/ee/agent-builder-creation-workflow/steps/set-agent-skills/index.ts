@@ -1,17 +1,29 @@
 import { createStep } from '@mastra/core/workflows';
 
+import { resolveAvailableSkills } from '../../available';
 import { configSchema, type Config, type StepFactoryArgs } from '../../types';
+import { createSkillsAgent } from './agent';
+import { resolveSkills } from './handler';
 
 /**
- * Pass-through for the agent's skills. The workflow input is a single prompt
- * with no skill catalog to select from, so this step leaves the skills record
- * untouched; skills are attached later via the playground builder.
+ * Resolve the agent's skills. Reads the registered Mastra editor to enumerate
+ * the available stored skills, then injects the scoped skills agent into the
+ * handler so it selects the minimum relevant set. No-ops when none available.
  */
-export const createSetSkillsStep = (_args: StepFactoryArgs) =>
+export const createSetSkillsStep = ({ model }: StepFactoryArgs) =>
   createStep({
     id: 'set-agent-skills',
     description: 'Set the agent skills',
     inputSchema: configSchema,
     outputSchema: configSchema,
-    execute: async ({ inputData }) => inputData as Config,
+    execute: async ({ inputData, mastra }) => {
+      const config = inputData as Config;
+      const availableSkills = await resolveAvailableSkills(mastra);
+      if (availableSkills.length === 0) return config;
+
+      const agent = createSkillsAgent({ model });
+      const skills = await resolveSkills(agent, availableSkills);
+
+      return { ...config, skills };
+    },
   });

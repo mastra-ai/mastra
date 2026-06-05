@@ -4,7 +4,7 @@ import { AGENT_GENERATION_MODEL_SETTINGS } from '../../constant';
 import type { AgentFactoryArgs } from '../../types';
 
 /**
- * Agent that confirms / normalizes the workspace id the agent should attach to.
+ * Agent that selects at most one workspace the agent should attach to.
  */
 export const createWorkspaceAgent = ({ model }: AgentFactoryArgs) =>
   new Agent({
@@ -13,8 +13,8 @@ export const createWorkspaceAgent = ({ model }: AgentFactoryArgs) =>
     model,
     defaultOptions: { modelSettings: AGENT_GENERATION_MODEL_SETTINGS },
     instructions: [
-      'You confirm and normalize the workspace id an AI agent should be attached to.',
-      'Return the provided workspace id trimmed of surrounding whitespace.',
-      'If no usable workspace id is given, return an empty value.',
+      'You select at most one workspace an AI agent should be attached to.',
+      'Only choose a workspace from the provided available list, identified by its id.',
+      'If none of the available workspaces is appropriate, return an empty value.',
     ].join(' '),
   });
