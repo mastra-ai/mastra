@@ -149,4 +149,32 @@ describe('wrapLocalClient', () => {
     expect(Number(result.rows[0]!.one)).toBe(1);
     expect(typeof client.close).toBe('function');
   });
+
+  it('clears the connection and frees the slot when COMMIT fails', async () => {
+    const client = wrapLocalClient(createClient({ url: ':memory:' }));
+    await client.execute('PRAGMA foreign_keys = ON');
+    await client.execute('CREATE TABLE parent (id INTEGER PRIMARY KEY)');
+    await client.execute(
+      'CREATE TABLE child (id INTEGER PRIMARY KEY, parent_id INTEGER REFERENCES parent(id) DEFERRABLE INITIALLY DEFERRED)',
+    );
+
+    // A deferred foreign-key violation is only enforced at COMMIT time, so the
+    // COMMIT itself rejects while the transaction is still open.
+    const tx = await client.transaction('write');
+    await tx.execute('INSERT INTO child (id, parent_id) VALUES (1, 999)');
+    await expect(tx.commit()).rejects.toThrow(/foreign key/i);
+
+    // The failed COMMIT must leave the transaction marked closed...
+    expect(tx.closed).toBe(true);
+    await expect(tx.execute('SELECT 1')).rejects.toThrow(/closed/i);
+
+    // ...and the shared connection must be clean again, so a subsequent
+    // transaction can BEGIN without hitting "transaction within a transaction".
+    const tx2 = await client.transaction('write');
+    await tx2.execute('INSERT INTO parent (id) VALUES (1)');
+    await tx2.commit();
+
+    const rows = await client.execute('SELECT COUNT(*) AS c FROM parent');
+    expect(Number(rows.rows[0]!.c)).toBe(1);
+  });
 });
