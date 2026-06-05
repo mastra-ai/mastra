@@ -1853,3 +1853,24 @@ Verification:
 - `pnpm --filter ./packages/core exec vitest run src/workspace/skills/skill-versioning.test.ts -t "normalizes paths|CompositeVersionedSkillSource" --bail=1 --reporter=dot` — 1 file / 11 tests passed / 45 skipped / no type errors.
 - `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/ansi.test.ts src/tui/components/__tests__/tool-validation-error.test.ts src/tui/components/__tests__/tool-execution-enhanced.test.ts --bail=1 --reporter=dot` — 3 files / 75 tests passed.
 - Attempted `pnpm --filter ./packages/core exec vitest run src/utils/semantic-markdown.test.ts --bail=1 --reporter=dot`, but no matching test exists in `packages/core`; semantic-markdown coverage belongs to non-Mastra-Code RAG surfaces and was not included in this checkpoint.
+
+### PR #15448 / #15515 / #15601 / #15606 feature-map checkpoint
+
+Verified rows 219-222:
+
+- #15448 adds the standalone `@mastra/tavily` integration package. Current `integrations/tavily` exposes `createTavilySearchTool()`, `createTavilyExtractTool()`, `createTavilyCrawlTool()`, `createTavilyMapTool()`, and `createTavilyTools()` with shared client creation, env/config API-key resolution, zod schemas, and response normalization. Current Mastra Code `web-search.ts` wraps the package search/extract tools to preserve Mastra Code relevance filtering, markdown formatting, failed-result rendering, and 2k-token output budgets.
+- #15515, #15601, and #15606 are Changesets alpha package-version batches; skipped for feature mapping.
+
+Documentation actions:
+
+- Updated `features/tools/web-search-rendering.md` for `@mastra/tavily` package ownership, Mastra Code wrapper delegation, package tests, and the missing wrapper-level formatting/truncation test gap.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #15448 done, #15515 skipped, #15601 skipped, #15606 skipped, #15631 current.
+
+Focused evidence read: PR metadata for #15448/#15515/#15601/#15606; current `integrations/tavily/src/{client,search,extract,crawl,map,tools}.ts`, Tavily package tests, `mastracode/src/tools/web-search.ts`, and Mastra Code dynamic-tool tests. No current dedicated Mastra Code wrapper test exists for `createWebSearchTool()` / `createWebExtractTool()` delegation and formatting.
+
+Verification:
+
+- `pnpm --filter ./integrations/tavily test -- --bail=1 --reporter=dot` — 6 files / 31 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/agents/tools.test.ts src/agents/extra-tools.test.ts src/tui/components/__tests__/tool-execution-enhanced.test.ts -t "web search|web-search|web extract|web-extract|Tavily" --bail=1 --reporter=dot` — targeted renderer test passed (1 passed / 83 skipped; dynamic-tool files skipped by the name filter).
+- `pnpm --filter ./mastracode exec vitest run src/agents/tools.test.ts src/agents/extra-tools.test.ts --bail=1 --reporter=dot` — 2 files / 23 tests passed.

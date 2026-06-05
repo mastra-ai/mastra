@@ -4,10 +4,11 @@
 
 - PR: [#13870](https://github.com/mastra-ai/mastra/pull/13870) — renders provider `web_search` results as readable TUI output instead of raw JSON/encrypted blobs.
 - Related earlier change: [#13609](https://github.com/mastra-ai/mastra/pull/13609) — added OpenAI native `web_search` fallback when Tavily is absent.
+- Later change: [#15448](https://github.com/mastra-ai/mastra/pull/15448) — extracts Tavily search/extract/crawl/map into the standalone `@mastra/tavily` integration package and rewires Mastra Code `web-search` / `web-extract` wrappers to delegate to it while preserving Mastra Code-specific markdown formatting and 2k-token truncation.
 
 ## User-visible behavior
 
-- What the user can do: ask models with native or Tavily-backed web search to search the web and read a compact list of titles, URLs, and optional page ages in the TUI.
+- What the user can do: ask models with native or Tavily-backed web search to search/extract web content and read compact markdown/TUI output; package users can also import `@mastra/tavily` tools for search, extract, crawl, and map.
 - Success looks like: `web_search` / `web_search_YYYYMMDD` calls show a bordered result block with `web_search "query"` in the footer, not raw provider JSON or `encryptedContent` payloads.
 - Must preserve: Tavily markdown passthrough, Anthropic provider result formatting, OpenAI `sources` formatting, quiet-mode previews, and error rendering.
 
@@ -42,7 +43,7 @@
 | --- | --- | --- |
 | Tool call name | Harness/provider event (`web_search` or `web_search_YYYYMMDD`) | TUI renderer detection |
 | Query summary | tool args `query` or nested `action.query` | footer / quiet badge |
-| Search result content | tool result text (`sources`, provider arrays, or Tavily markdown) | rendered result rows and quiet preview |
+| Search result content | tool result text (`sources`, provider arrays, or Mastra Code-formatted Tavily markdown from `@mastra/tavily`) | rendered result rows and quiet preview |
 | Output truncation/collapse | `ToolExecutionComponentEnhanced` collapsed/expanded state | normal TUI output |
 | Quiet preview cap | `settings.preferences.quietModeMaxToolPreviewLines` | compact quiet output |
 
@@ -50,7 +51,8 @@
 
 - `mastracode/src/tui/components/tool-execution-enhanced.ts` — web-search detection, bordered renderer, provider result parser, quiet preview.
 - `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts` — compact web-search preview coverage.
-- `mastracode/src/tools/web-search.ts` — Tavily tool result formatting and 2k token budget before TUI rendering.
+- `mastracode/src/tools/web-search.ts` — thin Mastra Code wrapper around `@mastra/tavily` search/extract tools that applies relevance filtering, markdown formatting, and 2k token budgets before TUI rendering.
+- `integrations/tavily/src/{client,search,extract,crawl,map,tools}.ts` — standalone Tavily client/tool package with zod schemas and API response mapping.
 - `mastracode/src/agents/tools.ts` — dynamic web-search tool availability, including native provider fallbacks.
 
 ## Dependencies / related features
@@ -63,18 +65,21 @@
 ## Existing tests
 
 - `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts` — quiet web-search rendering with query summary and compact result preview.
-- Existing dynamic-tool tests indirectly cover whether web-search tools are available; they do not assert the TUI format.
+- `integrations/tavily/src/__tests__/{client,search,extract,crawl,map,tools}.test.ts` — Tavily client env/config resolution, search/extract/crawl/map parameter mapping, response normalization, and `createTavilyTools()` bundle coverage.
+- Existing dynamic-tool tests indirectly cover whether web-search tools are available; they do not assert the TUI format or wrapper-level `@mastra/tavily` delegation.
 
 ## Missing tests
 
 - Normal-mode rendered output for Anthropic provider array results, including `pageAge` and `encryptedContent` stripping.
 - Normal-mode rendered output for OpenAI `{ action, sources }` results and fallback query extraction from result content.
+- Mastra Code wrapper test proving `createWebSearchTool()` / `createWebExtractTool()` delegate to `@mastra/tavily`, filter low relevance scores, preserve failed extract errors, and enforce the 2k token budget.
 - Tavily markdown passthrough stays readable and collapsed without double-formatting.
 - Loaded-history parity for web-search results.
 
 ## Known risks / regressions
 
 - Provider result shapes are not stable; unknown JSON arrays fall back to stripped JSON while object-shaped unknown output may still render raw JSON.
+- The package-level `@mastra/tavily` tests do not prove Mastra Code wrapper formatting/truncation; regressions in `web-search.ts` can slip unless wrapper-specific tests are added.
 - Query extraction is split between args and nested action/result content; streamed partial args can temporarily omit the footer query.
 - Quiet mode previews rely on normal formatter output, so parser regressions affect both compact and full render paths.
 
