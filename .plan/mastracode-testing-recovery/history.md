@@ -1007,3 +1007,22 @@ Verification:
 - Focused tests passed for direct editor/help coverage: `custom-editor.test.ts` and `help-overlay.test.ts` (2 files / 22 tests). Broader shortcut setup run also included `setup-keyboard-shortcuts.test.ts` but hit the known stale /github autocomplete drift: expected `subscribe, unsubscribe, debug`, received `subscribe, unsubscribe, sync, debug`.
 
 Next queue checkpoint: PR #13760 (inline version at build time), then PR #13761 (likely version-package skip).
+
+### Feature map batch: build-time version injection and release skip
+
+Processed PR [#13760](https://github.com/mastra-ai/mastra/pull/13760), `fa9692afe2` (`fix(mastracode): inline version at build time instead of requiring package.json`). Verified current `getCurrentVersion()` prefers a build-time `MASTRACODE_VERSION` define injected by `mastracode/tsup.config.ts`, preventing published npm installs from requiring `../../package.json` at runtime. Current source also contains the later source-run fallback, which will be verified again at queue rows #13767/#13768.
+
+Reviewed PR [#13761](https://github.com/mastra-ai/mastra/pull/13761), `3e2b181a61` (`chore: version packages (alpha)`). This is the alpha release follow-up for #13760. Changed files are `.changeset/pre.json`, `mastracode/CHANGELOG.md`, and `mastracode/package.json`; no separate behavior feature page was needed.
+
+Documentation actions:
+
+- Updated `features/setup/auto-update-prompts.md` with build-time current-version ownership, npm-packaged startup risk, and missing coverage for packaged builds.
+- Updated `features/setup/installation-and-launch.md` with `MASTRACODE_VERSION` build injection.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13760 done, #13761 skipped, #13767 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/utils/update-check.ts`, `mastracode/tsup.config.ts`, `mastracode/src/main.ts` earlier in the update-prompt batch, `features/setup/auto-update-prompts.md`, `features/setup/installation-and-launch.md`, and PR #13761 changed-file list.
+- Focused tests passed: `corepack pnpm.3.0 --filter ./mastracode exec vitest run src/utils/__tests__/update-check.test.ts --reporter=dot --bail 1` (1 file / 13 tests). Initial `pnpm` run failed because local pnpm 10.29.3 no longer satisfies root `packageManager`/engine metadata requiring pnpm 11.3.0.
+
+Next queue checkpoint: PR #13767 (source fallback for version detection), then PR #13768 (ESM-compatible version fallback).
