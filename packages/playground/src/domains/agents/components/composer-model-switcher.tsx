@@ -1,11 +1,11 @@
 import type { UpdateModelParams } from '@mastra/client-js';
-import { isModelAllowed } from '@mastra/core/agent-builder/ee';
 import { cn } from '@mastra/playground-ui';
 import { Lock, TriangleAlert } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useAgent } from '../hooks/use-agent';
 import { useUpdateAgentModel } from '../hooks/use-agents';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
+import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { LLMProviders, LLMModels, useLLMProviders, cleanProviderId, findProviderById } from '@/domains/llm';
 
 // Triggers stay transparent; the wrapper owns the shared pill border/background.
@@ -131,6 +131,7 @@ export const ComposerModelWarning = ({ agentId }: ComposerModelSwitcherProps) =>
   const { data: agent } = useAgent(agentId);
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
   const policy = useBuilderModelPolicy();
+  const { models: allowedModels } = useAgentBuilderAllowedModels();
 
   if (providersLoading || !agent) return null;
 
@@ -143,7 +144,7 @@ export const ComposerModelWarning = ({ agentId }: ComposerModelSwitcherProps) =>
     Boolean(currentModelProvider && selectedModel) &&
     policy.active &&
     policy.allowed !== undefined &&
-    !isModelAllowed(policy.allowed, { provider: currentModelProvider, modelId: selectedModel });
+    !allowedModels.some(m => cleanProviderId(m.provider) === currentModelProvider && m.model === selectedModel);
 
   const showProviderWarning = currentProvider && !currentProvider.connected;
 

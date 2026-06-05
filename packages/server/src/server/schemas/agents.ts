@@ -246,6 +246,8 @@ export const providersResponseSchema = z.object({
   providers: z.array(providerSchema),
 });
 
+export type ProviderListItem = z.infer<typeof providerSchema>;
+
 /**
  * Schema for list agents endpoint response
  * Returns a record of agent ID to serialized agent
