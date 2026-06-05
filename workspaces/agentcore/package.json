@@ -30,7 +30,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@aws-sdk/client-bedrock-agentcore": "^3.1057.0"
+    "@aws-sdk/client-bedrock-agentcore": "^3.1058.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

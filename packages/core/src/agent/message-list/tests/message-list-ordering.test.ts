@@ -517,7 +517,8 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       const storedSignal = list.get.all.db().at(-1)!;
       const recalledSignal = mastraDBMessageToSignal(storedSignal);
       expect(storedSignal.id).toBe(signal.id);
-      expect(storedSignal.createdAt.getTime()).toBe(toolPartTime + 1);
+      expect(storedSignal.createdAt.getTime()).toBe(responseTime.getTime() + 1);
+      expect(storedSignal.createdAt.getTime()).toBeLessThan(toolPartTime);
       expect(recalledSignal.createdAt).toEqual(storedSignal.createdAt);
       expect(recalledSignal.acceptedAt).toEqual(signalTime);
       expect(storedSignal.content.metadata?.signal).toMatchObject({
