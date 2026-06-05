@@ -177,6 +177,46 @@ describe('VoyageTextEmbeddingModelV2', () => {
     expect(result.embeddings).toEqual([[0.1], [0.2]]);
   });
 
+  it('should send all 1000 texts in one batch when under input limit', async () => {
+    const texts = Array.from({ length: 1000 }, (_, i) => `text${i}`);
+    mockTokenize.mockImplementation((t: string[]) =>
+      Promise.resolve(t.map(() => ({ tokens: ['a'], ids: [1] }))),
+    );
+
+    mockEmbed.mockResolvedValue({
+      data: texts.map((_, i) => ({ embedding: [i * 0.001], index: i })),
+    });
+
+    const model = new VoyageTextEmbeddingModelV2({ model: 'voyage-3.5' });
+    const result = await model.doEmbed({ values: texts });
+
+    expect(mockEmbed).toHaveBeenCalledTimes(1);
+    expect(result.embeddings).toHaveLength(1000);
+  });
+
+  it('should split into two batches when inputs exceed 1000', async () => {
+    const texts = Array.from({ length: 1500 }, (_, i) => `text${i}`);
+    mockTokenize.mockImplementation((t: string[]) =>
+      Promise.resolve(t.map(() => ({ tokens: ['a'], ids: [1] }))),
+    );
+
+    mockEmbed
+      .mockResolvedValueOnce({
+        data: Array.from({ length: 1000 }, (_, i) => ({ embedding: [i * 0.001], index: i })),
+      })
+      .mockResolvedValueOnce({
+        data: Array.from({ length: 500 }, (_, i) => ({ embedding: [(1000 + i) * 0.001], index: i })),
+      });
+
+    const model = new VoyageTextEmbeddingModelV2({ model: 'voyage-3.5' });
+    const result = await model.doEmbed({ values: texts });
+
+    expect(mockEmbed).toHaveBeenCalledTimes(2);
+    expect(mockEmbed.mock.calls[0][0].input).toHaveLength(1000);
+    expect(mockEmbed.mock.calls[1][0].input).toHaveLength(500);
+    expect(result.embeddings).toHaveLength(1500);
+  });
+
   it('should send all texts in one batch when tokens are within limit', async () => {
     // Each text has 100 tokens, voyage-3.5 limit is 320000
     mockTokenize.mockImplementation((texts: string[]) =>
