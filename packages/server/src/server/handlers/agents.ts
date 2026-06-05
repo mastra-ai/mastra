@@ -76,6 +76,7 @@ import type { Context } from '../types';
 
 import { toSlug } from '../utils';
 
+import { matchesAuthorFilter, resolveAuthorFilter } from './authorship';
 import { handleError } from './error';
 import {
   sanitizeBody,
@@ -1013,6 +1014,8 @@ export const LIST_AGENTS_ROUTE = createRoute({
   responseType: 'json',
   queryParamSchema: z.object({
     partial: z.string().optional(),
+    authorId: z.string().optional().describe('Filter stored agents by author identifier'),
+    visibility: z.enum(['public']).optional().describe('Filter stored agents to only public ones'),
   }),
   responseSchema: listAgentsResponseSchema,
   summary: 'List all agents',
@@ -1020,7 +1023,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
-  handler: async ({ mastra, requestContext, partial }) => {
+  handler: async ({ mastra, requestContext, partial, authorId, visibility }) => {
     try {
       const codeAgents = mastra.listAgents();
 
@@ -1063,9 +1066,35 @@ export const LIST_AGENTS_ROUTE = createRoute({
       try {
         const editor = mastra.getEditor();
 
+        // Apply ownership filtering to stored agents (matches /stored/agents behavior)
+        const authorFilter = resolveAuthorFilter({
+          requestContext,
+          resource: 'stored-agents',
+          queryAuthorId: authorId,
+          queryVisibility: visibility === 'public' ? 'public' : undefined,
+        });
+
+        // Determine storage-layer filters based on the resolved author filter.
+        // Storage adapters can only do equality filters, so we apply the full
+        // ownership logic post-fetch with matchesAuthorFilter.
+        let storageAuthorId: string | undefined;
+        let storageVisibility: 'public' | undefined;
+
+        if (authorFilter.kind === 'exact') {
+          storageAuthorId = authorFilter.authorId;
+        } else if (authorFilter.kind === 'publicOnly') {
+          storageVisibility = 'public';
+        } else if (authorFilter.kind === 'ownedOrPublicOthers') {
+          storageAuthorId = authorFilter.queryAuthorId;
+          storageVisibility = 'public';
+        }
+
         let storedAgentsResult;
         try {
-          storedAgentsResult = await editor?.agent.list();
+          storedAgentsResult = await editor?.agent.list({
+            authorId: storageAuthorId,
+            visibility: storageVisibility,
+          });
         } catch (error) {
           console.error('Error listing stored agents:', error);
           storedAgentsResult = null;
@@ -1087,6 +1116,12 @@ export const LIST_AGENTS_ROUTE = createRoute({
             // Those are overrides (no standalone model), not standalone stored agents,
             // and trying to hydrate them as standalone would fail model validation.
             if (codeAgentIds.has(storedAgentConfig.id)) continue;
+
+            // Apply ownership filter (defense-in-depth)
+            if (!matchesAuthorFilter(storedAgentConfig, authorFilter)) {
+              continue;
+            }
+
             try {
               const agent = await editor?.agent.getById(storedAgentConfig.id, { status: 'draft' });
               if (!agent) continue;

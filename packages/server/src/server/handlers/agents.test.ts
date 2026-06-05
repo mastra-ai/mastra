@@ -1955,3 +1955,244 @@ describe('extractVersionOptions', () => {
     expect(extractVersionOptions(undefined, {})).toBeUndefined();
   });
 });
+
+// =============================================================================
+// LIST_AGENTS_ROUTE stored agents ownership filtering
+// =============================================================================
+
+describe('LIST_AGENTS_ROUTE stored agents ownership', () => {
+  const MASTRA_USER_KEY = 'mastra__user';
+  const MASTRA_USER_PERMISSIONS_KEY = 'mastra__userPermissions';
+
+  function createCallerContext(userId: string, permissions: string[] = []) {
+    const ctx = new RequestContext();
+    ctx.set(MASTRA_RESOURCE_ID_KEY, userId);
+    ctx.set(MASTRA_USER_KEY, { id: userId });
+    if (permissions.length > 0) {
+      ctx.set(MASTRA_USER_PERMISSIONS_KEY, permissions);
+    }
+    return ctx;
+  }
+
+  function createMockEditor(
+    storedAgents: Array<{ id: string; authorId?: string | null; visibility?: 'public' | 'private'; name?: string }>,
+  ) {
+    return {
+      agent: {
+        list: vi.fn().mockResolvedValue({ agents: storedAgents }),
+        getById: vi.fn().mockImplementation(async (id: string) => {
+          const found = storedAgents.find(a => a.id === id);
+          if (!found) return null;
+          return new Agent({
+            id: found.id,
+            name: found.name ?? found.id,
+            instructions: 'test',
+            model: {} as any,
+          });
+        }),
+      },
+    };
+  }
+
+  it('non-admin user does not see private agents owned by other users', async () => {
+    const storedAgents = [
+      { id: 'alice-private', authorId: 'alice', visibility: 'private' as const, name: 'Alice Private' },
+      { id: 'bob-public', authorId: 'bob', visibility: 'public' as const, name: 'Bob Public' },
+      { id: 'caller-own', authorId: 'caller', visibility: 'private' as const, name: 'Caller Own' },
+      { id: 'legacy-unowned', authorId: null, visibility: 'private' as const, name: 'Legacy Unowned' },
+    ];
+
+    const mockEditor = createMockEditor(storedAgents);
+    const mastra = new Mastra({
+      agents: {},
+      logger: false,
+    });
+    vi.spyOn(mastra, 'getEditor').mockReturnValue(mockEditor as any);
+
+    const result = await LIST_AGENTS_ROUTE.handler({
+      mastra,
+      requestContext: createCallerContext('caller'),
+    } as any);
+
+    // Should see: caller's own, bob's public, and legacy unowned
+    expect(result['alice-private']).toBeUndefined();
+    expect(result['bob-public']).toBeDefined();
+    expect(result['caller-own']).toBeDefined();
+    expect(result['legacy-unowned']).toBeDefined();
+  });
+
+  it('admin user sees all stored agents', async () => {
+    const storedAgents = [
+      { id: 'alice-private', authorId: 'alice', visibility: 'private' as const, name: 'Alice Private' },
+      { id: 'bob-private', authorId: 'bob', visibility: 'private' as const, name: 'Bob Private' },
+    ];
+
+    const mockEditor = createMockEditor(storedAgents);
+    const mastra = new Mastra({
+      agents: {},
+      logger: false,
+    });
+    vi.spyOn(mastra, 'getEditor').mockReturnValue(mockEditor as any);
+
+    const result = await LIST_AGENTS_ROUTE.handler({
+      mastra,
+      requestContext: createCallerContext('admin', ['stored-agents:*']),
+    } as any);
+
+    expect(result['alice-private']).toBeDefined();
+    expect(result['bob-private']).toBeDefined();
+  });
+
+  it('no caller (auth not configured) sees all stored agents', async () => {
+    const storedAgents = [
+      { id: 'alice-private', authorId: 'alice', visibility: 'private' as const, name: 'Alice Private' },
+      { id: 'bob-public', authorId: 'bob', visibility: 'public' as const, name: 'Bob Public' },
+    ];
+
+    const mockEditor = createMockEditor(storedAgents);
+    const mastra = new Mastra({
+      agents: {},
+      logger: false,
+    });
+    vi.spyOn(mastra, 'getEditor').mockReturnValue(mockEditor as any);
+
+    const result = await LIST_AGENTS_ROUTE.handler({
+      mastra,
+      requestContext: new RequestContext(),
+    } as any);
+
+    expect(result['alice-private']).toBeDefined();
+    expect(result['bob-public']).toBeDefined();
+  });
+
+  it('code-defined agents are always included regardless of ownership', async () => {
+    const codeAgent = new Agent({
+      id: 'code-agent',
+      name: 'Code Agent',
+      instructions: 'test',
+      model: {} as any,
+    });
+
+    const mastra = new Mastra({
+      agents: { 'code-agent': codeAgent },
+      logger: false,
+    });
+
+    // No editor — no stored agents
+    const result = await LIST_AGENTS_ROUTE.handler({
+      mastra,
+      requestContext: createCallerContext('caller'),
+    } as any);
+
+    expect(result['code-agent']).toBeDefined();
+  });
+
+  it('legacy unowned agents (authorId: null) are visible to all users', async () => {
+    const storedAgents = [
+      { id: 'legacy-1', authorId: null, visibility: 'private' as const, name: 'Legacy Private' },
+      { id: 'legacy-2', authorId: null, visibility: 'public' as const, name: 'Legacy Public' },
+      { id: 'legacy-3', authorId: null, name: 'Legacy No Visibility' },
+    ];
+
+    const mockEditor = createMockEditor(storedAgents);
+    const mastra = new Mastra({
+      agents: {},
+      logger: false,
+    });
+    vi.spyOn(mastra, 'getEditor').mockReturnValue(mockEditor as any);
+
+    // Any authenticated user should see all legacy unowned agents
+    const result = await LIST_AGENTS_ROUTE.handler({
+      mastra,
+      requestContext: createCallerContext('any-user'),
+    } as any);
+
+    expect(result['legacy-1']).toBeDefined();
+    expect(result['legacy-2']).toBeDefined();
+    expect(result['legacy-3']).toBeDefined();
+  });
+
+  it('?visibility=public returns only public agents', async () => {
+    const storedAgents = [
+      { id: 'alice-public', authorId: 'alice', visibility: 'public' as const, name: 'Alice Public' },
+      { id: 'alice-private', authorId: 'alice', visibility: 'private' as const, name: 'Alice Private' },
+      { id: 'bob-public', authorId: 'bob', visibility: 'public' as const, name: 'Bob Public' },
+      { id: 'legacy-unowned', authorId: null, visibility: 'private' as const, name: 'Legacy Unowned' },
+    ];
+
+    const mockEditor = createMockEditor(storedAgents);
+    const mastra = new Mastra({
+      agents: {},
+      logger: false,
+    });
+    vi.spyOn(mastra, 'getEditor').mockReturnValue(mockEditor as any);
+
+    const result = await LIST_AGENTS_ROUTE.handler({
+      mastra,
+      requestContext: createCallerContext('caller'),
+      visibility: 'public',
+    } as any);
+
+    // Should only see public agents (including legacy unowned which is treated as public)
+    expect(result['alice-public']).toBeDefined();
+    expect(result['alice-private']).toBeUndefined();
+    expect(result['bob-public']).toBeDefined();
+    expect(result['legacy-unowned']).toBeDefined(); // legacy unowned treated as public
+  });
+
+  it("non-admin ?authorId=other-user returns only that user's public agents", async () => {
+    const storedAgents = [
+      { id: 'alice-public', authorId: 'alice', visibility: 'public' as const, name: 'Alice Public' },
+      { id: 'alice-private', authorId: 'alice', visibility: 'private' as const, name: 'Alice Private' },
+      { id: 'bob-public', authorId: 'bob', visibility: 'public' as const, name: 'Bob Public' },
+      { id: 'caller-own', authorId: 'caller', visibility: 'private' as const, name: 'Caller Own' },
+    ];
+
+    const mockEditor = createMockEditor(storedAgents);
+    const mastra = new Mastra({
+      agents: {},
+      logger: false,
+    });
+    vi.spyOn(mastra, 'getEditor').mockReturnValue(mockEditor as any);
+
+    // Non-admin caller queries for alice's agents
+    const result = await LIST_AGENTS_ROUTE.handler({
+      mastra,
+      requestContext: createCallerContext('caller'),
+      authorId: 'alice',
+    } as any);
+
+    // Should only see alice's public agents (not alice's private, not bob's, not caller's own)
+    expect(result['alice-public']).toBeDefined();
+    expect(result['alice-private']).toBeUndefined();
+    expect(result['bob-public']).toBeUndefined();
+    expect(result['caller-own']).toBeUndefined();
+  });
+
+  it("admin ?authorId=other-user returns all of that user's agents", async () => {
+    const storedAgents = [
+      { id: 'alice-public', authorId: 'alice', visibility: 'public' as const, name: 'Alice Public' },
+      { id: 'alice-private', authorId: 'alice', visibility: 'private' as const, name: 'Alice Private' },
+      { id: 'bob-public', authorId: 'bob', visibility: 'public' as const, name: 'Bob Public' },
+    ];
+
+    const mockEditor = createMockEditor(storedAgents);
+    const mastra = new Mastra({
+      agents: {},
+      logger: false,
+    });
+    vi.spyOn(mastra, 'getEditor').mockReturnValue(mockEditor as any);
+
+    // Admin queries for alice's agents
+    const result = await LIST_AGENTS_ROUTE.handler({
+      mastra,
+      requestContext: createCallerContext('admin', ['stored-agents:*']),
+      authorId: 'alice',
+    } as any);
+
+    // Should see all of alice's agents (public and private), but not bob's
+    expect(result['alice-public']).toBeDefined();
+    expect(result['alice-private']).toBeDefined();
+    expect(result['bob-public']).toBeUndefined();
+  });
+});

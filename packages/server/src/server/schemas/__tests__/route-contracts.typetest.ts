@@ -119,7 +119,9 @@ type _AssertListAgentsBodyNever = Expect<IsNever<ListAgentsBody>>;
 
 // GET /agents has an inline query schema — pin to exact shape
 type ListAgentsQuery = InferQueryParams<RouteMap['GET /agents']>;
-type _AssertListAgentsQuery = Expect<Equal<ListAgentsQuery, { partial?: string }>>;
+type _AssertListAgentsQuery = Expect<
+  Equal<ListAgentsQuery, { partial?: string; authorId?: string; visibility?: 'public' }>
+>;
 
 // POST routes without query params should return never
 type GenerateQuery = InferQueryParams<RouteMap['POST /agents/:agentId/generate']>;
