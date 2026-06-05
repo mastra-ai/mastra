@@ -3,11 +3,11 @@
 ## Origin PR / commit
 
 - PR: [#13648](https://github.com/mastra-ai/mastra/pull/13648) — added non-interactive `--prompt` / `-p` execution for Mastra Code.
-- Later changes: [#14962](https://github.com/mastra-ai/mastra/pull/14962) — adds headless thread control flags (`--continue`, `--thread`, `--title`, `--clone-thread`, `--resource-id`) so non-interactive runs can resume, title, clone, and scope threads instead of always starting fresh; [#14909](https://github.com/mastra-ai/mastra/pull/14909) — adds `--model`, shared `--settings`, model availability/API-key preflight, `--model` over `--mode` precedence warnings, and MCP init warning-only behavior for headless startup. Later queue rows add more output flags; current source already includes those surfaces and should be revisited when those rows are processed.
+- Later changes: [#14962](https://github.com/mastra-ai/mastra/pull/14962) — adds headless thread control flags (`--continue`, `--thread`, `--title`, `--clone-thread`, `--resource-id`) so non-interactive runs can resume, title, clone, and scope threads instead of always starting fresh; [#14909](https://github.com/mastra-ai/mastra/pull/14909) — adds `--model`, shared `--settings`, model availability/API-key preflight, `--model` over `--mode` precedence warnings, and MCP init warning-only behavior for headless startup; [#15423](https://github.com/mastra-ai/mastra/pull/15423) — adds automation-focused `--output-format text|json|stream-json` modes that separate final text summaries, final JSON summaries, and line-delimited event streams.
 
 ## User-visible behavior
 
-- What the user can do: run `mastracode --prompt "..."` or pipe stdin into `mastracode --prompt -` to execute a task without launching the TUI; optionally choose an explicit model or mode, use a shared settings file, resume the latest thread, select a thread by ID/title, clone it, set a title, or set a resource ID.
+- What the user can do: run `mastracode --prompt "..."` or pipe stdin into `mastracode --prompt -` to execute a task without launching the TUI; optionally choose an explicit model or mode, use a shared settings file, choose automation output (`text`, `json`, or `stream-json`), resume the latest thread, select a thread by ID/title, clone it, set a title, or set a resource ID.
 - Success looks like: assistant text streams to stdout in default mode; tool/subagent/status output goes to stderr; JSON modes emit machine-readable events or a final summary; thread-control actions are announced through stderr/default output or JSON events.
 - Must preserve: no interactive terminal assumptions, clear nonzero exits, same Harness/model/workspace behavior as the TUI, and safe auto-resolution of prompts that would otherwise block unattended runs.
 
@@ -66,14 +66,14 @@
 
 ## Existing tests
 
-- `mastracode/src/headless.test.ts` — flag detection, parsing, validation, timeout/model/mode/thinking/output arg edge cases, `--settings`, `--clone-thread`, and `--continue` + `--thread` conflict handling.
+- `mastracode/src/headless.test.ts` — flag detection, parsing, validation, timeout/model/mode/thinking/output/output-format arg edge cases, `--settings`, `--clone-thread`, and `--continue` + `--thread` conflict handling.
 - `mastracode/src/headless-integration.test.ts` — real Harness lifecycle, tool call flow, text streaming, abort handling, prompt-context reminders, `--model`/`--mode` preflight and override warnings, missing-key/unknown-model failures, thread ID/title resume, unknown-thread failure, title rename, and clone event coverage.
 
 ## Missing tests
 
 - Packaged CLI smoke for `mastracode --prompt` after npm-style build/install.
 - Packaged CLI smoke for model/mode auth preflight through the built binary and real settings/AuthStorage paths.
-- End-to-end JSON/stream-json contract tests that assert stdout/stderr separation, including thread-control status/event output.
+- End-to-end `--output-format text|json|stream-json` contract tests that assert stdout/stderr separation, summary aggregation, thread-control status/event output, and no legacy `--format json` behavior drift.
 
 ## Known risks / regressions
 

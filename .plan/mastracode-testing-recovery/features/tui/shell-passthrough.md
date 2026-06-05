@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13999](https://github.com/mastra-ai/mastra/pull/13999) — stream `!` shell passthrough output in real time instead of buffering until completion.
-- Later changes: [#15092](https://github.com/mastra-ai/mastra/pull/15092) — makes `!` passthrough output collapsible via the shared Ctrl+E tool-output toggle, caps the live component at 200 stored lines / 20 visible collapsed lines, tracks shell components in TUI state, and clears them on thread/resource switches and chat pruning. Pending row [#17283](https://github.com/mastra-ai/mastra/pull/17283) adds shell passthrough configuration; revisit this card when that row is processed.
+- Later changes: [#15092](https://github.com/mastra-ai/mastra/pull/15092) — makes `!` passthrough output collapsible via the shared Ctrl+E tool-output toggle, caps the live component at 200 stored lines / 20 visible collapsed lines, tracks shell components in TUI state, and clears them on thread/resource switches and chat pruning; [#15566](https://github.com/mastra-ai/mastra/pull/15566) — hardens shared ANSI/OSC truncation against polynomial ReDoS while preserving visible-width truncation for shell/tool renderers. Pending row [#17283](https://github.com/mastra-ai/mastra/pull/17283) adds shell passthrough configuration; revisit this card when that row is processed.
 
 ## User-visible behavior
 
 - What the user can do: type `!<command>` in the TUI to run a local shell command outside the agent/tool-call loop.
 - Success looks like: stdout/stderr appear incrementally in a bordered shell component while the subprocess is still running, long output stays collapsed to the latest 20 lines by default, Ctrl+E expands/collapses shell output with other tool-like blocks, then the component finishes with success/failure state, duration, and exit-code context.
-- Must preserve: real-time streaming, ANSI/color preservation, bounded output growth, collapse/expand parity with tool output, non-zero exit diagnostics, and no duplicate buffered stderr after it was already streamed.
+- Must preserve: real-time streaming, ANSI/color preservation through bounded ANSI/OSC parsing, bounded output growth, collapse/expand parity with tool output, non-zero exit diagnostics, and no duplicate buffered stderr after it was already streamed.
 
 ## Entry points / commands
 
@@ -51,6 +51,7 @@
 - `mastracode/src/tui/mastra-tui.ts` — detects `!` input and dispatches to shell passthrough.
 - `mastracode/src/tui/shell.ts` — runs the subprocess and streams stdout/stderr into the component.
 - `mastracode/src/tui/components/shell-output.ts` — live bordered output component, status icons, truncation, partial-line handling, collapse/expand state.
+- `mastracode/src/tui/components/ansi.ts` — shared bounded ANSI/OSC truncation helper used by shell/tool renderers.
 - `mastracode/src/tui/shell-runner.ts` — execa invocation, shell selection, timeout, cwd/env handling.
 - `mastracode/src/tui/shell-result.ts` — completion/diagnostic resolution.
 
@@ -66,6 +67,7 @@
 - `mastracode/src/tui/__tests__/shell-result.test.ts` — exit-code/diagnostic resolution for success, spawn failures, timeouts, and already-streamed stderr.
 - `mastracode/src/tui/__tests__/prune-chat.test.ts` — verifies `allShellComponents` are removed when pruned chat children are discarded.
 - `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts` — covers Ctrl+E expansion for tracked components; current assertion is system-reminder focused, while shell components use the same loop.
+- `mastracode/src/tui/components/__tests__/ansi.test.ts` — covers ANSI/OSC truncation plus a pathological no-terminator ReDoS regression case.
 
 ## Missing tests
 

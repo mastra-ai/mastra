@@ -234,11 +234,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 212 | 2026-04-16 | #15458 | `346c2f5f05` | review | done | chore(mastracode): bump Anthropic pack defaults to opus-4-7 and sonnet-4-6 (#15458) | 1 |
 | 213 | 2026-04-16 | #15462 | `f607106854` | review | done | fix: prevent early observational memory reflection activation overshoot (#15462) | 4 |
 | 214 | 2026-04-18 | #15483 | `7f9dc6260b` | review | done | fix(mastracode): check stored API key slot and env vars in key resolution (#15483) | 1 |
-| 215 | 2026-04-20 | #15403 | `f7420c2c45` | likely skip | current | chore: version packages (alpha) (#15403) | 2 |
-| 216 | 2026-04-20 | #15423 | `5e42e6f903` | review | | feat(core,mastracode): add --output-format to mastracode headless wit… (#15423) | 2 |
-| 217 | 2026-04-20 | #15566 | `0a5fa1d3cb` | review | | fix(security): replace polynomial-redos regexes with bounded/procedural alternatives (#15566) | 8 |
-| 218 | 2026-04-21 | #15544 | `30bd1ac2db` | likely skip | | chore(deps): update formatting & linting (major) (#15544) | 1 |
-| 219 | 2026-04-21 | #15448 | `2ca2d23913` | review | | feat: add Tavily integration package (#15448) | 2 |
+| 215 | 2026-04-20 | #15403 | `f7420c2c45` | likely skip | skipped | chore: version packages (alpha) (#15403) | 2 |
+| 216 | 2026-04-20 | #15423 | `5e42e6f903` | review | done | feat(core,mastracode): add --output-format to mastracode headless wit… (#15423) | 2 |
+| 217 | 2026-04-20 | #15566 | `0a5fa1d3cb` | review | done | fix(security): replace polynomial-redos regexes with bounded/procedural alternatives (#15566) | 8 |
+| 218 | 2026-04-21 | #15544 | `30bd1ac2db` | likely skip | skipped | chore(deps): update formatting & linting (major) (#15544) | 1 |
+| 219 | 2026-04-21 | #15448 | `2ca2d23913` | review | current | feat: add Tavily integration package (#15448) | 2 |
 | 220 | 2026-04-21 | #15515 | `3d3daffaae` | likely skip | | chore: version packages (alpha) (#15515) | 2 |
 | 221 | 2026-04-21 | #15601 | `74b1b9661f` | likely skip | | chore: version packages (alpha) (#15601) | 2 |
 | 222 | 2026-04-22 | #15606 | `dd05cb1f4a` | likely skip | | chore: version packages (alpha) (#15606) | 2 |

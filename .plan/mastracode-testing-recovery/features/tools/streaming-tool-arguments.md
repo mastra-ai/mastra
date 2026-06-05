@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments incrementally across tool renderers.
-- Later changes: [#13335](https://github.com/mastra-ai/mastra/pull/13335) — preserved assistant message text before task/todo tool calls by splitting the streaming assistant component; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — renamed todo streaming paths to task tools and moved tool ownership into core Harness; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — folded active tool and tool-input buffers into canonical `HarnessDisplayState`; [#14472](https://github.com/mastra-ai/mastra/pull/14472) — removed italic styling from rendered tool arguments while preserving argument color tinting; [#14535](https://github.com/mastra-ai/mastra/pull/14535) — makes tool-result object rendering JSON-safe for circular structures using shared safe serialization helpers.
+- Later changes: [#13335](https://github.com/mastra-ai/mastra/pull/13335) — preserved assistant message text before task/todo tool calls by splitting the streaming assistant component; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — renamed todo streaming paths to task tools and moved tool ownership into core Harness; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — folded active tool and tool-input buffers into canonical `HarnessDisplayState`; [#14472](https://github.com/mastra-ai/mastra/pull/14472) — removed italic styling from rendered tool arguments while preserving argument color tinting; [#14535](https://github.com/mastra-ai/mastra/pull/14535) — makes tool-result object rendering JSON-safe for circular structures using shared safe serialization helpers; [#15566](https://github.com/mastra-ai/mastra/pull/15566) — bounds ANSI/error parsing used by streamed tool renderers to prevent pathological output from hanging the TUI.
 
 ## User-visible behavior
 
 - What the user sees: tool boxes can appear before the final tool call is available, then fill in readable non-italic argument previews as the model streams JSON; completed object results render even when they contain circular references.
 - Special cases: `ask_user`, `submit_plan`, and task mutation tools update dedicated inline/pinned components from partial args.
-- Must preserve: no duplicate tool boxes, final args replace partial args, pre-tool assistant text stays visible, history reload renders stable final args/results only, circular results are marked instead of crashing, and argument styling remains legible in normal/quiet modes.
+- Must preserve: no duplicate tool boxes, final args replace partial args, pre-tool assistant text stays visible, history reload renders stable final args/results only, circular results are marked instead of crashing, and argument/result styling remains legible without regex backtracking hazards in normal/quiet modes.
 
 ## Entry points / commands
 
@@ -44,7 +44,7 @@
 | Raw streamed arg text | Harness display state `toolInputBuffers` | TUI tool handlers |
 | Parsed partial args | TUI `handleToolInputDelta()` | Tool/ask/plan/task components |
 | Final args/results | `tool_start` / stored `tool_call.args`; core `ensureSerializable()` and TUI `safeStringify()` for object results | TUI live and history renderers |
-| Argument styling | `CODE_HIGHLIGHT_THEME` / `QUIET_CODE_HIGHLIGHT_THEME` token colors without italic font style | Tool argument previews and shell arg segments |
+| Argument styling/parsing | `CODE_HIGHLIGHT_THEME` / `QUIET_CODE_HIGHLIGHT_THEME` token colors without italic font style + bounded ANSI/error parsing helpers | Tool argument previews, result/error previews, and shell arg segments |
 | Pending tool components | TUI state `pendingTools` | Tool handlers/renderers |
 | Assistant message split | TUI `streamingComponent` | Preserves text before and after tool calls |
 
@@ -54,7 +54,8 @@
 - `packages/core/src/harness/display-state.test.ts` — core buffer/status coverage.
 - `mastracode/src/tui/event-dispatch.ts` — routes input events to handlers.
 - `mastracode/src/tui/handlers/tool.ts` — creates early components and parses partial JSON.
-- `mastracode/src/tui/components/tool-execution-enhanced.ts` — renders and updates argument previews.
+- `mastracode/src/tui/components/tool-execution-enhanced.ts` — renders and updates argument previews, quiet shell command previews, and bounded error parsing.
+- `mastracode/src/tui/components/ansi.ts` — shared bounded ANSI/OSC truncation used by streamed tool renderers.
 - `packages/core/src/utils.ts`, `tool-call-step.ts`, and MastraCode tool renderers — safe serialization path for circular tool results before display/history projections.
 - `mastracode/src/tui/render-messages.ts` — reload/history rendering from final tool calls.
 - `mastracode/src/tui/components/task-progress.ts` — pinned task progress projection for task mutation tools.
@@ -71,7 +72,8 @@
 ## Existing tests
 
 - `packages/core/src/harness/display-state.test.ts` covers `tool_input_start/delta/end` buffers and streaming-input status.
-- `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts` covers preview updates from partial args.
+- `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts` covers preview updates from partial args plus pathological-input timing for bounded error parsing.
+- `mastracode/src/tui/components/__tests__/ansi.test.ts` covers ANSI/OSC visible-width truncation and a no-ReDoS pathological case.
 - `packages/core/src/utils.test.ts` covers safe circular-reference serialization helpers used by tool results.
 - `mastracode/src/tui/components/__tests__/ask-question-inline-long-labels.test.ts` covers streaming inline question args.
 - `mastracode/src/tui/components/__tests__/task-progress.test.ts` covers pinned task progress rendering.
@@ -89,6 +91,7 @@
 - Live streaming and history reload are intentionally different projections; regressions can hide if only one path is tested.
 - Task tools have special pinned-state behavior and can diverge from generic tool boxes.
 - Safe JSON serialization is not the same as output budgeting; circular results can still be large if a renderer skips truncation.
+- New renderer regexes should stay bounded/procedural; timing tests cover known pathological shapes but are not a substitute for reviewing regex structure.
 
 ## Verification checklist
 

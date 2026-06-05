@@ -1825,3 +1825,31 @@ Verification:
 - `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/om-marker.test.ts src/onboarding/__tests__/packs.test.ts src/agents/__tests__/model.test.ts -t "OMMarkerComponent activation rendering|getAvailableModePacks|getAnthropicApiKey|getOpenAIApiKey" --bail=1 --reporter=dot` — 3 files / 17 tests passed / 29 skipped.
 - `pnpm --filter ./mastracode exec vitest run src/agents/__tests__/model.test.ts -t "uses direct OpenAI API key provider when stored API key credential exists|uses stored API key credential when not logged in via OAuth" --bail=1 --reporter=dot` — 1 file / 2 tests passed / 34 skipped.
 - `pnpm --filter ./packages/core exec vitest run src/agent/message-list/tests/step-start.test.ts src/loop/workflows/agentic-execution/llm-execution-step.test.ts -t "step-start|processor-updated model|configured modelId" --bail=1 --reporter=dot` — 2 files / 9 tests passed / 19 skipped / no type errors.
+
+### PR #15403 / #15423 / #15566 / #15544 feature-map checkpoint
+
+Verified rows 215-218:
+
+- #15403 is a Changesets alpha package-version batch; skipped for feature mapping.
+- #15423 adds headless `--output-format text|json|stream-json`. Current `headless.ts` stores `outputFormat` separately from the legacy `format` flag, validates allowed values during parsing, emits text-only final summaries for `text`, final aggregate summaries for `json`, and line-delimited event output for `stream-json`.
+- #15566 replaces polynomial-ReDoS-prone regexes with bounded or procedural alternatives across Mastra Code surfaces: ANSI/OSC truncation, tool validation/error parsing, streamed tool rendering, OM thread-tag stripping, and workspace/skill path normalization.
+- #15544 is a formatting/lint dependency update; skipped for feature mapping.
+
+Documentation actions:
+
+- Updated `features/headless/prompt-mode.md` for #15423 output-format flags and output contract risk.
+- Updated `features/tui/shell-passthrough.md`, `features/tools/coding-tools-permissions.md`, and `features/tools/streaming-tool-arguments.md` for #15566 bounded ANSI/error parsing in shell/tool renderers.
+- Updated `features/memory/observational-memory.md` for bounded OM thread-tag stripping.
+- Updated `features/integrations/skills-command.md` and `features/tools/workspace-tools.md` for procedural versioned skill/workspace path normalization.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #15403 skipped, #15423 done, #15566 done, #15544 skipped, #15448 current.
+
+Focused evidence read: PR metadata for #15403/#15423/#15566/#15544; current `mastracode/src/headless.ts`, `headless.test.ts`, TUI `ansi.ts`, `tool-validation-error.ts`, `tool-execution-enhanced.ts`, memory `message-utils.ts`, core workspace skill source files, and focused test files.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/headless.test.ts -t "output-format" --bail=1 --reporter=dot` — 1 file / 4 tests passed / 40 skipped.
+- `pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/message-utils.test.ts --bail=1 --reporter=dot` — 1 file / 6 tests passed.
+- `pnpm --filter ./packages/core exec vitest run src/workspace/skills/skill-versioning.test.ts -t "normalizes paths|CompositeVersionedSkillSource" --bail=1 --reporter=dot` — 1 file / 11 tests passed / 45 skipped / no type errors.
+- `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/ansi.test.ts src/tui/components/__tests__/tool-validation-error.test.ts src/tui/components/__tests__/tool-execution-enhanced.test.ts --bail=1 --reporter=dot` — 3 files / 75 tests passed.
+- Attempted `pnpm --filter ./packages/core exec vitest run src/utils/semantic-markdown.test.ts --bail=1 --reporter=dot`, but no matching test exists in `packages/core`; semantic-markdown coverage belongs to non-Mastra-Code RAG surfaces and was not included in this checkpoint.

@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13457](https://github.com/mastra-ai/mastra/pull/13457) — cache dynamic Harness workspace resolution so `/skills` works before the first message.
-- Later changes: [#13460](https://github.com/mastra-ai/mastra/pull/13460) — the same autocomplete provider rebuild also receives `fdPath` for `@` file suggestions; [#13700](https://github.com/mastra-ai/mastra/pull/13700) — exposes computed skill paths through subagent allowed-path context so delegated agents can read installed skills; [#15151](https://github.com/mastra-ai/mastra/pull/15151) — adds Agent Skills spec-compatible `.agents/skills` project/global directories and updates `/skills` setup guidance; [#15228](https://github.com/mastra-ai/mastra/pull/15228) — resolves symlinked skill aliases to canonical paths so the same skill discovered through multiple directories is de-duplicated instead of treated as a conflicting duplicate.
+- Later changes: [#13460](https://github.com/mastra-ai/mastra/pull/13460) — the same autocomplete provider rebuild also receives `fdPath` for `@` file suggestions; [#13700](https://github.com/mastra-ai/mastra/pull/13700) — exposes computed skill paths through subagent allowed-path context so delegated agents can read installed skills; [#15151](https://github.com/mastra-ai/mastra/pull/15151) — adds Agent Skills spec-compatible `.agents/skills` project/global directories and updates `/skills` setup guidance; [#15228](https://github.com/mastra-ai/mastra/pull/15228) — resolves symlinked skill aliases to canonical paths so the same skill discovered through multiple directories is de-duplicated instead of treated as a conflicting duplicate; [#15566](https://github.com/mastra-ai/mastra/pull/15566) — replaces regex-heavy versioned skill path normalization with procedural parsing to avoid polynomial ReDoS in skill-source routing.
 - Related origin: [#13227](https://github.com/mastra-ai/mastra/pull/13227) — introduced workspace-backed skill loading during early subagent/workspace organization.
 
 ## User-visible behavior
@@ -54,7 +54,7 @@
 - `mastracode/src/tui/commands/skills.ts` — eagerly resolves workspace for `/skills` and `/skill/<name>`.
 - `mastracode/src/agents/workspace.ts` — `buildSkillPaths()` scans project/global Mastra Code, Claude, and Agent Skills directories, including `.agents/skills` and `~/.agents/skills`.
 - `packages/core/src/workspace/skills/workspace-skills.ts` and `skill-source.ts` — canonical-path de-duping for same-named skill candidates and the `realpath()` source contract.
-- `packages/core/src/workspace/skills/local-skill-source.ts`, `composite-versioned-skill-source.ts`, `versioned-skill-source.ts` — symlink-aware local skill directory detection and canonical path passthrough/fallback for live/versioned sources.
+- `packages/core/src/workspace/skills/local-skill-source.ts`, `composite-versioned-skill-source.ts`, `versioned-skill-source.ts` — symlink-aware local skill directory detection, canonical path passthrough/fallback for live/versioned sources, and procedural versioned path normalization.
 - `packages/core/src/processors/processors/skills.ts` — formats deduped skills by path so prompt injection does not duplicate canonical aliases.
 - `mastracode/src/tools/utils.ts` — `getAllowedPathsFromContext()` reuses skill paths for subagent/file-tool access.
 - `docs/src/content/en/reference/harness/harness-class.mdx` — documents Harness workspace methods.
@@ -75,6 +75,7 @@
 - `mastracode/src/agents/__tests__/workspace-skill-activation.test.ts` — verifies symlinked local skills activate through the Mastra Code workspace path.
 - `mastracode/src/tools/__tests__/get-allowed-paths.test.ts` — verifies skill paths are returned and merged with sandbox paths for inherited tool contexts.
 - `packages/core/src/workspace/skills/workspace-skills.test.ts` — verifies canonical alias de-duping for list/search/get while preserving distinct same-named local skills as conflicts.
+- `packages/core/src/workspace/skills/skill-versioning.test.ts` — covers versioned and composite skill-source path normalization/routing.
 - `packages/core/src/workspace/filesystem/local-filesystem.test.ts`, `workspace.test.ts`, `tools.test.ts`, and `processors/processors/skills.test.ts` — cover symlink allowed roots, workspace skill discovery, tool activation, and prompt-processor de-duping around symlink aliases.
 
 ## Missing tests
@@ -90,6 +91,7 @@
 - Dynamic workspace caching can become stale if the underlying skill config changes and no explicit reload path refreshes the workspace.
 - Agent Skills spec directory support depends on keeping `/skills` setup guidance, `buildSkillPaths()`, and allowed-path extraction in sync.
 - Canonical path de-duping depends on each `SkillSource` implementing `realpath()` consistently; sources without canonical resolution fall back to path-string tie-breaking and can still report duplicate same-named skills.
+- Versioned skill path parsing should stay procedural/bounded; regex-based normalization can be reintroduced accidentally when adding new virtual source routing.
 
 ## Verification checklist
 
