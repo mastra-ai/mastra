@@ -8,11 +8,9 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
 import type { LSPConfig, WorkspaceToolsConfig } from '@mastra/core/workspace';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
-import type { HookManager } from '../hooks';
 import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema';
 import { TOOL_NAME_OVERRIDES } from '../tool-names.js';
-import { wrapToolWithHooks } from './tools.js';
 
 // =============================================================================
 // Sandbox Environment
@@ -129,15 +127,7 @@ function detectPackageRunner(projectPath: string): string | undefined {
   return 'npx --yes';
 }
 
-export function getDynamicWorkspace({
-  requestContext,
-  mastra,
-  hookManager,
-}: {
-  requestContext: RequestContext;
-  mastra?: Mastra;
-  hookManager?: HookManager;
-}) {
+export function getDynamicWorkspace({ requestContext, mastra }: { requestContext: RequestContext; mastra?: Mastra }) {
   const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
   const state = ctx?.getState();
   const modeId = ctx?.modeId ?? 'build';
@@ -163,11 +153,6 @@ export function getDynamicWorkspace({
 
   const workspaceTools: WorkspaceToolsConfig = {
     ...(isPlanMode ? { ...TOOL_NAME_OVERRIDES, ...planModeTools } : TOOL_NAME_OVERRIDES),
-    ...(hookManager
-      ? {
-          toolWrapper: (tool, { toolName }) => wrapToolWithHooks(toolName, tool as any, hookManager),
-        }
-      : {}),
   };
 
   // Reuse existing workspace if already registered (preserves ProcessManager state)

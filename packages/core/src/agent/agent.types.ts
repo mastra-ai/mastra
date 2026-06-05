@@ -9,7 +9,7 @@ import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
-import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../tools';
+import type { RequireToolApproval, ToolHooks, ToolPayloadTransformPolicy } from '../tools';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type {
@@ -523,6 +523,8 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   toolsets?: ToolsetsInput;
   /** Client-side tools available during execution */
   clientTools?: ToolsInput;
+  /** Per-execution hooks that run before and after tool calls. */
+  hooks?: ToolHooks;
   /** Tool selection strategy: 'auto', 'none', 'required', or specific tools */
   toolChoice?: ToolChoice<any>;
 

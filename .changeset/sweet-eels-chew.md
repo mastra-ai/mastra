@@ -2,20 +2,32 @@
 '@mastra/core': minor
 ---
 
-Added a workspace tool wrapper for applications that need to wrap built-in workspace tools before they are exposed to agents.
+Added agent and workspace tool hooks for applications that need to run logic before and after tool calls execute.
 
 **Example**
 
 ```ts
+const agent = new Agent({
+  name: 'Support Agent',
+  instructions: 'Help users.',
+  model,
+  hooks: {
+    beforeToolCall: ({ toolName, input }) => {
+      console.log(`Running ${toolName}`, input);
+    },
+    afterToolCall: ({ toolName, output, error }) => {
+      console.log(`Finished ${toolName}`, { output, error });
+    },
+  },
+});
+
 const workspace = new Workspace({
   tools: {
-    toolWrapper: (tool, { toolName, workspaceToolName }) => ({
-      ...(tool as object),
-      execute: async (input, context) => {
-        console.log(`Running ${toolName} from ${workspaceToolName}`);
-        return (tool as any).execute(input, context);
+    hooks: {
+      beforeToolCall: ({ toolName, workspaceToolName, input }) => {
+        console.log(`Running ${toolName} from ${workspaceToolName}`, input);
       },
-    }),
+    },
   },
 });
 ```

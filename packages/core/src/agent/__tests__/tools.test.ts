@@ -1435,6 +1435,85 @@ describe('requireApproval property preservation', () => {
     // can evaluate it per call instead of falling back to the boolean flag.
     expect((tools.transferFunds as any).needsApprovalFn).toBe(needsApprovalFn);
   });
+
+  it('runs configured hooks around agent tool execution', async () => {
+    const calls: Array<{ phase: string; toolName: string; input: unknown; output?: unknown }> = [];
+    const testTool = createTool({
+      id: 'test-tool',
+      description: 'Test tool',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async ({ value }) => ({ value }),
+    });
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for hooks',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          content: [{ type: 'text', text: 'ok' }],
+          warnings: [],
+        }),
+      }),
+      tools: { testTool },
+      hooks: {
+        beforeToolCall: ({ toolName, input }) => calls.push({ phase: 'before', toolName, input }),
+        afterToolCall: ({ toolName, input, output }) => calls.push({ phase: 'after', toolName, input, output }),
+      },
+    });
+
+    const tools = await agent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+    });
+    const input = { value: 'ok' };
+    const output = await tools.testTool.execute?.(input, {} as any);
+
+    expect(output).toEqual({ value: 'ok' });
+    expect(calls).toEqual([
+      { phase: 'before', toolName: 'testTool', input },
+      { phase: 'after', toolName: 'testTool', input, output: { value: 'ok' } },
+    ]);
+  });
+
+  it('allows per-execution hooks to short-circuit agent tool execution', async () => {
+    const execute = vi.fn(async () => ({ value: 'executed' }));
+    const testTool = createTool({
+      id: 'test-tool',
+      description: 'Test tool',
+      inputSchema: z.object({ value: z.string() }),
+      execute,
+    });
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for hooks',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          content: [{ type: 'text', text: 'ok' }],
+          warnings: [],
+        }),
+      }),
+      tools: { testTool },
+    });
+
+    const tools = await agent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+      hooks: {
+        beforeToolCall: () => ({ proceed: false, output: { value: 'blocked' } }),
+      },
+    });
+    const output = await tools.testTool.execute?.({ value: 'ok' }, {} as any);
+
+    expect(output).toEqual({ value: 'blocked' });
+    expect(execute).not.toHaveBeenCalled();
+  });
 });
 
 describe('sub-agent prompt input normalization (GitHub #14154)', () => {

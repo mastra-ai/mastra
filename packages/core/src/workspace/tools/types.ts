@@ -55,14 +55,36 @@ export type DynamicToolConfigValue<TContext = ToolConfigContext> =
   | boolean
   | ((context: TContext) => boolean | Promise<boolean>);
 
-export interface WorkspaceToolWrapperContext {
+export interface WorkspaceToolHookContext {
   /** The name exposed to the model after any per-tool `name` remap. */
   toolName: string;
   /** The built-in workspace tool name before any `name` remap. */
   workspaceToolName: WorkspaceToolName;
+  /** Input passed to the tool. */
+  input: unknown;
+  /** Execution context passed to the tool. */
+  context: unknown;
 }
 
-export type WorkspaceToolWrapper = (tool: unknown, context: WorkspaceToolWrapperContext) => unknown;
+export interface WorkspaceToolBeforeHookResult {
+  /** Set to false to skip the tool execution and return `output` instead. */
+  proceed: false;
+  output: unknown;
+}
+
+export interface WorkspaceToolAfterHookContext extends WorkspaceToolHookContext {
+  /** Tool output when execution completed. */
+  output: unknown;
+  /** Error thrown by the tool, if execution failed. */
+  error?: unknown;
+}
+
+export interface WorkspaceToolHooks {
+  beforeToolCall?: (
+    context: WorkspaceToolHookContext,
+  ) => void | WorkspaceToolBeforeHookResult | Promise<void | WorkspaceToolBeforeHookResult>;
+  afterToolCall?: (context: WorkspaceToolAfterHookContext) => void | Promise<void>;
+}
 
 // =============================================================================
 // Tool Configuration Types
@@ -274,8 +296,8 @@ export type WorkspaceToolsConfig = {
   /** Default: whether all tools require user approval (default: false if not specified) */
   requireApproval?: DynamicToolConfigValue<ToolConfigWithArgsContext>;
 
-  /** Optional wrapper applied to every enabled workspace tool after name remapping. */
-  toolWrapper?: WorkspaceToolWrapper;
+  /** Optional hooks run around every enabled workspace tool after name remapping. */
+  hooks?: WorkspaceToolHooks;
 } & {
   [K in typeof WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]?: ExecuteCommandToolConfig;
 } & {

@@ -46,7 +46,7 @@ import { executeSubagent } from './agents/subagents/execute.js';
 import { exploreSubagent } from './agents/subagents/explore.js';
 import { planSubagent } from './agents/subagents/plan.js';
 import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state.js';
-import { createDynamicTools } from './agents/tools.js';
+import { createDynamicTools, createToolHooks } from './agents/tools.js';
 
 import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
@@ -451,7 +451,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     name: 'Code Agent',
     instructions: getDynamicInstructions,
     model: getDynamicModel,
-    tools: createDynamicTools(mcpManager, config?.extraTools, hookManager, config?.disabledTools, storage),
+    tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage),
+    hooks: createToolHooks(hookManager),
     scorers: {
       outcome: {
         scorer: outcomeScorer,
@@ -715,7 +716,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       // with MCP/hooks/storage which were already initialized with this value.
       configDir,
     },
-    workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, hookManager })),
+    workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
     browser: config?.browser,
     modes,
     heartbeatHandlers,

@@ -50,7 +50,7 @@ import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { AgentChunkType, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
-import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
+import type { ToolAction, ToolHooks, VercelTool, VercelToolV5 } from '../tools';
 import type { ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
@@ -458,6 +458,10 @@ interface AgentConfigBase<
    * Tools that the agent can access. Can be provided statically or resolved dynamically.
    */
   tools?: DynamicArgument<TTools, TRequestContext>;
+  /**
+   * Hooks that run before and after any tool call made by this agent.
+   */
+  hooks?: ToolHooks;
   /**
    * Workflows that the agent can execute. Can be static or dynamically resolved.
    */

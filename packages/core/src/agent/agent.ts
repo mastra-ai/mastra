@@ -84,7 +84,13 @@ import { createTool } from '../tools';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
 import { isMastraTool, isProviderTool } from '../tools/toolchecks';
-import type { CoreTool, McpMetadata, ToolPayloadTransformPolicy } from '../tools/types';
+import type {
+  CoreTool,
+  MastraToolInvocationOptions,
+  McpMetadata,
+  ToolHooks,
+  ToolPayloadTransformPolicy,
+} from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
 import type { ToolOptions } from '../utils';
@@ -348,6 +354,7 @@ export class Agent<
   #defaultOptions: DynamicArgument<AgentExecutionOptions<TOutput>, TRequestContext>;
   #defaultNetworkOptions: DynamicArgument<NetworkOptions, TRequestContext>;
   #tools: DynamicArgument<TTools, TRequestContext>;
+  #hooks?: ToolHooks;
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
   #agents: DynamicArgument<Record<string, SubAgent<string, TRequestContext>>, TRequestContext>;
   #voice: DynamicArgument<MastraVoice, TRequestContext>;
@@ -467,6 +474,7 @@ export class Agent<
     );
 
     this.#tools = config.tools || ({} as TTools);
+    this.#hooks = config.hooks;
     this.#pubsub = config.pubsub;
 
     if (config.mastra) {
@@ -5201,6 +5209,7 @@ export class Agent<
     requestContext?: RequestContext;
     memoryConfig?: MemoryConfig;
     autoResumeSuspendedTools?: boolean;
+    hooks?: ToolHooks;
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
     return this.convertTools({
@@ -5228,6 +5237,7 @@ export class Agent<
     delegation,
     backgroundTaskEnabled,
     inputProcessors,
+    hooks,
     ...rest
   }: {
     toolsets?: ToolsetsInput;
@@ -5243,6 +5253,7 @@ export class Agent<
     delegation?: DelegationConfig;
     backgroundTaskEnabled?: boolean;
     inputProcessors?: InputProcessorOrWorkflow[];
+    hooks?: ToolHooks;
   } & Partial<ObservabilityContext>): Promise<Record<string, CoreTool>> {
     const observabilityContext = resolveObservabilityContext(rest);
     let mastraProxy = undefined;
@@ -5395,7 +5406,58 @@ export class Agent<
       ...browserTools,
       ...inputProcessorLoadedTools,
     };
-    return this.formatTools(allTools);
+
+    const formattedTools = this.formatTools(allTools);
+    return this.wrapToolsWithHooks(formattedTools, this.resolveToolHooks(hooks));
+  }
+
+  private resolveToolHooks(runHooks?: ToolHooks): ToolHooks | undefined {
+    if (!this.#hooks) return runHooks;
+    if (!runHooks) return this.#hooks;
+
+    return deepMerge(this.#hooks as Record<string, unknown>, runHooks as Record<string, unknown>) as ToolHooks;
+  }
+
+  private wrapToolsWithHooks(tools: Record<string, CoreTool>, hooks?: ToolHooks): Record<string, CoreTool> {
+    if (!hooks?.beforeToolCall && !hooks?.afterToolCall) return tools;
+
+    return Object.fromEntries(
+      Object.entries(tools).map(([toolName, tool]) => [toolName, this.wrapToolWithHooks(toolName, tool, hooks)]),
+    );
+  }
+
+  private wrapToolWithHooks(toolName: string, tool: CoreTool, hooks: ToolHooks): CoreTool {
+    if (typeof tool.execute !== 'function') return tool;
+
+    return {
+      ...tool,
+      execute: async (input: unknown, context: MastraToolInvocationOptions) => {
+        const hookContext = {
+          toolName,
+          input,
+          context,
+          metadata: {
+            agentId: this.id,
+            agentName: this.name,
+          },
+        };
+        const beforeResult = await hooks.beforeToolCall?.(hookContext);
+        if (beforeResult?.proceed === false) {
+          return beforeResult.output;
+        }
+
+        let output: unknown;
+        try {
+          output = await tool.execute!(input, context);
+        } catch (error) {
+          await hooks.afterToolCall?.({ ...hookContext, output, error });
+          throw error;
+        }
+
+        await hooks.afterToolCall?.({ ...hookContext, output });
+        return output;
+      },
+    };
   }
 
   /**
