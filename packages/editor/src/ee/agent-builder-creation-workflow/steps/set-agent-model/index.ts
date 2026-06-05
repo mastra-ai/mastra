@@ -1,6 +1,6 @@
 import { createStep } from '@mastra/core/workflows';
 
-import { configSchema, type Config, type StepFactoryArgs, type WorkflowInput } from '../../types';
+import { configSchema, type Config, type StepFactoryArgs } from '../../types';
 import { createModelAgent } from './agent';
 import { resolveModel } from './handler';
 
@@ -14,10 +14,9 @@ export const createSetModelStep = ({ model }: StepFactoryArgs) =>
     description: 'Set the agent model',
     inputSchema: configSchema,
     outputSchema: configSchema,
-    execute: async ({ inputData, getInitData }) => {
-      const init = getInitData<WorkflowInput>();
+    execute: async ({ inputData }) => {
       const config = inputData as Config;
       const agent = createModelAgent({ model });
-      return { ...config, model: await resolveModel(agent, init.model, init.availableModels) };
+      return { ...config, model: await resolveModel(agent, undefined, undefined) };
     },
   });

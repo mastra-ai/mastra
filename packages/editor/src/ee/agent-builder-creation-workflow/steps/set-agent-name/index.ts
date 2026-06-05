@@ -18,6 +18,6 @@ export const createSetNameStep = ({ model }: StepFactoryArgs) =>
       const init = getInitData<WorkflowInput>();
       const config = inputData as Config;
       const agent = createNameAgent({ model });
-      return { ...config, name: await resolveName(agent, init.description, init.name) };
+      return { ...config, name: await resolveName(agent, init.prompt, undefined, config.userOutcome) };
     },
   });

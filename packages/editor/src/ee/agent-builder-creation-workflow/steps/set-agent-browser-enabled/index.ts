@@ -1,6 +1,6 @@
 import { createStep } from '@mastra/core/workflows';
 
-import { outputSchema, configSchema, type Config, type StepFactoryArgs, type WorkflowInput } from '../../types';
+import { outputSchema, configSchema, type Config, type StepFactoryArgs } from '../../types';
 import { createBrowserAgent } from './agent';
 import { resolveBrowserEnabled } from './handler';
 
@@ -15,8 +15,7 @@ export const createSetBrowserEnabledStep = ({ model }: StepFactoryArgs) =>
     description: 'Set whether the agent has browser access',
     inputSchema: configSchema,
     outputSchema,
-    execute: async ({ inputData, getInitData }) => {
-      const init = getInitData<WorkflowInput>();
+    execute: async ({ inputData }) => {
       const config = inputData as Config;
       const agent = createBrowserAgent({ model });
       return {
@@ -29,7 +28,7 @@ export const createSetBrowserEnabledStep = ({ model }: StepFactoryArgs) =>
         workflows: config.workflows,
         skills: config.skills,
         model: config.model,
-        browserEnabled: await resolveBrowserEnabled(agent, config.description ?? init.description, init.browserEnabled),
+        browserEnabled: await resolveBrowserEnabled(agent, config.description ?? '', undefined),
       };
     },
   });

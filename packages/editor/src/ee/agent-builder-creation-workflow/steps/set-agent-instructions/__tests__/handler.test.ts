@@ -40,4 +40,17 @@ describe('resolveInstructions', () => {
     await resolveInstructions(agent, 'Name', 'desc');
     expect(generate.mock.calls[0]?.[1]).toMatchObject({ structuredOutput: { schema: expect.anything() } });
   });
+
+  it('weaves the user outcome into the prompt', async () => {
+    const { agent, generate } = makeAgent({ instructions: 'x' });
+    const userOutcome = {
+      goal: 'Triage support tickets fast',
+      audience: 'Support agents',
+      capabilities: ['Classify', 'Route'],
+      tone: 'Friendly',
+      successCriteria: ['Correct routing'],
+    };
+    await resolveInstructions(agent, 'Name', 'desc', undefined, userOutcome);
+    expect(generate.mock.calls[0]?.[0]).toContain('Triage support tickets fast');
+  });
 });

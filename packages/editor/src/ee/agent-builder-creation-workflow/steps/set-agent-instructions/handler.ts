@@ -1,6 +1,9 @@
 import type { Agent } from '@mastra/core/agent';
 import { z } from 'zod-v4';
 
+import type { UserOutcome } from '../../types';
+import { formatUserOutcome } from '../../user-outcome';
+
 const instructionsSchema = z.object({
   instructions: z.string().min(1).describe('A focused, production-quality system prompt for the agent'),
 });
@@ -18,13 +21,14 @@ export async function resolveInstructions(
   name: string,
   description: string,
   explicitInstructions?: string,
+  userOutcome?: UserOutcome,
 ): Promise<string> {
   if (typeof explicitInstructions === 'string') {
     return explicitInstructions;
   }
 
   const result = await agent.generate(
-    `Write the system prompt for an agent.\n\nName: ${name}\nDescription: ${description}`,
+    `Write the system prompt for an agent.\n\nName: ${name}\nDescription: ${description}${formatUserOutcome(userOutcome)}`,
     { structuredOutput: { schema: instructionsSchema } },
   );
   return result.object.instructions;

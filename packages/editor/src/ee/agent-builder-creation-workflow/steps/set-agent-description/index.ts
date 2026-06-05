@@ -1,22 +1,27 @@
 import { createStep } from '@mastra/core/workflows';
 
-import { configSchema, inputSchema, type StepFactoryArgs } from '../../types';
+import { configSchema, type Config, type StepFactoryArgs, type WorkflowInput } from '../../types';
 import { createDescriptionAgent } from './agent';
 import { resolveDescription } from './handler';
 
 /**
- * First step: read the raw workflow input and seed the config-in-progress with a
- * `description`. Instantiates the scoped description agent from the builder
- * `model` and injects it into the handler (DI).
+ * Seed the config-in-progress with a `description`, grounded in the structured
+ * user outcome resolved by the first step. Instantiates the scoped description
+ * agent from the builder `model` and injects it into the handler (DI).
  */
 export const createSetDescriptionStep = ({ model }: StepFactoryArgs) =>
   createStep({
     id: 'set-agent-description',
     description: 'Set the agent description',
-    inputSchema,
+    inputSchema: configSchema,
     outputSchema: configSchema,
-    execute: async ({ inputData }) => {
+    execute: async ({ inputData, getInitData }) => {
+      const init = getInitData<WorkflowInput>();
+      const config = inputData as Config;
       const agent = createDescriptionAgent({ model });
-      return { description: await resolveDescription(agent, inputData.description) };
+      return {
+        ...config,
+        description: await resolveDescription(agent, init.prompt, config.userOutcome),
+      };
     },
   });

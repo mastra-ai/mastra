@@ -16,38 +16,27 @@ export const modelSchema = z.object({
   name: z.string(),
 });
 
-export const idNameEntrySchema = z.object({
-  id: z.string(),
-  name: z.string(),
-});
-
-export const availableAgentToolSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  type: z.enum(['tool', 'agent', 'workflow']),
+/**
+ * Structured, LLM-understandable interpretation of the raw user prompt produced
+ * by the first workflow step (`understand-user-outcome`). Downstream steps read
+ * this instead of re-interpreting the prompt, so the agent name, description and
+ * instructions are anchored to what the user actually wants to achieve.
+ */
+export const userOutcomeSchema = z.object({
+  goal: z.string().min(1).describe('The single outcome the user wants the agent to achieve, in plain language'),
+  audience: z.string().describe('Who will use or benefit from the agent (the target users)'),
+  capabilities: z.array(z.string()).describe('The concrete capabilities the agent needs to deliver the goal'),
+  tone: z.string().describe('The tone/persona the agent should adopt when interacting'),
+  successCriteria: z.array(z.string()).describe('Observable signals that the agent has succeeded at the goal'),
 });
 
 export const inputSchema = z.object({
-  description: z.string().min(1).describe('Plain-language description of the agent to build'),
-  name: z.string().optional().describe('Optional explicit agent name; otherwise derived from the description'),
-  instructions: z.string().optional().describe('Optional explicit system prompt; otherwise generated'),
-  workspaceId: z.string().optional().describe('Optional workspace id to attach the agent to'),
-  tools: z.array(idNameEntrySchema).optional().describe('Tools/agents/workflows to enable, each as { id, name }'),
-  availableAgentTools: z
-    .array(availableAgentToolSchema)
-    .optional()
-    .describe('Available tools/agents/workflows used to classify the selected tool entries by type'),
-  skills: z.array(idNameEntrySchema).optional().describe('Stored skills to attach, each as { id, name }'),
-  model: modelSchema.optional().describe('Model to use, as { provider, name }'),
-  availableModels: z
-    .array(modelSchema)
-    .optional()
-    .describe('Available models the agent can choose from when no explicit model is supplied'),
-  browserEnabled: z.boolean().optional().describe('Whether to enable browser access for the agent'),
+  prompt: z.string().min(1).describe('Plain-language prompt describing the agent to build'),
 });
 
 // Accumulating config-in-progress threaded from step to step.
 export const configSchema = z.object({
+  userOutcome: userOutcomeSchema.optional(),
   name: z.string().optional(),
   description: z.string().optional(),
   instructions: z.string().optional(),
@@ -75,6 +64,7 @@ export const outputSchema = z.object({
 
 export type WorkflowInput = z.infer<typeof inputSchema>;
 export type Config = z.infer<typeof configSchema>;
+export type UserOutcome = z.infer<typeof userOutcomeSchema>;
 
 /** Arguments every step factory receives — currently just the builder model. */
 export interface StepFactoryArgs {

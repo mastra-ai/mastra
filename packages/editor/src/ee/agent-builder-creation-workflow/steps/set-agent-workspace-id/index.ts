@@ -1,6 +1,6 @@
 import { createStep } from '@mastra/core/workflows';
 
-import { configSchema, type Config, type StepFactoryArgs, type WorkflowInput } from '../../types';
+import { configSchema, type Config, type StepFactoryArgs } from '../../types';
 import { createWorkspaceAgent } from './agent';
 import { resolveWorkspaceId } from './handler';
 
@@ -14,10 +14,9 @@ export const createSetWorkspaceIdStep = ({ model }: StepFactoryArgs) =>
     description: 'Set the agent workspace id',
     inputSchema: configSchema,
     outputSchema: configSchema,
-    execute: async ({ inputData, getInitData }) => {
-      const init = getInitData<WorkflowInput>();
+    execute: async ({ inputData }) => {
       const config = inputData as Config;
       const agent = createWorkspaceAgent({ model });
-      return { ...config, workspaceId: await resolveWorkspaceId(agent, init.workspaceId) };
+      return { ...config, workspaceId: await resolveWorkspaceId(agent, undefined) };
     },
   });

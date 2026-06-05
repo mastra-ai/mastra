@@ -1,6 +1,7 @@
 import { createWorkflow } from '@mastra/core/workflows';
 
 import {
+  createUnderstandUserOutcomeStep,
   createSetDescriptionStep,
   createSetNameStep,
   createSetInstructionsStep,
@@ -18,9 +19,13 @@ export * from './constant';
 /**
  * Agent Builder Creation Workflow
  *
- * A sequence of steps — one per field — that turns a plain-language description
- * into an agent configuration covering every field the playground agent-builder
- * client tools can set:
+ * A sequence of steps that turns a plain-language description into an agent
+ * configuration covering every field the playground agent-builder client tools
+ * can set. The first step interprets the raw user prompt into a structured,
+ * LLM-understandable user outcome (goal, audience, capabilities, tone, success
+ * criteria); every later step reads that outcome so the produced fields are
+ * grounded in what the user actually wants:
+ * - `userOutcome` (understand-user-outcome)
  * - `name` (set-agent-name)
  * - `description` (set-agent-description)
  * - `instructions` (set-agent-instructions)
@@ -43,6 +48,7 @@ export * from './constant';
  * builder runs on, mirroring `workflow-builder.ts`'s per-step research agent.
  */
 export function createAgentBuilderCreationWorkflow({ model }: { model: string }) {
+  const understandUserOutcomeStep = createUnderstandUserOutcomeStep({ model });
   const setDescriptionStep = createSetDescriptionStep({ model });
   const setNameStep = createSetNameStep({ model });
   const setInstructionsStep = createSetInstructionsStep({ model });
@@ -58,6 +64,7 @@ export function createAgentBuilderCreationWorkflow({ model }: { model: string })
     inputSchema,
     outputSchema,
     steps: [
+      understandUserOutcomeStep,
       setDescriptionStep,
       setNameStep,
       setInstructionsStep,
@@ -68,6 +75,7 @@ export function createAgentBuilderCreationWorkflow({ model }: { model: string })
       setBrowserEnabledStep,
     ],
   })
+    .then(understandUserOutcomeStep)
     .then(setDescriptionStep)
     .then(setNameStep)
     .then(setInstructionsStep)
