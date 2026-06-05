@@ -2207,3 +2207,26 @@ Verification:
 - `pnpm exec vitest run src/harness/task-tools.test.ts --bail=1 --reporter=dot` from `packages/core` — 1 file / 30 tests passed / no type errors.
 - `pnpm --filter ./packages/core exec vitest run src/llm/model/provider-registry.test.ts --bail=1 --reporter=dot` — 1 file / 27 tests passed / no type errors.
 - `pnpm --filter ./mastracode exec vitest run src/utils/__tests__/gateway-sync.test.ts src/tui/handlers/__tests__/prompts.test.ts src/HarnessCompat.test.ts --bail=1 --reporter=dot` — 3 files / 18 tests passed.
+
+### PR #16129 / #16398 / #16223 / #16409 feature-map checkpoint
+
+Verified rows 281-284:
+
+- #16129 adds GitHub Copilot OAuth/provider support. Current source has a GitHub device-code login flow, optional enterprise-domain handling, Copilot token refresh, OpenAI-compatible Copilot provider routing for `github-copilot/<model>`, Copilot request headers/URL rewriting, a provider-filtered Copilot pack, and live `/models` catalog discovery with TTL/fallback/inflight caching.
+- #16398 is an AI SDK dependency-update batch; skipped for feature mapping after PR metadata confirmed package-only dependency changes.
+- #16223 renames the recommended observability exporters to `MastraPlatformExporter` and `MastraStorageExporter` while keeping deprecated `CloudExporter`/`DefaultExporter` compatibility exports. Current Mastra Code observability setup uses explicit storage + platform exporters.
+- #16409 is a Changesets alpha package-version batch; skipped for feature mapping after PR metadata confirmed package/changelog-only changes.
+
+Documentation actions:
+
+- Updated `features/models/model-auth-and-modes.md` for GitHub Copilot OAuth, provider routing, model pack defaults, live catalog, tests, and risks.
+- Updated `features/integrations/observability-and-evals.md` for the storage/platform exporter rename and deprecated compatibility names.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16129 done, #16398 skipped, #16223 done, #16409 skipped, #16231 current.
+
+Focused evidence read: PR metadata for #16129/#16398/#16223/#16409; current `mastracode/src/auth/providers/github-copilot.ts`, `mastracode/src/providers/github-copilot.ts`, `mastracode/src/agents/model.ts`, `mastracode/src/onboarding/packs.ts`, `mastracode/src/index.ts`, Copilot auth/provider/catalog tests, `observability/mastra/src/exporters/mastra-platform.ts`, `mastra-storage.ts`, `default.ts`, `cloud.ts`, `default.ts` observability setup, and storage/platform exporter tests.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/auth/providers/__tests__/github-copilot.test.ts src/providers/__tests__/github-copilot-catalog.test.ts src/providers/__tests__/oauth-fetches.test.ts src/onboarding/__tests__/packs.test.ts --bail=1 --reporter=dot` — 4 files / 48 tests passed.
+- `pnpm exec vitest run src/exporters/mastra-storage.test.ts src/exporters/mastra-platform.test.ts --bail=1 --reporter=dot` from `observability/mastra` — 2 files / 119 tests passed.

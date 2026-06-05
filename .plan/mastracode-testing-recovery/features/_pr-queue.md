@@ -300,11 +300,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 278 | 2026-05-08 | #16254 | `e2a079cc37` | review | done | feat(harness): add stable task patch tools (#16254) | 31 |
 | 279 | 2026-05-08 | #16332 | `db34bc6fb3` | review | done | fix(core, mastracode): silence provider cache corruption warning and consolidate gateway sync (#16332) | 2 |
 | 280 | 2026-05-08 | #16340 | `7c275a8105` | review | done | fix(mastracode): trigger plan execution when accepting plan via /goal (#16340) | 8 |
-| 281 | 2026-05-08 | #16129 | `c50ebc34da` | review | current | feat(mastracode): add GitHub Copilot OAuth provider with live model discovery (#16129) | 16 |
-| 282 | 2026-05-11 | #16398 | `7ad5585640` | likely skip | | chore(deps): update ai sdk (#16398) | 1 |
-| 283 | 2026-05-11 | #16223 | `50f5884b41` | review | | draft: Add MastraPlatformExporter and MastraStorageExporter, deprecate CloudExporter and DefaultExporter (#16223) | 1 |
-| 284 | 2026-05-11 | #16409 | `f3279f5129` | likely skip | | chore: version packages (alpha) (#16409) | 2 |
-| 285 | 2026-05-12 | #16231 | `f984b4d6c6` | review | | feat(mastracode): send follow-ups through Agent signals (#16231) | 23 |
+| 281 | 2026-05-08 | #16129 | `c50ebc34da` | review | done | feat(mastracode): add GitHub Copilot OAuth provider with live model discovery (#16129) | 16 |
+| 282 | 2026-05-11 | #16398 | `7ad5585640` | likely skip | skipped | chore(deps): update ai sdk (#16398) | 1 |
+| 283 | 2026-05-11 | #16223 | `50f5884b41` | review | done | draft: Add MastraPlatformExporter and MastraStorageExporter, deprecate CloudExporter and DefaultExporter (#16223) | 1 |
+| 284 | 2026-05-11 | #16409 | `f3279f5129` | likely skip | skipped | chore: version packages (alpha) (#16409) | 2 |
+| 285 | 2026-05-12 | #16231 | `f984b4d6c6` | review | current | feat(mastracode): send follow-ups through Agent signals (#16231) | 23 |
 | 286 | 2026-05-12 | #16338 | `05dab92b33` | review | | feat(playground): support signal follow-up chat (#16338) | 2 |
 | 287 | 2026-05-12 | #16458 | `5337df1c3f` | likely skip | | chore: version packages (alpha) (#16458) | 2 |
 | 288 | 2026-05-12 | #16501 | `9cd4c8e07b` | likely skip | | chore: version packages (alpha) (#16501) | 2 |
