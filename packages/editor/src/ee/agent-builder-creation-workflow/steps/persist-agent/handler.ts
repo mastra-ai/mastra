@@ -19,6 +19,11 @@ import type { Config } from '../../types';
 export interface MapConfigToCreateInputDeps {
   /** Unique id for the new agent. */
   id: string;
+  /**
+   * Author id for the new agent, resolved from the caller on the request
+   * context. Omitted when no caller is resolvable.
+   */
+  authorId?: string;
   /** Visibility to persist the agent with. */
   visibility: StorageVisibility;
   /**
@@ -58,11 +63,11 @@ function enabledRecord<T>(selected: Record<string, boolean> | undefined): Record
  * playground's create semantics (`AgentBuilderStarter` + `formValuesToSaveParams`):
  * required `name`/`instructions`/`model`, optional trimmed `description`, the
  * `{ type: 'id', workspaceId }` workspace ref, enabled-record tools/agents/
- * workflows/skills, an inline browser ref when enabled, and the default
- * request-context schema.
+ * workflows/skills, an inline browser ref when enabled, the default
+ * request-context schema, and an optional `authorId` when the caller is known.
  */
 export function mapConfigToCreateInput(config: Config, deps: MapConfigToCreateInputDeps): StorageCreateAgentInput {
-  const { id, visibility, model, requestContextSchema, browserRef } = deps;
+  const { id, authorId, visibility, model, requestContextSchema, browserRef } = deps;
 
   const name = config.name && config.name.trim().length > 0 ? config.name : 'Untitled Agent';
   const description = config.description?.trim();
@@ -83,6 +88,7 @@ export function mapConfigToCreateInput(config: Config, deps: MapConfigToCreateIn
 
   return {
     id,
+    ...(authorId ? { authorId } : {}),
     visibility,
     name,
     instructions: config.instructions ?? '',

@@ -81,6 +81,11 @@ describe('mapConfigToCreateInput', () => {
     expect(input.workflows).toBeUndefined();
   });
 
+  it('includes authorId when provided and omits it otherwise', () => {
+    expect(mapConfigToCreateInput(baseConfig(), { ...deps, authorId: 'u1' }).authorId).toBe('u1');
+    expect(mapConfigToCreateInput(baseConfig(), deps).authorId).toBeUndefined();
+  });
+
   it('persists the browser ref only when enabled and a ref is provided', () => {
     const browserRef = { type: 'inline', config: { provider: 'playwright' } } as MapConfigToCreateInputDeps['browserRef'];
 

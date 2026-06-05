@@ -7,6 +7,7 @@ import {
   resolveAvailableSkills,
   resolveAvailableWorkspaces,
   resolveAvailableModels,
+  resolveDefaultModel,
   resolveBrowserAvailable,
   resolveFeatureCapabilities,
 } from './available';
@@ -291,6 +292,53 @@ describe('resolveAvailableModels', () => {
     const mastra = makeMastra({ hasEditor: false });
     const result = await resolveAvailableModels(mastra);
     expect(result).toContainEqual({ provider: sampleProvider, name: sampleModel });
+  });
+});
+
+describe('resolveDefaultModel', () => {
+  it('returns the policy default when the policy is active', async () => {
+    const mastra = makeMastra({
+      configuration: {
+        agent: {
+          models: {
+            default: { provider: 'openai', modelId: 'gpt-4o' },
+          },
+        },
+      },
+    });
+
+    await expect(resolveDefaultModel(mastra)).resolves.toEqual({ provider: 'openai', name: 'gpt-4o' });
+  });
+
+  it('returns undefined when the active policy has no default', async () => {
+    const mastra = makeMastra({
+      // picker visibility activates the policy without setting a default
+      features: { agent: { model: true } },
+      configuration: { agent: {} },
+    });
+
+    await expect(resolveDefaultModel(mastra)).resolves.toBeUndefined();
+  });
+
+  it('ignores a default carried by a disabled builder (inactive policy)', async () => {
+    // A disabled builder yields an inactive policy; any stale default must not be selected.
+    const mastra = makeMastra({
+      builderEnabled: false,
+      configuration: {
+        agent: {
+          models: {
+            default: { provider: 'openai', modelId: 'gpt-4o' },
+          },
+        },
+      },
+    });
+
+    await expect(resolveDefaultModel(mastra)).resolves.toBeUndefined();
+  });
+
+  it('returns undefined when there is no editor', async () => {
+    const mastra = makeMastra({ hasEditor: false });
+    await expect(resolveDefaultModel(mastra)).resolves.toBeUndefined();
   });
 });
 

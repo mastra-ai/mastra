@@ -177,9 +177,10 @@ export async function resolveAvailableModels(mastra: Mastra): Promise<AgentModel
 /**
  * Resolve the builder's policy default model (`configuration.agent.models.default`)
  * as an `AgentModel`, when one is configured. Mirrors the playground starter's
- * `resolveStarterModel`, which prefers the admin `modelPolicy.default`. Returns
- * `undefined` when there is no builder context or no default model entry, so the
- * caller can fall back to the first available model / the hard fallback.
+ * `resolveStarterModel`, which prefers the admin `modelPolicy.default` only when
+ * the policy is active. Returns `undefined` when there is no builder context, the
+ * policy is inactive, or there is no default model entry, so the caller can fall
+ * back to the first available model / the hard fallback.
  */
 export async function resolveDefaultModel(mastra: Mastra): Promise<AgentModel | undefined> {
   const ctx = await resolveBuilderContext(mastra);
@@ -187,6 +188,11 @@ export async function resolveDefaultModel(mastra: Mastra): Promise<AgentModel | 
 
   const { builderToModelPolicy } = await import('@mastra/core/agent-builder/ee');
   const policy = builderToModelPolicy(ctx.builder as never);
+
+  // Match the playground starter: only honor the policy default when the policy
+  // is active (`policy?.active && policy.default`). An inactive policy may still
+  // carry a stale default that must not be selected.
+  if (!policy.active) return undefined;
 
   const def = policy.default as { provider?: string; modelId?: string } | undefined;
   if (!def?.provider || !def.modelId) return undefined;
