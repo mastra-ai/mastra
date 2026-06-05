@@ -5,6 +5,7 @@ import type {
   StaticToolDisplay,
   StreamingConfig,
   ToolDisplay,
+  WaitUntilResolver,
 } from '@mastra/core/channels';
 import type { ChannelsStorage } from '@mastra/core/storage';
 import type { SlackAdapterConfig } from '@chat-adapter/slack';
@@ -223,6 +224,30 @@ interface SlackProviderConfigBase extends SlackAdapterChannelConfigBase {
    * Use a 32+ character random string. Can be set via MASTRA_ENCRYPTION_KEY env var.
    */
   encryptionKey?: string;
+
+  /**
+   * Resolver that returns a `waitUntil` for the current Slack webhook request.
+   *
+   * Required on serverless runtimes where Hono can't bridge the platform's
+   * `ExecutionContext` automatically (Vercel, Netlify). Without `waitUntil`, the
+   * runtime freezes the invocation as soon as the 200 ack returns, killing the
+   * agent run mid-flight and leaving the user with no Slack reply.
+   *
+   * Receives the request's Hono `Context` (optional — `@vercel/functions`'s
+   * `waitUntil` uses AsyncLocalStorage and ignores the arg).
+   *
+   * Cloudflare Workers users typically don't need this — the default helper
+   * already reads `c.executionCtx.waitUntil` from Hono.
+   *
+   * @example
+   * ```ts
+   * import { waitUntil } from '@vercel/functions';
+   * new SlackProvider({
+   *   resolveWaitUntil: () => waitUntil,
+   * });
+   * ```
+   */
+  resolveWaitUntil?: WaitUntilResolver;
 
   /**
    * Per-adapter overrides applied to the Slack adapter entry inside
