@@ -322,27 +322,13 @@ The built-in browser context processor emits state under the `browser` id with s
 
 Notification signals represent external events such as GitHub activity, email, Slack mentions, CI status, incidents, recordings, or direct messages. Use `agent.sendNotificationSignal()` when the event should create a durable inbox record.
 
-Notification delivery has two phases:
+Notification delivery has two phases. During ingress, `agent.sendNotificationSignal()` stores a notification record and resolves the agent's delivery policy. During dispatch, Mastra consumes due records and emits full notification or summary signals.
 
-- **Ingress**: `agent.sendNotificationSignal()` stores a notification record, then resolves the agent's delivery policy.
-- **Dispatch**: Mastra consumes due records stamped with `deliverAt` or `summaryAt` and emits full notification or summary signals.
+The default delivery policy is priority-aware. Urgent notifications deliver immediately, while lower-priority notifications may be batched into summaries or wait until the thread is idle.
 
-A notification record stores the source, kind, priority, summary, payload, resource id, thread id, agent id, coalescing keys, and delivery metadata. The delivery decision controls what happens after ingress:
-
-- `deliver` or `queue`: Emit a full `<notification>` signal and mark the record `delivered`.
-- `defer`: Keep the record `pending` with `deliverAt`.
-- `summarize`: Keep the record `pending` with `summaryAt`, or emit an immediate summary when the policy requests it.
-- `persist`: Keep the record `pending` in the inbox without scheduled delivery.
-- `discard`: Mark the record `discarded` and emit no signal.
-
-The default delivery policy is priority-aware:
-
-| Priority | Active thread | Idle thread |
-| - | - | - |
-| `urgent` | Deliver a full notification immediately | Deliver a full notification immediately |
-| `high` | Emit a summary immediately, keep `deliverAt`, then deliver the full notification when the thread is idle | Deliver a full notification immediately |
-| `medium` | Batch with `summaryAt` and later deliver one notification summary | Deliver a full notification immediately |
-| `low` | Batch with `summaryAt` and later deliver one notification summary | Batch with `summaryAt` and later deliver one notification summary without waking the model loop |
+:::note
+Visit [`Agent.sendNotificationSignal()` reference](/reference/agents/agent#sendnotificationsignalnotification-options) for notification fields, and [`Agent` constructor reference](/reference/agents/agent#constructor-parameters) for `notifications.deliveryPolicy` configuration.
+:::
 
 ```typescript title="src/mastra/notifications.ts"
 await agent.sendNotificationSignal(
@@ -442,16 +428,9 @@ export const supportAgent = new Agent({
 })
 ```
 
-The tool id is `notification-inbox`. It supports these actions:
+The tool id is `notification-inbox`. It can list, read, mark seen, dismiss, archive, and search notifications for the current thread.
 
-- `list`: List notifications for the current thread.
-- `read`: Deliver readable full notification signals into the chat when possible, then mark records `seen`.
-- `markSeen`: Mark one record `seen`.
-- `dismiss`: Mark one record `dismissed`.
-- `archive`: Mark one record `archived`.
-- `search`: Search notification summaries in the current thread.
-
-The tool uses the current `threadId` from the tool execution context unless one is provided. Use `read` after a `<notification-summary>` signal when the agent needs the full records behind the summary. The `read` result reports how many notifications will be delivered; it doesn't use normal tool output as the main context channel for the notification contents.
+Use `read` after a `<notification-summary>` signal when the agent needs the full records behind the summary. The notification contents are delivered as signals, not as normal tool output.
 
 `sendNotificationSignal()` requires a storage domain with `notifications` support. LibSQL supports notifications. Other storage adapters need matching notification domain support before they can store notification records.
 

@@ -89,7 +89,7 @@ export class CiSignals extends SignalProvider<'ci-signals'> {
 }
 ```
 
-The framework calls `poll()` on the `pollInterval` with all active subscriptions. It skips a cycle when there are no subscriptions and never overlaps cycles, so a slow `poll()` does not run concurrently with itself.
+The framework calls `poll()` on the `pollInterval` with all active subscriptions. It skips a cycle when there are no subscriptions and never overlaps cycles, so a slow `poll()` doesn't run concurrently with itself.
 
 ## Track subscriptions
 
@@ -125,20 +125,11 @@ const ci = new CiSignals()
 ci.watch({ resourceId: 'user_123', threadId: 'thread_456' }, 'acme/app:main')
 ```
 
-The registry is indexed for lookup by resource and by thread. The protected methods available to subclasses are:
+The registry is indexed for lookup by resource and by thread. It's in-memory and per-process, so it doesn't survive a restart. If your provider needs durable subscriptions, persist them yourself, for example on thread metadata, and rehydrate the registry in `start()`.
 
-| Method | Description |
-| - | - |
-| `subscribe(target, externalResourceId, metadata?)` | Link a thread to a resource. Merges metadata if the subscription already exists. |
-| `unsubscribe(target, externalResourceId)` | Remove a single subscription. Returns `true` if one existed. |
-| `unsubscribeAll(target)` | Remove every subscription for a thread. Returns the number removed. |
-| `getSubscriptions()` | All active subscriptions for the provider. |
-| `getSubscriptionsForResource(externalResourceId)` | All threads watching a resource. |
-| `getSubscriptionsForThread(target)` | All resources a thread watches. |
-| `hasSubscription(target, externalResourceId)` | Whether a thread watches a resource. |
-| `subscriptionCount` | Total number of active subscriptions. |
-
-The registry is in-memory and per-process. It does not survive a restart. If your provider needs durable subscriptions, persist them yourself, for example on thread metadata, and rehydrate the registry in `start()`.
+:::note
+Visit [SignalProvider reference](/reference/signals/signal-provider#subscription-tracking) for the full subscription method list.
+:::
 
 ## Receive events by webhook
 
@@ -190,7 +181,7 @@ A provider can support both delivery modes. Leave `pollInterval` undefined for a
 
 ## Send notifications
 
-Call the protected `notify()` helper to push a notification signal into a thread. It is a convenience wrapper around the connected agent's `sendNotificationSignal()`, so the notification flows through the agent's [delivery policy](/docs/agents/signals#notification-signals) and lands in the thread's inbox.
+Call the protected `notify()` helper to push a notification signal into a thread. It's a convenience wrapper around the connected agent's `sendNotificationSignal()`, so the notification flows through the agent's [delivery policy](/docs/agents/signals#notification-signals) and lands in the thread's inbox.
 
 ```typescript
 await this.notify(
@@ -206,7 +197,7 @@ await this.notify(
 )
 ```
 
-Use `dedupeKey` to avoid storing the same event twice, and `coalesceKey` to group related events into a single summary. `notify()` throws if the provider is not connected to an agent, which only happens if it was never passed to `Agent({ signals: [...] })`.
+Use `dedupeKey` to avoid storing the same event twice, and `coalesceKey` to group related events into a single summary. `notify()` throws if the provider isn't connected to an agent, which only happens if it was never passed to `Agent({ signals: [...] })`.
 
 ## Add processors and tools
 
@@ -309,7 +300,7 @@ When a webhook arrives, call `webhooks.handleWebhook({ body, headers })` from yo
 
 ## Real-world example
 
-The `@mastra/github-signals` package is a full signal provider that watches GitHub pull requests and notifies threads about new comments, review state, CI status, and merges. It is a useful reference for building your own provider because it exercises every hook on the base class:
+The `@mastra/github-signals` package is a full signal provider that watches GitHub pull requests and notifies threads about new comments, review state, CI status, and merges. It's a useful reference for building your own provider because it exercises every hook on the base class:
 
 - **Polling.** It sets a configurable poll interval (default five minutes) and overrides `poll()` to fetch each subscribed pull request and emit notifications only when the observed state changes.
 - **Processors.** It returns `[this]` from `getInputProcessors()` and `getOutputProcessors()` and implements `processInputStep()` / `processOutputStep()` on the class to detect subscribe and unsubscribe intent during a run.
