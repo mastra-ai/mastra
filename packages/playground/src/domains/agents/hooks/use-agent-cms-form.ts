@@ -40,10 +40,12 @@ type EditOptions = {
 
 export type UseAgentCmsFormOptions = CreateOptions | EditOptions;
 
-function hasNonEmptyInstructionBlock(blocks: AgentFormValues['instructionBlocks']) {
+function hasNonEmptyInstructionBlock(
+  blocks: Array<{ type?: string; content?: unknown; promptBlockId?: unknown }> | undefined,
+) {
   return (blocks ?? []).some(block => {
     if (block.type === 'prompt_block_ref') {
-      return !!block.promptBlockId;
+      return typeof block.promptBlockId === 'string' && block.promptBlockId.length > 0;
     }
 
     return typeof block.content === 'string' && block.content.trim().length > 0;
@@ -252,6 +254,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
   const validateOwnedInstructions = useCallback(
     (values: AgentFormValues) => {
       if (!isCodeAgentOverride || !ownsInstructions || hasNonEmptyInstructionBlock(values.instructionBlocks)) {
+        form.clearErrors('instructionBlocks');
         return true;
       }
 
@@ -542,22 +545,19 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
 
   const canPublish = useMemo(() => {
     if (isCodeAgentOverride) {
-      // Code agent overrides only need instructions to be filled
-      const instructionsDone = (watched.instructionBlocks ?? []).some(
-        b =>
-          b.type === 'prompt_block_ref' ||
-          (b.type === 'prompt_block' && typeof b.content === 'string' && b.content.trim()),
-      );
-      return instructionsDone;
+      return !ownsInstructions || hasNonEmptyInstructionBlock(watched.instructionBlocks);
     }
     const identityDone = !!watched.name && !!watched.model?.provider && !!watched.model?.name;
-    const instructionsDone = (watched.instructionBlocks ?? []).some(
-      b =>
-        b.type === 'prompt_block_ref' ||
-        (b.type === 'prompt_block' && typeof b.content === 'string' && b.content.trim()),
-    );
+    const instructionsDone = hasNonEmptyInstructionBlock(watched.instructionBlocks);
     return identityDone && instructionsDone;
-  }, [isCodeAgentOverride, watched.name, watched.model?.provider, watched.model?.name, watched.instructionBlocks]);
+  }, [
+    isCodeAgentOverride,
+    ownsInstructions,
+    watched.name,
+    watched.model?.provider,
+    watched.model?.name,
+    watched.instructionBlocks,
+  ]);
 
   const isDirty = form.formState.isDirty;
 
