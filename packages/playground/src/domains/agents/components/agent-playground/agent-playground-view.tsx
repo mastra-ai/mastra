@@ -31,6 +31,7 @@ interface AgentPlaygroundViewProps {
   onPublish: () => Promise<void>;
   onDownloadJson?: () => Promise<void>;
   onOpenPr?: (changeMessage?: string) => Promise<{ url: string } | void>;
+  onInspectPr?: () => Promise<{ url: string } | void>;
   isViewingPreviousVersion?: boolean;
 }
 
@@ -56,6 +57,7 @@ function LeftPanel({
   onPublish,
   onDownloadJson,
   onOpenPr,
+  onInspectPr,
   isViewingPreviousVersion,
 }: {
   agentId: string;
@@ -79,6 +81,7 @@ function LeftPanel({
   onPublish: () => Promise<void>;
   onDownloadJson?: () => Promise<void>;
   onOpenPr?: (changeMessage?: string) => Promise<{ url: string } | void>;
+  onInspectPr?: () => Promise<{ url: string } | void>;
   isViewingPreviousVersion?: boolean;
 }) {
   const { versionSelector, actionBar } = AgentPlaygroundVersionBar({
@@ -102,6 +105,7 @@ function LeftPanel({
     onPublish,
     onDownloadJson,
     onOpenPr,
+    onInspectPr,
     isViewingPreviousVersion,
   });
 
@@ -156,6 +160,7 @@ export function AgentPlaygroundView({
   onPublish,
   onDownloadJson,
   onOpenPr,
+  onInspectPr,
   isViewingPreviousVersion,
 }: AgentPlaygroundViewProps) {
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
@@ -198,6 +203,7 @@ export function AgentPlaygroundView({
             onPublish={onPublish}
             onDownloadJson={onDownloadJson}
             onOpenPr={onOpenPr}
+            onInspectPr={onInspectPr}
             isViewingPreviousVersion={isViewingPreviousVersion}
           />
         </CollapsiblePanel>

@@ -98,6 +98,7 @@ function AgentPlayground() {
     handleSaveDraft,
     handleDownloadJson,
     handleOpenPr,
+    handleInspectPr,
     isSubmitting,
     isSavingDraft,
     isDirty,
@@ -215,6 +216,7 @@ function AgentPlayground() {
         onPublish={handlePublishVersion}
         onDownloadJson={handleDownloadJson}
         onOpenPr={handleOpenPrClick}
+        onInspectPr={handleInspectPr}
         isViewingPreviousVersion={isViewingPreviousVersion}
       />
     </AgentEditFormProvider>

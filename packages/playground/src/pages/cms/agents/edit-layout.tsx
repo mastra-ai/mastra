@@ -219,6 +219,7 @@ function EditLayoutWrapper() {
     handleSaveDraft,
     handleDownloadJson,
     handleOpenPr,
+    handleInspectPr,
     isSubmitting,
     isSavingDraft,
     isDirty,
@@ -299,6 +300,20 @@ function EditLayoutWrapper() {
     mastraPlatformUserName,
     proposeMessage,
   ]);
+
+  useEffect(() => {
+    if (!canOpenPr || proposedChangeUrl) return;
+
+    let cancelled = false;
+    void (async () => {
+      const result = await handleInspectPr();
+      if (!cancelled && result?.url) setProposedChangeUrl(result.url);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canOpenPr, handleInspectPr, proposedChangeUrl]);
 
   const handleInspectChange = useCallback(() => {
     if (proposedChangeUrl) window.open(proposedChangeUrl, '_blank', 'noopener,noreferrer');

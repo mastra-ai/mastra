@@ -107,4 +107,20 @@ describe('AgentPlaygroundVersionBar source capabilities', () => {
 
     expect(openWindow).toHaveBeenCalledWith('https://github.com/acme/repo/pull/123', '_blank', 'noopener,noreferrer');
   });
+
+  it('discovers an existing source change before enabling inspection', async () => {
+    server.use(...agentVersionHandlers());
+    const inspectChangeRequest = vi.fn(async () => ({ url: 'https://github.com/acme/repo/pull/456' }));
+    const openWindow = vi.spyOn(window, 'open').mockImplementation(() => null);
+
+    renderVersionBar({ canOpenPr: true, onInspectPr: inspectChangeRequest });
+
+    expect(await screen.findByText('No filesystem saves yet')).not.toBeNull();
+    await waitFor(() => expect(inspectChangeRequest).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByRole('button', { name: /More source change options/i }));
+    fireEvent.click(await screen.findByText(/Inspect change/i));
+
+    expect(openWindow).toHaveBeenCalledWith('https://github.com/acme/repo/pull/456', '_blank', 'noopener,noreferrer');
+  });
 });

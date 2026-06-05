@@ -32,7 +32,7 @@ import {
   MessageSquare,
   Save,
 } from 'lucide-react';
-import { useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 
 import { useAgentVersions } from '../../hooks/use-agent-versions';
 
@@ -57,6 +57,7 @@ interface AgentPlaygroundVersionBarProps {
   onPublish: () => Promise<void>;
   onDownloadJson?: () => Promise<void>;
   onOpenPr?: (changeMessage?: string) => Promise<{ url: string } | void>;
+  onInspectPr?: () => Promise<{ url: string } | void>;
   /** Whether the user is viewing a previous (non-latest) version that can be published */
   isViewingPreviousVersion?: boolean;
 }
@@ -93,6 +94,7 @@ export function AgentPlaygroundVersionBar({
   onPublish,
   onDownloadJson,
   onOpenPr,
+  onInspectPr,
   isViewingPreviousVersion = false,
 }: AgentPlaygroundVersionBarProps) {
   const [showMessageDialog, setShowMessageDialog] = useState(false);
@@ -171,6 +173,20 @@ export function AgentPlaygroundVersionBar({
       setIsProposingChange(false);
     }
   }, [isProposingChange, onOpenPr, proposeMessage]);
+
+  useEffect(() => {
+    if (!canOpenPr || proposedChangeUrl) return;
+
+    let cancelled = false;
+    void (async () => {
+      const result = await onInspectPr?.();
+      if (!cancelled && result?.url) setProposedChangeUrl(result.url);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canOpenPr, onInspectPr, proposedChangeUrl]);
 
   const handleInspectChange = useCallback(() => {
     if (proposedChangeUrl) window.open(proposedChangeUrl, '_blank', 'noopener,noreferrer');
