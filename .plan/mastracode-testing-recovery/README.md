@@ -10,6 +10,8 @@ This plan should become the coordination base for the testing recovery effort: w
 
 Use the `mastracode-testing-recovery` skill for the overall operating protocol: verify everything, read the handoff, follow branch flow, and update history/handoff.
 
+Use [`test-recovery-system.md`](./test-recovery-system.md) as the draft system for turning the completed feature map into regression-shield test coverage.
+
 For feature-map documentation, start a goal from the project command:
 
 ```text
