@@ -45,6 +45,7 @@ import type {
 } from './types';
 import { defaultTypingStatus } from './typing-status';
 import type { TypingStatusContext, TypingStatusFn } from './typing-status';
+import { resolveWaitUntil } from './wait-until';
 
 /**
  * Manages a single Chat SDK instance for an agent, wiring all adapters
@@ -614,14 +615,7 @@ export class AgentChannels {
 
             // Pass platform execution context (e.g. Vercel/Cloudflare waitUntil)
             // to the Chat SDK so background processing survives serverless responses.
-            // Hono's `executionCtx` getter throws in Node.js when no ExecutionContext exists.
-            let execCtx: { waitUntil?: (p: Promise<unknown>) => void } | undefined;
-            try {
-              execCtx = c.executionCtx as { waitUntil?: (p: Promise<unknown>) => void } | undefined;
-            } catch {
-              execCtx = undefined;
-            }
-            const waitUntilFn = execCtx?.waitUntil?.bind(execCtx);
+            const waitUntilFn = resolveWaitUntil(c);
             return webhookHandler(c.req.raw, waitUntilFn ? { waitUntil: waitUntilFn } : undefined);
           };
         },
