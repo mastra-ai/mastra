@@ -93,27 +93,61 @@ For each feature or small feature cluster:
 7. Update the feature card with coverage evidence and remaining gaps.
 8. Commit one coherent, reviewable chunk.
 
-## Goal-judge shape
+## Slash command and goal flow
 
-Work should be broken into discrete chunks that a goal judge can verify objectively.
+The test recovery flow should be driven by a dedicated project slash command with `goal: true` metadata, similar to the feature-map audit command.
 
-A good goal should specify:
+The command should carry the detailed goal text and run one feature at a time. It should not rely on each agent inventing a new goal shape.
 
-- The feature or feature cluster.
-- The contract list to cover.
-- The required test layers.
-- The expected feature-card updates.
-- The exact verification commands.
-- What is explicitly out of scope.
+The command should instruct the agent to:
 
-Example goal shape:
+1. Pick the next unfinished feature from the test recovery tracker, unless a specific feature is requested.
+2. Read the feature card and related cards.
+3. Extract or update the feature's behavior contract list.
+4. Classify each invariant by required test layer.
+5. Identify existing tests that already cover each invariant.
+6. Add missing unit, integration, TUI e2e, and smoke tests until the feature's contracts are covered or explicitly deferred with rationale.
+7. Run the narrowest relevant verification commands, then broader Mastra Code checks when appropriate.
+8. Update the feature card and test recovery tracker with evidence.
+9. Commit one coherent, reviewable chunk.
+10. Stop after one feature or feature cluster so the goal judge can validate/approve that discrete unit before the next run.
 
-> Add regression-shield tests for Branch context/status. Extract the feature's behavior contracts, add TUI e2e coverage for every visible/triggered branch-status behavior, add lower-layer tests for branch metadata calculation and git boundary handling, update the feature card with coverage evidence, and run the narrowest relevant Mastra Code verification commands.
+## Progress tracking
+
+The system needs a tracker separate from the original PR queue. It should record feature-level test recovery state after goal-judge validation.
+
+Possible tracker:
+
+```text
+.plan/mastracode-testing-recovery/test-recovery-tracker.md
+```
+
+Each row should include:
+
+- Feature card path.
+- Risk level.
+- Current coverage state.
+- Required contract categories.
+- Implementation branch/PR, when created.
+- Verification commands/evidence.
+- Goal-judge status: pending, in-progress, validated, needs-follow-up, deferred.
+
+The slash command should use this tracker to advance through the flow one feature at a time. A feature is not considered finished just because tests were added; it is finished only after the feature card, tracker, and verification evidence are updated and the goal judge validates the result.
+
+## Test harness and skill work
+
+Before broad test recovery starts, we should experiment with the Mastra Code TUI/AIMock harness on a small pilot feature. The outcome should be:
+
+- A reusable TUI test utility API.
+- A few representative tests proving the utility works.
+- A dedicated skill that explains how to write Mastra Code tests with AIMock, the TUI test utility, hermetic config dirs, env cleanup, assertions, and verification commands.
+- The goal slash command should reference that skill so future goal runs use the same testing patterns.
 
 ## Open design questions
 
 - What exact vocabulary should replace the current coarse `Missing` / `Partial` test status?
 - Should every feature card get a contract table before any implementation PR starts?
+- What should the test recovery tracker schema be?
 - What is the minimum TUI test utility API needed before broad e2e coverage becomes cheap?
 - How should AIMock scripts be represented so tests stay readable and deterministic?
 - Which feature cluster should be the first pilot for this system?
