@@ -3,12 +3,12 @@
 ## Origin PR / commit
 
 - PR: [#13456](https://github.com/mastra-ai/mastra/pull/13456) — refresh current Git branch in prompt context and TUI status after thread resume or branch changes.
-- Later changes: none known.
+- Later changes: [#16790](https://github.com/mastra-ai/mastra/pull/16790) — makes Git branch refresh async so slash-command/active-run paths do not block the TUI while refreshing branch status.
 
 ## User-visible behavior
 
 - What the user can do: switch Git branches outside or inside Mastra Code and expect the footer plus next agent prompt to use the current branch.
-- Success looks like: thread resume and new runs show the live branch, not the branch captured at startup.
+- Success looks like: thread resume and new runs show the live branch, not the branch captured at startup, and branch refresh does not block active-run slash-command or status redraw paths.
 - Must preserve: long branch names should abbreviate before the status footer drops branch context entirely.
 
 ## Entry points / commands

@@ -2458,3 +2458,30 @@ Verification:
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/goal-manager.test.ts -t "judge resume|no structured|stale judge|budget exhaustion|waiting" --bail=1 --reporter=dot` — 1 file / 7 tests passed / 17 skipped.
 - `pnpm --filter ./mastracode exec vitest run src/tui/commands/__tests__/goal.test.ts src/utils/__tests__/update-check.test.ts --bail=1 --reporter=dot` — 2 files / 28 tests passed.
 - Note: an initial broader goal/update command hit the known `goal-manager.test.ts` Zod structured-output matcher object-diff failure at line 338; the narrower changed-path goal tests above passed.
+
+### PR #16923 / #16790 / #16939 / #16922 feature-map checkpoint
+
+Verified rows 321-324:
+
+- #16923 adds signal delivery attributes for active/idle context. Current source resolves `ifActive` / `ifIdle` attributes before persistence so Mastra Code can render active interjections as `delivery="while-active"` and idle messages as `delivery="message"` after reload.
+- #16790 runs slash/custom slash commands immediately during active runs through the pending signal path, blocks that path during goal-judge evaluation, creates pending threads before custom slash sends, and makes git branch refresh async.
+- #16939 isolates Unix socket PubSub by thread. Current source routes `agent.thread-stream.<resourceId\0threadId>` topics to `/tmp/mc/<resourceId>/<threadId>.sock`, coalesces socket creation, and avoids cross-thread serialization/OOM risk.
+- #16922 generates provider attachment capability files and wires `modelSupportsAttachments()` into OM attachment Auto mode so text-only observer models get placeholder text while multimodal observer models receive attachments.
+
+Documentation actions:
+
+- Updated `features/chat/agent-signals.md` for #16923 delivery attributes and #16939 per-thread socket isolation.
+- Updated `features/chat/queued-followups.md`, `features/tui/interactive-chat.md`, and `features/git/branch-context.md` for #16790 active-run slash-command dispatch and async branch refresh.
+- Updated `features/memory/observational-memory.md` and `features/models/model-auth-and-modes.md` for #16922 provider capability files and OM attachment Auto mode.
+- Updated `features/integrations/harness-api.md`, `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16923 done, #16790 done, #16939 done, #16922 done, #16951 current.
+
+Focused evidence read: PR metadata for #16923/#16790/#16939/#16922; current `packages/core/src/agent/signals.ts`, `thread-stream-runtime.ts`, `packages/core/src/events/unix-socket-pubsub.ts`, `mastracode/src/utils/signals-pubsub.ts`, `mastracode/src/tui/mastra-tui.ts`, `command-dispatch.ts`, `commands/skills.ts`, `git/branch-context` paths, `packages/core/src/llm/model/provider-registry.ts`, generated capability JSON files, and `packages/memory/src/processors/observational-memory/observational-memory.ts` tests.
+
+Verification:
+
+- `pnpm --filter ./packages/core exec vitest run src/agent/__tests__/agent-signals.test.ts -t "delivery option attributes" --bail=1 --reporter=dot` — 1 file / 6 tests passed / 67 skipped / no type errors.
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/command-dispatch.test.ts --bail=1 --reporter=dot` — 1 file / 20 tests passed.
+- `pnpm --filter ./packages/core exec vitest run src/llm/model/provider-registry.test.ts -t "modelSupportsAttachments" --bail=1 --reporter=dot` — 1 file / 1 test passed / 26 skipped / no type errors.
+- `pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/observational-memory.test.ts -t "auto mode" --bail=1 --reporter=dot` — 1 file / 3 tests passed / 447 skipped.
+- `pnpm --filter ./packages/core exec vitest run src/events/__tests__/per-thread-pubsub-multiprocess.test.ts --bail=1 --reporter=dot` — 1 file / 6 tests passed / no type errors.

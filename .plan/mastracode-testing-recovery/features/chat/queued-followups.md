@@ -3,11 +3,11 @@
 ## Origin PR / commit
 
 - PR: [#13345](https://github.com/mastra-ai/mastra/pull/13345) — Ctrl+F resolves autocomplete and queues slash commands while a run is active.
-- Later changes: [#13493](https://github.com/mastra-ai/mastra/pull/13493) — preserves custom slash-command arguments when the template has no `$ARGUMENTS`/`$1+` placeholders, and treats `$0` as literal shell text rather than a positional argument; [#14250](https://github.com/mastra-ai/mastra/pull/14250) — refined active-run follow-up UX with FIFO message/slash queues, queued-count status, history insertion, autocomplete-first selection, and `//custom-command` precedence; [#14727](https://github.com/mastra-ai/mastra/pull/14727) — fixes custom slash-command discovery/loading with deterministic source priority and name dedupe; [#15678](https://github.com/mastra-ai/mastra/pull/15678) — keeps `//custom-command` dispatch scoped to the active thread’s `state.customSlashCommands` so custom commands do not leak across thread switches; [#16231](https://github.com/mastra-ai/mastra/pull/16231) — moves active-run text follow-ups to Harness Agent signals while keeping Ctrl+F as the explicit queue shortcut and image/slash fallbacks on the transient queue.
+- Later changes: [#13493](https://github.com/mastra-ai/mastra/pull/13493) — preserves custom slash-command arguments when the template has no `$ARGUMENTS`/`$1+` placeholders, and treats `$0` as literal shell text rather than a positional argument; [#14250](https://github.com/mastra-ai/mastra/pull/14250) — refined active-run follow-up UX with FIFO message/slash queues, queued-count status, history insertion, autocomplete-first selection, and `//custom-command` precedence; [#14727](https://github.com/mastra-ai/mastra/pull/14727) — fixes custom slash-command discovery/loading with deterministic source priority and name dedupe; [#15678](https://github.com/mastra-ai/mastra/pull/15678) — keeps `//custom-command` dispatch scoped to the active thread’s `state.customSlashCommands` so custom commands do not leak across thread switches; [#16231](https://github.com/mastra-ai/mastra/pull/16231) — moves active-run text follow-ups to Harness Agent signals while keeping Ctrl+F as the explicit queue shortcut and image/slash fallbacks on the transient queue; [#16790](https://github.com/mastra-ai/mastra/pull/16790) — runs slash commands immediately during active runs through the signal/pending-message path instead of waiting for post-run queue drain.
 
 ## User-visible behavior
 
-- What the user can do: press Ctrl+F during an active run to explicitly queue a follow-up, send normal active-run text with Enter as a Harness signal, queue image/slash follow-ups when signals cannot carry them, or run custom slash commands loaded from user/project command directories.
+- What the user can do: press Ctrl+F during an active run to explicitly queue a follow-up, send normal active-run text with Enter as a Harness signal, run slash/custom slash commands immediately during active runs when signal routing is available, queue image follow-ups when signals cannot carry them, or run custom slash commands loaded from user/project command directories.
 - Success looks like: queued messages/slash commands drain one at a time in FIFO order after the active run and Harness follow-ups finish; `/rev` autocomplete resolves to `/review`; `//gh-debug-issue 123` exposes `123` to the model even if the template omits argument placeholders; custom commands load from the configured priority order and the status line shows queued work.
 - Must preserve: FIFO order across queued plain messages, image messages, and slash commands; queued messages enter editor history; unused custom-command args must not be dropped or shell-executed; later custom-command sources override earlier duplicate names deterministically; active-thread custom command lists must not leak across thread switches; active-run Enter text must not accidentally go through the old queue path unless image attachments force queuing.
 
@@ -19,7 +19,7 @@
 ## TUI states
 
 - Idle: Enter sends; Ctrl+F submits like Enter when the harness is idle.
-- Active / modal / error: Enter sends normal text as a signal in current source; Ctrl+F queues explicit follow-ups; image follow-ups queue when active-run signals cannot carry the pasted image path; queued slash commands render as pending grey user messages until drained.
+- Active / modal / error: Enter sends normal text as a signal in current source; slash/custom slash commands create pending messages and send immediately unless blocked by goal-judge evaluation; Ctrl+F queues explicit follow-ups; image follow-ups queue when active-run signals cannot carry the pasted image path; explicitly queued slash commands render as pending grey user messages until drained.
 
 ## Headless / non-TUI behavior
 
@@ -42,7 +42,7 @@
 | --- | --- | --- |
 | Queued action order | `TUIState.pendingQueuedActions` | Agent lifecycle drain |
 | Queued text/image messages | `TUIState.pendingFollowUpMessages` | `fireMessage()` after drain |
-| Queued slash commands | `TUIState.pendingSlashCommands` + `pendingSlashCommandMessageIds` | `handleSlashCommand()` after drain; pending grey user-message removal |
+| Queued/immediate slash commands | `TUIState.pendingSlashCommands` + `pendingSlashCommandMessageIds` + command-dispatch active-run signal path | `handleSlashCommand()` after drain for explicit queues; immediate pending-message signal dispatch during active runs; pending grey user-message removal |
 | Active-run signal messages | Agent/Harness signals + `pendingSignalMessageComponentsById` | active-run interjections, server-side follow-up queueing, echo dedupe |
 | Queued count | `pendingQueuedActions.length + harness.getFollowUpCount()` | status line `N queued` label |
 | Custom command discovery | `loadSlashCommands()` priority-ordered directories + Map dedupe by command name | Editor autocomplete, `/help` custom command list |
@@ -57,7 +57,7 @@
 - `mastracode/src/tui/mastra-tui.ts` — stores queued messages/slash commands, routes active-run Enter text to `signalMessage()`, and keeps active image follow-ups on the queue path.
 - `mastracode/src/tui/handlers/agent-lifecycle.ts` — drains queued actions after `agent_end`, after Harness signal follow-ups, one FIFO item per completed run.
 - `mastracode/src/tui/status-line.ts` — renders `N queued` using TUI queue length plus Harness follow-up count.
-- `mastracode/src/tui/command-dispatch.ts` — routes `//name` to the active `state.customSlashCommands` list, keeps built-in `/name` commands preferred over custom collisions, and falls back to custom `/name` when no built-in matches.
+- `mastracode/src/tui/command-dispatch.ts` — routes `//name` to the active `state.customSlashCommands` list, keeps built-in `/name` commands preferred over custom collisions, falls back to custom `/name` when no built-in matches, and sends active-run slash commands through the pending signal path with judge-evaluation blocking.
 - `mastracode/src/utils/slash-command-loader.ts` — discovers custom commands from OpenCode/Claude/Mastra user and project directories, derives names/namespaces, parses frontmatter, and dedupes by command name.
 - `mastracode/src/utils/slash-command-processor.ts` — expands `$ARGUMENTS`/`$1+`, appends unused raw args after shell/file expansion, and preserves literal `$0`.
 

@@ -340,11 +340,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 318 | 2026-05-20 | #16843 | `27fd1b79ac` | review | done | fix: goal judge maxSteps, retry, resume retrigger, and task auto-demote (#16843) | 4 |
 | 319 | 2026-05-20 | #16831 | `bb34e3dc4d` | likely skip | skipped | chore: version packages (alpha) (#16831) | 2 |
 | 320 | 2026-05-21 | #16920 | `206ceff6ca` | review | done | fix(mastracode): convert update notification from modal to inline component (#16920) | 5 |
-| 321 | 2026-05-21 | #16923 | `df1947affa` | review | current | feat: add signal delivery attributes for active/idle context (#16923) | 7 |
-| 322 | 2026-05-21 | #16790 | `c1d64b6306` | review | | fix(mastracode): run slash commands immediately during active runs & async git branch refresh (#16790) | 15 |
-| 323 | 2026-05-21 | #16939 | `81164363eb` | review | | feat(core): per-thread socket PubSub to fix OOM from cross-thread serialization (#16939) | 2 |
-| 324 | 2026-05-21 | #16922 | `c27c4b9f13` | review | | feat: generate provider capabilities file and add auto mode for OM observer attachments (#16922) | 9 |
-| 325 | 2026-05-22 | #16951 | `63fe14cd38` | review | | perf(mastracode): replace remaining sync blockers with async alternatives (#16951) | 7 |
+| 321 | 2026-05-21 | #16923 | `df1947affa` | review | done | feat: add signal delivery attributes for active/idle context (#16923) | 7 |
+| 322 | 2026-05-21 | #16790 | `c1d64b6306` | review | done | fix(mastracode): run slash commands immediately during active runs & async git branch refresh (#16790) | 15 |
+| 323 | 2026-05-21 | #16939 | `81164363eb` | review | done | feat(core): per-thread socket PubSub to fix OOM from cross-thread serialization (#16939) | 2 |
+| 324 | 2026-05-21 | #16922 | `c27c4b9f13` | review | done | feat: generate provider capabilities file and add auto mode for OM observer attachments (#16922) | 9 |
+| 325 | 2026-05-22 | #16951 | `63fe14cd38` | review | current | perf(mastracode): replace remaining sync blockers with async alternatives (#16951) | 7 |
 | 326 | 2026-05-22 | #16987 | `9a33d81f01` | review | | fix(mastracode): combine idle timeout and activation into single line (#16987) | 4 |
 | 327 | 2026-05-25 | #17008 | `6096445973` | review | | perf(mastracode): fix mode switch delay, modal lag, Ctrl+F duplicate, and block mode switch while active (#17008) | 4 |
 | 328 | 2026-05-25 | #17005 | `0e95e56637` | review | | fix(mastracode): wrap long ask_user option labels to prevent TUI crash (#17005) | 2 |
