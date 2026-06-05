@@ -18,13 +18,13 @@ import { useAuthCapabilities } from './use-auth-capabilities';
  * RBAC isn't configured, route gating is a no-op so the pattern vocabulary is
  * not needed, and we avoid an unnecessary (and potentially 403/401) call.
  */
-export const usePermissionPatterns = (): { patterns: Set<PermissionPattern>; isLoading: boolean } => {
+export const usePermissionPatterns = () => {
   const client = useMastraClient();
-  const { data: capabilities, isLoading: capabilitiesLoading } = useAuthCapabilities();
+  const { data: capabilities, isLoading: capabilitiesLoading, error: capabilitiesError } = useAuthCapabilities();
 
   const rbacEnabled = !!(capabilities && isAuthenticated(capabilities) && capabilities.capabilities.rbac);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['permission-patterns'],
     queryFn: () => client.getPermissionPatterns(),
     // Only fetch the pattern vocabulary when RBAC gating is in effect.
@@ -41,5 +41,5 @@ export const usePermissionPatterns = (): { patterns: Set<PermissionPattern>; isL
 
   // While capabilities are resolving we don't yet know whether RBAC applies, so
   // report loading. Once RBAC is ruled out, this hook is never "loading".
-  return { patterns, isLoading: capabilitiesLoading || (rbacEnabled && isLoading) };
+  return { patterns, isLoading: capabilitiesLoading || (rbacEnabled && isLoading), error: capabilitiesError || error };
 };

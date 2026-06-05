@@ -681,7 +681,7 @@ function App() {
     <MastraReactProvider baseUrl={baseUrl} headers={studioHeaders} apiPrefix={apiPrefix} customFetch={customFetch}>
       <RoleImpersonationProvider>
         <PostHogProvider>
-          <RoutePermissionsGate>
+          <RoutePermissionsGate baseUrl={baseUrl}>
             <RouterProvider router={router} />
           </RoutePermissionsGate>
         </PostHogProvider>

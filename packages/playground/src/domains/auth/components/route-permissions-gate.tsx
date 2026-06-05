@@ -1,7 +1,8 @@
-import { Spinner } from '@mastra/playground-ui';
+import { ErrorState, Spinner, Button } from '@mastra/playground-ui';
 
 import { usePermissionPatterns } from '../hooks/use-permission-patterns';
 import { ALL_SIDEBAR_PERMISSIONS } from '../route-permissions';
+import { MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY } from '@/domains/configuration/context/studio-config-context';
 
 /**
  * Async replacement for the old static `P()` validator.
@@ -29,8 +30,14 @@ import { ALL_SIDEBAR_PERMISSIONS } from '../route-permissions';
  * empty set and no request — route gating is a no-op, so the gate renders
  * children without validating.
  */
-export function RoutePermissionsGate({ children }: { children: React.ReactNode }) {
-  const { patterns, isLoading } = usePermissionPatterns();
+
+export interface RoutePermissionsGateProps {
+  children: React.ReactNode;
+  baseUrl: string;
+}
+
+export function RoutePermissionsGate({ children, baseUrl }: RoutePermissionsGateProps) {
+  const { patterns, isLoading, error } = usePermissionPatterns();
 
   if (isLoading) {
     return (
@@ -38,6 +45,10 @@ export function RoutePermissionsGate({ children }: { children: React.ReactNode }
         <Spinner />
       </div>
     );
+  }
+
+  if (error) {
+    return <GateInvalidBaseUrl error={error} baseUrl={baseUrl} />;
   }
 
   // Only validate when RBAC is actually in effect (non-empty pattern set).
@@ -55,3 +66,30 @@ export function RoutePermissionsGate({ children }: { children: React.ReactNode }
 
   return <>{children}</>;
 }
+
+interface GateInvalidBaseUrlProps {
+  error: Error;
+  baseUrl: string;
+}
+
+const GateInvalidBaseUrl = ({ error, baseUrl }: GateInvalidBaseUrlProps) => {
+  const messages = [
+    `Studio could not reach the Mastra server at ${baseUrl}. Check that the instance URL and API prefix in Settings are correct, and that the server is running.`,
+    `Error: ${error.message}`,
+  ];
+
+  const handleReset = () => {
+    localStorage.removeItem(MASTRA_STUDIO_CONFIG_LOCAL_STORAGE_KEY);
+    window.location.reload();
+  };
+
+  return (
+    <div className="flex h-screen w-full items-center justify-center">
+      <ErrorState
+        title="Failed to load studio"
+        message={messages.join('\n\n')}
+        action={<Button onClick={handleReset}>Reset Studio Configuration</Button>}
+      />
+    </div>
+  );
+};
