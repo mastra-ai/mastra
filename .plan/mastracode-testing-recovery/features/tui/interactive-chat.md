@@ -3,12 +3,12 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — initial TUI chat, streaming render, keyboard input, tool render, harness event dispatch.
-- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — replaced the local prototype harness with core Harness events and interactive prompt primitives; [#13255](https://github.com/mastra-ai/mastra/pull/13255) — added the public `mastracode/tui` package export; [#13345](https://github.com/mastra-ai/mastra/pull/13345) — fixed Ctrl+F queued slash-command/autocomplete behavior; [#13350](https://github.com/mastra-ai/mastra/pull/13350) — extracted shared `TUIState` / `createTUIState()`; [#13413](https://github.com/mastra-ai/mastra/pull/13413) — split the large TUI class into setup, event-dispatch, handlers, status-line, shell, and history-render modules without changing user-facing chat behavior; [#13422](https://github.com/mastra-ai/mastra/pull/13422) — added the responsive startup banner above the chat layout; [#13426](https://github.com/mastra-ai/mastra/pull/13426) — simplified the startup command hint and `/help` reference; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — added core `HarnessDisplayState` and centralized status-line refresh through `display_state_changed`; [#13456](https://github.com/mastra-ai/mastra/pull/13456) — refreshes and abbreviates Git branch status in the footer; [#13460](https://github.com/mastra-ai/mastra/pull/13460) — wires `fd`/`fdfind` into editor file autocomplete; [#13442](https://github.com/mastra-ai/mastra/pull/13442) — runs prompt-submit and stop hooks in the TUI lifecycle; [#13487](https://github.com/mastra-ai/mastra/pull/13487) — applies terminal theme detection and contrast-aware colors across the TUI; [#13556](https://github.com/mastra-ai/mastra/pull/13556) — adds Quiet mode projection for compact output; [#13609](https://github.com/mastra-ai/mastra/pull/13609) — preserves existing assistant text when tool-result-only chunks produce an empty trailing segment; [#13691](https://github.com/mastra-ai/mastra/pull/13691) — keeps console warn/error noise out of the TUI unless `MASTRA_DEBUG` is enabled; [#13696](https://github.com/mastra-ai/mastra/pull/13696) — queues parallel inline questions/access requests so they do not overwrite each other; [#13712](https://github.com/mastra-ai/mastra/pull/13712) — adds explicit Ctrl+V / Alt+V clipboard paste handling in the editor; [#13723](https://github.com/mastra-ai/mastra/pull/13723) — changes Ctrl+Z to suspend the Unix process and moves undo-last-clear to Alt+Z; [#13999](https://github.com/mastra-ai/mastra/pull/13999) — streams `!` shell passthrough output into a live TUI component; [#14423](https://github.com/mastra-ai/mastra/pull/14423) — polished prompt/editor animation and history/chat styling while later HEAD consolidated animation into `CustomEditor` + `GradientAnimator`.
+- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — replaced the local prototype harness with core Harness events and interactive prompt primitives; [#13255](https://github.com/mastra-ai/mastra/pull/13255) — added the public `mastracode/tui` package export; [#13345](https://github.com/mastra-ai/mastra/pull/13345) — fixed Ctrl+F queued slash-command/autocomplete behavior; [#13350](https://github.com/mastra-ai/mastra/pull/13350) — extracted shared `TUIState` / `createTUIState()`; [#13413](https://github.com/mastra-ai/mastra/pull/13413) — split the large TUI class into setup, event-dispatch, handlers, status-line, shell, and history-render modules without changing user-facing chat behavior; [#13422](https://github.com/mastra-ai/mastra/pull/13422) — added the responsive startup banner above the chat layout; [#13426](https://github.com/mastra-ai/mastra/pull/13426) — simplified the startup command hint and `/help` reference; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — added core `HarnessDisplayState` and centralized status-line refresh through `display_state_changed`; [#13456](https://github.com/mastra-ai/mastra/pull/13456) — refreshes and abbreviates Git branch status in the footer; [#13460](https://github.com/mastra-ai/mastra/pull/13460) — wires `fd`/`fdfind` into editor file autocomplete; [#13442](https://github.com/mastra-ai/mastra/pull/13442) — runs prompt-submit and stop hooks in the TUI lifecycle; [#13487](https://github.com/mastra-ai/mastra/pull/13487) — applies terminal theme detection and contrast-aware colors across the TUI; [#13556](https://github.com/mastra-ai/mastra/pull/13556) — adds Quiet mode projection for compact output; [#13609](https://github.com/mastra-ai/mastra/pull/13609) — preserves existing assistant text when tool-result-only chunks produce an empty trailing segment; [#13691](https://github.com/mastra-ai/mastra/pull/13691) — keeps console warn/error noise out of the TUI unless `MASTRA_DEBUG` is enabled; [#13696](https://github.com/mastra-ai/mastra/pull/13696) — queues parallel inline questions/access requests so they do not overwrite each other; [#13712](https://github.com/mastra-ai/mastra/pull/13712) — adds explicit Ctrl+V / Alt+V clipboard paste handling in the editor; [#13723](https://github.com/mastra-ai/mastra/pull/13723) — changes Ctrl+Z to suspend the Unix process and moves undo-last-clear to Alt+Z; [#13999](https://github.com/mastra-ai/mastra/pull/13999) — streams `!` shell passthrough output into a live TUI component; [#14423](https://github.com/mastra-ai/mastra/pull/14423) — polished prompt/editor animation and history/chat styling while later HEAD consolidated animation into `CustomEditor` + `GradientAnimator`; [#15082](https://github.com/mastra-ai/mastra/pull/15082) — prunes old rendered chat components during long sessions so TUI memory does not grow without bound.
 
 ## User-visible behavior
 
 - What the user can do: run `mastracode`, type prompts, see animated/polished editor feedback, and see streamed assistant/tool output.
-- Success looks like: input, prompt animation, status/footer, messages, tools, and interrupts stay coherent during a run.
+- Success looks like: input, prompt animation, status/footer, messages, tools, and interrupts stay coherent during a run; long sessions keep recent rendered chat while old component instances are pruned.
 - Must preserve: active streaming UI and loaded history should tell the same conversation story.
 
 ## Entry points / commands
@@ -29,13 +29,13 @@
 
 ## Streaming / loading / interrupted states
 
-- Streaming / loading: live `message_*` and `tool_*` events update TUI projections; tool-result-only chunks must not blank already-rendered assistant text.
-- Abort / retry / resume: Ctrl+C/Escape calls `harness.abort()`; terminal cleanup comes from `agent_end`; global warn/error console output is silenced or redirected before it can corrupt the active TUI.
+- Streaming / loading: live `message_*` and `tool_*` events update TUI projections; tool-result-only chunks must not blank already-rendered assistant text. After agent end/abort/error cleanup, `pruneChatContainer()` caps rendered chat children from >200 down to the most recent 100.
+- Abort / retry / resume: Ctrl+C/Escape calls `harness.abort()`; abort/error cleanup also prunes old rendered chat components; global warn/error console output is silenced or redirected before it can corrupt the active TUI.
 
 ## Streaming vs loaded-from-history behavior
 
-- While actively streaming: state lives in TUI projection maps like pending tools and streaming components.
-- After reload / history reconstruction: `renderExistingMessages()` rebuilds from persisted messages; live-only state should not resurrect as active work.
+- While actively streaming: state lives in TUI projection maps like pending tools and streaming components; pruning only runs after lifecycle cleanup, not mid-token stream.
+- After reload / history reconstruction: `renderExistingMessages()` rebuilds from persisted messages; live-only state should not resurrect as active work. Pruned components are only an in-memory TUI cap and do not delete persisted thread history.
 
 ## State ownership
 
@@ -45,6 +45,7 @@
 | Active run | Harness runtime | TUI keyboard/status handlers |
 | Display projection | `HarnessDisplayState` | Status line, tasks, tools, OM, future UIs |
 | Streaming components | TUI transient projection; trailing content after inline boundaries; local shell passthrough output component | Chat container |
+| Rendered chat component cap | `pruneChatContainer()` on lifecycle cleanup, `MAX_CHILDREN=200`, `KEEP_CHILDREN=100` | Chat container plus tool/slash/system-reminder/shell/pending-signal tracking arrays |
 | Prompt/editor animation | `CustomEditor` prompt timing + shared `GradientAnimator` sweep helpers | Editor border/prompt, status/OM progress polish |
 | Mutable TUI state | `TUIState` object from `createTUIState()` | Commands, extracted handlers, tests, TUI class |
 | Autocomplete provider | `setupAutocomplete()` | Editor slash, skill, custom command, and `@` file suggestions |
@@ -65,6 +66,8 @@
 - `mastracode/src/tui/event-dispatch.ts` — event-to-handler routing; `display_state_changed` refreshes the status line from Harness display state; `thread_changed` refreshes Git branch.
 - `packages/core/src/harness/types.ts` and `harness.ts` — `HarnessDisplayState` source for active tools/tasks/OM/current-message projection.
 - `mastracode/src/tui/handlers/message.ts` — assistant streaming partitioning, inline signal rendering, and text-preservation guard after tool updates.
+- `mastracode/src/tui/prune-chat.ts` — long-session rendered-component cap; removes old chat children and stale tracked tool/slash/reminder/shell/pending signal component references.
+- `mastracode/src/tui/handlers/agent-lifecycle.ts` — calls chat pruning on agent end, abort, and error cleanup.
 - `mastracode/src/tui/handlers/*` — focused tool, OM, prompt, and subagent handlers; prompt handlers own the inline question queue.
 - `mastracode/src/tui/render-messages.ts` — history reconstruction.
 - `mastracode/src/tui/status-line.ts`, `shell.ts` — extracted status and shell rendering helpers.
@@ -102,6 +105,7 @@
 - `mastracode/src/tui/components/__tests__/help-overlay.test.ts` — compact `/help` output.
 - `packages/core/src/harness/display-state.test.ts` — display-state projection used by status/tasks/tools/OM rendering.
 - `mastracode/src/tui/event-dispatch.test.ts`, `render-messages.test.ts` — event/history rendering.
+- `mastracode/src/tui/__tests__/prune-chat.test.ts` — #15082 cap behavior: >200 children prunes to the newest 100 and removes stale tracked tool/slash/system-reminder/shell component references.
 - `mastracode/src/tui/handlers/*.test.ts` — focused handler coverage after #13413 extraction, including spacing around quiet tool previews.
 - `mastracode/src/headless.test.ts` — non-TUI path.
 - `mastracode/src/tui/__tests__/*` imports `TUIState` in handler/queue/goal tests, but most tests still hand-build partial state objects.
@@ -118,6 +122,8 @@
 - Regression test for #13609: assistant text before a tool remains visible after a tool-result-only update and final chunk with no trailing text.
 - Full startup layout snapshot covering banner, frontmatter, instructions, chat, task progress, editor, and footer.
 - Component-level shell passthrough test proving incremental output appears before process exit and is not persisted as chat history.
+- Lifecycle handler tests proving `pruneChatContainer()` is invoked on normal `agent_end`, abort, and error paths, not only the helper's direct behavior.
+- Long-session regression covering `messageComponentsById` after pruning, because #15082 prunes several tracking arrays but does not currently remove message-id component map entries.
 
 ## Known risks / regressions
 
@@ -129,6 +135,7 @@
 - TUI modularization lowered file size but increased routing seams: a missing handler import or mismatched context field can silently break one event family while the main TUI still starts.
 - Streaming text preservation depends on `getTrailingContentParts()` treating tool/results/signals as inline boundaries; adding a new boundary type without updating it can blank or duplicate text.
 - Startup banner is static but width/theme assumptions can affect first-run layout in narrow or non-standard terminals.
+- The pruning helper removes chat-container children and selected tracking arrays, but `messageComponentsById` may still retain old component references unless later cleanup covers it.
 
 ## Verification checklist
 

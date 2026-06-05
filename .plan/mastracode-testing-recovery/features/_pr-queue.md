@@ -204,8 +204,8 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 182 | 2026-04-03 | #15042 | `c14a638639` | likely skip | skipped | chore: version packages (alpha) (#15042) | 2 |
 | 183 | 2026-04-04 | #15055 | `ee09cbf675` | likely skip | skipped | chore: version packages (alpha) (#15055) | 2 |
 | 184 | 2026-04-05 | #15059 | `f5b553c7a9` | likely skip | skipped | chore: version packages (alpha) (#15059) | 2 |
-| 185 | 2026-04-05 | #15082 | `0073994124` | review | current | fix: prune mastracode chat memory growth (#15082) | 13 |
-| 186 | 2026-04-05 | #15036 | `7d6f52164d` | review | | feat(mastracode): add browser automation support (#15036) | 13 |
+| 185 | 2026-04-05 | #15082 | `0073994124` | review | done | fix: prune mastracode chat memory growth (#15082) | 13 |
+| 186 | 2026-04-05 | #15036 | `7d6f52164d` | review | current | feat(mastracode): add browser automation support (#15036) | 13 |
 | 187 | 2026-04-05 | #15088 | `9f58f3a305` | review | | fix: address mastracode review follow-ups (#15088) | 2 |
 | 188 | 2026-04-06 | #15083 | `679003c3f6` | likely skip | | chore: version packages (alpha) (#15083) | 2 |
 | 189 | 2026-04-06 | #15114 | `6c3e6c14a0` | likely skip | | chore: version packages (alpha) (#15114) | 2 |

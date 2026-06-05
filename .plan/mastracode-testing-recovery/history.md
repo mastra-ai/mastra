@@ -1613,3 +1613,24 @@ Documentation actions:
 Focused evidence read: `gh pr view` metadata/files for #14965/#15034/#15042/#15055/#15059.
 
 Verification: no focused tests needed; skip-only package-version/docs churn.
+
+### PR #15082 feature-map checkpoint
+
+Verified row 185:
+
+- #15082 adds long-session TUI chat pruning. Current `mastracode/src/tui/prune-chat.ts` caps `state.chatContainer.children` after lifecycle cleanup: when more than 200 rendered children exist, it removes the oldest children and keeps the most recent 100.
+- The helper also removes pruned references from `allToolComponents`, `allSlashCommandComponents`, `allSystemReminderComponents`, `allShellComponents`, and `pendingSignalMessageComponentsById`.
+- `mastracode/src/tui/handlers/agent-lifecycle.ts` calls `pruneChatContainer(state)` on normal `agent_end`, abort cleanup, and error cleanup. Pruning is TUI-only; persisted thread history remains in Harness/memory and reload reconstruction still comes from stored messages.
+- PR also carried Harness API/type follow-up fixes in agent/headless/workspace paths; no separate user-visible feature behavior identified beyond chat pruning.
+
+Documentation actions:
+
+- Updated `features/tui/interactive-chat.md` with #15082 later-change history, current long-session pruning behavior, state ownership, key files, tests, missing lifecycle/map cleanup tests, and known risks.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #15082 done, #15036 current.
+
+Focused evidence read: PR metadata/diff for #15082; current `mastracode/src/tui/prune-chat.ts`, `mastracode/src/tui/__tests__/prune-chat.test.ts`, `mastracode/src/tui/handlers/agent-lifecycle.ts`, `mastracode/src/tui/state.ts`, and tracked component insertion sites.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/prune-chat.test.ts --bail=1 --reporter=dot` — 1 file / 2 tests passed.
