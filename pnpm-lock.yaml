@@ -1482,7 +1482,7 @@ importers:
         specifier: ^1.0.7
         version: 1.0.7(tailwindcss@4.2.2)
       tsx:
-        specifier: 'catalog:'
+        specifier: ^4.22.4
         version: 4.22.4
       tw-animate-css:
         specifier: ^1.4.0
