@@ -127,6 +127,9 @@ export type GithubPullRequestSnapshot = {
   latestCommentAuthor?: string;
   latestCommentAuthorType?: string;
   latestCommentIsBot?: boolean;
+  latestCommentBody?: string;
+  latestCommentUrl?: string;
+  latestCommentUpdatedAt?: string;
 };
 
 export type GithubSignalsSyncClient = {
@@ -178,7 +181,14 @@ export type GithubSubscriptionsChangedEvent = {
   subscriptions: GithubPRSubscription[];
 };
 
+export type GithubPollingChangedEvent = {
+  threadId: string;
+  resourceId: string;
+  running: boolean;
+};
+
 type GithubSubscriptionsChangedHandler = (event: GithubSubscriptionsChangedEvent) => void;
+type GithubPollingChangedHandler = (event: GithubPollingChangedEvent) => void;
 
 type GithubPRSignal = {
   id: string;
@@ -425,6 +435,16 @@ function getMergedNotificationSummary(label: string): string {
   return `${label} was merged. This thread has been automatically unsubscribed from this PR. Resubscribe if you still need updates.`;
 }
 
+function getCommentExcerpt(body: string): string {
+  const excerpt = body.replace(/\s+/g, ' ').trim();
+  return excerpt.length > 240 ? `${excerpt.slice(0, 237)}...` : excerpt;
+}
+
+function getCommentNotificationSummary(pr: string, snapshot: GithubPullRequestSnapshot): string | undefined {
+  if (!snapshot.latestCommentAuthor || !snapshot.latestCommentBody) return undefined;
+  return `${snapshot.latestCommentAuthor} commented on ${pr}: ${getCommentExcerpt(snapshot.latestCommentBody)}`;
+}
+
 function getCheckUpdatedTime(check: { updatedAt?: string }): number {
   const value = check.updatedAt ? Date.parse(check.updatedAt) : Number.NaN;
   return Number.isFinite(value) ? value : 0;
@@ -601,7 +621,7 @@ function classifyGithubActivityNotification(input: {
   return {
     kind: 'pull-request-activity',
     priority: 'medium',
-    summary: `${pr} has new activity${input.snapshot.title ? `: ${input.snapshot.title}` : ''}`,
+    summary: getCommentNotificationSummary(pr, input.snapshot) ?? `${pr} has new activity${input.snapshot.title ? `: ${input.snapshot.title}` : ''}`,
   };
 }
 
@@ -776,7 +796,11 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
         author_login?: string;
         author_type?: string;
         is_bot?: number;
-      }>(`select c.author_login, c.author_type, c.is_bot
+        body?: string;
+        html_url?: string;
+        updated_at?: string;
+      }>(`select c.author_login, c.author_type, c.is_bot, c.body, json_extract(c.raw_json, '$.html_url') as html_url,
+                 coalesce(c.updated_at_gh, c.created_at_gh) as updated_at
             from comments c
             join threads t on t.id=c.thread_id
             join repositories r on r.id=t.repo_id
@@ -855,6 +879,9 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
         latestCommentAuthor: readString(latestComment?.author_login),
         latestCommentAuthorType: readString(latestComment?.author_type),
         latestCommentIsBot: latestComment?.is_bot === 1,
+        latestCommentBody: readString(latestComment?.body),
+        latestCommentUrl: readString(latestComment?.html_url),
+        latestCommentUpdatedAt: readString(latestComment?.updated_at),
       };
     } catch {
       return undefined;
@@ -916,6 +943,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   #agent?: GithubSignalAgent;
   #agentOptions: GithubSignalAgentOptions = {};
   #subscriptionsChangedHandler?: GithubSubscriptionsChangedHandler;
+  #pollingChangedHandler?: GithubPollingChangedHandler;
 
   constructor(options: GithubSignalsOptions = {}) {
     super();
@@ -955,6 +983,10 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
 
   onSubscriptionsChanged(handler: GithubSubscriptionsChangedHandler): void {
     this.#subscriptionsChangedHandler = handler;
+  }
+
+  onPollingChanged(handler: GithubPollingChangedHandler): void {
+    this.#pollingChangedHandler = handler;
   }
 
   override __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
@@ -1007,15 +1039,13 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
 
     if (this.#polling.has(key)) return true;
 
-    let scheduledPollCount = options.pollImmediately ? 1 : 0;
     const runPoll = (pollOptions: { includeComments?: boolean } = {}) => {
       void this.#pollThread(input, pollOptions).catch(error => {
         console.warn('GitHub PR polling failed:', error);
       });
     };
     const timer = setInterval(() => {
-      scheduledPollCount += 1;
-      runPoll({ includeComments: scheduledPollCount % 2 === 1 });
+      runPoll({ includeComments: true });
     }, this.#options.pollIntervalMs ?? 300_000);
     if (options.pollImmediately) runPoll({ includeComments: true });
     timer.unref?.();
@@ -1033,6 +1063,10 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
 
   isPollingThread(input: GithubPollingThread): boolean {
     return this.#polling.has(this.#pollingKey(input));
+  }
+
+  isPollingThreadRunning(input: GithubPollingThread): boolean {
+    return this.#polling.get(this.#pollingKey(input))?.running ?? false;
   }
 
   getPollIntervalMs(): number {
@@ -1268,6 +1302,10 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     this.#subscriptionsChangedHandler?.(input);
   }
 
+  #notifyPollingChanged(input: GithubPollingChangedEvent): void {
+    this.#pollingChangedHandler?.(input);
+  }
+
   async #pollThread(input: GithubPollingThread, options: { includeComments?: boolean } = {}): Promise<number> {
     const key = this.#pollingKey(input);
     const state = this.#polling.get(key);
@@ -1275,6 +1313,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       return 0;
     }
     if (state) state.running = true;
+    this.#notifyPollingChanged({ threadId: input.threadId, resourceId: input.resourceId, running: true });
 
     try {
       const { threadStore, loadedThread } = await this.#loadThread(input);
@@ -1309,6 +1348,10 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         const previousContentHash = subscription.lastObservedContentHash;
         const previousThreadContentHash = subscription.lastObservedThreadContentHash;
         const previousHeadSha = subscription.lastObservedHeadSha;
+        const latestCommentChanged =
+          !!previousGithubUpdatedAt &&
+          !!snapshot?.latestCommentUpdatedAt &&
+          Date.parse(snapshot.latestCommentUpdatedAt) > Date.parse(previousGithubUpdatedAt);
         if (snapshot) applySnapshotCursor(nextSubscription, snapshot);
 
         // First observation (no previous cursor) always counts as changed so we
@@ -1326,6 +1369,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           (syncResult.ok &&
             snapshot &&
             (legacyAggregateChanged ||
+              latestCommentChanged ||
               (previousThreadContentHash &&
                 snapshot.threadContentHash &&
                 previousThreadContentHash !== snapshot.threadContentHash) ||
@@ -1341,7 +1385,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
                 snapshot.reviewStateHash &&
                 subscription.lastObservedReviewStateHash !== snapshot.reviewStateHash)));
         let shouldKeepSubscription = true;
-        if (changed) {
+        if (changed && snapshot) {
           const notification = await this.#sendActivityNotification({
             polling: input,
             subscription,
@@ -1379,6 +1423,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     } finally {
       const latestState = this.#polling.get(key);
       if (latestState) latestState.running = false;
+      this.#notifyPollingChanged({ threadId: input.threadId, resourceId: input.resourceId, running: false });
     }
   }
 
@@ -1394,12 +1439,19 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   }): Promise<void> {
     const failingChecks = getFailingChecks(input.snapshot);
     const pendingChecks = getPendingChecks(input.snapshot);
+    const latestCommentExcerpt = input.snapshot.latestCommentBody
+      ? getCommentExcerpt(input.snapshot.latestCommentBody)
+      : undefined;
+    const latestCommentDedupeSuffix =
+      input.notification.kind === 'pull-request-activity' && input.snapshot.latestCommentUrl
+        ? `comment:${input.snapshot.latestCommentUrl}:${input.snapshot.latestCommentUpdatedAt ?? ''}`
+        : input.dedupeSuffix;
     const notificationInput = {
       source: 'github',
       kind: input.notification.kind,
       priority: input.notification.priority,
       summary: input.notification.summary,
-      dedupeKey: `github:${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}:${input.dedupeSuffix}`,
+      dedupeKey: `github:${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}:${latestCommentDedupeSuffix}`,
       coalesceKey: `github:${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}:${input.notification.kind}`,
       attributes: {
         owner: input.subscription.owner,
@@ -1415,6 +1467,10 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         ...(input.snapshot.unresolvedReviewThreads !== undefined
           ? { unresolvedReviewThreads: input.snapshot.unresolvedReviewThreads }
           : {}),
+        ...(input.snapshot.latestCommentAuthor ? { latestCommentAuthor: input.snapshot.latestCommentAuthor } : {}),
+        ...(latestCommentExcerpt ? { latestCommentExcerpt } : {}),
+        ...(input.snapshot.latestCommentUrl ? { latestCommentUrl: input.snapshot.latestCommentUrl } : {}),
+        ...(input.snapshot.latestCommentUpdatedAt ? { latestCommentUpdatedAt: input.snapshot.latestCommentUpdatedAt } : {}),
         ...(failingChecks.length > 0 ? { failingChecks: failingChecks.map(check => check.name).join(', ') } : {}),
         ...(pendingChecks.length > 0 ? { pendingChecks: pendingChecks.map(check => check.name).join(', ') } : {}),
       },
@@ -1443,6 +1499,10 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           latestCommentAuthor: input.snapshot.latestCommentAuthor,
           latestCommentAuthorType: input.snapshot.latestCommentAuthorType,
           latestCommentIsBot: input.snapshot.latestCommentIsBot,
+          latestCommentBody: input.snapshot.latestCommentBody,
+          latestCommentExcerpt,
+          latestCommentUrl: input.snapshot.latestCommentUrl,
+          latestCommentUpdatedAt: input.snapshot.latestCommentUpdatedAt,
           failingChecks,
           pendingChecks,
         },
