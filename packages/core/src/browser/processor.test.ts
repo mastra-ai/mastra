@@ -455,7 +455,7 @@ describe('BrowserContextProcessor', () => {
       );
     });
 
-    it('includes process_restart close reason in snapshot', async () => {
+    it('includes process_restart close reason in delta', async () => {
       const activeSignal = createSignal({
         type: 'state',
         contents: 'Browser is open.',
@@ -474,6 +474,7 @@ describe('BrowserContextProcessor', () => {
       expect(result).toBeDefined();
       expect(result).toEqual(
         expect.objectContaining({
+          mode: 'delta',
           contents: expect.stringContaining('browser was closed because the chat process restarted'),
         }),
       );
