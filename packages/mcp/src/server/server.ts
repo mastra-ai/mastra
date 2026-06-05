@@ -42,7 +42,6 @@ import type {
   TextResourceContents,
   BlobResourceContents,
   Resource,
-  ResourceTemplate,
   ServerCapabilities,
   CallToolResult,
   ElicitResult,
@@ -96,9 +95,11 @@ export class MCPServer extends MCPServerBase {
   // Track server instances for each HTTP session
   private httpServerInstances: Map<string, Server> = new Map();
 
-  private definedResources?: Resource[];
-  private definedResourceTemplates?: ResourceTemplate[];
   private resourceOptions?: MCPServerResources;
+  // Whether any UI (`ui://`) app resources are configured. Captured at construction so
+  // per-request server instances can advertise the MCP Apps extension without relying on
+  // a shared, per-caller resource cache.
+  private hasUiResources: boolean = false;
   private definedPrompts?: MastraPrompt[];
   private promptOptions?: MCPServerPrompts;
   private jsonSchemaValidator?: jsonSchemaValidator;
@@ -304,6 +305,10 @@ export class MCPServer extends MCPServerBase {
 
     // Merge appResources into the resource system
     this.resourceOptions = this.mergeAppResources(opts.resources, opts.appResources);
+    // App resources are auto-registered as `ui://` resources, so their presence is what
+    // gates the MCP Apps extension. Capture it here instead of inferring it from a cached
+    // (and potentially per-caller) resource list.
+    this.hasUiResources = !!opts.appResources && Object.keys(opts.appResources).length > 0;
     this.promptOptions = opts.prompts;
     this.jsonSchemaValidator = opts.jsonSchemaValidator;
     this.mapAuthInfoToUser = opts.mapAuthInfoToUser;
@@ -361,12 +366,6 @@ export class MCPServer extends MCPServerBase {
       getSubscriptions: () => this.subscriptions,
       getLogger: () => this.logger,
       getSdkServer: () => this.server,
-      clearDefinedResources: () => {
-        this.definedResources = undefined;
-      },
-      clearDefinedResourceTemplates: () => {
-        this.definedResourceTemplates = undefined;
-      },
     });
 
     this.prompts = new ServerPromptActions({
@@ -569,8 +568,7 @@ export class MCPServer extends MCPServerBase {
       tool => (tool.mcp?._meta as Record<string, any>)?.ui?.resourceUri,
     );
     if (hasUiTools || this.resourceOptions) {
-      const hasUiResources = this.definedResources?.some(r => r.uri.startsWith('ui://'));
-      if (hasUiTools || hasUiResources) {
+      if (hasUiTools || this.hasUiResources) {
         capabilities.extensions = {
           ...capabilities.extensions,
           'io.modelcontextprotocol/ui': {},
@@ -833,18 +831,17 @@ export class MCPServer extends MCPServerBase {
     // List resources handler
     if (capturedResourceOptions.listResources) {
       serverInstance.setRequestHandler(ListResourcesRequestSchema, async (_request, extra) => {
-        if (this.definedResources) {
-          return { resources: this.definedResources };
-        } else {
-          try {
-            const resources = await capturedResourceOptions.listResources!({ extra });
-            this.definedResources = resources;
-            this.logger.debug('Fetched and cached resources', { count: this.definedResources.length });
-            return { resources: this.definedResources };
-          } catch (error) {
-            this.logger.error('Error fetching resources', { error });
-            throw error;
-          }
+        // Always re-evaluate the provider with the current request's `extra`. The result
+        // must never be cached on the shared instance: dynamic providers scope resources
+        // per caller (e.g. via `extra.authInfo`), so caching would leak one caller's
+        // resource index to the next. See https://github.com/mastra-ai/mastra/issues/17609
+        try {
+          const resources = await capturedResourceOptions.listResources!({ extra });
+          this.logger.debug('Fetched resources', { count: resources.length });
+          return { resources };
+        } catch (error) {
+          this.logger.error('Error fetching resources', { error });
+          throw error;
         }
       });
     }
@@ -856,13 +853,11 @@ export class MCPServer extends MCPServerBase {
         const uri = request.params.uri;
         this.logger.debug('Handling ReadResource request', { uri });
 
-        if (!this.definedResources) {
-          const resources = await this.resourceOptions?.listResources?.({ extra });
-          if (!resources) throw new Error('Failed to load resources');
-          this.definedResources = resources;
-        }
-
-        const resource = this.definedResources?.find(r => r.uri === uri);
+        // Resolve the resource list for the current caller's `extra` on every request
+        // rather than from a shared cache, so URI resolution respects per-caller auth.
+        const resources = await capturedResourceOptions.listResources?.({ extra });
+        if (!resources) throw new Error('Failed to load resources');
+        const resource = resources.find(r => r.uri === uri);
 
         if (!resource) {
           this.logger.warn('Unknown resource URI requested', { uri });
@@ -910,18 +905,17 @@ export class MCPServer extends MCPServerBase {
     // Resource templates handler
     if (capturedResourceOptions.resourceTemplates) {
       serverInstance.setRequestHandler(ListResourceTemplatesRequestSchema, async (_request, extra) => {
-        if (this.definedResourceTemplates) {
-          return { resourceTemplates: this.definedResourceTemplates };
-        } else {
-          try {
-            const templates = await capturedResourceOptions.resourceTemplates!({ extra });
-            this.definedResourceTemplates = templates;
-            this.logger.debug('Fetched and cached resource templates', { count: this.definedResourceTemplates.length });
-            return { resourceTemplates: this.definedResourceTemplates };
-          } catch (error) {
-            this.logger.error('Error fetching resource templates via resourceTemplates():', { error });
-            throw error;
-          }
+        // Always re-evaluate the provider with the current request's `extra`, never from a
+        // shared cache. Like resource lists, dynamic template providers can scope templates
+        // per caller (e.g. via `extra.authInfo`), so caching would leak across callers.
+        // See https://github.com/mastra-ai/mastra/issues/17609
+        try {
+          const templates = await capturedResourceOptions.resourceTemplates!({ extra });
+          this.logger.debug('Fetched resource templates', { count: templates.length });
+          return { resourceTemplates: templates };
+        } catch (error) {
+          this.logger.error('Error fetching resource templates via resourceTemplates():', { error });
+          throw error;
         }
       });
     }
@@ -2464,12 +2458,7 @@ export class MCPServer extends MCPServerBase {
     }
 
     const extra = {} as any;
-    if (this.definedResources) {
-      return { resources: this.definedResources };
-    }
-
     const resources = await this.resourceOptions.listResources({ extra });
-    this.definedResources = resources;
     return { resources };
   }
 }
