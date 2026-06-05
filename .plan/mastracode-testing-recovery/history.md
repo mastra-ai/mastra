@@ -1026,3 +1026,22 @@ Verification:
 - Focused tests passed: `corepack pnpm.3.0 --filter ./mastracode exec vitest run src/utils/__tests__/update-check.test.ts --reporter=dot --bail 1` (1 file / 13 tests). Initial `pnpm` run failed because local pnpm 10.29.3 no longer satisfies root `packageManager`/engine metadata requiring pnpm 11.3.0.
 
 Next queue checkpoint: PR #13767 (source fallback for version detection), then PR #13768 (ESM-compatible version fallback).
+
+### Feature map batch: source-safe version detection fallbacks
+
+Processed PR [#13767](https://github.com/mastra-ai/mastra/pull/13767), `205bbac168` (`fix(mastracode): fallback to package.json when running from source`). Verified current `getCurrentVersion()` guards `typeof MASTRACODE_VERSION !== 'undefined'` before using the build-time define. When running directly from source where tsup has not injected the constant, current source falls back to package metadata.
+
+Processed PR [#13768](https://github.com/mastra-ai/mastra/pull/13768), `46211b2799` (`fix(mastracode): use ESM-compatible fallback for version detection`). Verified current fallback uses ESM-safe `dirname(fileURLToPath(import.meta.url))`, `resolve()`, and `readFileSync()` rather than CommonJS `require`, avoiding `require is not defined` in the ESM package.
+
+Documentation actions:
+
+- Updated `features/setup/auto-update-prompts.md` with source-run fallback behavior, ESM compatibility, and missing version-detection tests.
+- Updated `features/setup/installation-and-launch.md` with package-version detection ownership across built and source-run paths.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13767 done, #13768 done, #13748 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/utils/update-check.ts`, PR metadata for #13767/#13768, and related setup/update feature cards.
+- Focused tests passed: `corepack pnpm.3.0 --filter ./mastracode exec vitest run src/utils/__tests__/update-check.test.ts --reporter=dot --bail 1` (1 file / 13 tests).
+
+Next queue checkpoint: PR #13748 (persist thinking level as a global preference), then PR #13787 (`/update` slash command).

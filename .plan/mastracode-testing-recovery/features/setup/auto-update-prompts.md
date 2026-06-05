@@ -3,12 +3,12 @@
 ## Origin PR / commit
 
 - PR: [#13603](https://github.com/mastra-ai/mastra/pull/13603) — checks npm for newer `mastracode` versions on session start and prompts the user to update.
-- Later changes: [#13760](https://github.com/mastra-ai/mastra/pull/13760) — inlines `MASTRACODE_VERSION` at build time so published npm installs do not require `package.json` at runtime; current source also has an `/update` command, and queue row #13787 should verify and map that slash-command path separately.
+- Later changes: [#13760](https://github.com/mastra-ai/mastra/pull/13760) — inlines `MASTRACODE_VERSION` at build time so published npm installs do not require `package.json` at runtime; [#13767](https://github.com/mastra-ai/mastra/pull/13767) — falls back to package metadata when running directly from source without the build define; [#13768](https://github.com/mastra-ai/mastra/pull/13768) — makes that source fallback ESM-compatible via `readFileSync` + `fileURLToPath`; current source also has an `/update` command, and queue row #13787 should verify and map that slash-command path separately.
 
 ## User-visible behavior
 
 - What the user can do: start the TUI and receive a Y/N inline prompt when a newer package version is available; decline to skip that version until a manual update or a newer version appears.
-- Success looks like: startup remains usable when the registry/changelog is unavailable, published npm installs can report their current version without reading `package.json`, update prompts show concise changelog entries, and choosing No persists the dismissed version.
+- Success looks like: startup remains usable when the registry/changelog is unavailable, published npm installs can report their current version without reading `package.json`, source runs can still resolve package metadata without CommonJS `require`, update prompts show concise changelog entries, and choosing No persists the dismissed version.
 - Must preserve: no blocking startup on network failure, no repeated prompt spam for a dismissed version, package-manager-specific install commands, and no fatal runtime `package.json` require in packaged builds.
 
 ## Entry points / commands
@@ -40,7 +40,7 @@
 
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
-| Current version | `getCurrentVersion()` build define (`MASTRACODE_VERSION`) with source-run fallback | TUI prompt, analytics, `/update` |
+| Current version | `getCurrentVersion()` build define (`MASTRACODE_VERSION`) with ESM-safe source-run package metadata fallback | TUI prompt, analytics, `/update` |
 | Latest version/changelog | npm registry + unpkg changelog fetchers | Startup update prompt |
 | Dismissed version | `settings.json` `updateDismissedVersion` | Startup prompt suppression |
 | Package manager | `detectPackageManager()` | Auto-update command selection |
@@ -70,12 +70,12 @@
 
 - TUI startup integration test for the automatic update prompt, dismissed-version suppression, and passive 45-minute recheck banner.
 - Package-manager detection tests across npm/pnpm/yarn/bun install contexts.
-- `getCurrentVersion()` tests for build-time define, source fallback, and packaged-build behavior without `package.json`.
+- `getCurrentVersion()` tests for build-time define, ESM-safe source fallback, and packaged-build behavior without `package.json`.
 - Auto-update execution failure/success tests that do not actually mutate the developer's global install.
 
 ## Known risks / regressions
 
-- Published-package builds can fail at startup if current-version detection falls back to runtime `package.json` access when that file is not shipped.
+- Published-package builds can fail at startup if current-version detection falls back to runtime `package.json` access when that file is not shipped; source runs can fail if fallback code assumes CommonJS `require` in an ESM package.
 - Network-dependent update checks can slow or annoy startup if timeout/suppression behavior regresses.
 - Manual `/update` and automatic startup prompt can drift because they share helpers but have separate UI paths.
 - Simple semver comparison can mishandle prerelease/build metadata if future releases depend on it.

@@ -36,8 +36,8 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 
 | Area | Feature | Origin | State owner | Tests | Risk | Page |
 | --- | --- | --- | --- | --- | --- | --- |
-| Setup | Installation and launch | #13294, #13560, #13760 | package metadata + startup runtime | Partial | Medium | [page](./setup/installation-and-launch.md) |
-| Setup | Auto-update prompts | #13603, #13760 | npm registry helpers + build-time version + settings dismissed version | Partial | Medium | [page](./setup/auto-update-prompts.md) |
+| Setup | Installation and launch | #13294, #13560, #13760, #13767, #13768 | package metadata + startup runtime | Partial | Medium | [page](./setup/installation-and-launch.md) |
+| Setup | Auto-update prompts | #13603, #13760, #13767, #13768 | npm registry helpers + build-time/source version + settings dismissed version | Partial | Medium | [page](./setup/auto-update-prompts.md) |
 | TUI | Startup banner | #13422 | TUI options + terminal width | Partial | Medium | [page](./tui/startup-banner.md) |
 | TUI | Help and shortcuts | #13426, #13712, #13723 | TUI command metadata + settings | Partial | Medium | [page](./tui/help-and-shortcuts.md) |
 | TUI | Interactive prompts and access requests | #13696 | TUI active prompt + pending prompt queue | Partial | High | [page](./tui/interactive-prompts.md) |

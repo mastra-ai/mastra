@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13294](https://github.com/mastra-ai/mastra/pull/13294) — installation/startup README guidance for Mastra Code.
-- Later changes: [#13560](https://github.com/mastra-ai/mastra/pull/13560) — treats `ERR_STREAM_DESTROYED` as a non-fatal global exception/rejection during CLI runtime; [#13691](https://github.com/mastra-ai/mastra/pull/13691) — makes debug logging opt-in via `MASTRA_DEBUG` and caps app-data `debug.log`; [#13603](https://github.com/mastra-ai/mastra/pull/13603) — checks for newer npm versions on TUI startup and prompts for update; [#13760](https://github.com/mastra-ai/mastra/pull/13760) — inlines package version metadata at build time to avoid runtime `package.json` dependency in npm installs.
+- Later changes: [#13560](https://github.com/mastra-ai/mastra/pull/13560) — treats `ERR_STREAM_DESTROYED` as a non-fatal global exception/rejection during CLI runtime; [#13691](https://github.com/mastra-ai/mastra/pull/13691) — makes debug logging opt-in via `MASTRA_DEBUG` and caps app-data `debug.log`; [#13603](https://github.com/mastra-ai/mastra/pull/13603) — checks for newer npm versions on TUI startup and prompts for update; [#13760](https://github.com/mastra-ai/mastra/pull/13760) — inlines package version metadata at build time to avoid runtime `package.json` dependency in npm installs; [#13767](https://github.com/mastra-ai/mastra/pull/13767) and [#13768](https://github.com/mastra-ai/mastra/pull/13768) — keep direct source runs working with an ESM-safe package metadata fallback.
 
 ## User-visible behavior
 
@@ -41,7 +41,7 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | Package entry point | `mastracode/package.json` bin/exports | npm/npx/global install |
-| Build-time package version | `tsup.config.ts` `MASTRACODE_VERSION` define | `getCurrentVersion()`, analytics, startup/update UI |
+| Package version detection | `tsup.config.ts` `MASTRACODE_VERSION` define + ESM-safe source fallback | `getCurrentVersion()`, analytics, startup/update UI |
 | Startup runtime | `mastracode/src/main.ts` + `error-classification.ts` + `utils/debug-log.ts` | TUI/headless entry, global error handlers, debug logging |
 | Onboarding state | settings/auth storage | First-run setup |
 | Install instructions | `mastracode/README.md` | Users and docs readers |

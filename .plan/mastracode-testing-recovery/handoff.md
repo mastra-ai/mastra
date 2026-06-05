@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13761 (row 100) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, and #13761 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13767 (`205bbac168`, source fallback for version detection), then #13768 (`46211b2799`, ESM-compatible version fallback).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13768 (row 102) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, and #13761 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13748 (`a3c16eb1be`, persisted thinking-level preference), then #13787 (`02cbb66435`, `/update` slash command).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 101: PR #13767 (source fallback for version detection), then row 102: PR #13768 (ESM-compatible version fallback).
+1. Continue at `_pr-queue.md` row 103: PR #13748 (persist thinking level as global preference), then row 104: PR #13787 (`/update` slash command).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.

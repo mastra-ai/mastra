@@ -120,9 +120,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 98 | 2026-03-04 | #13523 | `edfda994ef` | likely skip | skip: version packages only | chore: version packages (alpha) (#13523) | 2 |
 | 99 | 2026-03-04 | #13760 | `fa9692afe2` | review | done | fix(mastracode): inline version at build time instead of requiring package.json (#13760) | 2 |
 | 100 | 2026-03-04 | #13761 | `3e2b181a61` | likely skip | skip: version packages only | chore: version packages (alpha) (#13761) | 2 |
-| 101 | 2026-03-04 | #13767 | `205bbac168` | review | current | fix(mastracode): fallback to package.json when running from source (#13767) | 1 |
-| 102 | 2026-03-04 | #13768 | `46211b2799` | review | | fix(mastracode): use ESM-compatible fallback for version detection (#13768) | 1 |
-| 103 | 2026-03-04 | #13748 | `a3c16eb1be` | review | | fix: persist thinking level as a global preference (#13748) | 6 |
+| 101 | 2026-03-04 | #13767 | `205bbac168` | review | done | fix(mastracode): fallback to package.json when running from source (#13767) | 1 |
+| 102 | 2026-03-04 | #13768 | `46211b2799` | review | done | fix(mastracode): use ESM-compatible fallback for version detection (#13768) | 1 |
+| 103 | 2026-03-04 | #13748 | `a3c16eb1be` | review | current | fix: persist thinking level as a global preference (#13748) | 6 |
 | 104 | 2026-03-04 | #13787 | `02cbb66435` | review | | feat(mastracode): add /update slash command (#13787) | 6 |
 | 105 | 2026-03-04 | #13753 | `633370bdf4` | review | | fix: rename request_sandbox_access to request_access, fix tilde expansion and mid-turn setAllowedPaths (#13753) | 7 |
 | 106 | 2026-03-04 | #13611 | `f6b91c454b` | review | | feat(mastracode): auth routing fix, tool injection, and auth storage init (#13611) | 10 |
