@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14605 (row 155) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, and #14518 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #14549 (version-package skip), then #14654 (version-package skip) and #14688 (response guidance).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14688 (row 158) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, and #14654 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #14690 (thread selector loading), then #14691 (remove thread selector preview lookup) and #14565 (LSP inspect tool).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 156: PR #14549 (version-package skip), then row 157 #14654 (version-package skip), and row 158 #14688 (response guidance).
+1. Continue at `_pr-queue.md` row 159: PR #14690 (thread selector loading), then row 160 #14691 (remove thread selector preview lookup), and row 161 #14565 (LSP inspect workspace tool).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -44,6 +44,8 @@ None known.
 
 ## Last commands/evidence
 
+- Rows 156-158 verified/documented: #14549/#14654 version-package skips and #14688 response guidance prompt placement/wording.
+- Focused verification for rows 156-158 passed: `prompts.test.ts` (6 tests).
 - Rows 153-155 verified/documented: #14586 macOS active-run `caffeinate` lifecycle, #14604 OpenAI built-in mode/OM pack defaults, #14605 Claude Max OAuth warning removal.
 - Focused verification for rows 153-155 passed after a minimal test-mock fix: `mastra-tui-hooks.test.ts` (15 tests) and onboarding `packs/settings` tests (30 tests).
 - Rows 150-152 verified/documented: #14541 dependency range pins, #14518 version-package skip, #14587 autonomous system prompts/model-specific prompt assembly.

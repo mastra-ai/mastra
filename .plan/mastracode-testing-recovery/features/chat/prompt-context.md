@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13234](https://github.com/mastra-ai/mastra/pull/13234) — moved prompt building into agent prompt modules and added runtime instruction assembly.
-- Later changes: [#13346](https://github.com/mastra-ai/mastra/pull/13346) — static instruction discovery switched from dead `AGENT.md` to plural `AGENTS.md`; [#13416](https://github.com/mastra-ai/mastra/pull/13416) — split mode-aware tool guidance into `tool-guidance.ts` and made Plan mode explicitly require `submit_plan`; [#13376](https://github.com/mastra-ai/mastra/pull/13376) — passed current model ID into Git Safety commit attribution guidance; [#13456](https://github.com/mastra-ai/mastra/pull/13456) — refreshes current Git branch during dynamic instruction assembly; [#14587](https://github.com/mastra-ai/mastra/pull/14587) — expands base autonomy/common-sense guidance and inserts model-specific prompt sections during assembly; task-list injection, goal-mode prompt guidance, and dynamic AGENTS.md injection changed this behavior later.
+- Later changes: [#13346](https://github.com/mastra-ai/mastra/pull/13346) — static instruction discovery switched from dead `AGENT.md` to plural `AGENTS.md`; [#13416](https://github.com/mastra-ai/mastra/pull/13416) — split mode-aware tool guidance into `tool-guidance.ts` and made Plan mode explicitly require `submit_plan`; [#13376](https://github.com/mastra-ai/mastra/pull/13376) — passed current model ID into Git Safety commit attribution guidance; [#13456](https://github.com/mastra-ai/mastra/pull/13456) — refreshes current Git branch during dynamic instruction assembly; [#14587](https://github.com/mastra-ai/mastra/pull/14587) — expands base autonomy/common-sense guidance and inserts model-specific prompt sections during assembly; [#14688](https://github.com/mastra-ai/mastra/pull/14688) — moves Tone/Style to the end of the base prompt and tightens response guidance; task-list injection, goal-mode prompt guidance, and dynamic AGENTS.md injection changed this behavior later.
 
 ## User-visible behavior
 
 - What the user can do: influence agent behavior through project/global `AGENTS.md` or `CLAUDE.md` instruction files, current runtime state, and selected model.
-- Success looks like: the agent sees the right project, branch, mode, model, model-specific prompt guidance, tools, tasks, plan, and instructions for the current run.
-- Must preserve: `AGENTS.md` wins over `CLAUDE.md` at the same location; singular `AGENT.md` is not loaded as a static instruction file; model-specific sections only apply to matching model IDs.
+- Success looks like: the agent sees the right project, branch, mode, model, model-specific prompt guidance, tools, tasks, plan, instructions, and terminal-friendly response style for the current run.
+- Must preserve: `AGENTS.md` wins over `CLAUDE.md` at the same location; singular `AGENT.md` is not loaded as a static instruction file; model-specific sections only apply to matching model IDs; tone/style stays late in the base prompt so it remains salient.
 
 ## Entry points / commands
 
@@ -42,7 +42,7 @@
 | --- | --- | --- |
 | Mode/model | Harness session | Prompt mode/model sections, runtime model selection, commit attribution |
 | Model-specific prompt text | `modelSpecificPrompts` keyed by selected model ID | `buildFullPrompt()` assembled system prompt |
-| Base autonomy guidance | `buildBasePrompt()` | Shared behavior instructions for all modes/models |
+| Base autonomy/tone guidance | `buildBasePrompt()`; Tone and Style intentionally appears near the end after work/git/message-delivery/file-access sections | Shared behavior instructions for all modes/models |
 | Project metadata and branch | Project detection + live git branch refresh | Environment section |
 | Task list | Harness state | `<current-task-list>` prompt section |
 | Active plan | Harness state | Base/mode prompt guidance |
@@ -53,7 +53,7 @@
 
 - `mastracode/src/agents/instructions.ts` — builds prompt context from harness request context and refreshes current Git branch.
 - `mastracode/src/agents/prompts/index.ts` — assembles base, tasks, instructions, model-specific, and mode sections using blank-line-separated non-empty sections.
-- `mastracode/src/agents/prompts/base.ts` — shared environment, behavior, autonomy, and communication prompt.
+- `mastracode/src/agents/prompts/base.ts` — shared environment, behavior, autonomy, communication, and late Tone/Style prompt.
 - `mastracode/src/agents/prompts/model.ts` — model-specific prompt snippets keyed by exact model ID.
 - `mastracode/src/agents/prompts/agent-instructions.ts` — loads `AGENTS.md`/`CLAUDE.md` instruction files from global and project locations.
 - `mastracode/src/index.ts` — wires `getDynamicInstructions()` and `AgentsMDInjector` ignored static paths into the code agent.
@@ -71,7 +71,7 @@
 
 ## Existing tests
 
-- `mastracode/src/agents/__tests__/prompts.test.ts` — model-specific prompts (`openai/gpt-5.4`, `openai/gpt-5.5`), autonomy/base prompt guidance, goal prompt guidance, common binary context.
+- `mastracode/src/agents/__tests__/prompts.test.ts` — model-specific prompts (`openai/gpt-5.4`, `openai/gpt-5.5`), autonomy/base prompt guidance, late Tone/Style response guidance, goal prompt guidance, common binary context.
 - `mastracode/src/agents/prompts/index.test.ts` — task-list prompt injection and escaping.
 - `mastracode/src/__tests__/index.test.ts` — verifies runtime wiring uses `getDynamicInstructions()`.
 - `mastracode/src/headless-integration.test.ts` — includes nested `AGENTS.md` dynamic reminder persistence coverage.
@@ -86,6 +86,7 @@
 ## Known risks / regressions
 
 - Prompt context can drift if harness state, thread metadata, and TUI footer disagree.
+- Moving response-style guidance earlier/later in the prompt is behaviorally meaningful; prompt tests should catch accidental removal or stale old wording.
 - Model-specific prompt text is exact-ID keyed; model-pack renames can silently drop a model-specific section unless prompt tests cover the new ID.
 - Loaded-from-history runs can silently use current filesystem instructions, not the instructions that existed when history was created.
 - Attachments are user-message content, not instruction context; prompt-audit tests need to inspect both channels separately.

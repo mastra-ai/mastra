@@ -1414,3 +1414,23 @@ Verification:
 
 - `corepack pnpm --filter ./mastracode exec vitest run src/tui/__tests__/mastra-tui-hooks.test.ts --bail=1 --reporter=dot` — 1 file / 15 tests passed after adding the missing `execFile` export to the test's `node:child_process` mock.
 - `corepack pnpm --filter ./mastracode exec vitest run src/onboarding/__tests__/packs.test.ts src/onboarding/__tests__/settings.test.ts --bail=1 --reporter=dot` — 2 files / 30 tests passed.
+
+### PR #14549 / #14654 / #14688 feature-map checkpoint
+
+Verified rows 156-158:
+
+- #14549 is Changesets alpha package-version churn across packages, including `mastracode/CHANGELOG.md` and `mastracode/package.json`; skipped for feature mapping.
+- #14654 is another Changesets alpha package-version batch; skipped for feature mapping.
+- #14688 refines Mastra Code response guidance in the base prompt: Tone/Style moved from the top to the end of `buildBasePrompt()` so terminal-friendly directness remains salient, and the common-sense wording was tightened. Current source has this placement plus later-evolved prompt sections.
+
+Documentation actions:
+
+- Updated `features/chat/prompt-context.md` with #14688 base prompt placement/wording and tests/risks.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #14549 skipped, #14654 skipped, #14688 done, #14690 current.
+
+Focused evidence read: PR metadata/diffs for #14549/#14654/#14688; current `mastracode/src/agents/prompts/base.ts` and `mastracode/src/agents/__tests__/prompts.test.ts`.
+
+Verification:
+
+- `corepack pnpm --filter ./mastracode exec vitest run src/agents/__tests__/prompts.test.ts --bail=1 --reporter=dot` — 1 file / 6 tests passed.
