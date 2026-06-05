@@ -371,6 +371,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     processorStates,
     backgroundTaskManager,
     backgroundTasksConfig,
+    toolGovernance: execOptions?.toolGovernance,
     cleanup: () => {},
   };
 

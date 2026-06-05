@@ -7,6 +7,13 @@ import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
 import { ChunkFrom } from '../../../../stream/types';
+import {
+  createToolGovernanceError,
+  emitToolGovernanceSkipped,
+  evaluateToolGovernance,
+  recordToolGovernanceResult,
+} from '../../../../tools/governance';
+import type { ToolGovernanceEvaluation, ToolGovernancePolicyContext } from '../../../../tools/governance';
 import { createStep } from '../../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
@@ -141,9 +148,26 @@ export function createDurableToolCallStep() {
 
       const { runId, options: agentOptions, state } = initData;
       const logger = (mastra as any)?.getLogger?.();
+      const registryEntry = globalRunRegistry.get(runId);
+      const toolGovernance = registryEntry?.toolGovernance;
 
       // If the tool was already executed by the provider, return the output
       if (providerExecuted && output !== undefined) {
+        await emitToolGovernanceSkipped(
+          toolGovernance,
+          {
+            toolCallId,
+            toolName,
+            args,
+            runId,
+            agentId: initData.agentId,
+            resourceId: state?.resourceId,
+            threadId: state?.threadId,
+            requestContext,
+            source: 'durable-agent',
+          },
+          logger,
+        );
         return {
           ...typedInput,
           result: output,
@@ -151,7 +175,6 @@ export function createDurableToolCallStep() {
       }
 
       // 1. Resolve the tool from global registry first, then Mastra
-      const registryEntry = globalRunRegistry.get(runId);
       let tool = registryEntry?.tools?.[toolName];
 
       if (!tool) {
@@ -394,6 +417,40 @@ export function createDurableToolCallStep() {
         },
       };
 
+      const governanceContext: ToolGovernancePolicyContext = {
+        toolCallId,
+        toolName,
+        args: cleanedArgs,
+        runId,
+        agentId: initData.agentId,
+        resourceId: state?.resourceId,
+        threadId: state?.threadId,
+        requestContext,
+        source: 'durable-agent',
+        tool,
+      };
+      let governanceEvaluation: ToolGovernanceEvaluation | undefined = await evaluateToolGovernance(
+        toolGovernance,
+        governanceContext,
+        logger,
+      );
+      if (governanceEvaluation && !governanceEvaluation.allowed) {
+        const governanceError = serializeError(createToolGovernanceError(governanceEvaluation, toolName));
+        if (pubsub) {
+          await emitChunkEvent(pubsub, runId, {
+            type: 'tool-error',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: { toolCallId, toolName, args: cleanedArgs, error: governanceError },
+          });
+        }
+        return {
+          ...typedInput,
+          args: cleanedArgs,
+          error: governanceError,
+        };
+      }
+
       // Resolve whether to run in background using the shared config resolver
       if (bgManager && !bgConfig?.disabled && typeof cleanedArgs === 'object' && cleanedArgs !== null) {
         const bgResolved = resolveBackgroundConfig({
@@ -578,8 +635,27 @@ export function createDurableToolCallStep() {
                   );
                 },
 
-                onComplete: toolBgConfig?.onComplete ?? bgConfig?.onTaskComplete,
-                onFailed: toolBgConfig?.onFailed ?? bgConfig?.onTaskFailed,
+                onComplete: async (params: any) => {
+                  await recordToolGovernanceResult({
+                    options: toolGovernance,
+                    context: governanceContext,
+                    evaluation: governanceEvaluation,
+                    status: 'completed',
+                    logger,
+                  });
+                  await (toolBgConfig?.onComplete ?? bgConfig?.onTaskComplete)?.(params);
+                },
+                onFailed: async (params: any) => {
+                  await recordToolGovernanceResult({
+                    options: toolGovernance,
+                    context: governanceContext,
+                    evaluation: governanceEvaluation,
+                    status: 'failed',
+                    error: params.error,
+                    logger,
+                  });
+                  await (toolBgConfig?.onFailed ?? bgConfig?.onTaskFailed)?.(params);
+                },
               },
             });
 
@@ -642,6 +718,13 @@ export function createDurableToolCallStep() {
 
       try {
         const result = await tool.execute(cleanedArgs, toolOptions);
+        await recordToolGovernanceResult({
+          options: toolGovernance,
+          context: governanceContext,
+          evaluation: governanceEvaluation,
+          status: 'completed',
+          logger,
+        });
 
         // Emit tool-result chunk (non-fatal — result is returned regardless)
         if (pubsub) {
@@ -662,6 +745,14 @@ export function createDurableToolCallStep() {
           result,
         };
       } catch (error) {
+        await recordToolGovernanceResult({
+          options: toolGovernance,
+          context: governanceContext,
+          evaluation: governanceEvaluation,
+          status: 'failed',
+          error,
+          logger,
+        });
         const toolError = serializeError(error);
 
         // Emit tool-error chunk (non-fatal — error result is returned regardless)

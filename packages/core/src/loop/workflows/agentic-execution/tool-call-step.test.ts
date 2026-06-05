@@ -242,6 +242,116 @@ describe('createToolCallStep tool execution error handling', () => {
   });
 });
 
+describe('createToolCallStep governance', () => {
+  let controller: { enqueue: Mock };
+  let suspend: Mock;
+  let streamState: { serialize: Mock };
+  let messageList: MessageList;
+
+  const makeExecuteParams = (overrides: any = {}) => ({
+    ...makeBaseExecuteParams(suspend),
+    writer: new ToolStream({
+      prefix: 'tool',
+      callId: 'call-1',
+      name: 'search',
+      runId: 'run-1',
+    }),
+    inputData: {
+      toolCallId: 'call-1',
+      toolName: 'search',
+      args: { q: 'docs' },
+    },
+    ...overrides,
+  });
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+    suspend = vi.fn();
+    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    messageList = createMessageList();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('blocks denied tools before execute and emits an audit event', async () => {
+    const execute = vi.fn().mockResolvedValue({ ok: true });
+    const audits: any[] = [];
+    const step = createToolCallStep({
+      tools: { search: { execute } },
+      messageList,
+      controller,
+      runId: 'run-1',
+      agentId: 'agent-1',
+      streamState,
+      toolGovernance: {
+        denylist: ['search'],
+        onAudit: event => audits.push(event),
+      },
+    } as any);
+
+    const result = await step.execute(makeExecuteParams());
+
+    expect(result.error).toBeInstanceOf(Error);
+    expect(result.error.name).toBe('ToolGovernanceError');
+    expect(execute).not.toHaveBeenCalled();
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({ status: 'blocked', action: 'deny', toolName: 'search' });
+  });
+
+  it('tracks budget usage and blocks the call that exceeds the budget', async () => {
+    const execute = vi.fn().mockResolvedValue({ ok: true });
+    const toolGovernance = {
+      costs: { tools: { search: 2 } },
+      budget: { limit: 3, scope: 'run' as const },
+    };
+    const step = createToolCallStep({
+      tools: { search: { execute } },
+      messageList,
+      controller,
+      runId: 'run-1',
+      streamState,
+      toolGovernance,
+    } as any);
+
+    const first = await step.execute(makeExecuteParams());
+    const second = await step.execute(
+      makeExecuteParams({ inputData: { toolCallId: 'call-2', toolName: 'search', args: { q: 'docs' } } }),
+    );
+
+    expect(first.result).toEqual({ ok: true });
+    expect(second.error?.name).toBe('ToolGovernanceError');
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('opens a circuit breaker after tool execution failures', async () => {
+    const execute = vi.fn().mockRejectedValue(new Error('tool failed'));
+    const toolGovernance = {
+      circuitBreaker: { failureThreshold: 1, scope: 'tool' as const },
+    };
+    const step = createToolCallStep({
+      tools: { search: { execute } },
+      messageList,
+      controller,
+      runId: 'run-1',
+      streamState,
+      toolGovernance,
+    } as any);
+
+    const first = await step.execute(makeExecuteParams());
+    const second = await step.execute(
+      makeExecuteParams({ inputData: { toolCallId: 'call-2', toolName: 'search', args: { q: 'docs' } } }),
+    );
+
+    expect(first.error?.message).toBe('tool failed');
+    expect(second.error?.name).toBe('ToolGovernanceError');
+    expect(second.error?.message).toContain('Circuit breaker is open');
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('createToolCallStep tool approval workflow', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;

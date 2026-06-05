@@ -9,7 +9,7 @@ import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
-import type { ToolPayloadTransformPolicy } from '../tools';
+import type { ToolGovernanceOptions, ToolPayloadTransformPolicy } from '../tools';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { MessageListInput } from './message-list';
 import type {
@@ -570,6 +570,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Require approval for all tool calls */
   requireToolApproval?: boolean;
+
+  /** Optional runtime governance policy for Mastra-executed tool calls. */
+  toolGovernance?: ToolGovernanceOptions;
 
   /** Automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;

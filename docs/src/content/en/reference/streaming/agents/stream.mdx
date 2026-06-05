@@ -651,6 +651,13 @@ const stream = await agent.stream('message for agent')
               'When true, all tool calls require explicit approval before execution. The stream will emit `tool-call-approval` chunks and pause until `approveToolCall()` or `declineToolCall()` is called.',
           },
           {
+            name: 'toolGovernance',
+            type: 'ToolGovernanceOptions',
+            isOptional: true,
+            description:
+              'Runtime governance policy for Mastra-executed tool calls. Supports allowlists, denylists, ordered policies, cost tracking, budgets, circuit breakers, and structured audit events.',
+          },
+          {
             name: 'autoResumeSuspendedTools',
             type: 'boolean',
             isOptional: true,

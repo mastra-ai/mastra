@@ -114,6 +114,46 @@ afterEach(() => {
 });
 
 describe('durable tool-call background task dispatch', () => {
+  it('blocks denied tools before durable execute and emits an audit event', async () => {
+    const pubsub = mockPubsub();
+    const audits: any[] = [];
+    const { entry } = setupRegistry({
+      backgroundTaskManager: undefined,
+      backgroundTasksConfig: undefined,
+      toolGovernance: {
+        denylist: [TOOL_NAME],
+        onAudit: (event: any) => audits.push(event),
+      },
+    });
+    const initData = makeInitData();
+
+    const result = await executeStep(pubsub, initData);
+
+    expect(result.error).toMatchObject({
+      name: 'ToolGovernanceError',
+    });
+    expect(entry.tools[TOOL_NAME].execute).not.toHaveBeenCalled();
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({
+      status: 'blocked',
+      action: 'deny',
+      source: 'durable-agent',
+      toolName: TOOL_NAME,
+    });
+    expect(emitChunkEvent).toHaveBeenCalledWith(
+      pubsub,
+      RUN_ID,
+      expect.objectContaining({
+        type: 'tool-error',
+        payload: expect.objectContaining({
+          toolCallId: TOOL_CALL_ID,
+          toolName: TOOL_NAME,
+          error: expect.objectContaining({ name: 'ToolGovernanceError' }),
+        }),
+      }),
+    );
+  });
+
   it('dispatches a background task and returns a placeholder result', async () => {
     const pubsub = mockPubsub();
     setupRegistry();

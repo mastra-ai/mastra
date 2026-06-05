@@ -18,6 +18,7 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcesso
 import type { ProcessorState } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
 import type { ChunkType } from '../../stream/types';
+import type { ToolGovernanceOptions } from '../../tools';
 import type { CoreTool } from '../../tools/types';
 import type { Workspace } from '../../workspace';
 import type { MessageList } from '../message-list';
@@ -433,6 +434,8 @@ export interface RunRegistryEntry {
   backgroundTaskManager?: BackgroundTaskManager;
   /** Agent background tasks configuration */
   backgroundTasksConfig?: AgentBackgroundConfig;
+  /** Runtime governance policy for tool execution (non-serializable callbacks/state allowed) */
+  toolGovernance?: ToolGovernanceOptions;
 }
 
 /**

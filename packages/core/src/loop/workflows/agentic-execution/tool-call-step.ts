@@ -11,6 +11,17 @@ import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
 import type { ChunkType, ProviderMetadata } from '../../../stream/types';
 import {
+  createToolGovernanceError,
+  emitToolGovernanceSkipped,
+  evaluateToolGovernance,
+  recordToolGovernanceResult,
+} from '../../../tools/governance';
+import type {
+  ToolGovernanceEvaluation,
+  ToolGovernancePolicyContext,
+  ToolGovernanceSource,
+} from '../../../tools/governance';
+import {
   getTransformedToolPayload,
   hasTransformedToolPayload,
   transformToolPayloadForTargets,
@@ -58,6 +69,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   logger,
   agentId,
   mastra,
+  toolGovernance,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -310,6 +322,22 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       // Provider-executed tools are handled entirely by the stream path
       // (tool-call and tool-result chunks in llm-execution-step), so skip client execution.
       if (inputData.providerExecuted) {
+        await emitToolGovernanceSkipped(
+          toolGovernance,
+          {
+            toolCallId: inputData.toolCallId,
+            toolName: inputData.toolName,
+            args: inputData.args,
+            runId,
+            agentId,
+            resourceId: _internal?.resourceId,
+            threadId: _internal?.threadId,
+            requestContext,
+            source: 'agent',
+            tool,
+          },
+          logger,
+        );
         return inputData;
       }
 
@@ -348,6 +376,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       if (!tool.execute) {
         return inputData;
       }
+
+      let governanceContext: ToolGovernancePolicyContext | undefined;
+      let governanceEvaluation: ToolGovernanceEvaluation | undefined;
 
       try {
         const requireToolApproval = requestContext.get('__mastra_requireToolApproval');
@@ -460,6 +491,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // resumeStream instead of stream (otherwise the sub-agent restarts from scratch)
         const isAgentTool = inputData.toolName?.startsWith('agent-');
         const isWorkflowTool = inputData.toolName?.startsWith('workflow-');
+        const governanceSource: ToolGovernanceSource = isWorkflowTool ? 'workflow' : 'agent';
         const resumeDataToPassToToolOptions =
           !isAgentTool && toolRequiresApproval && Object.keys(resumeData).length === 1 && 'approved' in resumeData
             ? undefined
@@ -683,6 +715,27 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             resource: { type: 'tool', id: inputData.toolName },
             permission: MastraFGAPermissions.TOOLS_EXECUTE,
           });
+        }
+
+        governanceContext = {
+          toolCallId: inputData.toolCallId,
+          toolName: inputData.toolName,
+          args,
+          runId,
+          agentId,
+          workflowId: isWorkflowTool ? inputData.toolName : undefined,
+          resourceId: _internal?.resourceId,
+          threadId: _internal?.threadId,
+          requestContext,
+          source: governanceSource,
+          tool,
+        };
+        governanceEvaluation = await evaluateToolGovernance(toolGovernance, governanceContext, logger);
+        if (governanceEvaluation && !governanceEvaluation.allowed) {
+          return {
+            error: createToolGovernanceError(governanceEvaluation, inputData.toolName),
+            ...inputData,
+          };
         }
 
         const llmBgOverrides =
@@ -1051,8 +1104,31 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 },
 
                 // Per-task callbacks
-                onComplete: toolBgConfig?.onComplete ?? agentBgConfig?.onTaskComplete,
-                onFailed: toolBgConfig?.onFailed ?? agentBgConfig?.onTaskFailed,
+                onComplete: async params => {
+                  if (governanceContext) {
+                    await recordToolGovernanceResult({
+                      options: toolGovernance,
+                      context: governanceContext,
+                      evaluation: governanceEvaluation,
+                      status: 'completed',
+                      logger,
+                    });
+                  }
+                  await (toolBgConfig?.onComplete ?? agentBgConfig?.onTaskComplete)?.(params);
+                },
+                onFailed: async params => {
+                  if (governanceContext) {
+                    await recordToolGovernanceResult({
+                      options: toolGovernance,
+                      context: governanceContext,
+                      evaluation: governanceEvaluation,
+                      status: 'failed',
+                      error: params.error,
+                      logger,
+                    });
+                  }
+                  await (toolBgConfig?.onFailed ?? agentBgConfig?.onTaskFailed)?.(params);
+                },
               },
             });
 
@@ -1106,6 +1182,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         const rawResult = await tool.execute(args, toolOptions);
         const result = ensureSerializable(rawResult);
+        if (governanceContext) {
+          await recordToolGovernanceResult({
+            options: toolGovernance,
+            context: governanceContext,
+            evaluation: governanceEvaluation,
+            status: 'completed',
+            logger,
+          });
+        }
 
         // Call onOutput hook after successful execution
         if (tool && 'onOutput' in tool && typeof (tool as any).onOutput === 'function') {
@@ -1126,6 +1211,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // Re-throw FGA authorization errors instead of swallowing them
         if (error instanceof Error && error.name === 'FGADeniedError') {
           throw error;
+        }
+        if (governanceContext) {
+          await recordToolGovernanceResult({
+            options: toolGovernance,
+            context: governanceContext,
+            evaluation: governanceEvaluation,
+            status: 'failed',
+            error,
+            logger,
+          });
         }
         return {
           error: error as Error,

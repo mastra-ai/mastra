@@ -267,6 +267,51 @@ See the [`Agent.generate()` reference](/reference/agents/generate) for all runti
 
 :::
 
+## Govern tool execution
+
+Use `toolGovernance` on `.generate()` or `.stream()` to evaluate a deterministic policy before Mastra executes a tool call. Governance runs after the tool is resolved and approved, and before foreground or background execution starts.
+
+The following example allows only `weatherTool`, tracks a fixed cost for each call, enforces a per-run budget, records audit events, and opens a circuit breaker if the tool fails twice:
+
+```typescript
+const auditEvents = []
+
+await agent.generate('Check the forecast', {
+  toolGovernance: {
+    allowlist: ['weatherTool'],
+    costs: {
+      tools: {
+        weatherTool: 1,
+      },
+    },
+    budget: {
+      limit: 5,
+      scope: 'run',
+    },
+    circuitBreaker: {
+      failureThreshold: 2,
+      scope: 'tool',
+    },
+    onAudit: event => {
+      auditEvents.push(event)
+    },
+  },
+})
+```
+
+`toolGovernance` supports:
+
+- `allowlist`: Exact tool names that may run.
+- `denylist`: Exact tool names that must not run. Denylists take precedence over allowlists.
+- `policies`: Custom policies evaluated in array order. The first denial blocks execution.
+- `costs`: Fixed or estimated per-call tool costs.
+- `budget`: Cost limits scoped by run, agent, workflow, resource, thread, tool, or globally.
+- `circuitBreaker`: Failure limits that block later calls after repeated failures.
+- `onAudit`: A structured audit callback for allowed, blocked, completed, failed, and skipped calls.
+- `state`: Shared governance state for budgets and circuit breakers.
+
+When a governance policy blocks a tool call, Mastra returns a `ToolGovernanceError` for that tool result and does not call the tool's `execute` function.
+
 ## Control `toolName` in stream responses
 
 The `toolName` in stream responses is determined by the **object key** you use, not the `id` property of the tool, agent, or workflow.

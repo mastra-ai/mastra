@@ -446,6 +446,13 @@ const response = await agent.generate('Help me organize my day', {
               "When true, all tool calls require explicit approval before execution. The generate() method will return with `finishReason: 'suspended'` and include a `suspendPayload` with tool call details (`toolCallId`, `toolName`, `args`). Use `approveToolCallGenerate()` or `declineToolCallGenerate()` to proceed. See [Agent Approval](/docs/agents/agent-approval#tool-approval-with-generate) for details.",
           },
           {
+            name: 'toolGovernance',
+            type: 'ToolGovernanceOptions',
+            isOptional: true,
+            description:
+              'Runtime governance policy for Mastra-executed tool calls. Supports allowlists, denylists, ordered policies, cost tracking, budgets, circuit breakers, and structured audit events.',
+          },
+          {
             name: 'autoResumeSuspendedTools',
             type: 'boolean',
             isOptional: true,
