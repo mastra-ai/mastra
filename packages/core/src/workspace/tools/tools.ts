@@ -108,7 +108,7 @@ export interface ResolvedToolConfig {
   requireReadBeforeWrite?: DynamicToolConfigValue<ToolConfigWithArgsContext>;
   maxOutputTokens?: number;
   name?: string;
-  wrapTool?: WorkspaceToolWrapper;
+  toolWrapper?: WorkspaceToolWrapper;
 }
 
 /**
@@ -133,7 +133,7 @@ export async function resolveToolConfig(
   let requireReadBeforeWrite: DynamicToolConfigValue<ToolConfigWithArgsContext> | undefined;
   let maxOutputTokens: number | undefined;
   let name: string | undefined;
-  const wrapTool = toolsConfig?.wrapTool;
+  const toolWrapper = toolsConfig?.toolWrapper;
 
   if (toolsConfig) {
     if (toolsConfig.enabled !== undefined) {
@@ -166,7 +166,7 @@ export async function resolveToolConfig(
   // Resolve `enabled` now (tool-listing time) — safe default: false (fail-closed)
   const resolvedEnabled = await resolveDynamicValue(enabled, context, false);
 
-  return { enabled: resolvedEnabled, requireApproval, requireReadBeforeWrite, maxOutputTokens, name, wrapTool };
+  return { enabled: resolvedEnabled, requireApproval, requireReadBeforeWrite, maxOutputTokens, name, toolWrapper };
 }
 
 // ---------------------------------------------------------------------------
@@ -427,8 +427,8 @@ export async function createWorkspaceTools(
       wrapped = { ...wrapped, id: exposedName };
     }
 
-    if (config.wrapTool) {
-      wrapped = config.wrapTool(wrapped, { toolName: exposedName, workspaceToolName: name });
+    if (config.toolWrapper) {
+      wrapped = config.toolWrapper(wrapped, { toolName: exposedName, workspaceToolName: name });
     }
 
     // Write lock is outermost — serializes the entire enriched execute pipeline

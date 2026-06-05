@@ -243,7 +243,7 @@ describe('createWorkspaceTools', () => {
       const workspace = new Workspace({
         filesystem: new LocalFilesystem({ basePath: tempDir }),
         tools: {
-          wrapTool: (tool, context) => ({
+          toolWrapper: (tool, context) => ({
             ...(tool as any),
             execute: async (input: unknown, toolContext: unknown) => {
               calls.push(context);

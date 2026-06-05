@@ -9,7 +9,7 @@ Added a workspace tool wrapper for applications that need to wrap built-in works
 ```ts
 const workspace = new Workspace({
   tools: {
-    wrapTool: (tool, { toolName, workspaceToolName }) => ({
+    toolWrapper: (tool, { toolName, workspaceToolName }) => ({
       ...(tool as object),
       execute: async (input, context) => {
         console.log(`Running ${toolName} from ${workspaceToolName}`);

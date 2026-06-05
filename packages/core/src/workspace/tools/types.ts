@@ -275,7 +275,7 @@ export type WorkspaceToolsConfig = {
   requireApproval?: DynamicToolConfigValue<ToolConfigWithArgsContext>;
 
   /** Optional wrapper applied to every enabled workspace tool after name remapping. */
-  wrapTool?: WorkspaceToolWrapper;
+  toolWrapper?: WorkspaceToolWrapper;
 } & {
   [K in typeof WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]?: ExecuteCommandToolConfig;
 } & {

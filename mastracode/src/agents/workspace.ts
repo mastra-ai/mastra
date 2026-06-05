@@ -165,7 +165,7 @@ export function getDynamicWorkspace({
     ...(isPlanMode ? { ...TOOL_NAME_OVERRIDES, ...planModeTools } : TOOL_NAME_OVERRIDES),
     ...(hookManager
       ? {
-          wrapTool: (tool, { toolName }) => wrapToolWithHooks(toolName, tool as any, hookManager),
+          toolWrapper: (tool, { toolName }) => wrapToolWithHooks(toolName, tool as any, hookManager),
         }
       : {}),
   };
