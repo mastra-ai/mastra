@@ -3,12 +3,12 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — project-scoped persistent conversations and thread switching.
-- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved conversation runtime onto the shared core Harness primitive and session records; [#13334](https://github.com/mastra-ai/mastra/pull/13334) — restored optional thread locking through core Harness config; [#13343](https://github.com/mastra-ai/mastra/pull/13343) — scoped startup auto-resume to current working directory/worktree via `projectPath` metadata; [#13690](https://github.com/mastra-ai/mastra/pull/13690) — added Harness resource ID helpers and improved `/resource` switching; [#14428](https://github.com/mastra-ai/mastra/pull/14428) — speeds `/threads` by caching and lazily loading message previews; [#14436](https://github.com/mastra-ai/mastra/pull/14436) — lets observer output update thread titles through OM metadata and Harness events; [#14690](https://github.com/mastra-ai/mastra/pull/14690) — lists threads across all resources and keeps the selector responsive; [#14691](https://github.com/mastra-ai/mastra/pull/14691) — removes live preview lookup so the selector only uses fresh cache/title data; [#14567](https://github.com/mastra-ai/mastra/pull/14567) — adds `/thread` for current-thread/resource/fork provenance and exposes thread IDs for recall browsing; [#15749](https://github.com/mastra-ai/mastra/pull/15749) — clears per-thread ephemeral projections on thread switch/create so custom commands, tasks, plans, sandbox paths, queued state, and task progress do not leak into the next active thread; [#16835](https://github.com/mastra-ai/mastra/pull/16835) — improves TUI render scheduling around thread-selector preview loads with delayed batching, stale-version guards, and persisted preview seed maps; [#17276](https://github.com/mastra-ai/mastra/pull/17276) — scopes Harness v1 session records with stable owner IDs and deterministic resource/thread-derived session IDs.
+- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved conversation runtime onto the shared core Harness primitive and session records; [#13334](https://github.com/mastra-ai/mastra/pull/13334) — restored optional thread locking through core Harness config; [#13343](https://github.com/mastra-ai/mastra/pull/13343) — scoped startup auto-resume to current working directory/worktree via `projectPath` metadata; [#13690](https://github.com/mastra-ai/mastra/pull/13690) — added Harness resource ID helpers and improved `/resource` switching; [#14428](https://github.com/mastra-ai/mastra/pull/14428) — speeds `/threads` by caching and lazily loading message previews; [#14436](https://github.com/mastra-ai/mastra/pull/14436) — lets observer output update thread titles through OM metadata and Harness events; [#14690](https://github.com/mastra-ai/mastra/pull/14690) — lists threads across all resources and keeps the selector responsive; [#14691](https://github.com/mastra-ai/mastra/pull/14691) — removes live preview lookup so the selector only uses fresh cache/title data; [#14567](https://github.com/mastra-ai/mastra/pull/14567) — adds `/thread` for current-thread/resource/fork provenance and exposes thread IDs for recall browsing; [#15749](https://github.com/mastra-ai/mastra/pull/15749) — clears per-thread ephemeral projections on thread switch/create so custom commands, tasks, plans, sandbox paths, queued state, and task progress do not leak into the next active thread; [#16835](https://github.com/mastra-ai/mastra/pull/16835) — improves TUI render scheduling around thread-selector preview loads with delayed batching, stale-version guards, and persisted preview seed maps; [#17276](https://github.com/mastra-ai/mastra/pull/17276) — scopes Harness v1 session records with stable owner IDs and deterministic resource/thread-derived session IDs; [#17447](https://github.com/mastra-ai/mastra/pull/17447) — stores GitHub PR subscriptions and snapshot cursors in thread metadata; [#17411](https://github.com/mastra-ai/mastra/pull/17411) — composes Harness v1 session state into legacy Mastra Code thread state.
 
 ## User-visible behavior
 
 - What the user can do: resume, create, switch, clone, inspect the active thread, and browse conversations across resources/worktrees with cached/staged previews and generated titles.
-- Success looks like: startup resumes only threads from the current directory, `/threads` lists all resources without blocking on message preview retrieval, delayed preview batches hydrate visible rows without stale results overwriting newer searches, `/thread` shows the active ID/resource/fork provenance, Harness v1 session records retain stable owner/mode/model metadata across prefill, switch, and clone paths, then messages and metadata reload without leaking another thread’s ephemeral state, custom commands, queued actions, or task progress.
+- Success looks like: startup resumes only threads from the current directory, `/threads` lists all resources without blocking on message preview retrieval, delayed preview batches hydrate visible rows without stale results overwriting newer searches, `/thread` shows the active ID/resource/fork provenance, Harness v1 session records retain stable owner/mode/model/session-state metadata across prefill, switch, and clone paths, GitHub PR subscriptions stay thread-scoped, then messages and metadata reload without leaking another thread’s ephemeral state, custom commands, queued actions, or task progress.
 - Must preserve: history, title/resource, cache freshness by `updatedAt`, mode/model metadata, goals, project path tagging, deterministic session identity, thread lock ownership, fork provenance, and related status projections.
 
 ## Entry points / commands
@@ -42,7 +42,8 @@
 | --- | --- | --- |
 | Thread history | Harness memory/storage | TUI history renderer, headless |
 | Current thread/resource | Harness session + resource ID helpers | TUI status, `/resource`, commands |
-| Harness v1 session record | `SessionRecord` with deterministic `sess-${sha256(resourceId\0threadId).slice(0,32)}` id and stable `ownerId` | Mastra Code startup thread prefill, `HarnessCompat.switchThread()`, `/threads` selector, clone/session reload paths |
+| Harness v1 session record | `SessionRecord` with deterministic `sess-${sha256(resourceId\0threadId).slice(0,32)}` id, stable `ownerId`, and composed session state | Mastra Code startup thread prefill, `HarnessCompat.getState()`/`setState()`/`switchThread()`, `/threads` selector, clone/session reload paths |
+| GitHub subscription metadata | Thread metadata `metadata.mastra.githubSignals` | `/github` status/sync, GitHub polling, notification production |
 | Thread title/metadata | Thread metadata/session records, optionally updated by OM `threadTitle` output | TUI footer, `/threads`, `/thread`, goals, GitHub badges |
 | Thread preview/title display | Thread `title` first; cache-only `state.threadPreviewCache` + `attemptedThreadPreviewIds` fallback, invalidated by thread `updatedAt`; selector-local `previewLoadVersion` rejects stale async batches | `/threads` selector rows without live preview lookup |
 | Project path scope | Thread `metadata.projectPath` + legacy directory birthtime fallback | Startup auto-resume filtering |
@@ -61,8 +62,10 @@
 - `mastracode/src/tui/setup.ts` — startup auto-resume filtering by `projectPath` and legacy birthtime fallback.
 - `mastracode/src/tui/mastra-tui.ts` — startup thread sync.
 - `mastracode/src/headless.ts` — non-TUI thread flags.
-- `mastracode/src/index.ts` — stable Mastra Code owner ID derivation, deterministic Harness v1 session prefill from existing threads, and threadLock wiring.
-- `packages/core/src/harness/v1/harness.ts` and `session.ts` — owner-scoped session creation/loading/cloning and deterministic resource/thread session IDs.
+- `mastracode/src/index.ts` — stable Mastra Code owner ID derivation, deterministic Harness v1 session prefill from existing threads, GitHubSignals processor wiring, and threadLock wiring.
+- `mastracode/src/HarnessCompat.ts` — composes legacy state with active Harness v1 session state, model, and mode; falls back to legacy mode switching when no session is active.
+- `packages/core/src/harness/v1/harness.ts` and `session.ts` — owner-scoped session creation/loading/cloning, composed state, and deterministic resource/thread session IDs.
+- `mastracode/src/github-signals/index.ts` — thread metadata subscriptions and PR snapshot cursors.
 - `mastracode/src/utils/thread-lock.ts` — filesystem locks, stale lock cleanup, lock errors.
 - `packages/core/src/harness/harness.ts` — lock-safe select/create/switch/delete behavior and `data-om-thread-update` event translation.
 - `packages/memory/src/processors/observational-memory/*` — observer-generated `threadTitle` extraction and persistence into thread records.
@@ -73,6 +76,8 @@
 - [Model auth, selection, and modes](../models/model-auth-and-modes.md) — model/mode reload depends on thread/session metadata.
 - [Task tracking tools and TUI progress](../tools/task-tracking.md) — task state is thread-local and must reset/reload correctly.
 - [Storage backend configuration](../settings/storage-backend.md) — selected backend owns persisted thread/session history.
+- [GitHub signal subscriptions](../git/github-signal-subscriptions.md) — PR subscriptions are thread metadata.
+- [Core Harness API and reference docs](../integrations/harness-api.md) — Harness v1 state composition drives session reload.
 - [Resource ID switching](./resource-id-switching.md) — `/resource` changes the outer resource scope for thread selection.
 
 ## Existing tests
@@ -81,7 +86,7 @@
 - `mastracode/src/tui/components/__tests__/thread-selector.test.ts` — selector preview-cache seeding, delayed/stale preview loading, navigation debounce, and merged preview callbacks.
 - `mastracode/src/tui/commands/__tests__/thread.test.ts` — direct thread command behavior.
 - `mastracode/src/headless.test.ts` — headless thread flags.
-- `mastracode/src/HarnessCompat.test.ts` — v1 session/thread composition.
+- `mastracode/src/HarnessCompat.test.ts` — v1 session/thread composition, composed state, and legacy switchMode fallback.
 - `packages/core/src/harness/v1/session.test.ts` and `packages/core/src/storage/domains/harness/inmemory.test.ts` — owner ID propagation, deterministic session records, clone/load paths, and immutable in-memory session record copies.
 - `packages/core/src/harness/thread-locking.test.ts` — lock acquire/release ordering, create/switch/select, and failure recovery.
 - `mastracode/src/tui/__tests__/event-dispatch.test.ts` — `thread_changed`/`thread_created` cleanup for tasks, active plan, sandbox allowed paths, `taskToolInsertIndex`, task progress, goal metadata, and non-ephemeral state preservation.

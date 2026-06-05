@@ -9,7 +9,7 @@
 
 - What the user can do: run agents with processors that emit named state snapshots/deltas, and see state/reactive signal markers in Mastra Code TUI history instead of opaque system-reminder text.
 - Success looks like: browser state changes are persisted as thread-scoped state signals, unchanged state is deduped, active streams receive `data-signal` chunks, and reloaded TUI history renders `State snapshot: <id>` / `State delta: <id>` or generic `Signal: <tag>` markers.
-- Must preserve: cache-key dedupe, snapshot-vs-delta lanes, per-thread metadata tracking, memory-backed history reconstruction, streamed and loaded-from-history parity, and hidden internal GitHub subscription reactive signals.
+- Must preserve: cache-key dedupe, snapshot-vs-delta lanes, per-thread metadata tracking, memory-backed history reconstruction, streamed and loaded-from-history parity, notification-signal inline boundaries, and hidden internal GitHub subscription reactive signals.
 
 ## Entry points / commands
 
@@ -59,6 +59,8 @@
 ## Dependencies / related features
 
 - [Agent signals and streaming follow-ups](./agent-signals.md) — state signals reuse the signal wire format, delivery, and data-part stream path.
+- [Notification inbox signals](./notification-inbox-signals.md) — notification parts share the same TUI inline-boundary rendering path.
+- [GitHub signal subscriptions](../git/github-signal-subscriptions.md) — GitHub operation reactive signals are intentionally hidden by signal rendering.
 - [Browser automation](../integrations/browser-automation.md) — browser context is the first processor-backed state lane.
 - [Interactive TUI chat](../tui/interactive-chat.md) — state/reactive signals render as inline chat components.
 - [Core Harness API and reference docs](../integrations/harness-api.md) — Harness content variants carry state/reactive signal parts.

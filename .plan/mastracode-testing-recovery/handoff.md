@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #17240 (row 352) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, #15390, #15403, #15544, #15515, #15601, #15606, #15629, #15653, #15656, #15699, #15710, #15857, #15896, #15770, #15909, #15928, #15940, #15979, #16009, #16011, #16016, #16020, #16022, #16024, #16028, #16182, #16192, #16196, #16126, #16295, #16320, #16351, #16398, #16409, #16458, #16501, #16511, #16516, #16559, #16611, #16624, #16657, #16667, #16797, #16804, #16809, #16831, #16872, #17108, #17114, #17138, #17174, #17365, #17387, #17421, #17452, #17476, and #17480 recorded as version/dependency skips plus #12532, #14260, #13933, #14432, and #17220 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 353 #17241 (notification inbox signals).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #17511 (row 356) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, #15390, #15403, #15544, #15515, #15601, #15606, #15629, #15653, #15656, #15699, #15710, #15857, #15896, #15770, #15909, #15928, #15940, #15979, #16009, #16011, #16016, #16020, #16022, #16024, #16028, #16182, #16192, #16196, #16126, #16295, #16320, #16351, #16398, #16409, #16458, #16501, #16511, #16516, #16559, #16611, #16624, #16657, #16667, #16797, #16804, #16809, #16831, #16872, #17108, #17114, #17138, #17174, #17365, #17387, #17421, #17452, #17476, and #17480 recorded as version/dependency skips plus #12532, #14260, #13933, #14432, and #17220 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 357 #17492 (version-package alpha skip).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 353: PR #17241 (notification inbox signals).
+1. Continue at `_pr-queue.md` row 357: PR #17492 (version-package alpha skip), then row 358 #17538 (auto-subscribe to branch PR via GitHub Signals on agent run end).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -44,6 +44,7 @@ None known.
 
 ## Last commands/evidence
 
+- Rows 353-356 verified/documented: #17241 notification inbox signals/tool, #17447 GitHub signal subscriptions, #17411 composed Harness v1 session state, and #17511 legacy switchMode fallback before an active v1 session. Focused verification passed: MC GitHub Signals/commands/tool guidance slice (68), MC HarnessCompat/index state-switch slice (5 passed / 16 skipped), and core notification/signal slice (33 passed / 62 skipped). Source verification covered notifications storage/dispatcher/tool/TUI components, GitHub Signals polling/classification/commands/settings, HarnessCompat state composition, and switchMode fallback.
 - Rows 349-352 verified/documented: #17240 processor state signals, browser state snapshots/deltas, TUI state/reactive signal rows, and #17452/#17476/#17480 Changesets alpha skips. Focused verification passed: core agent state-signal slice (1 passed / 72 skipped), core browser/processor state-signal slice (22 passed / 61 skipped), and MC TUI state/reactive signal rendering/handler slice (6 passed / 34 skipped).
 - Rows 345-348 verified/documented: #17276 scoped Harness v1 owner IDs/deterministic session IDs, #17431 narrow-terminal truncation for user-message, inline question, and plan-approval boxes, and #17387/#17421 Changesets alpha skips. Focused verification passed: core Harness v1 session/storage tests (24), MC ask-question/plan inline tests (8), and MC index owner/session slice (6 passed / 10 skipped).
 - Rows 341-344 verified/documented: #17334 `ask_user` multi-select picker/array answers, #17283 configurable TUI shell passthrough, and #17174/#17365 Changesets alpha skips. Focused verification passed: ask-question multi-select and shell config/runner/result tests.

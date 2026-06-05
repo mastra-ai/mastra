@@ -2652,3 +2652,25 @@ Verification:
 - `pnpm --filter ./packages/core exec vitest run src/agent/__tests__/agent-signals.test.ts -t 'state signals|state signal|sendStateSignal|processor state signals' --bail=1 --reporter=dot` — 1 file / 1 test passed / 72 skipped / no type errors.
 - `pnpm --filter ./packages/core exec vitest run src/browser/processor.test.ts src/processors/runner.test.ts -t 'state signal|computeStateSignal|state signals|BrowserContextProcessor' --bail=1 --reporter=dot` — 2 files / 22 tests passed / 61 skipped / no type errors.
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/render-messages.test.ts src/tui/handlers/__tests__/message.test.ts -t 'state signal|reactive signal|reactive signals|GitHub subscribe operation signals' --bail=1 --reporter=dot` — 2 files / 6 tests passed / 34 skipped.
+
+### Rows 353-356 feature-map checkpoint
+
+Processed rows 353-356 in oldest-to-newest order:
+
+- #17241 — notification inbox signals: verified storage records/coalescing, delivery policy/dispatcher/workflow, notification and summary signal creation, `notification_inbox` tool actions, tool guidance, and TUI notification components for streamed/history rendering.
+- #17447 — GitHub signal subscriptions: verified `/github` commands, subscribe/unsubscribe/status reactive signals, gitcrawl sync client, repository resolver, polling, PR snapshot cursors/classification, notification production, and experimental signal-setting wiring.
+- #17411 — composed Harness v1 session state: verified `HarnessCompat.getState()` / `setState()` composition of legacy state plus active v1 session state/model/mode and thread/session metadata paths.
+- #17511 — fallback legacy `switchMode`: verified `HarnessCompat.switchMode()` still updates active v1 sessions when present and falls back to legacy mode switching when no session is active.
+
+Documentation updates:
+
+- Added `features/chat/notification-inbox-signals.md` and `features/git/github-signal-subscriptions.md`.
+- Updated README rows for agent signals, notification inbox, GitHub subscriptions, persistent conversations, settings, interactive chat, tools/permissions, and Harness API.
+- Updated agent-signals, processor-state-signals, interactive-chat, onboarding/global settings, persistent-conversations, harness-api, and coding-tools-permissions cards.
+- Marked `_pr-queue.md` rows 353-356 done and advanced handoff to row 357 #17492.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/github-signals/index.test.ts src/tui/commands/__tests__/github.test.ts src/agents/extra-tools.test.ts --bail=1 --reporter=dot` — 3 files / 68 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/HarnessCompat.test.ts src/__tests__/index.test.ts -t 'state|switchMode|GithubSignals|notification_inbox|notification inbox' --bail=1 --reporter=dot` — 1 file passed / 1 skipped; 5 tests passed / 16 skipped.
+- `pnpm --filter ./packages/core exec vitest run src/notifications/notifications.test.ts src/agent/__tests__/agent-signals.test.ts -t 'notification|Notification|sendNotificationSignal' --bail=1 --reporter=dot` — 2 files / 33 tests passed / 62 skipped / no type errors.

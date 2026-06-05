@@ -372,9 +372,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 350 | 2026-06-02 | #17476 | `0d2110ddd4` | likely skip | skipped | chore: version packages (alpha) (#17476) | 2 |
 | 351 | 2026-06-02 | #17480 | `bfbcf46aa8` | likely skip | skipped | chore: version packages (alpha) (#17480) | 2 |
 | 352 | 2026-06-02 | #17240 | `e2a838017a` | review | done | 05 feat(core): add processor state signals (#17240) | 6 |
-| 353 | 2026-06-02 | #17241 | `e751af2194` | review | | 06 feat(core): add notification inbox signals (#17241) | 16 |
-| 354 | 2026-06-03 | #17447 | `77e686c264` | review | | 07 feat(mastracode): add GitHub signal subscriptions (#17447) | 27 |
-| 355 | 2026-06-03 | #17411 | `23c3b74ac7` | review | | feat(core): compose Harness v1 session state (#17411) | 6 |
-| 356 | 2026-06-03 | #17511 | `de71e4fb3e` | review | | fix(mastracode): fall back to legacy switchMode when no session is active (#17511) | 2 |
+| 353 | 2026-06-02 | #17241 | `e751af2194` | review | done | 06 feat(core): add notification inbox signals (#17241) | 16 |
+| 354 | 2026-06-03 | #17447 | `77e686c264` | review | done | 07 feat(mastracode): add GitHub signal subscriptions (#17447) | 27 |
+| 355 | 2026-06-03 | #17411 | `23c3b74ac7` | review | done | feat(core): compose Harness v1 session state (#17411) | 6 |
+| 356 | 2026-06-03 | #17511 | `de71e4fb3e` | review | done | fix(mastracode): fall back to legacy switchMode when no session is active (#17511) | 2 |
 | 357 | 2026-06-03 | #17492 | `aeb4b1568d` | likely skip | | chore: version packages (alpha) (#17492) | 2 |
 | 358 | 2026-06-03 | #17538 | `3d1efdeb39` | review | | feat(mastracode): auto-subscribe to branch PR via GitHub Signals on agent run end (#17538) | 3 |
