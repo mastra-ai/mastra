@@ -170,41 +170,80 @@ Sends a user message to an active run or memory thread. Use this when the active
       'User-authored input. Bare strings and parts without attributes are sent to the model as normal user input. When `attributes` are present, Mastra renders the message as a `<user>` XML element with the attributes included.',
   },
   {
-    name: 'options.runId',
-    type: 'string',
+    name: 'options',
+    type: 'object',
     isOptional: true,
-    description: 'Run ID to target directly. Use this when you already know the active run ID.',
-  },
-  {
-    name: 'options.resourceId',
-    type: 'string',
-    isOptional: true,
-    description: 'Resource ID for the memory thread. Required with `threadId` for thread-targeted messages.',
-  },
-  {
-    name: 'options.threadId',
-    type: 'string',
-    isOptional: true,
-    description: 'Thread ID to target. Required with `resourceId` for thread-targeted messages.',
-  },
-  {
-    name: 'options.ifActive.behavior',
-    type: "'deliver' | 'persist' | 'discard'",
-    isOptional: true,
-    description: 'Controls what happens when the target thread is active. Defaults to `deliver`.',
-  },
-  {
-    name: 'options.ifIdle.behavior',
-    type: "'wake' | 'persist' | 'discard'",
-    isOptional: true,
-    description: 'Controls what happens when the target thread is idle. Defaults to `wake`.',
-  },
-  {
-    name: 'options.ifIdle.streamOptions',
-    type: 'AgentExecutionOptions',
-    isOptional: true,
-    description:
-      'Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
+    description: 'Targeting and delivery behavior for the message.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'runId',
+            type: 'string',
+            isOptional: true,
+            description: 'Run ID to target directly. Use this when you already know the active run ID.',
+          },
+          {
+            name: 'resourceId',
+            type: 'string',
+            isOptional: true,
+            description: 'Resource ID for the memory thread. Required with `threadId` for thread-targeted messages.',
+          },
+          {
+            name: 'threadId',
+            type: 'string',
+            isOptional: true,
+            description: 'Thread ID to target. Required with `resourceId` for thread-targeted messages.',
+          },
+          {
+            name: 'ifActive',
+            type: 'object',
+            isOptional: true,
+            description: 'Controls what happens when the target thread is active.',
+            properties: [
+              {
+                type: 'object',
+                parameters: [
+                  {
+                    name: 'behavior',
+                    type: "'deliver' | 'persist' | 'discard'",
+                    isOptional: true,
+                    description: 'Controls what happens when the target thread is active. Defaults to `deliver`.',
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            name: 'ifIdle',
+            type: 'object',
+            isOptional: true,
+            description: 'Controls what happens when the target thread is idle.',
+            properties: [
+              {
+                type: 'object',
+                parameters: [
+                  {
+                    name: 'behavior',
+                    type: "'wake' | 'persist' | 'discard'",
+                    isOptional: true,
+                    description: 'Controls what happens when the target thread is idle. Defaults to `wake`.',
+                  },
+                  {
+                    name: 'streamOptions',
+                    type: 'AgentExecutionOptions',
+                    isOptional: true,
+                    description:
+                      'Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -237,41 +276,80 @@ Sends a signal to an active run or memory thread.
       "Signal context to send to the thread. `type` is the semantic signal category. `tagName` controls the XML tag the model sees. For example, `{ type: 'notification', tagName: 'github-review' }` renders as `<github-review>...</github-review>`. Legacy `user-message` and `system-reminder` payloads are still accepted and normalized. Unknown `type` values are rejected; use `tagName` for custom XML tags.",
   },
   {
-    name: 'options.runId',
-    type: 'string',
+    name: 'options',
+    type: 'object',
     isOptional: true,
-    description: 'Run ID to target directly. Use this when you already know the active run ID.',
-  },
-  {
-    name: 'options.resourceId',
-    type: 'string',
-    isOptional: true,
-    description: 'Resource ID for the memory thread. Required with `threadId` for thread-targeted signals.',
-  },
-  {
-    name: 'options.threadId',
-    type: 'string',
-    isOptional: true,
-    description: 'Thread ID to target. Required with `resourceId` for thread-targeted signals.',
-  },
-  {
-    name: 'options.ifActive.behavior',
-    type: "'deliver' | 'persist' | 'discard'",
-    isOptional: true,
-    description: 'Controls what happens when the target thread is active. Defaults to `deliver`.',
-  },
-  {
-    name: 'options.ifIdle.behavior',
-    type: "'wake' | 'persist' | 'discard'",
-    isOptional: true,
-    description: 'Controls what happens when the target thread is idle. Defaults to `wake`.',
-  },
-  {
-    name: 'options.ifIdle.streamOptions',
-    type: 'AgentExecutionOptions',
-    isOptional: true,
-    description:
-      'Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
+    description: 'Targeting and delivery behavior for the signal.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'runId',
+            type: 'string',
+            isOptional: true,
+            description: 'Run ID to target directly. Use this when you already know the active run ID.',
+          },
+          {
+            name: 'resourceId',
+            type: 'string',
+            isOptional: true,
+            description: 'Resource ID for the memory thread. Required with `threadId` for thread-targeted signals.',
+          },
+          {
+            name: 'threadId',
+            type: 'string',
+            isOptional: true,
+            description: 'Thread ID to target. Required with `resourceId` for thread-targeted signals.',
+          },
+          {
+            name: 'ifActive',
+            type: 'object',
+            isOptional: true,
+            description: 'Controls what happens when the target thread is active.',
+            properties: [
+              {
+                type: 'object',
+                parameters: [
+                  {
+                    name: 'behavior',
+                    type: "'deliver' | 'persist' | 'discard'",
+                    isOptional: true,
+                    description: 'Controls what happens when the target thread is active. Defaults to `deliver`.',
+                  },
+                ],
+              },
+            ],
+          },
+          {
+            name: 'ifIdle',
+            type: 'object',
+            isOptional: true,
+            description: 'Controls what happens when the target thread is idle.',
+            properties: [
+              {
+                type: 'object',
+                parameters: [
+                  {
+                    name: 'behavior',
+                    type: "'wake' | 'persist' | 'discard'",
+                    isOptional: true,
+                    description: 'Controls what happens when the target thread is idle. Defaults to `wake`.',
+                  },
+                  {
+                    name: 'streamOptions',
+                    type: 'AgentExecutionOptions',
+                    isOptional: true,
+                    description:
+                      'Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -301,71 +379,109 @@ const result = await agent.sendNotificationSignal(
 <PropertiesTable
   content={[
   {
-    name: 'notification.source',
-    type: 'string',
-    description: 'External system that produced the notification, such as `github`, `slack`, or `email`.',
+    name: 'notification',
+    type: 'object',
+    description: 'Notification inbox record to create or coalesce.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'source',
+            type: 'string',
+            description: 'External system that produced the notification, such as `github`, `slack`, or `email`.',
+          },
+          {
+            name: 'kind',
+            type: 'string',
+            description: 'Notification kind within the source, such as `ci-status`, `mention`, or `direct-message`.',
+          },
+          {
+            name: 'summary',
+            type: 'string',
+            description: 'LLM-facing summary used as the notification signal contents.',
+          },
+          {
+            name: 'priority',
+            type: "'low' | 'medium' | 'high' | 'urgent'",
+            isOptional: true,
+            description: 'Priority used by the notification delivery policy. Defaults to `medium`.',
+          },
+          {
+            name: 'payload',
+            type: 'unknown',
+            isOptional: true,
+            description: 'Structured payload stored on the inbox record for tools or application code.',
+          },
+          {
+            name: 'dedupeKey',
+            type: 'string',
+            isOptional: true,
+            description: 'Key used to coalesce duplicate pending notifications from the same source and thread.',
+          },
+          {
+            name: 'coalesceKey',
+            type: 'string',
+            isOptional: true,
+            description: 'Key used to combine related pending notifications from the same source and thread.',
+          },
+          {
+            name: 'attributes',
+            type: 'Record<string, JSONValue>',
+            isOptional: true,
+            description: 'Extra attributes copied onto the emitted notification signal.',
+          },
+          {
+            name: 'metadata',
+            type: 'Record<string, unknown>',
+            isOptional: true,
+            description: 'Application metadata stored on the inbox record.',
+          },
+        ],
+      },
+    ],
   },
   {
-    name: 'notification.kind',
-    type: 'string',
-    description: 'Notification kind within the source, such as `ci-status`, `mention`, or `direct-message`.',
-  },
-  {
-    name: 'notification.summary',
-    type: 'string',
-    description: 'LLM-facing summary used as the notification signal contents.',
-  },
-  {
-    name: 'notification.priority',
-    type: "'low' | 'medium' | 'high' | 'urgent'",
-    isOptional: true,
-    description: 'Priority used by the notification delivery policy. Defaults to `medium`.',
-  },
-  {
-    name: 'notification.payload',
-    type: 'unknown',
-    isOptional: true,
-    description: 'Structured payload stored on the inbox record for tools or application code.',
-  },
-  {
-    name: 'notification.dedupeKey',
-    type: 'string',
-    isOptional: true,
-    description: 'Key used to coalesce duplicate pending notifications from the same source and thread.',
-  },
-  {
-    name: 'notification.coalesceKey',
-    type: 'string',
-    isOptional: true,
-    description: 'Key used to combine related pending notifications from the same source and thread.',
-  },
-  {
-    name: 'notification.attributes',
-    type: 'Record<string, JSONValue>',
-    isOptional: true,
-    description: 'Extra attributes copied onto the emitted notification signal.',
-  },
-  {
-    name: 'notification.metadata',
-    type: 'Record<string, unknown>',
-    isOptional: true,
-    description: 'Application metadata stored on the inbox record.',
-  },
-  {
-    name: 'options.resourceId',
-    type: 'string',
-    description: 'Resource ID for the notification inbox and target memory thread.',
-  },
-  {
-    name: 'options.threadId',
-    type: 'string',
-    description: 'Thread ID for the notification inbox and target memory thread.',
-  },
-  {
-    name: 'options.ifIdle.streamOptions',
-    type: 'AgentExecutionOptions',
-    isOptional: true,
-    description: 'Options for the stream that starts when an immediate notification wakes an idle thread.',
+    name: 'options',
+    type: 'object',
+    description: 'Target thread and wake-up behavior for the notification.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'resourceId',
+            type: 'string',
+            description: 'Resource ID for the notification inbox and target memory thread.',
+          },
+          {
+            name: 'threadId',
+            type: 'string',
+            description: 'Thread ID for the notification inbox and target memory thread.',
+          },
+          {
+            name: 'ifIdle',
+            type: 'object',
+            isOptional: true,
+            description: 'Controls what happens when the target thread is idle.',
+            properties: [
+              {
+                type: 'object',
+                parameters: [
+                  {
+                    name: 'streamOptions',
+                    type: 'AgentExecutionOptions',
+                    isOptional: true,
+                    description:
+                      'Options for the stream that starts when an immediate notification wakes an idle thread.',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
@@ -381,15 +497,27 @@ Subscribes to raw stream chunks for a memory thread. Use this before calling `se
 <PropertiesTable
   content={[
   {
-    name: 'options.resourceId',
-    type: 'string',
-    isOptional: true,
-    description: 'Resource ID for the memory thread.',
-  },
-  {
-    name: 'options.threadId',
-    type: 'string',
-    description: 'Thread ID to subscribe to.',
+    name: 'options',
+    type: 'object',
+    description: 'Thread subscription target.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'resourceId',
+            type: 'string',
+            isOptional: true,
+            description: 'Resource ID for the memory thread.',
+          },
+          {
+            name: 'threadId',
+            type: 'string',
+            description: 'Thread ID to subscribe to.',
+          },
+        ],
+      },
+    ],
   },
 ]}
 />
