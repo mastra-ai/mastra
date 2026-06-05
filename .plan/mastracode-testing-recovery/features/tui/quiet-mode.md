@@ -3,6 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13556](https://github.com/mastra-ai/mastra/pull/13556) — added persisted Quiet mode settings for compact TUI output and subagent completion behavior.
+- Later changes: [#13870](https://github.com/mastra-ai/mastra/pull/13870) — quiet compact web-search previews use the dedicated web-search formatter.
 - Later queued changes: [#16771](https://github.com/mastra-ai/mastra/pull/16771), [#16807](https://github.com/mastra-ai/mastra/pull/16807), and [#16839](https://github.com/mastra-ai/mastra/pull/16839) also touch quiet mode and still need mapping when the queue reaches them.
 
 ## User-visible behavior
@@ -41,7 +42,7 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | Quiet mode enabled | `settings.preferences.quietMode`, copied into `TUIState` at startup | `/settings`, live tool/subagent/task renderers, history renderer |
-| Preview line cap | `settings.preferences.quietModeMaxToolPreviewLines` | Tool compact preview rendering |
+| Preview line cap | `settings.preferences.quietModeMaxToolPreviewLines` | Tool compact preview rendering, including web-search result preview rows |
 | Rollout prompt state | `settings.onboarding.quietModePreferenceSelected` | Settings/onboarding migration logic |
 | Compact tool mode color | active mode color via `harness.getCurrentMode()` | `ToolExecutionComponentEnhanced` quiet badge |
 
@@ -62,6 +63,7 @@
 - [Subagent delegation](../subagents/delegation.md) — completed subagent output is quiet-mode-sensitive.
 - [Task tracking](../tools/task-tracking.md) — completed tasks can compact in quiet mode.
 - [Coding tools and approval permissions](../tools/coding-tools-permissions.md) — quiet rendering wraps the same runtime tool events.
+- [Web search tool rendering](../tools/web-search-rendering.md) — provides compact title/URL previews for web-search calls.
 - [Onboarding and global settings](../settings/onboarding-and-global-settings.md) — persistence and rollout live in global settings.
 
 ## Existing tests

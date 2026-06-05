@@ -1103,3 +1103,22 @@ Verification:
 - Focused tests passed: `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u MASTRA_GATEWAY_API_KEY corepack pnpm@11.3.0 --filter ./mastracode exec vitest run src/tui/commands/__tests__/om.test.ts src/tui/components/__tests__/om-settings.test.ts src/tui/handlers/__tests__/om.test.ts src/__tests__/index.test.ts --reporter=dot --bail 1` (4 files / 27 tests). Direct `omScope` precedence/config tests are still missing and recorded as a gap.
 
 Next queue checkpoint: PR #13870 (enhanced web_search rendering), then PR #12532 (build tools dependency update).
+
+### Feature map batch: web-search rendering and build-tool deps
+
+Processed PR [#13870](https://github.com/mastra-ai/mastra/pull/13870), `57764e02c0` (`feat(mastracode): enhanced web_search tool rendering`). Verified current TUI renderer behavior in `ToolExecutionComponentEnhanced`: `isWebSearchTool()` recognizes `web_search` and `web_search_YYYYMMDD`; normal mode renders a bordered block with `web_search "query"` in the footer; Anthropic/provider JSON arrays render title, URL, and optional `pageAge`; OpenAI `{ action, sources }` objects render source titles/URLs; Tavily markdown output passes through unchanged. Fallback JSON-array rendering strips `encryptedContent` before dumping unknown array shapes.
+
+Reviewed PR [#12532](https://github.com/mastra-ai/mastra/pull/12532), `7abbf1fb29` (`chore(deps): update build tools`). The Mastra Code-specific diff only bumped dev/build dependencies in `mastracode/package.json` (`@types/node`, `tsx`) plus lockfile/build-tool dependency updates across the monorepo, so it is recorded as dependency-only rather than a user-visible feature.
+
+Documentation actions:
+
+- Created `features/tools/web-search-rendering.md` for TUI web-search result formatting and parser/preview risks.
+- Updated `features/tools/coding-tools-permissions.md` and `features/tui/quiet-mode.md` with #13870 later-change refs.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13870 done, #12532 skipped, #13648 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/tui/components/tool-execution-enhanced.ts`, `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts`, `mastracode/src/tools/web-search.ts`, current tool/quiet feature cards, and PR #12532 Mastra Code package diff.
+- Focused tests passed: `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u MASTRA_GATEWAY_API_KEY corepack pnpm@11.3.0 --filter ./mastracode exec vitest run src/tui/components/__tests__/tool-execution-enhanced.test.ts --reporter=dot --bail 1` (1 file / 61 tests). Normal-mode provider-specific web-search rendering still needs dedicated tests and is recorded as a gap.
+
+Next queue checkpoint: PR #13648 (headless non-interactive `--prompt` mode), then PR #13695 (OpenAI strict mode fix).
