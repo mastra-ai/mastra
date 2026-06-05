@@ -628,6 +628,24 @@ export class AgentThreadStreamRuntime {
     key: string,
     pending: PendingContinuation<any>,
   ) {
+    const messageArray = Array.isArray(pending.messages) ? pending.messages : undefined;
+    console.log('[agent-builder-debug] core.thread-runtime start continuation', {
+      runId: pending.runId,
+      threadId: pending.threadId,
+      resourceId: pending.resourceId,
+      activeRunIdBeforeStart: state.activeThreadRunIds.get(key),
+      messageCount: messageArray?.length,
+      messageRoles: messageArray?.map(message => (message as { role?: string }).role),
+      messageToolCallIds: messageArray?.flatMap(message => {
+        const content = (message as { content?: unknown }).content;
+        return Array.isArray(content)
+          ? content
+              .map(part => (part as { toolCallId?: string }).toolCallId)
+              .filter((toolCallId): toolCallId is string => typeof toolCallId === 'string')
+          : [];
+      }),
+      messages: pending.messages,
+    });
     state.activeThreadRunIds.set(key, pending.runId);
     state.threadKeysByRunId.set(pending.runId, key);
     void pending.agent

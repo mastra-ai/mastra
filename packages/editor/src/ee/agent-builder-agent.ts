@@ -60,7 +60,11 @@ export const DEFAULT_BUILDER_ERROR_PROCESSORS = [
 ];
 
 export function createBuilderAgent(args?: Partial<AgentConfig<'builder-agent'>>): Agent<'builder-agent'> {
-  const memory = new Memory();
+  const memory = new Memory({
+    options: {
+      lastMessages: 50,
+    },
+  });
 
   // Merge defaults with any caller-supplied processors. Caller processors run
   // after defaults so they can observe/extend retries the defaults trigger.
@@ -197,6 +201,13 @@ The system prompt written into \`set-agent-instructions\` MUST include all of th
 - The final message should make clear that the agent starts with initial parameters and can be adjusted later.`,
     model: 'openai/gpt-5.5',
     memory,
+    defaultOptions: {
+      providerOptions: {
+        openai: {
+          reasoningEffort: 'none',
+        },
+      },
+    },
     workspace,
     ...(args || {}),
     errorProcessors,

@@ -37,16 +37,6 @@ export function useSetAgentInstructionsTool() {
           }
           const value = inputData.instructions;
           const currentLength = value.length;
-          if (currentLength > MAX_GENERATED_INSTRUCTIONS_CHARS) {
-            const over = currentLength - MAX_GENERATED_INSTRUCTIONS_CHARS;
-            return {
-              success: false,
-              rejected: true,
-              currentLength,
-              limit: MAX_GENERATED_INSTRUCTIONS_CHARS,
-              message: `REJECTED: ${currentLength} chars exceeds the ${MAX_GENERATED_INSTRUCTIONS_CHARS}-char limit by ${over}. Nothing was persisted. Drop a WHOLE section (worked example, FAQ, edge-case list) — do NOT shave words — and call set-agent-instructions ONCE more with the tighter version.`,
-            };
-          }
           formMethods.setValue('instructions', value, { shouldDirty: true });
           return {
             success: true,
