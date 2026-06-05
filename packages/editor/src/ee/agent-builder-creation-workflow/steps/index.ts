@@ -1,4 +1,5 @@
 export { createUnderstandUserOutcomeStep } from './understand-user-outcome';
+export { createFeatureCapabilityStep } from './feature-capability';
 export { createSetDescriptionStep } from './set-agent-description';
 export { createSetNameStep } from './set-agent-name';
 export { createSetInstructionsStep } from './set-agent-instructions';

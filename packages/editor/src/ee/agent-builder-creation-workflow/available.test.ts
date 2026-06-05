@@ -8,7 +8,22 @@ import {
   resolveAvailableWorkspaces,
   resolveAvailableModels,
   resolveBrowserAvailable,
+  resolveFeatureCapabilities,
 } from './available';
+
+const ALL_FALSE_CAPABILITIES = {
+  tools: false,
+  agents: false,
+  workflows: false,
+  scorers: false,
+  skills: false,
+  memory: false,
+  variables: false,
+  favorites: false,
+  avatarUpload: false,
+  browser: false,
+  model: false,
+} as const;
 
 type BuilderConfig = {
   agent?: Record<string, unknown>;
@@ -298,5 +313,68 @@ describe('resolveBrowserAvailable', () => {
   it('is false when there is no editor', async () => {
     const mastra = makeMastra({ hasEditor: false, configuration: { agent: { browser: { type: 'playwright' } } } });
     await expect(resolveBrowserAvailable(mastra)).resolves.toBe(false);
+  });
+});
+
+describe('resolveFeatureCapabilities', () => {
+  it('maps every enabled feature flag to true', async () => {
+    const mastra = makeMastra({
+      features: {
+        agent: {
+          tools: true,
+          agents: true,
+          workflows: true,
+          scorers: true,
+          skills: true,
+          memory: true,
+          variables: true,
+          favorites: true,
+          avatarUpload: true,
+          browser: true,
+          model: true,
+        },
+      },
+    });
+    await expect(resolveFeatureCapabilities(mastra)).resolves.toEqual({
+      tools: true,
+      agents: true,
+      workflows: true,
+      scorers: true,
+      skills: true,
+      memory: true,
+      variables: true,
+      favorites: true,
+      avatarUpload: true,
+      browser: true,
+      model: true,
+    });
+  });
+
+  it('treats omitted and non-true flags as false (playground parity)', async () => {
+    const mastra = makeMastra({ features: { agent: { tools: true, skills: false, model: 'yes' } } });
+    await expect(resolveFeatureCapabilities(mastra)).resolves.toEqual({
+      ...ALL_FALSE_CAPABILITIES,
+      tools: true,
+    });
+  });
+
+  it('returns an all-false map when there is no editor', async () => {
+    const mastra = makeMastra({ hasEditor: false, features: { agent: { tools: true } } });
+    await expect(resolveFeatureCapabilities(mastra)).resolves.toEqual(ALL_FALSE_CAPABILITIES);
+  });
+
+  it('returns an all-false map when the builder is disabled', async () => {
+    const mastra = makeMastra({ builderEnabled: false, features: { agent: { tools: true } } });
+    await expect(resolveFeatureCapabilities(mastra)).resolves.toEqual(ALL_FALSE_CAPABILITIES);
+  });
+
+  it('returns an all-false map when the builder config is disabled', async () => {
+    const mastra = makeMastra({ builderConfigEnabled: false, features: { agent: { tools: true } } });
+    await expect(resolveFeatureCapabilities(mastra)).resolves.toEqual(ALL_FALSE_CAPABILITIES);
+  });
+
+  it('returns an all-false map when getFeatures has no agent slice', async () => {
+    const mastra = makeMastra({ features: {} });
+    await expect(resolveFeatureCapabilities(mastra)).resolves.toEqual(ALL_FALSE_CAPABILITIES);
   });
 });

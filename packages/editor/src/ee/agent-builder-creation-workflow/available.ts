@@ -2,7 +2,7 @@ import type { Mastra } from '@mastra/core';
 
 import { buildProviderModelCatalog } from '../utils/provider-catalog';
 
-import type { AvailableAgentTool, IdNameEntry, AgentModel } from './types';
+import type { AvailableAgentTool, IdNameEntry, AgentModel, FeatureCapabilities } from './types';
 
 /**
  * Per-step availability resolution.
@@ -189,4 +189,39 @@ export async function resolveBrowserAvailable(mastra: Mastra): Promise<boolean> 
   // Configured when a type or a provider is declared.
   const provider = (browser.config as { provider?: string } | undefined)?.provider;
   return Boolean(browser.type || provider);
+}
+
+/** The builder feature keys, matching `FeatureCapabilities` / core's `AgentFeatures`. */
+const FEATURE_KEYS = [
+  'tools',
+  'agents',
+  'workflows',
+  'scorers',
+  'skills',
+  'memory',
+  'variables',
+  'favorites',
+  'avatarUpload',
+  'browser',
+  'model',
+] as const satisfies ReadonlyArray<keyof FeatureCapabilities>;
+
+const allFeaturesDisabled = (): FeatureCapabilities =>
+  Object.fromEntries(FEATURE_KEYS.map(key => [key, false])) as FeatureCapabilities;
+
+/**
+ * Resolve which agent-builder capabilities are enabled for the running builder.
+ * Mirrors the playground's `useBuilderAgentFeatures`: each capability is the raw
+ * `features.agent.{key} === true` value, with omitted flags resolving to `false`.
+ * Returns an all-`false` map when there is no editor or the builder is disabled,
+ * so the calling step can store a deterministic capability map either way.
+ */
+export async function resolveFeatureCapabilities(mastra: Mastra): Promise<FeatureCapabilities> {
+  const ctx = await resolveBuilderContext(mastra);
+  if (!ctx) return allFeaturesDisabled();
+
+  const agentFeatures = ctx.builder.getFeatures?.()?.agent ?? {};
+  return Object.fromEntries(
+    FEATURE_KEYS.map(key => [key, agentFeatures[key] === true]),
+  ) as FeatureCapabilities;
 }

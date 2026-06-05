@@ -34,9 +34,30 @@ export const inputSchema = z.object({
   prompt: z.string().min(1).describe('Plain-language prompt describing the agent to build'),
 });
 
+/**
+ * Which agent-builder capabilities are enabled for the running builder. Resolved
+ * deterministically from the builder feature flags by the `feature-capability`
+ * step. Mirrors the playground's `useBuilderAgentFeatures`: each flag is the raw
+ * `features.agent.{key} === true` value (an omitted flag resolves to `false`).
+ */
+export const featureCapabilitiesSchema = z.object({
+  tools: z.boolean().default(false),
+  agents: z.boolean().default(false),
+  workflows: z.boolean().default(false),
+  scorers: z.boolean().default(false),
+  skills: z.boolean().default(false),
+  memory: z.boolean().default(false),
+  variables: z.boolean().default(false),
+  favorites: z.boolean().default(false),
+  avatarUpload: z.boolean().default(false),
+  browser: z.boolean().default(false),
+  model: z.boolean().default(false),
+});
+
 // Accumulating config-in-progress threaded from step to step.
 export const configSchema = z.object({
   userOutcome: userOutcomeSchema,
+  featureCapabilities: featureCapabilitiesSchema.optional(),
   name: z.string().optional(),
   description: z.string().optional(),
   instructions: z.string().optional(),
@@ -65,6 +86,7 @@ export const outputSchema = z.object({
 export type WorkflowInput = z.infer<typeof inputSchema>;
 export type Config = z.infer<typeof configSchema>;
 export type UserOutcome = z.infer<typeof userOutcomeSchema>;
+export type FeatureCapabilities = z.infer<typeof featureCapabilitiesSchema>;
 
 /** Arguments every step factory receives — currently just the builder model. */
 export interface StepFactoryArgs {

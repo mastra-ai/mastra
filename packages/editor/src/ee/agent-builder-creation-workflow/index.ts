@@ -2,6 +2,7 @@ import { createWorkflow } from '@mastra/core/workflows';
 
 import {
   createUnderstandUserOutcomeStep,
+  createFeatureCapabilityStep,
   createSetDescriptionStep,
   createSetNameStep,
   createSetInstructionsStep,
@@ -26,6 +27,7 @@ export * from './constant';
  * criteria); every later step reads that outcome so the produced fields are
  * grounded in what the user actually wants:
  * - `userOutcome` (understand-user-outcome)
+ * - `featureCapabilities` (feature-capability)
  * - `name` (set-agent-name)
  * - `description` (set-agent-description)
  * - `instructions` (set-agent-instructions)
@@ -49,6 +51,7 @@ export * from './constant';
  */
 export function createAgentBuilderCreationWorkflow({ model }: { model: string }) {
   const understandUserOutcomeStep = createUnderstandUserOutcomeStep({ model });
+  const featureCapabilityStep = createFeatureCapabilityStep({ model });
   const setDescriptionStep = createSetDescriptionStep({ model });
   const setNameStep = createSetNameStep({ model });
   const setInstructionsStep = createSetInstructionsStep({ model });
@@ -65,6 +68,7 @@ export function createAgentBuilderCreationWorkflow({ model }: { model: string })
     outputSchema,
     steps: [
       understandUserOutcomeStep,
+      featureCapabilityStep,
       setDescriptionStep,
       setNameStep,
       setInstructionsStep,
@@ -76,6 +80,7 @@ export function createAgentBuilderCreationWorkflow({ model }: { model: string })
     ],
   })
     .then(understandUserOutcomeStep)
+    .then(featureCapabilityStep)
     .then(setDescriptionStep)
     .then(setNameStep)
     .then(setInstructionsStep)
