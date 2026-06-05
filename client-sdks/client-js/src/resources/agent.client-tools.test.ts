@@ -1339,6 +1339,23 @@ describe('Agent client-side tools', () => {
           msg.content.some((p: any) => p.type === 'tool-result' && p.result !== undefined)),
     );
     expect(hasToolResult).toBe(true);
+
+    // Regression for #16017: the recursive tool-result must carry the original
+    // call args (as `input`), not be fabricated as empty. This is what lets the
+    // server-side adapter persist real args instead of `{}` and stops the model
+    // from in-context-learning empty-argument tool calls.
+    const toolResultInputs = secondCallBody.messages.flatMap((msg: any) => {
+      if (msg.role === 'tool' && Array.isArray(msg.content)) {
+        return msg.content
+          .filter((p: any) => p.type === 'tool-result' && p.toolCallId === toolCallId)
+          .map((p: any) => p.input);
+      }
+      return [];
+    });
+    expect(toolResultInputs.length).toBeGreaterThan(0);
+    for (const input of toolResultInputs) {
+      expect(input).toEqual({ location: 'NYC' });
+    }
   });
 
   it('stream: should receive error chunks with serialized error properties', async () => {
