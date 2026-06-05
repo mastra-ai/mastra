@@ -166,10 +166,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 144 | 2026-03-18 | #14428 | `11dd998449` | review | done | feat(mastracode): speed up /threads popup loading (#14428) | 6 |
 | 145 | 2026-03-18 | #14472 | `8cda6192e0` | review | done | fix(tui): remove italic styling from tool arguments (#14472) | 1 |
 | 146 | 2026-03-18 | #14436 | `681ee1c811` | review | done | feat: generate thread titles in observer (#14436) | 11 |
-| 147 | 2026-03-18 | #14479 | `a673e88a4d` | review | current | fix: wrap long inline question answers (#14479) | 1 |
-| 148 | 2026-03-19 | #14439 | `c3fa1e60a7` | likely skip | | chore: version packages (alpha) (#14439) | 2 |
-| 149 | 2026-03-19 | #14437 | `da931155c1` | review | | feat(memory): add thread-scoped retrieval for observational memory (#14437) | 1 |
-| 150 | 2026-03-20 | #14541 | `b8acde89fd` | review | | fix(mastracode): pin dependency ranges (#14541) | 1 |
+| 147 | 2026-03-18 | #14479 | `a673e88a4d` | review | done | fix: wrap long inline question answers (#14479) | 1 |
+| 148 | 2026-03-19 | #14439 | `c3fa1e60a7` | likely skip | skipped | chore: version packages (alpha) (#14439) | 2 |
+| 149 | 2026-03-19 | #14437 | `da931155c1` | review | done | feat(memory): add thread-scoped retrieval for observational memory (#14437) | 1 |
+| 150 | 2026-03-20 | #14541 | `b8acde89fd` | review | current | fix(mastracode): pin dependency ranges (#14541) | 1 |
 | 151 | 2026-03-20 | #14518 | `0adb54aa31` | likely skip | | chore: version packages (alpha) (#14518) | 2 |
 | 152 | 2026-03-22 | #14587 | `55529f6c51` | review | | feat: Mastra Code autonomous system prompts (#14587) | 4 |
 | 153 | 2026-03-23 | #14586 | `0b619421b8` | review | | feat: prevent macOS sleep during active mastracode work (#14586) | 3 |

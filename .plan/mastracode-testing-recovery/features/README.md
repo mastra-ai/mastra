@@ -41,7 +41,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Headless | Prompt mode | #13648 | CLI args + Harness events + auto-resolution | Partial | High | [page](./headless/prompt-mode.md) |
 | TUI | Startup banner | #13422 | TUI options + terminal width | Partial | Medium | [page](./tui/startup-banner.md) |
 | TUI | Help and shortcuts | #13426, #13712, #13723, #13787, #14250 | TUI command metadata + settings + queueing shortcut labels | Partial | Medium | [page](./tui/help-and-shortcuts.md) |
-| TUI | Interactive prompts and access requests | #13696, #13753 | TUI active prompt + pending prompt queue + sandbox allowed paths | Partial | High | [page](./tui/interactive-prompts.md) |
+| TUI | Interactive prompts and access requests | #13696, #13753, #14479 | TUI active prompt + pending prompt queue + answered-prompt wrapping + sandbox allowed paths | Partial | High | [page](./tui/interactive-prompts.md) |
 | TUI | Process suspend shortcut | #13723 | TUI keyboard routing + Unix signal handling | Partial | Medium | [page](./tui/process-suspend.md) |
 | TUI | Clipboard paste | #13712, #13953 | OS clipboard helpers + editor paste buffer + pending pasted images | Partial | High | [page](./tui/clipboard-paste.md) |
 | TUI | File autocomplete | #13460 | editor autocomplete provider + `fd` detection | Partial | Medium | [page](./tui/file-autocomplete.md) |
@@ -79,7 +79,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Goals | Plan approval and build handoff | #13416, #13557, #13598 | Core Harness plan resolver + TUI plan card + plan files | Partial | High | [page](./goals/plan-approval.md) |
 | Subagents | Delegation to Explore / Plan / Execute | #13227, #13339, #13700, #13940 | Harness config + parent Workspace + subagent request context/session state | Partial | High | [page](./subagents/delegation.md) |
 | Subagents | Audit-tests subagent | #13331 | Harness subagent config | Missing | High | [page](./subagents/audit-tests.md) |
-| Memory | Observational memory | #13231, #13305, #13330, #13349, #13354, #13476, #13568, #13563, #13569, #13815, #13953, #13996, #14436 | Memory storage + harness/settings OM state + scope config + observer-context budgeting + attachment filtering/token estimates + OM model picker + clone remapping + generated thread titles | Partial | High | [page](./memory/observational-memory.md) |
+| Memory | Observational memory | #13231, #13305, #13330, #13349, #13354, #13476, #13568, #13563, #13569, #13815, #13953, #13996, #14436, #14437 | Memory storage + harness/settings OM state + scope config + retrieval/recall provenance + observer-context budgeting + attachment filtering/token estimates + OM model picker + clone remapping + generated thread titles | Partial | High | [page](./memory/observational-memory.md) |
 
 Use terse values:
 

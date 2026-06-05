@@ -1348,3 +1348,26 @@ Verification:
 
 - `corepack pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/custom-editor.test.ts src/tui/components/__tests__/thread-selector.test.ts src/tui/commands/__tests__/threads.test.ts src/tui/components/__tests__/tool-execution-enhanced.test.ts --bail=1 --reporter=dot` — 4 files / 83 tests passed.
 - `corepack pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/observational-memory.test.ts --bail=1 --reporter=dot -t "thread title|threadTitle|thread-title"` — 1 file / 5 tests passed / 445 skipped.
+
+### PR #14479 / #14439 / #14437 feature-map checkpoint
+
+Verified rows 147-149:
+
+- #14479 fixes inline question answer rendering by wrapping long free-text submitted answers inside the bordered prompt box with continuation indentation. Current source uses `wrapTextWithAnsi()` before colorizing answer text in `ask-question-inline.ts`, preventing terminal-width overflow for answered prompt history/live render.
+- #14439 is Changesets alpha package-version churn only; skipped for feature mapping.
+- #14437 adds OM retrieval/recall. Retrieval mode registers the `recall` memory tool, wraps observed output in durable `<observation-group id range>` provenance, renders group headings/ranges into observation context, and provides thread/resource-scoped source-message lookup with semantic search, cursor/range hints, pagination, high-detail part fetching, and strict access guards.
+
+Documentation actions:
+
+- Updated `features/tui/interactive-prompts.md` with #14479 long-answer wrapping state/tests/risks.
+- Updated `features/memory/observational-memory.md` with #14437 retrieval/recall provenance, `om-tools.ts`, observation-group helpers, tests, and recall access-guard risks.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #14479 done, #14439 skipped, #14437 done, #14541 current.
+
+Focused evidence read: PR metadata for #14479/#14439/#14437; current `mastracode/src/tui/components/ask-question-inline.ts`, `ask-question-inline-long-labels.test.ts`, `mastracode/src/agents/memory.ts`, `packages/memory/src/index.ts`, `packages/memory/src/tools/om-tools.ts`, `om-tools.test.ts`, `packages/memory/src/processors/observational-memory/anchor-ids.ts`, `observation-groups.ts`, `observational-memory.ts`, and OM constants/retrieval instructions.
+
+Verification:
+
+- `corepack pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/ask-question-inline-long-labels.test.ts --bail=1 --reporter=dot` — 1 file / 3 tests passed.
+- `corepack pnpm --filter ./packages/memory exec vitest run src/tools/om-tools.test.ts --bail=1 --reporter=dot` — 1 file / 91 tests passed.
+- `corepack pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/observational-memory.test.ts --bail=1 --reporter=dot -t "anchor|observation group|retrieval"` — 1 file / 13 tests passed / 437 skipped.
