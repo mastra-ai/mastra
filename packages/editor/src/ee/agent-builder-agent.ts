@@ -7,6 +7,15 @@ import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { createAgentBuilderCreationWorkflow } from './agent-builder-creation-workflow';
+
+/**
+ * The model the builder agent runs on. Captured as a named constant so it can be
+ * passed (as a plain string) into the creation workflow factory, which uses it
+ * to spin up per-step sub-agents on the same model.
+ */
+const BUILDER_MODEL = 'openai/gpt-5.5';
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -59,7 +68,10 @@ export const DEFAULT_BUILDER_ERROR_PROCESSORS = [
   new ProviderHistoryCompat(),
 ];
 
-export function createBuilderAgent(args?: Partial<AgentConfig<'builder-agent'>>): Agent<'builder-agent'> {
+export function createBuilderAgent(args?: Partial<AgentConfig<'builder-agent'>>): {
+  agent: Agent<'builder-agent'>;
+  workflow: ReturnType<typeof createAgentBuilderCreationWorkflow>;
+} {
   const memory = new Memory();
 
   // Merge defaults with any caller-supplied processors. Caller processors run
@@ -199,7 +211,7 @@ Keep this to 2–4 focused paragraphs or compact bullet groups. Do not include w
 - Never attach a capability "just in case." Every tool, agent, workflow, or skill must directly support the requested outcome.
 - The final message to the user must be concise, friendly, and focused on what the configured agent can now do.
 - The final message should make clear that the agent starts with initial parameters and can be adjusted later.`,
-    model: 'openai/gpt-5.5',
+    model: BUILDER_MODEL,
     memory,
     workspace,
     ...(args || {}),
@@ -209,5 +221,8 @@ Keep this to 2–4 focused paragraphs or compact bullet groups. Do not include w
     description: 'An agent that can build agents',
   };
 
-  return new Agent<'builder-agent'>(config);
+  const agent = new Agent<'builder-agent'>(config);
+  const workflow = createAgentBuilderCreationWorkflow({ model: BUILDER_MODEL });
+
+  return { agent, workflow };
 }

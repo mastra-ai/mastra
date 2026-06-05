@@ -1,0 +1,75 @@
+import { createWorkflow } from '@mastra/core/workflows';
+
+import {
+  createSetDescriptionStep,
+  createSetNameStep,
+  createSetInstructionsStep,
+  createSetWorkspaceIdStep,
+  createSetToolsStep,
+  createSetSkillsStep,
+  createSetModelStep,
+  createSetBrowserEnabledStep,
+} from './steps';
+import { inputSchema, outputSchema } from './types';
+
+/**
+ * Agent Builder Creation Workflow
+ *
+ * A sequence of steps — one per field — that turns a plain-language description
+ * into an agent configuration covering every field the playground agent-builder
+ * client tools can set:
+ * - `name` (set-agent-name)
+ * - `description` (set-agent-description)
+ * - `instructions` (set-agent-instructions)
+ * - `workspaceId` (set-agent-workspace-id)
+ * - `tools` / `agents` / `workflows` (set-agent-tools, routed by type)
+ * - `skills` (set-agent-skills)
+ * - `model` (set-agent-model)
+ * - `browserEnabled` (set-agent-browser-enabled)
+ *
+ * Each step's `execute` is a thin, Mastra-specific adapter: it unwraps the
+ * workflow context and delegates the actual field computation to a pure handler
+ * in `./handlers`. Handlers receive explicit domain arguments, never a workflow
+ * `ctx`.
+ *
+ * The workflow is bound to the builder agent's `model` (a plain string). Each
+ * step is built by a `createXStep({ model })` factory so that any step can spin
+ * up its own sub-agent (`new Agent({ model, ... })`) using the same model the
+ * builder runs on, mirroring `workflow-builder.ts`'s per-step research agent.
+ */
+export function createAgentBuilderCreationWorkflow({ model }: { model: string }) {
+  const setDescriptionStep = createSetDescriptionStep({ model });
+  const setNameStep = createSetNameStep({ model });
+  const setInstructionsStep = createSetInstructionsStep({ model });
+  const setWorkspaceIdStep = createSetWorkspaceIdStep({ model });
+  const setToolsStep = createSetToolsStep({ model });
+  const setSkillsStep = createSetSkillsStep({ model });
+  const setModelStep = createSetModelStep({ model });
+  const setBrowserEnabledStep = createSetBrowserEnabledStep({ model });
+
+  return createWorkflow({
+    id: 'agent-builder-creation',
+    description: 'Turn a plain-language description into an agent configuration for the agent builder',
+    inputSchema,
+    outputSchema,
+    steps: [
+      setDescriptionStep,
+      setNameStep,
+      setInstructionsStep,
+      setWorkspaceIdStep,
+      setToolsStep,
+      setSkillsStep,
+      setModelStep,
+      setBrowserEnabledStep,
+    ],
+  })
+    .then(setDescriptionStep)
+    .then(setNameStep)
+    .then(setInstructionsStep)
+    .then(setWorkspaceIdStep)
+    .then(setToolsStep)
+    .then(setSkillsStep)
+    .then(setModelStep)
+    .then(setBrowserEnabledStep)
+    .commit();
+}
