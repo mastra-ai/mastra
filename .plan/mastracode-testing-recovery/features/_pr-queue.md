@@ -304,11 +304,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 282 | 2026-05-11 | #16398 | `7ad5585640` | likely skip | skipped | chore(deps): update ai sdk (#16398) | 1 |
 | 283 | 2026-05-11 | #16223 | `50f5884b41` | review | done | draft: Add MastraPlatformExporter and MastraStorageExporter, deprecate CloudExporter and DefaultExporter (#16223) | 1 |
 | 284 | 2026-05-11 | #16409 | `f3279f5129` | likely skip | skipped | chore: version packages (alpha) (#16409) | 2 |
-| 285 | 2026-05-12 | #16231 | `f984b4d6c6` | review | current | feat(mastracode): send follow-ups through Agent signals (#16231) | 23 |
-| 286 | 2026-05-12 | #16338 | `05dab92b33` | review | | feat(playground): support signal follow-up chat (#16338) | 2 |
-| 287 | 2026-05-12 | #16458 | `5337df1c3f` | likely skip | | chore: version packages (alpha) (#16458) | 2 |
-| 288 | 2026-05-12 | #16501 | `9cd4c8e07b` | likely skip | | chore: version packages (alpha) (#16501) | 2 |
-| 289 | 2026-05-12 | #16511 | `ca4f94e378` | likely skip | | chore: version packages (alpha) (#16511) | 2 |
+| 285 | 2026-05-12 | #16231 | `f984b4d6c6` | review | done | feat(mastracode): send follow-ups through Agent signals (#16231) | 23 |
+| 286 | 2026-05-12 | #16338 | `05dab92b33` | review | done | feat(playground): support signal follow-up chat (#16338) | 2 |
+| 287 | 2026-05-12 | #16458 | `5337df1c3f` | likely skip | skipped | chore: version packages (alpha) (#16458) | 2 |
+| 288 | 2026-05-12 | #16501 | `9cd4c8e07b` | likely skip | skipped | chore: version packages (alpha) (#16501) | 2 |
+| 289 | 2026-05-12 | #16511 | `ca4f94e378` | likely skip | current | chore: version packages (alpha) (#16511) | 2 |
 | 290 | 2026-05-12 | #16513 | `49996678b6` | review | | feat: speed up LibSQL and Mastra Code startup (#16513) | 8 |
 | 291 | 2026-05-12 | #16516 | `136e85f3ae` | likely skip | | chore: version packages (alpha) (#16516) | 2 |
 | 292 | 2026-05-13 | #16521 | `3e63fca7aa` | review | | fix(mastracode): regular plan approval triggers via structured sendSignal and no longer hangs (#16521) | 2 |

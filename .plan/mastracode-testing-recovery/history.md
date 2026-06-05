@@ -2230,3 +2230,28 @@ Verification:
 
 - `pnpm --filter ./mastracode exec vitest run src/auth/providers/__tests__/github-copilot.test.ts src/providers/__tests__/github-copilot-catalog.test.ts src/providers/__tests__/oauth-fetches.test.ts src/onboarding/__tests__/packs.test.ts --bail=1 --reporter=dot` — 4 files / 48 tests passed.
 - `pnpm exec vitest run src/exporters/mastra-storage.test.ts src/exporters/mastra-platform.test.ts --bail=1 --reporter=dot` from `observability/mastra` — 2 files / 119 tests passed.
+
+### PR #16231 / #16338 / #16458 / #16501 feature-map checkpoint
+
+Verified rows 285-288:
+
+- #16231 sends Mastra Code active-run follow-ups through Agent signals. Current source owns signal creation/conversion in `packages/core/src/agent/signals.ts`, Harness `sendSignal()`/`sendMessage()`/follow-up queueing in `harness.ts`, Mastra Code pending interjection projection and echo dedupe in `mastra-tui.ts`/`render-messages.ts`, and fallback transient queues for Ctrl+F, slash commands, and attachment paths that cannot signal directly.
+- #16338 enables signal follow-up chat in Playground and Agent Builder. Current React `useChat()` subscribes to thread streams, sends threaded messages with `ifIdle.streamOptions`, falls back when thread signals are disabled/unsupported, and Playground projects `pendingSignals` through `ThreadRuntimeState` into composer previews and send/cancel button state.
+- #16458 and #16501 are Changesets alpha package-version batches; skipped for feature mapping after PR metadata confirmed package/changelog-only changes.
+
+Documentation actions:
+
+- Created `features/chat/agent-signals.md` for Agent signal conversion, Harness follow-up queueing, React/Playground subscription behavior, tests, and risks.
+- Updated `features/chat/queued-followups.md` for #16231 Enter-as-signal versus Ctrl+F/attachment queue fallback.
+- Updated `features/tui/interactive-chat.md`, `features/integrations/harness-api.md`, and `features/goals/persistent-goals.md` for pending signal projection, Harness signal APIs, and goal continuation signals.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16231 done, #16338 done, #16458 skipped, #16501 skipped, #16511 current.
+
+Focused evidence read: PR metadata for #16231/#16338/#16458/#16501; current `packages/core/src/agent/signals.ts`, `packages/core/src/harness/harness.ts`, signal/history tests, `client-sdks/react/src/agent/hooks.ts`, `hooks.test.ts`, `mastracode/src/tui/mastra-tui.ts`, `state.ts`, `handlers/agent-lifecycle.ts`, `render-messages.ts`, Mastra Code queue/render tests, `packages/playground/src/services/mastra-runtime-provider.tsx`, `lib/ai-ui/thread-runtime-state.ts`, `lib/ai-ui/thread.tsx`, and Agent Builder stream-chat provider tests.
+
+Verification:
+
+- `pnpm --filter ./packages/core exec vitest run src/agent/__tests__/agent-signals.test.ts src/harness/signal-messages.test.ts src/harness/signal-history.test.ts --bail=1 --reporter=dot` — 3 files / 102 tests passed / no type errors.
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/mastra-tui-queueing.test.ts src/tui/__tests__/render-messages.test.ts -t "signal|Signal|active-run|echo" --bail=1 --reporter=dot` — 2 files / 19 tests passed / 35 skipped.
+- `pnpm --filter ./client-sdks/react exec vitest run src/agent/hooks.test.ts -t "thread signals|sendMessage|subscription|clientTools|unsupported|tool approval" --bail=1 --reporter=dot` — 1 file / 20 tests passed. Initial run failed to resolve `@mastra/client-js`; `pnpm --filter @mastra/client-js build:lib` regenerated package dist.
+- `pnpm --filter ./packages/playground exec vitest run src/services/__tests__/mastra-runtime-provider.test.tsx src/domains/agent-builder/contexts/__tests__/stream-chat-provider.test.tsx -t "thread signals|enableThreadSignals" --bail=1 --reporter=dot` — 2 files / 4 tests passed / 9 skipped. Initial runs failed to resolve workspace package dist; `@mastra/react build:js` and `@mastra/playground-ui build` emitted JS but hit existing type/declaration errors before focused tests passed.

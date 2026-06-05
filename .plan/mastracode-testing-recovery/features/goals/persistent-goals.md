@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#16065](https://github.com/mastra-ai/mastra/pull/16065) — adds persistent `/goal` mode and judge-driven continuation loop.
-- Later changes: [#16322](https://github.com/mastra-ai/mastra/pull/16322) — keeps multiline `/goal` objectives, goal-enabled custom slash commands/skills, and user choices intact while goal mode is active; [#16340](https://github.com/mastra-ai/mastra/pull/16340) — ensures approving a plan as `/goal` first resolves the suspended plan approval, then starts the canonical goal reminder as a fresh build-mode run.
+- Later changes: [#16322](https://github.com/mastra-ai/mastra/pull/16322) — keeps multiline `/goal` objectives, goal-enabled custom slash commands/skills, and user choices intact while goal mode is active; [#16340](https://github.com/mastra-ai/mastra/pull/16340) — ensures approving a plan as `/goal` first resolves the suspended plan approval, then starts the canonical goal reminder as a fresh build-mode run; [#16231](https://github.com/mastra-ai/mastra/pull/16231) — routes judge continuations through the same Agent signal path as active-run follow-ups.
 
 ## User-visible behavior
 
@@ -43,7 +43,7 @@
 | Active goal | thread metadata key `goal` + `GoalManager` in `TUIState` | `/goal` command, status line, lifecycle continuation |
 | Judge defaults | settings `models.goalJudgeModel` / `goalMaxTurns` | `/judge`, `startGoalWithDefaults()`, plan approval goal start |
 | Judge run state | `activeGoalJudge`, abort controller, `JudgeDisplayComponent` | input lock, keyboard abort, lifecycle cleanup |
-| Goal continuations | `GoalManager.evaluateAfterTurn()` decision + structured `system-reminder` signal | harness signal path, chat history, next agent turn |
+| Goal continuations | `GoalManager.evaluateAfterTurn()` decision + structured Agent `system-reminder` signal | Harness signal path, subscribed chat history, next agent turn |
 | Approved-plan goal start | `handlePlanApproval().onGoal` resolves `respondToPlanApproval()` before `ctx.startGoal()` and records `planStartedGoalId` | suspended plan tool, Build-mode start, goal completion return-to-plan behavior |
 | Goal command text | command-dispatch raw-arg handling + custom editor autocomplete completion | multiline `/goal` objectives, `/goal/<custom>` and `/goal/<skill>` routes |
 
@@ -60,6 +60,7 @@
 ## Dependencies / related features
 
 - [Plan approval and build handoff](./plan-approval.md) — approved plans can become goals and return to Plan mode when the goal completes.
+- [Agent signals and streaming follow-ups](../chat/agent-signals.md) — goal continuations are structured system-reminder signals.
 - [Queued follow-ups and slash commands](../chat/queued-followups.md) — user queued messages/actions preempt automatic goal continuation.
 - [Interactive prompts and access requests](../tui/interactive-prompts.md) — goal-mode ask_user prompts remain user-controlled.
 - [Prompt context and project instructions](../chat/prompt-context.md) — goal/task prompt guidance is injected into agent context.
