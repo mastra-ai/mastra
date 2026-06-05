@@ -1507,3 +1507,25 @@ Verification:
 - `corepack pnpm --filter ./packages/core exec vitest run src/harness/om-threshold-persistence.test.ts --bail=1 --reporter=dot` — 1 file / 2 tests passed / no type errors.
 - `corepack pnpm --filter ./packages/core exec vitest run src/processors/tool-result-reminder.test.ts --bail=1 --reporter=dot` — 1 file / 14 tests passed / no type errors.
 - `corepack pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/ask-question-inline-long-labels.test.ts src/tui/components/__tests__/ask-question-inline-multi-select.test.ts src/tui/components/__tests__/ask-question-inline-multiline.test.ts --bail=1 --reporter=dot` — 3 files / 15 tests passed.
+
+### PR #14656 / #14867 / #14804 feature-map checkpoint
+
+Verified rows 168-170:
+
+- #14656 is Changesets alpha package-version churn across Mastra packages; skipped for feature mapping.
+- #14867 fixes gateway provider type generation for provider IDs that start with digits (for example `302ai`). Current MastraCode gateway sync delegates to core `GatewayRegistry`; the current source of truth is `packages/core/src/llm/model/registry-generator.ts`, where `generateTypesContent()` quotes keys that are not valid JavaScript identifiers.
+- #14804 fixes `/subagents` so configured subagents from `createMastraCode({ subagents })` appear in the type picker. Current source maps configured `{ id, name, description }` entries to options and falls back to built-in Explore/Plan/Execute only when the config is absent or empty.
+
+Documentation actions:
+
+- Updated `features/models/model-auth-and-modes.md` with gateway registry generated-type ownership and digit-leading provider key quoting.
+- Updated `features/subagents/delegation.md` with configured-subagent `/subagents` picker behavior and ID/name ownership risks.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #14656 skipped, #14867 done, #14804 done, #14535 current.
+
+Focused evidence read: PR metadata/diffs for #14656/#14867/#14804; current `mastracode/src/utils/gateway-sync.ts`, `mastracode/src/utils/__tests__/gateway-sync.test.ts`, `packages/core/src/llm/model/registry-generator.ts`, `registry-generator.test.ts`, `mastracode/src/tui/commands/subagents.ts`, and `subagents.test.ts`.
+
+Verification:
+
+- `corepack pnpm --filter ./packages/core exec vitest run src/llm/model/registry-generator.test.ts --bail=1 --reporter=dot` — 1 file / 3 tests passed / no type errors.
+- `corepack pnpm --filter ./mastracode exec vitest run src/utils/__tests__/gateway-sync.test.ts src/tui/commands/__tests__/subagents.test.ts --bail=1 --reporter=dot` — 2 files / 10 tests passed.
