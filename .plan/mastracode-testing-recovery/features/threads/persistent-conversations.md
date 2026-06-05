@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — project-scoped persistent conversations and thread switching.
-- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved conversation runtime onto the shared core Harness primitive and session records; [#13334](https://github.com/mastra-ai/mastra/pull/13334) — restored optional thread locking through core Harness config; [#13343](https://github.com/mastra-ai/mastra/pull/13343) — scoped startup auto-resume to current working directory/worktree via `projectPath` metadata; [#13690](https://github.com/mastra-ai/mastra/pull/13690) — added Harness resource ID helpers and improved `/resource` switching.
+- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved conversation runtime onto the shared core Harness primitive and session records; [#13334](https://github.com/mastra-ai/mastra/pull/13334) — restored optional thread locking through core Harness config; [#13343](https://github.com/mastra-ai/mastra/pull/13343) — scoped startup auto-resume to current working directory/worktree via `projectPath` metadata; [#13690](https://github.com/mastra-ai/mastra/pull/13690) — added Harness resource ID helpers and improved `/resource` switching; [#14428](https://github.com/mastra-ai/mastra/pull/14428) — speeds `/threads` by caching and lazily loading message previews; [#14436](https://github.com/mastra-ai/mastra/pull/14436) — lets observer output update thread titles through OM metadata and Harness events.
 
 ## User-visible behavior
 
-- What the user can do: resume, create, switch, and clone conversations per project/resource/worktree.
-- Success looks like: startup resumes only threads from the current directory, then messages and metadata reload without leaking another thread’s ephemeral state.
-- Must preserve: history, title/resource, mode/model metadata, goals, project path tagging, thread lock ownership, and related status projections.
+- What the user can do: resume, create, switch, clone, and browse conversations per project/resource/worktree with cached previews and generated titles.
+- Success looks like: startup resumes only threads from the current directory, `/threads` stays responsive while previews load lazily, then messages and metadata reload without leaking another thread’s ephemeral state.
+- Must preserve: history, title/resource, preview cache, mode/model metadata, goals, project path tagging, thread lock ownership, and related status projections.
 
 ## Entry points / commands
 
@@ -42,7 +42,8 @@
 | --- | --- | --- |
 | Thread history | Harness memory/storage | TUI history renderer, headless |
 | Current thread/resource | Harness session + resource ID helpers | TUI status, `/resource`, commands |
-| Thread title/metadata | Thread metadata/session records | TUI footer, goals, GitHub badges |
+| Thread title/metadata | Thread metadata/session records, optionally updated by OM `threadTitle` output | TUI footer, `/threads`, goals, GitHub badges |
+| Thread preview cache | `state.threadPreviewCache` + `attemptedThreadPreviewIds`, invalidated by thread `updatedAt` | `/threads` selector preview rows |
 | Project path scope | Thread `metadata.projectPath` + legacy directory birthtime fallback | Startup auto-resume filtering |
 | Ephemeral tasks/plan/sandbox | Harness state for active thread | Prompt context, TUI projection |
 | Thread lock ownership | Core Harness `threadLock` + MC filesystem lock files | Thread create/switch/select and TUI lock prompt |
@@ -50,14 +51,16 @@
 ## Key files
 
 - `mastracode/src/tui/commands/new.ts` — new conversation preparation.
-- `mastracode/src/tui/commands/threads.ts` — selector, switch, clone, lock conflicts.
-- `mastracode/src/tui/event-dispatch.ts` — thread event cleanup/reload.
+- `mastracode/src/tui/commands/threads.ts` — selector, switch, clone, lock conflicts, cached preview invalidation, and lazy message-preview loading.
+- `mastracode/src/tui/components/thread-selector.ts` — preview cache display, debounced/batched preview loading, sorting/filtering, and selector rendering.
+- `mastracode/src/tui/event-dispatch.ts` — thread event cleanup/reload and OM thread-title update events.
 - `mastracode/src/tui/setup.ts` — startup auto-resume filtering by `projectPath` and legacy birthtime fallback.
 - `mastracode/src/tui/mastra-tui.ts` — startup thread sync.
 - `mastracode/src/headless.ts` — non-TUI thread flags.
 - `mastracode/src/index.ts` — session prefill from existing threads and threadLock wiring.
 - `mastracode/src/utils/thread-lock.ts` — filesystem locks, stale lock cleanup, lock errors.
-- `packages/core/src/harness/harness.ts` — lock-safe select/create/switch/delete behavior.
+- `packages/core/src/harness/harness.ts` — lock-safe select/create/switch/delete behavior and `data-om-thread-update` event translation.
+- `packages/memory/src/processors/observational-memory/*` — observer-generated `threadTitle` extraction and persistence into thread records.
 
 ## Dependencies / related features
 
@@ -69,11 +72,13 @@
 
 ## Existing tests
 
-- `mastracode/src/tui/commands/__tests__/threads.test.ts` — thread command behavior.
+- `mastracode/src/tui/commands/__tests__/threads.test.ts` — thread command behavior and preview cache invalidation/loading.
+- `mastracode/src/tui/components/__tests__/thread-selector.test.ts` — selector preview-cache seeding, debounced preview fetching, navigation debounce, and merged preview callbacks.
 - `mastracode/src/tui/commands/__tests__/thread.test.ts` — direct thread command behavior.
 - `mastracode/src/headless.test.ts` — headless thread flags.
 - `mastracode/src/HarnessCompat.test.ts` — v1 session/thread composition.
 - `packages/core/src/harness/thread-locking.test.ts` — lock acquire/release ordering, create/switch/select, and failure recovery.
+- `packages/memory/src/processors/observational-memory/__tests__/observational-memory.test.ts` — observer/buffered `threadTitle` persistence into thread metadata/title.
 
 ## Missing tests
 

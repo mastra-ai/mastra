@@ -49,14 +49,14 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | TUI | Quiet mode | #13556 | settings preference + TUI render state | Partial | High | [page](./tui/quiet-mode.md) |
 | Settings | Onboarding and global settings | #13421, #13431, #13487, #13494, #13500, #13505, #13508, #13512, #13566, #13603, #13611, #13748, #13953, #13573 | settings.json + thread settings + provider registry + AuthStorage/stored API keys | Partial | High | [page](./settings/onboarding-and-global-settings.md) |
 | Settings | Storage backend configuration | #13435, #13815 | env/settings/database config + storage factory | Partial | High | [page](./settings/storage-backend.md) |
-| TUI | Interactive chat | #13218, #13350, #13413, #13427, #13456, #13460, #13442, #13487, #13609, #13696, #13712, #13723, #13999 | TUI + Harness display state | Partial | High | [page](./tui/interactive-chat.md) |
+| TUI | Interactive chat | #13218, #13350, #13413, #13427, #13456, #13460, #13442, #13487, #13609, #13696, #13712, #13723, #13999, #14423 | TUI + Harness display state + prompt/editor animation | Partial | High | [page](./tui/interactive-chat.md) |
 | TUI | Shell passthrough streaming | #13999 | TUI input router + shell subprocess + live output component | Partial | Medium | [page](./tui/shell-passthrough.md) |
 | TUI | Debug logging | #13691, #13701 | env vars + app-data/debug trace files | Partial | Medium | [page](./tui/debug-logging.md) |
 | Chat | Prompt context and project instructions | #13234, #13346, #13376, #13456 | Harness request context + instruction files + git metadata | Partial | High | [page](./chat/prompt-context.md) |
 | Chat | File attachments in chat input | #13574, #13712, #13953 | Harness signal content + message-list adapters + TUI pending images + OM attachment input | Partial | High | [page](./chat/file-attachments.md) |
 | Git | Branch context and status | #13456 | live git branch + TUI project info | Missing | High | [page](./git/branch-context.md) |
 | Chat | Queued follow-ups and slash commands | #13345, #13493, #14250 | TUI transient queue state + command template processor + active-run signal/queue routing | Partial | High | [page](./chat/queued-followups.md) |
-| Threads | Persistent conversations / switching | #13218, #13334, #13343 | Harness session + thread metadata | Partial | High | [page](./threads/persistent-conversations.md) |
+| Threads | Persistent conversations / switching | #13218, #13334, #13343, #14428, #14436 | Harness session + thread metadata + preview cache + OM title updates | Partial | High | [page](./threads/persistent-conversations.md) |
 | Threads | Resource ID switching | #13690 | Harness resource ID + resource-scoped threads | Partial | High | [page](./threads/resource-id-switching.md) |
 | Models | Model auth, selection, modes | #13218, #13307, #13490, #13512, #13566, #13600, #13611, #13695, #13716, #13573, #14433, #14469 | Settings + harness session + thread pack metadata + provider registry + AuthStorage/stored API keys + harness headers | Partial | High | [page](./models/model-auth-and-modes.md) |
 | Models | Custom OpenAI-compatible providers | #13682, #13611, #14433 | settings customProviders + Harness custom catalog + harness headers | Partial | High | [page](./models/custom-providers.md) |
@@ -66,7 +66,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Tools | Coding tools and approval permissions | #13218, #13344, #13347, #13348, #13355, #13385, #13384, #13428, #13442, #13519, #13526, #13564, #13609, #13611, #13687, #13696, #13713, #13724, #13753, #13870, #13999, #14157, #14168 | Harness state + permission policy + workspace filesystem + extraTools + schemas + local shell passthrough + validation errors | Partial | High | [page](./tools/coding-tools-permissions.md) |
 | Tools | Web search tool rendering | #13609, #13870 | provider/Tavily result shape + TUI renderer | Partial | Medium | [page](./tools/web-search-rendering.md) |
 | Tools | Workspace-backed coding tools | #13437, #13526, #13687, #13693, #13695, #13700, #13724, #13753, #13940 | core/custom Workspace + LocalFilesystem/LocalSandbox + tool-name overrides + allowed paths + schema compat + subagent inheritance | Partial | High | [page](./tools/workspace-tools.md) |
-| Tools | Streaming tool arguments | #13328, #13335 | Harness display state + TUI pending tools | Partial | High | [page](./tools/streaming-tool-arguments.md) |
+| Tools | Streaming tool arguments | #13328, #13335, #14472 | Harness display state + TUI pending tools + argument highlight theme | Partial | High | [page](./tools/streaming-tool-arguments.md) |
 | Tools | Task tracking tools and TUI progress | #13344 | Harness task state + TUI progress | Partial | High | [page](./tools/task-tracking.md) |
 | Integrations | MCP status and reload command | #13311, #13347, #14377 | MCP manager + selector overlay | Partial | High | [page](./integrations/mcp-status-command.md) |
 | Integrations | MCP server configuration | #13613, #13750, #14377 | MCP config files + programmatic config + manager runtime state | Partial | High | [page](./integrations/mcp-server-configuration.md) |
@@ -79,7 +79,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Goals | Plan approval and build handoff | #13416, #13557, #13598 | Core Harness plan resolver + TUI plan card + plan files | Partial | High | [page](./goals/plan-approval.md) |
 | Subagents | Delegation to Explore / Plan / Execute | #13227, #13339, #13700, #13940 | Harness config + parent Workspace + subagent request context/session state | Partial | High | [page](./subagents/delegation.md) |
 | Subagents | Audit-tests subagent | #13331 | Harness subagent config | Missing | High | [page](./subagents/audit-tests.md) |
-| Memory | Observational memory | #13231, #13305, #13330, #13349, #13354, #13476, #13568, #13563, #13569, #13815, #13953, #13996 | Memory storage + harness/settings OM state + scope config + observer-context budgeting + attachment filtering/token estimates + OM model picker + clone remapping | Partial | High | [page](./memory/observational-memory.md) |
+| Memory | Observational memory | #13231, #13305, #13330, #13349, #13354, #13476, #13568, #13563, #13569, #13815, #13953, #13996, #14436 | Memory storage + harness/settings OM state + scope config + observer-context budgeting + attachment filtering/token estimates + OM model picker + clone remapping + generated thread titles | Partial | High | [page](./memory/observational-memory.md) |
 
 Use terse values:
 

@@ -1326,3 +1326,25 @@ Verification:
 
 - `corepack pnpm --filter ./packages/core exec vitest run src/loop/workflows/agentic-execution/llm-execution-step.test.ts --bail=1 --reporter=dot` — 1 file / 18 tests passed.
 - `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u MASTRA_GATEWAY_API_KEY -u MOONSHOT_AI_API_KEY corepack pnpm --filter ./mastracode exec vitest run src/agents/__tests__/model.test.ts --bail=1 --reporter=dot` — 1 file / 36 tests passed. Unsanitized local env reproduced the known model-test env leakage: `OPENAI_API_KEY` makes the no-auth test take the direct OpenAI API-key path.
+
+### PR #14423 / #14428 / #14472 / #14436 feature-map checkpoint
+
+Verified rows 143-146:
+
+- #14423 polished the TUI editor/history/chat visual path. Current HEAD no longer has the PR's standalone `history-popup.ts` / `prompt-animation.ts` files; the verified behavior is consolidated into `CustomEditor` prompt animation, `GradientAnimator` / `applyGradientSweep()`, message framing, status/OM progress styling, and related custom-editor tests.
+- #14428 speeds `/threads` by caching message previews in TUI state, invalidating stale previews by `updatedAt`, debouncing preview loads, batching preview fetches, and showing cached previews while uncached previews load lazily.
+- #14472 removes italic styling from tool arguments in the normal and quiet tool renderers while preserving the argument color tint.
+- #14436 adds optional observer-generated thread titles. MC enables `threadTitle: true`; core OM conditionally prompts for `<thread-title>`, parses it into chunks/metadata, persists it through guarded `updateThread()` calls, emits `data-om-thread-update`, and the TUI renders `om_thread_title_updated` markers/status changes.
+
+Documentation actions:
+
+- Updated `features/tui/interactive-chat.md`, `features/threads/persistent-conversations.md`, `features/tools/streaming-tool-arguments.md`, and `features/memory/observational-memory.md`.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #14423 done, #14428 done, #14472 done, #14436 done, #14479 current.
+
+Focused evidence read: PR metadata/diffs for #14423/#14428/#14472/#14436; current `custom-editor.ts`, `user-message.ts`, `om-progress.ts`, `obi-loader.ts`, `assistant-message.ts`, `status-line.ts`, `thread-selector.ts`, `commands/threads.ts`, `event-dispatch.ts`, `handlers/om.ts`, `components/om-marker.ts`, `tool-execution-enhanced.ts`, `agents/memory.ts`, core Harness OM marker translation, `observer-agent.ts`, `observational-memory.ts`, and related tests in `custom-editor.test.ts`, `thread-selector.test.ts`, `threads.test.ts`, and `observational-memory.test.ts`.
+
+Verification:
+
+- `corepack pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/custom-editor.test.ts src/tui/components/__tests__/thread-selector.test.ts src/tui/commands/__tests__/threads.test.ts src/tui/components/__tests__/tool-execution-enhanced.test.ts --bail=1 --reporter=dot` — 4 files / 83 tests passed.
+- `corepack pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/observational-memory.test.ts --bail=1 --reporter=dot -t "thread title|threadTitle|thread-title"` — 1 file / 5 tests passed / 445 skipped.

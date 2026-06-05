@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14469 (row 142) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, and #14427 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #14423 (TUI history styling/prompt animation), then #14428 (speed up /threads popup loading), #14472 (tool arguments italic removal), and #14436 (observer-generated thread titles).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14436 (row 146) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, and #14427 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #14479 (wrap long inline question answers), then #14439 (version-package skip) and #14437 (thread-scoped OM retrieval).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 143: PR #14423 (TUI history styling and prompt animation), then row 144 #14428 (speed up `/threads` popup loading), row 145 #14472 (tool arguments italic removal), and row 146 #14436 (observer-generated thread titles).
+1. Continue at `_pr-queue.md` row 147: PR #14479 (wrap long inline question answers), then row 148 #14439 (version-package skip), and row 149 #14437 (thread-scoped OM retrieval).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -146,3 +146,4 @@ None known.
 - `gh pr view 13690 --json number,title,body,author,mergedAt,url,files,commits`, current `/resource` command, Harness resource ID helpers, headless args, and resource tests verified resource switching. Added `features/threads/resource-id-switching.md`; noted missing end-to-end loaded-history/resource-switch test.
 - `gh pr view 13613 --json number,title,body,author,mergedAt,url,files,commits`, current MCP config/manager/types, command setup text, and tests verified HTTP MCP server config support. Added `features/integrations/mcp-server-configuration.md`; noted missing real HTTP MCP server integration and OAuth flow tests.
 - Focused verification for #13690/#13613 passed: MC resource/MCP/headless/dispatch tests (5 files / 138 tests) and core resource ID tests (1 file / 6 tests).
+- Rows 143-146 verified/documented: #14423 prompt/editor/history styling (current HEAD consolidated animation into `CustomEditor`/`GradientAnimator`), #14428 `/threads` preview cache/lazy loading, #14472 non-italic tool args, and #14436 OM-generated thread titles. Updated interactive chat, threads, streaming-tool-arguments, OM, index, queue, and history docs. Focused verification passed: MC TUI slice 4 files / 83 tests; memory OM thread-title slice 1 file / 5 tests.

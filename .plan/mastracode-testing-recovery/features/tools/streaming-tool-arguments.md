@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments incrementally across tool renderers.
-- Later changes: [#13335](https://github.com/mastra-ai/mastra/pull/13335) — preserved assistant message text before task/todo tool calls by splitting the streaming assistant component; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — renamed todo streaming paths to task tools and moved tool ownership into core Harness; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — folded active tool and tool-input buffers into canonical `HarnessDisplayState`.
+- Later changes: [#13335](https://github.com/mastra-ai/mastra/pull/13335) — preserved assistant message text before task/todo tool calls by splitting the streaming assistant component; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — renamed todo streaming paths to task tools and moved tool ownership into core Harness; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — folded active tool and tool-input buffers into canonical `HarnessDisplayState`; [#14472](https://github.com/mastra-ai/mastra/pull/14472) — removed italic styling from rendered tool arguments while preserving argument color tinting.
 
 ## User-visible behavior
 
-- What the user sees: tool boxes can appear before the final tool call is available, then fill in argument previews as the model streams JSON.
+- What the user sees: tool boxes can appear before the final tool call is available, then fill in readable non-italic argument previews as the model streams JSON.
 - Special cases: `ask_user`, `submit_plan`, and task mutation tools update dedicated inline/pinned components from partial args.
-- Must preserve: no duplicate tool boxes, final args replace partial args, pre-tool assistant text stays visible, history reload renders stable final args only.
+- Must preserve: no duplicate tool boxes, final args replace partial args, pre-tool assistant text stays visible, history reload renders stable final args only, and argument styling remains legible in normal/quiet modes.
 
 ## Entry points / commands
 
@@ -44,6 +44,7 @@
 | Raw streamed arg text | Harness display state `toolInputBuffers` | TUI tool handlers |
 | Parsed partial args | TUI `handleToolInputDelta()` | Tool/ask/plan/task components |
 | Final args | `tool_start` / stored `tool_call.args` | TUI live and history renderers |
+| Argument styling | `CODE_HIGHLIGHT_THEME` / `QUIET_CODE_HIGHLIGHT_THEME` token colors without italic font style | Tool argument previews and shell arg segments |
 | Pending tool components | TUI state `pendingTools` | Tool handlers/renderers |
 | Assistant message split | TUI `streamingComponent` | Preserves text before and after tool calls |
 

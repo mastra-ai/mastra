@@ -162,11 +162,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 140 | 2026-03-18 | #14432 | `0256b9b00a` | likely skip | skip: CI/turbo config | ci: optimize turbo cache inputs, config, and workflow concurrency (#14432) | 1 |
 | 141 | 2026-03-18 | #14433 | `01a67403e1` | review | done | feat: forward harness headers to mastracode model providers (#14433) | 5 |
 | 142 | 2026-03-18 | #14469 | `c2e48b6a72` | review | done | fix(mastracode): don't pass custom headers to anthropic/codex providers (#14469) | 2 |
-| 143 | 2026-03-18 | #14423 | `d9d5f948b0` | review | current | feat: polish Mastra Code TUI history styling and prompt animation (#14423) | 7 |
-| 144 | 2026-03-18 | #14428 | `11dd998449` | review | | feat(mastracode): speed up /threads popup loading (#14428) | 6 |
-| 145 | 2026-03-18 | #14472 | `8cda6192e0` | review | | fix(tui): remove italic styling from tool arguments (#14472) | 1 |
-| 146 | 2026-03-18 | #14436 | `681ee1c811` | review | | feat: generate thread titles in observer (#14436) | 11 |
-| 147 | 2026-03-18 | #14479 | `a673e88a4d` | review | | fix: wrap long inline question answers (#14479) | 1 |
+| 143 | 2026-03-18 | #14423 | `d9d5f948b0` | review | done | feat: polish Mastra Code TUI history styling and prompt animation (#14423) | 7 |
+| 144 | 2026-03-18 | #14428 | `11dd998449` | review | done | feat(mastracode): speed up /threads popup loading (#14428) | 6 |
+| 145 | 2026-03-18 | #14472 | `8cda6192e0` | review | done | fix(tui): remove italic styling from tool arguments (#14472) | 1 |
+| 146 | 2026-03-18 | #14436 | `681ee1c811` | review | done | feat: generate thread titles in observer (#14436) | 11 |
+| 147 | 2026-03-18 | #14479 | `a673e88a4d` | review | current | fix: wrap long inline question answers (#14479) | 1 |
 | 148 | 2026-03-19 | #14439 | `c3fa1e60a7` | likely skip | | chore: version packages (alpha) (#14439) | 2 |
 | 149 | 2026-03-19 | #14437 | `da931155c1` | review | | feat(memory): add thread-scoped retrieval for observational memory (#14437) | 1 |
 | 150 | 2026-03-20 | #14541 | `b8acde89fd` | review | | fix(mastracode): pin dependency ranges (#14541) | 1 |
