@@ -1,4 +1,3 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
 import { ReadableStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v5';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
@@ -387,7 +386,6 @@ function buildTripWireBailResponse<OUTPUT = undefined, TOOLS extends ToolSet = T
 
 async function processOutputStream<OUTPUT = undefined>({
   tools,
-  runId,
   messageId,
   messageList,
   outputStream,
@@ -678,14 +676,6 @@ async function processOutputStream<OUTPUT = undefined>({
         break;
 
       case 'tool-result': {
-        console.log('[agent-builder-debug] stream tool-result', {
-          runId,
-          messageId,
-          toolCallId: chunk.payload.toolCallId,
-          toolName: chunk.payload.toolName,
-          result: chunk.payload.result,
-          args: chunk.payload.args,
-        });
         // Patch deferred provider-executed tool results inline.
         // When a provider tool is deferred (e.g., Anthropic web_search called alongside
         // a client tool), the tool-call arrives in step N and is added to messageList as
@@ -1238,51 +1228,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             : undefined;
           let cachedResponse: CachedLLMStepResponse | undefined;
           try {
-            const debugPrompt = (label: string, prompt: unknown) => {
-              try {
-                const summary = Array.isArray(prompt)
-                  ? prompt.map((message: any, index) => ({
-                      index,
-                      role: message?.role,
-                      parts: Array.isArray(message?.content)
-                        ? message.content.map((part: any) => ({
-                            type: part?.type,
-                            toolName: part?.toolName,
-                            toolCallId: part?.toolCallId,
-                          }))
-                        : typeof message?.content,
-                    }))
-                  : prompt;
-                const logDir = '/tmp/agent-builder-llm-prompts';
-                mkdirSync(logDir, { recursive: true });
-                const safeLabel = label.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
-                const logPath = `${logDir}/${Date.now()}-${runId}-${currentStep.messageId}-${safeLabel}.json`;
-                writeFileSync(
-                  logPath,
-                  JSON.stringify(
-                    {
-                      timestamp: new Date().toISOString(),
-                      label,
-                      runId,
-                      messageId: currentStep.messageId,
-                      agentId,
-                      stepNumber: inputData.output?.steps?.length || 0,
-                      retryCount: inputData.processorRetryCount || 0,
-                      summary,
-                      prompt,
-                    },
-                    null,
-                    2,
-                  ),
-                );
-                console.log(`[agent-builder-debug] ${label} wrote ${logPath}`);
-                console.log(`[agent-builder-debug] ${label} summary`, JSON.stringify(summary, null, 2));
-              } catch (error) {
-                console.log(`[agent-builder-debug] ${label} stringify/write failed`, error);
-                console.dir(prompt, { depth: null });
-              }
-            };
-            debugPrompt('processLLMRequest input prompt', inputMessages);
             const requestStepResult = await requestStepRunner.runProcessLLMRequest({
               prompt: inputMessages,
               model: currentStep.model,
@@ -1295,7 +1240,6 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               abortSignal: options?.abortSignal,
             });
             inputMessages = requestStepResult.prompt;
-            debugPrompt('processLLMRequest output prompt', inputMessages);
             cachedResponse = requestStepResult.response;
           } catch (error) {
             if (error instanceof TripWire) {

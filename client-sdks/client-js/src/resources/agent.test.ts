@@ -584,6 +584,7 @@ describe('Agent signal routes', () => {
       type: 'tool-result',
       toolCallId: 'call-1',
       toolName: 'myTool',
+      args: { x: 'hi' },
       result: { ok: true },
     });
 
@@ -599,6 +600,7 @@ describe('Agent signal routes', () => {
             type: 'tool-result',
             toolCallId: 'call-1',
             toolName: 'myTool',
+            args: { x: 'hi' },
             result: { ok: true },
           },
         ],
@@ -749,11 +751,27 @@ describe('Agent signal routes', () => {
     expect(continuationCall.messages).toEqual([
       {
         role: 'tool',
-        content: [{ type: 'tool-result', toolCallId: 'call-1', toolName: 'myTool', result: { value: 'first' } }],
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-1',
+            toolName: 'myTool',
+            args: { value: 'first' },
+            result: { value: 'first' },
+          },
+        ],
       },
       {
         role: 'tool',
-        content: [{ type: 'tool-result', toolCallId: 'call-2', toolName: 'myTool', result: { value: 'second' } }],
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-2',
+            toolName: 'myTool',
+            args: { value: 'second' },
+            result: { value: 'second' },
+          },
+        ],
       },
     ]);
   });
@@ -805,7 +823,9 @@ describe('Agent signal routes', () => {
       ...assistantMessages,
       {
         role: 'tool',
-        content: [{ type: 'tool-result', toolCallId: 'call-1', toolName: 'myTool', result: { ok: true } }],
+        content: [
+          { type: 'tool-result', toolCallId: 'call-1', toolName: 'myTool', args: { x: 'hi' }, result: { ok: true } },
+        ],
       },
     ]);
     expect(continuation.streamOptions?.memory).toBeUndefined();
@@ -874,11 +894,27 @@ describe('Agent signal routes', () => {
     expect(continuationMessages).toEqual([
       {
         role: 'tool',
-        content: [{ type: 'tool-result', toolCallId: 'call-1', toolName: 'firstTool', result: { first: true } }],
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-1',
+            toolName: 'firstTool',
+            args: { value: 'one' },
+            result: { first: true },
+          },
+        ],
       },
       {
         role: 'tool',
-        content: [{ type: 'tool-result', toolCallId: 'call-2', toolName: 'secondTool', result: { second: true } }],
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-2',
+            toolName: 'secondTool',
+            args: { value: 'two' },
+            result: { second: true },
+          },
+        ],
       },
     ]);
   });
@@ -989,6 +1025,7 @@ describe('Agent signal routes', () => {
       type: 'tool-result',
       toolCallId: 'call-error',
       toolName: 'myTool',
+      args: {},
       result: { error: 'Error: boom' },
     });
     expect(streamUntilIdleSpy).not.toHaveBeenCalled();
@@ -997,7 +1034,13 @@ describe('Agent signal routes', () => {
     expect(continuationMessages.at(-1)).toEqual({
       role: 'tool',
       content: [
-        { type: 'tool-result', toolCallId: 'call-error', toolName: 'myTool', result: { error: 'Error: boom' } },
+        {
+          type: 'tool-result',
+          toolCallId: 'call-error',
+          toolName: 'myTool',
+          args: {},
+          result: { error: 'Error: boom' },
+        },
       ],
     });
   });
@@ -1068,7 +1111,15 @@ describe('Agent signal routes', () => {
     expect(continuationMessages).toEqual([
       {
         role: 'tool',
-        content: [{ type: 'tool-result', toolCallId: 'call-a', toolName: 'myTool', result: { args: { run: 'a' } } }],
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-a',
+            toolName: 'myTool',
+            args: { run: 'a' },
+            result: { args: { run: 'a' } },
+          },
+        ],
       },
     ]);
   });

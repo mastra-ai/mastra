@@ -238,6 +238,70 @@ describe('buildMessagesFromChunks', () => {
     });
   });
 
+  it('should preserve streamed tool-call args when the final tool-call chunk has empty args', () => {
+    const result = parts([
+      { type: 'tool-call-input-streaming-start', payload: { toolCallId: 'tc1', toolName: 'myTool' } },
+      { type: 'tool-call-delta', payload: { toolCallId: 'tc1', argsTextDelta: '{"q":' } },
+      { type: 'tool-call-delta', payload: { toolCallId: 'tc1', argsTextDelta: '"test"}' } },
+      { type: 'tool-call-input-streaming-end', payload: { toolCallId: 'tc1' } },
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'tc1', toolName: 'myTool', args: {} },
+      },
+      {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'myTool',
+          args: { q: 'test' },
+          result: { answer: '42' },
+        },
+      },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc1',
+        toolName: 'myTool',
+        args: { q: 'test' },
+        result: { answer: '42' },
+      },
+    });
+  });
+
+  it('should use matching tool-result args when tool-call args are empty and no deltas were emitted', () => {
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'tc1', toolName: 'setAgentName', args: {} },
+      },
+      {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'tc1',
+          toolName: 'setAgentName',
+          args: { name: 'Email Support Triage' },
+          result: { success: true },
+        },
+      },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc1',
+        toolName: 'setAgentName',
+        args: { name: 'Email Support Triage' },
+        result: { success: true },
+      },
+    });
+  });
+
   // ── Source and file parts ───────────────────────────────────
 
   it('should produce a source part', () => {

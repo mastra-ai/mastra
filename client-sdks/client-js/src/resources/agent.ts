@@ -115,18 +115,6 @@ const deleteSignalRuntimeOptionsEntry = (store: Map<string, SignalRuntimeOptions
   store.delete(key);
 };
 
-const pushAgentBuilderDebug = (event: string, data: Record<string, unknown>) => {
-  const entry = { ts: new Date().toISOString(), event, ...data };
-  console.debug('[agent-builder-debug]', event, data);
-  const win = (globalThis as { window?: { __agentBuilderDebug?: unknown[]; localStorage?: { setItem: Function } } }).window;
-  if (!win) return;
-  win.__agentBuilderDebug ??= [];
-  win.__agentBuilderDebug.push(entry);
-  try {
-    win.localStorage?.setItem('agentBuilderDebug', JSON.stringify(win.__agentBuilderDebug.slice(-200)));
-  } catch {}
-};
-
 const noopClientToolObserve: ToolObserve = {
   async span<T>(_name: string, fn: () => Promise<T> | T): Promise<T> {
     return fn();
@@ -753,22 +741,18 @@ export class Agent extends BaseResource {
               result = { error: String(error) };
             }
 
-            const toolResultContent: Record<string, unknown> = {
+            const toolResultContent = {
               type: 'tool-result',
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
+              args: toolCall.args,
               result,
+              ...(observability ? { __mastraObservability: observability } : {}),
+            } satisfies Extract<CoreMessage, { role: 'tool' }>['content'][number] & {
+              args?: unknown;
+              __mastraObservability?: ClientToolObservabilityEnvelope;
             };
 
-            if (observability) {
-              toolResultContent.__mastraObservability = observability;
-            }
-
-            pushAgentBuilderDebug('client-js.local-tool-result', {
-              runId,
-              toolCallId: toolCall.toolCallId,
-              toolName: toolCall.toolName,
-            });
             await onChunk({
               type: 'tool-result',
               runId,
@@ -778,7 +762,7 @@ export class Agent extends BaseResource {
             toolResultMessages.push({
               role: 'tool',
               content: [toolResultContent],
-            } as unknown as CoreMessage);
+            });
           }
 
           if (toolResultMessages.length === 0) {
@@ -799,36 +783,11 @@ export class Agent extends BaseResource {
             streamOptions: continuationStreamOptions,
           });
 
-          const continuationMessages = (threadId
-            ? toolResultMessages
-            : [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages]) as MessageListInput;
+          const continuationMessages = (
+            threadId ? toolResultMessages : [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages]
+          ) as MessageListInput;
 
           try {
-            const continuationDebug = {
-              runId,
-              threadId,
-              resourceId,
-              pendingToolCallIds: pendingToolCalls.map(toolCall => toolCall.toolCallId),
-              pendingToolNames: pendingToolCalls.map(toolCall => toolCall.toolName),
-              toolResultMessageCount: toolResultMessages.length,
-              messageCount: Array.isArray(continuationMessages) ? continuationMessages.length : undefined,
-              messageRoles: Array.isArray(continuationMessages)
-                ? continuationMessages.map(message => (message as { role?: string }).role)
-                : undefined,
-              messageToolCallIds: Array.isArray(continuationMessages)
-                ? continuationMessages.flatMap(message => {
-                    const content = (message as { content?: unknown }).content;
-                    return Array.isArray(content)
-                      ? content
-                          .map(part => (part as { toolCallId?: string }).toolCallId)
-                          .filter((toolCallId): toolCallId is string => typeof toolCallId === 'string')
-                      : [];
-                  })
-                : undefined,
-              messages: continuationMessages,
-            };
-            console.log('[agent-builder-debug] client-js.send-tool-approval payload', continuationDebug);
-            pushAgentBuilderDebug('client-js.send-tool-approval', continuationDebug as unknown as Record<string, unknown>);
             await agent.sendToolApproval({
               resourceId: resourceId || agent.agentId,
               threadId,

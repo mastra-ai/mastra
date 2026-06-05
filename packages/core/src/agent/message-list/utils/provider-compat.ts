@@ -81,7 +81,8 @@ export function ensureAnthropicCompatibleMessages(
   messages: ModelMessage[],
   dbMessages: MastraDBMessage[],
 ): ModelMessage[] {
-  return messages.map(msg => enrichToolResultsWithInput(msg, dbMessages));
+  const withToolResultInputs = messages.map(msg => enrichToolResultsWithInput(msg, dbMessages));
+  return enrichToolCallsWithResultInput(withToolResultInputs);
 }
 
 /**
@@ -166,14 +167,54 @@ function enrichToolResultsWithInput(message: ModelMessage, dbMessages: MastraDBM
     ...message,
     content: message.content.map(part => {
       if (part.type === 'tool-result') {
+        const existingInput = (part as ToolResultWithInput).input;
         return {
           ...part,
-          input: findToolCallArgs(dbMessages, part.toolCallId),
+          input: hasNonEmptyInput(existingInput) ? existingInput : findToolCallArgs(dbMessages, part.toolCallId),
         } as ToolResultWithInput;
       }
       return part;
     }),
   } as ModelMessage;
+}
+
+function hasNonEmptyInput(input: unknown): input is Record<string, unknown> {
+  return Boolean(input && typeof input === 'object' && !Array.isArray(input) && Object.keys(input).length > 0);
+}
+
+function collectToolResultInputs(messages: ModelMessage[]): Map<string, Record<string, unknown>> {
+  const inputs = new Map<string, Record<string, unknown>>();
+  for (const message of messages) {
+    if (message.role !== 'tool' || !Array.isArray(message.content)) continue;
+    for (const part of message.content) {
+      if (part.type !== 'tool-result') continue;
+      const input = (part as ToolResultWithInput).input;
+      if (hasNonEmptyInput(input)) {
+        inputs.set(part.toolCallId, input);
+      }
+    }
+  }
+  return inputs;
+}
+
+function enrichToolCallsWithResultInput(messages: ModelMessage[]): ModelMessage[] {
+  const resultInputs = collectToolResultInputs(messages);
+  if (resultInputs.size === 0) return messages;
+
+  return messages.map(message => {
+    if (message.role !== 'assistant' || !Array.isArray(message.content)) return message;
+
+    let modified = false;
+    const content = message.content.map(part => {
+      if (part.type !== 'tool-call' || hasNonEmptyInput(part.input)) return part;
+      const input = resultInputs.get(part.toolCallId);
+      if (!input) return part;
+      modified = true;
+      return { ...part, input } as typeof part;
+    });
+
+    return modified ? ({ ...message, content } as ModelMessage) : message;
+  });
 }
 
 // ============================================================================

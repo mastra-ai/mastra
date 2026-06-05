@@ -7506,23 +7506,6 @@ export class Agent<
     const { threadId, resourceId, approved, messages, streamOptions, ...executionOptions } = options;
 
     if (messages && approved) {
-      const messageArray = Array.isArray(messages) ? messages : undefined;
-      console.log('[agent-builder-debug] core.sendToolApproval continuation received', {
-        threadId,
-        resourceId,
-        toolCallId: options.toolCallId,
-        messageCount: messageArray?.length,
-        messageRoles: messageArray?.map(message => (message as { role?: string }).role),
-        messageToolCallIds: messageArray?.flatMap(message => {
-          const content = (message as { content?: unknown }).content;
-          return Array.isArray(content)
-            ? content
-                .map(part => (part as { toolCallId?: string }).toolCallId)
-                .filter((toolCallId): toolCallId is string => typeof toolCallId === 'string')
-            : [];
-        }),
-        messages,
-      });
       const continuation = agentThreadStreamRuntime.continueWithMessages(
         this as Agent<any, any, any, any>,
         messages,
