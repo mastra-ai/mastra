@@ -2354,3 +2354,28 @@ Verification:
 - `pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/activation-ttl.test.ts src/processors/observational-memory/__tests__/observational-memory-api.test.ts -t "activateAfterIdle|resolveActivationTTL|auto ttl" --bail=1 --reporter=dot` — 2 files / 16 tests passed / 135 skipped.
 - `pnpm --filter ./packages/core exec vitest run src/agent/__tests__/memory-gateway-duck-typing.test.ts --bail=1 --reporter=dot` — 1 file / 1 test passed / no type errors.
 - `pnpm --filter ./mastracode exec vitest run src/tui/handlers/__tests__/om.test.ts --bail=1 --reporter=dot` — 1 file / 3 tests passed.
+
+### PR #16665 / #16682 / #16667 / #15173 feature-map checkpoint
+
+Verified rows 305-308:
+
+- #16665 routes Agent thread stream subscriptions through PubSub. Current source scopes `AgentThreadStreamRuntime` state by `WeakMap<PubSub, ...>`, publishes run registration/stream-part/completion/suspend/abort/signal-enqueued events with `sourceId`, creates remote subscriber streams for non-local runs, lets Agents inherit PubSub from Mastra/Harness unless they have an own PubSub, and lets Mastra Code disable file thread locks only when cross-process PubSub is explicitly enabled.
+- #16682 adds the `/om` Observe Attachments Auto/On/Off setting. Current source persists `models.omObserveAttachments`, seeds `state.observeAttachments`, restores thread metadata via `thread-caveman-state.ts`, threads the setting into `getDynamicMemory()` and its cache key, and exposes a three-way OM settings selector.
+- #16667 is a Changesets alpha package-version batch; skipped for feature mapping after PR metadata confirmed package/changelog-only changes.
+- #15173 adds Mastra Code product analytics. Current source creates `MastraCodeAnalytics` as PostHog-backed or no-op depending on `MASTRA_TELEMETRY_DISABLED`, captures session/prompt/thread/model/command/interactive-prompt events, and wraps capture/shutdown in try/catch.
+
+Documentation actions:
+
+- Updated `features/integrations/harness-api.md` and `features/chat/agent-signals.md` for #16665 PubSub-scoped Agent thread runtime state, cross-runtime broadcasting, Harness propagation, and tests.
+- Updated `features/memory/observational-memory.md` and `features/settings/onboarding-and-global-settings.md` for #16682 observe-attachments persistence, thread restore/seed, and OM settings UI.
+- Updated `features/integrations/observability-and-evals.md` for #15173 product analytics opt-out/no-op behavior and event surfaces.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16665 done, #16682 done, #16667 skipped, #15173 done, #16771 current.
+
+Focused evidence read: PR metadata for #16665/#16682/#16667/#15173; current `packages/core/src/agent/thread-stream-runtime.ts`, `agent.ts`, `packages/core/src/harness/harness.ts`, `mastracode/src/index.ts`, `mastracode/src/tui/commands/om.ts`, `components/om-settings.ts`, `mastracode/src/agents/thread-caveman-state.ts`, `mastracode/src/agents/memory.ts`, `mastracode/src/analytics.ts`, `main.ts`, `tui/command-dispatch.ts`, `tui/event-dispatch.ts`, and focused tests under `packages/core/src/agent/__tests__/agent-signals.test.ts`, `mastracode/src/__tests__/index.test.ts`, `mastracode/src/tui/commands/__tests__/om.test.ts`, `mastracode/src/analytics.test.ts`, and command/thread analytics tests.
+
+Verification:
+
+- `pnpm --filter ./packages/core exec vitest run src/agent/__tests__/agent-signals.test.ts -t "PubSub|pubsub|runtime instances|injected PubSub|Mastra-based" --bail=1 --reporter=dot` — 1 file / 5 tests passed / 68 skipped / no type errors.
+- `pnpm --filter ./mastracode exec vitest run src/__tests__/index.test.ts src/agents/thread-caveman-state.test.ts -t "PubSub|observeAttachments" --bail=1 --reporter=dot` — 2 files / 8 tests passed / 17 skipped.
+- `pnpm --filter ./mastracode exec vitest run src/__tests__/analytics.test.ts src/tui/__tests__/command-dispatch.test.ts src/tui/commands/__tests__/threads.test.ts -t "analytics|tracks" --bail=1 --reporter=dot` — 2 files passed + 1 skipped / 6 tests passed / 23 skipped.

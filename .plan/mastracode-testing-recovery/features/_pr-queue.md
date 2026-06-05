@@ -324,10 +324,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 302 | 2026-05-19 | #16691 | `359439bb8c` | review | done | fix: inherit env for MastraCode commands (#16691) | 2 |
 | 303 | 2026-05-19 | #16676 | `5e16cf0c6b` | review | done | feat(mastracode): return to plan after approved goal (#16676) | 7 |
 | 304 | 2026-05-19 | #16663 | `c272d50610` | review | done | feat(memory): add provider-aware OM idle activation (#16663) | 12 |
-| 305 | 2026-05-19 | #16665 | `841a222560` | review | current | fix(core): route agent thread stream subscriptions through pubsub (#16665) | 2 |
-| 306 | 2026-05-19 | #16682 | `c960279c56` | review | | feat(mastracode): /om toggle to skip attachments when observer is text-only (#16682) | 11 |
-| 307 | 2026-05-19 | #16667 | `8a52e03557` | likely skip | | chore: version packages (alpha) (#16667) | 2 |
-| 308 | 2026-05-19 | #15173 | `2c47b7e7a0` | review | | Add MastraCode product analytics (#15173) | 14 |
+| 305 | 2026-05-19 | #16665 | `841a222560` | review | done | fix(core): route agent thread stream subscriptions through pubsub (#16665) | 2 |
+| 306 | 2026-05-19 | #16682 | `c960279c56` | review | done | feat(mastracode): /om toggle to skip attachments when observer is text-only (#16682) | 11 |
+| 307 | 2026-05-19 | #16667 | `8a52e03557` | likely skip | skipped | chore: version packages (alpha) (#16667) | 2 |
+| 308 | 2026-05-19 | #15173 | `2c47b7e7a0` | review | done | Add MastraCode product analytics (#15173) | 14 |
 | 309 | 2026-05-19 | #16771 | `ac79462b98` | review | | feat(mastracode): add quiet mode (#16771) | 31 |
 | 310 | 2026-05-19 | #16797 | `6209a1f157` | likely skip | | chore: version packages (alpha) (#16797) | 2 |
 | 311 | 2026-05-19 | #16669 | `71a820b235` | review | | fix(mastracode): coordinate signals over Unix socket PubSub (#16669) | 6 |

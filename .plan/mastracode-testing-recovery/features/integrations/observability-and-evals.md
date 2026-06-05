@@ -3,11 +3,11 @@
 ## Origin PR / commit
 
 - PR: [#15642](https://github.com/mastra-ai/mastra/pull/15642) — adds Mastra Code eval scorers, observability configuration, and trace feedback commands.
-- Later changes: [#16223](https://github.com/mastra-ai/mastra/pull/16223) — renames the recommended exporters to `MastraStorageExporter` and `MastraPlatformExporter`, keeps `DefaultExporter`/`CloudExporter` as deprecated compatibility exports, and wires Mastra Code to explicit storage + platform exporters.
+- Later changes: [#16223](https://github.com/mastra-ai/mastra/pull/16223) — renames the recommended exporters to `MastraStorageExporter` and `MastraPlatformExporter`, keeps `DefaultExporter`/`CloudExporter` as deprecated compatibility exports, and wires Mastra Code to explicit storage + platform exporters; [#15173](https://github.com/mastra-ai/mastra/pull/15173) — adds PostHog-backed Mastra Code product analytics with `MASTRA_TELEMETRY_DISABLED` opt-out and no-op fallback.
 
 ## User-visible behavior
 
-- What the user can do: configure cloud/local observability with `/observability`, annotate the latest trace with `/feedback`, and run with live outcome/efficiency scorers attached to the code agent.
+- What the user can do: configure cloud/local observability with `/observability`, annotate the latest trace with `/feedback`, run with live outcome/efficiency scorers attached to the code agent, and opt out of product analytics with `MASTRA_TELEMETRY_DISABLED=1`.
 - Success looks like: local DuckDB tracing and platform exporter settings are resolved at startup, trace spans include request context, `/feedback` correlates ratings/comments to the current trace/run, and scorers evaluate code outcomes without blocking normal runs.
 - Must preserve: restart-required settings semantics, resource-scoped platform tokens, sensitive-data filtering before export, explicit storage/platform exporter configuration, and sampled evals staying lightweight.
 
@@ -44,17 +44,19 @@
 | Local tracing toggle | `settings.observability.localTracing` | DuckDB observability domain + `MastraStorageExporter({ strategy: 'event-sourced' })` setup |
 | Eval request context | Harness state + thread ID + storage messages + observability traces | `buildEvalContext()`, outcome/efficiency scorers |
 | Feedback correlation | Harness current `traceId` / `runId` / `threadId` | `/feedback`, observability event bus/exporters |
+| Product analytics | `MastraCodeAnalytics` PostHog/no-op factory + `MASTRA_TELEMETRY_DISABLED` env opt-out | session/prompt/thread/model/command/interactive-prompt telemetry, cleanup shutdown |
 
 ## Key files
 
-- `mastracode/src/index.ts` — DuckDB/platform/storage observability setup, explicit `MastraStorageExporter` + `MastraPlatformExporter`, sensitive-data filter, request-context keys, and scorer registration on the agent.
+- `mastracode/src/index.ts` and `main.ts` — DuckDB/platform/storage observability setup, explicit `MastraStorageExporter` + `MastraPlatformExporter`, sensitive-data filter, request-context keys, scorer registration on the agent, and product-analytics startup/shutdown capture.
 - `mastracode/src/evals/context-builder.ts` — converts stored messages, request context, and traces into scorer input/output/trajectory context.
 - `mastracode/src/evals/scorers/outcome.ts` — always-on code outcome scorer for build/test/tool-error/loop/regression/autonomy dimensions.
 - `mastracode/src/evals/scorers/efficiency.ts` — sampled efficiency scorer for redundancy, turn count, retry efficiency, and read-before-edit.
 - `mastracode/src/evals/scorers/classify-command.ts` and `extract-tools.ts` — command classification and tool-call extraction helpers.
 - `mastracode/src/tui/commands/observability.ts` — `/observability` status/connect/disconnect/local toggle command.
 - `mastracode/src/tui/commands/feedback.ts` — `/feedback` trace rating/comment command.
-- `mastracode/src/tui/command-dispatch.ts`, `setup.ts`, and `components/help-overlay.ts` — command dispatch plus `/observability` command surface.
+- `mastracode/src/analytics.ts` — PostHog-backed analytics/no-op implementation, telemetry disabled parsing, session base properties, and safe capture/shutdown wrappers.
+- `mastracode/src/tui/command-dispatch.ts`, `setup.ts`, `event-dispatch.ts`, `handlers/threads.ts`, and `components/help-overlay.ts` — command dispatch plus `/observability` command surface and analytics hooks for slash commands/interactive prompts.
 - `observability/mastra/src/exporters/mastra-storage.ts`, `mastra-platform.ts`, `default.ts`, and `cloud.ts` — storage/platform exporter implementations and deprecated compatibility exporter names.
 
 ## Dependencies / related features
@@ -69,7 +71,8 @@
 - `mastracode/src/evals/scorers/__tests__/outcome.test.ts` — outcome scorer coverage for text-only, build/test results, tool errors, and stuck loops.
 - `mastracode/src/evals/scorers/__tests__/efficiency.test.ts` — efficiency scorer coverage for redundancy, turn count, retry chains, and read-before-edit behavior.
 - `mastracode/src/evals/scorers/__tests__/classify-command.test.ts` — command classifier, exit-code, success-result, and file-path matching coverage.
-- `mastracode/src/tui/__tests__/command-dispatch.test.ts` — dispatch layer mocks `/feedback` and `/observability` handlers.
+- `mastracode/src/analytics.test.ts` — telemetry-disabled env parsing, no-op safety, and disabled debug logging.
+- `mastracode/src/tui/__tests__/command-dispatch.test.ts` — dispatch layer mocks `/feedback` and `/observability` handlers and asserts tracked slash-command analytics.
 - `observability/mastra/src/exporters/mastra-storage.test.ts` and `mastra-platform.test.ts` — storage exporter strategy/batching/drop behavior and platform exporter batching/endpoints/signal publishing/auth failure behavior.
 
 ## Missing tests
@@ -77,6 +80,7 @@
 - Direct `/observability` command tests for connect/disconnect/status/local toggles, project ID validation, AuthStorage key persistence, and env-var status fallback.
 - Direct `/feedback` tests for ratings, comments, missing trace/run IDs, and observability-event payload/correlation context.
 - Integration test proving scorers are attached to the real agent config and receive reconstructed `buildEvalContext()` data from stored messages/traces.
+- Startup/main-loop test that product analytics session-start, thread/model/command/prompt events, and shutdown remain safe when PostHog throws or telemetry is disabled.
 - Headless/runtime smoke for DuckDB/storage/platform exporter startup and sensitive-data filtering.
 
 ## Known risks / regressions

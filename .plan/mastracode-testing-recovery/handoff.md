@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #16663 (row 304) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, #15390, #15403, #15544, #15515, #15601, #15606, #15629, #15653, #15656, #15699, #15710, #15857, #15896, #15770, #15909, #15928, #15940, #15979, #16009, #16011, #16016, #16020, #16022, #16024, #16028, #16182, #16192, #16196, #16126, #16295, #16320, #16351, #16398, #16409, #16458, #16501, #16511, #16516, #16559, #16611, #16624, and #16657 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 305 #16665 (route agent thread stream subscriptions through PubSub).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #15173 (row 308) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, #15390, #15403, #15544, #15515, #15601, #15606, #15629, #15653, #15656, #15699, #15710, #15857, #15896, #15770, #15909, #15928, #15940, #15979, #16009, #16011, #16016, #16020, #16022, #16024, #16028, #16182, #16192, #16196, #16126, #16295, #16320, #16351, #16398, #16409, #16458, #16501, #16511, #16516, #16559, #16611, #16624, #16657, and #16667 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 309 #16771 (quiet mode).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 305: PR #16665 (route agent thread stream subscriptions through PubSub).
+1. Continue at `_pr-queue.md` row 309: PR #16771 (quiet mode).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -44,6 +44,7 @@ None known.
 
 ## Last commands/evidence
 
+- Rows 305-308 verified/documented: #16665 PubSub-routed Agent thread subscriptions/signals with cross-runtime broadcasting, #16682 `/om` Observe Attachments Auto/On/Off persistence, #15173 product analytics with PostHog/no-op opt-out, and #16667 Changesets alpha skip. Focused verification passed: core PubSub signal slice (5), MC PubSub/observeAttachments startup+thread settings (8), and analytics/command prompt tracking slice (6).
 - Rows 301-304 verified/documented: #16690 active goal pursuit timing, #16691 sandbox env inheritance with trace redaction, #16676 return-to-plan after approved-goal completion, and #16663 provider-aware OM idle activation/idle counter/Gateway skip. Focused verification passed: goal timer/queue/prompt/status tests (51), workspace env (1), core workspace trace redaction (6), memory OM TTL/API tests (16), core memory gateway duck-typing (1), and TUI OM handler tests (3).
 - Rows 297-300 verified/documented: #16654 goal judge UX/waiting/retry/resume/status-line improvements, #16618 explicit `/skill/<name>` activation and user-invocable filtering, #16622 narrowed/multimodal AgentSignal contents and legacy rehydration; #16657 is a Changesets alpha skip. Focused verification passed: targeted goal judge/UI slice (25), skill/dispatch/help tests (33), and core signal/history/message tests (102). Note: a broader first goal run hit the known fragile `uses stream with structured output and judge memory thread parent-goalId` Zod matcher assertion.
 - Rows 293-296 verified/documented: #16548 OpenAI Codex browser/device login and MCP HTTP OAuth config/token storage; #16559/#16611/#16624 are Changesets alpha skips. Focused verification passed: Codex OAuth/fetch tests (20), MCP config/manager tests (66), and model-routing Codex/OpenAI slice with local OpenAI env unset (15).
