@@ -2279,3 +2279,25 @@ Verification:
 - `pnpm --filter ./stores/libsql exec vitest run src/storage/local-performance.test.ts src/storage/db/migration-columns.test.ts --bail=1 --reporter=dot` — 2 files / 9 tests passed.
 - `pnpm --filter ./mastracode exec vitest run src/__tests__/index.test.ts src/tui/handlers/__tests__/prompts.test.ts --bail=1 --reporter=dot` — 2 files / 22 tests passed.
 - `pnpm --filter ./packages/core exec vitest run src/harness/signal-history.test.ts --bail=1 --reporter=dot` — 1 file / 3 tests passed / no type errors.
+
+### PR #16548 / #16559 / #16611 / #16624 feature-map checkpoint
+
+Verified rows 293-296:
+
+- #16548 adds OpenAI Codex browser/device OAuth selection and protected HTTP MCP OAuth config support. Current source advertises `OPENAI_CODEX_AUTH_MODES` (`browser`, `device`) through `openaiCodexOAuthProvider.authModes`, prompts through `LoginModeSelectorComponent`, honors explicit `callbacks.authMode` over `MASTRACODE_OPENAI_CODEX_AUTH_MODE`, implements the official Codex device user-code flow, extracts/preserves ChatGPT `accountId` from token claims during login/refresh, and injects Codex runtime headers (`Authorization`, `ChatGPT-Account-ID`, `originator`, `User-Agent`) through `buildOpenAICodexOAuthFetch()`. The MCP path validates HTTP OAuth config (`redirectUrl`, scopes, optional client credentials), builds `MCPOAuthClientProvider` for protected HTTP servers, and stores OAuth tokens in per-project/server `mcp-oauth/<fingerprint>.json` files.
+- #16559, #16611, and #16624 are Changesets alpha package-version batches; skipped for feature mapping after PR metadata confirmed package/changelog-only changes.
+
+Documentation actions:
+
+- Updated `features/models/model-auth-and-modes.md` for #16548 Codex auth modes, device flow, account-id storage/refresh, Codex headers, model routing, login-mode selector, and test coverage.
+- Updated `features/integrations/mcp-server-configuration.md` for #16548 protected HTTP MCP OAuth config, validation, `MCPOAuthClientProvider`, and per-project/server token storage.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16548 done, #16559/#16611/#16624 skipped, #16654 current.
+
+Focused evidence read: PR metadata for #16548/#16559/#16611/#16624; current `mastracode/src/auth/providers/openai-codex.ts`, `mastracode/src/providers/openai-codex.ts`, `mastracode/src/auth/types.ts`, `mastracode/src/auth/storage.ts`, `mastracode/src/tui/commands/login.ts`, `mastracode/src/tui/components/login-mode-selector.ts`, `mastracode/src/agents/model.ts`, `mastracode/src/mcp/config.ts`, `mastracode/src/mcp/manager.ts`, `mastracode/src/mcp/types.ts`, `docs/src/mastra-code/configuration.mdx`, and focused tests under `mastracode/src/auth/providers/openai-codex.test.ts`, `providers/__tests__/openai-codex-fetch.test.ts`, `mcp/__tests__/config.test.ts`, `mcp/__tests__/manager.test.ts`, and `agents/__tests__/model.test.ts`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/auth/providers/openai-codex.test.ts src/providers/__tests__/openai-codex-fetch.test.ts --bail=1 --reporter=dot` — 2 files / 20 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/mcp/__tests__/config.test.ts src/mcp/__tests__/manager.test.ts --bail=1 --reporter=dot` — 2 files / 66 tests passed.
+- `env -u OPENAI_API_KEY -u MASTRA_OPENAI_API_KEY pnpm --filter ./mastracode exec vitest run src/agents/__tests__/model.test.ts -t "Codex|openai|mastra-prefixed" --bail=1 --reporter=dot` — 1 file / 15 tests passed / 21 skipped. Initial run without unsetting OpenAI env failed one expected router-path assertion because local `OPENAI_API_KEY` made the resolver take the direct OpenAI path.

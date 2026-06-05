@@ -312,11 +312,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 290 | 2026-05-12 | #16513 | `49996678b6` | review | done | feat: speed up LibSQL and Mastra Code startup (#16513) | 8 |
 | 291 | 2026-05-12 | #16516 | `136e85f3ae` | likely skip | skipped | chore: version packages (alpha) (#16516) | 2 |
 | 292 | 2026-05-13 | #16521 | `3e63fca7aa` | review | done | fix(mastracode): regular plan approval triggers via structured sendSignal and no longer hangs (#16521) | 2 |
-| 293 | 2026-05-13 | #16548 | `7cb2a2b7f0` | review | current | feat(mastracode): add Codex device login and MCP OAuth config (#16548) | 16 |
-| 294 | 2026-05-14 | #16559 | `046cb4a2e9` | likely skip | | chore: version packages (alpha) (#16559) | 2 |
-| 295 | 2026-05-14 | #16611 | `b23d30dd83` | likely skip | | chore: version packages (alpha) (#16611) | 2 |
-| 296 | 2026-05-15 | #16624 | `fd5fbb4ce7` | likely skip | | chore: version packages (alpha) (#16624) | 2 |
-| 297 | 2026-05-15 | #16654 | `87e0c9886a` | review | | fix: improve goal mode judge UX (#16654) | 21 |
+| 293 | 2026-05-13 | #16548 | `7cb2a2b7f0` | review | done | feat(mastracode): add Codex device login and MCP OAuth config (#16548) | 16 |
+| 294 | 2026-05-14 | #16559 | `046cb4a2e9` | likely skip | skipped | chore: version packages (alpha) (#16559) | 2 |
+| 295 | 2026-05-14 | #16611 | `b23d30dd83` | likely skip | skipped | chore: version packages (alpha) (#16611) | 2 |
+| 296 | 2026-05-15 | #16624 | `fd5fbb4ce7` | likely skip | skipped | chore: version packages (alpha) (#16624) | 2 |
+| 297 | 2026-05-15 | #16654 | `87e0c9886a` | review | current | fix: improve goal mode judge UX (#16654) | 21 |
 | 298 | 2026-05-15 | #16657 | `bbbf6d015a` | likely skip | | chore: version packages (alpha) (#16657) | 2 |
 | 299 | 2026-05-16 | #16618 | `64c1e0b351` | review | | feat(mastracode): add /skill/<name> command to activate skills explicitly (#16618) | 14 |
 | 300 | 2026-05-15 | #16622 | `40d83a90d9` | review | | feat(core)!: simplify AgentSignalContents and fix multimodal signal handling (#16622) | 1 |
