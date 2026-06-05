@@ -1287,3 +1287,19 @@ Verification:
 
 - Accidental broad package-script run: `corepack pnpm --filter ./mastracode test -- --run src/tui/__tests__/theme-contrast.test.ts src/tui/__tests__/status-line.test.ts src/tui/components/__tests__/custom-editor.test.ts --bail=1 --reporter=dot` routed through the package script and ran the full Mastra Code suite, reproducing known baseline failures (`goal-manager.test.ts` Zod/nanoid snapshot drift and stale `/github sync` autocomplete ordering). Result: 5 files failed / 103 passed, 1221 tests passed before exit, 81.58s.
 - Correct focused run: `corepack pnpm --filter ./mastracode exec vitest run src/tui/__tests__/theme-contrast.test.ts src/tui/__tests__/status-line.test.ts src/tui/components/__tests__/custom-editor.test.ts --bail=1 --reporter=dot` — 3 files / 67 tests passed in 495ms.
+
+### PR #14377 / #14343 / #14427 feature-map checkpoint
+
+Verified rows 137-139:
+
+- #14377 improves MCP server management in Mastra Code: `/mcp` now defaults to `McpSelectorComponent`, showing configured and skipped servers, transports, tool counts, connecting/connected/failed state, per-server submenus, tool/error/log detail views, reload-all, and reconnect-one. `MastraTUI` starts `mcpManager.initInBackground()` after the UI starts so failed/skipped notices are inserted without corrupting terminal startup. `createMcpManager()` now exposes `initInBackground()`, `reconnectServer(name)`, `getServerLogs(name)`, and transient `connecting` statuses while preserving programmatic extra-server reload behavior.
+- #14343 and #14427 are version-package alpha skips (CHANGELOG.md + package.json only in the PR file lists).
+
+Documentation actions:
+
+- Updated `features/integrations/mcp-status-command.md` with #14377 selector UX, background init, reload/reconnect, log views, state ownership, key files, tests, and missing selector component tests.
+- Updated `features/integrations/mcp-server-configuration.md` with #14377 runtime state/log/reconnect ownership and MCP package client dependency note.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #14377 done, #14343 skipped, #14427 skipped, #14432 current.
+
+Focused evidence read: PR metadata for #14377/#14343/#14427; current `mastracode/src/tui/commands/mcp.ts`, `tui/components/mcp-selector.ts`, `tui/mastra-tui.ts`, `mcp/manager.ts`, `mcp/types.ts`, `mcp/__tests__/manager.test.ts`; package-local `packages/mcp/AGENTS.md`; current `packages/mcp/src/client/client.ts` and `client/configuration.ts` for HTTP transport/client compatibility context.

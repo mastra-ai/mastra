@@ -3,23 +3,24 @@
 ## Origin PR / commit
 
 - PR: [#13311](https://github.com/mastra-ai/mastra/pull/13311) — wire `mcpManager` into the TUI so `/mcp` can show status and reload servers.
-- Later changes: [#13347](https://github.com/mastra-ai/mastra/pull/13347) — replaced the `MCPManager` class with `createMcpManager()` + `McpManager` interface while preserving status/reload/tool behavior; [#13613](https://github.com/mastra-ai/mastra/pull/13613) — added HTTP MCP server config and transport-aware statuses.
+- Later changes: [#13347](https://github.com/mastra-ai/mastra/pull/13347) — replaced the `MCPManager` class with `createMcpManager()` + `McpManager` interface while preserving status/reload/tool behavior; [#13613](https://github.com/mastra-ai/mastra/pull/13613) — added HTTP MCP server config and transport-aware statuses; [#14377](https://github.com/mastra-ai/mastra/pull/14377) — made `/mcp` default to an interactive selector with per-server actions, background init status, logs, reload-all, and reconnect-one flows.
 
 ## User-visible behavior
 
-- What the user can do: run `/mcp`, `/mcp status`, or `/mcp reload` to inspect configured MCP servers.
-- Success looks like: configured stdio/HTTP servers show real connected/error/skipped state instead of `MCP system not initialized.`
-- Must preserve: MCP tools can work in conversations and the command UI must report the same manager state.
+- What the user can do: run `/mcp` to open an interactive server selector, or `/mcp status` / `/mcp reload` for text fallback and reload-all.
+- Success looks like: configured stdio/HTTP servers show real connected/error/skipped/connecting state, users can view tools/errors/logs, reconnect one server, or reload all servers from the selector.
+- Must preserve: MCP tools can work in conversations and the command UI/selector must report the same manager state.
 
 ## Entry points / commands
 
-- Commands / shortcuts / flags: `/mcp`, `/mcp status`, `/mcp reload`.
-- Automatic triggers: TUI startup passes the `mcpManager` returned by `createMastraCode()` into `MastraTUI`.
+- Commands / shortcuts / flags: `/mcp`, `/mcp status`, `/mcp reload`; selector keys `↑↓`, Enter, `r` reload all, Esc close/back.
+- Automatic triggers: TUI startup passes the `mcpManager` returned by `createMastraCode()` into `MastraTUI`, starts `initInBackground()` after the UI owns the terminal, and inserts MCP failed/skipped notices into chat.
 
 ## TUI states
 
 - Idle: `/mcp` opens the selector overlay; `/mcp status` prints a text summary.
-- Active / modal / error: reload/reconnect actions show info/error messages from the manager result.
+- Modal: selector lists connected/failed/connecting/skipped servers, transport, tool count, per-server submenu actions, tool/error/log detail views, and reload-all progress.
+- Active / error: startup background init, reload, and reconnect insert info messages for failed/skipped servers and reconnect results.
 
 ## Headless / non-TUI behavior
 
@@ -41,16 +42,18 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | MCP manager interface | `createMcpManager()` result / `TUIState.mcpManager` | `/mcp`, dynamic tools, cleanup |
-| Server statuses | `McpManager` closure state, including `transport` | selector, text status, reload/reconnect UI |
-| Config paths/skipped servers | MCP config loader + manager closure state | `/mcp` setup instructions/status |
+| Server statuses | `McpManager` closure state, including `transport` and transient `connecting` state | selector, text status, reload/reconnect UI, startup failure notices |
+| Config paths/skipped servers | MCP config loader + manager closure state | `/mcp` setup instructions/status/selector |
+| Captured stderr logs | `McpManager` per-server ring buffer (`MAX_STDERR_LINES = 200`) | selector log detail view |
 
 ## Key files
 
 - `mastracode/src/main.ts` — passes `mcpManager` to `MastraTUI`.
 - `mastracode/src/tui/state.ts` — stores `mcpManager` in options/state.
-- `mastracode/src/tui/mastra-tui.ts` — includes `mcpManager` in slash-command context.
-- `mastracode/src/tui/commands/mcp.ts` — `/mcp` status/reload/selector behavior.
-- `mastracode/src/mcp/manager.ts` — `createMcpManager()` factory, server status, reload, reconnect, logs.
+- `mastracode/src/tui/mastra-tui.ts` — starts MCP `initInBackground()` after UI start, shows failed/skipped notices, and includes `mcpManager` in slash-command context.
+- `mastracode/src/tui/commands/mcp.ts` — `/mcp` setup/status/reload and interactive selector wiring.
+- `mastracode/src/tui/components/mcp-selector.ts` — selector overlay, server list, submenu/detail views, reload-all/reconnect actions, polling, and log display.
+- `mastracode/src/mcp/manager.ts` — `createMcpManager()` factory, server status, background init summary, reload, reconnect, logs.
 - `mastracode/src/agents/tools.ts` — merges MCP tools from the manager interface into runtime tool set.
 
 ## Dependencies / related features
@@ -61,19 +64,20 @@
 
 ## Existing tests
 
-- `mastracode/src/mcp/__tests__/manager.test.ts` — `createMcpManager()` status/skipped/reload/reconnect/tool collection behavior.
+- `mastracode/src/mcp/__tests__/manager.test.ts` — `createMcpManager()` status/skipped/background init/reload/reconnect/tool collection/log accessor behavior.
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — routes `/mcp` to `handleMcpCommand` via command dispatcher.
 
 ## Missing tests
 
-- Direct `/mcp` command test proving context includes `mcpManager` and no longer falls back to `MCP system not initialized.` when configured.
-- TUI integration test for `/mcp reload` updating selector/status from the live manager.
+- Direct `/mcp` command test proving context includes `mcpManager` and opens the selector instead of falling back to `MCP system not initialized.` when configured.
+- Focused `McpSelectorComponent` tests for navigation, detail views, reload-all, reconnect-one, polling, and stale reconnect results during reload.
+- TUI integration test for `/mcp reload` and selector actions updating status from the live manager.
 
 ## Known risks / regressions
 
 - Command status can drift from actual tool availability if TUI context and `createDynamicTools()` receive different manager instances.
-- Closure-state refactors must preserve reload/reconnect lifecycle: config, tools, statuses, skipped servers, and stderr logs.
-- No focused command test covers the exact regression from #13311.
+- Closure-state refactors must preserve background init, reload/reconnect lifecycle, config, tools, statuses, skipped servers, and stderr logs.
+- Selector state is mostly untested at component level, so keyboard navigation and stale async reconnect/reload races are regression-prone.
 
 ## Verification checklist
 

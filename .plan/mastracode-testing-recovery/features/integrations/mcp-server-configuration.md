@@ -4,23 +4,24 @@
 
 - PR: [#13613](https://github.com/mastra-ai/mastra/pull/13613) — added HTTP MCP server config support, headers, OAuth metadata, and transport-aware manager status.
 - Related origin: [#13311](https://github.com/mastra-ai/mastra/pull/13311) — made `/mcp` status/reload use the live MCP manager; [#13347](https://github.com/mastra-ai/mastra/pull/13347) — refactored manager into `createMcpManager()`.
-- Later changes: [#13750](https://github.com/mastra-ai/mastra/pull/13750) — adds `createMastraCode({ mcpServers })` for programmatic MCP server configs that override file-based servers and persist across reloads.
+- Later changes: [#13750](https://github.com/mastra-ai/mastra/pull/13750) — adds `createMastraCode({ mcpServers })` for programmatic MCP server configs that override file-based servers and persist across reloads; [#14377](https://github.com/mastra-ai/mastra/pull/14377) — adds background initialization summaries, per-server reconnect/log state, and an interactive `/mcp` selector for configured/skipped servers.
 
 ## User-visible behavior
 
 - What the user can do: configure MCP servers in `.mastracode/mcp.json`, global `~/.mastracode/mcp.json`, Claude-compatible `.claude/settings.local.json`, or programmatically via `createMastraCode({ mcpServers })`, using either stdio `command` entries or HTTP `url` entries.
-- Success looks like: valid stdio and HTTP MCP servers connect, expose namespaced tools, show transport (`stdio`/`http`) in `/mcp status`, and invalid entries are skipped with reasons.
+- Success looks like: valid stdio and HTTP MCP servers initialize in the background, expose namespaced tools, show transport (`stdio`/`http`) and skipped reasons in `/mcp status`/selector, and can be reloaded or individually reconnected.
 - Must preserve: programmatic servers override file-based servers by name, project config overrides global config by server name, global overrides Claude config, skipped lower-priority entries disappear when a valid higher-priority server exists, and programmatic servers survive reload.
 
 ## Entry points / commands
 
 - Commands / shortcuts / flags: `/mcp`, `/mcp status`, `/mcp reload`; configuration files under project/global/Claude paths; programmatic `createMastraCode({ mcpServers })`.
-- Automatic triggers: `createMcpManager(projectDir, configDir, extraServers)` loads merged file config plus programmatic overrides at startup; TUI initializes MCP in the background after UI start; headless initializes MCP for tool availability.
+- Automatic triggers: `createMcpManager(projectDir, configDir, extraServers)` loads merged file config plus programmatic overrides at startup; TUI initializes MCP in the background after UI start and reports failed/skipped servers; headless initializes MCP for tool availability.
 
 ## TUI states
 
 - Idle: `/mcp` shows setup instructions when no configured or skipped servers exist, including stdio and HTTP examples.
-- Active / modal / error: `/mcp status` displays transport and skipped reasons; reload/reconnect actions update server statuses from the manager.
+- Modal: `/mcp` selector displays configured and skipped servers, transport, tool counts, errors, stderr logs, and per-server reconnect actions.
+- Active / error: `/mcp status` displays transport and skipped reasons; background init/reload/reconnect actions update server statuses from the manager and insert failure notices.
 
 ## Headless / non-TUI behavior
 
@@ -47,18 +48,20 @@
 | Merged server map | `loadMcpConfig()` / `mergeConfigs()` plus `extraServers` from `createMastraCode({ mcpServers })` | `createMcpManager()` |
 | Programmatic MCP servers | `MastraCodeConfig.mcpServers` | startup MCP manager, reload merge, `/mcp` status/tools |
 | Skipped servers | config validation result | `/mcp status`, selector, init summary |
-| Runtime statuses/tools/logs | `McpManager` closure state | `/mcp`, dynamic tools, cleanup |
+| Runtime statuses/tools/logs | `McpManager` closure state (`serverStatuses`, `tools`, `stderrLogs`, transient `connecting`) | `/mcp` selector/status, dynamic tools, cleanup |
 | HTTP OAuth tokens | app-data `mcp-oauth/<fingerprint>.json` | `MCPOAuthClientProvider` |
 
 ## Key files
 
 - `mastracode/src/mcp/config.ts` — config path loading, stdio/http classification, OAuth validation, merge precedence, skipped-entry tracking.
 - `mastracode/src/mcp/types.ts` — stdio/http/OAuth/skipped/status types and `transport` field.
-- `mastracode/src/mcp/manager.ts` — server definition building, `MCPClient` construction, programmatic `extraServers` merge/override/reload behavior, HTTP URL/request headers/OAuth provider, status/tool/log lifecycle.
+- `mastracode/src/mcp/manager.ts` — server definition building, `MCPClient` construction, programmatic `extraServers` merge/override/reload behavior, HTTP URL/request headers/OAuth provider, status/tool/log lifecycle, `initInBackground()`, and `reconnectServer()`.
 - `mastracode/src/index.ts` — `MastraCodeConfig.mcpServers` and `createMcpManager(project.rootPath, configDir, config?.mcpServers)` wiring.
 - `mastracode/src/tui/commands/mcp.ts` — `/mcp` setup examples, text status, reload/reconnect selector integration.
-- `mastracode/src/main.ts` and `mastracode/src/headless.ts` — TUI/headless MCP initialization timing.
+- `mastracode/src/tui/components/mcp-selector.ts` — interactive management UI for configured and skipped servers.
+- `mastracode/src/main.ts`, `mastracode/src/headless.ts`, and `mastracode/src/tui/mastra-tui.ts` — TUI/headless/background MCP initialization timing.
 - `mastracode/src/agents/tools.ts` — merges connected MCP tools into the runtime tool map.
+- `packages/mcp/src/client/client.ts` and `packages/mcp/src/client/configuration.ts` — upstream MCP client transport/config support consumed by Mastra Code's HTTP MCP manager path.
 
 ## Dependencies / related features
 

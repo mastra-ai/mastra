@@ -156,10 +156,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 134 | 2026-03-16 | #14337 | `3f47335cac` | review | done | feat(mastracode): theme with adaptive colors and refined TUI styling (#14337) | 37 |
 | 135 | 2026-03-16 | #13933 | `531607166e` | review | skip: build-tool deps only | chore(deps): update build tools (#13933) | 1 |
 | 136 | 2026-03-16 | #14359 | `1179b045bb` | review | done | fix(mastracode): replace editor border animation with solid mode color (#14359) | 2 |
-| 137 | 2026-03-17 | #14377 | `133ef20c39` | review | current | feat(mastracode): improve MCP server management with interactive /mcp selector (#14377) | 9 |
-| 138 | 2026-03-17 | #14343 | `6611d73d42` | likely skip | | chore: version packages (alpha) (#14343) | 2 |
-| 139 | 2026-03-17 | #14427 | `52715cf453` | likely skip | | chore: version packages (alpha) (#14427) | 2 |
-| 140 | 2026-03-18 | #14432 | `0256b9b00a` | likely skip | | ci: optimize turbo cache inputs, config, and workflow concurrency (#14432) | 1 |
+| 137 | 2026-03-17 | #14377 | `133ef20c39` | review | done | feat(mastracode): improve MCP server management with interactive /mcp selector (#14377) | 9 |
+| 138 | 2026-03-17 | #14343 | `6611d73d42` | likely skip | skipped | chore: version packages (alpha) (#14343) | 2 |
+| 139 | 2026-03-17 | #14427 | `52715cf453` | likely skip | skipped | chore: version packages (alpha) (#14427) | 2 |
+| 140 | 2026-03-18 | #14432 | `0256b9b00a` | likely skip | current | ci: optimize turbo cache inputs, config, and workflow concurrency (#14432) | 1 |
 | 141 | 2026-03-18 | #14433 | `01a67403e1` | review | | feat: forward harness headers to mastracode model providers (#14433) | 5 |
 | 142 | 2026-03-18 | #14469 | `c2e48b6a72` | review | | fix(mastracode): don't pass custom headers to anthropic/codex providers (#14469) | 2 |
 | 143 | 2026-03-18 | #14423 | `d9d5f948b0` | review | | feat: polish Mastra Code TUI history styling and prompt animation (#14423) | 7 |
