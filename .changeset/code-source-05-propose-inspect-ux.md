@@ -1,5 +1,6 @@
 ---
 'mastra': minor
+'@mastra/deployer': minor
 ---
 
 Added a proposal-focused source change flow in Studio.

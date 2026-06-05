@@ -591,6 +591,7 @@ describe('injectStudioHtmlConfig', () => {
       hideCloudCta: "'false'",
       cloudApiEndpoint: "''",
       platformProjectId: "''",
+      platformUserName: "''",
       experimentalFeatures: "'false'",
       templates: "'false'",
       telemetryDisabled: "''",
