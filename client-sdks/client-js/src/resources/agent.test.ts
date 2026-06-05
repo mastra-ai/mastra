@@ -57,7 +57,7 @@ describe('Agent signal routes', () => {
     role: 'assistant',
     content: [
       { type: 'tool-call', toolCallId, toolName, input },
-      { type: 'tool-result', toolCallId, toolName, input, output: { type: 'json', value: output } },
+      { type: 'tool-result', toolCallId, toolName, output: { type: 'json', value: output } },
     ],
   });
 
@@ -1242,7 +1242,6 @@ describe('Agent signal routes', () => {
       type: 'tool-result',
       toolCallId: 'call-observe',
       toolName: 'observeTool',
-      input: {},
       output: { type: 'json', value: { ok: true } },
       __mastraObservability: toolResult.payload.__mastraObservability,
     });
