@@ -16,7 +16,7 @@ importers:
         specifier: 22.19.15
         version: 22.19.15
       tsx:
-        specifier: ^4.21.0
+        specifier: ^4.22.4
         version: 4.22.4
       typescript:
         specifier: ^5.9.3
