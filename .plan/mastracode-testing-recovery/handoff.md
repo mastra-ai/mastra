@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14427 (row 139) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, and #14427 recorded as version/dependency skips plus #12532, #14260, and #13933 recorded as build/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #14432 (CI/turbo cache config, likely skip), then #14433 (forward harness headers to model providers), #14469 (custom header provider guard), and #14423 (TUI history styling/prompt animation).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14469 (row 142) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, and #14427 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #14423 (TUI history styling/prompt animation), then #14428 (speed up /threads popup loading), #14472 (tool arguments italic removal), and #14436 (observer-generated thread titles).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 140: PR #14432 (CI/turbo cache config, likely skip), then row 141 #14433 (forward harness headers to model providers) and row 142 #14469 (custom header provider guard).
+1. Continue at `_pr-queue.md` row 143: PR #14423 (TUI history styling and prompt animation), then row 144 #14428 (speed up `/threads` popup loading), row 145 #14472 (tool arguments italic removal), and row 146 #14436 (observer-generated thread titles).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.

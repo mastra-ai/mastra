@@ -3,12 +3,12 @@
 ## Origin PR / commit
 
 - PR: [#13353](https://github.com/mastra-ai/mastra/pull/13353) — changed public `Harness` methods to object-parameter calls and added the first Harness class reference page.
-- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — added `HarnessDisplayState`, `getDisplayState()`, `display_state_changed`, and `subscribeDisplayState()` for UI-agnostic rendering; [#13457](https://github.com/mastra-ai/mastra/pull/13457) — added/corrected workspace lifecycle methods and dynamic workspace caching; [#13519](https://github.com/mastra-ai/mastra/pull/13519) — initialized an internal Mastra instance from Harness storage so standalone-agent tool approvals can resume; [#13525](https://github.com/mastra-ai/mastra/pull/13525) — moved Mastra Code docs to the Code docs site and marked Harness reference docs as Alpha; [#13716](https://github.com/mastra-ai/mastra/pull/13716) — exposes Mastra Code `resolveModel` from `createMastraCode()` for external UI consumers.
+- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — added `HarnessDisplayState`, `getDisplayState()`, `display_state_changed`, and `subscribeDisplayState()` for UI-agnostic rendering; [#13457](https://github.com/mastra-ai/mastra/pull/13457) — added/corrected workspace lifecycle methods and dynamic workspace caching; [#13519](https://github.com/mastra-ai/mastra/pull/13519) — initialized an internal Mastra instance from Harness storage so standalone-agent tool approvals can resume; [#13525](https://github.com/mastra-ai/mastra/pull/13525) — moved Mastra Code docs to the Code docs site and marked Harness reference docs as Alpha; [#13716](https://github.com/mastra-ai/mastra/pull/13716) — exposes Mastra Code `resolveModel` from `createMastraCode()` for external UI consumers; [#14433](https://github.com/mastra-ai/mastra/pull/14433) — forwards Harness thread/resource identity into model request headers during core LLM execution.
 
 ## User-visible behavior
 
 - What the user can do: Mastra Code and external Harness consumers call stable, named-parameter methods such as `switchMode({ modeId })`, `sendMessage({ content })`, `switchThread({ threadId })`, `respondToQuestion({ questionId, answer })`, and `resolveWorkspace()`; external `createMastraCode()` consumers can also resolve model IDs through the same configured resolver as the TUI.
-- Success looks like: TUI/headless behavior is unchanged, while call sites are easier to read and safer to extend; UI consumers can subscribe to display-state snapshots instead of raw-event state machines; workspace consumers can eagerly resolve dynamic workspaces; standalone Harness agents with storage can persist and resume approval snapshots.
+- Success looks like: TUI/headless behavior is unchanged, while call sites are easier to read and safer to extend; UI consumers can subscribe to display-state snapshots instead of raw-event state machines; workspace consumers can eagerly resolve dynamic workspaces; standalone Harness agents with storage can persist and resume approval snapshots; model execution can attach `x-thread-id`/`x-resource-id` without each caller hand-wiring headers.
 - Must preserve: method names, parameter object shapes, docs examples, TUI/headless call-site parity, display-state contract, thread/model/mode behavior, and internal Mastra registration for storage-backed agents.
 
 ## Entry points / commands
@@ -46,6 +46,7 @@
 | Display projection | `HarnessDisplayState` | TUI and external UI consumers |
 | Workspace instance/cache | Core Harness workspace fields/factory | Slash commands, agents, workspace tools, external consumers |
 | Internal Mastra/storage registration | Core Harness `init()` / `getMastra()` | Standalone agents, approval/suspend resume, workflow snapshots |
+| Model request identity headers | Core LLM execution `_internal.threadId` / `_internal.resourceId` merged with model/modelSettings headers | Memory Gateway, provider requests, server-side memory enrichment |
 | Harness docs location | Docs reference sidebar + Code docs redirects | External Harness consumers and Mastra Code docs readers |
 
 ## Key files
@@ -55,6 +56,7 @@
 - `packages/core/src/harness/display-state-scheduler.ts` — coalesced display-state subscriber snapshots.
 - `packages/core/src/harness/tools.ts` — built-in tool callers using object-param Harness methods.
 - `packages/core/src/workflows/default.ts` and `packages/core/src/workflows/entry.ts` — serialize JSON-safe request context for persisted resume snapshots.
+- `packages/core/src/loop/workflows/agentic-execution/llm-execution-step.ts` — model execution merges memory identity headers, model config headers, and call-time `modelSettings.headers`.
 - `mastracode/src/tui/setup.ts` — keyboard/mode/thread call sites.
 - `mastracode/src/tui/handlers/prompts.ts` — question and plan approval call sites.
 - `mastracode/src/tui/handlers/tool.ts` — tool approval call sites.
@@ -80,6 +82,7 @@
 - `packages/core/src/agent/__tests__/tool-approval-standalone-repro.test.ts` and `mastracode/src/__tests__/tool-approval-libsql.test.ts` — verify approval resume with stored workflow snapshots and standalone/storage-backed agents.
 - `packages/core/src/workflows/default.test.ts` — verifies `serializeRequestContext()` skips functions, circular objects, and RPC-like proxies before persistence.
 - `packages/core/src/harness/v1/mode.test.ts` — verifies current `listModes()` behavior in the v1 Harness surface.
+- `packages/core/src/loop/workflows/agentic-execution/llm-execution-step.test.ts` — verifies model header merge order and automatic `x-thread-id`/`x-resource-id` request headers.
 - `mastracode/src/tui/__tests__/*`, `mastracode/src/tui/handlers/__tests__/*`, and command tests indirectly compile/run the migrated TUI call sites.
 - `mastracode/src/headless.test.ts` indirectly covers migrated non-TUI call sites.
 
@@ -96,6 +99,7 @@
 - Docs and implementation can drift because reference examples are not clearly compiled as tests.
 - Standalone Harness users can regress approval/suspend resume if agents lose internal Mastra registration or request context serialization reintroduces live runtime objects.
 - TUI/headless behavior can regress if future refactors update one set of object-param call sites but not the other.
+- Model request header ownership is shared with model/provider configuration; duplicate keys intentionally let `modelSettings.headers` override model config and memory headers, so callers can accidentally shadow `x-thread-id`/`x-resource-id`.
 
 ## Verification checklist
 

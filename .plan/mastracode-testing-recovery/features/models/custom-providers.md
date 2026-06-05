@@ -3,12 +3,12 @@
 ## Origin PR / commit
 
 - PR: [#13682](https://github.com/mastra-ai/mastra/pull/13682) — added `/custom-providers`, custom provider settings, model routing, and Harness custom model catalog support.
-- Later changes: [#13611](https://github.com/mastra-ai/mastra/pull/13611) — preserves custom-provider precedence before gateway/built-in routing while tightening explicit gateway auth paths.
+- Later changes: [#13611](https://github.com/mastra-ai/mastra/pull/13611) — preserves custom-provider precedence before gateway/built-in routing while tightening explicit gateway auth paths; [#14433](https://github.com/mastra-ai/mastra/pull/14433) — forwards Harness thread/resource headers into custom-provider `ModelRouterLanguageModel` construction so server-side memory enrichment receives identity context.
 
 ## User-visible behavior
 
 - What the user can do: run `/custom-providers` to add, manage, edit, delete, and attach model IDs for OpenAI-compatible provider endpoints.
-- Success looks like: configured custom provider models appear in `/models`/OM model selectors, route through the provider's base URL/API key, and can be selected like built-in provider models.
+- Success looks like: configured custom provider models appear in `/models`/OM model selectors, route through the provider's base URL/API key with Harness thread/resource headers when available, and can be selected like built-in provider models.
 - Must preserve: custom providers use slug IDs without a `custom-` prefix, provider model IDs are `provider-slug/model`, and custom providers win over built-in/gateway routing when IDs collide.
 
 ## Entry points / commands
@@ -44,6 +44,7 @@
 | Provider slug/id | `getCustomProviderId(name)` | model IDs, duplicate checks, resolver lookup |
 | Provider model IDs | `toCustomProviderModelId(providerName, modelName)` | `/models`, `/om`, Harness model list |
 | Provider auth | optional provider `apiKey` in settings | `ModelRouterLanguageModel`, auth checker/model selector |
+| Harness request headers | `resolveModel()` derives `x-thread-id`/`x-resource-id` from requestContext | Custom provider `ModelRouterLanguageModel` requests |
 | Custom model catalog | Harness `customModelCatalogProvider` | `listAvailableModels()`, model selector, OM selector |
 
 ## Key files
@@ -52,7 +53,7 @@
 - `mastracode/src/tui/command-dispatch.ts` — `/custom-providers` routing and analytics tracking.
 - `mastracode/src/tui/setup.ts`, `components/help-overlay.ts` — autocomplete/help list registration.
 - `mastracode/src/onboarding/settings.ts` — `CustomProviderSetting`, parsing/sanitization, provider slug/model ID helpers, settings persistence.
-- `mastracode/src/agents/model.ts` — custom provider resolution through `ModelRouterLanguageModel` before gateway/built-in paths.
+- `mastracode/src/agents/model.ts` — custom provider resolution through `ModelRouterLanguageModel` before gateway/built-in paths, including Harness thread/resource headers.
 - `mastracode/src/index.ts` — `modelAuthChecker` and `customModelCatalogProvider` wiring.
 - `packages/core/src/harness/harness.ts`, `types.ts` — custom model catalog merge into `listAvailableModels()`.
 

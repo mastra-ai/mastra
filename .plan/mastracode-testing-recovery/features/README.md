@@ -58,8 +58,8 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Chat | Queued follow-ups and slash commands | #13345, #13493, #14250 | TUI transient queue state + command template processor + active-run signal/queue routing | Partial | High | [page](./chat/queued-followups.md) |
 | Threads | Persistent conversations / switching | #13218, #13334, #13343 | Harness session + thread metadata | Partial | High | [page](./threads/persistent-conversations.md) |
 | Threads | Resource ID switching | #13690 | Harness resource ID + resource-scoped threads | Partial | High | [page](./threads/resource-id-switching.md) |
-| Models | Model auth, selection, modes | #13218, #13307, #13490, #13512, #13566, #13600, #13611, #13695, #13716, #13573 | Settings + harness session + thread pack metadata + provider registry + AuthStorage/stored API keys | Partial | High | [page](./models/model-auth-and-modes.md) |
-| Models | Custom OpenAI-compatible providers | #13682, #13611 | settings customProviders + Harness custom catalog | Partial | High | [page](./models/custom-providers.md) |
+| Models | Model auth, selection, modes | #13218, #13307, #13490, #13512, #13566, #13600, #13611, #13695, #13716, #13573, #14433, #14469 | Settings + harness session + thread pack metadata + provider registry + AuthStorage/stored API keys + harness headers | Partial | High | [page](./models/model-auth-and-modes.md) |
+| Models | Custom OpenAI-compatible providers | #13682, #13611, #14433 | settings customProviders + Harness custom catalog + harness headers | Partial | High | [page](./models/custom-providers.md) |
 | Models | Thinking and reasoning effort | #13490, #13563, #13748 | Harness/request context + settings | Partial | High | [page](./models/thinking-and-reasoning.md) |
 | Models | OpenAI strict schema compatibility | #13695, #14157 | schema-compat + core stream strict-mode preparation | Partial | High | [page](./models/openai-strict-schema-compat.md) |
 | Models | Tool schema compatibility | #13253, #13695, #14157, #14264 | Standard Schema adapters + Zod JSON Schema conversion + Zod module export handling | Partial | High | [page](./models/tool-schema-compatibility.md) |
@@ -70,7 +70,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Tools | Task tracking tools and TUI progress | #13344 | Harness task state + TUI progress | Partial | High | [page](./tools/task-tracking.md) |
 | Integrations | MCP status and reload command | #13311, #13347, #14377 | MCP manager + selector overlay | Partial | High | [page](./integrations/mcp-status-command.md) |
 | Integrations | MCP server configuration | #13613, #13750, #14377 | MCP config files + programmatic config + manager runtime state | Partial | High | [page](./integrations/mcp-server-configuration.md) |
-| Integrations | Core Harness API and reference docs | #13353, #13457, #13519, #13525, #13716 | Core Harness runtime + docs | Partial | High | [page](./integrations/harness-api.md) |
+| Integrations | Core Harness API and reference docs | #13353, #13457, #13519, #13525, #13716, #14433 | Core Harness runtime + docs + model request headers | Partial | High | [page](./integrations/harness-api.md) |
 | Integrations | Harness display state | #13427 | Core Harness display projection | Partial | High | [page](./integrations/harness-display-state.md) |
 | Integrations | Skills command and workspace resolution | #13457, #13700 | Core Harness workspace cache + Workspace skills provider | Partial | High | [page](./integrations/skills-command.md) |
 | Integrations | Lifecycle hooks | #13442 | hook config + TUI lifecycle + tool wrapper | Partial | High | [page](./integrations/lifecycle-hooks.md) |

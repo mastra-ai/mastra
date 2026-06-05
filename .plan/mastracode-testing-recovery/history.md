@@ -1303,3 +1303,26 @@ Documentation actions:
 - Queue status: #14377 done, #14343 skipped, #14427 skipped, #14432 current.
 
 Focused evidence read: PR metadata for #14377/#14343/#14427; current `mastracode/src/tui/commands/mcp.ts`, `tui/components/mcp-selector.ts`, `tui/mastra-tui.ts`, `mcp/manager.ts`, `mcp/types.ts`, `mcp/__tests__/manager.test.ts`; package-local `packages/mcp/AGENTS.md`; current `packages/mcp/src/client/client.ts` and `client/configuration.ts` for HTTP transport/client compatibility context.
+
+### PR #14432 / #14433 / #14469 feature-map checkpoint
+
+Verified rows 140-142:
+
+- #14432 is CI/turbo-cache configuration only for this feature map. It updates `turbo.json`, GitHub workflow concurrency/cache inputs, and package/store turbo configs; no Mastra Code runtime behavior changed.
+- #14433 forwards Harness conversation identity into model-provider paths. `resolveModel()` derives `x-thread-id`/`x-resource-id` from requestContext and passes them to custom providers, direct API-key providers, gateway-routed models, GitHub Copilot, Moonshot, and (at the time) Claude Max/Codex OAuth wrappers. Core LLM execution also merges memory headers with model config headers and `modelSettings.headers`, with `modelSettings` winning duplicates.
+- #14469 temporarily narrowed the Claude Max/Codex OAuth provider path by removing custom headers from those provider constructors because those APIs could reject unexpected headers. Current HEAD later evolved in #14952: provider/header plumbing was reintroduced around gateway routing and OAuth fetch helpers, so the feature cards record both the historical #14469 guard and current-source drift.
+
+Documentation actions:
+
+- Updated `features/models/model-auth-and-modes.md` with #14433/#14469, Harness header ownership, gateway/custom-provider consumers, key files, tests, missing test gap, and provider-header risk.
+- Updated `features/models/custom-providers.md` with #14433 custom-provider header forwarding.
+- Updated `features/integrations/harness-api.md` with core LLM execution header merge behavior.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #14432 CI/turbo skip, #14433 done, #14469 done, #14423 current.
+
+Focused evidence read: PR metadata/diffs for #14432/#14433/#14469; current `mastracode/src/agents/model.ts`, `agents/memory.ts`, `providers/claude-max.ts`, `providers/openai-codex.ts`, `agents/__tests__/model.test.ts`, `packages/core/src/loop/workflows/agentic-execution/llm-execution-step.ts`, `llm-execution-step.test.ts`; `git show c2e48b6a72` and `git show c8c86aa145` to reconcile #14469 with later current-source provider header reintroduction.
+
+Verification:
+
+- `corepack pnpm --filter ./packages/core exec vitest run src/loop/workflows/agentic-execution/llm-execution-step.test.ts --bail=1 --reporter=dot` — 1 file / 18 tests passed.
+- `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u MASTRA_GATEWAY_API_KEY -u MOONSHOT_AI_API_KEY corepack pnpm --filter ./mastracode exec vitest run src/agents/__tests__/model.test.ts --bail=1 --reporter=dot` — 1 file / 36 tests passed. Unsanitized local env reproduced the known model-test env leakage: `OPENAI_API_KEY` makes the no-auth test take the direct OpenAI API-key path.

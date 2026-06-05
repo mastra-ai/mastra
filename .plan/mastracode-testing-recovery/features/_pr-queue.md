@@ -159,10 +159,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 137 | 2026-03-17 | #14377 | `133ef20c39` | review | done | feat(mastracode): improve MCP server management with interactive /mcp selector (#14377) | 9 |
 | 138 | 2026-03-17 | #14343 | `6611d73d42` | likely skip | skipped | chore: version packages (alpha) (#14343) | 2 |
 | 139 | 2026-03-17 | #14427 | `52715cf453` | likely skip | skipped | chore: version packages (alpha) (#14427) | 2 |
-| 140 | 2026-03-18 | #14432 | `0256b9b00a` | likely skip | current | ci: optimize turbo cache inputs, config, and workflow concurrency (#14432) | 1 |
-| 141 | 2026-03-18 | #14433 | `01a67403e1` | review | | feat: forward harness headers to mastracode model providers (#14433) | 5 |
-| 142 | 2026-03-18 | #14469 | `c2e48b6a72` | review | | fix(mastracode): don't pass custom headers to anthropic/codex providers (#14469) | 2 |
-| 143 | 2026-03-18 | #14423 | `d9d5f948b0` | review | | feat: polish Mastra Code TUI history styling and prompt animation (#14423) | 7 |
+| 140 | 2026-03-18 | #14432 | `0256b9b00a` | likely skip | skip: CI/turbo config | ci: optimize turbo cache inputs, config, and workflow concurrency (#14432) | 1 |
+| 141 | 2026-03-18 | #14433 | `01a67403e1` | review | done | feat: forward harness headers to mastracode model providers (#14433) | 5 |
+| 142 | 2026-03-18 | #14469 | `c2e48b6a72` | review | done | fix(mastracode): don't pass custom headers to anthropic/codex providers (#14469) | 2 |
+| 143 | 2026-03-18 | #14423 | `d9d5f948b0` | review | current | feat: polish Mastra Code TUI history styling and prompt animation (#14423) | 7 |
 | 144 | 2026-03-18 | #14428 | `11dd998449` | review | | feat(mastracode): speed up /threads popup loading (#14428) | 6 |
 | 145 | 2026-03-18 | #14472 | `8cda6192e0` | review | | fix(tui): remove italic styling from tool arguments (#14472) | 1 |
 | 146 | 2026-03-18 | #14436 | `681ee1c811` | review | | feat: generate thread titles in observer (#14436) | 11 |
