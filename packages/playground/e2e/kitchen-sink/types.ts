@@ -5,7 +5,12 @@ export type Fixtures =
   | 'om-observation-success'
   | 'om-observation-failed'
   | 'om-reflection'
-  | 'om-shared-budget';
+  | 'om-shared-budget'
+  | 'agent-builder-support'
+  | 'agent-builder-standup'
+  | 'agent-builder-pr-reviewer'
+  | 'agent-builder-onboarding'
+  | 'agent-builder-complex';
 
 export type FixtureConfig = {
   name: Fixtures;

@@ -485,6 +485,9 @@ const sidebars = {
           type: 'doc',
           id: 'server/pubsub',
           label: 'PubSub',
+          customProps: {
+            tags: ['new'],
+          },
         },
         {
           type: 'doc',
