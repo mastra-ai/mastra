@@ -13,12 +13,17 @@ const COPY: Record<
 > = {
   delete: {
     dependents: 'This agent is used as a sub-agent by:',
-    hidden: n => `${n} private agent${n === 1 ? '' : 's'} in other workspaces also reference this agent.`,
+    hidden: n =>
+      n === 1
+        ? '1 other private agent also references this agent.'
+        : `${n} other private agents also reference this agent.`,
   },
   'make-private': {
     dependents: 'Making this agent private may break the following agents that use it as a sub-agent:',
     hidden: n =>
-      `${n} private agent${n === 1 ? '' : 's'} in other workspaces also reference this agent and may stop working.`,
+      n === 1
+        ? '1 other private agent also references this agent and may stop working.'
+        : `${n} other private agents also reference this agent and may stop working.`,
   },
 };
 
@@ -43,10 +48,7 @@ export const AgentImpactWarnings = ({ agentId, variant, enabled = true }: AgentI
   const overflow = dependents.length - visible.length;
 
   return (
-    <div
-      data-testid="agent-impact-warnings"
-      className="mt-3 rounded-md border border-warning/30 bg-warning/5 p-3 text-sm"
-    >
+    <div data-testid="agent-impact-warnings" className="text-ui-sm text-neutral3">
       {dependents.length > 0 && (
         <div data-testid="agent-impact-dependents-warning">
           <p className="font-medium">{copy.dependents}</p>

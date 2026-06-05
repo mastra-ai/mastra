@@ -240,7 +240,7 @@ describe('VisibilitySelect', () => {
     expect(dependents.textContent).toContain('Coordinator');
     expect(dependents.textContent).toContain('Making this agent private');
     const hidden = await screen.findByTestId('agent-impact-hidden-warning');
-    expect(hidden.textContent).toContain('2 private agents');
+    expect(hidden.textContent).toContain('2 other private agents also reference this agent and may stop working.');
   });
 
   it('does not render impact warnings on the make-public dialog', async () => {

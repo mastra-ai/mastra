@@ -298,7 +298,7 @@ describe('DeleteAgentDialog impact warnings', () => {
     fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
 
     const hidden = await screen.findByTestId('agent-impact-hidden-warning');
-    expect(hidden.textContent).toContain('3 private agents');
+    expect(hidden.textContent).toContain('3 other private agents also reference this agent.');
   });
 
   it('singularizes the hiddenCount line when exactly one private dependent', async () => {
@@ -313,6 +313,6 @@ describe('DeleteAgentDialog impact warnings', () => {
     fireEvent.click(screen.getByTestId('agent-builder-delete-agent'));
 
     const hidden = await screen.findByTestId('agent-impact-hidden-warning');
-    expect(hidden.textContent).toContain('1 private agent ');
+    expect(hidden.textContent).toContain('1 other private agent also references this agent.');
   });
 });

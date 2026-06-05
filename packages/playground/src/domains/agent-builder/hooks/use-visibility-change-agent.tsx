@@ -1,3 +1,4 @@
+import { DialogBody } from '@mastra/playground-ui';
 import { useFormContext } from 'react-hook-form';
 
 import { AgentImpactWarnings } from '../components/agent-edit/agent-impact-warnings';
@@ -43,7 +44,11 @@ export function useVisibilityChange(agentId: string): UseVisibilityChange {
       confirm: 'agent-builder-visibility-confirm-yes',
     },
     renderExtraContent: pending =>
-      pending === 'private' ? <AgentImpactWarnings agentId={agentId} variant="make-private" /> : null,
+      pending === 'private' ? (
+        <DialogBody className="pt-0">
+          <AgentImpactWarnings agentId={agentId} variant="make-private" />
+        </DialogBody>
+      ) : null,
     confirmDisabled: pending => pending === 'private' && isDependentsLoading,
   });
 }
