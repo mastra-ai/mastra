@@ -1,5 +1,5 @@
 ---
-title: "Datadog bridge | Tracing | Observability"
+title: "Datadog bridge | Integrations | Observability"
 description: "Integrate Mastra tracing with Datadog APM and LLM Observability"
 packages:
   - "@mastra/observability"
@@ -18,7 +18,7 @@ The Datadog Bridge enables bidirectional integration between Mastra's tracing sy
 
 :::info Not using dd-trace APM?
 
-If you only need to send LLM Observability data and don't use `dd-trace` APM auto-instrumentation, the [Datadog Exporter](/docs/observability/tracing/exporters/datadog) is simpler — it supports agentless mode and sends spans directly to Datadog without a local agent.
+If you only need to send LLM Observability data and don't use `dd-trace` APM auto-instrumentation, the [Datadog Exporter](/docs/observability/integrations/exporters/datadog) is simpler — it supports agentless mode and sends spans directly to Datadog without a local agent.
 
 :::
 
@@ -46,7 +46,7 @@ The DatadogBridge participates in two parts of the dd-trace pipeline:
 
 - Emits annotations (model info, token usage, input/output, errors) through `dd-trace`'s LLM Observability pipeline
 - Maintains parent-child relationships in Datadog LLM Observability using nested `llmobs.trace()` calls
-- Reuses the same data shape and span-kind mapping as the [Datadog Exporter](/docs/observability/tracing/exporters/datadog#span-type-mapping)
+- Reuses the same data shape and span-kind mapping as the [Datadog Exporter](/docs/observability/integrations/exporters/datadog#span-type-mapping)
 
 ## Why this matters
 
@@ -60,7 +60,7 @@ The bridge fixes this by creating real dd-trace spans up front, so the scope is 
 npm install @mastra/datadog dd-trace
 ```
 
-The bridge requires `dd-trace` to be installed and a local Datadog Agent (or compatible OTLP receiver) to receive APM data. See the [APM prerequisites](/docs/observability/tracing/exporters/datadog#prerequisites) on the exporter page for agent setup details.
+The bridge requires `dd-trace` to be installed and a local Datadog Agent (or compatible OTLP receiver) to receive APM data. See the [APM prerequisites](/docs/observability/integrations/exporters/datadog#prerequisites) on the exporter page for agent setup details.
 
 ## Configuration
 
@@ -147,7 +147,7 @@ new DatadogBridge({
 ```
 
 :::note
-For most bridge users, agent mode is the right choice. APM data cannot be sent in agentless mode, so enabling agentless splits LLM Observability traffic away from APM traffic. If you want LLM Observability only without an agent, use the [Datadog Exporter](/docs/observability/tracing/exporters/datadog) instead.
+For most bridge users, agent mode is the right choice. APM data cannot be sent in agentless mode, so enabling agentless splits LLM Observability traffic away from APM traffic. If you want LLM Observability only without an agent, use the [Datadog Exporter](/docs/observability/integrations/exporters/datadog) instead.
 :::
 
 ## Trace hierarchy
@@ -168,7 +168,7 @@ In Datadog, the APM trace shows this full topology, and the LLM Observability pr
 
 ## Span type mapping
 
-The bridge uses the same span-kind mapping as the Datadog Exporter for LLM Observability. See [span type mapping](/docs/observability/tracing/exporters/datadog#span-type-mapping) on the exporter page.
+The bridge uses the same span-kind mapping as the Datadog Exporter for LLM Observability. See [span type mapping](/docs/observability/integrations/exporters/datadog#span-type-mapping) on the exporter page.
 
 ## Using tags
 
@@ -206,12 +206,12 @@ If APM spans aren't connecting to Mastra spans as expected:
 - Ensure the DatadogBridge is set as `bridge` (not as an entry in `exporters`) in your observability config
 - Confirm you haven't also added the `DatadogExporter` to `exporters` — using both will double-emit LLM Observability data
 
-For native-module compatibility issues with `dd-trace` and bundler externals, see the [Datadog exporter troubleshooting](/docs/observability/tracing/exporters/datadog#troubleshooting) section.
+For native-module compatibility issues with `dd-trace` and bundler externals, see the [Datadog exporter troubleshooting](/docs/observability/integrations/exporters/datadog#troubleshooting) section.
 
 ## Related
 
 - [Tracing Overview](/docs/observability/tracing/overview)
-- [Datadog Exporter](/docs/observability/tracing/exporters/datadog) - LLM Observability only, no `dd-trace` APM
+- [Datadog Exporter](/docs/observability/integrations/exporters/datadog) - LLM Observability only, no `dd-trace` APM
 - [DatadogBridge Reference](/reference/observability/tracing/bridges/datadog) - API documentation
 - [Datadog APM documentation](https://docs.datadoghq.com/tracing/)
 - [Datadog LLM Observability documentation](https://docs.datadoghq.com/llm_observability/)
