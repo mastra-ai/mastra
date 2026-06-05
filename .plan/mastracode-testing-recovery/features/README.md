@@ -49,7 +49,8 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | TUI | Quiet mode | #13556 | settings preference + TUI render state | Partial | High | [page](./tui/quiet-mode.md) |
 | Settings | Onboarding and global settings | #13421, #13431, #13487, #13494, #13500, #13505, #13508, #13512, #13566, #13603, #13611, #13748 | settings.json + thread settings + provider registry + AuthStorage | Partial | High | [page](./settings/onboarding-and-global-settings.md) |
 | Settings | Storage backend configuration | #13435, #13815 | env/settings/database config + storage factory | Partial | High | [page](./settings/storage-backend.md) |
-| TUI | Interactive chat | #13218, #13350, #13413, #13427, #13456, #13460, #13442, #13487, #13609, #13696, #13712, #13723 | TUI + Harness display state | Partial | High | [page](./tui/interactive-chat.md) |
+| TUI | Interactive chat | #13218, #13350, #13413, #13427, #13456, #13460, #13442, #13487, #13609, #13696, #13712, #13723, #13999 | TUI + Harness display state | Partial | High | [page](./tui/interactive-chat.md) |
+| TUI | Shell passthrough streaming | #13999 | TUI input router + shell subprocess + live output component | Partial | Medium | [page](./tui/shell-passthrough.md) |
 | TUI | Debug logging | #13691, #13701 | env vars + app-data/debug trace files | Partial | Medium | [page](./tui/debug-logging.md) |
 | Chat | Prompt context and project instructions | #13234, #13346, #13376, #13456 | Harness request context + instruction files + git metadata | Partial | High | [page](./chat/prompt-context.md) |
 | Chat | File attachments in chat input | #13574, #13712 | Harness signal content + message-list adapters | Partial | High | [page](./chat/file-attachments.md) |
@@ -61,9 +62,9 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Models | Custom OpenAI-compatible providers | #13682, #13611 | settings customProviders + Harness custom catalog | Partial | High | [page](./models/custom-providers.md) |
 | Models | Thinking and reasoning effort | #13490, #13563, #13748 | Harness/request context + settings | Partial | High | [page](./models/thinking-and-reasoning.md) |
 | Models | OpenAI strict schema compatibility | #13695 | schema-compat + core stream strict-mode preparation | Partial | High | [page](./models/openai-strict-schema-compat.md) |
-| Tools | Coding tools and approval permissions | #13218, #13344, #13347, #13348, #13355, #13385, #13384, #13428, #13442, #13519, #13526, #13564, #13609, #13611, #13687, #13696, #13713, #13724, #13753, #13870 | Harness state + permission policy + workspace filesystem + extraTools | Partial | High | [page](./tools/coding-tools-permissions.md) |
+| Tools | Coding tools and approval permissions | #13218, #13344, #13347, #13348, #13355, #13385, #13384, #13428, #13442, #13519, #13526, #13564, #13609, #13611, #13687, #13696, #13713, #13724, #13753, #13870, #13999 | Harness state + permission policy + workspace filesystem + extraTools + local shell passthrough | Partial | High | [page](./tools/coding-tools-permissions.md) |
 | Tools | Web search tool rendering | #13609, #13870 | provider/Tavily result shape + TUI renderer | Partial | Medium | [page](./tools/web-search-rendering.md) |
-| Tools | Workspace-backed coding tools | #13437, #13526, #13687, #13693, #13695, #13700, #13724, #13753 | core/custom Workspace + LocalFilesystem/LocalSandbox + tool-name overrides + allowed paths + schema compat | Partial | High | [page](./tools/workspace-tools.md) |
+| Tools | Workspace-backed coding tools | #13437, #13526, #13687, #13693, #13695, #13700, #13724, #13753, #13940 | core/custom Workspace + LocalFilesystem/LocalSandbox + tool-name overrides + allowed paths + schema compat + subagent inheritance | Partial | High | [page](./tools/workspace-tools.md) |
 | Tools | Streaming tool arguments | #13328, #13335 | Harness display state + TUI pending tools | Partial | High | [page](./tools/streaming-tool-arguments.md) |
 | Tools | Task tracking tools and TUI progress | #13344 | Harness task state + TUI progress | Partial | High | [page](./tools/task-tracking.md) |
 | Integrations | MCP status and reload command | #13311, #13347 | MCP manager | Partial | High | [page](./integrations/mcp-status-command.md) |
@@ -75,7 +76,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Integrations | GitHub issue reporting command | #13605 | TUI command prompt + GitHub CLI side effects | Partial | High | [page](./integrations/github-issue-reporting.md) |
 | Git | Commit attribution | #13376 | Prompt context + harness model state | Missing | Medium | [page](./git/commit-attribution.md) |
 | Goals | Plan approval and build handoff | #13416, #13557, #13598 | Core Harness plan resolver + TUI plan card + plan files | Partial | High | [page](./goals/plan-approval.md) |
-| Subagents | Delegation to Explore / Plan / Execute | #13227, #13339, #13700 | Harness config + subagent request context/session state | Partial | High | [page](./subagents/delegation.md) |
+| Subagents | Delegation to Explore / Plan / Execute | #13227, #13339, #13700, #13940 | Harness config + parent Workspace + subagent request context/session state | Partial | High | [page](./subagents/delegation.md) |
 | Subagents | Audit-tests subagent | #13331 | Harness subagent config | Missing | High | [page](./subagents/audit-tests.md) |
 | Memory | Observational memory | #13231, #13305, #13330, #13349, #13354, #13476, #13563, #13569, #13815 | Memory storage + harness/settings OM state + scope config + clone remapping | Partial | High | [page](./memory/observational-memory.md) |
 

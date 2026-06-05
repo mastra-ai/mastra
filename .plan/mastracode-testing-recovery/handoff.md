@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13695 (row 112) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, and #13766 recorded as version-package skips plus #12532 recorded as build-tool-dependency-only. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13999 (`534c8bdf04`, shell passthrough streaming), then #13940 (`28c85b184f`, subagent workspace inheritance).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13940 (row 114) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, and #13766 recorded as version-package skips plus #12532 recorded as build-tool-dependency-only. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13953 (`57c739108b`, attachment support for OM and MastraCode), then #14062 (`6ba1788c15`, likely formatting/lint dependency skip).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 113: PR #13999 (shell passthrough real-time streaming), then row 114: PR #13940 (subagent workspace inheritance).
+1. Continue at `_pr-queue.md` row 115: PR #13953 (attachment support for observational memory and MastraCode), then row 116: PR #14062 (formatting/linting dependency update, likely skip).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.

@@ -1141,3 +1141,13 @@ Verification:
 - Focused tests passed: `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u MASTRA_GATEWAY_API_KEY corepack pnpm@11.3.0 --filter ./mastracode exec vitest run src/headless.test.ts --reporter=dot --bail 1` (1 file / 44 tests); `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u MASTRA_GATEWAY_API_KEY corepack pnpm@11.3.0 --filter ./mastracode exec vitest run src/headless-integration.test.ts -t 'emits agent_start|emits tool_start|streams message_update|AgentsMDInjector|switches model|returns exit code 1|emits JSON error|emits warning|structured warning|does not switch|--mode|--model still|no effectiveDefaults|resumes|renames|thread_cloned' --reporter=dot --bail 1` (22 passed / 1 skipped); `corepack pnpm@11.3.0 --filter ./packages/core exec vitest run src/agent/__tests__/structured-output-openai-compat.test.ts --reporter=dot --bail 1` (1 file / 5 tests); `corepack pnpm@11.3.0 --filter ./packages/schema-compat exec vitest run src/zod-to-json.test.ts src/provider-compats/openai.test.ts src/provider-compats/openai-reasoning.test.ts --reporter=dot --bail 1` (4 files / 179 passed / 1 skipped). Full `headless.test.ts + headless-integration.test.ts` run timed out in the existing abort integration case and is recorded as a headless risk.
 
 Next queue checkpoint: PR #13999 (shell passthrough real-time streaming), then PR #13940 (subagent workspace inheritance).
+
+
+### PR #13999 / #13940 feature-map checkpoint
+
+Verified rows 113-114:
+
+- #13999 streams TUI shell passthrough (`!<command>`) output in real time. `handleShellPassthrough()` now creates a `ShellStreamComponent`, pipes subprocess stdout/stderr `data` events directly into it, and finalizes through `resolveShellPassthroughCompletion()` so spawn failures/timeouts produce diagnostics without duplicating already-streamed stderr. Created `features/tui/shell-passthrough.md`.
+- #13940 makes non-forked subagents inherit the parent `Workspace` instead of carrying duplicate MC-local file/edit/shell tool definitions. `createSubagentTool()` passes `context.workspace` into fresh subagent Agents, and `allowedWorkspaceTools` filters inherited workspace tools through `prepareStep`; forked subagents still reuse the parent agent/thread clone path. Updated delegation and workspace-tool cards.
+
+Focused evidence read: `mastracode/src/tui/shell.ts`, `shell-runner.ts`, `shell-result.ts`, `components/shell-output.ts`, `packages/core/src/harness/tools.ts`, `subagent-tool.test.ts`, `subagent-workspace-integration.test.ts`, and built-in subagent definitions.

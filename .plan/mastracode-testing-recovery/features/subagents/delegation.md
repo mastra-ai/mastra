@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13227](https://github.com/mastra-ai/mastra/pull/13227) — extracted built-in Explore, Plan, and Execute subagents plus dynamic workspace support.
-- Later changes: [#13331](https://github.com/mastra-ai/mastra/pull/13331) added an intended `audit-tests` subagent; [#13339](https://github.com/mastra-ai/mastra/pull/13339) added parallel-only subagent guidance and an audit-tests exception; [#13556](https://github.com/mastra-ai/mastra/pull/13556) made completed subagent output quiet-mode-sensitive; [#13700](https://github.com/mastra-ai/mastra/pull/13700) forwarded request context and skill/sandbox paths so subagents inherit the parent's filesystem access; current registration/help-text gaps are tracked separately.
+- Later changes: [#13331](https://github.com/mastra-ai/mastra/pull/13331) added an intended `audit-tests` subagent; [#13339](https://github.com/mastra-ai/mastra/pull/13339) added parallel-only subagent guidance and an audit-tests exception; [#13556](https://github.com/mastra-ai/mastra/pull/13556) made completed subagent output quiet-mode-sensitive; [#13700](https://github.com/mastra-ai/mastra/pull/13700) forwarded request context and skill/sandbox paths so subagents inherit the parent's filesystem access; [#13940](https://github.com/mastra-ai/mastra/pull/13940) moved subagents onto the parent Agent workspace instead of MC-local duplicate tool definitions; current registration/help-text gaps are tracked separately.
 
 ## User-visible behavior
 
 - What the user can do: delegate focused work to `explore`, `plan`, or `execute` subagents.
-- Success looks like: read-only subagents cannot edit; execute can make focused changes; parent chat shows subagent progress/results; subagents can read approved external paths and skill directories that the parent workspace can access.
-- Must preserve: subagent model selection, tool boundaries, parallel-only usage guidance, audit-tests exception, request-context inheritance without parent thread/resource leakage, and loaded-history render of subagent activity.
+- Success looks like: read-only subagents cannot edit; execute can make focused changes; parent chat shows subagent progress/results; subagents use the same Workspace instance and approved filesystem paths as the parent.
+- Must preserve: subagent model selection, workspace inheritance, tool boundaries, parallel-only usage guidance, audit-tests exception, request-context inheritance without parent thread/resource leakage, and loaded-history render of subagent activity.
 
 ## Entry points / commands
 
@@ -44,7 +44,7 @@
 | Read/write boundaries | Subagent `allowedWorkspaceTools` / instructions | Runtime tool availability |
 | Subagent model override | Harness state + settings | `/subagents`, runtime context |
 | Request context | copied parent `RequestContext`; thread/resource stripped for non-forked runs, retargeted for forked runs | subagent `Agent.stream()` tools |
-| Filesystem access | workspace skill paths + sandbox-approved paths from harness state | subagent workspace/file tools |
+| Filesystem access | parent `Workspace` plus skill paths + sandbox-approved paths from harness state | subagent workspace/file tools |
 | Rendered progress | Harness events/history + `TUIState.quietMode` | TUI subagent component |
 | Usage guidance | Base prompt + tool guidance prompt section | Parent agent behavior |
 
@@ -53,7 +53,7 @@
 - `mastracode/src/agents/subagents/explore.ts` — read-only Explore subagent.
 - `mastracode/src/agents/subagents/plan.ts` — read-only Plan subagent.
 - `mastracode/src/agents/subagents/execute.ts` — write-capable Execute subagent.
-- `packages/core/src/harness/tools.ts` — `createSubagentTool()` request-context forwarding, forked/non-forked thread/resource handling, workspace allowlist filtering, and event streaming.
+- `packages/core/src/harness/tools.ts` — `createSubagentTool()` request-context forwarding, forked/non-forked thread/resource handling, parent workspace propagation, workspace allowlist filtering, and event streaming.
 - `mastracode/src/agents/workspace.ts` — per-request workspace, skill paths, sandbox paths, and plan-mode write-tool disablement.
 - `mastracode/src/tools/utils.ts` — `getAllowedPathsFromContext()` merges computed skill paths with sandbox-approved paths.
 - `mastracode/src/tui/commands/subagents.ts` — `/subagents` model selection.
@@ -76,7 +76,8 @@
 - `mastracode/src/tui/components/__tests__/subagent-execution.test.ts` — running/completed/error/fork rendering and completion collapse/expand options.
 - `mastracode/src/tui/__tests__/render-messages.test.ts` — persisted subagent rendering cases.
 - `mastracode/src/agents/prompts/index.test.ts` / tool-guidance tests — partial prompt/guidance coverage.
-- `packages/core/src/harness/subagent-tool.test.ts` — request-context copy/retargeting, tracing-context forwarding, workspace propagation, and `allowedWorkspaceTools` filtering.
+- `packages/core/src/harness/subagent-tool.test.ts` — request-context copy/retargeting, tracing-context forwarding, parent workspace propagation, and `allowedWorkspaceTools` filtering.
+- `packages/core/src/harness/subagent-workspace-integration.test.ts` — real workspace tool execution from non-forked subagents and allowlist filtering.
 - `mastracode/src/tools/__tests__/get-allowed-paths.test.ts` — skill-path plus sandbox-path merging for subagent/file-tool access.
 
 ## Missing tests
@@ -88,7 +89,7 @@
 
 ## Known risks / regressions
 
-- Tool boundaries are split across instructions and runtime allowlists; both need verification.
+- Tool boundaries are split across instructions, inherited workspace tools, and runtime allowlists; all three need verification.
 - Request-context forwarding must avoid leaking the parent thread/resource into non-forked subagents while still preserving sandbox and skill-path access.
 - Harness v1 migration risk: forked subagent sessions can leak into thread lists unless filtered.
 - Loaded-history subagent render depends on persisted tool metadata being complete.
