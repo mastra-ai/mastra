@@ -11,6 +11,8 @@ packages:
 
 Use it to build resumable streams on top of a transport that does not keep history, such as [`EventEmitterPubSub`](/reference/pubsub/event-emitter). Transports that already persist events, such as [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), do not need this wrapper.
 
+`CachingPubSub` is transparent to batching: `subscribe()` forwards `options.batch` to the inner pub/sub, and `supportsNativeBatching` mirrors the inner's value. Wrapping an inner that does not support batching results in unbatched delivery even when `options.batch` is passed.
+
 ## Usage example
 
 Wrap an inner pub/sub and provide a server cache to store events.
@@ -74,6 +76,18 @@ const pubsub = withCaching(new EventEmitterPubSub(), new InMemoryServerCache())
         isOptional: true,
       },
     ],
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'supportsNativeBatching',
+    type: 'boolean',
+    description: 'Mirrors the inner pub/sub. Returns `true` only when the wrapped implementation supports batching.',
   },
 ]}
 />
