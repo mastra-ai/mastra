@@ -178,10 +178,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 156 | 2026-03-24 | #14549 | `d4fcb37312` | likely skip | skipped | chore: version packages (alpha) (#14549) | 2 |
 | 157 | 2026-03-24 | #14654 | `62ff1b61a9` | likely skip | skipped | chore: version packages (alpha) (#14654) | 2 |
 | 158 | 2026-03-25 | #14688 | `3cebe964bb` | review | done | fix: improve Mastra Code response guidance (#14688) | 1 |
-| 159 | 2026-03-25 | #14690 | `b174c63a09` | review | current | fix(mastracode): speed up loading and show all threads in thread selector (#14690) | 2 |
-| 160 | 2026-03-25 | #14691 | `faede8c392` | review | | fix: remove thread selector preview lookup (#14691) | 2 |
-| 161 | 2026-03-25 | #14565 | `404fea1304` | review | | feat: add lsp_inspect workspace inspection tool (#14565) | 5 |
-| 162 | 2026-03-25 | #14637 | `86e326363e` | review | | feat: add dynamic AGENTS.md loading in mastracode (#14637) | 15 |
+| 159 | 2026-03-25 | #14690 | `b174c63a09` | review | done | fix(mastracode): speed up loading and show all threads in thread selector (#14690) | 2 |
+| 160 | 2026-03-25 | #14691 | `faede8c392` | review | done | fix: remove thread selector preview lookup (#14691) | 2 |
+| 161 | 2026-03-25 | #14565 | `404fea1304` | review | done | feat: add lsp_inspect workspace inspection tool (#14565) | 5 |
+| 162 | 2026-03-25 | #14637 | `86e326363e` | review | current | feat: add dynamic AGENTS.md loading in mastracode (#14637) | 15 |
 | 163 | 2026-03-27 | #14727 | `a98a9c7930` | review | | fix(mastracode): fix custom slash commands not loading (#14727) | 2 |
 | 164 | 2026-03-27 | #14567 | `949b7bfd4e` | review | | feat(memory): cross-thread recall browsing, search, and scope-based access control (#14567) | 15 |
 | 165 | 2026-03-27 | #14788 | `60a224dd49` | review | | fix: persist observational memory threshold settings across restarts (#14788) | 3 |

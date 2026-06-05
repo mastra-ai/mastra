@@ -1434,3 +1434,25 @@ Focused evidence read: PR metadata/diffs for #14549/#14654/#14688; current `mast
 Verification:
 
 - `corepack pnpm --filter ./mastracode exec vitest run src/agents/__tests__/prompts.test.ts --bail=1 --reporter=dot` — 1 file / 6 tests passed.
+
+### PR #14690 / #14691 / #14565 feature-map checkpoint
+
+Verified rows 159-161:
+
+- #14690 makes `/threads` list all resources and keeps the selector responsive by relying on sorted thread metadata plus cached previews rather than blocking thread browsing.
+- #14691 removes live thread-selector preview lookup. Current `handleThreadsCommand()` passes a `getMessagePreviews` callback that returns only `state.threadPreviewCache` hits and explicitly does not call `getFirstUserMessagesForThreads`; stale cache entries are invalidated by `updatedAt`.
+- #14565 adds the `lsp_inspect` workspace tool. Current core source validates exactly one `<<<` marker, prepares a per-file LSP query, returns hover/line diagnostics/definition/implementation results, closes the document afterward, maps the tool to Mastra Code's `lsp_inspect` name, marks it read-category, documents prompt guidance, and renders a dedicated TUI box.
+
+Documentation actions:
+
+- Updated `features/threads/persistent-conversations.md` with all-resource thread listing, cache-only preview/title display, tests, and stale-title risks.
+- Updated `features/tools/workspace-tools.md` and `features/tools/coding-tools-permissions.md` with `lsp_inspect` tool ownership, registration, prompt/permission/TUI surfaces, tests, and LSP availability risks.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #14690 done, #14691 done, #14565 done, #14637 current.
+
+Focused evidence read: PR metadata/diffs for #14690/#14691/#14565; current `mastracode/src/tui/commands/threads.ts`, `threads.test.ts`, `mastracode/src/tui/components/thread-selector.ts`, `thread-selector.test.ts`, `packages/core/src/workspace/tools/lsp-inspect.ts`, `lsp-inspect.test.ts`, `packages/core/src/workspace/lsp/client.ts`, `manager.ts`, `packages/core/src/workspace/tools/tools.ts`, `mastracode/src/tool-names.ts`, `permissions.ts`, `agents/prompts/tool-guidance.ts`, and `tui/components/tool-execution-enhanced.ts`.
+
+Verification:
+
+- `corepack pnpm --filter ./mastracode exec vitest run src/tui/commands/__tests__/threads.test.ts src/tui/components/__tests__/thread-selector.test.ts --bail=1 --reporter=dot` — 2 files / 6 tests passed.
+- `corepack pnpm --filter ./packages/core exec vitest run src/workspace/tools/__tests__/lsp-inspect.test.ts --bail=1 --reporter=dot` — 1 file / 13 tests passed / no type errors.
