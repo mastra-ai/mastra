@@ -53,6 +53,14 @@ describe('Agent signal routes', () => {
       { headers: { 'Content-Type': 'text/event-stream' } },
     );
 
+  const continuationToolResultMessage = (toolCallId: string, toolName: string, input: unknown, output: unknown) => ({
+    role: 'assistant',
+    content: [
+      { type: 'tool-call', toolCallId, toolName, input },
+      { type: 'tool-result', toolCallId, toolName, output: { type: 'json', value: output } },
+    ],
+  });
+
   const mockSignalAndSubscriptionRequests = async (
     agent: Agent,
     runId: string,
@@ -593,18 +601,7 @@ describe('Agent signal routes', () => {
     expect(sendToolApprovalSpy).toHaveBeenCalled();
     const continuationCall = sendToolApprovalSpy.mock.calls.at(-1) as [any];
     expect(continuationCall[0].messages).toEqual([
-      {
-        role: 'tool',
-        content: [
-          {
-            type: 'tool-result',
-            toolCallId: 'call-1',
-            toolName: 'myTool',
-            args: { x: 'hi' },
-            result: { ok: true },
-          },
-        ],
-      },
+      continuationToolResultMessage('call-1', 'myTool', { x: 'hi' }, { ok: true }),
     ]);
     expect(continuationCall[0].streamOptions?.memory).toEqual({ thread: 'thread-123', resource: 'resource-123' });
   });
@@ -749,30 +746,8 @@ describe('Agent signal routes', () => {
     ]);
     const [continuationCall] = sendToolApprovalSpy.mock.calls.at(-1) as [any];
     expect(continuationCall.messages).toEqual([
-      {
-        role: 'tool',
-        content: [
-          {
-            type: 'tool-result',
-            toolCallId: 'call-1',
-            toolName: 'myTool',
-            args: { value: 'first' },
-            result: { value: 'first' },
-          },
-        ],
-      },
-      {
-        role: 'tool',
-        content: [
-          {
-            type: 'tool-result',
-            toolCallId: 'call-2',
-            toolName: 'myTool',
-            args: { value: 'second' },
-            result: { value: 'second' },
-          },
-        ],
-      },
+      continuationToolResultMessage('call-1', 'myTool', { value: 'first' }, { value: 'first' }),
+      continuationToolResultMessage('call-2', 'myTool', { value: 'second' }, { value: 'second' }),
     ]);
   });
 
@@ -821,12 +796,7 @@ describe('Agent signal routes', () => {
     const [continuation] = sendToolApprovalSpy.mock.calls.at(-1) as [any];
     expect(continuation.messages).toEqual([
       ...assistantMessages,
-      {
-        role: 'tool',
-        content: [
-          { type: 'tool-result', toolCallId: 'call-1', toolName: 'myTool', args: { x: 'hi' }, result: { ok: true } },
-        ],
-      },
+      continuationToolResultMessage('call-1', 'myTool', { x: 'hi' }, { ok: true }),
     ]);
     expect(continuation.streamOptions?.memory).toBeUndefined();
   });
@@ -892,30 +862,8 @@ describe('Agent signal routes', () => {
     const [continuation] = sendToolApprovalSpy.mock.calls.at(-1) as [any];
     const continuationMessages = continuation.messages;
     expect(continuationMessages).toEqual([
-      {
-        role: 'tool',
-        content: [
-          {
-            type: 'tool-result',
-            toolCallId: 'call-1',
-            toolName: 'firstTool',
-            args: { value: 'one' },
-            result: { first: true },
-          },
-        ],
-      },
-      {
-        role: 'tool',
-        content: [
-          {
-            type: 'tool-result',
-            toolCallId: 'call-2',
-            toolName: 'secondTool',
-            args: { value: 'two' },
-            result: { second: true },
-          },
-        ],
-      },
+      continuationToolResultMessage('call-1', 'firstTool', { value: 'one' }, { first: true }),
+      continuationToolResultMessage('call-2', 'secondTool', { value: 'two' }, { second: true }),
     ]);
   });
 
@@ -1031,18 +979,9 @@ describe('Agent signal routes', () => {
     expect(streamUntilIdleSpy).not.toHaveBeenCalled();
     const [continuation] = sendToolApprovalSpy.mock.calls.at(-1) as [any];
     const continuationMessages = continuation.messages;
-    expect(continuationMessages.at(-1)).toEqual({
-      role: 'tool',
-      content: [
-        {
-          type: 'tool-result',
-          toolCallId: 'call-error',
-          toolName: 'myTool',
-          args: {},
-          result: { error: 'Error: boom' },
-        },
-      ],
-    });
+    expect(continuationMessages.at(-1)).toEqual(
+      continuationToolResultMessage('call-error', 'myTool', {}, { error: 'Error: boom' }),
+    );
   });
 
   it('scopes pending client tool calls by runId', async () => {
@@ -1109,18 +1048,7 @@ describe('Agent signal routes', () => {
     const [continuation] = sendToolApprovalSpy.mock.calls.at(-1) as [any];
     const continuationMessages = continuation.messages;
     expect(continuationMessages).toEqual([
-      {
-        role: 'tool',
-        content: [
-          {
-            type: 'tool-result',
-            toolCallId: 'call-a',
-            toolName: 'myTool',
-            args: { run: 'a' },
-            result: { args: { run: 'a' } },
-          },
-        ],
-      },
+      continuationToolResultMessage('call-a', 'myTool', { run: 'a' }, { args: { run: 'a' } }),
     ]);
   });
 
@@ -1309,9 +1237,14 @@ describe('Agent signal routes', () => {
     expect(streamUntilIdleSpy).not.toHaveBeenCalled();
     const [continuation] = sendToolApprovalSpy.mock.calls.at(-1) as [any];
     const continuationMessages = continuation.messages;
-    const continuationToolContent = continuationMessages.at(-1).content[0];
-    expect(continuationToolContent).toBe(toolResult.payload);
-    expect(continuationToolContent.__mastraObservability).toEqual(toolResult.payload.__mastraObservability);
+    const continuationToolContent = continuationMessages.at(-1).content[1];
+    expect(continuationToolContent).toEqual({
+      type: 'tool-result',
+      toolCallId: 'call-observe',
+      toolName: 'observeTool',
+      output: { type: 'json', value: { ok: true } },
+      __mastraObservability: toolResult.payload.__mastraObservability,
+    });
   });
 
   it('does not execute client tools when no clientTools are provided', async () => {

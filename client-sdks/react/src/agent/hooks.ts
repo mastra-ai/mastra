@@ -367,10 +367,7 @@ export const useChat = ({
 
   const processStreamChunk = useCallback(
     async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
-      setMessages(prev => {
-        const next = accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } });
-        return next;
-      });
+      setMessages(prev => accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
       if (
         chunk.type === 'data-user-message' &&

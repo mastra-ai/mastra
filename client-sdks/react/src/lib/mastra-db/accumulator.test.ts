@@ -575,24 +575,6 @@ describe('accumulateChunk - tool calls', () => {
     expect(out[0].content.parts[0]).toMatchObject({ type: 'tool-invocation' });
   });
 
-  it('keeps repeated same-tool results in one assistant message', () => {
-    const out = reduce([
-      startChunk(),
-      toolCallChunk('tc-1', 'search', { query: 'first' }),
-      toolCallChunk('tc-2', 'search', { query: 'second' }),
-      toolResultChunk('tc-1', { hits: 1 }),
-      toolResultChunk('tc-2', { hits: 2 }),
-    ]);
-
-    expect(out).toHaveLength(1);
-    const toolParts = out[0].content.parts.filter((part): part is MastraToolInvocationPart => part.type === 'tool-invocation');
-    expect(toolParts).toHaveLength(2);
-    expect(toolParts.map(part => part.toolInvocation)).toEqual([
-      { state: 'result', toolCallId: 'tc-1', toolName: 'search', args: { query: 'first' }, result: { hits: 1 } },
-      { state: 'result', toolCallId: 'tc-2', toolName: 'search', args: { query: 'second' }, result: { hits: 2 } },
-    ]);
-  });
-
   it('tool-call → tool-result transitions through call → result', () => {
     const out = reduce([
       startChunk(),

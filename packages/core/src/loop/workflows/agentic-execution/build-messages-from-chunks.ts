@@ -20,20 +20,6 @@ import { findProviderToolByName, inferProviderExecuted } from '../../../tools/pr
  */
 export type CollectedChunk = { type: string; payload: any; metadata?: Record<string, any> };
 
-function isEmptyArgs(args: unknown): boolean {
-  return args == null || (typeof args === 'object' && !Array.isArray(args) && Object.keys(args).length === 0);
-}
-
-function parseToolCallArgsFromDeltas(deltas: string[]): unknown {
-  const text = deltas.join('').trim();
-  if (!text) return undefined;
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-}
-
 /**
  * Build MastraDBMessage entries from the full sequence of stream chunks.
  *
@@ -69,14 +55,7 @@ export function buildMessagesFromChunks({
     string,
     { result: any; args: any; providerMetadata: any; providerExecuted: boolean | undefined; toolName: string }
   >();
-  const toolCallArgsDeltas = new Map<string, string[]>();
   for (const chunk of chunks) {
-    if (chunk.type === 'tool-call-delta' && chunk.payload.argsTextDelta) {
-      const deltas = toolCallArgsDeltas.get(chunk.payload.toolCallId) ?? [];
-      deltas.push(chunk.payload.argsTextDelta);
-      toolCallArgsDeltas.set(chunk.payload.toolCallId, deltas);
-    }
-
     if (chunk.type === 'tool-result' && chunk.payload.result != null) {
       const p = chunk.payload as ToolResultPayload;
       toolResults.set(p.toolCallId, {
@@ -258,12 +237,9 @@ export function buildMessagesFromChunks({
         const toolDef = tools?.[p.toolName] || findProviderToolByName(tools, p.toolName);
         const providerExecuted = inferProviderExecuted(p.providerExecuted, toolDef);
         const providerMetadata = withToolPayloadTransformProviderMetadata(p.providerMetadata, chunk.metadata);
+
+        // Check if we have a matching result from a provider-executed tool
         const result = toolResults.get(p.toolCallId);
-        const streamedArgs = isEmptyArgs(p.args)
-          ? parseToolCallArgsFromDeltas(toolCallArgsDeltas.get(p.toolCallId) ?? [])
-          : undefined;
-        const resultArgs = isEmptyArgs(p.args) ? result?.args : undefined;
-        const args = streamedArgs ?? resultArgs ?? p.args;
 
         if (result) {
           // Merge call + result into a single 'result' state part
@@ -274,7 +250,7 @@ export function buildMessagesFromChunks({
               state: 'result' as const,
               toolCallId: p.toolCallId,
               toolName: p.toolName,
-              args,
+              args: p.args,
               result: result.result,
             },
             providerMetadata: result.providerMetadata ?? providerMetadata,
@@ -288,7 +264,7 @@ export function buildMessagesFromChunks({
               state: 'call' as const,
               toolCallId: p.toolCallId,
               toolName: p.toolName,
-              args,
+              args: p.args,
             },
             providerMetadata,
             providerExecuted,

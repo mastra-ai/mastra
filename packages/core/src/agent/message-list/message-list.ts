@@ -1596,17 +1596,10 @@ export class MessageList {
   private lastCreatedAt?: number;
 
   private updateLastCreatedAt(message: MastraDBMessage): void {
-    const latestMessageTime = message.createdAt.getTime();
-    const latestPartTime = Array.isArray(message.content.parts)
-      ? message.content.parts.reduce((latest, part) => {
-          if (typeof part.createdAt === 'number' && part.createdAt > latest) {
-            return part.createdAt;
-          }
-          return latest;
-        }, latestMessageTime)
-      : latestMessageTime;
-
-    this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, latestPartTime);
+    // Message-level createdAt controls transcript ordering and OM observation boundaries.
+    // Part timestamps are event metadata within a message and must not advance the
+    // ordering watermark used to timestamp later messages/signals.
+    this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, message.createdAt.getTime());
   }
 
   // this makes sure messages added in order will always have a date atleast 1ms apart.
@@ -1632,10 +1625,9 @@ export class MessageList {
 
     const now = new Date();
     const nowTime = startDate?.getTime() || now.getTime();
-    // find the latest createdAt in stored messages and parts
     const lastTime = this.lastCreatedAt || 0;
 
-    // make sure our new message is created later than the latest known message time
+    // make sure our new message is created later than the latest known ordering timestamp
     // it's expected that messages are added to the list in order if they don't have a createdAt date on them
     if (nowTime <= lastTime) {
       const newDate = new Date(lastTime + 1);

@@ -85,18 +85,19 @@ export class MessageMerger {
   }
 
   /**
-   * Merge an incoming assistant message into the latest assistant message
+   * Merge an incoming assistant message into the latest assistant message.
+   *
+   * This preserves the existing message-level createdAt. OM uses that timestamp
+   * as its observation boundary, so moving it forward can make an already
+   * observed message look unobserved and eligible for reprocessing.
    *
    * This handles:
    * - Updating tool invocations with their results
    * - Adding new parts in the correct order using anchor maps
    * - Inserting step-start markers where needed
-   * - Updating timestamps and content strings
+   * - Updating content strings
    */
   static merge(latestMessage: MastraDBMessage, incomingMessage: MastraDBMessage): void {
-    // Update timestamp
-    latestMessage.createdAt = incomingMessage.createdAt || latestMessage.createdAt;
-
     if (incomingMessage.content.metadata) {
       latestMessage.content.metadata = {
         ...(latestMessage.content.metadata ?? {}),
@@ -208,9 +209,6 @@ export class MessageMerger {
       partsToAdd,
     });
 
-    if (latestMessage.createdAt.getTime() < incomingMessage.createdAt.getTime()) {
-      latestMessage.createdAt = incomingMessage.createdAt;
-    }
     if (!latestMessage.content.content && incomingMessage.content.content) {
       latestMessage.content.content = incomingMessage.content.content;
     }

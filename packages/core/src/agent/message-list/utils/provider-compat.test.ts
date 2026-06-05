@@ -1,6 +1,6 @@
 import type { ModelMessage } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
-import { ensureAnthropicCompatibleMessages, sanitizeOrphanedToolPairs } from './provider-compat';
+import { sanitizeOrphanedToolPairs } from './provider-compat';
 
 const assistantWithToolCalls = (...callIds: string[]): ModelMessage => ({
   role: 'assistant',
@@ -20,51 +20,6 @@ const toolMessageWithResults = (...callIds: string[]): ModelMessage => ({
     toolName: 'fetch',
     output: { type: 'text', value: `result-${toolCallId}` },
   })),
-});
-
-describe('ensureAnthropicCompatibleMessages', () => {
-  it('backfills empty assistant tool-call input from matching tool-result input', () => {
-    const messages: ModelMessage[] = [
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'tool-call',
-            toolCallId: 'call-set-name',
-            toolName: 'set-agent-name',
-            input: {},
-          },
-        ],
-      },
-      {
-        role: 'tool',
-        content: [
-          {
-            type: 'tool-result',
-            toolCallId: 'call-set-name',
-            toolName: 'set-agent-name',
-            input: { name: 'Support Email Triager' },
-            output: { type: 'json', value: { success: true } },
-          } as any,
-        ],
-      },
-    ];
-
-    expect(ensureAnthropicCompatibleMessages(messages, [])).toEqual([
-      {
-        role: 'assistant',
-        content: [
-          {
-            type: 'tool-call',
-            toolCallId: 'call-set-name',
-            toolName: 'set-agent-name',
-            input: { name: 'Support Email Triager' },
-          },
-        ],
-      },
-      messages[1],
-    ]);
-  });
 });
 
 describe('sanitizeOrphanedToolPairs', () => {
