@@ -118,4 +118,23 @@ describe('MCPServer dynamic resource provider does not leak across callers', () 
     tenant = 'tenant-B';
     expect((await server.listResources()).resources[0].name).toBe('Doc for tenant-B');
   });
+
+  it('invokes the listResources provider on every public listResources() call', async () => {
+    // Regression guard: the public method must re-run the provider each call rather than
+    // serving a cached result, otherwise the dynamic provider stops being consulted and
+    // stale/cross-tenant data is returned. Asserting the call count catches a silent
+    // reintroduction of the cache even if the returned shape happens to look correct.
+    const listResources = vi.fn(async () => [{ uri: 'app://doc', name: 'Doc', mimeType: 'text/plain' }]);
+    const server = new MCPServer({
+      name: 'regression',
+      version: '1.0.0',
+      tools: {},
+      resources: { listResources, getResourceContent: async ({ uri }) => ({ text: uri }) },
+    });
+
+    await server.listResources();
+    await server.listResources();
+
+    expect(listResources).toHaveBeenCalledTimes(2);
+  });
 });
