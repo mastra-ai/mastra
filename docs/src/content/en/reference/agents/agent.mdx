@@ -155,6 +155,35 @@ The model receives this as:
 <user name="Devin" from="slack">Can we simplify the API surface?</user>
 ```
 
+Use `ifActive.attributes` and `ifIdle.attributes` when the message should carry different context depending on whether the thread is currently running:
+
+```typescript title="src/mastra/signals.ts"
+agent.sendMessage(
+  {
+    contents: 'Also cover the edge cases.',
+    attributes: { source: 'chat' },
+  },
+  {
+    resourceId: 'user-123',
+    threadId: 'thread-abc',
+    ifActive: { attributes: { delivery: 'while-active' } },
+    ifIdle: { attributes: { delivery: 'new-message' } },
+  },
+)
+```
+
+When the thread is active, the model sees:
+
+```xml
+<user source="chat" delivery="while-active">Also cover the edge cases.</user>
+```
+
+When the thread is idle, the model sees:
+
+```xml
+<user source="chat" delivery="new-message">Also cover the edge cases.</user>
+```
+
 The UI sees the message contents and can also read `attributes` and `metadata` off the signal message for custom rendering (e.g. showing user names, avatars, or platform badges).
 
 ### `sendMessage(message, options)`
@@ -211,6 +240,13 @@ Sends a user message to an active run or memory thread. Use this when the active
                     isOptional: true,
                     description: 'Controls what happens when the target thread is active. Defaults to `deliver`.',
                   },
+                  {
+                    name: 'attributes',
+                    type: 'Record<string, string | number | boolean>',
+                    isOptional: true,
+                    description:
+                      'Attributes merged into the message when Mastra accepts it while the target thread is active.',
+                  },
                 ],
               },
             ],
@@ -237,6 +273,13 @@ Sends a user message to an active run or memory thread. Use this when the active
                     description:
                       'Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
                   },
+                  {
+                    name: 'attributes',
+                    type: 'Record<string, string | number | boolean>',
+                    isOptional: true,
+                    description:
+                      'Attributes merged into the message when Mastra accepts it while the target thread is idle.',
+                  },
                 ],
               },
             ],
@@ -247,6 +290,21 @@ Sends a user message to an active run or memory thread. Use this when the active
   },
 ]}
 />
+
+Set `ifIdle.behavior` to `wake` and pass `ifIdle.streamOptions` when an idle thread should start a new stream with custom execution options:
+
+```typescript title="src/mastra/signals.ts"
+agent.sendMessage('Continue with the next step.', {
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+  ifIdle: {
+    behavior: 'wake',
+    streamOptions: {
+      maxSteps: 3,
+    },
+  },
+})
+```
 
 Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the message to memory.
 
@@ -317,6 +375,13 @@ Sends a signal to an active run or memory thread.
                     isOptional: true,
                     description: 'Controls what happens when the target thread is active. Defaults to `deliver`.',
                   },
+                  {
+                    name: 'attributes',
+                    type: 'Record<string, string | number | boolean>',
+                    isOptional: true,
+                    description:
+                      'Attributes merged into the signal when Mastra accepts it while the target thread is active.',
+                  },
                 ],
               },
             ],
@@ -343,6 +408,13 @@ Sends a signal to an active run or memory thread.
                     description:
                       'Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
                   },
+                  {
+                    name: 'attributes',
+                    type: 'Record<string, string | number | boolean>',
+                    isOptional: true,
+                    description:
+                      'Attributes merged into the signal when Mastra accepts it while the target thread is idle.',
+                  },
                 ],
               },
             ],
@@ -355,6 +427,101 @@ Sends a signal to an active run or memory thread.
 />
 
 Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void> }`. `persisted` is only present for `persist` behavior and resolves when Mastra finishes writing the signal to memory.
+
+### `sendStateSignal(state, options)`
+
+Sends named, thread-scoped state context to an active run or memory thread. Use this when an external producer owns durable context that changes over time, such as browser state, editor state, or watcher output.
+
+```typescript
+const result = await agent.sendStateSignal(
+  {
+    id: 'browser',
+    mode: 'snapshot',
+    cacheKey: 'browser:https://example.com:3-tabs',
+    contents: 'Browser is open on https://example.com with 3 tabs.',
+    value: {
+      activeUrl: 'https://example.com',
+      tabCount: 3,
+      open: true,
+    },
+  },
+  {
+    resourceId: 'user-123',
+    threadId: 'thread-abc',
+  },
+)
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'state',
+    type: 'object',
+    description: 'State signal to send to the thread.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          { name: 'id', type: 'string', description: 'State lane name, such as `browser` or `editor`.' },
+          {
+            name: 'cacheKey',
+            type: 'string',
+            description: 'Producer-owned key Mastra uses to skip duplicate state for the same lane and mode.',
+          },
+          {
+            name: 'contents',
+            type: 'string | Array<TextPart | FilePart>',
+            description: 'LLM-facing representation of the state.',
+          },
+          {
+            name: 'mode',
+            type: "'snapshot' | 'delta'",
+            isOptional: true,
+            description: 'Whether the state is an authoritative snapshot or a change event. Defaults to `snapshot`.',
+          },
+          {
+            name: 'value',
+            type: 'unknown',
+            isOptional: true,
+            description: "Structured snapshot value for `mode: 'snapshot'`.",
+          },
+          {
+            name: 'delta',
+            type: 'unknown',
+            isOptional: true,
+            description: "Structured change value for `mode: 'delta'`.",
+          },
+          {
+            name: 'attributes',
+            type: 'Record<string, string | number | boolean>',
+            isOptional: true,
+            description: 'Attributes rendered on the state signal tag.',
+          },
+          {
+            name: 'metadata',
+            type: 'Record<string, unknown>',
+            isOptional: true,
+            description: 'Application metadata stored with the state signal.',
+          },
+          {
+            name: 'tagName',
+            type: 'string',
+            isOptional: true,
+            description: 'XML tag name shown to the model. Defaults to `state`.',
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'options',
+    type: 'object',
+    description: 'Targeting and delivery behavior for the state signal. Accepts the same options as `sendSignal()`.',
+  },
+]}
+/>
+
+Returns `{ accepted: true, runId: string, signal: CreatedAgentSignal, persisted?: Promise<void>, skipped?: false }` when Mastra accepts new state. Returns `{ accepted: true, skipped: true, reason: 'unchanged' }` when the same `cacheKey` and mode are already current for the state lane.
 
 ### `sendNotificationSignal(notification, options)`
 
@@ -490,6 +657,32 @@ Returns `{ accepted: true, record: NotificationRecord, decision: NotificationDel
 
 Default delivery is priority-aware. `urgent` notifications deliver immediately. `high` notifications deliver immediately when the thread is idle; when the thread is active, Mastra emits a summary immediately and keeps `deliverAt` for later full delivery when the thread is idle. `medium` notifications deliver immediately when idle and batch into summaries when active. `low` notifications batch into summaries in both active and idle threads; idle low-priority summaries reach subscribers without waking the model loop. For the full flow, visit [Signals](/docs/agents/signals#notification-signals).
 
+Configure `notifications.deliveryPolicy` on the agent when some notifications should wait for a different dispatch window or summary rollup:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Help the user triage updates.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  notifications: {
+    deliveryPolicy: {
+      priorities: {
+        urgent: 'deliver',
+      },
+      decide: ({ record }) => {
+        if (record.priority === 'low') {
+          return {
+            action: 'summarize',
+            summaryAt: new Date(Date.now() + 30 * 60 * 1000),
+          }
+        }
+      },
+    },
+  },
+})
+```
+
 ### `subscribeToThread(options)`
 
 Subscribes to raw stream chunks for a memory thread. Use this before calling `sendMessage()`, `queueMessage()`, or `sendSignal()` when you need to render stream output, observe signal echoes, or abort the active run.
@@ -612,13 +805,6 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
       'Shared policy for transforming tool payloads before display streams or user-visible transcript messages receive them. Use per-tool `transform` on `createTool()` for tool-local rules.',
   },
   {
-    name: 'notifications',
-    type: '{ deliveryPolicy?: NotificationDeliveryPolicyConfig }',
-    isOptional: true,
-    description:
-      'Notification delivery configuration for `sendNotificationSignal()`. `deliveryPolicy` can define `decide`, `sources`, `priorities`, or `default` rules that return `deliver`, `queue`, `defer`, `summarize`, `persist`, or `discard` decisions.',
-  },
-  {
     name: 'workflows',
     type: 'Record<string, Workflow> | ({ requestContext: RequestContext }) => Record<string, Workflow> | Promise<Record<string, Workflow>>',
     isOptional: true,
@@ -659,6 +845,26 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
     type: 'MastraMemory | ({ requestContext: RequestContext }) => MastraMemory | Promise<MastraMemory>',
     isOptional: true,
     description: 'Memory module used for storing and retrieving stateful context.',
+  },
+  {
+    name: 'notifications',
+    type: 'object',
+    isOptional: true,
+    description: 'Notification delivery configuration for durable notification signals.',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'deliveryPolicy',
+            type: 'NotificationDeliveryPolicyConfig',
+            isOptional: true,
+            description:
+              'Controls how notification records are delivered. Configure a default decision, per-priority decisions, per-source decisions, or a custom `decide()` function.',
+          },
+        ],
+      },
+    ],
   },
   {
     name: 'voice',

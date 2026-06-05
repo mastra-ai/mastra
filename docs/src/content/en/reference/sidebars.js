@@ -521,6 +521,12 @@ const sidebars = {
       label: 'Signals',
       collapsed: true,
       items: [
+        {
+          type: 'doc',
+          id: 'signals/create-notification-inbox-tool',
+          label: 'createNotificationInboxTool()',
+          customProps: { tags: ['alpha'] },
+        },
         { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider', customProps: { tags: ['alpha'] } },
         {
           type: 'doc',
