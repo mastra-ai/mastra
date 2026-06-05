@@ -30,7 +30,7 @@ function sseResponse(chunks: Array<object | string>, { status = 200 }: { status?
   });
 }
 
-describe('Agent vNext', () => {
+describe('Agent client-side tools', () => {
   const client = new MastraClient({ baseUrl: 'http://localhost:4111', headers: { Authorization: 'Bearer test-key' } });
   const agent = client.getAgent('agent-1');
   const traceparent = '00-1234567890abcdef1234567890abcdef-1234567890abcdef-01';
