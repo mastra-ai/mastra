@@ -1,60 +1,60 @@
 import { Button, Spinner, Textarea, toast } from '@mastra/playground-ui';
+import { useCreateWorkflowRun, useStreamWorkflow } from '@mastra/react';
 import { ArrowUpIcon } from 'lucide-react';
-import { nanoid } from 'nanoid';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA } from '../../constants/default-request-context-schema';
-import { useAgentBuilderAllowedModels } from '../../hooks/use-agent-builder-allowed-models';
-import { useBuilderModelPolicy, useBuilderSettings } from '../../hooks/use-builder-settings';
 import { ExampleList } from './example-list';
-import { resolveStarterModel, truncateName } from './utils';
-import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
-import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
+import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
+
+const AGENT_BUILDER_CREATION_WORKFLOW_ID = 'agent-builder-creation';
+
+const getCreatedAgentId = (result: unknown): string | undefined => {
+  if (!result || typeof result !== 'object') return undefined;
+  const id = (result as { id?: unknown }).id;
+  return typeof id === 'string' && id.length > 0 ? id : undefined;
+};
 
 export const AgentBuilderStarter = () => {
   const [message, setMessage] = useState('');
+  const [createdAgentId, setCreatedAgentId] = useState<string | null>(null);
   const navigate = useNavigate();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { createStoredAgent } = useStoredAgentMutations(undefined);
-  const defaultVisibility = useDefaultVisibility();
-  const { models: allowedModels } = useAgentBuilderAllowedModels();
-  const modelPolicy = useBuilderModelPolicy();
-  // While builder settings are still loading, useBuilderModelPolicy falls back
-  // to an inactive policy — submitting in that window would skip the admin
-  // default model. Block submit until the settings query has resolved.
-  const { isLoading: isBuilderSettingsLoading } = useBuilderSettings();
+  const { data: currentUser } = useCurrentUser();
+  const createWorkflowRun = useCreateWorkflowRun();
+  const { streamWorkflow, streamResult, isStreaming } = useStreamWorkflow({
+    debugMode: false,
+    onError: error => toast.error(error.message),
+  });
 
   const trimmed = message.trim();
-  const isCreating = createStoredAgent.isPending;
-  const isSubmitBlocked = trimmed.length === 0 || isCreating || isBuilderSettingsLoading;
+  const isCreating = createWorkflowRun.isPending || isStreaming;
+  const isSubmitBlocked = trimmed.length === 0 || isCreating;
+
+  // When the creation workflow finishes successfully its terminal `persist-agent`
+  // step output (createResultSchema) surfaces on `streamResult.result`. Capture
+  // the created agent id so the user can choose where to go next.
+  const resultId = streamResult.status === 'success' ? getCreatedAgentId(streamResult.result) : undefined;
+  useEffect(() => {
+    if (resultId) setCreatedAgentId(resultId);
+  }, [resultId]);
 
   const handleSubmit = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isSubmitBlocked) return;
 
-    const id = nanoid();
-
     try {
-      await createStoredAgent.mutateAsync({
-        id,
-        name: truncateName(trimmed),
-        instructions: '',
-        tools: {},
-        agents: {},
-        workflows: {},
-        skills: {},
-        visibility: defaultVisibility,
-        model: resolveStarterModel(allowedModels, modelPolicy),
-        requestContextSchema: DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA,
-      });
+      const run = await createWorkflowRun.mutateAsync({ workflowId: AGENT_BUILDER_CREATION_WORKFLOW_ID });
 
-      void navigate(`/agent-builder/agents/${id}/edit`, {
-        state: { userMessage: trimmed },
-        viewTransition: true,
+      // Attribute authorship to the current user so the persisted agent is owned
+      // by them. The workflow reads the `user` key off the request context.
+      await streamWorkflow.mutateAsync({
+        workflowId: AGENT_BUILDER_CREATION_WORKFLOW_ID,
+        runId: run.runId,
+        inputData: { prompt: trimmed },
+        requestContext: currentUser ? { user: currentUser } : {},
       });
     } catch {
-      toast.error('Failed to start a new agent');
-      return;
+      toast.error('Failed to create your agent');
     }
   };
 
@@ -71,6 +71,51 @@ export const AgentBuilderStarter = () => {
     setMessage(prompt);
     textareaRef.current?.focus();
   };
+
+  if (createdAgentId) {
+    return (
+      <div className="starter-aurora flex min-h-full flex-col items-center justify-center bg-surface1 px-6 py-24">
+        <div
+          className="relative z-10 flex w-full max-w-xl flex-col items-center gap-8 text-center"
+          data-testid="agent-builder-starter-complete"
+        >
+          <h1
+            className="starter-heading font-serif text-neutral6"
+            style={{ fontSize: 'clamp(1.875rem, 3.5vw, 2.5rem)', lineHeight: 1.1, letterSpacing: '-0.015em' }}
+          >
+            Your agent is ready
+          </h1>
+
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Button
+              variant="default"
+              size="lg"
+              data-testid="agent-builder-starter-view"
+              onClick={() =>
+                navigate(`/agent-builder/agents/${createdAgentId}/view`, {
+                  viewTransition: true,
+                })
+              }
+            >
+              View agent
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
+              data-testid="agent-builder-starter-review"
+              onClick={() =>
+                navigate(`/agent-builder/agents/${createdAgentId}/onboarding`, {
+                  viewTransition: true,
+                })
+              }
+            >
+              Review config
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="starter-aurora flex min-h-full flex-col items-center justify-center bg-surface1 px-6 py-24">

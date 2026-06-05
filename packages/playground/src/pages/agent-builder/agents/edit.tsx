@@ -1,11 +1,10 @@
-import { Button, Spinner } from '@mastra/playground-ui';
-import { useEffect, useState } from 'react';
-import { FormProvider, useForm, useFormContext, useFormState, useWatch } from 'react-hook-form';
+import { Spinner } from '@mastra/playground-ui';
+import { useState } from 'react';
+import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu';
 import {
   AgentProfile,
-  AgentProfileInitialStep,
   AgentProfileModelStep,
   AgentProfileToolsStep,
   AgentProfileInstructionsStep,
@@ -28,13 +27,11 @@ import { EditPageProvider, useEditPage } from '@/domains/agent-builder/contexts/
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
 import { useWizard, WizardProvider } from '@/domains/agent-builder/contexts/wizard-context';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
-import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
 import { useChannelConnectToast } from '@/domains/agent-builder/hooks/use-channel-connect-toast';
 import { AgentBuilderEditLayout } from '@/domains/agent-builder/layouts/agent-builder-edit-layout';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { storedAgentToFormValues } from '@/domains/agent-builder/services/stored-agent-to-form-values';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
-import { startViewTransition } from '@/lib/routing';
 
 export default function AgentBuilderAgentEdit() {
   const { id } = useParams<{ id: string }>();
@@ -48,14 +45,14 @@ export default function AgentBuilderAgentEdit() {
 }
 
 const EditPageGate = () => {
-  const { agentId, storedAgent, isReady, isOwner, canWrite, initialUserMessage } = useAgentPrimitives();
+  const { agentId, storedAgent, isReady, isOwner, canWrite } = useAgentPrimitives();
 
   if (!isReady) return <AgentBuilderAgentEditSkeleton />;
   if (!storedAgent) return <Navigate to="/agent-builder/agents" replace />;
   if (!canWrite || !isOwner) return <Navigate to={`/agent-builder/agents/${agentId}/view`} replace />;
 
   return (
-    <WizardProvider initialStep={initialUserMessage ? 'initial' : 'end'}>
+    <WizardProvider initialStep="end">
       <EditPageForm />
     </WizardProvider>
   );
@@ -110,76 +107,15 @@ const EditPageBody = () => {
 
 const EditPageLayout = () => {
   const { step } = useWizard();
-  const features = useBuilderAgentFeatures();
-  const isRunning = useStreamRunning();
-  const { control } = useFormContext<AgentBuilderEditFormValues>();
-  const { dirtyFields } = useFormState({ control });
-  const name = useWatch({ control, name: 'name' }) ?? '';
-  const description = useWatch({ control, name: 'description' }) ?? '';
-  const instructions = useWatch({ control, name: 'instructions' }) ?? '';
-  const modelName = useWatch({ control, name: 'model.name' }) ?? '';
-
-  // Onboarding gate: stay centered until every mandatory field for the new agent
-  // is populated. A field is considered populated when it is either user-dirty
-  // in the form OR already has a non-empty value (e.g. set by the builder agent
-  // through a tool call, or persisted on the stored agent).
-  const isFilled = (isDirty: boolean | undefined, value: string) => Boolean(isDirty) || value.trim().length > 0;
-
-  const hasMandatoryFields =
-    isFilled(dirtyFields.name, name) &&
-    isFilled(dirtyFields.description, description) &&
-    isFilled(dirtyFields.instructions, instructions) &&
-    (!features.model || isFilled(dirtyFields.model?.name, modelName));
-
-  const shouldBeCentered = step === 'initial' && !hasMandatoryFields;
-
-  const [variant, setVariant] = useState<'centered' | 'split'>(shouldBeCentered ? 'centered' : 'split');
-
-  useEffect(() => {
-    const next = shouldBeCentered ? 'centered' : 'split';
-    if (next === variant) return;
-    startViewTransition(() => {
-      setVariant(next);
-    });
-  }, [shouldBeCentered, variant]);
-
-  const isCentered = variant === 'centered';
-  const showMobileInitialCtas = step === 'initial' && hasMandatoryFields && !isRunning;
 
   return (
     <AgentBuilderEditLayout
       topBar={<EditTopBarSlot />}
       chat={<ConversationPanelChat />}
-      chatFooter={showMobileInitialCtas ? <MobileInitialCtas /> : undefined}
-      profile={isCentered ? null : <ProfileSlot />}
-      variant={variant}
+      profile={<ProfileSlot />}
+      variant="split"
       hideMobileChat={step === 'end'}
     />
-  );
-};
-
-const MobileInitialCtas = () => {
-  const { next } = useWizard();
-  const navigate = useNavigate();
-  const { agentId } = useEditPage();
-
-  return (
-    <div className="flex flex-col gap-2 lg:hidden" data-testid="agent-builder-mobile-initial-ctas">
-      <Button
-        variant="primary"
-        onClick={() => navigate(`/agent-builder/agents/${agentId}/view`, { viewTransition: true })}
-        data-testid="agent-builder-mobile-initial-cta-chat"
-      >
-        Chat with my agent
-      </Button>
-      <Button
-        variant="outline"
-        onClick={() => startViewTransition(() => next())}
-        data-testid="agent-builder-mobile-initial-cta-config"
-      >
-        See configuration
-      </Button>
-    </div>
   );
 };
 
@@ -240,18 +176,6 @@ const ProfileSlot = () => {
       {isOwner && <DeleteAgentPanelButton agentId={agentId} agentName={name} disabled={isRunning} />}
     </div>
   );
-
-  // When the wizard is on the 'initial' step, `EditPageLayout` guarantees that
-  // every mandatory field is filled before the profile column is rendered, so
-  // there is no preparing/skeleton state to handle here.
-  if (step === 'initial') {
-    return (
-      <AgentProfileInitialStep
-        avatar={<AgentProfileAvatar disabled={isRunning} />}
-        details={<AgentProfileDetails mode="highlighted" disabled={isRunning} />}
-      />
-    );
-  }
 
   if (step === 'model') {
     return <AgentProfileModelStep />;

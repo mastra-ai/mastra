@@ -8,11 +8,16 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import type * as ReactRouter from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA } from '../../../constants/default-request-context-schema';
 import { AgentBuilderStarter } from '../agent-builder-starter';
 import { server } from '@/test/msw-server';
+import {
+  encodeChunks,
+  failedCreationChunks,
+  successfulCreationChunks,
+} from './fixtures/creation-workflow';
 
 const navigateMock = vi.fn();
+const { toastErrorMock } = vi.hoisted(() => ({ toastErrorMock: vi.fn() }));
 
 vi.mock('react-router', async () => {
   const actual = await vi.importActual<typeof ReactRouter>('react-router');
@@ -26,22 +31,20 @@ vi.mock('@mastra/playground-ui', async () => {
   const actual = await vi.importActual<typeof PlaygroundUi>('@mastra/playground-ui');
   return {
     ...actual,
-    toast: { success: vi.fn(), error: vi.fn() },
-    usePlaygroundStore: () => ({ requestContext: undefined }),
+    toast: { success: vi.fn(), error: toastErrorMock },
   };
 });
 
-vi.mock('@/domains/auth/hooks/use-default-visibility', () => ({
-  useDefaultVisibility: () => 'private',
-}));
-
 const BASE_URL = 'http://localhost:4111';
+const WORKFLOW_ID = 'agent-builder-creation';
+const CREATED_AGENT_ID = 'agent-created-123';
+const CURRENT_USER = { id: 'user-1', name: 'Ada', email: 'ada@example.com' };
 
 const renderStarter = () => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(
+  const utils = render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
@@ -52,27 +55,82 @@ const renderStarter = () => {
       </QueryClientProvider>
     </MastraReactProvider>,
   );
+  return { ...utils, queryClient };
+};
+
+/**
+ * Wait for the `useCurrentUser` query to settle so the starter has resolved the
+ * authenticated user before it submits and builds the request context.
+ */
+const waitForAuthSettled = async (queryClient: QueryClient) => {
+  await waitFor(() => {
+    const state = queryClient.getQueryState(['auth', 'me']);
+    expect(state?.status === 'success' || state?.status === 'error').toBe(true);
+  });
+};
+
+/**
+ * Wire the create-run + stream endpoints the creation workflow drives. The
+ * stream body is RECORD_SEPARATOR-delimited JSON the client SDK parses into
+ * `StreamVNextChunkType` chunks.
+ */
+const useCreationHandlers = (opts?: {
+  onCreateRun?: () => void;
+  onStream?: (body: unknown) => void;
+  streamBody?: string;
+  createRunStatus?: number;
+}) => {
+  server.use(
+    http.post(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/create-run`, () => {
+      opts?.onCreateRun?.();
+      if (opts?.createRunStatus && opts.createRunStatus >= 400) {
+        return HttpResponse.json({ message: 'nope' }, { status: opts.createRunStatus });
+      }
+      return HttpResponse.json({ runId: 'run-creation-1' });
+    }),
+    http.post(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/stream`, async ({ request }) => {
+      opts?.onStream?.(await request.json());
+      return new HttpResponse(opts?.streamBody ?? encodeChunks(successfulCreationChunks(CREATED_AGENT_ID)), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }),
+  );
+};
+
+const withCurrentUser = () => {
+  server.use(http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json(CURRENT_USER)));
+};
+
+const withoutCurrentUser = () => {
+  server.use(
+    http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json(null, { status: 401 })),
+    // `fetchWithRefresh` attempts a session refresh on a 401; keep it handled so
+    // MSW's `onUnhandledRequest: 'error'` does not flag it.
+    http.post(`${BASE_URL}/api/auth/refresh`, () => HttpResponse.json(null, { status: 401 })),
+  );
+};
+
+const enableSubmit = async (getByTestId: (id: string) => HTMLElement, prompt: string) => {
+  const input = getByTestId('agent-builder-starter-input') as HTMLTextAreaElement;
+  const submit = getByTestId('agent-builder-starter-submit') as HTMLButtonElement;
+  fireEvent.change(input, { target: { value: prompt } });
+  await waitFor(() => expect(submit.disabled).toBe(false));
+  return { input, submit };
 };
 
 describe('AgentBuilderStarter', () => {
   beforeEach(() => {
-    // The starter pulls builder settings + provider models so it can pick a
-    // model that the admin policy allows. Stub the bare minimum: no policy and
-    // an empty provider list, which yields the hard-coded fallback model.
-    server.use(
-      http.get(`${BASE_URL}/api/editor/builder/settings`, () =>
-        HttpResponse.json({ enabled: true, modelPolicy: { active: false } }),
-      ),
-      http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json({ providers: [] })),
-    );
+    withCurrentUser();
   });
 
   afterEach(() => {
     cleanup();
     navigateMock.mockReset();
+    toastErrorMock.mockReset();
   });
 
-  it('renders a submit button that is disabled until the input has content', async () => {
+  it('keeps the submit button disabled until the prompt has content', async () => {
+    useCreationHandlers();
     const { getByTestId } = renderStarter();
     const submit = getByTestId('agent-builder-starter-submit') as HTMLButtonElement;
     const input = getByTestId('agent-builder-starter-input') as HTMLTextAreaElement;
@@ -80,107 +138,91 @@ describe('AgentBuilderStarter', () => {
     expect(submit.type).toBe('submit');
     expect(submit.disabled).toBe(true);
 
-    fireEvent.change(input, { target: { value: 'build something' } });
+    fireEvent.change(input, { target: { value: 'build a tutor agent' } });
     await waitFor(() => expect(submit.disabled).toBe(false));
+
+    // Whitespace-only input does not count as content.
+    fireEvent.change(input, { target: { value: '   ' } });
+    await waitFor(() => expect(submit.disabled).toBe(true));
   });
 
-  it('does not render a "create manually" affordance — users must use the prompt input', () => {
-    const { queryByTestId } = renderStarter();
-    expect(queryByTestId('agent-builder-starter-create-manually')).toBeNull();
-  });
-
-  it('eagerly creates the agent then navigates to its edit page with the user message', async () => {
-    let capturedBody: any = null;
+  it('runs the creation workflow with the prompt and does not call the legacy stored-agents create endpoint', async () => {
+    const onCreateRun = vi.fn();
+    let streamBody: any = null;
+    const onStoredAgents = vi.fn();
+    useCreationHandlers({ onCreateRun, onStream: body => (streamBody = body) });
     server.use(
-      http.post(`${BASE_URL}/api/stored/agents`, async ({ request }) => {
-        capturedBody = await request.json();
-        return HttpResponse.json({ id: capturedBody.id });
+      http.post(`${BASE_URL}/api/stored/agents`, () => {
+        onStoredAgents();
+        return HttpResponse.json({ id: 'should-not-happen' });
       }),
     );
 
     const { getByTestId } = renderStarter();
-    const input = getByTestId('agent-builder-starter-input') as HTMLTextAreaElement;
-    const submit = getByTestId('agent-builder-starter-submit') as HTMLButtonElement;
-
-    fireEvent.change(input, { target: { value: 'build a tutor agent' } });
-    // Wait for builder settings to load so submit is no longer gated.
-    await waitFor(() => expect(submit.disabled).toBe(false));
+    const { submit } = await enableSubmit(getByTestId, 'build a tutor agent');
 
     await act(async () => {
       fireEvent.click(submit);
     });
 
-    // The MSW handler populates `capturedBody` asynchronously, so wait for the
-    // POST to land before reading its fields. Avoids a race that previously
-    // made this assertion flaky on slow runners.
-    await waitFor(() => expect(capturedBody).not.toBeNull());
-    expect(capturedBody.name).toBe('build a tutor agent');
-    expect(capturedBody.instructions).toBe('');
-    expect(capturedBody.model).toEqual({ provider: 'google', name: 'gemini-2.5-flash' });
-    expect(capturedBody.visibility).toBe('private');
-    // Every builder agent is born with a `user` request-context variable matching
-    // the authenticated user shape. The constant is asserted by reference so any
-    // shape drift in the source-of-truth constant is caught by its own test, not here.
-    expect(capturedBody.requestContextSchema).toEqual(DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA);
-
-    await waitFor(() => expect(navigateMock).toHaveBeenCalledTimes(1));
-    const [path, opts] = navigateMock.mock.calls[0];
-    expect(path).toBe(`/agent-builder/agents/${capturedBody.id}/edit`);
-    expect(opts).toMatchObject({
-      state: { userMessage: 'build a tutor agent' },
-      viewTransition: true,
-    });
+    await waitFor(() => expect(onCreateRun).toHaveBeenCalled());
+    await waitFor(() => expect(streamBody).not.toBeNull());
+    expect(streamBody.inputData).toEqual({ prompt: 'build a tutor agent' });
+    expect(onStoredAgents).not.toHaveBeenCalled();
   });
 
-  it('truncates long prompts to 20 chars + ellipsis when generating the temp name', async () => {
-    let capturedBody: any = null;
-    server.use(
-      http.post(`${BASE_URL}/api/stored/agents`, async ({ request }) => {
-        capturedBody = await request.json();
-        return HttpResponse.json({ id: capturedBody.id });
-      }),
-    );
+  it('forwards the current user as the request-context author when streaming', async () => {
+    let streamBody: any = null;
+    useCreationHandlers({ onStream: body => (streamBody = body) });
 
-    const longPrompt = 'build a really helpful pull request reviewer agent for typescript repos';
-    const { getByTestId } = renderStarter();
-    fireEvent.change(getByTestId('agent-builder-starter-input'), { target: { value: longPrompt } });
-    await waitFor(() =>
-      expect((getByTestId('agent-builder-starter-submit') as HTMLButtonElement).disabled).toBe(false),
-    );
+    const { getByTestId, queryClient } = renderStarter();
+    await waitForAuthSettled(queryClient);
+    const { submit } = await enableSubmit(getByTestId, 'support triage');
 
     await act(async () => {
-      fireEvent.click(getByTestId('agent-builder-starter-submit'));
+      fireEvent.click(submit);
     });
 
-    await waitFor(() => expect(capturedBody).not.toBeNull());
-    expect(capturedBody.name).toBe(longPrompt.slice(0, 20) + '\u2026');
-    await waitFor(() => expect(navigateMock).toHaveBeenCalled());
+    await waitFor(() => expect(streamBody).not.toBeNull());
+    expect(streamBody.requestContext).toMatchObject({ user: CURRENT_USER });
   });
 
-  it('disables the input and shows a spinner while the create request is in flight, then navigates once it resolves', async () => {
-    let resolveResponse: () => void = () => {};
-    const pending = new Promise<void>(resolve => {
-      resolveResponse = resolve;
-    });
-    let capturedId: string | undefined;
+  it('omits the user request-context key when there is no authenticated user', async () => {
+    withoutCurrentUser();
+    let streamBody: any = null;
+    useCreationHandlers({ onStream: body => (streamBody = body) });
 
+    const { getByTestId, queryClient } = renderStarter();
+    await waitForAuthSettled(queryClient);
+    const { submit } = await enableSubmit(getByTestId, 'support triage');
+
+    await act(async () => {
+      fireEvent.click(submit);
+    });
+
+    await waitFor(() => expect(streamBody).not.toBeNull());
+    expect(streamBody.requestContext?.user).toBeUndefined();
+  });
+
+  it('shows a spinner and disables input while the workflow is in flight', async () => {
+    let releaseStream: () => void = () => {};
+    const streamGate = new Promise<void>(resolve => {
+      releaseStream = resolve;
+    });
     server.use(
-      http.post(`${BASE_URL}/api/stored/agents`, async ({ request }) => {
-        const body = (await request.json()) as { id: string };
-        capturedId = body.id;
-        await pending;
-        return HttpResponse.json({ id: body.id });
+      http.post(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/create-run`, () =>
+        HttpResponse.json({ runId: 'run-creation-1' }),
+      ),
+      http.post(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/stream`, async () => {
+        await streamGate;
+        return new HttpResponse(encodeChunks(successfulCreationChunks(CREATED_AGENT_ID)), {
+          headers: { 'Content-Type': 'application/json' },
+        });
       }),
     );
 
     const { getByTestId, queryByTestId } = renderStarter();
-    const input = getByTestId('agent-builder-starter-input') as HTMLTextAreaElement;
-    const submit = getByTestId('agent-builder-starter-submit') as HTMLButtonElement;
-
-    fireEvent.change(input, { target: { value: 'standup bot' } });
-    // Wait for builder settings to load so submit is no longer gated by it,
-    // otherwise the click below is a no-op and the spinner never appears.
-    await waitFor(() => expect(submit.disabled).toBe(false));
+    const { input, submit } = await enableSubmit(getByTestId, 'standup bot');
     fireEvent.click(submit);
 
     await waitFor(() => expect(submit.disabled).toBe(true));
@@ -189,81 +231,62 @@ describe('AgentBuilderStarter', () => {
     expect(navigateMock).not.toHaveBeenCalled();
 
     await act(async () => {
-      resolveResponse();
+      releaseStream();
     });
 
-    await waitFor(() => expect(navigateMock).toHaveBeenCalledTimes(1));
-    const [path] = navigateMock.mock.calls[0];
-    expect(path).toBe(`/agent-builder/agents/${capturedId}/edit`);
+    await waitFor(() => expect(queryByTestId('agent-builder-starter-complete')).not.toBeNull());
   });
 
-  it('prefers the admin-configured modelPolicy default over the first allowed model (PLTFRM-1017)', async () => {
-    // When the admin configures a default model on an active policy, the
-    // starter must commit to that default — not the first allowlist entry
-    // (which is what we used to pick, and which broke the configured default).
-    // Model IDs use placeholder tokens documented in
-    // docs/src/plugins/remark-model-tokens/models.ts.
-    const ALLOWED_MODEL_PROVIDER = 'anthropic';
-    const ALLOWED_MODEL_ID = 'claude-opus-4-7'; // __GATEWAY_ANTHROPIC_MODEL_OPUS__
-    const DEFAULT_MODEL_PROVIDER = 'openai';
-    const DEFAULT_MODEL_ID = 'gpt-5.4'; // __GATEWAY_OPENAI_MODEL__
-
-    let capturedBody: any = null;
-    server.use(
-      http.get(`${BASE_URL}/api/editor/builder/settings`, () =>
-        HttpResponse.json({
-          enabled: true,
-          modelPolicy: {
-            active: true,
-            pickerVisible: true,
-            allowed: [
-              { provider: ALLOWED_MODEL_PROVIDER, modelId: ALLOWED_MODEL_ID },
-              { provider: DEFAULT_MODEL_PROVIDER },
-            ],
-            default: { provider: DEFAULT_MODEL_PROVIDER, modelId: DEFAULT_MODEL_ID },
-          },
-        }),
-      ),
-      http.post(`${BASE_URL}/api/stored/agents`, async ({ request }) => {
-        capturedBody = await request.json();
-        return HttpResponse.json({ id: capturedBody.id });
-      }),
-    );
+  it('renders View agent and Review config CTAs on completion and navigates to the right routes', async () => {
+    useCreationHandlers();
 
     const { getByTestId } = renderStarter();
-
-    // The submit button is gated on `useBuilderSettings().isLoading`, so once
-    // it's enabled we know React Query has the policy cached and the next
-    // submit will see the active policy. This replaces the prior flaky
-    // `setTimeout(0)` workaround with a deterministic UI signal.
-    fireEvent.change(getByTestId('agent-builder-starter-input'), { target: { value: 'standup bot' } });
-    await waitFor(() =>
-      expect((getByTestId('agent-builder-starter-submit') as HTMLButtonElement).disabled).toBe(false),
-    );
-
-    await act(async () => {
-      fireEvent.click(getByTestId('agent-builder-starter-submit'));
-    });
-
-    await waitFor(() => expect(capturedBody).not.toBeNull());
-    expect(capturedBody.model).toEqual({ provider: DEFAULT_MODEL_PROVIDER, name: DEFAULT_MODEL_ID });
-  });
-
-  it('does not navigate when the create request fails', async () => {
-    server.use(
-      http.post(`${BASE_URL}/api/stored/agents`, () => HttpResponse.json({ message: 'boom' }, { status: 500 })),
-    );
-
-    const { getByTestId } = renderStarter();
-    fireEvent.change(getByTestId('agent-builder-starter-input'), { target: { value: 'support triage' } });
-    const submit = getByTestId('agent-builder-starter-submit') as HTMLButtonElement;
-    await waitFor(() => expect(submit.disabled).toBe(false));
+    const { submit } = await enableSubmit(getByTestId, 'build a tutor agent');
 
     await act(async () => {
       fireEvent.click(submit);
     });
 
+    await waitFor(() => expect(getByTestId('agent-builder-starter-complete')).not.toBeNull());
+
+    fireEvent.click(getByTestId('agent-builder-starter-view'));
+    expect(navigateMock).toHaveBeenLastCalledWith(`/agent-builder/agents/${CREATED_AGENT_ID}/view`, {
+      viewTransition: true,
+    });
+
+    fireEvent.click(getByTestId('agent-builder-starter-review'));
+    expect(navigateMock).toHaveBeenLastCalledWith(`/agent-builder/agents/${CREATED_AGENT_ID}/onboarding`, {
+      viewTransition: true,
+    });
+  });
+
+  it('surfaces an error toast and re-enables submit when the run fails', async () => {
+    useCreationHandlers({ createRunStatus: 500 });
+
+    const { getByTestId } = renderStarter();
+    const { submit } = await enableSubmit(getByTestId, 'support triage');
+
+    await act(async () => {
+      fireEvent.click(submit);
+    });
+
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
     expect(navigateMock).not.toHaveBeenCalled();
     await waitFor(() => expect(submit.disabled).toBe(false));
+  });
+
+  it('reports the failed workflow status through the stream error handler', async () => {
+    useCreationHandlers({ streamBody: encodeChunks(failedCreationChunks()) });
+
+    const { getByTestId, queryByTestId } = renderStarter();
+    const { submit } = await enableSubmit(getByTestId, 'support triage');
+
+    await act(async () => {
+      fireEvent.click(submit);
+    });
+
+    await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
+    expect(queryByTestId('agent-builder-starter-complete')).toBeNull();
+    expect(navigateMock).not.toHaveBeenCalled();
   });
 });

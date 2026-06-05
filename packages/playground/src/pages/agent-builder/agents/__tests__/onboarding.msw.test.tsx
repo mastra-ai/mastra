@@ -3,13 +3,13 @@ import type * as PlaygroundUi from '@mastra/playground-ui';
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import React from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import AgentBuilderAgentEdit from '../edit';
+import AgentBuilderAgentOnboarding from '../onboarding';
 import type * as AgentBuilderModule from '@/domains/agent-builder';
 import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
@@ -41,22 +41,27 @@ vi.mock('@/domains/agent-builder', async () => {
   };
 });
 
+const useCurrentUserMock = vi.fn<() => { data: { id: string } | undefined; isLoading: boolean }>(() => ({
+  data: { id: 'user-1' },
+  isLoading: false,
+}));
 vi.mock('@/domains/auth/hooks/use-current-user', () => ({
-  useCurrentUser: () => ({ data: { id: 'user-1' }, isLoading: false }),
+  useCurrentUser: () => useCurrentUserMock(),
 }));
 
+const useBuilderAgentAccessMock = vi.fn(() => ({
+  hasAccess: true,
+  canWrite: true,
+  canExecute: true,
+  canManageSkills: true,
+  canUseFavorites: true,
+  denialReason: null,
+}));
 vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
-  useBuilderAgentAccess: () => ({
-    hasAccess: true,
-    canWrite: true,
-    canExecute: true,
-    canManageSkills: true,
-    canUseFavorites: true,
-    denialReason: null,
-  }),
+  useBuilderAgentAccess: () => useBuilderAgentAccessMock(),
 }));
 
-// Stub heavy chat panels so we can focus on layout.
+// Stub heavy chat panels so we can focus on the onboarding shell + CTAs.
 vi.mock('@/domains/agent-builder/components/agent-edit/conversation-panel', () => ({
   ConversationPanelChat: () => <div data-testid="stub-conversation-panel" />,
   ConversationPanelProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
@@ -71,13 +76,6 @@ vi.mock('@/domains/agent-builder/contexts/stream-chat-context', () => ({
 
 vi.mock('@/domains/agent-builder/contexts/stream-chat-provider', () => ({
   StreamChatProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
-// A starter message used to drive the OLD onboarding step. The edit page must
-// now ignore it entirely — onboarding lives on the standalone /:id/onboarding page.
-const useStarterUserMessageMock = vi.fn<() => string | undefined>(() => 'hello');
-vi.mock('@/domains/agent-builder/hooks/use-starter-user-message', () => ({
-  useStarterUserMessage: () => useStarterUserMessageMock(),
 }));
 
 const BASE_URL = 'http://localhost:4111';
@@ -119,9 +117,13 @@ function renderPage() {
       <QueryClientProvider client={queryClient}>
         <LinkComponentProvider Link={StubLink as never} navigate={() => {}} paths={noopPaths}>
           <TooltipProvider>
-            <MemoryRouter initialEntries={['/agent-builder/agents/agent-onboarding/edit']}>
+            <MemoryRouter initialEntries={['/agent-builder/agents/agent-onboarding/onboarding']}>
               <Routes>
-                <Route path="/agent-builder/agents/:id/edit" element={<AgentBuilderAgentEdit />} />
+                <Route
+                  path="/agent-builder/agents/:id/onboarding"
+                  element={<AgentBuilderAgentOnboarding />}
+                />
+                <Route path="/agent-builder/agents/:id/edit" element={<div data-testid="edit-page" />} />
                 <Route path="/agent-builder/agents/:id/view" element={<div data-testid="view-page" />} />
                 <Route path="/agent-builder/agents" element={<div data-testid="agents-list-page" />} />
               </Routes>
@@ -133,11 +135,11 @@ function renderPage() {
   );
 }
 
-const emptyAgent = {
+const draftAgent = {
   id: 'agent-onboarding',
-  name: '',
-  description: '',
-  instructions: '',
+  name: 'Freshly created',
+  description: 'Created by the workflow',
+  instructions: 'Be helpful.',
   tools: [],
   agents: [],
   workflows: [],
@@ -147,14 +149,6 @@ const emptyAgent = {
   authorId: 'user-1',
   createdAt: '2026-04-29T10:00:00.000Z',
   updatedAt: '2026-04-29T10:00:00.000Z',
-};
-
-const populatedAgent = {
-  ...emptyAgent,
-  id: 'agent-onboarding',
-  name: 'Pre-populated',
-  description: 'A pre-populated description',
-  instructions: 'Be helpful.',
 };
 
 const installRadixDomShims = () => {
@@ -177,23 +171,17 @@ const installRadixDomShims = () => {
   }
 };
 
-const baseHandlers = (agent: typeof emptyAgent) => [
+const baseHandlers = (
+  agentResponse: () => Response = () => HttpResponse.json(draftAgent),
+) => [
   http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: true, user: { id: 'user-1' } })),
-  http.get(`${BASE_URL}/api/stored/agents/agent-onboarding`, () => HttpResponse.json(agent)),
-  http.patch(`${BASE_URL}/api/stored/agents/agent-onboarding`, async ({ request }) => {
-    const body = (await request.json()) as Partial<typeof emptyAgent>;
-    return HttpResponse.json({ ...agent, ...body });
-  }),
+  http.get(`${BASE_URL}/api/stored/agents/agent-onboarding`, () => agentResponse()),
   http.get(`${BASE_URL}/api/stored/workspaces`, () => HttpResponse.json({ workspaces: [] })),
   http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json([])),
   http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({})),
 ];
 
-// The edit page no longer hosts the post-create "review capabilities" onboarding.
-// Onboarding moved to the standalone /:id/onboarding page. These tests prove the
-// edit page renders the steady-state split editor and never enters onboarding,
-// even when a starter message (the old onboarding trigger) is present.
-describe('AgentBuilderAgentEdit MSW integration — onboarding removed from edit page', () => {
+describe('AgentBuilderAgentOnboarding MSW integration', () => {
   beforeAll(() => {
     installRadixDomShims();
   });
@@ -201,86 +189,96 @@ describe('AgentBuilderAgentEdit MSW integration — onboarding removed from edit
   afterEach(() => {
     cleanup();
     useStreamRunningMock.mockReturnValue(false);
-    useStarterUserMessageMock.mockReturnValue('hello');
-  });
-
-  it('renders the split layout (chat + profile) even when a starter message is present', async () => {
-    // A starter message used to force the centered onboarding state. It must be ignored now.
-    useStarterUserMessageMock.mockReturnValue('hello');
-    server.use(...baseHandlers(emptyAgent));
-
-    renderPage();
-
-    await waitFor(() => {
-      expect(screen.queryByTestId('agent-builder-panel-chat')).not.toBeNull();
-      expect(screen.queryByTestId('agent-builder-panel-profile')).not.toBeNull();
+    useCurrentUserMock.mockReturnValue({ data: { id: 'user-1' }, isLoading: false });
+    useBuilderAgentAccessMock.mockReturnValue({
+      hasAccess: true,
+      canWrite: true,
+      canExecute: true,
+      canManageSkills: true,
+      canUseFavorites: true,
+      denialReason: null,
     });
   });
 
-  it('renders the split layout when there is no starter message', async () => {
-    useStarterUserMessageMock.mockReturnValue(undefined);
-    server.use(...baseHandlers(populatedAgent));
+  it('owner + draft agent: renders the centered onboarding experience (chat + CTAs, no profile)', async () => {
+    server.use(...baseHandlers());
 
     renderPage();
 
-    await waitFor(() => {
-      expect(screen.queryByTestId('agent-builder-panel-chat')).not.toBeNull();
-      expect(screen.queryByTestId('agent-builder-panel-profile')).not.toBeNull();
-    });
+    await screen.findByTestId('agent-builder-panel-chat');
+
+    // Centered variant: the profile column is not rendered.
+    expect(screen.queryByTestId('agent-builder-panel-profile')).toBeNull();
+
+    // The two CTAs render in the chat footer.
+    expect(screen.getByTestId('agent-builder-onboarding-cta-view')).toBeTruthy();
+    expect(screen.getByTestId('agent-builder-onboarding-cta-config')).toBeTruthy();
   });
 
-  it('never renders the onboarding mobile initial CTAs', async () => {
-    server.use(...baseHandlers(populatedAgent));
+  it('"View agent" CTA navigates to /view', async () => {
+    server.use(...baseHandlers());
 
     renderPage();
 
-    await waitFor(() => {
-      expect(screen.queryByTestId('agent-builder-panel-profile')).not.toBeNull();
-    });
+    const viewCta = await screen.findByTestId('agent-builder-onboarding-cta-view');
+    fireEvent.click(viewCta);
 
-    expect(screen.queryByTestId('agent-builder-mobile-initial-cta-chat')).toBeNull();
-    expect(screen.queryByTestId('agent-builder-mobile-initial-cta-config')).toBeNull();
+    await screen.findByTestId('view-page');
   });
 
-  it('never renders onboarding step CTAs ("Continue" / "Try agent" / "See agent configuration")', async () => {
-    server.use(...baseHandlers(populatedAgent));
+  it('"Review config" CTA navigates to /edit', async () => {
+    server.use(...baseHandlers());
 
     renderPage();
 
-    await waitFor(() => {
-      expect(screen.queryByTestId('agent-builder-panel-profile')).not.toBeNull();
-    });
+    const configCta = await screen.findByTestId('agent-builder-onboarding-cta-config');
+    fireEvent.click(configCta);
 
-    expect(screen.queryByRole('button', { name: /continue/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /try agent/i })).toBeNull();
-    expect(screen.queryByRole('button', { name: /see agent configuration/i })).toBeNull();
+    await screen.findByTestId('edit-page');
   });
 
-  it('starts the wizard at the "end" step: the chat column is hidden on mobile via "hidden lg:block"', async () => {
-    server.use(...baseHandlers(populatedAgent));
+  it('CTAs are disabled while the stream is running', async () => {
+    useStreamRunningMock.mockReturnValue(true);
+    server.use(...baseHandlers());
 
     renderPage();
 
-    const chatPanel = await screen.findByTestId('agent-builder-panel-chat');
-    expect(chatPanel.classList.contains('hidden')).toBe(true);
-    expect(chatPanel.classList.contains('lg:block')).toBe(true);
-
-    // Profile is still rendered.
-    expect(screen.getByTestId('agent-builder-panel-profile')).toBeTruthy();
+    const viewCta = (await screen.findByTestId('agent-builder-onboarding-cta-view')) as HTMLButtonElement;
+    const configCta = screen.getByTestId('agent-builder-onboarding-cta-config') as HTMLButtonElement;
+    expect(viewCta.disabled).toBe(true);
+    expect(configCta.disabled).toBe(true);
   });
 
-  it('on the end step: hero actions (Delete + Add to library) are wrapped in a mobile-hidden container', async () => {
-    server.use(...baseHandlers(populatedAgent));
+  it('missing agent: redirects to the agents list', async () => {
+    server.use(...baseHandlers(() => new HttpResponse(null, { status: 404 })));
 
     renderPage();
 
-    const heroActionsWrapper = await screen.findByTestId('agent-builder-hero-actions-desktop');
-    expect(heroActionsWrapper.classList.contains('hidden')).toBe(true);
-    expect(heroActionsWrapper.classList.contains('lg:flex')).toBe(true);
+    await screen.findByTestId('agents-list-page');
+  });
 
-    // Confirm the delete button is a child of the mobile-hidden wrapper (not a sibling).
-    await waitFor(() => {
-      expect(heroActionsWrapper.querySelector('[data-testid="agent-builder-delete-agent"]')).not.toBeNull();
+  it('non-owner: redirects to /view', async () => {
+    useCurrentUserMock.mockReturnValue({ data: { id: 'someone-else' }, isLoading: false });
+    server.use(...baseHandlers(() => HttpResponse.json(draftAgent)));
+
+    renderPage();
+
+    await screen.findByTestId('view-page');
+  });
+
+  it('no write access: redirects to /view', async () => {
+    useBuilderAgentAccessMock.mockReturnValue({
+      hasAccess: true,
+      canWrite: false,
+      canExecute: true,
+      canManageSkills: true,
+      canUseFavorites: true,
+      denialReason: null,
     });
+    server.use(...baseHandlers());
+
+    renderPage();
+
+    await screen.findByTestId('view-page');
   });
 });

@@ -17,6 +17,7 @@ import { AgentBuilderRoot } from './pages/agent-builder';
 import AgentBuilderAgents from './pages/agent-builder/agents';
 import AgentBuilderCreate from './pages/agent-builder/agents/create';
 import AgentBuilderAgentEdit from './pages/agent-builder/agents/edit';
+import AgentBuilderAgentOnboarding from './pages/agent-builder/agents/onboarding';
 import AgentBuilderAgentView from './pages/agent-builder/agents/view';
 import AgentBuilderFavorite from './pages/agent-builder/favorite';
 import AgentBuilderInfrastructure from './pages/agent-builder/infrastructure';
@@ -277,6 +278,7 @@ export const routes: RouteObject[] = [
           },
           { path: ':id/edit', element: <AgentBuilderAgentEdit /> },
           { path: ':id/view', element: <AgentBuilderAgentView /> },
+          { path: ':id/onboarding', element: <AgentBuilderAgentOnboarding /> },
         ],
       },
       {

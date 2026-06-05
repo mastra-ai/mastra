@@ -26,11 +26,13 @@ const slack = new SlackProvider({
 
 const workos = await initWorkOS();
 
+const { agent: builderAgent, workflow: agentBuilderCreationWorkflow } = createBuilderAgent();
+
 export const mastra = new Mastra({
   storage,
   channels: { slack },
   agents: {
-    builderAgent: createBuilderAgent(),
+    builderAgent,
     weatherAgent,
   },
   tools: {
@@ -41,6 +43,7 @@ export const mastra = new Mastra({
   },
   workflows: {
     greetWorkflow,
+    agentBuilderCreationWorkflow,
   },
   bundler: {
     sourcemap: true,
