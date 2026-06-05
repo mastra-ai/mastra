@@ -195,6 +195,7 @@ function DatasetPage() {
       <ExperimentTriggerDialog
         datasetId={datasetId}
         version={activeVersion ?? undefined}
+        requestContextSchema={dataset?.requestContextSchema}
         open={experimentDialogOpen}
         onOpenChange={setExperimentDialogOpen}
         onSuccess={handleExperimentSuccess}
@@ -213,6 +214,7 @@ function DatasetPage() {
             description: dataset?.description || '',
             inputSchema: dataset.inputSchema,
             groundTruthSchema: dataset.groundTruthSchema,
+            requestContextSchema: dataset.requestContextSchema,
           }}
         />
       )}

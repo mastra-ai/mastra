@@ -8,6 +8,8 @@ packages:
 
 # Signals
 
+**Added in:** `@mastra/core@1.39.0`
+
 :::experimental
 
 This feature is in alpha. Breaking changes may occur without a major version bump until the API is stable.
@@ -18,20 +20,34 @@ Signals are a way to interact with an agent through a thread. Instead of startin
 
 Use message APIs for user-authored input. Use `sendSignal()` for lower-level system context, such as background task notifications, policy reminders, or processor-generated context.
 
+## When to use signals
+
+Use signals when an agent thread needs new input or context outside the original `stream()` call. Signals are useful when users send follow-up messages while a run is active, when background systems need to add context to a thread, or when external events should wake, update, or notify the agent.
+
+Use `sendMessage()` and `queueMessage()` for user-authored input. Use `sendSignal()` for lower-level system context. Use `sendStateSignal()` for durable state lanes, and use `sendNotificationSignal()` when an external event should create a durable notification inbox record.
+
 ## Quickstart
 
-Subscribe to the thread before sending messages. The subscription receives the active stream when the message wakes the agent or enters a running loop.
+Create an agent, subscribe to a thread, then send a message to that thread. The subscription receives the active stream when the message wakes the agent or enters a running loop.
 
 ```typescript title="src/mastra/signals.ts"
-const subscription = await agent.subscribeToThread({
-  resourceId: 'user_123',
-  threadId: 'thread_456',
+import { Agent } from '@mastra/core/agent'
+
+const agent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Help the user compare options.',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 
-agent.sendMessage('Compare that with the previous option.', {
+const thread = {
   resourceId: 'user_123',
   threadId: 'thread_456',
-})
+}
+
+const subscription = await agent.subscribeToThread(thread)
+
+await agent.sendMessage('Compare that with the previous option.', thread)
 
 for await (const chunk of subscription.stream) {
   console.log(chunk)
@@ -40,7 +56,9 @@ for await (const chunk of subscription.stream) {
 
 When the thread has a running agent stream, `sendMessage()` becomes new input inside that agent loop. When the thread is idle, Mastra starts a stream with the message as the first input.
 
-## Send a message now
+## Message input
+
+### Send a message now
 
 Use `sendMessage()` when the user expects the active agent to see the message immediately.
 
@@ -65,7 +83,7 @@ The model receives attributed messages as XML-wrapped user input:
 
 Messages without attributes are sent as plain user input.
 
-## Queue a message for the next turn
+### Queue a message for the next turn
 
 Use `queueMessage()` when a user sends a follow-up but the active model call should finish first. Mastra waits for the active run to complete, then starts a new run on the same thread.
 
@@ -78,7 +96,9 @@ agent.queueMessage('Also check whether the tests need updates.', {
 
 When the thread is idle, `queueMessage()` starts a run immediately. When the thread is active, it preserves turn order by starting a new run after the active run completes.
 
-## Control low-level signal behavior
+## Signal context
+
+### Control low-level signal behavior
 
 Use `sendSignal()` when you need to send system-generated context instead of user-authored input. For external events, use `type: 'notification'`. By default, Mastra delivers signals to active runs and wakes idle threads. Use `ifActive.behavior` and `ifIdle.behavior` to change that behavior.
 
@@ -100,31 +120,13 @@ const result = agent.sendSignal(
 await result.persisted
 ```
 
-The behavior options are:
+Pass `ifIdle.streamOptions` when the idle wake-up stream needs options such as model settings, tools, or runtime context.
 
-- `ifActive.behavior: 'deliver'`: Add the signal or message to the running agent loop. This is the default.
-- `ifActive.behavior: 'persist'`: Save the signal or message to memory without adding it to the running loop.
-- `ifActive.behavior: 'discard'`: Ignore the signal or message while the thread is active.
-- `ifIdle.behavior: 'wake'`: Start a stream with the signal or message as the first input. This is the default.
-- `ifIdle.behavior: 'persist'`: Save the signal or message to memory without starting a stream.
-- `ifIdle.behavior: 'discard'`: Ignore the signal or message while the thread is idle.
+:::note
+Visit [`Agent.sendSignal()` reference](/reference/agents/agent#sendsignalsignal-options) for `ifActive`, `ifIdle`, branch attributes, and `streamOptions`.
+:::
 
-Pass `ifIdle.streamOptions` when the idle wake-up stream needs options such as model settings, tools, or runtime context. You don't need to repeat `memory.resource` or `memory.thread`; Mastra uses the top-level `resourceId` and `threadId` for the thread.
-
-```typescript title="src/mastra/signals.ts"
-agent.sendMessage('Continue with the next step.', {
-  resourceId: 'user_123',
-  threadId: 'thread_456',
-  ifIdle: {
-    behavior: 'wake',
-    streamOptions: {
-      maxSteps: 3,
-    },
-  },
-})
-```
-
-## Send notification context
+### Send notification context
 
 Signals have a semantic `type` and an LLM-facing `tagName`. Use `type` to describe the signal category. Use `tagName` to control the XML tag the model sees.
 
@@ -155,11 +157,11 @@ The model receives the signal as context like this:
 
 Use XML-safe `tagName` and attribute names. They can contain letters, numbers, underscores, periods, and hyphens. They must start with a letter or underscore.
 
-### Storage support
+#### Storage support
 
 Notification inbox storage is available in the storage adapters that support richer memory and signal workflows: [libSQL](/reference/storage/libsql), [PostgreSQL](/reference/storage/postgresql), and [MongoDB](/reference/storage/mongodb). These adapters expose notification records through `getStore('notifications')`.
 
-## Send processor context
+### Send processor context
 
 Processors can send reactive signals during a run. A processor should inspect the chat history, react to a specific trigger, and avoid sending the same context more than once.
 
@@ -205,50 +207,21 @@ Reactive signals default to `tagName: 'system-reminder'`, so the model receives 
 
 Awaiting `sendSignal()` preserves stream echo ordering when a subscribed thread is active.
 
-## Conditional attributes
+### Conditional attributes
 
-Use `ifActive.attributes` and `ifIdle.attributes` to tag input with context that depends on whether the agent is active or idle at delivery time. Mastra resolves the correct branch when the input is accepted.
+Use `ifActive.attributes` and `ifIdle.attributes` to tag input with context that depends on whether the agent is active or idle at delivery time. Top-level `attributes` always apply, and Mastra merges the selected branch's `attributes` into them when the input is accepted.
 
-```typescript title="src/mastra/signals.ts"
-agent.sendMessage(
-  {
-    contents: 'Also cover the edge cases.',
-    attributes: { source: 'chat' },
-  },
-  {
-    resourceId: 'user_123',
-    threadId: 'thread_456',
-    ifActive: { attributes: { delivery: 'while-active' } },
-    ifIdle: { attributes: { delivery: 'new-message' } },
-  },
-)
-```
+:::note
+Visit [`Agent.sendMessage()` reference](/reference/agents/agent#sendmessagemessage-options) and [`Agent.sendSignal()` reference](/reference/agents/agent#sendsignalsignal-options) for branch-specific attributes.
+:::
 
-When the agent is working, the model sees:
+## State and notification signals
 
-```xml
-<user source="chat" delivery="while-active">Also cover the edge cases.</user>
-```
-
-When the agent is idle:
-
-```xml
-<user source="chat" delivery="new-message">Also cover the edge cases.</user>
-```
-
-Top-level `attributes` always apply. The selected branch's `attributes` are merged into them at delivery time. The `delivery` name shown above isn't a special Mastra API field. It's a custom attribute name used for this example. Add any attribute names that suit your use case.
-
-## State signals
+### State signals
 
 State signals expose named, thread-scoped context lanes. Use them for durable context that changes over time, such as browser state, editor state, or a background watcher result.
 
-Each state signal needs:
-
-- `id`: The state lane name, such as `browser`.
-- `cacheKey`: A producer-owned key for deduping the current state.
-- `mode`: `snapshot` for an authoritative state copy, or `delta` for a change event.
-
-Use `sendStateSignal()` when an external producer detects a state change.
+Use `sendStateSignal()` when an external producer detects a state change. Each state signal identifies a state lane, a producer-owned cache key, and whether the update is a snapshot or delta.
 
 ```typescript title="src/mastra/browser-watcher.ts"
 await agent.sendStateSignal(
@@ -270,16 +243,9 @@ await agent.sendStateSignal(
 )
 ```
 
-When Mastra accepts a state signal, it stores compact tracking metadata on the thread. The metadata records the lane's current `cacheKey`, current mode, version, last signal id, and last snapshot signal id. If a producer sends the same `cacheKey` and mode again while that state is still current, Mastra skips the duplicate.
+When Mastra accepts a state signal, it stores compact tracking metadata on the thread. If a producer sends the same `cacheKey` and mode again while that state is still current, Mastra skips the duplicate.
 
-State signal fields have separate roles:
-
-- `contents`: The representation the model reads.
-- `value`: The structured snapshot for `mode: 'snapshot'`.
-- `delta`: The structured change for `mode: 'delta'`.
-- `metadata.state`: The runtime tracking envelope with `id`, `mode`, `cacheKey`, `version`, and `threadId`.
-
-Use `computeStateSignal()` when a processor owns a state lane. Mastra calls it once per model input step after `processInputStep()`. If the processor omits `id`, Mastra uses the processor id as the state lane id. Set `stateId` when the public state lane should differ from the processor id.
+Use `computeStateSignal()` when a processor owns a state lane. Mastra calls it once per model input step after `processInputStep()`. Visit [`Agent.sendStateSignal()` reference](/reference/agents/agent#sendstatesignalstate-options) for state signal fields and return values.
 
 ```typescript title="src/mastra/processors/browser-state.ts"
 import type { ComputeStateSignalArgs, Processor } from '@mastra/core/processors'
@@ -316,31 +282,17 @@ Mastra passes `lastSnapshot` and `deltasSinceSnapshot` into `computeStateSignal(
 
 The built-in browser context processor emits state under the `browser` id with snapshot and delta modes.
 
-## Notification signals
+### Notification signals
 
 Notification signals represent external events such as GitHub activity, email, Slack mentions, CI status, incidents, recordings, or direct messages. Use `agent.sendNotificationSignal()` when the event should create a durable inbox record.
 
-Notification delivery has two phases:
+Notification delivery has two phases. During ingress, `agent.sendNotificationSignal()` stores a notification record and resolves the agent's delivery policy. During dispatch, Mastra consumes due records and emits full notification or summary signals.
 
-- **Ingress**: `agent.sendNotificationSignal()` stores a notification record, then resolves the agent's delivery policy.
-- **Dispatch**: Mastra consumes due records stamped with `deliverAt` or `summaryAt` and emits full notification or summary signals.
+The default delivery policy is priority-aware. Urgent notifications deliver immediately, while lower-priority notifications may be batched into summaries or wait until the thread is idle.
 
-A notification record stores the source, kind, priority, summary, payload, resource id, thread id, agent id, coalescing keys, and delivery metadata. The delivery decision controls what happens after ingress:
-
-- `deliver` or `queue`: Emit a full `<notification>` signal and mark the record `delivered`.
-- `defer`: Keep the record `pending` with `deliverAt`.
-- `summarize`: Keep the record `pending` with `summaryAt`, or emit an immediate summary when the policy requests it.
-- `persist`: Keep the record `pending` in the inbox without scheduled delivery.
-- `discard`: Mark the record `discarded` and emit no signal.
-
-The default delivery policy is priority-aware:
-
-| Priority | Active thread | Idle thread |
-| - | - | - |
-| `urgent` | Deliver a full notification immediately | Deliver a full notification immediately |
-| `high` | Emit a summary immediately, keep `deliverAt`, then deliver the full notification when the thread is idle | Deliver a full notification immediately |
-| `medium` | Batch with `summaryAt` and later deliver one notification summary | Deliver a full notification immediately |
-| `low` | Batch with `summaryAt` and later deliver one notification summary | Batch with `summaryAt` and later deliver one notification summary without waking the model loop |
+:::note
+Visit [`Agent.sendNotificationSignal()` reference](/reference/agents/agent#sendnotificationsignalnotification-options) for notification fields, [`Agent` constructor reference](/reference/agents/agent#constructor-parameters) for `notifications.deliveryPolicy` configuration, and [`createNotificationInboxTool()` reference](/reference/signals/create-notification-inbox-tool) for inbox tool actions.
+:::
 
 ```typescript title="src/mastra/notifications.ts"
 await agent.sendNotificationSignal(
@@ -376,86 +328,25 @@ Notification summaries tell the model that inbox records are waiting:
 
 When Mastra emits a summary, it clears `summaryAt` and sets `summarySignalId` on each summarized record. The records stay pending and readable. When Mastra emits a full notification, it sets `deliveredSignalId` and marks the record `delivered`. If the inbox tool reads a notification first, it can inject the full notification signal and mark the record `seen`, which prevents duplicate full delivery.
 
-Configure a delivery policy on the agent when some notifications should wait for a different dispatch window or summary rollup.
+Configure a delivery policy on the agent when some notifications should wait for a different dispatch window or summary rollup. Enable scheduled dispatch at the Mastra level when deferred notifications and summary rollups should be delivered automatically.
 
-```typescript title="src/mastra/agents/support-agent.ts"
-export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support Agent',
-  instructions: 'Help the user triage updates.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  notifications: {
-    deliveryPolicy: {
-      priorities: {
-        urgent: 'deliver',
-      },
-      decide: ({ record }) => {
-        if (record.priority === 'low') {
-          return {
-            action: 'summarize',
-            summaryAt: new Date(Date.now() + 30 * 60 * 1000),
-          }
-        }
-      },
-    },
-  },
-})
-```
+:::note
+Visit [`Agent` constructor reference](/reference/agents/agent#constructor-parameters) for `notifications.deliveryPolicy` and [`Mastra` class reference](/reference/core/mastra-class#constructor-parameters) for runtime notification dispatch configuration.
+:::
 
-Enable scheduled dispatch at the Mastra level so deferred notifications and summary rollups are delivered through the existing workflow scheduler.
+#### Notification inbox tool
 
-```typescript title="src/mastra/index.ts"
-export const mastra = new Mastra({
-  agents: { supportAgent },
-  storage,
-  notifications: {
-    dispatch: {
-      enabled: true,
-      cron: '*/1 * * * *',
-      batchSize: 100,
-    },
-  },
-})
-```
+Use `createNotificationInboxTool()` to give agents one tool for inbox actions instead of many CRUD tools. Use `read` after a `<notification-summary>` signal when the agent needs the full records behind the summary. The notification contents are delivered as signals, not as normal tool output.
 
-`notifications.dispatch.enabled` registers an internal workflow with the default cron `*/1 * * * *`. The dispatcher reads due notification records from storage, groups summaries by `agentId`, `resourceId`, and `threadId`, and emits signals through the Agent thread runtime. It isn't a user-facing entrypoint.
+:::note
+Visit [`createNotificationInboxTool()` reference](/reference/signals/create-notification-inbox-tool) for the setup example, input schema, and action behavior.
+:::
 
-### Notification inbox tool
+`sendNotificationSignal()` requires a storage domain with `notifications` support. Use `sendSignal({ type: 'notification' })` only for lower-level notification-shaped context that should bypass inbox storage.
 
-Use `createNotificationInboxTool()` to give agents one tool for inbox actions instead of many CRUD tools.
+## Compatibility and APIs
 
-```typescript title="src/mastra/agents/support-agent.ts"
-import { createNotificationInboxTool } from '@mastra/core/notifications'
-
-const notificationsStorage = await storage.getStore('notifications')
-
-export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support Agent',
-  instructions: 'Help the user triage updates.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  tools: {
-    notificationInbox: createNotificationInboxTool({ storage: notificationsStorage }),
-  },
-})
-```
-
-The tool id is `notification-inbox`. It supports these actions:
-
-- `list`: List notifications for the current thread.
-- `read`: Deliver readable full notification signals into the chat when possible, then mark records `seen`.
-- `markSeen`: Mark one record `seen`.
-- `dismiss`: Mark one record `dismissed`.
-- `archive`: Mark one record `archived`.
-- `search`: Search notification summaries in the current thread.
-
-The tool uses the current `threadId` from the tool execution context unless one is provided. Use `read` after a `<notification-summary>` signal when the agent needs the full records behind the summary. The `read` result reports how many notifications will be delivered; it doesn't use normal tool output as the main context channel for the notification contents.
-
-`sendNotificationSignal()` requires a storage domain with `notifications` support. LibSQL supports notifications. Other storage adapters need matching notification domain support before they can store notification records.
-
-Use `sendSignal({ type: 'notification' })` only for lower-level notification-shaped context that should bypass inbox storage.
-
-## Compatibility
+### Compatibility
 
 Mastra still accepts legacy signal payloads such as `type: 'user-message'` and `type: 'system-reminder'`. It normalizes them internally to the new category and tag shape:
 
@@ -468,26 +359,19 @@ Existing stored signal rows and older clients continue to load through the compa
 Visit [Agent signals reference](/reference/agents/agent#thread-signals) for the full message, signal, and subscription types.
 :::
 
-## Approve tool calls
+### Approve tool calls
 
-When a subscribed run pauses for tool approval, approve or decline the tool call with the subscription-native methods. The call returns a JSON acknowledgement. The resumed chunks arrive through the existing thread subscription.
+When a subscribed run pauses for tool approval, approve or decline the tool call with the subscription-native methods. The resumed chunks arrive through the existing thread subscription.
 
-```typescript title="src/app/chat.ts"
-await agent.sendToolApproval({
-  resourceId: 'user_123',
-  threadId: 'thread_456',
-  toolCallId: 'tool-call_456',
-  approved: true,
-})
-```
+:::note
+Visit [`client.getAgent().sendToolApproval()` reference](/reference/client-js/agents#sendtoolapproval) and [server agent routes](/reference/server/routes#subscription-tool-approval-routes) for request and response shapes.
+:::
 
-Pass `approved: false` to decline the same pending tool call. Use the older `approveToolCall()` and `declineToolCall()` methods only when you are rendering the separate continuation stream directly.
-
-## Use HTTP routes
+### Use HTTP routes
 
 If you call Mastra over HTTP directly, use `POST /api/agents/:agentId/send-message` for immediate messages and `POST /api/agents/:agentId/queue-message` for next-turn messages. For subscription-native tool approval, use `POST /api/agents/:agentId/send-tool-approval`. See [Server routes reference](/reference/server/routes#agent-message-routes) for request and response schemas.
 
-## Use the client SDK
+### Use the client SDK
 
 The JavaScript client exposes thread signal APIs. Use `subscribeToThread()` before sending thread input so the client can render the stream that wakes from, or receives, the input.
 
@@ -513,9 +397,9 @@ await subscription.processDataStream({
 })
 ```
 
-Use `reconnect: true` for long-lived subscriptions. The client resubscribes when the stream closes or a reconnect request fails, such as after a proxy idle timeout or a dropped network connection.
+Use `reconnect: true` for long-lived subscriptions. Visit [`client.getAgent().subscribeToThread()` reference](/reference/client-js/agents#subscribetothread) for reconnect options.
 
-## Keep custom SSE subscriptions alive
+### Keep custom SSE subscriptions alive
 
 If you expose your own Server-Sent Events (SSE) endpoint for thread subscriptions, send periodic heartbeat frames while the stream is idle. This keeps browsers, proxies, and load balancers from closing the connection before the next signal or model chunk arrives.
 
@@ -538,7 +422,9 @@ Use heartbeats together with client-side reconnect logic. Heartbeats reduce idle
 - [`Agent.sendMessage()`](/reference/agents/agent#sendmessagemessage-options)
 - [`Agent.queueMessage()`](/reference/agents/agent#queuemessagemessage-options)
 - [`Agent.sendSignal()`](/reference/agents/agent#sendsignalsignal-options)
+- [`Agent.sendStateSignal()`](/reference/agents/agent#sendstatesignalstate-options)
 - [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions)
+- [`createNotificationInboxTool()`](/reference/signals/create-notification-inbox-tool)
 - [`client.getAgent().sendMessage()`](/reference/client-js/agents#sendmessage)
 - [`client.getAgent().queueMessage()`](/reference/client-js/agents#queuemessage)
 - [`client.getAgent().sendSignal()`](/reference/client-js/agents#sendsignal)
