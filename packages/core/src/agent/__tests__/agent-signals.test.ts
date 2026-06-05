@@ -1171,6 +1171,66 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('wakes idle threads for immediate medium-priority notification summaries', async () => {
+    let streamCount = 0;
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'medium-summary-wake-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'medium-summary-wake-agent',
+      name: 'Medium Summary Wake Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          streamCount += 1;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+          };
+        },
+      }),
+      notifications: {
+        deliveryPolicy: {
+          decide: ({ now }) => ({ action: 'summarize', summaryAt: now, reason: 'test-medium-summary-now' }),
+        },
+      },
+    });
+    new Mastra({ agents: { mediumSummaryWakeAgent: agent }, storage, logger: false });
+    const subscription = await agent.subscribeToThread({
+      threadId: 'medium-summary-wake-thread',
+      resourceId: 'medium-summary-wake-user',
+    });
+    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+
+    const result = await agent.sendNotificationSignal(
+      { source: 'github', kind: 'pull-request-activity', priority: 'medium', summary: 'Devin commented' },
+      { resourceId: 'medium-summary-wake-user', threadId: 'medium-summary-wake-thread' },
+    );
+    const subscribedRun = await withTimeout(nextRun, 'Timed out waiting for medium notification summary wake');
+    const signalPart = subscribedRun.value.parts.find((part: any) => part.type === 'data-signal');
+
+    expect(result.signal).toMatchObject({ type: 'notification', tagName: 'notification-summary' });
+    expect(result.decision).toMatchObject({ action: 'summarize', reason: 'test-medium-summary-now' });
+    expect(result.record).toMatchObject({
+      status: 'pending',
+      summaryAt: undefined,
+      summarySignalId: result.signal?.id,
+    });
+    expect(signalPart?.data).toMatchObject({
+      id: result.signal?.id,
+      type: 'notification',
+      tagName: 'notification-summary',
+      contents: 'github: 1',
+      attributes: { pending: 1 },
+    });
+    expect(streamCount).toBe(1);
+
+    subscription.unsubscribe();
+  });
+
   it('keeps immediate notification records pending when runtime rejects delivery', async () => {
     const notifications = new InMemoryNotificationsStorage();
     const storage = new MastraCompositeStore({ id: 'rejected-notification-storage', domains: { notifications } });
@@ -1284,18 +1344,22 @@ describe('Agent signals', () => {
     });
     expect(high.record.summaryAt).toBeUndefined();
     expect(high.record.deliverAt).toBeInstanceOf(Date);
-    expect(medium.signal).toBeUndefined();
+    expect(medium.signal).toMatchObject({ type: 'notification', tagName: 'notification-summary' });
     expect(medium.decision).toMatchObject({ action: 'summarize', reason: 'active-batch-summary' });
-    expect(medium.record).toMatchObject({ status: 'pending', deliveryReason: 'active-batch-summary' });
-    expect(medium.record.summaryAt).toBeInstanceOf(Date);
+    expect(medium.record).toMatchObject({
+      status: 'pending',
+      deliveryReason: 'active-batch-summary',
+      summarySignalId: medium.signal?.id,
+    });
+    expect(medium.record.summaryAt).toBeUndefined();
     expect(low.signal).toBeUndefined();
     expect(low.decision).toMatchObject({ action: 'summarize', reason: 'active-batch-summary' });
     expect(low.record).toMatchObject({ status: 'pending', deliveryReason: 'active-batch-summary' });
     expect(low.record.summaryAt).toBeInstanceOf(Date);
 
     releaseFirst();
-    await expect(stream.text).resolves.toBe('active response');
-    expect(streamCount).toBe(1);
+    await expect(stream.text).resolves.toBe('active responseactive response');
+    expect(streamCount).toBe(2);
     subscription.unsubscribe();
   });
 

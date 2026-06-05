@@ -6750,9 +6750,10 @@ export class Agent<
       { resourceId: target.resourceId, threadId: target.threadId },
       this.getPubSub(),
     );
+    const now = new Date();
     const decision = await resolveNotificationDeliveryDecision({
       config: this.#notifications?.deliveryPolicy,
-      now: new Date(),
+      now,
       record,
       threadState,
     });
@@ -6777,7 +6778,12 @@ export class Agent<
     }
 
     if (decision.action === 'defer' || decision.action === 'summarize') {
-      const shouldEmitSummaryNow = decision.action === 'summarize' && record.priority === 'high' && decision.deliverAt;
+      const shouldEmitSummaryNow = Boolean(
+        decision.action === 'summarize' &&
+        decision.summaryAt &&
+        decision.summaryAt.getTime() <= now.getTime() &&
+        (record.priority === 'medium' || (record.priority === 'high' && decision.deliverAt)),
+      );
       const updated = await notifications.updateNotification({
         id: record.id,
         threadId: record.threadId,
@@ -6795,7 +6801,7 @@ export class Agent<
         const result = agentThreadStreamRuntime.sendSignal(
           this as Agent<any, any, any, any>,
           signal,
-          { ...target, ifIdle: { ...target.ifIdle, behavior: 'persist' } },
+          { ...target, ifIdle: { ...target.ifIdle, behavior: record.priority === 'high' ? 'persist' : 'wake' } },
           this.getPubSub(),
         );
         if (!result.accepted) {
