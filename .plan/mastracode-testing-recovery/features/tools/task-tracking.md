@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved todo tools into core Harness and renamed them to task tools.
-- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — moved current/previous task snapshots into `HarnessDisplayState` for UI rendering and history reconciliation; [#15192](https://github.com/mastra-ai/mastra/pull/15192) — clears task/plan/access projections on thread switch or creation so stale global task state does not leak across threads; [#15749](https://github.com/mastra-ai/mastra/pull/15749) — broadens thread-boundary cleanup to reset task progress UI, `taskToolInsertIndex`, queued state, and other per-thread TUI projections on switch/create/clone.
+- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — moved current/previous task snapshots into `HarnessDisplayState` for UI rendering and history reconciliation; [#15192](https://github.com/mastra-ai/mastra/pull/15192) — clears task/plan/access projections on thread switch or creation so stale global task state does not leak across threads; [#15749](https://github.com/mastra-ai/mastra/pull/15749) — broadens thread-boundary cleanup to reset task progress UI, `taskToolInsertIndex`, queued state, and other per-thread TUI projections on switch/create/clone; [#16254](https://github.com/mastra-ai/mastra/pull/16254) — adds stable patch tools (`task_update`, `task_complete`, `task_check`) plus deterministic task ID assignment.
 
 ## User-visible behavior
 
 - Agents maintain a structured task list with `task_write`, `task_update`, `task_complete`, and `task_check`.
-- Success: tool results, pinned TUI progress, prompt context, and reload/history agree on the same tasks.
-- Must preserve: stable task IDs, one `in_progress` task, no stale tasks across threads, no stale active plans, sandbox approvals, task insertion indexes, or task progress UI across thread boundaries, no parent task tools in non-forked execute subagents.
+- Success: tool results, pinned TUI progress, prompt context, and reload/history agree on the same tasks; single-task patch tools update the existing list without rewriting unrelated items.
+- Must preserve: stable task IDs, one `in_progress` task, deterministic ID reuse/deduplication, no stale tasks across threads, no stale active plans, sandbox approvals, task insertion indexes, or task progress UI across thread boundaries, no parent task tools in non-forked execute subagents.
 
 ## Entry points / commands
 
@@ -40,7 +40,8 @@
 
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
-| Task list/mutations | Core Harness state + task tools | Runtime, prompt, TUI, headless |
+| Task list/mutations | Core Harness state + task tools; `assignTaskIds()` gives deterministic stable IDs and patch tools mutate by ID | Runtime, prompt, TUI, headless |
+| Single-task patch semantics | `task_update`, `task_complete`, and `task_check` in core Harness tools | Agent task maintenance without full-list rewrites; user-visible status summaries |
 | Task display snapshots | `HarnessDisplayState.tasks` / `previousTasks` | TUI progress + history reconciliation |
 | Pinned/inline projection | TUI `TaskProgressComponent` + `taskToolInsertIndex` | Interactive chat |
 | Thread boundary reset | `event-dispatch.ts` handles `thread_changed` / `thread_created` by clearing tasks, active plan, sandbox allowed paths, task insert index, and live task progress component | Thread switch/create UI and prompt context |
@@ -48,7 +49,8 @@
 
 ## Key files
 
-- `packages/core/src/harness/tools.ts` — task schemas, ID assignment, state mutation, `task_updated`.
+- `packages/core/src/harness/tools.ts` — task schemas, deterministic ID assignment/reuse, full-list and single-task state mutation, `task_updated`, and `task_check` summaries.
+- `packages/core/src/harness/task-tools.test.ts` — stable task ID assignment, duplicate disambiguation, patch tool mutation/error behavior, and completion checks.
 - `packages/core/src/harness/harness.ts` — built-in task tool injection and display state.
 - `mastracode/src/tui/components/task-progress.ts`, `tui/event-dispatch.ts`, `tui/handlers/tool.ts` — TUI projections and thread-boundary cleanup.
 - `mastracode/src/tui/commands/new.ts` and `mastracode/src/tui/commands/clone.ts` — explicit TUI reset paths for new/cloned threads, component caches, task state, active plan, sandbox paths, and `taskToolInsertIndex`.
@@ -66,6 +68,7 @@
 ## Existing tests
 
 - Core Harness display-state/task tests cover `task_updated`, task mutation, replay, and subagent restrictions.
+- `packages/core/src/harness/task-tools.test.ts` covers `assignTaskIds()`, explicit/implicit ID reuse, duplicate ID/content disambiguation, `task_update`, `task_complete`, and `task_check` summaries/error paths.
 - MC TUI tests cover `TaskProgressComponent`, `task_updated` dispatch, completed/cleared inline rendering, prompt task injection, and `event-dispatch.test.ts` thread boundary resets for tasks/active plan/sandbox paths/task insert index/task progress component.
 - `mastracode/src/agents/subagents/execute.test.ts` covers task tools not being exposed to non-forked execute subagents.
 

@@ -296,11 +296,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 274 | 2026-05-07 | #16320 | `de93ce2a87` | likely skip | skipped | chore: version packages (alpha) (#16320) | 2 |
 | 275 | 2026-05-07 | #16275 | `0586486462` | review | done | feat(mastracode): add /om toggle for caveman observations (#16275) | 13 |
 | 276 | 2026-05-07 | #16326 | `b275631dc1` | review | done | Replace js-tiktoken with tokenx in @mastra/core and mastracode (#16326) | 2 |
-| 277 | 2026-05-08 | #16351 | `25cd423cd8` | likely skip | current | chore: dedupe and clean up external dependencies (#16351) | 1 |
-| 278 | 2026-05-08 | #16254 | `e2a079cc37` | review | | feat(harness): add stable task patch tools (#16254) | 31 |
-| 279 | 2026-05-08 | #16332 | `db34bc6fb3` | review | | fix(core, mastracode): silence provider cache corruption warning and consolidate gateway sync (#16332) | 2 |
-| 280 | 2026-05-08 | #16340 | `7c275a8105` | review | | fix(mastracode): trigger plan execution when accepting plan via /goal (#16340) | 8 |
-| 281 | 2026-05-08 | #16129 | `c50ebc34da` | review | | feat(mastracode): add GitHub Copilot OAuth provider with live model discovery (#16129) | 16 |
+| 277 | 2026-05-08 | #16351 | `25cd423cd8` | likely skip | skipped | chore: dedupe and clean up external dependencies (#16351) | 1 |
+| 278 | 2026-05-08 | #16254 | `e2a079cc37` | review | done | feat(harness): add stable task patch tools (#16254) | 31 |
+| 279 | 2026-05-08 | #16332 | `db34bc6fb3` | review | done | fix(core, mastracode): silence provider cache corruption warning and consolidate gateway sync (#16332) | 2 |
+| 280 | 2026-05-08 | #16340 | `7c275a8105` | review | done | fix(mastracode): trigger plan execution when accepting plan via /goal (#16340) | 8 |
+| 281 | 2026-05-08 | #16129 | `c50ebc34da` | review | current | feat(mastracode): add GitHub Copilot OAuth provider with live model discovery (#16129) | 16 |
 | 282 | 2026-05-11 | #16398 | `7ad5585640` | likely skip | | chore(deps): update ai sdk (#16398) | 1 |
 | 283 | 2026-05-11 | #16223 | `50f5884b41` | review | | draft: Add MastraPlatformExporter and MastraStorageExporter, deprecate CloudExporter and DefaultExporter (#16223) | 1 |
 | 284 | 2026-05-11 | #16409 | `f3279f5129` | likely skip | | chore: version packages (alpha) (#16409) | 2 |

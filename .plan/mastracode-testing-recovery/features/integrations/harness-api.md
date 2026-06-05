@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13353](https://github.com/mastra-ai/mastra/pull/13353) — changed public `Harness` methods to object-parameter calls and added the first Harness class reference page.
-- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — added `HarnessDisplayState`, `getDisplayState()`, `display_state_changed`, and `subscribeDisplayState()` for UI-agnostic rendering; [#13457](https://github.com/mastra-ai/mastra/pull/13457) — added/corrected workspace lifecycle methods and dynamic workspace caching; [#13519](https://github.com/mastra-ai/mastra/pull/13519) — initialized an internal Mastra instance from Harness storage so standalone-agent tool approvals can resume; [#13525](https://github.com/mastra-ai/mastra/pull/13525) — moved Mastra Code docs to the Code docs site and marked Harness reference docs as Alpha; [#13716](https://github.com/mastra-ai/mastra/pull/13716) — exposes Mastra Code `resolveModel` from `createMastraCode()` for external UI consumers; [#14433](https://github.com/mastra-ai/mastra/pull/14433) — forwards Harness thread/resource identity into model request headers during core LLM execution; [#15036](https://github.com/mastra-ai/mastra/pull/15036) — adds Harness-level browser storage and propagation to mode agents; [#13891](https://github.com/mastra-ai/mastra/pull/13891) — lets `createMastraCode()` callers override the memory instance/factory passed into Harness.
+- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — added `HarnessDisplayState`, `getDisplayState()`, `display_state_changed`, and `subscribeDisplayState()` for UI-agnostic rendering; [#13457](https://github.com/mastra-ai/mastra/pull/13457) — added/corrected workspace lifecycle methods and dynamic workspace caching; [#13519](https://github.com/mastra-ai/mastra/pull/13519) — initialized an internal Mastra instance from Harness storage so standalone-agent tool approvals can resume; [#13525](https://github.com/mastra-ai/mastra/pull/13525) — moved Mastra Code docs to the Code docs site and marked Harness reference docs as Alpha; [#13716](https://github.com/mastra-ai/mastra/pull/13716) — exposes Mastra Code `resolveModel` from `createMastraCode()` for external UI consumers; [#14433](https://github.com/mastra-ai/mastra/pull/14433) — forwards Harness thread/resource identity into model request headers during core LLM execution; [#15036](https://github.com/mastra-ai/mastra/pull/15036) — adds Harness-level browser storage and propagation to mode agents; [#13891](https://github.com/mastra-ai/mastra/pull/13891) — lets `createMastraCode()` callers override the memory instance/factory passed into Harness; [#16340](https://github.com/mastra-ai/mastra/pull/16340) — hardens plan-approval resolver ordering and clears stale abort state before subsequent message/signal runs.
 
 ## User-visible behavior
 
@@ -41,7 +41,7 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | Harness mode/model/thread state | `packages/core/src/harness/harness.ts` + Mastra Code model resolver | Mastra Code TUI/headless, commands, docs consumers, external `createMastraCode()` consumers |
-| Prompt/tool/plan resolver state | Core Harness pending resolver maps | TUI prompt/tool handlers, headless auto-resolvers |
+| Prompt/tool/plan resolver state | Core Harness pending resolver maps; plan approvals resolve before aborting/switching modes | TUI prompt/tool handlers, headless auto-resolvers |
 | Public API docs | `docs/src/content/en/reference/harness/harness-class.mdx` | External Harness consumers |
 | Display projection | `HarnessDisplayState` | TUI and external UI consumers |
 | Workspace instance/cache | Core Harness workspace fields/factory | Slash commands, agents, workspace tools, external consumers |
@@ -49,6 +49,7 @@
 | Memory instance/factory override | `MastraCodeConfig.memory` or default `getDynamicMemory(storage, vectorStore)` | External `createMastraCode()` consumers, Harness memory/recall/OM pipeline |
 | Internal Mastra/storage registration | Core Harness `init()` / `getMastra()` | Standalone agents, approval/suspend resume, workflow snapshots |
 | Model request identity headers | Core LLM execution `_internal.threadId` / `_internal.resourceId` merged with model/modelSettings headers | Memory Gateway, provider requests, server-side memory enrichment |
+| Run abort/tracing state | Harness `abortController` / `abortRequested` plus per-run tracing context/options | Message sends, signals, follow-up queue, plan→goal handoff runs |
 | Harness docs location | Docs reference sidebar + Code docs redirects | External Harness consumers and Mastra Code docs readers |
 
 ## Key files
@@ -56,6 +57,7 @@
 - `packages/core/src/harness/harness.ts` — current object-param public method implementation, display state, workspace/browser cache methods, browser propagation to mode agents, and internal Mastra registration for storage-backed standalone agents.
 - `packages/core/src/harness/types.ts` — request context, display state, workspace config, and Harness types exposed to built-in tools/consumers.
 - `packages/core/src/harness/display-state-scheduler.ts` — coalesced display-state subscriber snapshots.
+- `packages/core/src/harness/mode-model-persistence.test.ts` and `tracing-propagation.test.ts` — plan approval resolver ordering and stale abort/tracing propagation regressions.
 - `packages/core/src/harness/tools.ts` — built-in tool callers using object-param Harness methods.
 - `packages/core/src/workflows/default.ts` and `packages/core/src/workflows/entry.ts` — serialize JSON-safe request context for persisted resume snapshots.
 - `packages/core/src/loop/workflows/agentic-execution/llm-execution-step.ts` — model execution merges memory identity headers, model config headers, and call-time `modelSettings.headers`.

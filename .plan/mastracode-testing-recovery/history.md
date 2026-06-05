@@ -2181,3 +2181,29 @@ Verification:
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/command-dispatch.test.ts src/tui/__tests__/setup-keyboard-shortcuts.test.ts src/tui/handlers/__tests__/prompts.test.ts src/tui/__tests__/parallel-interactive-prompts.test.ts src/tui/components/__tests__/custom-editor.test.ts -t "goal|Goal|ask_user|plan approval|slash autocomplete|Ctrl\\+F" --bail=1 --reporter=dot` — 5 files / 25 tests passed / 35 skipped.
 - `pnpm --filter ./mastracode exec vitest run src/agents/thread-caveman-state.test.ts src/__tests__/index.test.ts -t "caveman|observeAttachments" --bail=1 --reporter=dot` — 2 files / 9 tests passed / 16 skipped.
 - `pnpm --filter ./packages/core exec vitest run src/processors/processors/token-limiter.test.ts --bail=1 --reporter=dot` — 1 file / 39 tests passed / no type errors.
+
+### PR #16351 / #16254 / #16332 / #16340 feature-map checkpoint
+
+Verified rows 277-280:
+
+- #16351 is a dependency dedupe/cleanup batch; skipped for feature mapping after PR metadata confirmed external dependency cleanup only.
+- #16254 adds stable task patch tools. Current core Harness `tools.ts` owns deterministic `assignTaskIds()`, `task_write` full replacement semantics, `task_update` single-task mutation by ID, `task_complete`, `task_check` summaries, one-`in_progress` enforcement, and forked-subagent task-tool stubs. Mastra Code TUI projects task mutations through `task_updated`, `TaskProgressComponent`, `pendingTaskToolIds`, and completed/cleared inline summaries.
+- #16332 consolidates Mastra Code gateway sync behind core `GatewayRegistry`. Current Mastra Code startup/heartbeat delegates sync to the core registry, which handles dynamic loading, global cache writes, corruption validation/deletion, static fallback, refresh timestamps, and silent network/cache failures.
+- #16340 fixes plan approval started as `/goal`: `handlePlanApproval().onGoal` resolves `respondToPlanApproval()` first, then calls `ctx.startGoal()` so the suspended plan tool settles before the canonical goal reminder starts a fresh Build-mode run. Core Harness tests cover resolver-before-abort and stale abort-state clearing.
+
+Documentation actions:
+
+- Updated `features/tools/task-tracking.md` for stable task IDs and patch/check tools.
+- Updated `features/models/model-auth-and-modes.md` for core-owned gateway sync and corrupt-cache fallback.
+- Updated `features/goals/persistent-goals.md` and `features/goals/plan-approval.md` for resolver-first approved-plan goal handoff.
+- Updated `features/integrations/harness-api.md` for plan approval resolver ordering and stale abort/tracing state.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16351 skipped, #16254 done, #16332 done, #16340 done, #16129 current.
+
+Focused evidence read: PR metadata for #16351/#16254/#16332/#16340; current `packages/core/src/harness/tools.ts`, `task-tools.test.ts`, `mastracode/src/tui/event-dispatch.ts`, `handlers/tool.ts`, `components/task-progress.ts`, `mastracode/src/utils/gateway-sync.ts`, `gateway-sync.test.ts`, `packages/core/src/llm/model/provider-registry.ts`, `provider-registry.test.ts`, `mastracode/src/tui/handlers/prompts.ts`, `handlers/__tests__/prompts.test.ts`, `commands/goal.ts`, `commands/__tests__/goal.test.ts`, `packages/core/src/harness/harness.ts`, `mode-model-persistence.test.ts`, and `tracing-propagation.test.ts`.
+
+Verification:
+
+- `pnpm exec vitest run src/harness/task-tools.test.ts --bail=1 --reporter=dot` from `packages/core` — 1 file / 30 tests passed / no type errors.
+- `pnpm --filter ./packages/core exec vitest run src/llm/model/provider-registry.test.ts --bail=1 --reporter=dot` — 1 file / 27 tests passed / no type errors.
+- `pnpm --filter ./mastracode exec vitest run src/utils/__tests__/gateway-sync.test.ts src/tui/handlers/__tests__/prompts.test.ts src/HarnessCompat.test.ts --bail=1 --reporter=dot` — 3 files / 18 tests passed.

@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13416](https://github.com/mastra-ai/mastra/pull/13416) — fixed Plan mode so the agent calls `submit_plan` instead of only writing plan text.
-- Later changes: [#13557](https://github.com/mastra-ai/mastra/pull/13557) — persists approved plans as Markdown files on disk; [#13598](https://github.com/mastra-ai/mastra/pull/13598) — keeps the submitted plan visible while the user types requested-change feedback; [#16065](https://github.com/mastra-ai/mastra/pull/16065) — adds `Use as /goal` from the plan approval UI so approved plans can enter persistent goal pursuit.
+- Later changes: [#13557](https://github.com/mastra-ai/mastra/pull/13557) — persists approved plans as Markdown files on disk; [#13598](https://github.com/mastra-ai/mastra/pull/13598) — keeps the submitted plan visible while the user types requested-change feedback; [#16065](https://github.com/mastra-ai/mastra/pull/16065) — adds `Use as /goal` from the plan approval UI so approved plans can enter persistent goal pursuit; [#16340](https://github.com/mastra-ai/mastra/pull/16340) — fixes `Use as /goal` ordering so the suspended plan tool resolves before the goal reminder starts Build-mode execution.
 
 ## User-visible behavior
 
@@ -29,7 +29,7 @@
 ## Streaming / loading / interrupted states
 
 - Streaming / loading: `tool_input_start` for `submit_plan` creates a streaming `PlanApprovalInlineComponent`; `tool_input_delta` updates title/plan as args stream; `plan_approval_required` activates the same component in place.
-- Abort / retry / resume: approving saves the plan best-effort, calls `respondToPlanApproval({ planId, response: { action: 'approved' } })`, waits for the Plan-mode run to settle, then sends one structured system-reminder signal for Build-mode execution.
+- Abort / retry / resume: approving saves the plan best-effort, calls `respondToPlanApproval({ planId, response: { action: 'approved' } })`, waits for the Plan-mode run to settle, then sends one structured system-reminder signal for Build-mode execution. `Use as /goal` follows the same resolver-first ordering, then starts the canonical goal reminder instead of sending the regular build reminder.
 
 ## Streaming vs loaded-from-history behavior
 
@@ -45,7 +45,7 @@
 | Active plan approval UI | `TUIState.activeInlinePlanApproval` / `lastSubmitPlanComponent` + component-local `planTitle`/`planContent` | Input focus, chat renderer, feedback sub-mode |
 | Approval result | Core Harness `respondToPlanApproval()` | Suspended `submit_plan` tool, persisted tool result |
 | Approved plan files | `savePlanToDisk()` + app data / `MASTRA_PLANS_DIR` | User archive/reference outside chat history |
-| Build/goal handoff | TUI prompt handler + goal manager | Harness signal / `/goal` flow |
+| Build/goal handoff | TUI prompt handler + goal manager; `respondToPlanApproval()` resolves before either build signal or `/goal` start | Harness signal / `/goal` flow |
 
 ## Key files
 
@@ -74,6 +74,7 @@
 - `mastracode/src/utils/__tests__/save-plan.test.ts` — approved plan file names/content, resource subdirectories, special-character titles, and timestamp non-overwrite behavior.
 - `packages/core/src/harness/display-state.test.ts` — `pendingPlanApproval` display state is set/cleared by plan approval events.
 - `packages/core/src/harness/mode-model-persistence.test.ts` — `respondToPlanApproval()` resolves plan approvals without aborting the resolver signal prematurely.
+- `packages/core/src/harness/tracing-propagation.test.ts` — regression for stale abort state before a new message/goal-triggered run.
 
 ## Missing tests
 
