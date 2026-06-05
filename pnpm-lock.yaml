@@ -5996,10 +5996,10 @@ importers:
   stores/dynamodb:
     dependencies:
       '@aws-sdk/client-dynamodb':
-        specifier: ^3.1057.0
+        specifier: ^3.1058.0
         version: 3.1059.0
       '@aws-sdk/lib-dynamodb':
-        specifier: ^3.1057.0
+        specifier: ^3.1058.0
         version: 3.1059.0(@aws-sdk/client-dynamodb@3.1059.0)
       electrodb:
         specifier: ^3.7.2
@@ -6515,7 +6515,7 @@ importers:
   stores/s3vectors:
     dependencies:
       '@aws-sdk/client-s3vectors':
-        specifier: ^3.1057.0
+        specifier: ^3.1058.0
         version: 3.1059.0
       '@lukeed/uuid':
         specifier: ^2.0.1
@@ -6733,10 +6733,10 @@ importers:
   voice/aws-nova-sonic:
     dependencies:
       '@aws-sdk/client-bedrock-runtime':
-        specifier: ^3.1057.0
+        specifier: ^3.1058.0
         version: 3.1059.0
       '@aws-sdk/credential-provider-node':
-        specifier: ^3.972.47
+        specifier: ^3.972.48
         version: 3.972.49
       '@smithy/node-http-handler':
         specifier: ^4.0.0
@@ -7668,7 +7668,7 @@ importers:
   workspaces/agentcore:
     dependencies:
       '@aws-sdk/client-bedrock-agentcore':
-        specifier: ^3.1057.0
+        specifier: ^3.1058.0
         version: 3.1059.0
     devDependencies:
       '@internal/lint':
@@ -8143,7 +8143,7 @@ importers:
   workspaces/s3:
     dependencies:
       '@aws-sdk/client-s3':
-        specifier: ^3.1057.0
+        specifier: ^3.1058.0
         version: 3.1059.0
       '@aws-sdk/types':
         specifier: ^3.0.0
