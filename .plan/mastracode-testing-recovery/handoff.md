@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #15365 (row 210) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, and #15390 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 211 #15420 (activate observations on provider changes).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #15483 (row 214) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, and #15390 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 215 #15403 (Changesets alpha skip).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 211: PR #15420 (activate observations on provider changes), then row 212 #15458 (Anthropic pack defaults) and row 213 #15462 (OM reflection activation overshoot fix).
+1. Continue at `_pr-queue.md` row 215: PR #15403 (Changesets alpha skip), then row 216 #15423 (`--output-format` headless) and row 217 #15566 (regex security fix).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -44,6 +44,7 @@ None known.
 
 ## Last commands/evidence
 
+- Rows 211-214 verified/documented: #15420 observation activation on provider/model change, #15458 Anthropic built-in model-pack defaults (`claude-opus-4-7` / `claude-sonnet-4-6`), #15462 early reflection activation overshoot suppression and normalized provider-change comparison, and #15483 Anthropic/OpenAI provider stored-key fallback before env vars. Focused verification passed: memory provider-change/overshoot tests (20), MastraCode OM marker/pack/key fallback tests (17 with provider env isolated), targeted direct-key model tests (2), and core step-start/model metadata tests (9, no type errors).
 - Rows 207-210 verified/documented: #15370 custom model-pack share/import via `mastra-pack:` payloads, #15390 Changesets alpha skip, #14909 headless `--model`/`--settings` preflight and precedence handling, and #15365 OM `activateAfterIdle` / `auto` provider-aware idle activation. Focused verification passed: MastraCode model-pack/headless unit tests (59), targeted headless `--model` integration tests (8), memory TTL/idle tests (13), core memory config tests (7, no type errors), MastraCode OM marker tests (5), and targeted OM activateAfterIdle API tests (10).
 - Rows 204-206 verified/documented: #15352 autonomy-first/common-sense prompt refinement, #15359 opt-in caveman OM compression with thread/global persistence and base-prompt memory-style guard, and #15200 Changesets alpha skip. Focused verification passed: MastraCode prompt + thread-caveman tests (15) and targeted startup caveman restore tests (2).
 - Rows 201-203 verified/documented: #15014 `/api-keys` provider key management command, #14435 `processAPIError`/`PrefillErrorHandler` retry path for assistant-prefill LLM API rejections, and #15194 browser profile/executablePath support. Focused verification passed: MastraCode command/help/settings tests (51), core prefill-error/runner recovery tests (92, no type errors), and core browser tests (18, no type errors).

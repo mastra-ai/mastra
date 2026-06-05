@@ -1800,3 +1800,28 @@ Verification:
 - `pnpm --filter ./packages/core exec vitest run src/memory/memory-config.test.ts --bail=1 --reporter=dot` — 1 file / 7 tests passed / no type errors.
 - `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/om-marker.test.ts --bail=1 --reporter=dot` — 1 file / 5 tests passed.
 - `pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/observational-memory-api.test.ts -t "activateAfterIdle" --bail=1 --reporter=dot` — targeted activateAfterIdle API tests passed (10 passed / 135 skipped).
+
+### PR #15420 / #15458 / #15462 / #15483 feature-map checkpoint
+
+Verified rows 211-214:
+
+- #15420 adds provider/model-change observation activation. Current Mastra Code memory defaults set `activateAfterIdle: 'auto'` and `activateOnProviderChange: true`; core OM detects the last stored model from `step-start`/metadata, compares it to the current actor model, prioritizes provider-change activation over TTL/threshold, and emits `om_activation` metadata with `triggeredBy: 'provider_change'`, `previousModel`, and `currentModel`.
+- #15458 bumps Anthropic built-in pack defaults. Current `packs.ts` uses `anthropic/claude-opus-4-7` for OAuth build/plan, `anthropic/claude-sonnet-4-6` for API-key build/plan, and keeps `anthropic/claude-haiku-4-5` for fast mode.
+- #15462 prevents early buffered-reflection activation overshoot. Current `reflector-runner.ts` suppresses TTL/provider-change reflection swaps when the unreflected tail is smaller than the buffered reflection or the combined token count is below 75% of the normal activation target; `model-context.ts` also normalizes bare vs provider-prefixed model IDs so equivalent model IDs do not falsely trigger provider-change activation.
+- #15483 fixes stored API-key fallback. Current `getAnthropicApiKey()` and `getOpenAIApiKey()` check the main credential slot, then `authStorage.getStoredApiKey(providerId)`, then `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`.
+
+Documentation actions:
+
+- Updated `features/memory/observational-memory.md` for provider-change activation, provider-change marker state, normalized model comparison, and early reflection overshoot guards.
+- Updated `features/models/model-auth-and-modes.md` for Anthropic pack defaults and Anthropic/OpenAI stored-key fallback order.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #15420 done, #15458 done, #15462 done, #15483 done, #15403 current.
+
+Focused evidence read: PR metadata for #15420/#15458/#15462/#15483; current `mastracode/src/agents/memory.ts`, `mastracode/src/onboarding/packs.ts`, `mastracode/src/agents/model.ts`, `packages/memory/src/processors/observational-memory/observational-memory.ts`, `reflector-runner.ts`, `model-context.ts`, OM activation TUI handlers/markers, and focused test files.
+
+Verification:
+
+- `pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/observational-memory.test.ts -t "didProviderChange|early reflection activation overshoot guard|activate on provider change when threshold messages" --bail=1 --reporter=dot` — 1 file / 20 tests passed / 430 skipped.
+- `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/om-marker.test.ts src/onboarding/__tests__/packs.test.ts src/agents/__tests__/model.test.ts -t "OMMarkerComponent activation rendering|getAvailableModePacks|getAnthropicApiKey|getOpenAIApiKey" --bail=1 --reporter=dot` — 3 files / 17 tests passed / 29 skipped.
+- `pnpm --filter ./mastracode exec vitest run src/agents/__tests__/model.test.ts -t "uses direct OpenAI API key provider when stored API key credential exists|uses stored API key credential when not logged in via OAuth" --bail=1 --reporter=dot` — 1 file / 2 tests passed / 34 skipped.
+- `pnpm --filter ./packages/core exec vitest run src/agent/message-list/tests/step-start.test.ts src/loop/workflows/agentic-execution/llm-execution-step.test.ts -t "step-start|processor-updated model|configured modelId" --bail=1 --reporter=dot` — 2 files / 9 tests passed / 19 skipped / no type errors.

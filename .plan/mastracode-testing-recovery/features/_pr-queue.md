@@ -230,11 +230,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 208 | 2026-04-15 | #15390 | `1192dffd35` | likely skip | skipped | chore: version packages (alpha) (#15390) | 2 |
 | 209 | 2026-04-15 | #14909 | `b42565acf0` | review | done | feat(mastracode): add --model CLI option to headless mode (#14909) | 4 |
 | 210 | 2026-04-15 | #15365 | `9467ea8769` | review | done | feat: add activateAfterIdle for observational memory activation when prompt caches expire (#15365) | 6 |
-| 211 | 2026-04-16 | #15420 | `0fd90a215c` | review | current | feat: activate observations on provider changes (#15420) | 6 |
-| 212 | 2026-04-16 | #15458 | `346c2f5f05` | review | | chore(mastracode): bump Anthropic pack defaults to opus-4-7 and sonnet-4-6 (#15458) | 1 |
-| 213 | 2026-04-16 | #15462 | `f607106854` | review | | fix: prevent early observational memory reflection activation overshoot (#15462) | 4 |
-| 214 | 2026-04-18 | #15483 | `7f9dc6260b` | review | | fix(mastracode): check stored API key slot and env vars in key resolution (#15483) | 1 |
-| 215 | 2026-04-20 | #15403 | `f7420c2c45` | likely skip | | chore: version packages (alpha) (#15403) | 2 |
+| 211 | 2026-04-16 | #15420 | `0fd90a215c` | review | done | feat: activate observations on provider changes (#15420) | 6 |
+| 212 | 2026-04-16 | #15458 | `346c2f5f05` | review | done | chore(mastracode): bump Anthropic pack defaults to opus-4-7 and sonnet-4-6 (#15458) | 1 |
+| 213 | 2026-04-16 | #15462 | `f607106854` | review | done | fix: prevent early observational memory reflection activation overshoot (#15462) | 4 |
+| 214 | 2026-04-18 | #15483 | `7f9dc6260b` | review | done | fix(mastracode): check stored API key slot and env vars in key resolution (#15483) | 1 |
+| 215 | 2026-04-20 | #15403 | `f7420c2c45` | likely skip | current | chore: version packages (alpha) (#15403) | 2 |
 | 216 | 2026-04-20 | #15423 | `5e42e6f903` | review | | feat(core,mastracode): add --output-format to mastracode headless wit… (#15423) | 2 |
 | 217 | 2026-04-20 | #15566 | `0a5fa1d3cb` | review | | fix(security): replace polynomial-redos regexes with bounded/procedural alternatives (#15566) | 8 |
 | 218 | 2026-04-21 | #15544 | `30bd1ac2db` | likely skip | | chore(deps): update formatting & linting (major) (#15544) | 1 |
