@@ -189,7 +189,6 @@ const sidebars = {
           type: 'category',
           label: 'Agent Builder',
           collapsed: true,
-          customProps: { tags: ['new'] },
           items: [
             {
               type: 'doc',
@@ -522,8 +521,19 @@ const sidebars = {
       label: 'Signals',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider' },
-        { type: 'doc', id: 'signals/webhook-signal-provider', label: 'WebhookSignalProvider' },
+        {
+          type: 'doc',
+          id: 'signals/create-notification-inbox-tool',
+          label: 'createNotificationInboxTool()',
+          customProps: { tags: ['alpha'] },
+        },
+        { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider', customProps: { tags: ['alpha'] } },
+        {
+          type: 'doc',
+          id: 'signals/webhook-signal-provider',
+          label: 'WebhookSignalProvider',
+          customProps: { tags: ['alpha'] },
+        },
       ],
     },
     {

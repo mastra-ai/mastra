@@ -207,6 +207,7 @@ export const serializedAgentSchema = z.object({
   provider: z.string().optional(),
   modelId: z.string().optional(),
   modelVersion: z.string().optional(),
+  supportsMemory: z.boolean().optional(),
   modelList: z.array(modelConfigSchema).optional(),
   defaultOptions: defaultOptionsSchema.optional(),
   defaultGenerateOptionsLegacy: z.record(z.string(), z.any()).optional(),
