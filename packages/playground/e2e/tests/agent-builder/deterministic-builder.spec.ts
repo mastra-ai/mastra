@@ -16,7 +16,7 @@ const starterCases: Array<{
 const complexPrompt =
   'Build a B2B SaaS security vulnerability triage agent. It should classify severity, ask for missing proof, identify customer impact, draft a concise escalation summary, and route urgent issues to security leadership.';
 
-test.describe('Agent Builder mocked canary', () => {
+test.describe('Agent Builder deterministic flow', () => {
   test.setTimeout(60_000);
 
   test.beforeEach(async () => {
@@ -53,7 +53,13 @@ test.describe('Agent Builder mocked canary', () => {
 
 async function assertBuilderOutput(page: Page, expectedName: string) {
   await expect(page.getByText(new RegExp(`Done.*${expectedName}`, 'i'))).toBeVisible({ timeout: 10_000 });
+
+  // Regression guard: each deterministic client tool call should execute exactly once.
+  // This catches duplicate continuation execution, missing tool execution, and empty/bad args in the browser path.
+  await expect(page.getByText('Setting the agent name:')).toHaveCount(1);
+  await expect(page.getByText('Setting the agent description:')).toHaveCount(1);
+  await expect(page.getByText('Setting the agent instructions:')).toHaveCount(1);
+
   await expect(page.getByTestId('agent-configure-name')).toHaveValue(expectedName);
   await expect(page.getByTestId('agent-configure-description')).not.toHaveValue('');
-  await expect(page.getByText('Setting the agent instructions:')).toBeVisible();
 }
