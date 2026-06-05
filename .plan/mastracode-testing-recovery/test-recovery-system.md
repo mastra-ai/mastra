@@ -80,6 +80,28 @@ Use the lowest reliable layer for each invariant, but do not skip TUI e2e for TU
 - TUI e2e tests: actual user-visible terminal workflows using AIMock and the TUI test utility.
 - Smoke tests: packaged CLI or generated-project checks for the few paths that need binary-level proof.
 
+## Branch and proof flow
+
+Implementation work should happen on individual branches off `main`, grouped by coherent feature area. The planning branch tracks the system and feature map; product/test PRs should not carry unrelated planning churn.
+
+For each grouped branch:
+
+1. Commit the tests first.
+2. Prove the tests are meaningful before fixing any revealed product issue.
+3. Intentionally break the target Mastra Code feature in realistic ways and confirm the new tests go red.
+4. Only after the tests are proven solid should product fixes be added.
+
+For every new test or test group, run at least three realistic break validations when practical. These should be feature-relevant edits where Mastra Code still runs but the tested contract fails. Do not use blunt invalidations such as deleting files, forcing `process.exit()`, throwing at startup, or otherwise making the app trivially broken.
+
+Record the proof in the feature card or linked test-recovery notes:
+
+- New tests added.
+- Contracts/invariants covered.
+- Realistic break #1 and failing test evidence.
+- Realistic break #2 and failing test evidence.
+- Realistic break #3 and failing test evidence.
+- Final verification after reverting the intentional breaks and applying any real fixes.
+
 ## Work loop
 
 For each feature or small feature cluster:
@@ -89,9 +111,13 @@ For each feature or small feature cluster:
 3. Classify each invariant by required test layer.
 4. Identify existing tests that already cover each invariant.
 5. Add missing tests until each invariant is covered or explicitly deferred with rationale.
-6. Run focused verification first, then broader Mastra Code tests when appropriate.
-7. Update the feature card with coverage evidence and remaining gaps.
-8. Commit one coherent, reviewable chunk.
+6. Commit the tests first.
+7. Prove the tests by making realistic feature-level breaks and confirming the tests fail.
+8. Revert the intentional breaks.
+9. Fix any real product issues revealed by the tests, after the tests are proven correct.
+10. Run focused verification first, then broader Mastra Code tests when appropriate.
+11. Update the feature card and tracker with coverage and break-validation evidence.
+12. Commit one coherent, reviewable chunk.
 
 ## Slash command and goal flow
 
@@ -136,11 +162,21 @@ The slash command should use this tracker to advance through the flow one featur
 
 ## Test harness and skill work
 
-Before broad test recovery starts, we should experiment with the Mastra Code TUI/AIMock harness on a small pilot feature. The outcome should be:
+Before broad test recovery starts, we need to become fluent in the existing TUI and AIMock testing packages. The first phase is a discovery/experimentation pass, not feature coverage.
+
+That phase should answer:
+
+- What TUI test utilities already exist?
+- What AIMock APIs already exist?
+- How do current tests drive terminal input, streaming output, tool calls, model responses, config dirs, and async state?
+- What is missing or too awkward for broad e2e coverage?
+- What utility API would make tests concise, deterministic, and easy for future goal runs to write?
+
+After that discovery, experiment with the Mastra Code TUI/AIMock harness on a small pilot feature. The outcome should be:
 
 - A reusable TUI test utility API.
 - A few representative tests proving the utility works.
-- A dedicated skill that explains how to write Mastra Code tests with AIMock, the TUI test utility, hermetic config dirs, env cleanup, assertions, and verification commands.
+- A dedicated skill that explains how to write Mastra Code tests with AIMock, the TUI test utility, hermetic config dirs, env cleanup, assertions, break-validation, and verification commands.
 - The goal slash command should reference that skill so future goal runs use the same testing patterns.
 
 ## Open design questions
