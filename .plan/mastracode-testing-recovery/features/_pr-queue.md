@@ -126,9 +126,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 104 | 2026-03-04 | #13787 | `02cbb66435` | review | done | feat(mastracode): add /update slash command (#13787) | 6 |
 | 105 | 2026-03-04 | #13753 | `633370bdf4` | review | done | fix: rename request_sandbox_access to request_access, fix tilde expansion and mid-turn setAllowedPaths (#13753) | 7 |
 | 106 | 2026-03-04 | #13611 | `f6b91c454b` | review | done | feat(mastracode): auth routing fix, tool injection, and auth storage init (#13611) | 10 |
-| 107 | 2026-03-05 | #13815 | `324fff2672` | review | current | feat(mastracode): add omScope to MastraCodeConfig (#13815) | 3 |
-| 108 | 2026-03-05 | #13766 | `38a334998f` | likely skip | | chore: version packages (alpha) (#13766) | 2 |
-| 109 | 2026-03-05 | #13870 | `57764e02c0` | review | | feat(mastracode): enhanced web_search tool rendering (#13870) | 1 |
+| 107 | 2026-03-05 | #13815 | `324fff2672` | review | done | feat(mastracode): add omScope to MastraCodeConfig (#13815) | 3 |
+| 108 | 2026-03-05 | #13766 | `38a334998f` | likely skip | skip: version packages only | chore: version packages (alpha) (#13766) | 2 |
+| 109 | 2026-03-05 | #13870 | `57764e02c0` | review | current | feat(mastracode): enhanced web_search tool rendering (#13870) | 1 |
 | 110 | 2026-03-06 | #12532 | `7abbf1fb29` | review | | chore(deps): update build tools (#12532) | 1 |
 | 111 | 2026-03-06 | #13648 | `4df211619d` | review | | feat(mastracode): add headless non-interactive mode via --prompt flag (#13648) | 5 |
 | 112 | 2026-03-06 | #13695 | `aae2295838` | review | | fix(schema-compat, core): fix OpenAI strict mode schema rejection for agent networks (#12284) (#13695) | 2 |

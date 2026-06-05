@@ -47,7 +47,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | TUI | Terminal theme and contrast | #13487, #13503 | settings preference + terminal detection + theme helper API | Partial | Medium | [page](./tui/terminal-theme.md) |
 | TUI | Quiet mode | #13556 | settings preference + TUI render state | Partial | High | [page](./tui/quiet-mode.md) |
 | Settings | Onboarding and global settings | #13421, #13431, #13487, #13494, #13500, #13505, #13508, #13512, #13566, #13603, #13611, #13748 | settings.json + thread settings + provider registry + AuthStorage | Partial | High | [page](./settings/onboarding-and-global-settings.md) |
-| Settings | Storage backend configuration | #13435 | env/settings + storage factory | Partial | High | [page](./settings/storage-backend.md) |
+| Settings | Storage backend configuration | #13435, #13815 | env/settings/database config + storage factory | Partial | High | [page](./settings/storage-backend.md) |
 | TUI | Interactive chat | #13218, #13350, #13413, #13427, #13456, #13460, #13442, #13487, #13609, #13696, #13712, #13723 | TUI + Harness display state | Partial | High | [page](./tui/interactive-chat.md) |
 | TUI | Debug logging | #13691, #13701 | env vars + app-data/debug trace files | Partial | Medium | [page](./tui/debug-logging.md) |
 | Chat | Prompt context and project instructions | #13234, #13346, #13376, #13456 | Harness request context + instruction files + git metadata | Partial | High | [page](./chat/prompt-context.md) |
@@ -74,7 +74,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Goals | Plan approval and build handoff | #13416, #13557, #13598 | Core Harness plan resolver + TUI plan card + plan files | Partial | High | [page](./goals/plan-approval.md) |
 | Subagents | Delegation to Explore / Plan / Execute | #13227, #13339, #13700 | Harness config + subagent request context/session state | Partial | High | [page](./subagents/delegation.md) |
 | Subagents | Audit-tests subagent | #13331 | Harness subagent config | Missing | High | [page](./subagents/audit-tests.md) |
-| Memory | Observational memory | #13231, #13305, #13330, #13349, #13354, #13476, #13563, #13569 | Memory storage + harness/settings OM state + clone remapping | Partial | High | [page](./memory/observational-memory.md) |
+| Memory | Observational memory | #13231, #13305, #13330, #13349, #13354, #13476, #13563, #13569, #13815 | Memory storage + harness/settings OM state + scope config + clone remapping | Partial | High | [page](./memory/observational-memory.md) |
 
 Use terse values:
 

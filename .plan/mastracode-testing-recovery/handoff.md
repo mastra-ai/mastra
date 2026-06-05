@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13611 (row 106) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, and #13761 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13815 (`324fff2672`, omScope config), then #13766 (`6c2848c5e6`, likely version-package skip).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13766 (row 108) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, and #13766 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13870 (`57764e02c0`, enhanced web_search rendering), then #12532 (`7abbf1fb29`, build tools dependency update).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 107: PR #13815 (add `omScope` to `MastraCodeConfig`), then row 108: PR #13766 (likely version-package skip).
+1. Continue at `_pr-queue.md` row 109: PR #13870 (enhanced `web_search` rendering), then row 110: PR #12532 (build tools dependency update).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.

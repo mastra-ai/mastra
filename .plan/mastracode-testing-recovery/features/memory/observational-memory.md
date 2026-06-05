@@ -3,11 +3,11 @@
 ## Origin PR / commit
 
 - PR: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — dynamic memory configuration, configurable thresholds, observational memory support.
-- Later changes: [#13305](https://github.com/mastra-ai/mastra/pull/13305) — improved OM activation chunk selection, overshoot safeguards, and absolute buffer activation support; [#13330](https://github.com/mastra-ai/mastra/pull/13330) — restored streamed OM status/lifecycle events and observer/reflector model-change events; [#13349](https://github.com/mastra-ai/mastra/pull/13349) — temporarily raised observation `bufferActivation` to 4000 to avoid aggressive message-window shrinking while token-counting precision was investigated; [#13354](https://github.com/mastra-ai/mastra/pull/13354) — preserved OM continuation hints (`currentTask` / `suggestedContinuation`) through low-activation buffering and added degenerate observer-output guards; [#13421](https://github.com/mastra-ai/mastra/pull/13421) — added setup/global settings OM pack defaults; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — centralized OM UI progress in `HarnessDisplayState`; [#13476](https://github.com/mastra-ai/mastra/pull/13476) — fixed buffering precision, mid-step activation, blockAfter semantics, and retained-context safeguards; [#13563](https://github.com/mastra-ai/mastra/pull/13563) — made Codex-resolved OM models and OM failure aborts work with Mastra Code streams; [#13569](https://github.com/mastra-ai/mastra/pull/13569) — clones thread-scoped OM, remaps message/thread IDs, and preserves resource-scoped sharing semantics when forking threads.
+- Later changes: [#13305](https://github.com/mastra-ai/mastra/pull/13305) — improved OM activation chunk selection, overshoot safeguards, and absolute buffer activation support; [#13330](https://github.com/mastra-ai/mastra/pull/13330) — restored streamed OM status/lifecycle events and observer/reflector model-change events; [#13349](https://github.com/mastra-ai/mastra/pull/13349) — temporarily raised observation `bufferActivation` to 4000 to avoid aggressive message-window shrinking while token-counting precision was investigated; [#13354](https://github.com/mastra-ai/mastra/pull/13354) — preserved OM continuation hints (`currentTask` / `suggestedContinuation`) through low-activation buffering and added degenerate observer-output guards; [#13421](https://github.com/mastra-ai/mastra/pull/13421) — added setup/global settings OM pack defaults; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — centralized OM UI progress in `HarnessDisplayState`; [#13476](https://github.com/mastra-ai/mastra/pull/13476) — fixed buffering precision, mid-step activation, blockAfter semantics, and retained-context safeguards; [#13563](https://github.com/mastra-ai/mastra/pull/13563) — made Codex-resolved OM models and OM failure aborts work with Mastra Code streams; [#13569](https://github.com/mastra-ai/mastra/pull/13569) — clones thread-scoped OM, remaps message/thread IDs, and preserves resource-scoped sharing semantics when forking threads; [#13815](https://github.com/mastra-ai/mastra/pull/13815) — adds `createMastraCode({ omScope })` and disables async OM buffering when resource scope is active.
 
 ## User-visible behavior
 
-- What the user can do: use persistent observational memory across Mastra Code conversations/resources, including cloned/forked threads.
+- What the user can do: use persistent observational memory across Mastra Code conversations/resources, configure thread-vs-resource scope before startup, and fork threads with relevant OM state preserved.
 - Success looks like: observations/reflections happen in the background without polluting chat or forgetting important context; forking a thread carries the relevant OM forward without mutating the source.
 - Must preserve: observer/reflector model settings, thresholds, scope, attachment behavior, activation/window-retention behavior, continuation hints, message-ID remapping on clone, and loaded memory after restart.
 
@@ -44,14 +44,15 @@
 | Observer/reflector models | Harness request context + thread settings + settings | OM model functions, `/setup`, `/om`, `om_model_changed` subscribers, Codex OAuth remapping |
 | Thresholds | Harness state + thread settings + settings | Memory factory, `/om` |
 | OM UI progress | Harness display state + transient TUI components | Chat/status rendering |
-| OM scope | Project/resource settings via `getOmScope()` | Memory factory |
+| OM scope | `createMastraCode({ omScope })` override, then `MASTRA_OM_SCOPE`, project/global `database.json`, then `thread` default | Memory factory, OM storage keying |
+| Resource-scope buffering | `getDynamicMemory()` disables `bufferTokens`/`bufferActivation` when scope is `resource` | Core OM validation and activation behavior |
 | Buffer activation math | Core OM thresholds + storage `swapBufferedToActive()` | Runtime context trimming, async buffering, blockAfter fallback |
 | Continuation hints | Observer output → buffered chunks / thread OM metadata | Next observer prompt, memory context injection, activation result |
 | Cloned OM records | `Memory.cloneThread()` + storage OM domain | Thread/resource fork behavior, message-ID remapping, source-record preservation |
 
 ## Key files
 
-- `mastracode/src/agents/memory.ts` — dynamic OM memory factory and Mastra Code defaults; current source sets observation `bufferActivation` to `2000` for thread scope and passes `remapForCodexOAuth: true` for observer/reflector model resolution.
+- `mastracode/src/agents/memory.ts` — dynamic OM memory factory and Mastra Code defaults; current source sets observation `bufferActivation` to `2000` for thread scope, disables async buffering for resource scope, and passes `remapForCodexOAuth: true` for observer/reflector model resolution.
 - `packages/memory/src/processors/observational-memory/thresholds.ts` — activation retention floor, `blockAfter` resolution, and chunk-boundary safeguards.
 - `packages/memory/src/index.ts` — `cloneThread()` orchestration, OM clone rollback, message-ID remapping, resource-scope sharing, and xxhash thread-tag replacement.
 - `packages/memory/src/processors/observational-memory/observational-memory.ts` — core OM runtime, mid-step activation decisions, and context injection (`<current-task>` / `<suggested-response>`).
@@ -63,7 +64,8 @@
 - `mastracode/src/tui/commands/om.ts` — `/om` settings modal wiring.
 - `mastracode/src/tui/handlers/om.ts` — OM event rendering.
 - `mastracode/src/tui/components/om-settings.ts` — settings UI.
-- `mastracode/src/index.ts` — memory/vector store wiring and heartbeat setup.
+- `mastracode/src/index.ts` — `MastraCodeConfig.omScope` startup override, memory/vector store wiring, and heartbeat setup.
+- `mastracode/src/schema.ts`, `utils/project.ts` — state schema and `getOmScope()` env/project/global/default precedence.
 
 ## Dependencies / related features
 
@@ -92,6 +94,7 @@
 - End-to-end observation/reflection across restart with resource/thread scope, including `currentTask` / `suggestedContinuation` continuity.
 - `/om` modal changes propagate to harness state, thread settings, settings file, and next memory factory instance.
 - Mastra Code-specific test that `getDynamicMemory()` wires intended OM activation defaults into core memory.
+- Direct tests for `getOmScope()` precedence and `createMastraCode({ omScope: 'resource' })` producing a resource-scoped memory config with async buffering disabled.
 - Mastra Code `/om` command test asserting observer/reflector model changes call `switchObserverModel()` / `switchReflectorModel()` rather than raw `setState()`.
 - Storage-backed integration coverage for OM clone across LibSQL/Postgres/Mongo/MySQL/Redis adapters, especially rollback and resource-scope new-resource clones.
 
@@ -101,6 +104,7 @@
 - State is split across harness state, settings, thread settings, storage, and display state.
 - Dynamic AGENTS.md reminders must not be observed into memory.
 - Core OM activation defaults can drift from Mastra Code defaults; PR #13305 intended `bufferActivation: 1000` / `blockAfter: 1.2`, PR #13349 temporarily raised observation `bufferActivation` to `4000`, and current Mastra Code wiring is `bufferActivation: 2000` / `blockAfter: 2` after later precision/scope changes.
+- Resource scope intentionally disables async buffering; enabling it without core support can throw validation errors or mix resource-wide buffered state unexpectedly.
 - Storage adapters must keep activation-boundary math in sync; in-memory, LibSQL, MongoDB, and PG each implement `swapBufferedToActive()`.
 - Continuation hints are intentionally taken from the most recent activated chunk only; stale older hints must not leak forward after partial activation.
 - OM observer/reflector model resolution must preserve requestContext so Codex OAuth remapping, reasoning effort, and gateway headers survive the memory pipeline.

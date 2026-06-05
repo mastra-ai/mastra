@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13435](https://github.com/mastra-ai/mastra/pull/13435) — added opt-in PostgreSQL storage alongside default LibSQL, plus `/settings` backend selection.
-- Later changes: none known.
+- Later changes: [#13815](https://github.com/mastra-ai/mastra/pull/13815) — database config files can also carry `omScope` for observational-memory scope selection.
 
 ## User-visible behavior
 
@@ -41,13 +41,14 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | Backend selection | Env vars first, then `settings.json` `storage.backend`, then legacy `.mastracode/database.json`, then local LibSQL default | `getStorageConfig()` |
+| OM scope in database config | `MASTRA_OM_SCOPE`, project/global `.mastracode/database.json` `omScope`, or `createMastraCode({ omScope })` | `getOmScope()`, memory factory |
 | LibSQL URL/token | `MASTRA_DB_URL`/`MASTRA_DB_AUTH_TOKEN` or `settings.storage.libsql` | `LibSQLStore`, `LibSQLVector` |
 | PostgreSQL connection | `MASTRA_PG_*` vars or `settings.storage.pg` | `PostgresStore`, `PgVector` |
 | Effective backend after fallback | `createStorage()` result | Vector-store selection, startup warnings |
 
 ## Key files
 
-- `mastracode/src/utils/project.ts` — storage config precedence and env/settings/legacy parsing.
+- `mastracode/src/utils/project.ts` — storage config precedence, `omScope` precedence, and env/settings/legacy parsing.
 - `mastracode/src/utils/storage-factory.ts` — creates LibSQL/PostgreSQL stores, tests PG startup, and falls back to LibSQL with warnings.
 - `mastracode/src/onboarding/settings.ts` — persisted `StorageSettings` schema/defaults.
 - `mastracode/src/tui/components/settings.ts` — storage backend submenu and connection input.
@@ -72,6 +73,7 @@
 - Restart after switching backend: selected backend, footer/runtime warning, and history visibility.
 - Successful PostgreSQL integration against a real test database, including `PgVector` usage and schema/index flags.
 - Data migration story when switching LibSQL ↔ PostgreSQL.
+- `getOmScope()` precedence tests for env/project/global database config and invalid values.
 
 ## Known risks / regressions
 

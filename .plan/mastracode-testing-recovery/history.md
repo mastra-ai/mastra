@@ -1084,3 +1084,22 @@ Verification:
 - Focused tests passed after clearing local provider env vars: `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u MASTRA_GATEWAY_API_KEY corepack pnpm@11.3.0 --filter ./mastracode exec vitest run src/tools/__tests__/request-sandbox-access.test.ts src/tui/__tests__/parallel-interactive-prompts.test.ts src/agents/__tests__/model.test.ts src/agents/extra-tools.test.ts src/__tests__/index.test.ts --reporter=dot --bail 1` (5 files / 84 tests). Initial unguarded run failed because local `OPENAI_API_KEY` changed expected OpenAI routing in `model.test.ts`.
 
 Next queue checkpoint: PR #13815 (`omScope` config), then PR #13766 (version-package skip).
+
+### Feature map batch: OM scope override and release skip
+
+Processed PR [#13815](https://github.com/mastra-ai/mastra/pull/13815), `324fff2672` (`feat(mastracode): add omScope to MastraCodeConfig`). Verified current `MastraCodeConfig.omScope` accepts `'thread' | 'resource'` and seeds `globalInitialState.omScope` before Harness startup. The dynamic memory factory uses `state.omScope ?? getOmScope(projectPath)`, where `getOmScope()` falls back through `MASTRA_OM_SCOPE`, project `.mastracode/database.json`, global `~/.mastracode/database.json`, then `'thread'`. Resource-scoped OM disables async buffering by setting observation `bufferTokens: false` and omitting observation/reflection `bufferActivation` values so core OM validation does not reject resource scope.
+
+Reviewed PR [#13766](https://github.com/mastra-ai/mastra/pull/13766), `38a334998f` (`chore: version packages (alpha)`). It is a release-version package/changelog sweep with no separate Mastra Code behavior to map.
+
+Documentation actions:
+
+- Updated `features/memory/observational-memory.md` with configurable OM scope, resource-scope async-buffer disabling, source files, missing tests, and risk notes.
+- Updated `features/settings/storage-backend.md` because `database.json` also owns `omScope` precedence alongside storage/resource settings.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13815 done, #13766 skipped, #13870 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/agents/memory.ts`, `mastracode/src/index.ts`, `mastracode/src/schema.ts`, `mastracode/src/utils/project.ts`, current OM/storage feature cards, and PR #13766 changed-file list.
+- Focused tests passed: `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u MASTRA_GATEWAY_API_KEY corepack pnpm@11.3.0 --filter ./mastracode exec vitest run src/tui/commands/__tests__/om.test.ts src/tui/components/__tests__/om-settings.test.ts src/tui/handlers/__tests__/om.test.ts src/__tests__/index.test.ts --reporter=dot --bail 1` (4 files / 27 tests). Direct `omScope` precedence/config tests are still missing and recorded as a gap.
+
+Next queue checkpoint: PR #13870 (enhanced web_search rendering), then PR #12532 (build tools dependency update).
