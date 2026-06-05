@@ -83,7 +83,7 @@ describe('BrowserContextProcessor', () => {
     const createStateArgs = (
       browserCtx?: BrowserContext,
       activeStateSignals: any[] = [],
-      options: { contextWindow?: { hasSnapshot?: boolean } } = {},
+      options: { contextWindow?: { hasSnapshot?: boolean }; lastSnapshot?: any } = {},
     ) => {
       const requestContext = new RequestContext();
       if (browserCtx) requestContext.set('browser', browserCtx);
@@ -104,7 +104,8 @@ describe('BrowserContextProcessor', () => {
             options.contextWindow?.hasSnapshot ??
             activeStateSignals.some(signal => signal.metadata?.state?.mode === 'snapshot'),
         },
-        lastSnapshot: activeStateSignals.findLast(signal => signal.metadata?.state?.mode === 'snapshot'),
+        lastSnapshot:
+          options.lastSnapshot ?? activeStateSignals.findLast(signal => signal.metadata?.state?.mode === 'snapshot'),
         deltasSinceSnapshot: activeStateSignals.filter(signal => signal.metadata?.state?.mode === 'delta'),
       };
     };
@@ -243,13 +244,70 @@ describe('BrowserContextProcessor', () => {
       expect(result).toBeUndefined();
     });
 
+    it('includes active URL when browser opens from a remembered closed state', async () => {
+      const closedSignal = createSignal({
+        type: 'state',
+        contents:
+          'The browser was closed because the chat process restarted. Active tab URL: https://example.com/. 1 open tab.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'closed', version: 1 },
+          value: { processId: 'previous-process', open: false, activeUrl: 'https://example.com/', tabCount: 1 },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            isOpen: true,
+            currentUrl: 'https://example.com/',
+            activeUrlChangeSource: 'agent',
+            tabCount: 1,
+          },
+          [closedSignal as any],
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: 'changed: browser opened; agent changed active tab URL to https://example.com/; 1 open tab',
+          delta: expect.objectContaining({
+            open: true,
+            activeUrl: 'https://example.com/',
+            activeUrlChangeSource: 'agent',
+            tabCount: 1,
+          }),
+        }),
+      );
+    });
+
     it('does not emit when browser was never opened (no previous state and currently closed)', async () => {
       const result = await processor.computeStateSignal(createStateArgs({ provider: 'agent-browser', isOpen: false }));
 
       expect(result).toBeUndefined();
     });
 
-    it('emits when browser transitions from open to closed (has previous state)', async () => {
+    it('does not refresh a bare closed browser snapshot after restart', async () => {
+      const evictedSnapshot = createSignal({
+        type: 'state',
+        contents: 'Browser is open. Active tab URL: https://example.com.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', mode: 'snapshot', version: 1 },
+          browser: { open: true, activeUrl: 'https://example.com' },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: false }, [evictedSnapshot as any], {
+          contextWindow: { hasSnapshot: false },
+        }),
+      );
+
+      expect(result).toBeUndefined();
+    });
+
+    it('does not emit an ambiguous bare closed delta without process attribution', async () => {
       const activeSignal = createSignal({
         type: 'state',
         contents: 'Browser is open.',
@@ -263,11 +321,136 @@ describe('BrowserContextProcessor', () => {
         createStateArgs({ provider: 'agent-browser', isOpen: false }, [activeSignal as any]),
       );
 
-      expect(result).toBeDefined();
+      expect(result).toBeUndefined();
+    });
+
+    it('attributes a bare closed delta to process restart when process id changed', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          value: { processId: 'previous-process', open: true, activeUrl: 'https://example.com' },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: false }, [activeSignal as any]),
+      );
+
       expect(result).toEqual(
         expect.objectContaining({
           mode: 'delta',
-          contents: expect.stringContaining('browser closed'),
+          contents: expect.stringContaining('browser was closed because the chat process restarted'),
+          delta: expect.objectContaining({ open: false, closeReason: 'process_restart' }),
+        }),
+      );
+    });
+
+    it('attributes a same-process bare closed delta to the user', async () => {
+      const snapshot = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: true, currentUrl: 'https://example.com' }),
+      );
+      expect(snapshot).toBeDefined();
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: snapshot!.contents,
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: snapshot!.cacheKey, version: 1 },
+          browser: snapshot!.metadata!.browser,
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: false }, [activeSignal as any]),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: expect.stringContaining('browser was closed externally, maybe by the user'),
+          delta: expect.objectContaining({ open: false, closeReason: 'user' }),
+        }),
+      );
+    });
+
+    it('attributes a same-process remembered closed state to the user', async () => {
+      const snapshot = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: true, currentUrl: 'https://example.com', tabCount: 1 }),
+      );
+      expect(snapshot).toBeDefined();
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: snapshot!.contents,
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: snapshot!.cacheKey, version: 1 },
+          browser: snapshot!.metadata!.browser,
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: false, currentUrl: 'https://example.com', tabCount: 1 }, [
+          activeSignal as any,
+        ]),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: expect.stringContaining('browser was closed externally, maybe by the user'),
+          delta: expect.objectContaining({ open: false, closeReason: 'user' }),
+        }),
+      );
+    });
+
+    it('attributes a remembered closed state to process restart when process id changed', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open. Active tab URL: https://example.com. 1 open tab.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          value: { processId: 'previous-process', open: true, activeUrl: 'https://example.com', tabCount: 1 },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: false, currentUrl: 'https://example.com', tabCount: 1 }, [
+          activeSignal as any,
+        ]),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: expect.stringContaining('browser was closed because the chat process restarted'),
+          delta: expect.objectContaining({ open: false, closeReason: 'process_restart' }),
+        }),
+      );
+    });
+
+    it('attributes snapshot refresh close to process restart from last snapshot when active copies are empty', async () => {
+      const lastSnapshot = createSignal({
+        type: 'state',
+        contents: 'Browser is open. Active tab URL: https://example.com. 1 open tab.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', mode: 'snapshot', version: 1 },
+          value: { processId: 'previous-process', open: true, activeUrl: 'https://example.com', tabCount: 1 },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          { provider: 'agent-browser', isOpen: false, currentUrl: 'https://example.com', tabCount: 1 },
+          [],
+          { contextWindow: { hasSnapshot: false }, lastSnapshot },
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'snapshot',
+          contents: expect.stringContaining('The browser was closed because the chat process restarted.'),
+          value: expect.objectContaining({ closeReason: 'process_restart' }),
         }),
       );
     });
@@ -291,7 +474,7 @@ describe('BrowserContextProcessor', () => {
       expect(result).toBeDefined();
       expect(result).toEqual(
         expect.objectContaining({
-          contents: expect.stringContaining('session process restarted'),
+          contents: expect.stringContaining('browser was closed because the chat process restarted'),
         }),
       );
     });
@@ -314,7 +497,7 @@ describe('BrowserContextProcessor', () => {
       expect(result).toEqual(
         expect.objectContaining({
           mode: 'delta',
-          contents: expect.stringContaining('user closed the browser'),
+          contents: expect.stringContaining('browser was closed externally, maybe by the user'),
         }),
       );
     });
@@ -340,6 +523,96 @@ describe('BrowserContextProcessor', () => {
           contents: expect.stringContaining('closed unexpectedly due to an error'),
         }),
       );
+    });
+
+    it('attributes active URL changes to the user when provided', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open. Active tab URL: https://example.com.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          browser: { open: true, activeUrl: 'https://example.com' },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            isOpen: true,
+            currentUrl: 'https://www.google.com/',
+            activeUrlChangeSource: 'user',
+          },
+          [activeSignal as any],
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: 'changed: user changed active tab URL to https://www.google.com/',
+          delta: { activeUrl: 'https://www.google.com/', activeUrlChangeSource: 'user' },
+        }),
+      );
+    });
+
+    it('attributes same-process active URL changes to the user when source is missing', async () => {
+      const snapshot = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: true, currentUrl: 'https://example.com' }),
+      );
+      expect(snapshot).toBeDefined();
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: snapshot!.contents,
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: snapshot!.cacheKey, version: 1 },
+          browser: snapshot!.metadata!.browser,
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            isOpen: true,
+            currentUrl: 'https://www.google.com/',
+          },
+          [activeSignal as any],
+        ),
+      );
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: 'changed: user changed active tab URL to https://www.google.com/',
+          delta: { activeUrl: 'https://www.google.com/', activeUrlChangeSource: 'user' },
+        }),
+      );
+    });
+
+    it('does not emit when only the active URL change source changes', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open. Active tab URL: https://example.com.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          browser: { open: true, activeUrl: 'https://example.com' },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs(
+          {
+            provider: 'agent-browser',
+            isOpen: true,
+            currentUrl: 'https://example.com',
+            activeUrlChangeSource: 'user',
+          },
+          [activeSignal as any],
+        ),
+      );
+
+      expect(result).toBeUndefined();
     });
   });
 });

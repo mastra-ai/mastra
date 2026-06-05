@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed browser state signal showing 'Browser is closed' when the agent never used the browser. Added closeReason field to differentiate between agent-initiated close, user action, process restart, or error.
+Fixed browser state signals so they no longer show 'Browser is closed' before the browser is used. Added attribution for browser closes and active URL changes when the agent or user caused them.
