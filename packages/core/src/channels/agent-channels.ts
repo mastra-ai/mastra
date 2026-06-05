@@ -8,7 +8,12 @@ import type { AgentThreadSubscription } from '../agent/types';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
-import type { InputProcessor, InputProcessorOrWorkflow } from '../processors';
+import type {
+  InputProcessor,
+  InputProcessorOrWorkflow,
+  OutputProcessor,
+  OutputProcessorOrWorkflow,
+} from '../processors';
 import { isProcessorWorkflow } from '../processors';
 import { RequestContext } from '../request-context';
 import type { ApiRoute } from '../server/types';
@@ -28,6 +33,8 @@ import {
   normalizeInlineLinks,
 } from './inline-media';
 import type { InlineLinkRule } from './inline-media';
+import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
+import type { ChatChannelRenderContext } from './output-processor';
 import { ChatChannelProcessor } from './processor';
 import { MastraStateAdapter } from './state-adapter';
 import type { PendingApprovalRecord } from './stream-helpers';
@@ -695,6 +702,20 @@ export class AgentChannels {
   }
 
   /**
+   * Returns channel output processors that render the agent's stream to the
+   * originating chat platform. The processor is a no-op for runs that didn't
+   * come in through the channels path (it keys off a marker on
+   * `requestContext` set by `processChatMessage`).
+   *
+   * Skipped if the user already added a processor with the same id.
+   */
+  getOutputProcessors(configuredProcessors: OutputProcessorOrWorkflow[] = []): OutputProcessor[] {
+    const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-render');
+    if (hasProcessor) return [];
+    return [new ChatChannelOutputProcessor()];
+  }
+
+  /**
    * Returns generic channel tools (send_message, add_reaction, etc.)
    * that resolve the target adapter from the current request context.
    */
@@ -1042,12 +1063,15 @@ export class AgentChannels {
     const requestContext = new RequestContext();
     requestContext.set('channel', channelContext);
 
-    this.ensureThreadSubscription({
-      mastraThreadId: mastraThread.id,
-      resourceId: threadResourceId,
-      chatThread,
-      platform,
-    });
+    // Stash the per-event render deps so `ChatChannelOutputProcessor` can
+    // route the agent's stream to the chat platform. The processor opens an
+    // async queue on the first chunk and hands the iterable to the existing
+    // streaming/static driver. This replaces the previous per-thread
+    // subscription consumer: rendering now happens inline with the run that
+    // produces the chunks, so only the Lambda that won the wake race
+    // (signals reservation) renders the reply.
+    const renderContext = this._buildRenderContext(chatThread, platform);
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
     void chatThread.subscribe().catch(err => {
       this.log('debug', 'chatThread.subscribe failed', err);
@@ -1200,12 +1224,22 @@ export class AgentChannels {
     return placeholder;
   }
 
-  private async consumeAgentStream(
-    stream: AsyncIterable<AgentChunkType<any>>,
+  /**
+   * Build the per-event render dependencies handed to the output processor (or
+   * the legacy `consumeAgentStream` path). Captures the adapter, driver mode,
+   * tool-display config, approval-card stash callbacks, and the typing-status
+   * wrapper as a callable so the processor can apply it after the queue is
+   * created. The returned object is plain data — no streams, no promises —
+   * so it's safe to stash on `requestContext` for the processor to read later.
+   *
+   * @internal Used by `processChatMessage` (via `requestContext`) and by
+   * `consumeAgentStream` for the slash-command / approval-resume paths.
+   */
+  _buildRenderContext(
     chatThread: Thread,
     platform: string,
     approvalContext?: { toolCallId: string; messageId: string },
-  ): Promise<void> {
+  ): ChatChannelRenderContext {
     const adapter = this.adapters[platform]!;
     const adapterConfig = this.adapterConfigs[platform];
     const streaming = this.resolveStreaming(adapterConfig?.streaming);
@@ -1217,23 +1251,7 @@ export class AgentChannels {
       adapterConfig?.formatToolCall,
     );
 
-    // Seed the approval-card stash on resumed runs so the driver can resolve
-    // `messageId` for the incoming `tool-result` even though it never saw the
-    // pre-suspension `tool-call`.
-    if (approvalContext) {
-      this.pendingApprovalCards.set(approvalContext.toolCallId, {
-        messageId: approvalContext.messageId,
-        displayName: '',
-        argsSummary: '',
-        startedAt: Date.now(),
-      });
-    }
-
-    // The streaming driver flips `typingGate.active = true` while a
-    // StreamingPlan post is in flight; the typing-status wrapper reads it
-    // and skips `startTyping` during that window.
     const typingGate = { active: false };
-    const wrapped = this.withTypingStatus(stream, chatThread, platform, adapterConfig, typingGate);
 
     const onApprovalPosted = (toolCallId: string, record: PendingApprovalRecord) => {
       this.pendingApprovalCards.set(toolCallId, record);
@@ -1245,35 +1263,76 @@ export class AgentChannels {
       return r;
     };
 
-    if (streaming.enabled) {
+    return {
+      adapter,
+      chatThread,
+      platform,
+      streaming,
+      toolDisplay,
+      toolDisplayFn,
+      channelToolNames: this.channelToolNames,
+      logger: this.logger,
+      onApprovalPosted,
+      getPendingApproval,
+      takePendingApproval,
+      wrapStream: stream => this.withTypingStatus(stream, chatThread, platform, adapterConfig, typingGate),
+      typingGate,
+      formatError: adapterConfig?.formatError,
+      approvalContext,
+    };
+  }
+
+  private async consumeAgentStream(
+    stream: AsyncIterable<AgentChunkType<any>>,
+    chatThread: Thread,
+    platform: string,
+    approvalContext?: { toolCallId: string; messageId: string },
+  ): Promise<void> {
+    const render = this._buildRenderContext(chatThread, platform, approvalContext);
+
+    // Seed the approval-card stash on resumed runs so the driver can resolve
+    // `messageId` for the incoming `tool-result` even though it never saw the
+    // pre-suspension `tool-call`.
+    if (render.approvalContext) {
+      this.pendingApprovalCards.set(render.approvalContext.toolCallId, {
+        messageId: render.approvalContext.messageId,
+        displayName: '',
+        argsSummary: '',
+        startedAt: Date.now(),
+      });
+    }
+
+    const wrapped = render.wrapStream(stream);
+
+    if (render.streaming.enabled) {
       await runStreamingDriver({
         stream: wrapped,
-        chatThread,
-        adapter,
-        toolDisplay: toolDisplay as 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden',
-        toolDisplayFn,
-        streamingOptions: streaming.options,
-        channelToolNames: this.channelToolNames,
-        logger: this.logger,
-        onApprovalPosted,
-        getPendingApproval,
-        takePendingApproval,
-        typingGate,
-        formatError: adapterConfig?.formatError,
+        chatThread: render.chatThread,
+        adapter: render.adapter,
+        toolDisplay: render.toolDisplay as 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden',
+        toolDisplayFn: render.toolDisplayFn,
+        streamingOptions: render.streaming.options,
+        channelToolNames: render.channelToolNames,
+        logger: render.logger,
+        onApprovalPosted: render.onApprovalPosted,
+        getPendingApproval: render.getPendingApproval,
+        takePendingApproval: render.takePendingApproval,
+        typingGate: render.typingGate,
+        formatError: render.formatError,
       });
     } else {
       await runStaticDriver({
         stream: wrapped,
-        chatThread,
-        adapter,
-        toolDisplay: toolDisplay as 'cards' | 'text' | 'hidden',
-        toolDisplayFn,
-        channelToolNames: this.channelToolNames,
-        logger: this.logger,
-        onApprovalPosted,
-        getPendingApproval,
-        takePendingApproval,
-        formatError: adapterConfig?.formatError,
+        chatThread: render.chatThread,
+        adapter: render.adapter,
+        toolDisplay: render.toolDisplay as 'cards' | 'text' | 'hidden',
+        toolDisplayFn: render.toolDisplayFn,
+        channelToolNames: render.channelToolNames,
+        logger: render.logger,
+        onApprovalPosted: render.onApprovalPosted,
+        getPendingApproval: render.getPendingApproval,
+        takePendingApproval: render.takePendingApproval,
+        formatError: render.formatError,
       });
     }
   }
