@@ -7,9 +7,11 @@ packages:
 
 # SignalProvider
 
+**Added in:** `@mastra/core@1.39.0`
+
 Abstract base class for building signal providers. A signal provider monitors external sources (APIs, webhooks, event streams) and pushes notification signals into agent threads through a built-in subscription registry.
 
-Signal providers are not processors by default. Providers that need to intercept agent execution return processors from `getInputProcessors()` or `getOutputProcessors()`. Providers that expose agent-callable tools return them from `getTools()`.
+Signal providers aren't processors by default. Providers that need to intercept agent execution return processors from `getInputProcessors()` or `getOutputProcessors()`. Providers that expose agent-callable tools return them from `getTools()`.
 
 For a ready-to-use webhook-based provider, see [`WebhookSignalProvider`](/reference/signals/webhook-signal-provider).
 
