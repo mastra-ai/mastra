@@ -16,7 +16,6 @@ import type {
   SSOCallbackResult,
 } from '@mastra/core/auth';
 import type { IRBACProvider, IFGAProvider, EEUser } from '@mastra/core/auth/ee';
-import { PERMISSION_PATTERNS } from '@mastra/core/auth/ee';
 import type { MastraAuthProvider } from '@mastra/core/server';
 
 import { z } from 'zod/v4';
@@ -54,6 +53,21 @@ function loadBuildCapabilities(): Promise<BuildCapabilitiesFn | undefined> {
       });
   }
   return _buildCapabilitiesPromise;
+}
+
+let _permissionPatternsPromise: Promise<Record<string, unknown> | undefined> | undefined;
+function loadPermissionPatterns(): Promise<Record<string, unknown> | undefined> {
+  if (!_permissionPatternsPromise) {
+    _permissionPatternsPromise = import('@mastra/core/auth/ee')
+      .then(m => m.PERMISSION_PATTERNS as Record<string, unknown>)
+      .catch(() => {
+        console.error(
+          '[@mastra/server] EE auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+        );
+        return undefined;
+      });
+  }
+  return _permissionPatternsPromise;
 }
 
 /**
@@ -744,7 +758,8 @@ export const GET_PERMISSION_PATTERNS_ROUTE = createRoute({
     'Returns the authoritative list of valid permission-pattern strings. Used by Studio to validate the route→permission literals it ships and to gate the sidebar.',
   tags: ['Auth'],
   handler: async () => {
-    return { patterns: Object.keys(PERMISSION_PATTERNS) };
+    const patterns = await loadPermissionPatterns();
+    return { patterns: Object.keys(patterns ?? {}) };
   },
 });
 
