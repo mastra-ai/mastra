@@ -1044,10 +1044,13 @@ describe('Processor Tracing Tests', () => {
       const registeredAgent = mastra.getAgent('agent');
       const stream = await registeredAgent.stream('Hello');
 
-      // Consume the stream to trigger processOutputStream
-      for await (const _chunk of stream.textStream) {
-        // Just consume
-      }
+      // Await full output to deterministically flush the stream pipeline. This
+      // guarantees the `finish` chunk has propagated through the output
+      // processor chain — which is when the output stream processor spans are
+      // ended — before we assert on them. Draining `textStream` alone does not
+      // guarantee the finish chunk has been processed, causing flaky failures
+      // where processor spans are still incomplete.
+      await stream.getFullOutput();
 
       const agentSpans = testExporter.getAgentSpans();
       const processorSpans = testExporter.getProcessorSpans();
