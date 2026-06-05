@@ -148,8 +148,6 @@ function wrapError(op: string, error: unknown, details?: Record<string, unknown>
   );
 }
 
-
-
 export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   readonly #client: DbClient;
   readonly #schema: string;

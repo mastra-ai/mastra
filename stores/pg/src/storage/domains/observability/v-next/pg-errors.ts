@@ -28,10 +28,7 @@ function asPgError(error: unknown): PgErrorLike {
 export function isDuplicateRelationError(error: unknown): boolean {
   const { code, constraint, message = '' } = asPgError(error);
   if (code === '42P07') return true;
-  if (
-    code === '23505' &&
-    (constraint === 'pg_type_typname_nsp_index' || constraint === 'pg_class_relname_nsp_index')
-  ) {
+  if (code === '23505' && (constraint === 'pg_type_typname_nsp_index' || constraint === 'pg_class_relname_nsp_index')) {
     return true;
   }
   return /already exists/i.test(message);
