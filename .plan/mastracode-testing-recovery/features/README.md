@@ -43,17 +43,17 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | TUI | Help and shortcuts | #13426, #13712, #13723, #13787 | TUI command metadata + settings | Partial | Medium | [page](./tui/help-and-shortcuts.md) |
 | TUI | Interactive prompts and access requests | #13696, #13753 | TUI active prompt + pending prompt queue + sandbox allowed paths | Partial | High | [page](./tui/interactive-prompts.md) |
 | TUI | Process suspend shortcut | #13723 | TUI keyboard routing + Unix signal handling | Partial | Medium | [page](./tui/process-suspend.md) |
-| TUI | Clipboard paste | #13712 | OS clipboard helpers + editor paste buffer | Partial | High | [page](./tui/clipboard-paste.md) |
+| TUI | Clipboard paste | #13712, #13953 | OS clipboard helpers + editor paste buffer + pending pasted images | Partial | High | [page](./tui/clipboard-paste.md) |
 | TUI | File autocomplete | #13460 | editor autocomplete provider + `fd` detection | Partial | Medium | [page](./tui/file-autocomplete.md) |
 | TUI | Terminal theme and contrast | #13487, #13503 | settings preference + terminal detection + theme helper API | Partial | Medium | [page](./tui/terminal-theme.md) |
 | TUI | Quiet mode | #13556 | settings preference + TUI render state | Partial | High | [page](./tui/quiet-mode.md) |
-| Settings | Onboarding and global settings | #13421, #13431, #13487, #13494, #13500, #13505, #13508, #13512, #13566, #13603, #13611, #13748 | settings.json + thread settings + provider registry + AuthStorage | Partial | High | [page](./settings/onboarding-and-global-settings.md) |
+| Settings | Onboarding and global settings | #13421, #13431, #13487, #13494, #13500, #13505, #13508, #13512, #13566, #13603, #13611, #13748, #13953 | settings.json + thread settings + provider registry + AuthStorage | Partial | High | [page](./settings/onboarding-and-global-settings.md) |
 | Settings | Storage backend configuration | #13435, #13815 | env/settings/database config + storage factory | Partial | High | [page](./settings/storage-backend.md) |
 | TUI | Interactive chat | #13218, #13350, #13413, #13427, #13456, #13460, #13442, #13487, #13609, #13696, #13712, #13723, #13999 | TUI + Harness display state | Partial | High | [page](./tui/interactive-chat.md) |
 | TUI | Shell passthrough streaming | #13999 | TUI input router + shell subprocess + live output component | Partial | Medium | [page](./tui/shell-passthrough.md) |
 | TUI | Debug logging | #13691, #13701 | env vars + app-data/debug trace files | Partial | Medium | [page](./tui/debug-logging.md) |
 | Chat | Prompt context and project instructions | #13234, #13346, #13376, #13456 | Harness request context + instruction files + git metadata | Partial | High | [page](./chat/prompt-context.md) |
-| Chat | File attachments in chat input | #13574, #13712 | Harness signal content + message-list adapters | Partial | High | [page](./chat/file-attachments.md) |
+| Chat | File attachments in chat input | #13574, #13712, #13953 | Harness signal content + message-list adapters + TUI pending images + OM attachment input | Partial | High | [page](./chat/file-attachments.md) |
 | Git | Branch context and status | #13456 | live git branch + TUI project info | Missing | High | [page](./git/branch-context.md) |
 | Chat | Queued follow-ups and slash commands | #13345, #13493 | TUI transient queue state + command template processor | Partial | High | [page](./chat/queued-followups.md) |
 | Threads | Persistent conversations / switching | #13218, #13334, #13343 | Harness session + thread metadata | Partial | High | [page](./threads/persistent-conversations.md) |
@@ -78,7 +78,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Goals | Plan approval and build handoff | #13416, #13557, #13598 | Core Harness plan resolver + TUI plan card + plan files | Partial | High | [page](./goals/plan-approval.md) |
 | Subagents | Delegation to Explore / Plan / Execute | #13227, #13339, #13700, #13940 | Harness config + parent Workspace + subagent request context/session state | Partial | High | [page](./subagents/delegation.md) |
 | Subagents | Audit-tests subagent | #13331 | Harness subagent config | Missing | High | [page](./subagents/audit-tests.md) |
-| Memory | Observational memory | #13231, #13305, #13330, #13349, #13354, #13476, #13563, #13569, #13815 | Memory storage + harness/settings OM state + scope config + clone remapping | Partial | High | [page](./memory/observational-memory.md) |
+| Memory | Observational memory | #13231, #13305, #13330, #13349, #13354, #13476, #13563, #13569, #13815, #13953 | Memory storage + harness/settings OM state + scope config + attachment filtering/token estimates + clone remapping | Partial | High | [page](./memory/observational-memory.md) |
 
 Use terse values:
 

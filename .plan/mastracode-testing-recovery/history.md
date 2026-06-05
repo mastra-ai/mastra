@@ -1151,3 +1151,24 @@ Verified rows 113-114:
 - #13940 makes non-forked subagents inherit the parent `Workspace` instead of carrying duplicate MC-local file/edit/shell tool definitions. `createSubagentTool()` passes `context.workspace` into fresh subagent Agents, and `allowedWorkspaceTools` filters inherited workspace tools through `prepareStep`; forked subagents still reuse the parent agent/thread clone path. Updated delegation and workspace-tool cards.
 
 Focused evidence read: `mastracode/src/tui/shell.ts`, `shell-runner.ts`, `shell-result.ts`, `components/shell-output.ts`, `packages/core/src/harness/tools.ts`, `subagent-tool.test.ts`, `subagent-workspace-integration.test.ts`, and built-in subagent definitions.
+
+### PR #13953 / #14062 feature-map checkpoint
+
+Verified rows 115-116:
+
+- #13953 adds attachment support to observational memory and wires Mastra Code pasted images into real chat submission. Current source forwards editor `onImagePaste` into `TUIState.pendingImages`, inserts `[image]` placeholders, consumes only referenced images on submit/queued follow-up, renders optimistic image messages, and sends image data through Harness signal/file content. OM now formats user/tool-result image/file parts as observer placeholders plus real attachment parts, supports `observeAttachments` (`auto`/on/off), filters by provider attachment capability/mime patterns, and counts images/files with provider-aware token estimates, provider count-token endpoints, remote image probing, client-stamped estimates, caching, and in-flight deduping.
+- #14062 is formatting/lint dependency-only for this feature map pass and was skipped.
+
+Documentation actions:
+
+- Updated `features/memory/observational-memory.md` with #13953 attachment observation, token counting, settings/state ownership, source/test files, and risks.
+- Updated `features/chat/file-attachments.md` with TUI pasted-image submission and OM attachment preservation.
+- Updated `features/tui/clipboard-paste.md` to close the earlier integration gap: `onImagePaste` is now wired in `mastracode/src/tui/mastra-tui.ts`.
+- Updated `features/settings/onboarding-and-global-settings.md`, `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13953 done, #14062 skipped, #13883 current.
+
+Focused evidence read: `mastracode/src/tui/mastra-tui.ts`, `custom-editor.ts`, `mastra-tui-images.test.ts`, `mastra-tui-queueing.test.ts`, `mastracode/src/agents/memory.ts`, `thread-caveman-state.ts`, `index.test.ts`, `om.ts`, `packages/memory/src/processors/observational-memory/types.ts`, `observer-runner.ts`, `observer-agent.ts`, `message-utils.ts`, `token-counter.ts`, `observational-memory.test.ts`, and `token-counter.test.ts`.
+
+Verification:
+
+- `corepack pnpm@11.3.0 --filter ./mastracode exec vitest run src/tui/__tests__/mastra-tui-images.test.ts src/tui/__tests__/mastra-tui-queueing.test.ts --reporter=dot --bail 1` — 2 files / 33 tests passed.
+- `corepack pnpm@11.3.0 --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/token-counter.test.ts src/processors/observational-memory/__tests__/observational-memory.test.ts --reporter=dot --bail 1` — 2 files / 496 passed / 1 todo.

@@ -3,12 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13712](https://github.com/mastra-ai/mastra/pull/13712) — added explicit Ctrl+V / Alt+V clipboard text and image paste handling in the TUI editor.
+- Later changes: [#13953](https://github.com/mastra-ai/mastra/pull/13953) — wires editor image paste into real TUI pending images, `[image]` placeholders, optimistic rendering, and Harness file/image signal dispatch.
 
 ## User-visible behavior
 
 - What the user can do: press Ctrl+V (or Alt+V) in the TUI editor to paste clipboard text or image data.
-- Success looks like: text clipboard contents enter the editor through the bracketed-paste path; image clipboard contents call the editor image-paste callback when present.
-- Must preserve: bracketed paste handling for terminal-native paste, remote/local image URL/path detection, and normal editor shortcuts.
+- Success looks like: text clipboard contents enter the editor through the bracketed-paste path; image clipboard contents add a pending image, insert a `[image]` marker, render optimistically, and submit as Harness file/image content.
+- Must preserve: bracketed paste handling for terminal-native paste, remote/local image URL/path detection, stale pending-image dropping when the marker is removed, and normal editor shortcuts.
 
 ## Entry points / commands
 
@@ -41,13 +42,15 @@
 | --- | --- | --- |
 | Host clipboard text/image | OS clipboard via platform helpers | `CustomEditor.handleExplicitPaste()` |
 | Bracketed paste buffer | `CustomEditor.pendingBracketedPaste` | Editor text insertion and image-source detection |
-| Image paste callback | TUI/editor integration via `onImagePaste` | Attachment submit path |
+| Image paste callback | TUI/editor integration via `onImagePaste` | Pending-image state and attachment submit path |
+| Pending pasted images | `TUIState.pendingImages` + `[image]` editor placeholders | Optimistic user rendering, queued follow-ups, Harness signal content |
 | Local/remote image source | Pasted payload normalization | `readPastedImageSource()` |
 
 ## Key files
 
 - `mastracode/src/clipboard/index.ts` — platform-specific text/image clipboard read/write helpers.
 - `mastracode/src/tui/components/custom-editor.ts` — Ctrl+V/Alt+V handling, bracketed paste accumulation, image URL/path detection, and image-paste callback dispatch.
+- `mastracode/src/tui/mastra-tui.ts` — real `onImagePaste` wiring, pending-image consumption, optimistic message rendering, queued follow-up image preservation, and Harness signal/file dispatch.
 - `mastracode/src/clipboard/__tests__/index.test.ts` — macOS image extraction coverage.
 - `mastracode/src/tui/components/__tests__/custom-editor.test.ts` — local path, file URL, remote URL, empty paste, and Alt+V explicit paste coverage.
 
@@ -62,16 +65,17 @@
 
 - `mastracode/src/clipboard/__tests__/index.test.ts` — macOS PNG/TIFF clipboard extraction and failure fallback.
 - `mastracode/src/tui/components/__tests__/custom-editor.test.ts` — image path/URL paste handling and Alt+V explicit image paste.
+- `mastracode/src/tui/__tests__/mastra-tui-images.test.ts` and image cases in `mastra-tui-queueing.test.ts` — pending-image placeholder consumption, stale-image dropping, and image-only submissions.
 
 ## Missing tests
 
 - Explicit Ctrl+V text-paste test proving `getClipboardText()` is wrapped in bracketed-paste markers and passed to the editor.
 - Linux clipboard tests for `xclip` / `wl-paste` text and image fallbacks.
-- TUI integration test proving `onImagePaste` is wired to pending attachments and submitted through Harness.
+- End-to-end TUI/Harness test proving a real pasted image goes through `onImagePaste` → pending image → `sendSignal()`/`sendMessage()` → persisted message parts.
 
 ## Known risks / regressions
 
-- Current source verifies editor-level image paste support, but a production `onImagePaste` assignment was not found in this pass; treat image paste as an integration gap until a later PR wires the callback.
+- Pasted image ownership is split between editor-local placeholders and `TUIState.pendingImages`; removing or reordering `[image]` markers must not send stale images.
 - Clipboard helpers use synchronous OS commands on paste events, so command timeouts and missing platform utilities can affect perceived editor responsiveness.
 - Image extraction has a 50MB buffer cap on Linux; oversized clipboard images fail closed.
 

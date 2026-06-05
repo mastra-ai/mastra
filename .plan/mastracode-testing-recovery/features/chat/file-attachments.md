@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13574](https://github.com/mastra-ai/mastra/pull/13574) — added Harness file attachment support with filename preservation and text-file handling.
-- Later changes: [#13712](https://github.com/mastra-ai/mastra/pull/13712) — added editor-level clipboard image/text paste helpers that feed the attachment pipeline when `onImagePaste` is wired.
+- Later changes: [#13712](https://github.com/mastra-ai/mastra/pull/13712) — added editor-level clipboard image/text paste helpers; [#13953](https://github.com/mastra-ai/mastra/pull/13953) — wires TUI pasted images into pending attachments and teaches observational memory to preserve/estimate image/file parts.
 
 ## User-visible behavior
 
-- What the user can do: send a chat message with attached files through `Harness.sendMessage({ content, files })`.
-- Success looks like: text attachments are visible to the model as fenced text with a filename label; binary/non-text attachments remain file parts with media type and filename metadata.
-- Must preserve: filenames survive storage/signal/model-message conversions, and old text-only callers continue to send plain string content.
+- What the user can do: send a chat message with attached files through `Harness.sendMessage({ content, files })` or pasted images through the TUI editor.
+- Success looks like: text attachments are visible to the model as fenced text with a filename label; binary/non-text/image attachments remain file/image parts with media type and filename metadata; OM can observe attachment placeholders plus the actual image/file parts.
+- Must preserve: filenames survive storage/signal/model-message conversions, pasted-image markers map only to selected pending images, and old text-only callers continue to send plain string content.
 
 ## Entry points / commands
 
@@ -40,10 +40,11 @@
 
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
-| Pending files | Caller/TUI before submit | Harness `sendMessage()` |
-| Submitted attachment payload | Harness signal content + persisted message parts | Agent model input, history rehydration |
+| Pending files/images | Caller/TUI before submit (`TUIState.pendingImages` for pasted images) | Harness `sendMessage()` / `sendSignal()` |
+| Submitted attachment payload | Harness signal content + persisted message parts | Agent model input, history rehydration, observational memory |
 | Text attachment projection | `Harness.createMessageInput()` | Model prompt input |
-| Filename/media type | File part metadata | Signal, adapter, model-message conversion |
+| Attachment token estimates | `providerMetadata.mastra.tokenEstimate` + memory `TokenCounter` cache | Observational memory thresholds/context budgets |
+| Filename/media type | File part metadata | Signal, adapter, model-message conversion, observer attachment labels |
 
 ## Key files
 
@@ -53,6 +54,8 @@
 - `packages/core/src/agent/message-list/adapters/AIV5Adapter.ts` — file/image URL/data URI conversion and duplicate legacy attachment avoidance.
 - `packages/core/src/agent/__tests__/agent-signals.test.ts` — signal round-trip and legacy rehydration coverage for file parts.
 - `packages/core/src/agent/message-list/prompt/attachments-to-parts.ts` — attachment normalization helper for model prompt parts.
+- `mastracode/src/tui/mastra-tui.ts` — pasted-image pending state, placeholder consumption, optimistic image rendering, and Harness signal/file dispatch.
+- `packages/memory/src/processors/observational-memory/observer-agent.ts` and `token-counter.ts` — attachment placeholders, observer input parts, and provider-aware attachment token estimates.
 
 ## Dependencies / related features
 
@@ -66,20 +69,22 @@
 - `packages/core/src/agent/__tests__/agent-signals.test.ts` — file signal contents, filename preservation, DB round-trip, legacy stash recovery.
 - `packages/core/src/agent/message-list/adapters/AIV5Adapter-file-ui-part.test.ts` — URL/data-URI file/image parts and mixed text+file conversion.
 - `packages/core/src/agent/message-list/prompt/attachments-to-parts.test.ts` — raw base64/data URI/URL attachment normalization.
+- `mastracode/src/tui/__tests__/mastra-tui-images.test.ts` and image cases in `mastra-tui-queueing.test.ts` — pending pasted-image placeholder behavior.
+- `packages/memory/src/processors/observational-memory/__tests__/observational-memory.test.ts` and `token-counter.test.ts` — observer attachment formatting, tool-result attachment hoisting, image-heavy threshold checks, and attachment token estimates.
 - Existing base64/image tests cover `experimental_attachments` compatibility.
 
 ## Missing tests
 
 - Direct Harness test for `sendMessage({ content, files })` proving text files become fenced text and binary files retain `filename`/`mediaType` through the signal.
 - TUI attachment submit test proving pending images/files are cleared only after successful send and are preserved in history.
-- Integration test proving `CustomEditor.onImagePaste` is wired to pending attachments in the real TUI.
+- End-to-end test from real paste through Harness persistence and OM observation.
 - Loaded-history display test for user messages with attached files/images.
 
 ## Known risks / regressions
 
 - Text-file handling intentionally injects file content into model-visible text; large files or backtick-heavy content can affect prompt size and formatting.
-- Attachment data shape crosses several compatibility layers (`mediaType` vs `mimeType`, v4 `experimental_attachments`, v5 file parts), so one adapter can regress while another still passes.
-- Current coverage is stronger in signal/adapter layers than in Harness `sendMessage()` itself.
+- Attachment data shape crosses several compatibility layers (`mediaType` vs `mimeType`, v4 `experimental_attachments`, v5 file parts, observer `image`/`file` parts), so one adapter can regress while another still passes.
+- Current coverage is stronger in signal/adapter/OM layers than in full TUI-to-Harness submission.
 
 ## Verification checklist
 

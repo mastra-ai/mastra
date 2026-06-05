@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13940 (row 114) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, and #13766 recorded as version-package skips plus #12532 recorded as build-tool-dependency-only. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13953 (`57c739108b`, attachment support for OM and MastraCode), then #14062 (`6ba1788c15`, likely formatting/lint dependency skip).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14062 (row 116) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, and #14062 recorded as version/dependency skips plus #12532 recorded as build-tool-dependency-only. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13883 (`868dcde021`, likely version-package skip), then #14102/#14146 (likely version-package skips), then #13750 (`930302b249`, MCP server configs to `createMastraCode`).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 115: PR #13953 (attachment support for observational memory and MastraCode), then row 116: PR #14062 (formatting/linting dependency update, likely skip).
+1. Continue at `_pr-queue.md` row 117: PR #13883 (version-package skip), then rows 118-119 (#14102/#14146, likely version-package skips), then row 120: PR #13750 (MCP server configs to `createMastraCode`).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
