@@ -4,17 +4,18 @@
 
 - PR: [#13442](https://github.com/mastra-ai/mastra/pull/13442) — triggers `Stop` and `UserPromptSubmit` hooks from the TUI run loop.
 - Related origin: earlier hooks infrastructure added `PreToolUse`, `PostToolUse`, session, and notification hook types.
+- Later changes: [#14586](https://github.com/mastra-ai/mastra/pull/14586) — uses the same `agent_start`/`agent_end` lifecycle to start/stop macOS `caffeinate` during active runs.
 
 ## User-visible behavior
 
-- What the user can do: configure shell-command hooks in global or project `hooks.json`; use `/hooks` to inspect or reload them.
-- Success looks like: `UserPromptSubmit` can block non-command prompts before they reach the agent, and `Stop` runs after every agent ending reason (`complete`, `aborted`, `error`).
-- Must preserve: blocking semantics for `PreToolUse` / `UserPromptSubmit` / `Stop`, warning display, and project hooks appended after global hooks.
+- What the user can do: configure shell-command hooks in global or project `hooks.json`; use `/hooks` to inspect or reload them; rely on active macOS runs staying awake.
+- Success looks like: `UserPromptSubmit` can block non-command prompts before they reach the agent, `Stop` runs after every agent ending reason (`complete`, `aborted`, `error`), and `caffeinate` cleanup happens even when stop hooks/error handling run.
+- Must preserve: blocking semantics for `PreToolUse` / `UserPromptSubmit` / `Stop`, warning display, project hooks appended after global hooks, and no leaked lifecycle-owned processes.
 
 ## Entry points / commands
 
-- Commands / shortcuts / flags: `/hooks`, `/hooks reload`; hook config files at project and global `.mastracode/hooks.json` paths.
-- Automatic triggers: tool execution (`PreToolUse` / `PostToolUse`), TUI prompt submit (`UserPromptSubmit`), `agent_end` (`Stop`), TUI `run()` / `stop()` (`SessionStart` / `SessionEnd`).
+- Commands / shortcuts / flags: `/hooks`, `/hooks reload`; hook config files at project and global `.mastracode/hooks.json` paths; `MASTRACODE_DISABLE_CAFFEINATE=1`.
+- Automatic triggers: tool execution (`PreToolUse` / `PostToolUse`), TUI prompt submit (`UserPromptSubmit`), `agent_start`/`agent_end` (`caffeinate`), `agent_end` (`Stop`), TUI `run()` / `stop()` (`SessionStart` / `SessionEnd`).
 
 ## TUI states
 
@@ -43,6 +44,7 @@
 | Hook config | Global/project `hooks.json`, loaded by `HookManager` | Tool wrapper, TUI lifecycle, `/hooks` |
 | Session id | Harness thread events update `HookManager` | Hook stdin payloads |
 | Blocking decision | Hook process stdout / exit code 2 | Tool wrapper, TUI prompt submit, Stop warning path |
+| Active-run keep-awake process | `MastraTUI.caffeinateProcess`, started on `agent_start`, killed in `agent_end` finally and `stop()` | macOS TUI runtime |
 
 ## Key files
 
@@ -50,7 +52,7 @@
 - `mastracode/src/hooks/executor.ts` — runs shell commands, passes JSON stdin, interprets blocking decisions and warnings.
 - `mastracode/src/hooks/manager.ts` — builds event-specific hook stdin payloads.
 - `mastracode/src/agents/tools.ts` — wraps dynamic tools with `PreToolUse` / `PostToolUse`.
-- `mastracode/src/tui/mastra-tui.ts` — wires `UserPromptSubmit`, `Stop`, `SessionStart`, and `SessionEnd` into the TUI lifecycle.
+- `mastracode/src/tui/mastra-tui.ts` — wires `UserPromptSubmit`, `Stop`, `SessionStart`, `SessionEnd`, and macOS `caffeinate` start/stop into the TUI lifecycle.
 - `mastracode/src/tui/commands/hooks.ts` — `/hooks` status and reload command.
 
 ## Dependencies / related features

@@ -1392,3 +1392,25 @@ Focused evidence read: PR metadata/diffs for #14541/#14518/#14587; current `mast
 Verification:
 
 - `corepack pnpm --filter ./mastracode exec vitest run src/agents/__tests__/prompts.test.ts --bail=1 --reporter=dot` — 1 file / 6 tests passed.
+
+### PR #14586 / #14604 / #14605 feature-map checkpoint
+
+Verified rows 153-155:
+
+- #14586 starts macOS `caffeinate -i -m` on `agent_start` and kills it on every `agent_end` path plus TUI `stop()`. It is gated to Darwin and disabled by `MASTRACODE_DISABLE_CAFFEINATE=1`, with duplicate-process suppression and child error/exit cleanup.
+- #14604 updates Mastra Code built-in OpenAI mode/OM packs. Current source uses `openai/gpt-5.5` for build/plan and `openai/gpt-5.4-mini` for fast/OM; settings and pack tests assert those IDs.
+- #14605 removes the Claude Max OAuth warning/acknowledgement flow. Current login/onboarding code no longer has `claudeMaxOAuthWarningAcknowledgedAt` state or warning overlay files, so auth proceeds through the normal login dialog path.
+
+Documentation actions:
+
+- Updated `features/setup/installation-and-launch.md` and `features/integrations/lifecycle-hooks.md` with #14586 active-run sleep prevention and cleanup ownership.
+- Updated `features/models/model-auth-and-modes.md` and `features/settings/onboarding-and-global-settings.md` with #14604 OpenAI defaults and #14605 warning removal.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #14586 done, #14604 done, #14605 done, #14549 current.
+
+Focused evidence read: PR metadata/diffs for #14586/#14604/#14605; current `mastracode/src/tui/mastra-tui.ts`, `mastracode/src/tui/__tests__/mastra-tui-hooks.test.ts`, `mastracode/src/onboarding/packs.ts`, `mastracode/src/onboarding/settings.ts`, `mastracode/src/onboarding/__tests__/settings.test.ts`, `mastracode/src/auth/storage.ts`, `mastracode/src/tui/commands/login.ts`, and `mastracode/src/onboarding/onboarding-inline.ts`.
+
+Verification:
+
+- `corepack pnpm --filter ./mastracode exec vitest run src/tui/__tests__/mastra-tui-hooks.test.ts --bail=1 --reporter=dot` — 1 file / 15 tests passed after adding the missing `execFile` export to the test's `node:child_process` mock.
+- `corepack pnpm --filter ./mastracode exec vitest run src/onboarding/__tests__/packs.test.ts src/onboarding/__tests__/settings.test.ts --bail=1 --reporter=dot` — 2 files / 30 tests passed.

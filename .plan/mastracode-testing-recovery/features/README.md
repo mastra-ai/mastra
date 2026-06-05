@@ -36,7 +36,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 
 | Area | Feature | Origin | State owner | Tests | Risk | Page |
 | --- | --- | --- | --- | --- | --- | --- |
-| Setup | Installation and launch | #13294, #13560, #13648, #13760, #13767, #13768, #14541 | package metadata + dependency ranges + startup runtime | Partial | Medium | [page](./setup/installation-and-launch.md) |
+| Setup | Installation and launch | #13294, #13560, #13648, #13760, #13767, #13768, #14541, #14586 | package metadata + dependency ranges + startup runtime + macOS sleep-prevention process | Partial | Medium | [page](./setup/installation-and-launch.md) |
 | Setup | Auto-update prompts | #13603, #13760, #13767, #13768, #13787 | npm registry helpers + build-time/source version + settings dismissed version | Partial | Medium | [page](./setup/auto-update-prompts.md) |
 | Headless | Prompt mode | #13648 | CLI args + Harness events + auto-resolution | Partial | High | [page](./headless/prompt-mode.md) |
 | TUI | Startup banner | #13422 | TUI options + terminal width | Partial | Medium | [page](./tui/startup-banner.md) |
@@ -47,7 +47,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | TUI | File autocomplete | #13460 | editor autocomplete provider + `fd` detection | Partial | Medium | [page](./tui/file-autocomplete.md) |
 | TUI | Terminal theme and contrast | #13487, #13503, #14337, #14359 | settings preference + terminal detection + adapted palette + solid editor border | Partial | Medium | [page](./tui/terminal-theme.md) |
 | TUI | Quiet mode | #13556 | settings preference + TUI render state | Partial | High | [page](./tui/quiet-mode.md) |
-| Settings | Onboarding and global settings | #13421, #13431, #13487, #13494, #13500, #13505, #13508, #13512, #13566, #13603, #13611, #13748, #13953, #13573 | settings.json + thread settings + provider registry + AuthStorage/stored API keys | Partial | High | [page](./settings/onboarding-and-global-settings.md) |
+| Settings | Onboarding and global settings | #13421, #13431, #13487, #13494, #13500, #13505, #13508, #13512, #13566, #13603, #13611, #13748, #13953, #13573, #14604, #14605 | settings.json + thread settings + provider registry + AuthStorage/stored API keys + built-in pack defaults | Partial | High | [page](./settings/onboarding-and-global-settings.md) |
 | Settings | Storage backend configuration | #13435, #13815 | env/settings/database config + storage factory | Partial | High | [page](./settings/storage-backend.md) |
 | TUI | Interactive chat | #13218, #13350, #13413, #13427, #13456, #13460, #13442, #13487, #13609, #13696, #13712, #13723, #13999, #14423 | TUI + Harness display state + prompt/editor animation | Partial | High | [page](./tui/interactive-chat.md) |
 | TUI | Shell passthrough streaming | #13999 | TUI input router + shell subprocess + live output component | Partial | Medium | [page](./tui/shell-passthrough.md) |
@@ -58,7 +58,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Chat | Queued follow-ups and slash commands | #13345, #13493, #14250 | TUI transient queue state + command template processor + active-run signal/queue routing | Partial | High | [page](./chat/queued-followups.md) |
 | Threads | Persistent conversations / switching | #13218, #13334, #13343, #14428, #14436 | Harness session + thread metadata + preview cache + OM title updates | Partial | High | [page](./threads/persistent-conversations.md) |
 | Threads | Resource ID switching | #13690 | Harness resource ID + resource-scoped threads | Partial | High | [page](./threads/resource-id-switching.md) |
-| Models | Model auth, selection, modes | #13218, #13307, #13490, #13512, #13566, #13600, #13611, #13695, #13716, #13573, #14433, #14469 | Settings + harness session + thread pack metadata + provider registry + AuthStorage/stored API keys + harness headers | Partial | High | [page](./models/model-auth-and-modes.md) |
+| Models | Model auth, selection, modes | #13218, #13307, #13490, #13512, #13566, #13600, #13611, #13695, #13716, #13573, #14433, #14469, #14604, #14605 | Settings + harness session + thread pack metadata + provider registry + AuthStorage/stored API keys + harness headers + built-in defaults | Partial | High | [page](./models/model-auth-and-modes.md) |
 | Models | Custom OpenAI-compatible providers | #13682, #13611, #14433 | settings customProviders + Harness custom catalog + harness headers | Partial | High | [page](./models/custom-providers.md) |
 | Models | Thinking and reasoning effort | #13490, #13563, #13748 | Harness/request context + settings | Partial | High | [page](./models/thinking-and-reasoning.md) |
 | Models | OpenAI strict schema compatibility | #13695, #14157 | schema-compat + core stream strict-mode preparation | Partial | High | [page](./models/openai-strict-schema-compat.md) |
@@ -73,7 +73,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Integrations | Core Harness API and reference docs | #13353, #13457, #13519, #13525, #13716, #14433 | Core Harness runtime + docs + model request headers | Partial | High | [page](./integrations/harness-api.md) |
 | Integrations | Harness display state | #13427 | Core Harness display projection | Partial | High | [page](./integrations/harness-display-state.md) |
 | Integrations | Skills command and workspace resolution | #13457, #13700 | Core Harness workspace cache + Workspace skills provider | Partial | High | [page](./integrations/skills-command.md) |
-| Integrations | Lifecycle hooks | #13442 | hook config + TUI lifecycle + tool wrapper | Partial | High | [page](./integrations/lifecycle-hooks.md) |
+| Integrations | Lifecycle hooks | #13442, #14586 | hook config + TUI lifecycle + tool wrapper + macOS keep-awake lifecycle | Partial | High | [page](./integrations/lifecycle-hooks.md) |
 | Integrations | GitHub issue reporting command | #13605 | TUI command prompt + GitHub CLI side effects | Partial | High | [page](./integrations/github-issue-reporting.md) |
 | Git | Commit attribution | #13376 | Prompt context + harness model state | Missing | Medium | [page](./git/commit-attribution.md) |
 | Goals | Plan approval and build handoff | #13416, #13557, #13598 | Core Harness plan resolver + TUI plan card + plan files | Partial | High | [page](./goals/plan-approval.md) |

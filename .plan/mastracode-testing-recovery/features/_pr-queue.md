@@ -172,10 +172,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 150 | 2026-03-20 | #14541 | `b8acde89fd` | review | done | fix(mastracode): pin dependency ranges (#14541) | 1 |
 | 151 | 2026-03-20 | #14518 | `0adb54aa31` | likely skip | skipped | chore: version packages (alpha) (#14518) | 2 |
 | 152 | 2026-03-22 | #14587 | `55529f6c51` | review | done | feat: Mastra Code autonomous system prompts (#14587) | 4 |
-| 153 | 2026-03-23 | #14586 | `0b619421b8` | review | current | feat: prevent macOS sleep during active mastracode work (#14586) | 3 |
-| 154 | 2026-03-23 | #14604 | `8d0e4aa363` | review | | feat: update mastracode default OpenAI model packs (#14604) | 4 |
-| 155 | 2026-03-23 | #14605 | `d3878829d4` | review | | fix: remove Claude Max OAuth warning flow (#14605) | 10 |
-| 156 | 2026-03-24 | #14549 | `d4fcb37312` | likely skip | | chore: version packages (alpha) (#14549) | 2 |
+| 153 | 2026-03-23 | #14586 | `0b619421b8` | review | done | feat: prevent macOS sleep during active mastracode work (#14586) | 3 |
+| 154 | 2026-03-23 | #14604 | `8d0e4aa363` | review | done | feat: update mastracode default OpenAI model packs (#14604) | 4 |
+| 155 | 2026-03-23 | #14605 | `d3878829d4` | review | done | fix: remove Claude Max OAuth warning flow (#14605) | 10 |
+| 156 | 2026-03-24 | #14549 | `d4fcb37312` | likely skip | current | chore: version packages (alpha) (#14549) | 2 |
 | 157 | 2026-03-24 | #14654 | `62ff1b61a9` | likely skip | | chore: version packages (alpha) (#14654) | 2 |
 | 158 | 2026-03-25 | #14688 | `3cebe964bb` | review | | fix: improve Mastra Code response guidance (#14688) | 1 |
 | 159 | 2026-03-25 | #14690 | `b174c63a09` | review | | fix(mastracode): speed up loading and show all threads in thread selector (#14690) | 2 |
