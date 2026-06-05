@@ -6,16 +6,16 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { AgentPlaygroundVersionBar } from '../agent-playground/agent-playground-version-bar';
+import { AgentPlaygroundVersionBar as getAgentPlaygroundVersionBarParts } from '../agent-playground/agent-playground-version-bar';
 import { emptyAgentVersions } from './fixtures/agent-playground-version-bar';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
-type VersionBarProps = Parameters<typeof AgentPlaygroundVersionBar>[0];
+type VersionBarProps = Parameters<typeof getAgentPlaygroundVersionBarParts>[0];
 
 function VersionBarHarness(props: Partial<VersionBarProps>) {
-  const result = AgentPlaygroundVersionBar({
+  const result = getAgentPlaygroundVersionBarParts({
     agentId: 'agent-1',
     onVersionSelect: vi.fn(),
     isDirty: true,
