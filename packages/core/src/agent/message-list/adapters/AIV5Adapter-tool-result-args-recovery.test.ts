@@ -99,4 +99,125 @@ describe('AIV5Adapter tool-result arg recovery (issue #16017)', () => {
 
     expect(dbMessage.content.toolInvocations?.[0]?.args).toEqual({});
   });
+
+  it('recovers the args for the matching toolCallId and does not cross-contaminate', () => {
+    const priorMessages = [
+      {
+        id: 'msg-a',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'call-a', toolName: 'toolA', args: { a: 1 } },
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'call-b', toolName: 'toolB', args: { b: 2 } },
+            },
+          ],
+        },
+      },
+    ] as unknown as MastraDBMessage[];
+
+    const dbMessage = AIV5Adapter.fromModelMessage(
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-b',
+            toolName: 'toolB',
+            output: { type: 'json', value: { ok: true } },
+          },
+        ],
+      },
+      undefined,
+      { dbMessages: priorMessages },
+    );
+
+    expect(dbMessage.content.toolInvocations?.[0]?.args).toEqual({ b: 2 });
+  });
+
+  it('recovers args from AIV4-format toolInvocations history', () => {
+    const priorMessages = [
+      {
+        id: 'msg-legacy',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'calling tool' }],
+          toolInvocations: [
+            { state: 'call', toolCallId: 'call-legacy', toolName: 'buildSlide', args: { slideIndex: 7 } },
+          ],
+        },
+      },
+    ] as unknown as MastraDBMessage[];
+
+    const dbMessage = AIV5Adapter.fromModelMessage(
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call-legacy',
+            toolName: 'buildSlide',
+            output: { type: 'json', value: { ok: true } },
+          },
+        ],
+      },
+      undefined,
+      { dbMessages: priorMessages },
+    );
+
+    expect(dbMessage.content.toolInvocations?.[0]?.args).toEqual({ slideIndex: 7 });
+  });
+
+  it('prefers an in-message matching tool-call over prior-message recovery', () => {
+    const priorMessages = [
+      {
+        id: 'msg-stale',
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: { state: 'call', toolCallId: 'call-1', toolName: 'buildSlide', args: { stale: true } },
+            },
+          ],
+        },
+      },
+    ] as unknown as MastraDBMessage[];
+
+    // The tool-call is present in THIS message, so its args win over history.
+    const dbMessage = AIV5Adapter.fromModelMessage(
+      {
+        role: 'assistant',
+        content: [
+          { type: 'tool-call', toolCallId: 'call-1', toolName: 'buildSlide', input: { fresh: true } },
+          {
+            type: 'tool-result',
+            toolCallId: 'call-1',
+            toolName: 'buildSlide',
+            output: { type: 'json', value: { ok: true } },
+          } as never,
+        ],
+      },
+      undefined,
+      { dbMessages: priorMessages },
+    );
+
+    expect(dbMessage.content.toolInvocations?.[0]?.args).toEqual({ fresh: true });
+  });
 });
