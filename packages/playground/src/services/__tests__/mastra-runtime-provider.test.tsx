@@ -165,6 +165,22 @@ describe('MastraRuntimeProvider', () => {
     expect(useChat).toHaveBeenCalledWith(expect.objectContaining({ enableThreadSignals: false }));
   });
 
+  it('disables thread signals when the agent does not support memory', () => {
+    render(
+      <MastraRuntimeProvider
+        agentId="agent-1"
+        threadId="thread-1"
+        initialMessages={[]}
+        modelVersion="v2"
+        supportsMemory={false}
+      >
+        <div />
+      </MastraRuntimeProvider>,
+    );
+
+    expect(useChat).toHaveBeenCalledWith(expect.objectContaining({ enableThreadSignals: false }));
+  });
+
   it('persists a visible error when a vNext stream finishes with pending tool calls', async () => {
     mocks.sendMessage.mockImplementation(async ({ onChunk }) => {
       await onChunk({

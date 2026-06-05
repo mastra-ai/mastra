@@ -1,0 +1,146 @@
+---
+title: "Configuration | Observability"
+description: "Configure observability for traces, logs, and metrics in Mastra."
+packages:
+  - "@mastra/observability"
+---
+
+# Configuration
+
+Observability is configured once on your Mastra instance and applies across traces, logs, and metrics.
+
+## When to use configuration
+
+- Set up a default observability pipeline for local development.
+- Route different environments or request types to different observability configs.
+- Keep Mastra Studio and Mastra platform access enabled while also sending data to external providers.
+
+## Quickstart
+
+The following example demonstrates the standard starter setup: composite storage with DuckDB for the observability domain, plus Mastra storage, Mastra platform, and sensitive-data redaction.
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { DuckDBStore } from '@mastra/duckdb'
+import { LibSQLStore } from '@mastra/libsql'
+import {
+  Observability,
+  MastraStorageExporter,
+  MastraPlatformExporter,
+  SensitiveDataFilter,
+} from '@mastra/observability'
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new LibSQLStore({
+      id: 'mastra-storage',
+      url: 'file:./mastra.db',
+    }),
+    domains: {
+      observability: await new DuckDBStore().getStore('observability'),
+    },
+  }),
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
+        spanOutputProcessors: [new SensitiveDataFilter()],
+        logging: {
+          enabled: true,
+          level: 'info',
+        },
+      },
+    },
+  }),
+})
+```
+
+## Basic config
+
+An observability config usually contains:
+
+- `serviceName`: The service identifier attached to exported observability data.
+- `exporters`: One or more destinations for traces, logs, and derived metrics.
+- `spanOutputProcessors`: Transformations that run before spans are exported.
+- `logging`: Log forwarding settings for observability storage.
+
+For destinations and processors, see [Integrations overview](/docs/observability/integrations/overview).
+
+## Maintaining Studio access
+
+When you add external exporters, keep `MastraStorageExporter` for Studio observability and/or `MastraPlatformExporter` for hosted Mastra platform observability.
+
+This example shows only the observability config. Configure storage separately.
+
+```ts title="src/mastra/observability.ts"
+import { Observability, MastraStorageExporter, MastraPlatformExporter } from '@mastra/observability'
+import { ArizeExporter } from '@mastra/arize'
+
+export const observability = new Observability({
+  configs: {
+    production: {
+      serviceName: 'my-service',
+      exporters: [
+        new ArizeExporter({
+          endpoint: process.env.PHOENIX_COLLECTOR_ENDPOINT,
+          apiKey: process.env.PHOENIX_API_KEY,
+        }),
+        new MastraStorageExporter(),
+        new MastraPlatformExporter(),
+      ],
+    },
+  },
+})
+```
+
+## Flushing in serverless environments
+
+In serverless environments, flush observability exporters before the runtime pauses or exits:
+
+```ts
+const observability = mastra.getObservability()
+await observability.flush()
+```
+
+Use external storage in serverless environments instead of local file storage. For storage selection and routing, see [Storage](/docs/observability/storage).
+
+## Multi-config setup
+
+Use multiple configs when different environments or request types need different exporters or sampling behavior. Select the active config at runtime with `configSelector`.
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability, MastraStorageExporter } from '@mastra/observability'
+import { LangfuseExporter } from '@mastra/langfuse'
+
+const storageExporter = new MastraStorageExporter()
+const langfuseExporter = new LangfuseExporter()
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      development: {
+        serviceName: 'my-service-dev',
+        exporters: [storageExporter],
+      },
+      production: {
+        serviceName: 'my-service-prod',
+        exporters: [storageExporter, langfuseExporter],
+      },
+    },
+    configSelector: () => process.env.NODE_ENV || 'development',
+  }),
+})
+```
+
+For trace sampling, see [Tracing](/docs/observability/tracing/overview).
+
+## Related
+
+- [Observability overview](/docs/observability/overview)
+- [Storage](/docs/observability/storage)
+- [Tracing](/docs/observability/tracing/overview)
+- [Integrations overview](/docs/observability/integrations/overview)
