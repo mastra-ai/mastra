@@ -15,7 +15,13 @@ vi.mock('@openai/agents', () => {
     tools?: unknown[];
     outputType?: unknown;
 
-    constructor(options: { name: string; instructions?: unknown; model?: unknown; tools?: unknown[]; outputType?: unknown }) {
+    constructor(options: {
+      name: string;
+      instructions?: unknown;
+      model?: unknown;
+      tools?: unknown[];
+      outputType?: unknown;
+    }) {
       this.name = options.name;
       this.instructions = options.instructions;
       this.model = options.model;
