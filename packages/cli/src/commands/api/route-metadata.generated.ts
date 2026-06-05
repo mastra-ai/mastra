@@ -108,6 +108,7 @@ export const API_ROUTE_METADATA = {
       "toolChoice",
       "toolsets",
       "tracingOptions",
+      "untilIdle",
       "versions"
     ],
     "hasQuery": false,
@@ -146,6 +147,7 @@ export const API_ROUTE_METADATA = {
       "toolChoice",
       "toolsets",
       "tracingOptions",
+      "untilIdle",
       "versions"
     ],
     "hasQuery": false,
@@ -3071,6 +3073,7 @@ export const API_ROUTE_METADATA = {
       "toolChoice",
       "toolsets",
       "tracingOptions",
+      "untilIdle",
       "versions"
     ],
     "hasQuery": false,
