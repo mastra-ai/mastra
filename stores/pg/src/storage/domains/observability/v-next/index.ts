@@ -154,7 +154,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   readonly #client: DbClient;
   readonly #schema: string;
   readonly #partitioning: PartitioningOptions;
-  readonly #discovery: DiscoveryConfig;
+  readonly #discoveryConfig: DiscoveryConfig;
   #partitionMode?: PartitionMode;
 
   constructor(config: VNextPostgresObservabilityConfig) {
@@ -163,7 +163,18 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     this.#client = client;
     this.#schema = schemaName ?? 'public';
     this.#partitioning = config.partitioning ?? {};
-    this.#discovery = config.discovery ?? {};
+    this.#discoveryConfig = config.discovery ?? {};
+  }
+
+  /**
+   * Build the discovery config used at each call site, with the framework
+   * logger injected so background refresh failures land in the same log
+   * stream as the rest of the store. Reads `this.logger` lazily so
+   * `__setLogger()` calls (e.g. when the domain is mounted under a Mastra
+   * instance) propagate without rebuilding the domain.
+   */
+  get #discovery(): DiscoveryConfig {
+    return { ...this.#discoveryConfig, logger: this.logger };
   }
 
   // -------------------------------------------------------------------------

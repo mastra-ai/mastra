@@ -14,6 +14,7 @@
  * frontends pointing at the same database and survives serverless restarts.
  */
 
+import type { IMastraLogger } from '@mastra/core/logger';
 import type {
   EntityType,
   GetEntityNamesArgs,
@@ -64,6 +65,15 @@ const ENTITY_DISCOVERY_TABLES = [TABLE_SPAN_EVENTS, TABLE_METRIC_EVENTS, TABLE_L
 export interface DiscoveryConfig {
   /** TTL for cached values in seconds. Default 300 (5 minutes). */
   ttlSeconds?: number;
+  /**
+   * Logger used to report background refresh failures. Injected by the
+   * domain class (`ObservabilityStoragePostgresVNext`) so discovery
+   * warnings land in the framework logger alongside the rest of the store.
+   * Falls back to `console.warn` when absent so direct callers (tests,
+   * scripts) still see refresh failures.
+   * @internal
+   */
+  logger?: IMastraLogger;
 }
 
 /**
@@ -87,6 +97,7 @@ function startOrJoinRefresh(
   cacheKey: string,
   refresh: () => Promise<string[]>,
   upsert: (values: string[]) => Promise<void>,
+  logger: IMastraLogger | undefined,
 ): Promise<string[]> {
   const existing = inFlightRefreshes.get(dedupeKey);
   if (existing) return existing;
@@ -98,10 +109,16 @@ function startOrJoinRefresh(
       return values;
     } catch (error) {
       // Surface refresh failures — silently swallowing them would mask real
-      // DB/connectivity issues behind permanently stale data. Use
-      // console.warn since the discovery helpers don't currently take a
-      // logger; the next reader will retry.
-      console.warn(`[observability/v-next] background refresh failed for discovery cache key "${cacheKey}":`, error);
+      // DB/connectivity issues behind permanently stale data. Prefer the
+      // framework logger so warnings land in the same stream as the rest
+      // of the store; fall back to console.warn for direct callers (tests,
+      // scripts) that don't inject one.
+      const message = `[observability/v-next] background refresh failed for discovery cache key "${cacheKey}"`;
+      if (logger) {
+        logger.warn(message, { error });
+      } else {
+        console.warn(message + ':', error);
+      }
       throw error;
     } finally {
       inFlightRefreshes.delete(dedupeKey);
@@ -130,6 +147,7 @@ async function readWithRefresh(
   cacheKey: string,
   refresh: () => Promise<string[]>,
   ttlSeconds: number,
+  logger: IMastraLogger | undefined,
 ): Promise<string[]> {
   const table = qualifiedTable(schema, TABLE_DISCOVERY);
   // pg returns `timestamptz` as a JS Date — type the field accordingly.
@@ -144,8 +162,12 @@ async function readWithRefresh(
   if (!stale) return row!.values;
 
   const dedupeKey = `${schema}:${cacheKey}`;
-  const refreshing = startOrJoinRefresh(dedupeKey, cacheKey, refresh, values =>
-    upsertCache(client, schema, cacheKey, values),
+  const refreshing = startOrJoinRefresh(
+    dedupeKey,
+    cacheKey,
+    refresh,
+    values => upsertCache(client, schema, cacheKey, values),
+    logger,
   );
 
   // Force-refresh path: `ttlSeconds <= 0` is the contract used by
@@ -238,6 +260,7 @@ export async function getEntityTypes(
     'entity_types',
     () => distinctAcrossTables(client, schema, 'entityType', ENTITY_DISCOVERY_TABLES),
     ttl,
+    config.logger,
   );
   return { entityTypes: values as EntityType[] };
 }
@@ -258,6 +281,7 @@ export async function getEntityNames(
     cacheKey,
     () => distinctAcrossTables(client, schema, 'entityName', ENTITY_DISCOVERY_TABLES, filterSql, filterParams),
     ttl,
+    config.logger,
   );
   return { names: values };
 }
@@ -275,6 +299,7 @@ export async function getServiceNames(
     'service_names',
     () => distinctAcrossTables(client, schema, 'serviceName', SIGNAL_TABLES_WITH_CONTEXT),
     ttl,
+    config.logger,
   );
   return { serviceNames: values };
 }
@@ -292,6 +317,7 @@ export async function getEnvironments(
     'environments',
     () => distinctAcrossTables(client, schema, 'environment', SIGNAL_TABLES_WITH_CONTEXT),
     ttl,
+    config.logger,
   );
   return { environments: values };
 }
@@ -319,7 +345,7 @@ export async function getTags(
     return rows.map(r => r.v);
   };
 
-  const values = await readWithRefresh(client, schema, cacheKey, refresh, ttl);
+  const values = await readWithRefresh(client, schema, cacheKey, refresh, ttl, config.logger);
   return { tags: values };
 }
 
@@ -342,6 +368,7 @@ export async function getMetricNames(
       return rows.map(r => r.v);
     },
     ttl,
+    config.logger,
   );
   let filtered = values;
   if (args.prefix) filtered = filtered.filter(v => v.startsWith(args.prefix!));
@@ -371,6 +398,7 @@ export async function getMetricLabelKeys(
       return rows.map(r => r.v);
     },
     ttl,
+    config.logger,
   );
   return { keys: values };
 }
@@ -398,6 +426,7 @@ export async function getMetricLabelValues(
       return rows.map(r => r.v).filter(v => v != null && v !== '');
     },
     ttl,
+    config.logger,
   );
   let filtered = values;
   if (args.prefix) filtered = filtered.filter(v => v.startsWith(args.prefix!));

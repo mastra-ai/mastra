@@ -953,9 +953,9 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
   });
 
   describe('discovery — refresh failure surfaces', () => {
-    it('logs console.warn and the next reader retries instead of getting stuck', async () => {
+    it('routes refresh failures to the framework logger and the next reader retries', async () => {
       let refreshAttempts = 0;
-      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const warn = vi.fn();
 
       const harness = await createHarness({
         schemaPrefix: 'obs_vnext_discovery_failure',
@@ -973,6 +973,20 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
             },
           }),
       });
+
+      // Inject a mock logger so we can assert on logger.warn directly
+      // instead of the underlying console.* sink. The domain reads
+      // `this.logger` lazily when building the discovery config, so
+      // __setLogger flows through to the discovery helpers.
+      harness.domain.__setLogger({
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn,
+        error: vi.fn(),
+        trackException: vi.fn(),
+        getLogs: vi.fn(),
+        getLogsByRunId: vi.fn(),
+      } as any);
 
       try {
         await harness.domain.createSpan({
@@ -997,9 +1011,9 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         expect(first.serviceNames).toEqual(['stale-service']);
 
         await vi.waitFor(() => {
-          expect(warnSpy).toHaveBeenCalledWith(
+          expect(warn).toHaveBeenCalledWith(
             expect.stringContaining('background refresh failed for discovery cache key "service_names"'),
-            expect.any(Error),
+            expect.objectContaining({ error: expect.any(Error) }),
           );
         });
 
