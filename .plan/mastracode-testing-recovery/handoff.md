@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14961 (row 176) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, and #14911 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #14929 (version package skip), then #14952 (Mastra Gateway model router provider + memory integration).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14936 (row 179) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, and #14929 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #14965 (version package skip), then #15034/#15042/#15055 version-package skips before row 185 #15082.
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 177: PR #14929 (version-package skip), then row 178 #14952 (Mastra Gateway model router provider + memory integration), and row 179 #14936 (mask sensitive input fields in TUI dialogs).
+1. Continue at `_pr-queue.md` row 180: PR #14965 (version-package skip), then rows 181-184 (#15034/#15042/#15055/#15059, likely version-package skips), before row 185 #15082 (prune MastraCode chat memory growth).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -44,6 +44,8 @@ None known.
 
 ## Last commands/evidence
 
+- Rows 177-179 verified/documented: #14929 version-package skip, #14952 Mastra Gateway model router/provider memory integration, and #14936 masked sensitive TUI input fields.
+- Focused verification for rows 177-179 passed: MastraCode model + memory-gateway command (40 tests with provider env isolated), core memory-gateway duck typing (1 test), and server memory handler (85 tests).
 - Rows 174-176 verified/documented: #14911 version-package skip, #14960 seven-day MCP client timeout for long-running tool results, and #14961 base prompt guidance to use `request_access` for external-path access failures.
 - Focused verification for rows 174-176 passed: MastraCode MCP manager tests and prompt tests.
 - Rows 171-173 verified/documented: #14535 safe circular tool-result serialization plus #14870/#14904 version-package skips.

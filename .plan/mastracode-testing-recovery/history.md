@@ -1571,3 +1571,29 @@ Verification:
 
 - `pnpm --filter ./mastracode exec vitest run src/mcp/__tests__/manager.test.ts src/agents/__tests__/prompts.test.ts --bail=1 --reporter=dot` — 2 files / 50 tests passed.
 - Note: an earlier `pnpm --filter ./mastracode test -- --run ...` attempt accidentally invoked the broad MastraCode suite and failed in unrelated tests; the focused `exec vitest run` command above is the relevant checkpoint evidence.
+
+### PR #14929 / #14952 / #14936 feature-map checkpoint
+
+Verified rows 177-179:
+
+- #14929 is a Changesets alpha package-version batch across packages; skipped for feature mapping.
+- #14952 adds the Mastra Gateway model-router provider path and Memory Gateway integration. Current source routes explicit `mastra/<provider>/<model>` IDs through Memory Gateway when a stored/env gateway key exists, keeps OAuth Anthropic/Codex paths on direct providers with gateway auth headers, adds `/memory-gateway` API-key/base-URL configuration, and proxies server memory/OM routes for gateway-backed agents through `GatewayMemoryClient`.
+- #14936 masks sensitive TUI input fields with `MaskedInput`, now used by API-key dialogs, login prompts, and storage backend connection-string entry.
+
+Documentation actions:
+
+- Updated `features/models/model-auth-and-modes.md` with #14952 Memory Gateway routing/settings/server proxy ownership and #14936 masked key/login prompts.
+- Updated `features/memory/observational-memory.md` with gateway-backed memory/OM server proxy behavior, key files, tests, and missing server-route coverage.
+- Updated `features/settings/onboarding-and-global-settings.md` with Memory Gateway settings ownership and masked settings prompts.
+- Updated `features/tui/interactive-prompts.md` with sensitive input masking behavior and missing `MaskedInput` regression tests.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #14929 skipped, #14952 done, #14936 done, #14965 current.
+
+Focused evidence read: PR metadata/diffs for #14929/#14952/#14936; current `mastracode/src/agents/model.ts`, `model.test.ts`, `mastracode/src/tui/commands/memory-gateway.ts`, `memory-gateway.test.ts`, `packages/server/src/server/handlers/gateway-memory-client.ts`, `memory.ts`, `agents.ts`, `mastracode/src/tui/components/masked-input.ts`, `api-key-dialog.ts`, `login-dialog.ts`, and `settings.ts`.
+
+Verification:
+
+- `env -u OPENAI_API_KEY -u MASTRA_GATEWAY_API_KEY pnpm --filter ./mastracode exec vitest run src/agents/__tests__/model.test.ts src/tui/commands/__tests__/memory-gateway.test.ts --bail=1 --reporter=dot` — 2 files / 40 tests passed.
+- `pnpm --filter ./packages/core exec vitest run src/agent/__tests__/memory-gateway-duck-typing.test.ts --bail=1 --reporter=dot` — 1 file / 1 test passed / no type errors.
+- `pnpm --filter ./packages/server exec vitest run src/server/handlers/memory.test.ts --bail=1 --reporter=dot` — 1 file / 85 tests passed.
+- Note: the first MastraCode model run without env isolation failed because local `OPENAI_API_KEY` changed the intended no-auth branch; rerun above isolated provider env and passed.

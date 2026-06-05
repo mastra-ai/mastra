@@ -196,10 +196,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 174 | 2026-04-01 | #14911 | `2737684b2a` | likely skip | skipped | chore: version packages (alpha) (#14911) | 2 |
 | 175 | 2026-04-01 | #14960 | `a9d47b786f` | review | done | fix(mastracode): disable MCP tool result timeout for long-running tools (#14960) | 1 |
 | 176 | 2026-04-01 | #14961 | `b016d2d4b7` | review | done | fix: instruct agent to use request_access tool instead of telling user to run /sandbox (#14961) | 1 |
-| 177 | 2026-04-01 | #14929 | `121c67f169` | likely skip | current | chore: version packages (alpha) (#14929) | 2 |
-| 178 | 2026-04-01 | #14952 | `c8c86aa145` | review | | feat: Mastra Gateway model router provider + memory integration (#14952) | 23 |
-| 179 | 2026-04-02 | #14936 | `323b31fe37` | review | | feat(mastracode): mask sensitive input fields in TUI dialogs (#14936) | 4 |
-| 180 | 2026-04-03 | #14965 | `176278f52a` | likely skip | | chore: version packages (alpha) (#14965) | 2 |
+| 177 | 2026-04-01 | #14929 | `121c67f169` | likely skip | skipped | chore: version packages (alpha) (#14929) | 2 |
+| 178 | 2026-04-01 | #14952 | `c8c86aa145` | review | done | feat: Mastra Gateway model router provider + memory integration (#14952) | 23 |
+| 179 | 2026-04-02 | #14936 | `323b31fe37` | review | done | feat(mastracode): mask sensitive input fields in TUI dialogs (#14936) | 4 |
+| 180 | 2026-04-03 | #14965 | `176278f52a` | likely skip | current | chore: version packages (alpha) (#14965) | 2 |
 | 181 | 2026-04-03 | #15034 | `8eed048de4` | likely skip | | chore: version packages (alpha) (#15034) | 2 |
 | 182 | 2026-04-03 | #15042 | `c14a638639` | likely skip | | chore: version packages (alpha) (#15042) | 2 |
 | 183 | 2026-04-04 | #15055 | `ee09cbf675` | likely skip | | chore: version packages (alpha) (#15055) | 2 |
