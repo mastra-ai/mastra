@@ -1,13 +1,14 @@
 import { Spinner } from '@mastra/playground-ui';
 import { CheckIcon } from 'lucide-react';
-import { CREATION_STEPS } from './creation-steps';
+import { CREATION_STEPS, getStepDetail } from './creation-steps';
 
 export type AgentCreationInProgressProps = {
   /**
    * Live per-step status keyed by step id, derived from `streamResult.steps`.
-   * Steps absent from this record have not started yet and render as gray.
+   * Steps absent from this record have not started yet and render as gray. The
+   * step's `output` (the accumulated config) drives the dimmer detail line.
    */
-  steps: Record<string, { status: string }>;
+  steps: Record<string, { status: string; output?: unknown }>;
 };
 
 type StepState = 'success' | 'running' | 'pending';
@@ -34,13 +35,15 @@ export const AgentCreationInProgress = ({ steps }: AgentCreationInProgressProps)
 
         <ol className="flex flex-col">
           {CREATION_STEPS.map((step, idx) => {
-            const state = resolveStepState(steps[step.id]?.status);
+            const stepResult = steps[step.id];
+            const state = resolveStepState(stepResult?.status);
+            const detail = getStepDetail(step.id, stepResult?.output);
             return (
               <li
                 key={step.id}
                 data-testid={`creation-step-${step.id}`}
                 data-status={state}
-                className="creation-step flex items-center gap-3 border-b border-border1 py-3 last:border-b-0"
+                className="creation-step flex items-start gap-3 border-b border-border1 py-3 last:border-b-0"
                 style={{ animationDelay: `${idx * 40}ms` }}
               >
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center">
@@ -51,17 +54,28 @@ export const AgentCreationInProgress = ({ steps }: AgentCreationInProgressProps)
                   ) : state === 'running' ? (
                     <Spinner />
                   ) : (
-                    <span className="h-4 w-4 rounded-full border border-dashed border-neutral2" />
+                    <span className="mt-1 h-4 w-4 rounded-full border border-dashed border-neutral2" />
                   )}
                 </span>
-                <span
-                  className={
-                    state === 'pending'
-                      ? 'text-ui-md text-neutral3 transition-colors'
-                      : 'text-ui-md text-neutral5 transition-colors'
-                  }
-                >
-                  {step.label}
+                <span className="flex min-w-0 flex-col">
+                  <span
+                    className={
+                      state === 'pending'
+                        ? 'text-ui-md text-neutral3 transition-colors'
+                        : 'text-ui-md text-neutral5 transition-colors'
+                    }
+                  >
+                    {step.label}
+                  </span>
+                  {detail ? (
+                    <span
+                      data-testid={`creation-step-${step.id}-detail`}
+                      title={detail}
+                      className="max-w-full truncate text-ui-sm text-neutral3"
+                    >
+                      {detail}
+                    </span>
+                  ) : null}
                 </span>
               </li>
             );

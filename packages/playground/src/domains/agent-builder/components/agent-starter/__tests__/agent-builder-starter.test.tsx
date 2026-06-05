@@ -306,6 +306,36 @@ describe('AgentBuilderStarter', () => {
     }
   });
 
+  it('shows a secondary detail line summarizing each step value from its output', () => {
+    // Each step's `output` is the accumulated config; the timeline derives a
+    // dimmer secondary line summarizing the value that step resolved.
+    const steps = {
+      'understand-user-outcome': { status: 'success', output: { userOutcome: { goal: 'Tutor students' } } },
+      'set-agent-name': { status: 'success', output: { name: 'Tutor' } },
+      'set-agent-model': { status: 'success', output: { model: { provider: 'openai', name: 'gpt-4o' } } },
+      'set-agent-tools': {
+        status: 'success',
+        output: { tools: { search: true, calc: false }, agents: { helper: true } },
+      },
+      'set-agent-browser-enabled': { status: 'success', output: { browserEnabled: true } },
+      // No meaningful value resolved yet → no detail line is rendered.
+      'set-agent-skills': { status: 'success', output: { skills: {} } },
+    };
+
+    const { getByTestId, queryByTestId } = render(<AgentCreationInProgress steps={steps} />);
+
+    expect(getByTestId('creation-step-understand-user-outcome-detail').textContent).toBe('Tutor students');
+    expect(getByTestId('creation-step-set-agent-name-detail').textContent).toBe('Tutor');
+    expect(getByTestId('creation-step-set-agent-model-detail').textContent).toBe('openai/gpt-4o');
+    // Only enabled (true) entries are listed, across tools + agents + workflows.
+    expect(getByTestId('creation-step-set-agent-tools-detail').textContent).toBe('search, helper');
+    expect(getByTestId('creation-step-set-agent-browser-enabled-detail').textContent).toBe('Browser access enabled');
+    // A step with no enabled entries renders no detail line.
+    expect(queryByTestId('creation-step-set-agent-skills-detail')).toBeNull();
+    // A not-started step has no detail line either.
+    expect(queryByTestId('creation-step-persist-agent-detail')).toBeNull();
+  });
+
   it('renders View agent and Review config CTAs on completion and navigates to the right routes', async () => {
     useCreationHandlers();
 
