@@ -1657,3 +1657,24 @@ Verification:
 
 - `pnpm --filter ./packages/core exec vitest run src/agent/__tests__/browser.test.ts src/browser/browser.test.ts --bail=1 --reporter=dot` — 2 files / 18 tests passed / no type errors.
 - `pnpm --filter ./mastracode exec vitest run src/tui/commands/__tests__/subagents.test.ts src/tui/__tests__/prune-chat.test.ts src/tui/components/__tests__/help-overlay.test.ts src/tui/__tests__/command-dispatch.test.ts --bail=1 --reporter=dot` — 4 files / 31 tests passed.
+
+### PR #15151 / #15117 / #15165 / #15172 feature-map checkpoint
+
+Verified rows 190-193:
+
+- #15151 adds Agent Skills spec-compatible skill directory support. Current `buildSkillPaths()` scans project-local `.agents/skills` and global `~/.agents/skills` in addition to Mastra Code and Claude skill directories, includes those paths in workspace skills and inherited allowed paths, and updates `/skills` setup guidance with the Agent Skills locations.
+- Current tests have evolved from the original `workspace-skill-paths.test.ts` file name into `build-skill-paths.test.ts` and `workspace-skill-activation.test.ts`, covering base path construction, symlink parent handling, and symlinked local skill activation through the Mastra Code workspace path.
+- #15117, #15165, and #15172 are Changesets alpha package-version batches; skipped for feature mapping.
+
+Documentation actions:
+
+- Updated `features/integrations/skills-command.md` for Agent Skills directories, `/skills` setup text, state ownership, tests, and risks.
+- Updated `features/tools/workspace-tools.md` for inherited allowed-path ownership including Agent Skills directories.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #15151 done, #15117 skipped, #15165 skipped, #15172 skipped, #15092 current.
+
+Focused evidence read: PR metadata/diffs for #15151/#15117/#15165/#15172; current `mastracode/src/agents/workspace.ts`, `mastracode/src/tui/commands/skills.ts`, `mastracode/src/agents/__tests__/build-skill-paths.test.ts`, `mastracode/src/agents/__tests__/workspace-skill-activation.test.ts`, and `mastracode/src/tools/__tests__/get-allowed-paths.test.ts`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/agents/__tests__/build-skill-paths.test.ts src/agents/__tests__/workspace-skill-activation.test.ts src/tools/__tests__/get-allowed-paths.test.ts src/tui/commands/__tests__/skills.test.ts --bail=1 --reporter=dot` — 4 files / 24 tests passed.

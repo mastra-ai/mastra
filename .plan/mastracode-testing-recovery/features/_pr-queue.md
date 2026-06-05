@@ -209,11 +209,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 187 | 2026-04-05 | #15088 | `9f58f3a305` | review | done | fix: address mastracode review follow-ups (#15088) | 2 |
 | 188 | 2026-04-06 | #15083 | `679003c3f6` | likely skip | skipped | chore: version packages (alpha) (#15083) | 2 |
 | 189 | 2026-04-06 | #15114 | `6c3e6c14a0` | likely skip | skipped | chore: version packages (alpha) (#15114) | 2 |
-| 190 | 2026-04-08 | #15151 | `171c703862` | review | current | feat: support Agent Skills spec skill directories (#15151) | 3 |
-| 191 | 2026-04-07 | #15117 | `7f8d0efa83` | likely skip | | chore: version packages (alpha) (#15117) | 2 |
-| 192 | 2026-04-07 | #15165 | `44085a1ad0` | likely skip | | chore: version packages (alpha) (#15165) | 2 |
-| 193 | 2026-04-07 | #15172 | `2e325726f4` | likely skip | | chore: version packages (alpha) (#15172) | 2 |
-| 194 | 2026-04-08 | #15092 | `166e39a7d6` | review | | feat: add collapsible output for shell passthrough (! commands) (#15092) | 11 |
+| 190 | 2026-04-08 | #15151 | `171c703862` | review | done | feat: support Agent Skills spec skill directories (#15151) | 3 |
+| 191 | 2026-04-07 | #15117 | `7f8d0efa83` | likely skip | skipped | chore: version packages (alpha) (#15117) | 2 |
+| 192 | 2026-04-07 | #15165 | `44085a1ad0` | likely skip | skipped | chore: version packages (alpha) (#15165) | 2 |
+| 193 | 2026-04-07 | #15172 | `2e325726f4` | likely skip | skipped | chore: version packages (alpha) (#15172) | 2 |
+| 194 | 2026-04-08 | #15092 | `166e39a7d6` | review | current | feat: add collapsible output for shell passthrough (! commands) (#15092) | 11 |
 | 195 | 2026-04-08 | #15174 | `6f63b8c638` | likely skip | | chore: version packages (alpha) (#15174) | 2 |
 | 196 | 2026-04-08 | #14962 | `061adb3329` | review | | feat(mastracode): add thread control CLI options to headless mode (#14962) | 3 |
 | 197 | 2026-04-08 | #15190 | `d93b410668` | likely skip | | chore: version packages (alpha) (#15190) | 2 |

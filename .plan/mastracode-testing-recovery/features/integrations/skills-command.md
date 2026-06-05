@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13457](https://github.com/mastra-ai/mastra/pull/13457) — cache dynamic Harness workspace resolution so `/skills` works before the first message.
-- Later changes: [#13460](https://github.com/mastra-ai/mastra/pull/13460) — the same autocomplete provider rebuild also receives `fdPath` for `@` file suggestions; [#13700](https://github.com/mastra-ai/mastra/pull/13700) — exposes computed skill paths through subagent allowed-path context so delegated agents can read installed skills.
+- Later changes: [#13460](https://github.com/mastra-ai/mastra/pull/13460) — the same autocomplete provider rebuild also receives `fdPath` for `@` file suggestions; [#13700](https://github.com/mastra-ai/mastra/pull/13700) — exposes computed skill paths through subagent allowed-path context so delegated agents can read installed skills; [#15151](https://github.com/mastra-ai/mastra/pull/15151) — adds Agent Skills spec-compatible `.agents/skills` project/global directories and updates `/skills` setup guidance.
 - Related origin: [#13227](https://github.com/mastra-ai/mastra/pull/13227) — introduced workspace-backed skill loading during early subagent/workspace organization.
 
 ## User-visible behavior
 
-- What the user can do: run `/skills` to list invocable skills and `/skill/<name> [args]` to inject a specific skill's instructions into the current thread.
-- Success looks like: skills are available immediately at startup, even before any agent request has caused the dynamic workspace factory to resolve; delegated subagents can access the same skill directories as the parent workspace.
+- What the user can do: run `/skills` to list invocable skills and `/skill/<name> [args]` to inject a specific skill's instructions into the current thread from Mastra Code, Claude, or Agent Skills spec directories.
+- Success looks like: skills are available immediately at startup, even before any agent request has caused the dynamic workspace factory to resolve; delegated subagents can access the same skill directories as the parent workspace, including `.agents/skills` and `~/.agents/skills`.
 - Must preserve: `user-invocable: false` skills stay hidden, embedded `</skill>` text is escaped before injection, and skill-path filesystem access is inherited without granting arbitrary paths.
 
 ## Entry points / commands
@@ -44,14 +44,14 @@
 | Workspace instance | Core Harness `workspace` cache | Slash commands, request context, agents/tools |
 | Dynamic workspace factory | Harness config `workspace` function | `buildRequestContext()`, `resolveWorkspace()` |
 | Skill catalog | Workspace skills provider | `/skills`, `/skill/<name>`, goal skill aliases |
-| Skill path access | `buildSkillPaths(projectPath, configDir)` plus request-context allowed-path extraction | parent and subagent filesystem/tools |
+| Skill path access | `buildSkillPaths(projectPath, configDir)` scans project/global Mastra Code, Claude, and Agent Skills spec directories; request-context allowed-path extraction mirrors those paths | parent and subagent filesystem/tools |
 
 ## Key files
 
 - `packages/core/src/harness/harness.ts` — `buildRequestContext()` caches dynamic workspace and exposes `resolveWorkspace()` / `getWorkspace()`.
 - `packages/core/src/harness/types.ts` — workspace config accepts static, config, or dynamic factory values.
 - `mastracode/src/tui/commands/skills.ts` — eagerly resolves workspace for `/skills` and `/skill/<name>`.
-- `mastracode/src/agents/workspace.ts` — `buildSkillPaths()` scans project/global Mastra Code, Claude, and Agent Skills directories.
+- `mastracode/src/agents/workspace.ts` — `buildSkillPaths()` scans project/global Mastra Code, Claude, and Agent Skills directories, including `.agents/skills` and `~/.agents/skills`.
 - `mastracode/src/tools/utils.ts` — `getAllowedPathsFromContext()` reuses skill paths for subagent/file-tool access.
 - `docs/src/content/en/reference/harness/harness-class.mdx` — documents Harness workspace methods.
 
@@ -67,6 +67,8 @@
 
 - `packages/core/src/harness/workspace-resolution.test.ts` — verifies static/dynamic/no-workspace paths and dynamic cache behavior.
 - `mastracode/src/tui/commands/__tests__/skills.test.ts` — verifies `/skill/<name>` activation, missing-skill hints, hidden skills, and XML boundary escaping.
+- `mastracode/src/agents/__tests__/build-skill-paths.test.ts` — verifies project/global Mastra Code, Claude, and Agent Skills path construction plus symlink parent handling.
+- `mastracode/src/agents/__tests__/workspace-skill-activation.test.ts` — verifies symlinked local skills activate through the Mastra Code workspace path.
 - `mastracode/src/tools/__tests__/get-allowed-paths.test.ts` — verifies skill paths are returned and merged with sandbox paths for inherited tool contexts.
 
 ## Missing tests
@@ -80,6 +82,7 @@
 - `isWorkspaceReady()` returns true for dynamic factories even before resolution; callers must still use `resolveWorkspace()`.
 - Workspace factory failures now surface in command UI, but repeated failures can still leave skills unavailable until config is fixed.
 - Dynamic workspace caching can become stale if the underlying skill config changes and no explicit reload path refreshes the workspace.
+- Agent Skills spec directory support depends on keeping `/skills` setup guidance, `buildSkillPaths()`, and allowed-path extraction in sync.
 
 ## Verification checklist
 
