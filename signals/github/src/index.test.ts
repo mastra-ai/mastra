@@ -2300,9 +2300,13 @@ describe('GithubSignals', () => {
       contentHash: 'ci-fail-hash',
       ciState: 'failure',
       checks: [{ name: 'build', status: 'completed', conclusion: 'failure' }],
-      latestCommentAuthor: 'random-outsider',
+      latestCommentAuthor: 'vercel[bot]',
+      latestCommentIsBot: true,
+      latestCommentBody: '[vc]: deployment status payload',
+      latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/42#issuecomment-vercel',
+      latestCommentUpdatedAt: '2026-01-01T00:01:00.000Z',
     };
-    // Permission resolver returns 'none' — but CI notifications should still fire
+    // Vercel is not in the default bot allowlist, but CI notifications should still fire
     const noPermission = { getPermission: vi.fn(async () => 'none' as const) };
     const threadStore = createThreadStore(baseThread);
     const syncClient: GithubSignalsSyncClient = {
@@ -2321,7 +2325,22 @@ describe('GithubSignals', () => {
     } as any);
     await processor.pollThreadNow({ threadId: baseThread.id, resourceId: baseThread.resourceId });
     expect(sendNotificationSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'pull-request-ci-failure', priority: 'high' }),
+      expect.objectContaining({
+        kind: 'pull-request-ci-failure',
+        priority: 'high',
+        attributes: expect.not.objectContaining({
+          latestCommentAuthor: expect.any(String),
+          latestCommentExcerpt: expect.any(String),
+          latestCommentUrl: expect.any(String),
+        }),
+        metadata: expect.objectContaining({
+          github: expect.not.objectContaining({
+            latestCommentAuthor: expect.any(String),
+            latestCommentBody: expect.any(String),
+            latestCommentUrl: expect.any(String),
+          }),
+        }),
+      }),
       expect.anything(),
     );
   });

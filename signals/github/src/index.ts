@@ -1366,7 +1366,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           includeComments: options.includeComments,
         };
         const syncResult = await this.#syncClient.syncPullRequest(syncInput);
-        const snapshot = syncResult.ok ? await this.#syncClient.getPullRequestSnapshot?.(syncInput) : undefined;
+        let snapshot = syncResult.ok ? await this.#syncClient.getPullRequestSnapshot?.(syncInput) : undefined;
+        if (snapshot) snapshot = await this.#filterUnauthorizedLatestComment(subscription.owner, subscription.repo, snapshot);
         const nextSubscription: GithubPRSubscription = {
           ...subscription,
           updatedAt: now,
@@ -1580,6 +1581,26 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     const permission = await this.#loadAuthorPermission(owner, repo, user);
     const authorizedPermissions = this.#options.authorizedPermissions ?? DEFAULT_AUTHORIZED_PERMISSIONS;
     return !!permission && authorizedPermissions.includes(permission);
+  }
+
+  async #filterUnauthorizedLatestComment(
+    owner: string,
+    repo: string,
+    snapshot: GithubPullRequestSnapshot,
+  ): Promise<GithubPullRequestSnapshot> {
+    if (!snapshot.latestCommentAuthor) return snapshot;
+    if (!snapshot.latestCommentBody && !snapshot.latestCommentUrl && !snapshot.latestCommentUpdatedAt) return snapshot;
+    const authorized = await this.#isAuthorizedAuthor(owner, repo, snapshot.latestCommentAuthor);
+    if (authorized) return snapshot;
+    return {
+      ...snapshot,
+      latestCommentAuthor: undefined,
+      latestCommentAuthorType: undefined,
+      latestCommentIsBot: undefined,
+      latestCommentBody: undefined,
+      latestCommentUrl: undefined,
+      latestCommentUpdatedAt: undefined,
+    };
   }
 
   async #loadAuthorPermission(owner: string, repo: string, user: string): Promise<GithubPermission | undefined> {
