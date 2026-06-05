@@ -157,6 +157,7 @@ export class SourceAgentsStorage extends AgentsStorage {
   private readonly providerVersions = new Map<string, AgentVersion>();
   private readonly loadedHistory = new Set<string>();
   private readonly hydratedAgents = new Set<string>();
+  private readonly activeRefs = new Map<string, string>();
   private providerAgentIdsDiscovered = false;
 
   constructor({ provider, agentIds = [] }: SourceAgentsStorageConfig) {
@@ -183,8 +184,22 @@ export class SourceAgentsStorage extends AgentsStorage {
     this.hydratedAgents.clear();
     this.loadedHistory.clear();
     this.providerVersions.clear();
+    this.activeRefs.clear();
     this.providerAgentIdsDiscovered = false;
     await this.memory.dangerouslyClearAll();
+  }
+
+  async useProviderRef(agentId: string, ref: string): Promise<void> {
+    this.activeRefs.set(agentId, ref);
+    this.hydratedAgents.delete(agentId);
+    this.loadedHistory.delete(agentId);
+    for (const [versionId, version] of this.providerVersions.entries()) {
+      if (version.agentId === agentId) {
+        this.providerVersions.delete(versionId);
+      }
+    }
+    await this.memory.delete(agentId);
+    await this.hydrateAgent(agentId);
   }
 
   async getById(id: string): Promise<StorageAgentType | null> {
@@ -348,7 +363,8 @@ export class SourceAgentsStorage extends AgentsStorage {
   private async hydrateAgent(agentId: string): Promise<void> {
     if (this.hydratedAgents.has(agentId)) return;
 
-    const file = await this.provider.readFile({ path: getSourceAgentFilePath(agentId) });
+    const ref = this.activeRefs.get(agentId);
+    const file = await this.provider.readFile({ path: getSourceAgentFilePath(agentId), ref });
     if (!file) {
       this.hydratedAgents.add(agentId);
       return;
@@ -405,6 +421,7 @@ export class SourceAgentsStorage extends AgentsStorage {
     const filtered = filterSourceSnapshot(snapshot, agent?.__getEditorConfig?.(), Boolean(agent));
     return this.provider.writeFile({
       path: getSourceAgentFilePath(agentId),
+      ref: this.activeRefs.get(agentId),
       content: `${stableStringify(filtered)}\n`,
       message,
     });
@@ -419,7 +436,8 @@ export class SourceAgentsStorage extends AgentsStorage {
       return;
     }
 
-    const entries = await this.provider.listFileHistory({ path: getSourceAgentFilePath(agentId) });
+    const activeRef = this.activeRefs.get(agentId);
+    const entries = await this.provider.listFileHistory({ path: getSourceAgentFilePath(agentId), ref: activeRef });
     const orderedEntries = [...entries].reverse();
     const versions = new Map<string, AgentVersion>();
     let versionNumber = 0;

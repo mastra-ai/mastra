@@ -253,6 +253,33 @@ describe('SourceAgentsStorage', () => {
     await expect(storage.getById('weather-agent')).resolves.toBeNull();
   });
 
+  it('reads and writes through an activated provider ref', async () => {
+    const provider = new MockSourceProvider();
+    provider.files.set(getSourceAgentFilePath('weather-agent'), JSON.stringify({ instructions: 'From main' }));
+    const draft = new Map<string, string>();
+    draft.set(getSourceAgentFilePath('weather-agent'), JSON.stringify({ instructions: 'From proposal' }));
+    provider.refs.set('mastra/weather-agent', draft);
+    const storage = new SourceAgentsStorage({ provider });
+
+    await expect(storage.getByIdResolved('weather-agent')).resolves.toMatchObject({ instructions: 'From main' });
+
+    await storage.useProviderRef('weather-agent', 'mastra/weather-agent');
+
+    await expect(storage.getByIdResolved('weather-agent')).resolves.toMatchObject({ instructions: 'From proposal' });
+
+    await storage.createVersion({
+      id: 'version-2',
+      agentId: 'weather-agent',
+      versionNumber: 2,
+      name: 'Weather Agent',
+      instructions: 'Updated proposal',
+      model,
+      changedFields: ['instructions'],
+    });
+
+    expect(provider.writes.at(-1)?.ref).toBe('mastra/weather-agent');
+  });
+
   it('does not create an in-memory version when source persistence fails', async () => {
     const provider = new MockSourceProvider();
     const storage = new SourceAgentsStorage({ provider });

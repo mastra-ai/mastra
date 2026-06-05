@@ -73,6 +73,7 @@ export type SourceChangeRequestInput = {
   files: SourceWriteFileInput[];
   baseRef?: string;
   headRef?: string;
+  inspectOnly?: boolean;
 };
 
 export type SourceChangeRequestResult = {
