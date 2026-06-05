@@ -2151,7 +2151,7 @@ describe('GithubSignals', () => {
     );
   });
 
-  it('allows bot notifications by default but blocks ignored bots', async () => {
+  it('allows configured bot notifications and blocks unlisted or ignored bots', async () => {
     const baseThread: StorageThreadType = {
       id: 'thread-bot',
       resourceId: 'resource-bot',
@@ -2209,7 +2209,35 @@ describe('GithubSignals', () => {
       expect.anything(),
     );
 
-    // Ignored bot — should NOT notify
+    // Unlisted bot — should NOT notify
+    const unlistedBotSnapshot: GithubPullRequestSnapshot = {
+      title: 'Test PR',
+      state: 'open',
+      contentHash: 'vercel-hash',
+      threadContentHash: 'vercel-thread-hash',
+      ciState: 'success',
+      latestCommentAuthor: 'vercel[bot]',
+      latestCommentIsBot: true,
+    };
+    const unlistedThreadStore = createThreadStore({ ...baseThread, id: 'thread-bot-unlisted' });
+    const unlistedSyncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => unlistedBotSnapshot),
+    };
+    const unlistedNotify = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
+    const unlistedProcessor = new GithubSignals({
+      threadStore: unlistedThreadStore,
+      syncClient: unlistedSyncClient,
+      agentId: 'code-agent',
+      permissionResolver: { getPermission: vi.fn(async () => 'read' as const) },
+    });
+    unlistedProcessor.__registerMastra({
+      getAgentById: vi.fn(() => ({ sendSignal: vi.fn(), sendNotificationSignal: unlistedNotify })),
+    } as any);
+    await unlistedProcessor.pollThreadNow({ threadId: 'thread-bot-unlisted', resourceId: baseThread.resourceId });
+    expect(unlistedNotify).not.toHaveBeenCalled();
+
+    // Ignored bot — should NOT notify even when authorized
     const ignoredBotSnapshot: GithubPullRequestSnapshot = {
       title: 'Test PR',
       state: 'open',
@@ -2229,6 +2257,7 @@ describe('GithubSignals', () => {
       threadStore: ignoredThreadStore,
       syncClient: ignoredSyncClient,
       agentId: 'code-agent',
+      authorizedBots: ['renovate[bot]'],
       ignoredBots: ['renovate[bot]'],
       permissionResolver: { getPermission: vi.fn(async () => 'read' as const) },
     });

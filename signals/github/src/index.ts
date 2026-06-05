@@ -41,6 +41,7 @@ export const GITHUB_SIGNALS_METADATA_KEY = 'githubSignals';
 
 export type GithubPermission = 'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none';
 const DEFAULT_AUTHORIZED_PERMISSIONS: GithubPermission[] = ['admin', 'maintain', 'write'];
+const DEFAULT_AUTHORIZED_BOTS = ['coderabbitai[bot]', 'devin-ai-integration[bot]'];
 
 /** Notification kinds driven by comment/review activity that should be gated by author permission. */
 const AUTHOR_GATED_NOTIFICATION_KINDS = new Set(['pull-request-activity', 'pull-request-review-activity']);
@@ -169,6 +170,8 @@ export type GithubSignalsOptions = {
   getNotificationStreamOptions?: GithubSignalAgentOptions['getNotificationStreamOptions'];
   /** Permissions that authorize a human commenter to trigger notifications (default: admin, maintain, write). */
   authorizedPermissions?: GithubPermission[];
+  /** Bot logins authorized to trigger notifications (default: coderabbitai[bot], devin-ai-integration[bot]). */
+  authorizedBots?: string[];
   /** Bot logins whose comments should be ignored and NOT trigger notifications. */
   ignoredBots?: string[];
   /** Custom resolver for looking up collaborator permissions (default: gh api). */
@@ -1566,10 +1569,13 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
 
   async #isAuthorizedAuthor(owner: string, repo: string, user: string | undefined): Promise<boolean> {
     if (!user) return false;
-    const isBot = user.toLowerCase().endsWith('[bot]');
+    const normalizedUser = user.toLowerCase();
+    const isBot = normalizedUser.endsWith('[bot]');
     if (isBot) {
       const ignoredBots = this.#options.ignoredBots ?? [];
-      return !ignoredBots.some(bot => bot.toLowerCase() === user.toLowerCase());
+      if (ignoredBots.some(bot => bot.toLowerCase() === normalizedUser)) return false;
+      const authorizedBots = this.#options.authorizedBots ?? DEFAULT_AUTHORIZED_BOTS;
+      return authorizedBots.some(bot => bot.toLowerCase() === normalizedUser);
     }
     const permission = await this.#loadAuthorPermission(owner, repo, user);
     const authorizedPermissions = this.#options.authorizedPermissions ?? DEFAULT_AUTHORIZED_PERMISSIONS;
