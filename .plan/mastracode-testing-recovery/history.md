@@ -1678,3 +1678,28 @@ Focused evidence read: PR metadata/diffs for #15151/#15117/#15165/#15172; curren
 Verification:
 
 - `pnpm --filter ./mastracode exec vitest run src/agents/__tests__/build-skill-paths.test.ts src/agents/__tests__/workspace-skill-activation.test.ts src/tools/__tests__/get-allowed-paths.test.ts src/tui/commands/__tests__/skills.test.ts --bail=1 --reporter=dot` — 4 files / 24 tests passed.
+
+### PR #15092 / #15174 / #14962 feature-map checkpoint
+
+Verified rows 194-196:
+
+- #15092 adds collapsible output for `!` shell passthrough commands. Current `ShellStreamComponent` stores up to 200 lines, shows the latest 20 lines when collapsed, exposes `setExpanded()` / `isExpanded()`, renders the Ctrl+E hint when output is truncated, and inherits `state.toolOutputExpanded` for newly created passthrough components.
+- #15092 also adds `allShellComponents` to `TUIState`, includes shells in the Ctrl+E expansion loop, clears tracked shell components on thread/resource/new/clone transitions, and prunes stale shell components from `pruneChatContainer()`.
+- #15174 is a Changesets alpha package-version batch; skipped for feature mapping.
+- #14962 adds headless thread-control CLI options: `--continue`, `--thread` / `-t`, `--title`, `--clone-thread`, and `--resource-id`. `parseHeadlessArgs()` rejects `--continue` + `--thread`, resolves threads by exact ID then most-recent matching title, optionally clones before sending the prompt, renames the selected/current thread, and includes thread IDs in JSON summaries.
+
+Documentation actions:
+
+- Updated `features/tui/shell-passthrough.md` for #15092 collapse behavior, state ownership, tests, and risks.
+- Updated `features/headless/prompt-mode.md` for #14962 thread/resource controls, CLI parsing, and integration tests.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #15092 done, #15174 skipped, #14962 done, #15190 current.
+
+Focused evidence read: PR metadata for #15092/#15174/#14962; current `mastracode/src/tui/components/shell-output.ts`, `mastracode/src/tui/shell.ts`, `mastracode/src/tui/setup.ts`, `mastracode/src/tui/prune-chat.ts`, `mastracode/src/tui/state.ts`, `mastracode/src/headless.ts`, `mastracode/src/headless.test.ts`, `mastracode/src/headless-integration.test.ts`, and shell/thread-control related test searches.
+
+Verification:
+
+- Initial broad focused command including full `setup-keyboard-shortcuts.test.ts` failed on the known unrelated GitHub autocomplete ordering assertion (`sync` present before `debug`).
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/shell.test.ts src/tui/__tests__/shell-result.test.ts src/tui/__tests__/prune-chat.test.ts src/headless.test.ts --bail=1 --reporter=dot` — 4 files / 54 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/setup-keyboard-shortcuts.test.ts -t "toggles system reminder expansion with Ctrl\\+E" --bail=1 --reporter=dot` — targeted Ctrl+E test passed (1 passed / 9 skipped).
+- `pnpm --filter ./mastracode exec vitest run src/headless-integration.test.ts -t "headless mode — thread control" --bail=1 --reporter=dot` — targeted thread-control integration tests passed (5 passed / 18 skipped).

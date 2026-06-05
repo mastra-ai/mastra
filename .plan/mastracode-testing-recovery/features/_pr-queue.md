@@ -213,10 +213,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 191 | 2026-04-07 | #15117 | `7f8d0efa83` | likely skip | skipped | chore: version packages (alpha) (#15117) | 2 |
 | 192 | 2026-04-07 | #15165 | `44085a1ad0` | likely skip | skipped | chore: version packages (alpha) (#15165) | 2 |
 | 193 | 2026-04-07 | #15172 | `2e325726f4` | likely skip | skipped | chore: version packages (alpha) (#15172) | 2 |
-| 194 | 2026-04-08 | #15092 | `166e39a7d6` | review | current | feat: add collapsible output for shell passthrough (! commands) (#15092) | 11 |
-| 195 | 2026-04-08 | #15174 | `6f63b8c638` | likely skip | | chore: version packages (alpha) (#15174) | 2 |
-| 196 | 2026-04-08 | #14962 | `061adb3329` | review | | feat(mastracode): add thread control CLI options to headless mode (#14962) | 3 |
-| 197 | 2026-04-08 | #15190 | `d93b410668` | likely skip | | chore: version packages (alpha) (#15190) | 2 |
+| 194 | 2026-04-08 | #15092 | `166e39a7d6` | review | done | feat: add collapsible output for shell passthrough (! commands) (#15092) | 11 |
+| 195 | 2026-04-08 | #15174 | `6f63b8c638` | likely skip | skipped | chore: version packages (alpha) (#15174) | 2 |
+| 196 | 2026-04-08 | #14962 | `061adb3329` | review | done | feat(mastracode): add thread control CLI options to headless mode (#14962) | 3 |
+| 197 | 2026-04-08 | #15190 | `d93b410668` | likely skip | current | chore: version packages (alpha) (#15190) | 2 |
 | 198 | 2026-04-08 | #15192 | `32b122470c` | review | | fix(mastracode): clear task list on thread switch instead of reading stale global state (#15192) | 1 |
 | 199 | 2026-04-08 | #15191 | `ee35ec6944` | likely skip | | chore: version packages (alpha) (#15191) | 2 |
 | 200 | 2026-04-09 | #15228 | `5d84914e0e` | review | | fix: resolve symlinked workspace skill aliases (#15228) | 3 |

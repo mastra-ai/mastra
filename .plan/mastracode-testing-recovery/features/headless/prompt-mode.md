@@ -3,12 +3,12 @@
 ## Origin PR / commit
 
 - PR: [#13648](https://github.com/mastra-ai/mastra/pull/13648) — added non-interactive `--prompt` / `-p` execution for Mastra Code.
-- Later changes: later queue rows add more thread/model/output flags; current source already includes those surfaces and should be revisited when those rows are processed.
+- Later changes: [#14962](https://github.com/mastra-ai/mastra/pull/14962) — adds headless thread control flags (`--continue`, `--thread`, `--title`, `--clone-thread`, `--resource-id`) so non-interactive runs can resume, title, clone, and scope threads instead of always starting fresh. Later queue rows add more model/output flags; current source already includes those surfaces and should be revisited when those rows are processed.
 
 ## User-visible behavior
 
-- What the user can do: run `mastracode --prompt "..."` or pipe stdin into `mastracode --prompt -` to execute a task without launching the TUI.
-- Success looks like: assistant text streams to stdout in default mode; tool/subagent/status output goes to stderr; JSON modes emit machine-readable events or a final summary.
+- What the user can do: run `mastracode --prompt "..."` or pipe stdin into `mastracode --prompt -` to execute a task without launching the TUI; optionally resume the latest thread, select a thread by ID/title, clone it, set a title, or set a resource ID.
+- Success looks like: assistant text streams to stdout in default mode; tool/subagent/status output goes to stderr; JSON modes emit machine-readable events or a final summary; thread-control actions are announced through stderr/default output or JSON events.
 - Must preserve: no interactive terminal assumptions, clear nonzero exits, same Harness/model/workspace behavior as the TUI, and safe auto-resolution of prompts that would otherwise block unattended runs.
 
 ## Entry points / commands
@@ -46,10 +46,11 @@
 | Auto-resolution | `autoResolve()` over Harness events | tool approval, plan approval, sandbox access, ask_user |
 | Exit code | `agent_end.reason` + timeout flag | CLI process exit |
 | Runtime cleanup | `headlessMain()` finally path after `runHeadless()` | thread locks, MCP manager, workers, heartbeats, signals pubsub |
+| Thread selection/scoping | `runHeadless()` + Harness thread/resource APIs | `--continue`, `--thread`, `--title`, `--clone-thread`, `--resource-id` |
 
 ## Key files
 
-- `mastracode/src/headless.ts` — CLI parsing, usage text, output formatting, auto-resolution, thread selection, timeout handling, cleanup entry.
+- `mastracode/src/headless.ts` — CLI parsing, usage text, output formatting, auto-resolution, thread/resource selection, title/clone handling, timeout handling, cleanup entry.
 - `mastracode/src/main.ts` — dispatches between TUI and headless startup.
 - `mastracode/src/headless.test.ts` — argument parsing/unit coverage.
 - `mastracode/src/headless-integration.test.ts` — Harness lifecycle, tool calls, streaming, and abort integration coverage.
@@ -64,14 +65,14 @@
 
 ## Existing tests
 
-- `mastracode/src/headless.test.ts` — flag detection, parsing, validation, timeout/mode/thinking/output arg edge cases.
-- `mastracode/src/headless-integration.test.ts` — real Harness lifecycle, tool call flow, text streaming, abort handling, prompt-context reminders, model/mode preflight, and thread controls.
+- `mastracode/src/headless.test.ts` — flag detection, parsing, validation, timeout/mode/thinking/output arg edge cases, `--clone-thread`, and `--continue` + `--thread` conflict handling.
+- `mastracode/src/headless-integration.test.ts` — real Harness lifecycle, tool call flow, text streaming, abort handling, prompt-context reminders, model/mode preflight, thread ID/title resume, unknown-thread failure, title rename, and clone event coverage.
 
 ## Missing tests
 
 - Packaged CLI smoke for `mastracode --prompt` after npm-style build/install.
 - Headless auth failure path for missing credentials on explicit `--model` or configured `--mode`.
-- End-to-end JSON/stream-json contract tests that assert stdout/stderr separation.
+- End-to-end JSON/stream-json contract tests that assert stdout/stderr separation, including thread-control status/event output.
 
 ## Known risks / regressions
 
