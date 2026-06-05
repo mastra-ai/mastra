@@ -40,6 +40,8 @@ export {
   type ToolConfigContext,
   type ToolConfigWithArgsContext,
   type DynamicToolConfigValue,
+  type WorkspaceToolWrapper,
+  type WorkspaceToolWrapperContext,
   type ResolvedToolConfig,
   // Individual standalone tools
   readFileTool,

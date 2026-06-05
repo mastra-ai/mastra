@@ -17,7 +17,7 @@ import { MC_TOOLS } from '../tool-names.js';
 import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools';
 
 /** Minimal shape for tools passed to createDynamicTools. */
-type ToolLike = {
+export type ToolLike = {
   execute?: (...args: any[]) => Promise<unknown> | unknown;
 } & Record<string, any>;
 
@@ -59,7 +59,7 @@ class LazyNotificationsStorage extends NotificationsStorage {
   }
 }
 
-function wrapToolWithHooks(toolName: string, tool: ToolLike, hookManager?: HookManager): ToolLike {
+export function wrapToolWithHooks(toolName: string, tool: ToolLike, hookManager?: HookManager): ToolLike {
   if (!hookManager || typeof tool?.execute !== 'function') {
     return tool;
   }

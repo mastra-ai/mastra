@@ -55,6 +55,15 @@ export type DynamicToolConfigValue<TContext = ToolConfigContext> =
   | boolean
   | ((context: TContext) => boolean | Promise<boolean>);
 
+export interface WorkspaceToolWrapperContext {
+  /** The name exposed to the model after any per-tool `name` remap. */
+  toolName: string;
+  /** The built-in workspace tool name before any `name` remap. */
+  workspaceToolName: WorkspaceToolName;
+}
+
+export type WorkspaceToolWrapper = (tool: unknown, context: WorkspaceToolWrapperContext) => unknown;
+
 // =============================================================================
 // Tool Configuration Types
 // =============================================================================
@@ -264,6 +273,9 @@ export type WorkspaceToolsConfig = {
 
   /** Default: whether all tools require user approval (default: false if not specified) */
   requireApproval?: DynamicToolConfigValue<ToolConfigWithArgsContext>;
+
+  /** Optional wrapper applied to every enabled workspace tool after name remapping. */
+  wrapTool?: WorkspaceToolWrapper;
 } & {
   [K in typeof WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]?: ExecuteCommandToolConfig;
 } & {

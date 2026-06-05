@@ -715,7 +715,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
       // with MCP/hooks/storage which were already initialized with this value.
       configDir,
     },
-    workspace: config?.workspace ?? getDynamicWorkspace,
+    workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, hookManager })),
     browser: config?.browser,
     modes,
     heartbeatHandlers,

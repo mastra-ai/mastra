@@ -35,6 +35,7 @@ import type {
   DynamicToolConfigValue,
   ToolConfigContext,
   ToolConfigWithArgsContext,
+  WorkspaceToolWrapper,
 } from './types';
 export type {
   WorkspaceToolConfig,
@@ -46,6 +47,8 @@ export type {
   ToolConfigContext,
   ToolConfigWithArgsContext,
   DynamicToolConfigValue,
+  WorkspaceToolWrapper,
+  WorkspaceToolWrapperContext,
 } from './types';
 import { writeFileTool } from './write-file';
 
@@ -105,6 +108,7 @@ export interface ResolvedToolConfig {
   requireReadBeforeWrite?: DynamicToolConfigValue<ToolConfigWithArgsContext>;
   maxOutputTokens?: number;
   name?: string;
+  wrapTool?: WorkspaceToolWrapper;
 }
 
 /**
@@ -129,6 +133,7 @@ export async function resolveToolConfig(
   let requireReadBeforeWrite: DynamicToolConfigValue<ToolConfigWithArgsContext> | undefined;
   let maxOutputTokens: number | undefined;
   let name: string | undefined;
+  const wrapTool = toolsConfig?.wrapTool;
 
   if (toolsConfig) {
     if (toolsConfig.enabled !== undefined) {
@@ -161,7 +166,7 @@ export async function resolveToolConfig(
   // Resolve `enabled` now (tool-listing time) — safe default: false (fail-closed)
   const resolvedEnabled = await resolveDynamicValue(enabled, context, false);
 
-  return { enabled: resolvedEnabled, requireApproval, requireReadBeforeWrite, maxOutputTokens, name };
+  return { enabled: resolvedEnabled, requireApproval, requireReadBeforeWrite, maxOutputTokens, name, wrapTool };
 }
 
 // ---------------------------------------------------------------------------
@@ -407,11 +412,6 @@ export async function createWorkspaceTools(
       wrapped = wrapTool(wrapped, workspace, opts?.targets ?? {});
     }
 
-    // Write lock is outermost — serializes the entire enriched execute pipeline
-    if (opts?.useWriteLock) {
-      wrapped = wrapWithWriteLock(wrapped, writeLock);
-    }
-
     // Use custom name if provided, otherwise use the default constant name
     const exposedName = config.name ?? name;
     if (tools[exposedName]) {
@@ -426,6 +426,16 @@ export async function createWorkspaceTools(
     if (exposedName !== name && 'id' in wrapped) {
       wrapped = { ...wrapped, id: exposedName };
     }
+
+    if (config.wrapTool) {
+      wrapped = config.wrapTool(wrapped, { toolName: exposedName, workspaceToolName: name });
+    }
+
+    // Write lock is outermost — serializes the entire enriched execute pipeline
+    if (opts?.useWriteLock) {
+      wrapped = wrapWithWriteLock(wrapped, writeLock);
+    }
+
     tools[exposedName] = wrapped;
   };
 
