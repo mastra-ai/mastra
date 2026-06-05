@@ -174,12 +174,14 @@ export class PosthogExporter extends TrackingExporter<
     const distinctId = this.getDistinctId(span, traceData);
     const properties = this.buildEventProperties(span, 0);
 
-    this.#client?.capture({
-      distinctId,
-      event: eventName,
-      properties,
-      timestamp: span.endTime ? new Date(span.endTime) : new Date(),
-    });
+    this.#client?.capture(
+      this.withGroups({
+        distinctId,
+        event: eventName,
+        properties,
+        timestamp: span.endTime ? new Date(span.endTime) : new Date(),
+      }),
+    );
 
     return true;
   }
@@ -213,7 +215,7 @@ export class PosthogExporter extends TrackingExporter<
     const mergedSpan = !span.input && cachedSpan?.input ? { ...span, input: cachedSpan.input } : span;
 
     const eventMessage = this.buildEventMessage({ span: mergedSpan, traceData });
-    this.#client?.capture(eventMessage);
+    this.#client?.capture(this.withGroups(eventMessage));
   }
 
   protected override async _abortSpan(args: {
@@ -227,7 +229,22 @@ export class PosthogExporter extends TrackingExporter<
     span.errorInfo = reason;
 
     const eventMessage = this.buildEventMessage({ span, traceData });
-    this.#client?.capture(eventMessage);
+    this.#client?.capture(this.withGroups(eventMessage));
+  }
+
+  /**
+   * PostHog group analytics are keyed off the top-level `groups` field on the
+   * capture call. The Node SDK derives the event's `$groups` from that field and
+   * overwrites any property-level `$groups`, so group metadata carried in
+   * properties is dropped unless it is mirrored here.
+   * @see https://github.com/mastra-ai/mastra/issues/17599
+   */
+  private withGroups(message: EventMessage): EventMessage {
+    const groups = message.properties?.$groups;
+    if (groups && typeof groups === 'object' && !Array.isArray(groups)) {
+      return { ...message, groups };
+    }
+    return message;
   }
 
   private buildEventMessage(args: { span: AnyExportedSpan; traceData: PosthogTraceData }): EventMessage {

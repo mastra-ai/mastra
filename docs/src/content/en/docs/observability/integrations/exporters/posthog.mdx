@@ -130,6 +130,22 @@ new PosthogExporter({
 })
 ```
 
+### Group analytics
+
+To attach events to a [PostHog group](https://posthog.com/docs/product-analytics/group-analytics), add a `$groups` object to `tracingOptions.metadata`. The exporter sends those values as the top-level `groups` field on the PostHog capture call, so you can slice analytics such as LLM cost by group.
+
+```ts
+await agent.generate(input, {
+  tracingOptions: {
+    metadata: {
+      $groups: {
+        publication: 'publication-1',
+      },
+    },
+  },
+})
+```
+
 ## Related
 
 - [Tracing Overview](/docs/observability/tracing/overview)
