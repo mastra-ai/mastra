@@ -242,11 +242,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 220 | 2026-04-21 | #15515 | `3d3daffaae` | likely skip | skipped | chore: version packages (alpha) (#15515) | 2 |
 | 221 | 2026-04-21 | #15601 | `74b1b9661f` | likely skip | skipped | chore: version packages (alpha) (#15601) | 2 |
 | 222 | 2026-04-22 | #15606 | `dd05cb1f4a` | likely skip | skipped | chore: version packages (alpha) (#15606) | 2 |
-| 223 | 2026-04-22 | #15631 | `c7b5417617` | review | current | feat(mastracode): normalize Fireworks and generic model IDs in TUI status line (#15631) | 2 |
-| 224 | 2026-04-22 | #15605 | `01a7d51349` | review | | feat(memory): opt-in temporal-gap markers for observational memory (#15605) | 11 |
-| 225 | 2026-04-22 | #15629 | `83224849d1` | likely skip | | chore: version packages (alpha) (#15629) | 2 |
-| 226 | 2026-04-22 | #15653 | `8e75750997` | likely skip | | chore: version packages (alpha) (#15653) | 2 |
-| 227 | 2026-04-23 | #15678 | `090c9558a3` | review | | fix(mastracode): keep custom slash commands in the active thread (#15678) | 2 |
+| 223 | 2026-04-22 | #15631 | `c7b5417617` | review | done | feat(mastracode): normalize Fireworks and generic model IDs in TUI status line (#15631) | 2 |
+| 224 | 2026-04-22 | #15605 | `01a7d51349` | review | done | feat(memory): opt-in temporal-gap markers for observational memory (#15605) | 11 |
+| 225 | 2026-04-22 | #15629 | `83224849d1` | likely skip | skipped | chore: version packages (alpha) (#15629) | 2 |
+| 226 | 2026-04-22 | #15653 | `8e75750997` | likely skip | skipped | chore: version packages (alpha) (#15653) | 2 |
+| 227 | 2026-04-23 | #15678 | `090c9558a3` | review | current | fix(mastracode): keep custom slash commands in the active thread (#15678) | 2 |
 | 228 | 2026-04-23 | #15656 | `f51df5d95a` | likely skip | | chore: version packages (alpha) (#15656) | 2 |
 | 229 | 2026-04-24 | #15699 | `d86bfacf70` | likely skip | | chore: version packages (alpha) (#15699) | 2 |
 | 230 | 2026-04-24 | #15749 | `5a0fca7986` | review | | fix(mastracode): clear per-thread state on thread switch/create (#15749) | 7 |

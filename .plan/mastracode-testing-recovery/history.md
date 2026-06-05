@@ -1874,3 +1874,27 @@ Verification:
 - `pnpm --filter ./integrations/tavily test -- --bail=1 --reporter=dot` — 6 files / 31 tests passed.
 - `pnpm --filter ./mastracode exec vitest run src/agents/tools.test.ts src/agents/extra-tools.test.ts src/tui/components/__tests__/tool-execution-enhanced.test.ts -t "web search|web-search|web extract|web-extract|Tavily" --bail=1 --reporter=dot` — targeted renderer test passed (1 passed / 83 skipped; dynamic-tool files skipped by the name filter).
 - `pnpm --filter ./mastracode exec vitest run src/agents/tools.test.ts src/agents/extra-tools.test.ts --bail=1 --reporter=dot` — 2 files / 23 tests passed.
+
+### PR #15631 / #15605 / #15629 / #15653 feature-map checkpoint
+
+Verified rows 223-226:
+
+- #15631 normalizes Mastra Code TUI status-line model labels: long Fireworks IDs like `fireworks-ai/accounts/fireworks/models/kimi-k2p6` render as `fireworks/kimi-k2.6`, and generic version separators such as `minimax-m2p7` render as `minimax-m2.7` before compact/full-width status-line logic.
+- #15605 adds opt-in temporal-gap markers for observational memory. Current Mastra Code dynamic memory enables `temporalMarkers: true`; core Memory serializes the option; `Memory.getInputProcessor()` passes it to `ObservationalMemoryProcessor`; step-0 processing inserts reactive `system-reminder` signals for long pauses; persisted canonical and legacy reminders reload as `TemporalGapComponent` rows anchored before `precedesMessageId` target messages.
+- #15629 and #15653 are Changesets alpha package-version batches; skipped for feature mapping.
+
+Documentation actions:
+
+- Updated `features/models/model-auth-and-modes.md` for Fireworks/generic model ID status-line normalization, status-line tests, and display-only drift risk.
+- Updated `features/memory/observational-memory.md` for temporal-marker config/state ownership, active insertion, loaded-from-history rendering, key files, tests, missing tests, and timestamp/storage risks.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #15631 done, #15605 done, #15629 skipped, #15653 skipped, #15678 current.
+
+Focused evidence read: PR metadata for #15631/#15605/#15629/#15653; current `mastracode/src/tui/status-line.ts`; `mastracode/src/tui/__tests__/status-line.test.ts`; `mastracode/src/agents/memory.ts`; `packages/core/src/memory/{memory.ts,types.ts,memory-config.test.ts}`; `packages/memory/src/index.ts`; `packages/memory/src/processors/observational-memory/{processor.ts,temporal-markers.ts,date-utils.ts}`; `packages/memory/src/processors/observational-memory/__tests__/temporal-markers.test.ts`; `mastracode/src/tui/{render-messages.ts,components/temporal-gap.ts,__tests__/render-messages.test.ts}`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/status-line.test.ts -t "rewrites" --bail=1 --reporter=dot` — 1 file / 4 tests passed / 9 skipped.
+- `pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/temporal-markers.test.ts --bail=1 --reporter=dot` — 1 file / 5 tests passed.
+- `pnpm --filter ./packages/core exec vitest run src/memory/memory-config.test.ts -t "temporalMarkers" --bail=1 --reporter=dot` — 1 file / 1 test passed / 6 skipped / no type errors.
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/render-messages.test.ts -t "temporal-gap" --bail=1 --reporter=dot` — 1 file / 3 tests passed / 21 skipped.
