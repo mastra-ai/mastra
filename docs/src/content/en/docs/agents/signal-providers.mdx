@@ -15,9 +15,7 @@ This feature is in alpha. Breaking changes may occur without a major version bum
 
 :::
 
-A signal provider monitors an external source, such as GitHub, Slack, CI, or your own API, and pushes [notification signals](/docs/agents/signals#notification-signals) into the agent threads that subscribed to it.
-
-[Signals](/docs/agents/signals) are how a thread receives input. A signal provider is the producing side of that system: it brings external events into a thread, while the signal APIs control how the thread consumes them. Each provider extends the `SignalProvider` base class, which supplies a subscription registry, a polling loop, a webhook entry point, and a helper to send notifications back into a thread. A provider implements only the hooks its source needs.
+A signal provider monitors an external source, such as GitHub, Slack, continuous integration (CI), or your own API, and pushes [notification signals](/docs/agents/signals#notification-signals) into subscribed agent threads.
 
 ## When to use a signal provider
 
@@ -31,13 +29,15 @@ If you only need to push a one-off event into a thread, call [`agent.sendNotific
 
 ## How it works
 
+A signal provider is the producing side of the [signals](/docs/agents/signals) system. It brings external events into a thread, while the signal APIs control how the thread consumes them.
+
 A signal provider combines three capabilities:
 
-- **Subscription tracking.** The base class keeps an in-memory registry mapping each agent thread to the external resources it watches.
+- **Subscription tracking.** The `SignalProvider` base class keeps an in-memory registry mapping each agent thread to the external resources it watches.
 - **Ingestion.** You override `poll()` for pull-based sources or `handleWebhook()` for push-based sources.
 - **Delivery.** When an event matches a subscription, you call the protected `notify()` helper, which forwards a notification signal to the connected agent's thread.
 
-You register a provider by passing it to the agent. The agent connects the provider, starts polling if a `pollInterval` is set, and merges any processors or tools the provider exposes.
+You register a provider by passing it to the agent. The agent connects the provider, starts polling if a `pollInterval` is set, and merges any processors or tools the provider exposes. A provider implements only the hooks its source needs.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
