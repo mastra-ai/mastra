@@ -34,7 +34,18 @@ import { ALL_SIGNAL_TABLES, qualifiedName, qualifiedTable, SIGNAL_TIME_COLUMN } 
 function isDuplicateRelationError(error: unknown): boolean {
   const code = (error as { code?: string } | undefined)?.code;
   const message = (error as { message?: string } | undefined)?.message ?? '';
-  return code === '42P07' || /already exists/i.test(message);
+  // `42P07 duplicate_table` is the clean case. Under high concurrency,
+  // `CREATE TABLE IF NOT EXISTS` can also surface `23505 unique_violation`
+  // on `pg_type_typname_nsp_index` (the row in pg_type for the new
+  // relation's rowtype) when two backends race past the existence check
+  // and both insert into the catalog before either commits. Treat it the
+  // same as a duplicate relation — the table exists by the time we look.
+  const constraint = (error as { constraint?: string } | undefined)?.constraint;
+  if (code === '42P07') return true;
+  if (code === '23505' && (constraint === 'pg_type_typname_nsp_index' || /pg_type_typname/i.test(message))) {
+    return true;
+  }
+  return /already exists/i.test(message);
 }
 
 export type PartitionMode = 'timescale' | 'partman' | 'native';
@@ -139,24 +150,66 @@ export async function ensureNativePartitions(
       const childName = partitionName(table, suffix);
       const child = qualifiedName(schema, childName);
       const parent = qualifiedTable(schema, table);
+      // Two-phase partition creation. `CREATE TABLE ... PARTITION OF` takes
+      // ACCESS EXCLUSIVE on the parent for the duration of the statement,
+      // which blocks every concurrent read and write against every other
+      // partition. Splitting into `CREATE TABLE (LIKE ...) + ALTER TABLE
+      // ATTACH PARTITION` keeps the parent lock at SHARE UPDATE EXCLUSIVE
+      // (since PG 12), which only blocks DDL and vacuum — concurrent
+      // inserts and reads against today's partition keep flowing.
+      //
       // Postgres requires partition bounds in `FOR VALUES FROM (…) TO (…)`
       // to be constant expressions at parse time — `$N` placeholders are
       // resolved at execution and so are rejected here. `partStart` /
       // `partEnd` are produced by `dayBounds()` (formatted from a JS Date)
       // and never touch user input, so the template interpolation is safe.
       try {
-        await client.none(
-          `CREATE TABLE IF NOT EXISTS ${child} PARTITION OF ${parent}
-           FOR VALUES FROM ('${partStart}') TO ('${partEnd}')`,
-        );
+        // `LIKE parent INCLUDING ALL` copies columns, defaults, NOT NULL,
+        // PRIMARY KEY, and indexes but not the parent's partition spec, so
+        // the child becomes a regular table that can later be attached as
+        // a partition. Index names are auto-generated per child and don't
+        // collide across days.
+        await client.none(`CREATE TABLE IF NOT EXISTS ${child} (LIKE ${parent} INCLUDING ALL)`);
       } catch (error) {
         // `CREATE TABLE IF NOT EXISTS` is not atomic under concurrency;
         // a parallel init() can win the race between the existence check
         // and the create. Treat the duplicate as success.
         if (!isDuplicateRelationError(error)) throw error;
       }
+
+      try {
+        // ATTACH PARTITION on an empty child is fast: there are no rows to
+        // scan against the partition constraint, and the parent lock is
+        // SHARE UPDATE EXCLUSIVE rather than ACCESS EXCLUSIVE.
+        await client.none(
+          `ALTER TABLE ${parent} ATTACH PARTITION ${child}
+           FOR VALUES FROM ('${partStart}') TO ('${partEnd}')`,
+        );
+      } catch (error) {
+        // The child can already be attached from a previous init() or from
+        // a concurrent caller that won the race between our CREATE and
+        // ATTACH. Either way, treat "already a partition of this parent"
+        // as success.
+        if (!isAlreadyAttachedError(error)) throw error;
+      }
     }
   }
+}
+
+/**
+ * `ALTER TABLE ATTACH PARTITION` fails with `42P17 invalid_object_definition`
+ * when the target table is already a partition of *any* parent (including
+ * the one we want). On older PG it can also surface as 42710 or a generic
+ * message. We err on the side of treating any "already a partition" wording
+ * as success so concurrent inits converge cleanly.
+ */
+function isAlreadyAttachedError(error: unknown): boolean {
+  const code = (error as { code?: string } | undefined)?.code;
+  const message = (error as { message?: string } | undefined)?.message ?? '';
+  if (code === '42P17' || code === '42710') {
+    return /is already a partition/i.test(message) || /already a partition/i.test(message);
+  }
+  return /is already a partition/i.test(message);
 }
 
 /**
