@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13696](https://github.com/mastra-ai/mastra/pull/13696) — queues parallel interactive tool prompts so concurrent `ask_user` / sandbox access requests do not overwrite each other.
-- Later changes: [#13753](https://github.com/mastra-ai/mastra/pull/13753) — renames the sandbox request tool to `request_access`, expands `~`, and updates the active workspace filesystem immediately after approval; [#14479](https://github.com/mastra-ai/mastra/pull/14479) — wraps long free-text answers in inline question history/rendering so answered prompt boxes do not overflow terminal width; [#14845](https://github.com/mastra-ai/mastra/pull/14845) — adds a single-select `Custom response...` option that switches option prompts into free-text input when none of the predefined answers fit; [#14936](https://github.com/mastra-ai/mastra/pull/14936) — masks sensitive TUI input fields for API keys, login prompts, and storage connection strings; [#15395](https://github.com/mastra-ai/mastra/pull/15395) — adds multiline free-text question input for `ask_user` via `MultilineInput`, with Enter submit and Shift+Enter/backslash+Enter newline support.
+- Later changes: [#13753](https://github.com/mastra-ai/mastra/pull/13753) — renames the sandbox request tool to `request_access`, expands `~`, and updates the active workspace filesystem immediately after approval; [#14479](https://github.com/mastra-ai/mastra/pull/14479) — wraps long free-text answers in inline question history/rendering so answered prompt boxes do not overflow terminal width; [#14845](https://github.com/mastra-ai/mastra/pull/14845) — adds a single-select `Custom response...` option that switches option prompts into free-text input when none of the predefined answers fit; [#14936](https://github.com/mastra-ai/mastra/pull/14936) — masks sensitive TUI input fields for API keys, login prompts, and storage connection strings; [#15395](https://github.com/mastra-ai/mastra/pull/15395) — adds multiline free-text question input for `ask_user` via `MultilineInput`, with Enter submit and Shift+Enter/backslash+Enter newline support; [#16274](https://github.com/mastra-ai/mastra/pull/16274) — adds shared modal question/overlay helpers for config prompts.
 
 ## User-visible behavior
 
@@ -45,6 +45,7 @@
 | Prompt resolution | Core Harness pending prompt/question resolver | `ask_user`, `request_access` |
 | Answered prompt wrapping/custom free text | `AskQuestionBorderedBox` answer render path using `wrapTextWithAnsi()` and continuation indentation; ask-question components' `Custom response...` sentinel switches select mode to input mode | Inline question history/live answered-state rendering, `ask_user` option prompts |
 | Multiline free-text answers | `MultilineInput` wrapping `@mariozechner/pi-tui` `Editor`; `handleAskQuestion()` passes `multiline: true` + `state.ui` for inline/dialog `ask_user` | Paragraph/log answers, newline keybindings, wrapped active question input |
+| Modal config questions | `askModalQuestion()` wrapping `AskQuestionDialogComponent` in `showModalOverlay()` | Config slash commands and startup/setup prompts that need focused modal input |
 | Sensitive prompt masking | `MaskedInput` wrapper swaps rendered value for mask characters while preserving the real `Input` value for submit handlers | API-key dialog, OAuth/login prompt dialog, storage backend connection-string settings |
 | Approved access paths | Harness `sandboxAllowedPaths` plus active `LocalFilesystem.setAllowedPaths()` | Same-turn and later workspace file tools |
 | Abort cleanup | `tui/setup.ts` Ctrl+C/Escape/SIGINT handlers | Active/queued prompt state |
@@ -54,6 +55,7 @@
 - `mastracode/src/tui/handlers/prompts.ts` — inline prompt activation queue, `processNextInlineQuestion()`, and `ask_user` multiline opt-in for inline/dialog free-text answers.
 - `mastracode/src/tui/components/ask-question-inline.ts` — inline question rendering, selected answer freeze state, single-select custom-response mode switch, multiline input activation/fallback, and long option/answer wrapping.
 - `mastracode/src/tui/components/ask-question-dialog.ts` — modal question rendering, custom-response mode switch for option prompts, and multiline editor construction when a `TUI` is provided.
+- `mastracode/src/tui/modal-question.ts` and `overlay.ts` — config-prompt modal wrapper and shared overlay sizing/min-height padding.
 - `mastracode/src/tui/components/multiline-input.ts` — `Editor` wrapper with Enter submit, Shift+Enter/backslash+Enter newline handling, raw-text submit preservation, and border/scroll chrome stripping.
 - `mastracode/src/tui/components/masked-input.ts` — masked rendering wrapper for sensitive input fields.
 - `mastracode/src/tui/components/api-key-dialog.ts`, `login-dialog.ts`, and `settings.ts` — dialogs/settings menus that use masked input for provider keys, login prompts, and storage URLs.
@@ -75,6 +77,7 @@
 - `mastracode/src/tui/components/__tests__/multiline-input.test.ts` — multiline submit/newline/escape/focus/render cleanup behavior.
 - `mastracode/src/tui/components/__tests__/ask-question-inline-multiline.test.ts` — opt-in/fallback rules and hint text for multiline inline question input.
 - `mastracode/src/tui/components/__tests__/ask-question-inline-multi-select.test.ts` — multi-select behavior and guard that `Custom response...` is omitted in multi-select mode.
+- `mastracode/src/tui/__tests__/overlay.test.ts` — shared modal overlay min-height, max-height cap, and top-padding behavior.
 - `mastracode/src/tools/__tests__/request-sandbox-access.test.ts` — approve/deny outcomes, tilde expansion, same-turn `setAllowedPaths()`, missing filesystem fallback, and no-`setAllowedPaths` fallback.
 
 ## Missing tests
@@ -83,6 +86,7 @@
 - End-to-end TUI/PTY test proving a real `ask_user` prompt accepts Shift+Enter multiline text and submits raw multiline content to Harness.
 - Direct regression test for long answered free-text values overflowing the inline bordered box.
 - Direct regression test that selecting `Custom response...` in inline and dialog single-select prompts switches to free-text input, preserves focus, and submits the typed answer rather than the sentinel value.
+- Direct `askModalQuestion()` regression proving submit/cancel hide the overlay and resolve the expected value.
 - Direct `MaskedInput` regression proving rendered output hides sensitive input while submit/getValue preserve the unmasked value; no such test exists today.
 - Regression test for queued prompts interleaved with tool approvals or plan approval.
 - Headless parallel prompt behavior, if non-TUI auto-resolution needs similar queueing guarantees.

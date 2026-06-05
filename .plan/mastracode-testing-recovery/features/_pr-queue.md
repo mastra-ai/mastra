@@ -286,11 +286,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 264 | 2026-05-06 | #16250 | `98bae8da6e` | review | done | chore(mastracode): Improve README & docs (#16250) | 1 |
 | 265 | 2026-05-06 | #16176 | `d1fdbd012a` | review | done | feat(core): add provider-boundary prompt processor hook (#16176) | 3 |
 | 266 | 2026-05-06 | #13891 | `aa0cb0ddd8` | review | done | feat(mastracode): allow overriding memory instance via config (#13891) | 1 |
-| 267 | 2026-05-06 | #16274 | `e2055ca7cd` | review | current | fix(mastracode): standardize setup and config overlays (#16274) | 32 |
-| 268 | 2026-05-06 | #16196 | `3bdb5cee50` | likely skip | | chore: version packages (alpha) (#16196) | 2 |
-| 269 | 2026-05-07 | #16126 | `9f1741080d` | likely skip | | chore(deps): update ai sdk (#16126) | 1 |
-| 270 | 2026-05-07 | #16294 | `e97b9ec4af` | review | | Fix Codex OAuth callback port fallback (#16294) | 2 |
-| 271 | 2026-05-07 | #16065 | `33f5061cd1` | review | | feat(mastracode): add /goal slash command for persistent cross-turn goals (Ralph loop) (#16065) | 38 |
+| 267 | 2026-05-06 | #16274 | `e2055ca7cd` | review | done | fix(mastracode): standardize setup and config overlays (#16274) | 32 |
+| 268 | 2026-05-06 | #16196 | `3bdb5cee50` | likely skip | skipped | chore: version packages (alpha) (#16196) | 2 |
+| 269 | 2026-05-07 | #16126 | `9f1741080d` | likely skip | skipped | chore(deps): update ai sdk (#16126) | 1 |
+| 270 | 2026-05-07 | #16294 | `e97b9ec4af` | review | done | Fix Codex OAuth callback port fallback (#16294) | 2 |
+| 271 | 2026-05-07 | #16065 | `33f5061cd1` | review | current | feat(mastracode): add /goal slash command for persistent cross-turn goals (Ralph loop) (#16065) | 38 |
 | 272 | 2026-05-07 | #16295 | `8519846579` | likely skip | | chore: version packages (alpha) (#16295) | 2 |
 | 273 | 2026-05-07 | #16322 | `91db9e771f` | review | | fix: keep goal commands and user choices intact (#16322) | 11 |
 | 274 | 2026-05-07 | #16320 | `de93ce2a87` | likely skip | | chore: version packages (alpha) (#16320) | 2 |

@@ -2126,3 +2126,28 @@ Verification:
 - `pnpm --filter ./packages/core exec vitest run src/loop/workflows/agentic-execution/llm-execution-step.test.ts -t "processLLMRequest" --bail=1 --reporter=dot` — 1 file / 3 tests passed / 15 skipped / no type errors.
 - `pnpm --filter ./mastracode exec vitest run src/__tests__/index.test.ts -t "memory|ProviderHistoryCompat|processor" --bail=1 --reporter=dot` — 1 file / 3 tests passed / 13 skipped.
 - `pnpm --filter ./packages/core check` — passed.
+
+### PR #16274 / #16196 / #16126 / #16294 feature-map checkpoint
+
+Verified rows 267-270:
+
+- #16274 standardizes setup/config UI as modal overlays. Current source has shared `showModalOverlay()` / `modalOverlayOptions()` in `tui/overlay.ts`, `askModalQuestion()` in `tui/modal-question.ts`, startup `/setup` onboarding and nested model selectors opened through modal overlays, and config commands (`/models`, `/sandbox`, `/api-keys`, `/subagents`, `/browser`, `/memory-gateway`, `/observability`, `/custom-providers`, login/MCP/goal helpers) routed through modal question/overlay helpers. `theme.ts` maps `toolPendingBg` and `toolSuccessBg` to neutral surface colors.
+- #16196 is a Changesets alpha package-version batch; skipped for feature mapping after PR metadata confirmed package/changelog-only changes under Mastra Code.
+- #16126 is an AI SDK dependency update batch; skipped for feature mapping after PR metadata confirmed dependency-only changes.
+- #16294 fixes OpenAI Codex OAuth callback port selection. Current `auth/providers/openai-codex.ts` tries port 1455 first, then 1457, warns when both are unavailable, uses the selected `redirectUri` in the authorization URL and token exchange, and exports `__testing` helpers. Current tests cover default/fallback port selection, no arbitrary scan, redirect URI, originator, scope, account ID extraction, refresh, and device OAuth.
+
+Documentation actions:
+
+- Created `features/tui/configuration-overlays.md` for modal overlay ownership, entrypoints, tests, and risks.
+- Updated `features/settings/onboarding-and-global-settings.md` for #16274 setup/config modal behavior.
+- Updated `features/tui/interactive-prompts.md` for shared modal question helper and overlay tests.
+- Updated `features/models/model-auth-and-modes.md` for #16294 OpenAI Codex OAuth callback port fallback.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16274 done, #16196 skipped, #16126 skipped, #16294 done, #16065 current.
+
+Focused evidence read: PR metadata for #16274/#16196/#16126/#16294; current `mastracode/src/tui/overlay.ts`, `modal-question.ts`, `mastra-tui.ts`, `onboarding/onboarding-inline.ts`, config command files, `theme.ts`, `tui/__tests__/overlay.test.ts`, `auth/providers/openai-codex.ts`, and `auth/providers/openai-codex.test.ts`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/overlay.test.ts src/tui/__tests__/mastra-tui-quiet-mode.test.ts --bail=1 --reporter=dot` — 2 files / 7 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/auth/providers/openai-codex.test.ts --bail=1 --reporter=dot` — 1 file / 19 tests passed.
