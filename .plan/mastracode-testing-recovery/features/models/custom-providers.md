@@ -3,6 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13682](https://github.com/mastra-ai/mastra/pull/13682) — added `/custom-providers`, custom provider settings, model routing, and Harness custom model catalog support.
+- Later changes: [#13611](https://github.com/mastra-ai/mastra/pull/13611) — preserves custom-provider precedence before gateway/built-in routing while tightening explicit gateway auth paths.
 
 ## User-visible behavior
 
@@ -39,7 +40,7 @@
 
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
-| Custom providers | `settings.json` `customProviders` | `/custom-providers`, model resolver, catalog provider |
+| Custom providers | `settings.json` `customProviders` | `/custom-providers`, model resolver before gateway/built-ins, catalog provider |
 | Provider slug/id | `getCustomProviderId(name)` | model IDs, duplicate checks, resolver lookup |
 | Provider model IDs | `toCustomProviderModelId(providerName, modelName)` | `/models`, `/om`, Harness model list |
 | Provider auth | optional provider `apiKey` in settings | `ModelRouterLanguageModel`, auth checker/model selector |

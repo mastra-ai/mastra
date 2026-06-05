@@ -1064,3 +1064,23 @@ Verification:
 - Focused tests passed: `corepack pnpm@11.3.0 --filter ./mastracode exec vitest run src/utils/__tests__/update-check.test.ts src/onboarding/__tests__/settings.test.ts src/tui/commands/__tests__/models-pack.test.ts src/tui/__tests__/command-dispatch.test.ts --reporter=dot --bail 1`.
 
 Next queue checkpoint: PR #13753 (request access rename, tilde expansion, mid-turn allowed paths), then PR #13611 (auth routing fix, tool injection, and auth storage init).
+
+### Feature map batch: request access and auth routing
+
+Processed PR [#13753](https://github.com/mastra-ai/mastra/pull/13753), `633370bdf4` (`fix: rename request_sandbox_access to request_access, fix tilde expansion and mid-turn setAllowedPaths`). Verified current `request_access` expands `~`, resolves relative paths to absolute paths, short-circuits already-allowed paths, emits a queued `sandbox_access_request` question through the Harness TUI context, persists approved paths to `sandboxAllowedPaths`, and updates the active `LocalFilesystem` with `setAllowedPaths()` so same-turn follow-up file tools can access the path.
+
+Processed PR [#13611](https://github.com/mastra-ai/mastra/pull/13611), `f6b91c454b` (`feat(mastracode): auth routing fix, tool injection, and auth storage init`). Verified current `createAuthStorage()` initializes shared auth storage for Anthropic, OpenAI Codex, and GitHub Copilot providers; `createMastraCode()` loads stored provider API keys into env before access/model checks; `resolveModel()` routes explicit `mastra/<provider>/<model>` IDs through Memory Gateway while keeping plain provider IDs on their normal paths; Anthropic/OpenAI OAuth gateway paths use direct provider construction with gateway auth headers and OAuth fetch wrappers; custom providers still bypass gateway first.
+
+Documentation actions:
+
+- Updated `features/tui/interactive-prompts.md` with `request_access` rename, tilde expansion, same-turn filesystem updates, and access-request tests.
+- Updated `features/tools/workspace-tools.md` and `features/tools/coding-tools-permissions.md` with same-turn allowed-path ownership and dynamic tool injection notes.
+- Updated `features/models/model-auth-and-modes.md`, `features/models/custom-providers.md`, and `features/settings/onboarding-and-global-settings.md` with #13611 auth routing/auth-storage behavior.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13753 done, #13611 done, #13815 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/tools/request-sandbox-access.ts`, `mastracode/src/tools/__tests__/request-sandbox-access.test.ts`, `mastracode/src/tui/handlers/prompts.ts`, `mastracode/src/tui/__tests__/parallel-interactive-prompts.test.ts`, `mastracode/src/agents/model.ts`, `mastracode/src/providers/claude-max.ts`, `mastracode/src/providers/openai-codex.ts`, `mastracode/src/permissions.ts`, `mastracode/src/index.ts`, `mastracode/src/agents/__tests__/model.test.ts`, `mastracode/src/agents/extra-tools.test.ts`, and `mastracode/src/__tests__/index.test.ts`.
+- Focused tests passed after clearing local provider env vars: `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u MASTRA_GATEWAY_API_KEY corepack pnpm@11.3.0 --filter ./mastracode exec vitest run src/tools/__tests__/request-sandbox-access.test.ts src/tui/__tests__/parallel-interactive-prompts.test.ts src/agents/__tests__/model.test.ts src/agents/extra-tools.test.ts src/__tests__/index.test.ts --reporter=dot --bail 1` (5 files / 84 tests). Initial unguarded run failed because local `OPENAI_API_KEY` changed expected OpenAI routing in `model.test.ts`.
+
+Next queue checkpoint: PR #13815 (`omScope` config), then PR #13766 (version-package skip).

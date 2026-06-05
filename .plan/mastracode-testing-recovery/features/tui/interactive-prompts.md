@@ -3,10 +3,11 @@
 ## Origin PR / commit
 
 - PR: [#13696](https://github.com/mastra-ai/mastra/pull/13696) — queues parallel interactive tool prompts so concurrent `ask_user` / sandbox access requests do not overwrite each other.
+- Later changes: [#13753](https://github.com/mastra-ai/mastra/pull/13753) — renames the sandbox request tool to `request_access`, expands `~`, and updates the active workspace filesystem immediately after approval.
 
 ## User-visible behavior
 
-- What the user can do: answer multiple interactive tool prompts sequentially when the agent triggers them in parallel.
+- What the user can do: answer multiple interactive tool prompts sequentially when the agent triggers them in parallel, including access requests for paths outside the project root.
 - Success looks like: the first prompt stays active, later prompts wait their turn, every tool promise resolves after the user answers, and aborting a run clears both the active prompt and queued prompts.
 - Must preserve: no unreachable prompts, no editor input corruption, no queued prompt activation after Ctrl+C/Escape/SIGINT abort.
 
@@ -42,6 +43,7 @@
 | Active inline prompt | `TUIState.activeInlineQuestion` | Editor input routing, prompt handlers |
 | Queued inline prompts | `TUIState.pendingInlineQuestions` | Prompt handlers, abort cleanup |
 | Prompt resolution | Core Harness pending prompt/question resolver | `ask_user`, `request_access` |
+| Approved access paths | Harness `sandboxAllowedPaths` plus active `LocalFilesystem.setAllowedPaths()` | Same-turn and later workspace file tools |
 | Abort cleanup | `tui/setup.ts` Ctrl+C/Escape/SIGINT handlers | Active/queued prompt state |
 
 ## Key files
@@ -50,6 +52,7 @@
 - `mastracode/src/tui/state.ts` — `activeInlineQuestion` and `pendingInlineQuestions` state.
 - `mastracode/src/tui/setup.ts` — Ctrl+C/Escape/SIGINT cleanup for active and queued prompts.
 - `mastracode/src/tui/__tests__/parallel-interactive-prompts.test.ts` — regression coverage for parallel prompt queueing and abort cleanup.
+- `mastracode/src/tools/request-sandbox-access.ts` — `request_access` path normalization, approval event emission, Harness state update, and same-turn filesystem update.
 
 ## Dependencies / related features
 
@@ -60,6 +63,7 @@
 ## Existing tests
 
 - `mastracode/src/tui/__tests__/parallel-interactive-prompts.test.ts` — concurrent `ask_user`, concurrent sandbox access, mixed prompt types, and abort-clears-queue behavior.
+- `mastracode/src/tools/__tests__/request-sandbox-access.test.ts` — approve/deny outcomes, tilde expansion, same-turn `setAllowedPaths()`, missing filesystem fallback, and no-`setAllowedPaths` fallback.
 
 ## Missing tests
 

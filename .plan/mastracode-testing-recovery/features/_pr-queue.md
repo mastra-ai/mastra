@@ -124,9 +124,9 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 102 | 2026-03-04 | #13768 | `46211b2799` | review | done | fix(mastracode): use ESM-compatible fallback for version detection (#13768) | 1 |
 | 103 | 2026-03-04 | #13748 | `a3c16eb1be` | review | done | fix: persist thinking level as a global preference (#13748) | 6 |
 | 104 | 2026-03-04 | #13787 | `02cbb66435` | review | done | feat(mastracode): add /update slash command (#13787) | 6 |
-| 105 | 2026-03-04 | #13753 | `633370bdf4` | review | current | fix: rename request_sandbox_access to request_access, fix tilde expansion and mid-turn setAllowedPaths (#13753) | 7 |
-| 106 | 2026-03-04 | #13611 | `f6b91c454b` | review | | feat(mastracode): auth routing fix, tool injection, and auth storage init (#13611) | 10 |
-| 107 | 2026-03-05 | #13815 | `324fff2672` | review | | feat(mastracode): add omScope to MastraCodeConfig (#13815) | 3 |
+| 105 | 2026-03-04 | #13753 | `633370bdf4` | review | done | fix: rename request_sandbox_access to request_access, fix tilde expansion and mid-turn setAllowedPaths (#13753) | 7 |
+| 106 | 2026-03-04 | #13611 | `f6b91c454b` | review | done | feat(mastracode): auth routing fix, tool injection, and auth storage init (#13611) | 10 |
+| 107 | 2026-03-05 | #13815 | `324fff2672` | review | current | feat(mastracode): add omScope to MastraCodeConfig (#13815) | 3 |
 | 108 | 2026-03-05 | #13766 | `38a334998f` | likely skip | | chore: version packages (alpha) (#13766) | 2 |
 | 109 | 2026-03-05 | #13870 | `57764e02c0` | review | | feat(mastracode): enhanced web_search tool rendering (#13870) | 1 |
 | 110 | 2026-03-06 | #12532 | `7abbf1fb29` | review | | chore(deps): update build tools (#12532) | 1 |
