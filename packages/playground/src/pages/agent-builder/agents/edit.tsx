@@ -5,12 +5,6 @@ import { Navigate, useNavigate, useParams } from 'react-router';
 import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu';
 import {
   AgentProfile,
-  AgentProfileModelStep,
-  AgentProfileToolsStep,
-  AgentProfileInstructionsStep,
-  AgentProfileSkillsStep,
-  AgentProfileBrowserStep,
-  AgentProfileIntegrationsStep,
   AgentProfileAvatar,
   AgentProfileDetails,
   AgentProfileHero,
@@ -25,7 +19,6 @@ import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color
 import { AgentPrimitivesProvider, useAgentPrimitives } from '@/domains/agent-builder/contexts/agent-primitives-context';
 import { EditPageProvider, useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
-import { useWizard, WizardProvider } from '@/domains/agent-builder/contexts/wizard-context';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
 import { useChannelConnectToast } from '@/domains/agent-builder/hooks/use-channel-connect-toast';
 import { AgentBuilderEditLayout } from '@/domains/agent-builder/layouts/agent-builder-edit-layout';
@@ -51,11 +44,7 @@ const EditPageGate = () => {
   if (!storedAgent) return <Navigate to="/agent-builder/agents" replace />;
   if (!canWrite || !isOwner) return <Navigate to={`/agent-builder/agents/${agentId}/view`} replace />;
 
-  return (
-    <WizardProvider initialStep="end">
-      <EditPageForm />
-    </WizardProvider>
-  );
+  return <EditPageForm />;
 };
 
 const EditPageForm = () => {
@@ -105,19 +94,15 @@ const EditPageBody = () => {
   );
 };
 
-const EditPageLayout = () => {
-  const { step } = useWizard();
-
-  return (
-    <AgentBuilderEditLayout
-      topBar={<EditTopBarSlot />}
-      chat={<ConversationPanelChat />}
-      profile={<ProfileSlot />}
-      variant="split"
-      hideMobileChat={step === 'end'}
-    />
-  );
-};
+const EditPageLayout = () => (
+  <AgentBuilderEditLayout
+    topBar={<EditTopBarSlot />}
+    chat={<ConversationPanelChat />}
+    profile={<ProfileSlot />}
+    variant="split"
+    hideMobileChat
+  />
+);
 
 const EditTopBarSlot = () => {
   const { autosave, onModeToggle } = useEditPage();
@@ -162,8 +147,6 @@ const ProfileSlot = () => {
   const { data: capabilities } = useAuthCapabilities();
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const name = useWatch({ control, name: 'name' }) ?? '';
-  const { step } = useWizard();
-
   // Both buttons are already accessible from the mobile 3-dots menu, so we
   // hide them in the profile panel on mobile to avoid duplication.
   const heroActions = (
@@ -176,30 +159,6 @@ const ProfileSlot = () => {
       {isOwner && <DeleteAgentPanelButton agentId={agentId} agentName={name} disabled={isRunning} />}
     </div>
   );
-
-  if (step === 'model') {
-    return <AgentProfileModelStep />;
-  }
-
-  if (step === 'tools') {
-    return <AgentProfileToolsStep />;
-  }
-
-  if (step === 'instructions') {
-    return <AgentProfileInstructionsStep />;
-  }
-
-  if (step === 'skills') {
-    return <AgentProfileSkillsStep />;
-  }
-
-  if (step === 'browser') {
-    return <AgentProfileBrowserStep />;
-  }
-
-  if (step === 'integrations') {
-    return <AgentProfileIntegrationsStep />;
-  }
 
   return (
     <AgentProfile>

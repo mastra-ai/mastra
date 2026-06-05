@@ -1,14 +1,27 @@
-import { Button, Spinner } from '@mastra/playground-ui';
+import { Spinner } from '@mastra/playground-ui';
 import { useState } from 'react';
 import { FormProvider, useForm, useFormContext, useWatch } from 'react-hook-form';
-import { Navigate, useNavigate, useParams } from 'react-router';
-import { ConversationPanelChat } from '@/domains/agent-builder/components/agent-edit/conversation-panel';
+import { Navigate, useParams } from 'react-router';
+import {
+  AgentProfile,
+  AgentProfileAvatar,
+  AgentProfileBrowserStep,
+  AgentProfileDetails,
+  AgentProfileHero,
+  AgentProfileInitialStep,
+  AgentProfileInstructionsStep,
+  AgentProfileIntegrationsStep,
+  AgentProfileModelStep,
+  AgentProfileSkillsStep,
+  AgentProfileTabs,
+  AgentProfileToolsStep,
+} from '@/domains/agent-builder/components/agent-edit/agent-profile';
 import { EditTopBar } from '@/domains/agent-builder/components/agent-edit/edit-top-bar';
 import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
 import { AgentPrimitivesProvider, useAgentPrimitives } from '@/domains/agent-builder/contexts/agent-primitives-context';
 import { EditPageProvider, useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
-import { WizardProvider } from '@/domains/agent-builder/contexts/wizard-context';
+import { useWizard, WizardProvider } from '@/domains/agent-builder/contexts/wizard-context';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
 import { AgentBuilderEditLayout } from '@/domains/agent-builder/layouts/agent-builder-edit-layout';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
@@ -16,9 +29,8 @@ import { storedAgentToFormValues } from '@/domains/agent-builder/services/stored
 
 /**
  * Standalone onboarding page shown right after the creation workflow finishes.
- * It mirrors the edit page's provider stack but stays in a centered
- * "review your new agent" experience: the user can chat with the freshly
- * created agent and then choose to view it or jump into full configuration.
+ * It mirrors the edit page's provider stack but stays in a centered,
+ * low-noise review flow so the user can inspect each section one by one.
  */
 export default function AgentBuilderAgentOnboarding() {
   const { id } = useParams<{ id: string }>();
@@ -82,42 +94,65 @@ const OnboardingBody = () => {
   );
 };
 
-const OnboardingLayout = () => {
-  return (
-    <AgentBuilderEditLayout
-      topBar={<EditTopBar isLoading={false} />}
-      chat={<ConversationPanelChat />}
-      chatFooter={<OnboardingCtas />}
-      profile={null}
-      variant="centered"
-    />
-  );
-};
+const OnboardingLayout = () => (
+  <AgentBuilderEditLayout
+    topBar={<EditTopBar isLoading={false} />}
+    profile={<OnboardingProfileSlot />}
+    variant="profile-centered"
+  />
+);
 
-const OnboardingCtas = () => {
-  const navigate = useNavigate();
-  const { agentId } = useEditPage();
+const OnboardingProfileSlot = () => {
+  const { agentId, availableAgentTools, availableSkills } = useEditPage();
   const isRunning = useStreamRunning();
+  const { step } = useWizard();
+
+  if (step === 'initial') {
+    return (
+      <AgentProfileInitialStep
+        avatar={<AgentProfileAvatar disabled={isRunning} />}
+        details={<AgentProfileDetails disabled={isRunning} mode="highlighted" />}
+      />
+    );
+  }
+
+  if (step === 'model') {
+    return <AgentProfileModelStep />;
+  }
+
+  if (step === 'tools') {
+    return <AgentProfileToolsStep />;
+  }
+
+  if (step === 'instructions') {
+    return <AgentProfileInstructionsStep />;
+  }
+
+  if (step === 'skills') {
+    return <AgentProfileSkillsStep />;
+  }
+
+  if (step === 'browser') {
+    return <AgentProfileBrowserStep />;
+  }
+
+  if (step === 'integrations') {
+    return <AgentProfileIntegrationsStep />;
+  }
 
   return (
-    <div className="flex flex-col gap-2" data-testid="agent-builder-onboarding-ctas">
-      <Button
-        variant="primary"
+    <AgentProfile>
+      <AgentProfileHero
+        avatar={<AgentProfileAvatar disabled={isRunning} />}
+        details={<AgentProfileDetails disabled={isRunning} />}
+      />
+      <AgentProfileTabs
+        agentId={agentId}
+        availableAgentTools={availableAgentTools}
+        availableSkills={availableSkills}
         disabled={isRunning}
-        onClick={() => navigate(`/agent-builder/agents/${agentId}/view`, { viewTransition: true })}
-        data-testid="agent-builder-onboarding-cta-view"
-      >
-        View agent
-      </Button>
-      <Button
-        variant="outline"
-        disabled={isRunning}
-        onClick={() => navigate(`/agent-builder/agents/${agentId}/edit`, { viewTransition: true })}
-        data-testid="agent-builder-onboarding-cta-config"
-      >
-        Review config
-      </Button>
-    </div>
+      />
+    </AgentProfile>
   );
 };
 

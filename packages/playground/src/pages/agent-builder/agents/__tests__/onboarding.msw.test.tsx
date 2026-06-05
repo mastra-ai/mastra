@@ -61,12 +61,6 @@ vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
   useBuilderAgentAccess: () => useBuilderAgentAccessMock(),
 }));
 
-// Stub heavy chat panels so we can focus on the onboarding shell + CTAs.
-vi.mock('@/domains/agent-builder/components/agent-edit/conversation-panel', () => ({
-  ConversationPanelChat: () => <div data-testid="stub-conversation-panel" />,
-  ConversationPanelProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-
 const useStreamRunningMock = vi.fn(() => false);
 vi.mock('@/domains/agent-builder/contexts/stream-chat-context', () => ({
   useStreamRunning: () => useStreamRunningMock(),
@@ -119,10 +113,7 @@ function renderPage() {
           <TooltipProvider>
             <MemoryRouter initialEntries={['/agent-builder/agents/agent-onboarding/onboarding']}>
               <Routes>
-                <Route
-                  path="/agent-builder/agents/:id/onboarding"
-                  element={<AgentBuilderAgentOnboarding />}
-                />
+                <Route path="/agent-builder/agents/:id/onboarding" element={<AgentBuilderAgentOnboarding />} />
                 <Route path="/agent-builder/agents/:id/edit" element={<div data-testid="edit-page" />} />
                 <Route path="/agent-builder/agents/:id/view" element={<div data-testid="view-page" />} />
                 <Route path="/agent-builder/agents" element={<div data-testid="agents-list-page" />} />
@@ -171,10 +162,16 @@ const installRadixDomShims = () => {
   }
 };
 
-const baseHandlers = (
-  agentResponse: () => Response = () => HttpResponse.json(draftAgent),
-) => [
-  http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: true, user: { id: 'user-1' } })),
+const baseHandlers = (agentResponse: () => Response = () => HttpResponse.json(draftAgent)) => [
+  http.get(`${BASE_URL}/api/auth/capabilities`, () =>
+    HttpResponse.json({
+      enabled: true,
+      login: null,
+      user: { id: 'user-1' },
+      capabilities: { user: true, session: true, sso: false, rbac: false, acl: false },
+      access: null,
+    }),
+  ),
   http.get(`${BASE_URL}/api/stored/agents/agent-onboarding`, () => agentResponse()),
   http.get(`${BASE_URL}/api/stored/workspaces`, () => HttpResponse.json({ workspaces: [] })),
   http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json([])),
@@ -200,53 +197,71 @@ describe('AgentBuilderAgentOnboarding MSW integration', () => {
     });
   });
 
-  it('owner + draft agent: renders the centered onboarding experience (chat + CTAs, no profile)', async () => {
+  it('owner + draft agent: renders the centered wizard review without chat', async () => {
     server.use(...baseHandlers());
 
     renderPage();
 
-    await screen.findByTestId('agent-builder-panel-chat');
+    await screen.findByTestId('agent-builder-panel-profile');
 
-    // Centered variant: the profile column is not rendered.
-    expect(screen.queryByTestId('agent-builder-panel-profile')).toBeNull();
-
-    // The two CTAs render in the chat footer.
-    expect(screen.getByTestId('agent-builder-onboarding-cta-view')).toBeTruthy();
-    expect(screen.getByTestId('agent-builder-onboarding-cta-config')).toBeTruthy();
+    expect(screen.queryByTestId('agent-builder-panel-chat')).toBeNull();
+    expect((screen.getByTestId('agent-configure-name') as HTMLInputElement).value).toBe('Freshly created');
+    expect(screen.getByRole('button', { name: /continue/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /previous/i })).toBeNull();
   });
 
-  it('"View agent" CTA navigates to /view', async () => {
+  it('walks from the initial review to the section review', async () => {
     server.use(...baseHandlers());
 
     renderPage();
 
-    const viewCta = await screen.findByTestId('agent-builder-onboarding-cta-view');
+    const continueCta = await screen.findByRole('button', { name: /continue/i });
+    fireEvent.click(continueCta);
+
+    await screen.findByRole('heading', { name: 'Instructions' });
+    expect(screen.getByRole('button', { name: /previous/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /try agent/i })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /see agent configuration/i })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /previous/i }));
+    await screen.findByTestId('agent-configure-name');
+  });
+
+  it('"Try agent" CTA navigates to /view from the last review step', async () => {
+    server.use(...baseHandlers());
+
+    renderPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /continue/i }));
+    const viewCta = await screen.findByRole('button', { name: /try agent/i });
     fireEvent.click(viewCta);
 
     await screen.findByTestId('view-page');
   });
 
-  it('"Review config" CTA navigates to /edit', async () => {
+  it('"See agent configuration" CTA navigates to /edit from the last review step', async () => {
     server.use(...baseHandlers());
 
     renderPage();
 
-    const configCta = await screen.findByTestId('agent-builder-onboarding-cta-config');
-    fireEvent.click(configCta);
+    fireEvent.click(await screen.findByRole('button', { name: /continue/i }));
+    const editCta = await screen.findByRole('button', { name: /see agent configuration/i });
+    fireEvent.click(editCta);
 
     await screen.findByTestId('edit-page');
   });
 
-  it('CTAs are disabled while the stream is running', async () => {
+  it('wizard actions are disabled while the stream is running', async () => {
     useStreamRunningMock.mockReturnValue(true);
     server.use(...baseHandlers());
 
     renderPage();
 
-    const viewCta = (await screen.findByTestId('agent-builder-onboarding-cta-view')) as HTMLButtonElement;
-    const configCta = screen.getByTestId('agent-builder-onboarding-cta-config') as HTMLButtonElement;
-    expect(viewCta.disabled).toBe(true);
-    expect(configCta.disabled).toBe(true);
+    const continueCta = (await screen.findByRole('button', { name: /continue/i })) as HTMLButtonElement;
+    expect(continueCta.disabled).toBe(true);
+
+    fireEvent.click(continueCta);
+    expect(screen.queryByRole('button', { name: /previous/i })).toBeNull();
   });
 
   it('missing agent: redirects to the agents list', async () => {

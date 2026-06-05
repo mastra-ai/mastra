@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 export interface AgentBuilderEditLayoutProps {
   topBar: ReactNode;
   profile: ReactNode;
-  chat: ReactNode;
+  chat?: ReactNode;
   /**
    * Optional content rendered inside the chat column, below the chat itself.
    * Used on mobile to surface CTAs while the chat composer stays in place.
@@ -15,10 +15,11 @@ export interface AgentBuilderEditLayoutProps {
    * Layout variant.
    * - `'split'` (default): chat on the left, profile on the right (2-col grid on lg+).
    * - `'centered'`: chat is centered as a single column; the profile slot is not rendered.
+   * - `'profile-centered'`: profile is centered as a single column; the chat slot is not rendered.
    *
    * Callers can wrap variant changes in `startViewTransition` to crossfade between layouts.
    */
-  variant?: 'split' | 'centered';
+  variant?: 'split' | 'centered' | 'profile-centered';
   /**
    * When true and variant is `'split'`, the chat column is hidden on mobile
    * (visible at `lg+`). The chat React subtree stays mounted to preserve state
@@ -35,8 +36,9 @@ export const AgentBuilderEditLayout = ({
   variant = 'split',
   hideMobileChat = false,
 }: AgentBuilderEditLayoutProps) => {
-  const isCentered = variant === 'centered';
-  const applyMobileChatHide = hideMobileChat && !isCentered;
+  const isChatCentered = variant === 'centered';
+  const isProfileCentered = variant === 'profile-centered';
+  const applyMobileChatHide = hideMobileChat && !isChatCentered;
 
   return (
     <div className="h-full grid grid-rows-[auto_1fr]">
@@ -44,36 +46,38 @@ export const AgentBuilderEditLayout = ({
       <div
         className={cn(
           'flex flex-1 min-h-0 min-w-0 flex-col pt-4 pb-4 md:pb-10',
-          !isCentered && 'lg:grid lg:grid-rows-1 lg:grid-cols-[1fr_2fr]',
+          !isChatCentered && !isProfileCentered && 'lg:grid lg:grid-rows-1 lg:grid-cols-[1fr_2fr]',
         )}
       >
-        <div
-          className={cn(
-            'h-full w-full min-w-0 overflow-hidden px-4 md:px-10',
-            isCentered && 'lg:mx-auto lg:max-w-[80ch]',
-            applyMobileChatHide && 'hidden lg:block',
-          )}
-          data-testid="agent-builder-panel-chat"
-          style={{ viewTransitionName: 'agent-builder-chat-panel' }}
-        >
-          {chatFooter ? (
-            <div className="min-h-0 min-w-0 h-full overflow-hidden md:max-w-[80ch] md:mx-auto w-full grid grid-rows-[1fr_auto]">
-              <div className="min-h-0 min-w-0 h-full overflow-hidden">{chat}</div>
-              <div data-testid="agent-builder-chat-footer" className="w-full pt-3">
-                {chatFooter}
+        {!isProfileCentered && (
+          <div
+            className={cn(
+              'h-full w-full min-w-0 overflow-hidden px-4 md:px-10',
+              isChatCentered && 'lg:mx-auto lg:max-w-[80ch]',
+              applyMobileChatHide && 'hidden lg:block',
+            )}
+            data-testid="agent-builder-panel-chat"
+            style={{ viewTransitionName: 'agent-builder-chat-panel' }}
+          >
+            {chatFooter ? (
+              <div className="min-h-0 min-w-0 h-full overflow-hidden md:max-w-[80ch] md:mx-auto w-full grid grid-rows-[1fr_auto]">
+                <div className="min-h-0 min-w-0 h-full overflow-hidden">{chat}</div>
+                <div data-testid="agent-builder-chat-footer" className="w-full pt-3">
+                  {chatFooter}
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="min-h-0 min-w-0 h-full overflow-hidden md:max-w-[80ch] md:mx-auto w-full">{chat}</div>
-          )}
-        </div>
+            ) : (
+              <div className="min-h-0 min-w-0 h-full overflow-hidden md:max-w-[80ch] md:mx-auto w-full">{chat}</div>
+            )}
+          </div>
+        )}
 
-        {!isCentered && (
+        {!isChatCentered && (
           <div
             className={cn(
               'min-w-0 overflow-hidden',
               'flex-1 px-4 md:px-10',
-              'lg:flex-none lg:h-full lg:min-h-0 lg:pl-0 lg:pr-10',
+              isProfileCentered ? 'lg:h-full lg:min-h-0' : 'lg:flex-none lg:h-full lg:min-h-0 lg:pl-0 lg:pr-10',
             )}
             data-testid="agent-builder-panel-profile"
             style={{ viewTransitionName: 'agent-builder-profile-panel' }}

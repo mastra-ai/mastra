@@ -11,6 +11,8 @@ export interface WizardContextValue {
   step: WizardStep;
   /** Advance to the next step in the resolved nav tree. No-op at `end`. */
   next: () => void;
+  /** Return to the previous step in the resolved nav tree. No-op at the first step. */
+  previous: () => void;
   /** The resolved nav tree: ordered list of steps the wizard will walk. */
   steps: WizardStep[];
   /**
@@ -144,9 +146,21 @@ export const WizardProvider = ({ initialStep = 'end', children }: WizardProvider
     });
   }, [steps]);
 
+  const previous = useCallback(() => {
+    setStep(current => {
+      const idx = steps.indexOf(current);
+      if (idx <= 0) return current;
+      const candidate = steps[idx - 1];
+      return candidate ?? current;
+    });
+  }, [steps]);
+
   const isLast = steps.length >= 2 && steps[steps.length - 2] === step;
 
-  const value = useMemo<WizardContextValue>(() => ({ step, next, steps, isLast }), [step, next, steps, isLast]);
+  const value = useMemo<WizardContextValue>(
+    () => ({ step, next, previous, steps, isLast }),
+    [step, next, previous, steps, isLast],
+  );
 
   return <WizardContext.Provider value={value}>{children}</WizardContext.Provider>;
 };
@@ -155,5 +169,5 @@ export const WizardProvider = ({ initialStep = 'end', children }: WizardProvider
 export const useWizard = (): WizardContextValue => {
   const ctx = useContext(WizardContext);
 
-  return ctx ?? { step: 'end', next: () => {}, steps: [], isLast: false };
+  return ctx ?? { step: 'end', next: () => {}, previous: () => {}, steps: [], isLast: false };
 };
