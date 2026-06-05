@@ -254,11 +254,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 232 | 2026-04-24 | #15703 | `299f6fd1fb` | review | done | mastracode: allow custom model strings in /om (#15703) | 14 |
 | 233 | 2026-04-27 | #15642 | `cf25a03132` | review | done | feat(mastracode): add evals system with live scorers, offline experiments, and Studio feedback (#15642) | 24 |
 | 234 | 2026-04-28 | #15710 | `68a4cec599` | likely skip | skipped | chore: version packages (alpha) (#15710) | 2 |
-| 235 | 2026-04-28 | #15759 | `c8919894c0` | review | current | feat(mastracode): use GPT-5.5 in OpenAI pack (#15759) | 7 |
-| 236 | 2026-04-28 | #15760 | `13b4d7c16d` | review | | Add stream error retry processor (#15760) | 4 |
-| 237 | 2026-04-28 | #15695 | `5a4b1ee802` | review | | feat(core): forked subagents inherit parent thread + prompt cache prefix (#15695) | 8 |
-| 238 | 2026-04-28 | #15857 | `84a4c8515b` | likely skip | | chore: version packages (alpha) (#15857) | 2 |
-| 239 | 2026-04-28 | #15896 | `14227ce4b3` | likely skip | | chore: version packages (alpha) (#15896) | 2 |
+| 235 | 2026-04-28 | #15759 | `c8919894c0` | review | done | feat(mastracode): use GPT-5.5 in OpenAI pack (#15759) | 7 |
+| 236 | 2026-04-28 | #15760 | `13b4d7c16d` | review | done | Add stream error retry processor (#15760) | 4 |
+| 237 | 2026-04-28 | #15695 | `5a4b1ee802` | review | done | feat(core): forked subagents inherit parent thread + prompt cache prefix (#15695) | 8 |
+| 238 | 2026-04-28 | #15857 | `84a4c8515b` | likely skip | skipped | chore: version packages (alpha) (#15857) | 2 |
+| 239 | 2026-04-28 | #15896 | `14227ce4b3` | likely skip | current | chore: version packages (alpha) (#15896) | 2 |
 | 240 | 2026-04-28 | #15820 | `b430eef4e5` | review | | feat(mastracode): include common binaries in system prompt (#15820) | 6 |
 | 241 | 2026-04-29 | #15770 | `30fe03e5f5` | likely skip | | chore(deps): update ai sdk (#15770) | 1 |
 | 242 | 2026-04-29 | #15909 | `7179450363` | likely skip | | chore: version packages (alpha) (#15909) | 2 |

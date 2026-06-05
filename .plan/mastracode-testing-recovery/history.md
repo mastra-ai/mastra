@@ -1947,3 +1947,29 @@ Verification:
 - `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/om-settings.test.ts src/tui/commands/__tests__/om.test.ts --bail=1 --reporter=dot` — 2 files / 8 tests passed.
 - `pnpm --filter ./mastracode exec vitest run src/evals/scorers/__tests__/outcome.test.ts src/evals/scorers/__tests__/efficiency.test.ts src/evals/scorers/__tests__/classify-command.test.ts --bail=1 --reporter=dot` — 3 files / 58 tests passed.
 - `pnpm --filter ./mastracode exec vitest run src/__tests__/index.test.ts -t "ProviderHistoryCompat" --bail=1 --reporter=dot` — 1 file / 1 test passed / 15 skipped.
+
+### PR #15759 / #15760 / #15695 / #15857 feature-map checkpoint
+
+Verified rows 235-238:
+
+- #15759 updates the OpenAI built-in pack/prompt alignment. Current source uses `openai/gpt-5.5` for OpenAI build/plan, `openai/gpt-5.4-mini` for fast/OM, keeps `PROVIDER_DEFAULT_MODELS['openai-codex']` aligned to `gpt-5.5`, and includes exact-ID prompt sections for `openai/gpt-5.4` and `openai/gpt-5.5`.
+- #15760 adds `StreamErrorRetryProcessor`, a core error processor with retryable OpenAI Responses stream-error matching, provider `isRetryable` cause-chain handling, custom matchers, and a `maxRetries` guard. Mastra Code wires it before `PrefillErrorHandler` and `ProviderHistoryCompat`.
+- #15695 adds forked subagents: forked runs clone the parent thread, reuse the parent agent/prompt/tool schema prefix, inherit parent harness toolsets with `subagent` and task tools patched to runtime no-ops, retarget request context to the cloned thread, and hide forked threads from default thread listings.
+- #15857 is a Changesets alpha package-version batch; skipped for feature mapping.
+
+Documentation actions:
+
+- Added `features/models/stream-error-retry.md` for stream retry processor state ownership, lifecycle, tests, missing tests, and retry risks.
+- Updated `features/models/model-auth-and-modes.md` and `features/chat/prompt-context.md` for GPT-5.5 OpenAI pack defaults and exact-ID model-specific prompt sections.
+- Updated `features/subagents/delegation.md` for forked subagent thread cloning, parent toolset inheritance, patched task/subagent tools, tests, and risks.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #15759 done, #15760 done, #15695 done, #15857 skipped, #15896 current.
+
+Focused evidence read: PR metadata for #15759/#15760/#15695/#15857; current `mastracode/src/onboarding/{packs.ts,__tests__/packs.test.ts}`, `mastracode/src/auth/storage.ts`, `mastracode/src/agents/prompts/{model.ts,__tests__/prompts.test.ts}`, `packages/core/src/processors/{stream-error-retry-processor.ts,stream-error-retry-processor.test.ts}`, `docs/src/content/en/reference/processors/stream-error-retry-processor.mdx`, `mastracode/src/index.ts`, `mastracode/src/__tests__/index.test.ts`, `packages/core/src/harness/{tools.ts,harness.ts,types.ts,HarnessCompat.ts,subagent-tool.test.ts,fork-clone-metadata.test.ts,list-threads-fork-filter.test.ts}`, and Mastra Code subagent render tests.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/onboarding/__tests__/packs.test.ts src/agents/__tests__/prompts.test.ts --bail=1 --reporter=dot` — 2 files / 11 tests passed.
+- `pnpm --filter ./packages/core exec vitest run src/processors/stream-error-retry-processor.test.ts --bail=1 --reporter=dot` — 1 file / 11 tests passed / no type errors.
+- `pnpm --filter ./packages/core exec vitest run src/harness/subagent-tool.test.ts src/harness/fork-clone-metadata.test.ts src/harness/list-threads-fork-filter.test.ts -t "fork" --bail=1 --reporter=dot` — 3 files / 18 tests passed / 15 skipped / no type errors.
+- `pnpm --filter ./mastracode exec vitest run src/__tests__/index.test.ts src/tui/__tests__/render-messages.test.ts -t "stream-error-retry|fork" --bail=1 --reporter=dot` — 1 file passed / 1 skipped; 1 test passed / 39 skipped.
