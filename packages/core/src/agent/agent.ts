@@ -1378,9 +1378,15 @@ export class Agent<
 
     const memoryProcessors = memory ? await memory.getOutputProcessors(configuredProcessors, requestContext) : [];
 
+    // Get channel output processors (with deduplication) — mirrors the input
+    // processor hookup. Channels render the agent's stream to the originating
+    // chat platform via this processor; without it, replies never reach Slack.
+    const channelProcessors = this.#agentChannels ? this.#agentChannels.getOutputProcessors(configuredProcessors) : [];
+
     // Combine all processors into a single workflow
-    // Memory processors should run last (to persist messages after other processing)
-    const allProcessors = [...configuredProcessors, ...memoryProcessors];
+    // Channel processors run before configured/memory so the platform sees
+    // chunks before user-supplied transforms or persistence.
+    const allProcessors = [...channelProcessors, ...configuredProcessors, ...memoryProcessors];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-output-processor`);
   }
 
