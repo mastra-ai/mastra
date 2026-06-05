@@ -100,7 +100,8 @@
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "zod": "^3.25.76"
+    "zod": "^3.25.76",
+    "zod-v4": "npm:zod@^4.4.3"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.34.0-0 <2.0.0-0",
