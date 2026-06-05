@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13435](https://github.com/mastra-ai/mastra/pull/13435) — added opt-in PostgreSQL storage alongside default LibSQL, plus `/settings` backend selection.
-- Later changes: [#13815](https://github.com/mastra-ai/mastra/pull/13815) — database config files can also carry `omScope` for observational-memory scope selection; [#14567](https://github.com/mastra-ai/mastra/pull/14567) — pairs the selected storage backend with a vector store used by OM recall search/indexing; [#16135](https://github.com/mastra-ai/mastra/pull/16135) — normalizes Enter/Escape handling in the storage connection submenu using pi-tui `matchesKey()` plus raw-byte fallbacks.
+- Later changes: [#13815](https://github.com/mastra-ai/mastra/pull/13815) — database config files can also carry `omScope` for observational-memory scope selection; [#14567](https://github.com/mastra-ai/mastra/pull/14567) — pairs the selected storage backend with a vector store used by OM recall search/indexing; [#16135](https://github.com/mastra-ai/mastra/pull/16135) — normalizes Enter/Escape handling in the storage connection submenu using pi-tui `matchesKey()` plus raw-byte fallbacks; [#16513](https://github.com/mastra-ai/mastra/pull/16513) — tunes local LibSQL startup with safe PRAGMAs, cached/coalesced init, message indexes, and non-blocking gateway sync.
 
 ## User-visible behavior
 
 - What the user can do: use default local LibSQL, configure remote LibSQL/Turso, or switch to PostgreSQL from `/settings` or environment variables.
-- Success looks like: threads, memory, approvals, and agent data use the selected backend after restart; failed PostgreSQL startup falls back to LibSQL with a warning so `/settings` remains reachable; Enter saves and Escape cancels the storage connection prompt across terminal emulators.
-- Must preserve: backend precedence, connection-string persistence, restart-required UX, LibSQL fallback, and vector-store pairing.
+- Success looks like: threads, memory, approvals, and agent data use the selected backend after restart; failed PostgreSQL startup falls back to LibSQL with a warning so `/settings` remains reachable; local LibSQL startup/history reads stay fast; Enter saves and Escape cancels the storage connection prompt across terminal emulators.
+- Must preserve: backend precedence, connection-string persistence, restart-required UX, LibSQL fallback, vector-store pairing, and safe local SQLite PRAGMAs.
 
 ## Entry points / commands
 
@@ -45,12 +45,14 @@
 | LibSQL URL/token | `MASTRA_DB_URL`/`MASTRA_DB_AUTH_TOKEN` or `settings.storage.libsql` | `LibSQLStore`, `LibSQLVector` |
 | PostgreSQL connection | `MASTRA_PG_*` vars or `settings.storage.pg` | `PostgresStore`, `PgVector` |
 | Effective backend after fallback | `createStorage()` result | Vector-store selection, startup warnings |
+| Local LibSQL performance settings | `LibSQLStore` local PRAGMAs plus Mastra Code overrides in `storage-factory.ts` | local thread/message history, schema init, startup latency |
 | Recall vector store | `createVectorStore()` uses `PgVector` for effective PG or separate local `LibSQLVector` file for LibSQL | OM observation indexing, `Memory.searchMessages()`, agent `recall` search mode |
 
 ## Key files
 
 - `mastracode/src/utils/project.ts` — storage config precedence, `omScope` precedence, and env/settings/legacy parsing.
-- `mastracode/src/utils/storage-factory.ts` — creates LibSQL/PostgreSQL stores, tests PG startup, and falls back to LibSQL with warnings.
+- `mastracode/src/utils/storage-factory.ts` — creates LibSQL/PostgreSQL stores, tests PG startup, applies Mastra Code local LibSQL PRAGMA overrides, and falls back to LibSQL with warnings.
+- `stores/libsql/src/storage/index.ts` and `stores/libsql/src/storage/db/index.ts` — local PRAGMAs, cached/coalesced init, message indexes, and table-column cache for migration-compatible writes.
 - `mastracode/src/onboarding/settings.ts` — persisted `StorageSettings` schema/defaults.
 - `mastracode/src/tui/components/settings.ts` — storage backend submenu and connection input, including normalized `matchesKey(data, 'enter'|'escape')` plus raw-byte fallbacks.
 - `mastracode/src/tui/commands/settings.ts` — saves backend settings and forces restart.
@@ -62,11 +64,14 @@
 - [Onboarding and global settings](./onboarding-and-global-settings.md) — stores backend choice in global settings.
 - [Persistent conversations](../threads/persistent-conversations.md) — thread/session history depends on selected storage.
 - [Observational memory](../memory/observational-memory.md) — OM and recall vector storage depend on selected backend.
+- [Startup performance](../setup/startup-performance.md) — documents the LibSQL/startup optimization layer that keeps this backend responsive.
 
 ## Existing tests
 
 - `mastracode/src/utils/__tests__/storage-config.test.ts` — config precedence, env/settings parsing, LibSQL creation, PG fallback, vector-store fallback, and PG option construction.
 - `mastracode/src/onboarding/__tests__/settings.test.ts` — settings schema/default parsing includes storage defaults.
+- `stores/libsql/src/storage/local-performance.test.ts` — local PRAGMAs, message indexes, cached/coalesced init, and in-memory reinit behavior.
+- `stores/libsql/src/storage/db/migration-columns.test.ts` — table-column cache keeps migration column inspection bounded.
 
 ## Missing tests
 

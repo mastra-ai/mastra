@@ -2255,3 +2255,27 @@ Verification:
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/mastra-tui-queueing.test.ts src/tui/__tests__/render-messages.test.ts -t "signal|Signal|active-run|echo" --bail=1 --reporter=dot` — 2 files / 19 tests passed / 35 skipped.
 - `pnpm --filter ./client-sdks/react exec vitest run src/agent/hooks.test.ts -t "thread signals|sendMessage|subscription|clientTools|unsupported|tool approval" --bail=1 --reporter=dot` — 1 file / 20 tests passed. Initial run failed to resolve `@mastra/client-js`; `pnpm --filter @mastra/client-js build:lib` regenerated package dist.
 - `pnpm --filter ./packages/playground exec vitest run src/services/__tests__/mastra-runtime-provider.test.tsx src/domains/agent-builder/contexts/__tests__/stream-chat-provider.test.tsx -t "thread signals|enableThreadSignals" --bail=1 --reporter=dot` — 2 files / 4 tests passed / 9 skipped. Initial runs failed to resolve workspace package dist; `@mastra/react build:js` and `@mastra/playground-ui build` emitted JS but hit existing type/declaration errors before focused tests passed.
+
+### PR #16511 / #16513 / #16516 / #16521 feature-map checkpoint
+
+Verified rows 289-292:
+
+- #16511 and #16516 are Changesets alpha package-version batches; skipped for feature mapping after PR metadata confirmed package/changelog-only changes.
+- #16513 speeds up Mastra Code startup and local LibSQL behavior. Current source starts gateway sync in the background after stored API keys load, keeps heartbeat gateway sync for refresh, applies Mastra Code local LibSQL PRAGMA overrides (`cache_size=-128000`, `mmap_size=536870912`), applies safe local LibSQL PRAGMAs before schema init, caches/coalesces local file DB init while keeping in-memory DB reinit, adds message indexes for thread history reads, and caches table-column metadata for migration-compatible writes.
+- #16521 fixes regular plan approval by resolving `respondToPlanApproval()` first, then sending a single structured `system-reminder` through `harness.sendSignal()` to start Build-mode execution. The handler no longer uses legacy XML reminders, `addUserMessage`, or `fireMessage`, preventing duplicate rendering and hangs on the dying Plan-mode run.
+
+Documentation actions:
+
+- Created `features/setup/startup-performance.md` for the startup/LibSQL optimization layer, state ownership, tests, and risks.
+- Updated `features/settings/storage-backend.md` for #16513 local LibSQL PRAGMAs/init/indexes.
+- Updated `features/goals/plan-approval.md`, `features/integrations/harness-api.md`, and `features/chat/agent-signals.md` for #16521 structured regular approval handoff.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16511 skipped, #16513 done, #16516 skipped, #16521 done, #16548 current.
+
+Focused evidence read: PR metadata for #16511/#16513/#16516/#16521; current `mastracode/src/index.ts`, `main.ts`, `utils/storage-factory.ts`, `tui/handlers/prompts.ts`, `tui/handlers/__tests__/prompts.test.ts`, `stores/libsql/src/storage/index.ts`, `stores/libsql/src/storage/db/index.ts`, `stores/libsql/src/storage/local-performance.test.ts`, `stores/libsql/src/storage/db/migration-columns.test.ts`, and `mastracode/src/__tests__/index.test.ts`.
+
+Verification:
+
+- `pnpm --filter ./stores/libsql exec vitest run src/storage/local-performance.test.ts src/storage/db/migration-columns.test.ts --bail=1 --reporter=dot` — 2 files / 9 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/__tests__/index.test.ts src/tui/handlers/__tests__/prompts.test.ts --bail=1 --reporter=dot` — 2 files / 22 tests passed.
+- `pnpm --filter ./packages/core exec vitest run src/harness/signal-history.test.ts --bail=1 --reporter=dot` — 1 file / 3 tests passed / no type errors.

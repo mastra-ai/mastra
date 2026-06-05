@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13416](https://github.com/mastra-ai/mastra/pull/13416) — fixed Plan mode so the agent calls `submit_plan` instead of only writing plan text.
-- Later changes: [#13557](https://github.com/mastra-ai/mastra/pull/13557) — persists approved plans as Markdown files on disk; [#13598](https://github.com/mastra-ai/mastra/pull/13598) — keeps the submitted plan visible while the user types requested-change feedback; [#16065](https://github.com/mastra-ai/mastra/pull/16065) — adds `Use as /goal` from the plan approval UI so approved plans can enter persistent goal pursuit; [#16340](https://github.com/mastra-ai/mastra/pull/16340) — fixes `Use as /goal` ordering so the suspended plan tool resolves before the goal reminder starts Build-mode execution.
+- Later changes: [#13557](https://github.com/mastra-ai/mastra/pull/13557) — persists approved plans as Markdown files on disk; [#13598](https://github.com/mastra-ai/mastra/pull/13598) — keeps the submitted plan visible while the user types requested-change feedback; [#16065](https://github.com/mastra-ai/mastra/pull/16065) — adds `Use as /goal` from the plan approval UI so approved plans can enter persistent goal pursuit; [#16340](https://github.com/mastra-ai/mastra/pull/16340) — fixes `Use as /goal` ordering so the suspended plan tool resolves before the goal reminder starts Build-mode execution; [#16521](https://github.com/mastra-ai/mastra/pull/16521) — fixes regular approval by sending one structured system-reminder signal after resolver/abort cleanup.
 
 ## User-visible behavior
 
 - What the user can do: ask for a plan in Plan mode, receive an inline rendered plan approval card, then approve, start as a goal, reject, or request changes.
-- Success looks like: the plan appears in the approval UI; approval switches/hands off to Build-mode execution; request-changes keeps the plan visible while collecting feedback; rejection keeps the agent in Plan mode with feedback.
-- Must preserve: `submit_plan` tool call requirement, inline plan rendering in every approval sub-mode, approval/rejection resolver semantics, best-effort plan file persistence, and single handoff signal after approval.
+- Success looks like: the plan appears in the approval UI; approval switches/hands off to Build-mode execution through exactly one structured system-reminder signal; request-changes keeps the plan visible while collecting feedback; rejection keeps the agent in Plan mode with feedback.
+- Must preserve: `submit_plan` tool call requirement, inline plan rendering in every approval sub-mode, approval/rejection resolver semantics, best-effort plan file persistence, resolver-before-signal ordering, and single handoff signal after approval.
 
 ## Entry points / commands
 
@@ -45,7 +45,7 @@
 | Active plan approval UI | `TUIState.activeInlinePlanApproval` / `lastSubmitPlanComponent` + component-local `planTitle`/`planContent` | Input focus, chat renderer, feedback sub-mode |
 | Approval result | Core Harness `respondToPlanApproval()` | Suspended `submit_plan` tool, persisted tool result |
 | Approved plan files | `savePlanToDisk()` + app data / `MASTRA_PLANS_DIR` | User archive/reference outside chat history |
-| Build/goal handoff | TUI prompt handler + goal manager; `respondToPlanApproval()` resolves before either build signal or `/goal` start | Harness signal / `/goal` flow |
+| Build/goal handoff | TUI prompt handler + goal manager; `respondToPlanApproval()` resolves before either build signal or `/goal` start | Harness structured `sendSignal()` system-reminder / `/goal` flow |
 
 ## Key files
 
@@ -69,7 +69,7 @@
 ## Existing tests
 
 - `mastracode/src/agents/__tests__/prompts.test.ts` — Plan mode prompt includes `submit_plan` and goal-ready plan guidance.
-- `mastracode/src/tui/handlers/__tests__/prompts.test.ts` — approval sends one build handoff signal; goal option delegates to `/goal`; streamed component activates in place.
+- `mastracode/src/tui/handlers/__tests__/prompts.test.ts` — regular approval sends one structured build handoff signal without duplicate `addUserMessage`/`fireMessage`; goal option delegates to `/goal`; streamed component activates in place.
 - `mastracode/src/tui/components/__tests__/plan-approval-inline.test.ts` — inline plan card renders, goal option exists, feedback/requested-changes display works, and feedback mode forces a full redraw.
 - `mastracode/src/utils/__tests__/save-plan.test.ts` — approved plan file names/content, resource subdirectories, special-character titles, and timestamp non-overwrite behavior.
 - `packages/core/src/harness/display-state.test.ts` — `pendingPlanApproval` display state is set/cleared by plan approval events.

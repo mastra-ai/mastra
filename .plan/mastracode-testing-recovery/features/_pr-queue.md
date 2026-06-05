@@ -308,11 +308,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 286 | 2026-05-12 | #16338 | `05dab92b33` | review | done | feat(playground): support signal follow-up chat (#16338) | 2 |
 | 287 | 2026-05-12 | #16458 | `5337df1c3f` | likely skip | skipped | chore: version packages (alpha) (#16458) | 2 |
 | 288 | 2026-05-12 | #16501 | `9cd4c8e07b` | likely skip | skipped | chore: version packages (alpha) (#16501) | 2 |
-| 289 | 2026-05-12 | #16511 | `ca4f94e378` | likely skip | current | chore: version packages (alpha) (#16511) | 2 |
-| 290 | 2026-05-12 | #16513 | `49996678b6` | review | | feat: speed up LibSQL and Mastra Code startup (#16513) | 8 |
-| 291 | 2026-05-12 | #16516 | `136e85f3ae` | likely skip | | chore: version packages (alpha) (#16516) | 2 |
-| 292 | 2026-05-13 | #16521 | `3e63fca7aa` | review | | fix(mastracode): regular plan approval triggers via structured sendSignal and no longer hangs (#16521) | 2 |
-| 293 | 2026-05-13 | #16548 | `7cb2a2b7f0` | review | | feat(mastracode): add Codex device login and MCP OAuth config (#16548) | 16 |
+| 289 | 2026-05-12 | #16511 | `ca4f94e378` | likely skip | skipped | chore: version packages (alpha) (#16511) | 2 |
+| 290 | 2026-05-12 | #16513 | `49996678b6` | review | done | feat: speed up LibSQL and Mastra Code startup (#16513) | 8 |
+| 291 | 2026-05-12 | #16516 | `136e85f3ae` | likely skip | skipped | chore: version packages (alpha) (#16516) | 2 |
+| 292 | 2026-05-13 | #16521 | `3e63fca7aa` | review | done | fix(mastracode): regular plan approval triggers via structured sendSignal and no longer hangs (#16521) | 2 |
+| 293 | 2026-05-13 | #16548 | `7cb2a2b7f0` | review | current | feat(mastracode): add Codex device login and MCP OAuth config (#16548) | 16 |
 | 294 | 2026-05-14 | #16559 | `046cb4a2e9` | likely skip | | chore: version packages (alpha) (#16559) | 2 |
 | 295 | 2026-05-14 | #16611 | `b23d30dd83` | likely skip | | chore: version packages (alpha) (#16611) | 2 |
 | 296 | 2026-05-15 | #16624 | `fd5fbb4ce7` | likely skip | | chore: version packages (alpha) (#16624) | 2 |

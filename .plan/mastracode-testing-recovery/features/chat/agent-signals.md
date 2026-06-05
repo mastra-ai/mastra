@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#16231](https://github.com/mastra-ai/mastra/pull/16231) — sends Mastra Code follow-ups through Agent signals instead of the old post-run queue path when a thread is active.
-- Later changes: [#16338](https://github.com/mastra-ai/mastra/pull/16338) — enables signal follow-up chat in Playground and Agent Builder UIs with pending-message previews and stream-time send controls.
+- Later changes: [#16338](https://github.com/mastra-ai/mastra/pull/16338) — enables signal follow-up chat in Playground and Agent Builder UIs with pending-message previews and stream-time send controls; [#16521](https://github.com/mastra-ai/mastra/pull/16521) — uses the same structured system-reminder signal path for regular plan approval handoff.
 
 ## User-visible behavior
 
