@@ -1217,6 +1217,106 @@ describe('GithubSignals', () => {
     });
   });
 
+  it('emits separate notifications when a new comment and CI state change in the same poll', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-comment-and-ci',
+      resourceId: 'resource-comment-and-ci',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 17590,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+                lastObservedGithubUpdatedAt: '2026-06-05T22:05:20.000Z',
+                lastObservedContentHash: 'previous-content-hash',
+                lastObservedThreadContentHash: 'previous-thread-hash',
+                lastObservedHeadSha: 'same-head-sha',
+                lastObservedState: 'open',
+                lastObservedMergeableState: 'blocked',
+                lastObservedCiState: 'success',
+                lastObservedReviewStateHash: 'reviews-0',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(
+        async () =>
+          ({
+            title: 'fix(github-signals): gate notifications behind author permission checks',
+            state: 'open',
+            githubUpdatedAt: '2026-06-05T22:13:47.000Z',
+            contentHash: 'new-content-hash',
+            threadContentHash: 'new-thread-hash',
+            headSha: 'same-head-sha',
+            ciState: 'pending',
+            mergeableState: 'blocked',
+            unresolvedReviewThreads: 0,
+            reviewStateHash: 'reviews-0',
+            checks: [
+              {
+                name: 'Analyze (javascript-typescript)',
+                status: 'in_progress',
+                updatedAt: '2026-06-05T22:13:47.000Z',
+              },
+            ],
+            latestCommentAuthor: 'devin-ai-integration[bot]',
+            latestCommentAuthorType: 'Bot',
+            latestCommentIsBot: true,
+            latestCommentBody: 'Nice follow-up! Thanks for the summary — those are solid improvements.',
+            latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/17590#issuecomment-4635974623',
+            latestCommentUpdatedAt: '2026-06-05T22:11:28.000Z',
+          }) satisfies GithubPullRequestSnapshot,
+      ),
+    };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({ threadStore, syncClient });
+    processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
+
+    await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(2);
+    expect(sendNotificationSignal).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        kind: 'pull-request-ci-pending',
+        summary: 'mastra-ai/mastra#17590 has CI still running: Analyze (javascript-typescript)',
+      }),
+      expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
+    );
+    expect(sendNotificationSignal).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        kind: 'pull-request-activity',
+        summary:
+          'devin-ai-integration[bot] commented on mastra-ai/mastra#17590: Nice follow-up! Thanks for the summary — those are solid improvements.',
+        dedupeKey:
+          'github:mastra-ai/mastra#17590:comment:https://github.com/mastra-ai/mastra/pull/17590#issuecomment-4635974623:2026-06-05T22:11:28.000Z',
+      }),
+      expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
+    );
+    const savedThread = vi.mocked(threadStore.saveThread).mock.calls[0]![0].thread;
+    const [subscription] = (savedThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions;
+    expect(subscription).toMatchObject({
+      lastObservedGithubUpdatedAt: '2026-06-05T22:13:47.000Z',
+      lastObservedCiState: 'pending',
+      lastNotificationKind: 'pull-request-activity',
+      lastNotificationSummary:
+        'devin-ai-integration[bot] commented on mastra-ai/mastra#17590: Nice follow-up! Thanks for the summary — those are solid improvements.',
+    });
+  });
+
   it('updates the GitHub cursor without notifying when only pending check details change', async () => {
     const thread: StorageThreadType = {
       id: 'thread-check-churn',

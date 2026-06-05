@@ -445,6 +445,17 @@ function getCommentNotificationSummary(pr: string, snapshot: GithubPullRequestSn
   return `${snapshot.latestCommentAuthor} commented on ${pr}: ${getCommentExcerpt(snapshot.latestCommentBody)}`;
 }
 
+function classifyGithubCommentActivityNotification(input: {
+  subscription: GithubPRSubscription;
+  snapshot: GithubPullRequestSnapshot;
+}): { kind: string; priority: 'medium' | 'high'; summary: string } | undefined {
+  if (isBotOnlyActivity(input.snapshot)) return undefined;
+  const pr = `${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}`;
+  const summary = getCommentNotificationSummary(pr, input.snapshot);
+  if (!summary) return undefined;
+  return { kind: 'pull-request-activity', priority: 'medium', summary };
+}
+
 function getCheckUpdatedTime(check: { updatedAt?: string }): number {
   const value = check.updatedAt ? Date.parse(check.updatedAt) : Number.NaN;
   return Number.isFinite(value) ? value : 0;
@@ -1386,19 +1397,21 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
                 subscription.lastObservedReviewStateHash !== snapshot.reviewStateHash)));
         let shouldKeepSubscription = true;
         if (changed && snapshot) {
-          const notification = await this.#sendActivityNotification({
+          const notifications = await this.#sendActivityNotifications({
             polling: input,
             subscription,
             snapshot,
             previousGithubUpdatedAt,
             previousContentHash,
+            latestCommentChanged,
           });
-          if (notification) {
+          const lastNotification = notifications.at(-1);
+          if (lastNotification) {
             nextSubscription.lastNotificationAt = now;
-            nextSubscription.lastNotificationKind = notification.kind;
-            nextSubscription.lastNotificationPriority = notification.priority;
-            nextSubscription.lastNotificationSummary = notification.summary;
-            shouldKeepSubscription = notification.kind !== 'pull-request-merged';
+            nextSubscription.lastNotificationKind = lastNotification.kind;
+            nextSubscription.lastNotificationPriority = lastNotification.priority;
+            nextSubscription.lastNotificationSummary = lastNotification.summary;
+            shouldKeepSubscription = notifications.every(notification => notification.kind !== 'pull-request-merged');
           }
         }
 
@@ -1574,39 +1587,55 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     }
   }
 
-  async #sendActivityNotification(input: {
+  async #sendActivityNotifications(input: {
     polling: GithubPollingThread;
     subscription: GithubPRSubscription;
     snapshot: GithubPullRequestSnapshot;
     previousGithubUpdatedAt?: string;
     previousContentHash?: string;
-  }): Promise<{ kind: string; priority: 'medium' | 'high'; summary: string } | undefined> {
+    latestCommentChanged?: boolean;
+  }): Promise<Array<{ kind: string; priority: 'medium' | 'high'; summary: string }>> {
     const agent = this.#getNotificationAgent(input.polling);
-    if (!agent?.sendNotificationSignal) return undefined;
-    const notification = classifyGithubActivityNotification({
-      subscription: input.subscription,
-      snapshot: input.snapshot,
-    });
-    if (!notification) return undefined;
-    if (AUTHOR_GATED_NOTIFICATION_KINDS.has(notification.kind)) {
-      const authorized = await this.#isAuthorizedAuthor(
-        input.subscription.owner,
-        input.subscription.repo,
-        input.snapshot.latestCommentAuthor,
+    if (!agent?.sendNotificationSignal) return [];
+    const notifications = [
+      classifyGithubActivityNotification({
+        subscription: input.subscription,
+        snapshot: input.snapshot,
+      }),
+    ];
+    if (input.latestCommentChanged && notifications[0]?.kind !== 'pull-request-activity') {
+      notifications.push(
+        classifyGithubCommentActivityNotification({
+          subscription: input.subscription,
+          snapshot: input.snapshot,
+        }),
       );
-      if (!authorized) return undefined;
     }
-    await this.#sendGithubNotification({
-      agent,
-      subscription: input.subscription,
-      snapshot: input.snapshot,
-      notification,
-      target: { resourceId: input.polling.resourceId, threadId: input.polling.threadId },
-      dedupeSuffix: input.snapshot.contentHash ?? input.snapshot.githubUpdatedAt ?? String(Date.now()),
-      previousGithubUpdatedAt: input.previousGithubUpdatedAt,
-      previousContentHash: input.previousContentHash,
-    });
-    return notification;
+
+    const sent: Array<{ kind: string; priority: 'medium' | 'high'; summary: string }> = [];
+    for (const notification of notifications) {
+      if (!notification) continue;
+      if (AUTHOR_GATED_NOTIFICATION_KINDS.has(notification.kind)) {
+        const authorized = await this.#isAuthorizedAuthor(
+          input.subscription.owner,
+          input.subscription.repo,
+          input.snapshot.latestCommentAuthor,
+        );
+        if (!authorized) continue;
+      }
+      await this.#sendGithubNotification({
+        agent,
+        subscription: input.subscription,
+        snapshot: input.snapshot,
+        notification,
+        target: { resourceId: input.polling.resourceId, threadId: input.polling.threadId },
+        dedupeSuffix: input.snapshot.contentHash ?? input.snapshot.githubUpdatedAt ?? String(Date.now()),
+        previousGithubUpdatedAt: input.previousGithubUpdatedAt,
+        previousContentHash: input.previousContentHash,
+      });
+      sent.push(notification);
+    }
+    return sent;
   }
 
   async #subscribe(
