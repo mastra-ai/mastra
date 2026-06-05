@@ -162,14 +162,19 @@ Returns `{ status: 200, body: { matched: N } }` where `N` is the number of subsc
     description: 'The incoming webhook request.',
     properties: [
       {
-        name: 'body',
-        type: 'unknown',
-        description: 'The parsed webhook payload.',
-      },
-      {
-        name: 'headers',
-        type: 'Record<string, string>',
-        description: 'HTTP headers from the webhook request.',
+        type: 'object',
+        parameters: [
+          {
+            name: 'body',
+            type: 'unknown',
+            description: 'The parsed webhook payload.',
+          },
+          {
+            name: 'headers',
+            type: 'Record<string, string>',
+            description: 'HTTP headers from the webhook request.',
+          },
+        ],
       },
     ],
   },

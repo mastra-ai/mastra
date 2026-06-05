@@ -395,31 +395,36 @@ await this.notify(
     description: 'The notification payload.',
     properties: [
       {
-        name: 'source',
-        type: 'string',
-        description: 'Identifier for the notification source.',
-      },
-      {
-        name: 'kind',
-        type: 'string',
-        description: 'Type of event (for example, `"pr-updated"`, `"new-message"`).',
-      },
-      {
-        name: 'summary',
-        type: 'string',
-        description: 'Human-readable summary of the event.',
-      },
-      {
-        name: 'priority',
-        type: '"high" | "medium" | "low"',
-        description: 'Notification priority.',
-        isOptional: true,
-      },
-      {
-        name: 'payload',
-        type: 'unknown',
-        description: 'Arbitrary data attached to the notification.',
-        isOptional: true,
+        type: 'object',
+        parameters: [
+          {
+            name: 'source',
+            type: 'string',
+            description: 'Identifier for the notification source.',
+          },
+          {
+            name: 'kind',
+            type: 'string',
+            description: 'Type of event (for example, `"pr-updated"`, `"new-message"`).',
+          },
+          {
+            name: 'summary',
+            type: 'string',
+            description: 'Human-readable summary of the event.',
+          },
+          {
+            name: 'priority',
+            type: '"high" | "medium" | "low"',
+            description: 'Notification priority.',
+            isOptional: true,
+          },
+          {
+            name: 'payload',
+            type: 'unknown',
+            description: 'Arbitrary data attached to the notification.',
+            isOptional: true,
+          },
+        ],
       },
     ],
   },
