@@ -4,11 +4,11 @@
 
 - PR: [#13613](https://github.com/mastra-ai/mastra/pull/13613) — added HTTP MCP server config support, headers, OAuth metadata, and transport-aware manager status.
 - Related origin: [#13311](https://github.com/mastra-ai/mastra/pull/13311) — made `/mcp` status/reload use the live MCP manager; [#13347](https://github.com/mastra-ai/mastra/pull/13347) — refactored manager into `createMcpManager()`.
-- Later changes: [#13750](https://github.com/mastra-ai/mastra/pull/13750) — adds `createMastraCode({ mcpServers })` for programmatic MCP server configs that override file-based servers and persist across reloads; [#14377](https://github.com/mastra-ai/mastra/pull/14377) — adds background initialization summaries, per-server reconnect/log state, and an interactive `/mcp` selector for configured/skipped servers; [#14960](https://github.com/mastra-ai/mastra/pull/14960) — sets the MCP client timeout to seven days so long-running MCP tools are not killed by a short default result timeout; [#16548](https://github.com/mastra-ai/mastra/pull/16548) — wires protected HTTP MCP OAuth config into `MCPOAuthClientProvider` with per-project/server token storage.
+- Later changes: [#13750](https://github.com/mastra-ai/mastra/pull/13750) — adds `createMastraCode({ mcpServers })` for programmatic MCP server configs that override file-based servers and persist across reloads; [#14377](https://github.com/mastra-ai/mastra/pull/14377) — adds background initialization summaries, per-server reconnect/log state, and an interactive `/mcp` selector for configured/skipped servers; [#14960](https://github.com/mastra-ai/mastra/pull/14960) — sets the MCP client timeout to seven days so long-running MCP tools are not killed by a short default result timeout; [#16548](https://github.com/mastra-ai/mastra/pull/16548) — wires protected HTTP MCP OAuth config into `MCPOAuthClientProvider` with per-project/server token storage; [#13751](https://github.com/mastra-ai/mastra/pull/13751) — lets `createMastraCode({ configDir })` move Mastra Code MCP config lookup away from `.mastracode`.
 
 ## User-visible behavior
 
-- What the user can do: configure MCP servers in `.mastracode/mcp.json`, global `~/.mastracode/mcp.json`, Claude-compatible `.claude/settings.local.json`, or programmatically via `createMastraCode({ mcpServers })`, using either stdio `command` entries or HTTP `url` entries, including protected HTTP servers with OAuth metadata.
+- What the user can do: configure MCP servers in `.mastracode/mcp.json` (or the configured Mastra Code config directory), global `~/.mastracode/mcp.json`, Claude-compatible `.claude/settings.local.json`, or programmatically via `createMastraCode({ mcpServers })`, using either stdio `command` entries or HTTP `url` entries, including protected HTTP servers with OAuth metadata.
 - Success looks like: valid stdio and HTTP MCP servers initialize in the background, protected HTTP servers get an MCP OAuth provider with durable per-server token storage, expose namespaced tools, show transport (`stdio`/`http`) and skipped reasons in `/mcp status`/selector, can be reloaded or individually reconnected, and allow long-running MCP tool calls to complete.
 - Must preserve: programmatic servers override file-based servers by name, project config overrides global config by server name, global overrides Claude config, skipped lower-priority entries disappear when a valid higher-priority server exists, programmatic servers survive reload, MCP client timeout stays intentionally long rather than reverting to a short default, and HTTP OAuth redirect URLs remain HTTPS except loopback HTTP.
 
@@ -42,8 +42,8 @@
 
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
-| Project MCP config | `<project>/.mastracode/mcp.json` | config loader, `/mcp` setup display |
-| Global MCP config | `~/.mastracode/mcp.json` | config loader, `/mcp` setup display |
+| Project MCP config | `<project>/<configDir>/mcp.json` (default `.mastracode`) | config loader, `/mcp` setup display |
+| Global MCP config | `~/<configDir>/mcp.json` (default `.mastracode`) | config loader, `/mcp` setup display |
 | Claude-compatible config | `<project>/.claude/settings.local.json` `mcpServers` | config loader lowest-priority source |
 | Merged server map | `loadMcpConfig()` / `mergeConfigs()` plus `extraServers` from `createMastraCode({ mcpServers })` | `createMcpManager()` |
 | Programmatic MCP servers | `MastraCodeConfig.mcpServers` | startup MCP manager, reload merge, `/mcp` status/tools |
@@ -53,7 +53,7 @@
 
 ## Key files
 
-- `mastracode/src/mcp/config.ts` — config path loading, stdio/http classification, OAuth validation (HTTPS or loopback redirect URLs, scopes, optional client credentials), merge precedence, skipped-entry tracking.
+- `mastracode/src/mcp/config.ts` — config path loading with configDir support, stdio/http classification, OAuth validation (HTTPS or loopback redirect URLs, scopes, optional client credentials), merge precedence, skipped-entry tracking.
 - `mastracode/src/mcp/types.ts` — stdio/http/OAuth/skipped/status types and `transport` field.
 - `mastracode/src/mcp/manager.ts` — server definition building, `MCPClient` construction with seven-day timeout, programmatic `extraServers` merge/override/reload behavior, HTTP URL/request headers/OAuth provider, per-server `FileOAuthStorage`, status/tool/log lifecycle, `initInBackground()`, and `reconnectServer()`.
 - `mastracode/src/index.ts` — `MastraCodeConfig.mcpServers` and `createMcpManager(project.rootPath, configDir, config?.mcpServers)` wiring.

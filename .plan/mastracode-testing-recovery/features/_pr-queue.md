@@ -348,10 +348,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 326 | 2026-05-22 | #16987 | `9a33d81f01` | review | done | fix(mastracode): combine idle timeout and activation into single line (#16987) | 4 |
 | 327 | 2026-05-25 | #17008 | `6096445973` | review | done | perf(mastracode): fix mode switch delay, modal lag, Ctrl+F duplicate, and block mode switch while active (#17008) | 4 |
 | 328 | 2026-05-25 | #17005 | `0e95e56637` | review | done | fix(mastracode): wrap long ask_user option labels to prevent TUI crash (#17005) | 2 |
-| 329 | 2026-05-25 | #13751 | `7462719a30` | review | | feat(mastracode): allow custom config directory via configDir option (#13751) | 19 |
-| 330 | 2026-05-25 | #17032 | `b970a83042` | review | | fix: preserve unresolved slash command references and update pr-triage command (#17032) | 2 |
-| 331 | 2026-05-25 | #16984 | `7f9da22efd` | review | | fix(core): suppress gateway fetch errors and stop retrying on failure (#16984) | 2 |
-| 332 | 2026-05-26 | #17070 | `c35b9625c7` | review | | Fix legacy subagent results and MastraCode type checks (#17070) | 8 |
+| 329 | 2026-05-25 | #13751 | `7462719a30` | review | done | feat(mastracode): allow custom config directory via configDir option (#13751) | 19 |
+| 330 | 2026-05-25 | #17032 | `b970a83042` | review | done | fix: preserve unresolved slash command references and update pr-triage command (#17032) | 2 |
+| 331 | 2026-05-25 | #16984 | `7f9da22efd` | review | done | fix(core): suppress gateway fetch errors and stop retrying on failure (#16984) | 2 |
+| 332 | 2026-05-26 | #17070 | `c35b9625c7` | review | done | Fix legacy subagent results and MastraCode type checks (#17070) | 8 |
 | 333 | 2026-05-27 | #17054 | `c49655fb6d` | review | | feat(mastracode): wrap long ask_user picker option labels with ↳ continuation (#17054) | 3 |
 | 334 | 2026-05-26 | #16872 | `ed376fe8d7` | likely skip | | chore: version packages (alpha) (#16872) | 2 |
 | 335 | 2026-05-27 | #17071 | `029668d5d6` | review | | fix(mastracode): decode kitty CSI-u keys for tool approval shortcuts (#17071) | 7 |

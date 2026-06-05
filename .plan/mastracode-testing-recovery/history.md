@@ -2511,3 +2511,32 @@ Verification:
 - `pnpm --filter ./mastracode exec vitest run src/agents/__tests__/prompts.test.ts src/tui/components/__tests__/om-marker.test.ts src/tui/components/__tests__/ask-question-inline-long-labels.test.ts --bail=1 --reporter=dot` — 3 files / 14 tests passed.
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/setup-keyboard-shortcuts.test.ts -t "queues follow-ups|blocks Ctrl\\+F|toggles system reminder expansion" --bail=1 --reporter=dot` — 1 file / 3 tests passed / 7 skipped.
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/mastra-tui-queueing.test.ts -t "running|slash commands|goal judge|mode switch" --bail=1 --reporter=dot` — 1 file / 8 tests passed / 22 skipped.
+
+### PR #13751 / #17032 / #16984 / #17070 feature-map checkpoint
+
+Verified rows 329-332:
+
+- #13751 adds `createMastraCode({ configDir })`. Current source validates safe single-directory names, stores the value in `MastraCodeState.configDir`, and passes it through storage, MCP, hooks, slash commands, static instructions, resource IDs, workspace skill paths, and dynamic prompt/workspace state.
+- #17032 preserves unresolved slash-command `@` references instead of replacing them with file-read errors, which keeps command text such as `@me` or GitHub search qualifiers intact; the bundled `pr-triage` command was updated around explicit user-selected PR queues.
+- #16984 suppresses gateway refresh/fetch errors and stops noisy retry behavior. Current source silently falls back to bundled registry/capability data, coalesces syncs, validates cache files before atomic copies, and deletes corrupt JSON cache files quietly.
+- #17070 fixes legacy subagent results and Mastra Code type checks. Current source keeps legacy generate results to text plus optional usage, preserves raw subagent tool result access where expected, and tightens `MastraCodeConfig`/HarnessCompat typing around `MastraCodeState`.
+
+Documentation actions:
+
+- Created `features/settings/custom-config-directory.md` for #13751.
+- Updated `features/settings/onboarding-and-global-settings.md`, `features/integrations/mcp-server-configuration.md`, `features/integrations/lifecycle-hooks.md`, `features/integrations/skills-command.md`, `features/chat/prompt-context.md`, and `features/chat/queued-followups.md` for configDir path ownership.
+- Updated `features/chat/queued-followups.md` for #17032 unresolved `@` preservation and pr-triage behavior.
+- Updated `features/models/model-auth-and-modes.md` for #16984 gateway refresh fallback behavior.
+- Updated `features/integrations/harness-api.md` and `features/subagents/delegation.md` for #17070 typed config and legacy subagent result behavior.
+- Updated `features/README.md`, `features/_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #13751 done, #17032 done, #16984 done, #17070 done, #17054 current.
+
+Focused evidence read: PR metadata for #13751/#17032/#16984/#17070; current `mastracode/src/constants.ts`, `index.ts`, `schema.ts`, `agents/workspace.ts`, `agents/prompts/agent-instructions.ts`, `utils/slash-command-loader.ts`, `mcp/config.ts`, `hooks/config.ts`, `utils/slash-command-processor.ts`, `.mastracode/commands/pr-triage.md`, `mastracode/src/utils/gateway-sync.ts`, `packages/core/src/llm/model/provider-registry.ts`, `packages/core/src/agent/agent.ts`, and focused tests.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/__tests__/validate-config-dir-name.test.ts src/agents/__tests__/build-skill-paths.test.ts --bail=1 --reporter=dot` — 2 files / 22 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/utils/__tests__/slash-command-processor.test.ts --bail=1 --reporter=dot` — 1 file / 2 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/utils/__tests__/gateway-sync.test.ts --bail=1 --reporter=dot` — 1 file / 7 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/HarnessCompat.test.ts -t "subagent|Subagent|subagent model" --bail=1 --reporter=dot` — 1 file / 1 test passed / 4 skipped.
+- `pnpm --filter ./packages/core exec vitest run --project unit:packages/core src/agent/__tests__/supervisor-integration.test.ts -t "hide sub-agent tool results" --bail=1 --reporter=dot` — 1 file / 1 test passed / 41 skipped / no type errors.

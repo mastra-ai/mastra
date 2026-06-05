@@ -4,7 +4,7 @@
 
 - PR: [#13442](https://github.com/mastra-ai/mastra/pull/13442) — triggers `Stop` and `UserPromptSubmit` hooks from the TUI run loop.
 - Related origin: earlier hooks infrastructure added `PreToolUse`, `PostToolUse`, session, and notification hook types.
-- Later changes: [#14586](https://github.com/mastra-ai/mastra/pull/14586) — uses the same `agent_start`/`agent_end` lifecycle to start/stop macOS `caffeinate` during active runs.
+- Later changes: [#14586](https://github.com/mastra-ai/mastra/pull/14586) — uses the same `agent_start`/`agent_end` lifecycle to start/stop macOS `caffeinate` during active runs; [#13751](https://github.com/mastra-ai/mastra/pull/13751) — makes project/global hook config paths honor `createMastraCode({ configDir })`.
 
 ## User-visible behavior
 
@@ -14,7 +14,7 @@
 
 ## Entry points / commands
 
-- Commands / shortcuts / flags: `/hooks`, `/hooks reload`; hook config files at project and global `.mastracode/hooks.json` paths; `MASTRACODE_DISABLE_CAFFEINATE=1`.
+- Commands / shortcuts / flags: `/hooks`, `/hooks reload`; hook config files at project/global `<configDir>/hooks.json` paths (default `.mastracode`); `MASTRACODE_DISABLE_CAFFEINATE=1`.
 - Automatic triggers: tool execution (`PreToolUse` / `PostToolUse`), TUI prompt submit (`UserPromptSubmit`), `agent_start`/`agent_end` (`caffeinate`), `agent_end` (`Stop`), TUI `run()` / `stop()` (`SessionStart` / `SessionEnd`).
 
 ## TUI states
@@ -41,14 +41,14 @@
 
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
-| Hook config | Global/project `hooks.json`, loaded by `HookManager` | Tool wrapper, TUI lifecycle, `/hooks` |
+| Hook config | Global/project `<configDir>/hooks.json`, loaded by `HookManager` | Tool wrapper, TUI lifecycle, `/hooks` |
 | Session id | Harness thread events update `HookManager` | Hook stdin payloads |
 | Blocking decision | Hook process stdout / exit code 2 | Tool wrapper, TUI prompt submit, Stop warning path |
 | Active-run keep-awake process | `MastraTUI.caffeinateProcess`, started on `agent_start`, killed in `agent_end` finally and `stop()` | macOS TUI runtime |
 
 ## Key files
 
-- `mastracode/src/hooks/config.ts` — loads and merges global then project hook configs.
+- `mastracode/src/hooks/config.ts` — loads and merges global then project hook configs, using custom configDir paths when supplied.
 - `mastracode/src/hooks/executor.ts` — runs shell commands, passes JSON stdin, interprets blocking decisions and warnings.
 - `mastracode/src/hooks/manager.ts` — builds event-specific hook stdin payloads.
 - `mastracode/src/agents/tools.ts` — wraps dynamic tools with `PreToolUse` / `PostToolUse`.
