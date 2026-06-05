@@ -1920,3 +1920,30 @@ Verification:
 
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/command-dispatch.test.ts src/tui/__tests__/event-dispatch.test.ts -t "custom slash|thread_changed|thread_created|taskToolInsertIndex|taskProgress|non-ephemeral" --bail=1 --reporter=dot` — targeted thread lifecycle tests passed (1 file / 5 tests passed / 15 skipped).
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/command-dispatch.test.ts -t "custom slash command|//deploy|//new|built-in command" --bail=1 --reporter=dot` — targeted custom slash-command tests passed (1 file / 7 tests passed / 13 skipped).
+
+### PR #15730 / #15703 / #15642 / #15710 feature-map checkpoint
+
+Verified rows 231-234:
+
+- #15730 adds `ProviderHistoryCompat`, an extensible core prompt/error processor. Current source includes Anthropic invalid tool-call ID sanitization with one retry, Cerebras outbound reasoning stripping, Anthropic foreign-reasoning stripping, provider-prefix detection for resolved/gateway/fallback model shapes, and Mastra Code agent wiring in both input and error processors.
+- #15703 lets `/om` observer/reflector pickers accept arbitrary custom model strings. Current source creates synthetic `Use: <id>` model selector entries, persists observer/reflector overrides under the custom OM pack path, and snapshots the other OM role's current model when leaving a built-in pack.
+- #15642 adds Mastra Code observability/evals: local DuckDB/cloud exporter setup, `/observability` status/connect/disconnect/local toggles, `/feedback` trace feedback, `buildEvalContext()`, always-on outcome scoring, and sampled efficiency scoring.
+- #15710 is a Changesets alpha package-version batch; skipped for feature mapping.
+
+Documentation actions:
+
+- Added `features/models/provider-history-compat.md` for ProviderHistoryCompat rule ownership, prompt/error lifecycle, tests, and provider-history risks.
+- Added `features/integrations/observability-and-evals.md` for `/observability`, `/feedback`, eval context/scorers, state ownership, tests, and command/exporter risks.
+- Updated `features/models/model-auth-and-modes.md` and `features/memory/observational-memory.md` for custom `/om` model string entries and observer/reflector role override persistence.
+- Updated `features/tui/help-and-shortcuts.md` for `/observability` listing and `/feedback` help-surface drift.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #15730 done, #15703 done, #15642 done, #15710 skipped, #15759 current.
+
+Focused evidence read: PR metadata for #15730/#15703/#15642/#15710; current `packages/core/src/processors/provider-history-compat.ts`, `provider-history-compat.test.ts`, `mastracode/src/index.ts`, `mastracode/src/__tests__/index.test.ts`, `mastracode/src/tui/{commands/om.ts,components/model-selector.ts,components/om-settings.ts}`, OM/model selector tests, `mastracode/src/evals/{context-builder.ts,scorers/*.ts}`, scorer tests, and TUI `/observability`/`/feedback` command dispatch.
+
+Verification:
+
+- `pnpm --filter ./packages/core exec vitest run src/processors/provider-history-compat.test.ts --bail=1 --reporter=dot` — 1 file / 33 tests passed / no type errors.
+- `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/om-settings.test.ts src/tui/commands/__tests__/om.test.ts --bail=1 --reporter=dot` — 2 files / 8 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/evals/scorers/__tests__/outcome.test.ts src/evals/scorers/__tests__/efficiency.test.ts src/evals/scorers/__tests__/classify-command.test.ts --bail=1 --reporter=dot` — 3 files / 58 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/__tests__/index.test.ts -t "ProviderHistoryCompat" --bail=1 --reporter=dot` — 1 file / 1 test passed / 15 skipped.

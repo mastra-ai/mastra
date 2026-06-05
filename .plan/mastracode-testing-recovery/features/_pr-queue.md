@@ -250,11 +250,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 228 | 2026-04-23 | #15656 | `f51df5d95a` | likely skip | skipped | chore: version packages (alpha) (#15656) | 2 |
 | 229 | 2026-04-24 | #15699 | `d86bfacf70` | likely skip | skipped | chore: version packages (alpha) (#15699) | 2 |
 | 230 | 2026-04-24 | #15749 | `5a0fca7986` | review | done | fix(mastracode): clear per-thread state on thread switch/create (#15749) | 7 |
-| 231 | 2026-04-24 | #15730 | `7a7b3138fb` | review | current | feat(core,mastracode): add ProviderHistoryCompat error processor with extensible rule architecture (#15730) | 1 |
-| 232 | 2026-04-24 | #15703 | `299f6fd1fb` | review | | mastracode: allow custom model strings in /om (#15703) | 14 |
-| 233 | 2026-04-27 | #15642 | `cf25a03132` | review | | feat(mastracode): add evals system with live scorers, offline experiments, and Studio feedback (#15642) | 24 |
-| 234 | 2026-04-28 | #15710 | `68a4cec599` | likely skip | | chore: version packages (alpha) (#15710) | 2 |
-| 235 | 2026-04-28 | #15759 | `c8919894c0` | review | | feat(mastracode): use GPT-5.5 in OpenAI pack (#15759) | 7 |
+| 231 | 2026-04-24 | #15730 | `7a7b3138fb` | review | done | feat(core,mastracode): add ProviderHistoryCompat error processor with extensible rule architecture (#15730) | 1 |
+| 232 | 2026-04-24 | #15703 | `299f6fd1fb` | review | done | mastracode: allow custom model strings in /om (#15703) | 14 |
+| 233 | 2026-04-27 | #15642 | `cf25a03132` | review | done | feat(mastracode): add evals system with live scorers, offline experiments, and Studio feedback (#15642) | 24 |
+| 234 | 2026-04-28 | #15710 | `68a4cec599` | likely skip | skipped | chore: version packages (alpha) (#15710) | 2 |
+| 235 | 2026-04-28 | #15759 | `c8919894c0` | review | current | feat(mastracode): use GPT-5.5 in OpenAI pack (#15759) | 7 |
 | 236 | 2026-04-28 | #15760 | `13b4d7c16d` | review | | Add stream error retry processor (#15760) | 4 |
 | 237 | 2026-04-28 | #15695 | `5a4b1ee802` | review | | feat(core): forked subagents inherit parent thread + prompt cache prefix (#15695) | 8 |
 | 238 | 2026-04-28 | #15857 | `84a4c8515b` | likely skip | | chore: version packages (alpha) (#15857) | 2 |
