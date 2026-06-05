@@ -36,7 +36,7 @@ export const inputSchema = z.object({
 
 // Accumulating config-in-progress threaded from step to step.
 export const configSchema = z.object({
-  userOutcome: userOutcomeSchema.optional(),
+  userOutcome: userOutcomeSchema,
   name: z.string().optional(),
   description: z.string().optional(),
   instructions: z.string().optional(),
