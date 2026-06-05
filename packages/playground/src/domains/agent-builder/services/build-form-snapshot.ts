@@ -30,11 +30,10 @@ export interface BuildFormSnapshotOptions {
 }
 
 /**
- * Hard cap on the generated `instructions` field. Surfaced to the builder LLM
- * via the empty-instructions directive AND enforced by `useSetAgentInstructionsTool`,
- * which **rejects** over-limit `set-agent-instructions` calls without persisting
- * anything — so a single tool call always stays under the stream output cap
- * (`maxTokens` in `stream-chat-provider.tsx`).
+ * Hard cap on the generated `instructions` field. Enforced by
+ * `useSetAgentInstructionsTool`, which rejects over-limit
+ * `set-agent-instructions` calls without persisting anything. The directive
+ * focuses on a concise target rather than exposing this hard limit to the model.
  *
  * The same cap is reused when echoing already-persisted instructions back in
  * the snapshot via the `truncate` helper below: this only trims the display
