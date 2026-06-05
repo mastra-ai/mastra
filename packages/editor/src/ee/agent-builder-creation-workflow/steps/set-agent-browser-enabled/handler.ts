@@ -13,11 +13,7 @@ const browserSchema = z.object({
  * Infra-agnostic: receives a ready-to-use `Agent` (dependency-injected by the
  * step) and explicit domain args, never a workflow `ctx`.
  */
-export async function resolveBrowserEnabled(
-  agent: Agent,
-  description: string,
-  browserEnabled?: boolean,
-): Promise<boolean | undefined> {
+export async function resolveBrowserEnabled(agent: Agent, description: string, browserEnabled?: boolean) {
   if (typeof browserEnabled === 'boolean') {
     return browserEnabled;
   }

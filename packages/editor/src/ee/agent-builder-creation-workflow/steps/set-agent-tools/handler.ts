@@ -1,7 +1,7 @@
 import type { Agent } from '@mastra/core/agent';
 import { z } from 'zod-v4';
 
-import type { AvailableAgentTool, IdNameEntry, RoutedTools } from '../../types';
+import type { AvailableAgentTool, IdNameEntry } from '../../types';
 
 const selectionSchema = z.object({
   ids: z.array(z.string()).describe('Ids of the available tools/agents/workflows the agent should be granted'),
@@ -19,11 +19,7 @@ const selectionSchema = z.object({
  * Infra-agnostic: receives a ready-to-use `Agent` (dependency-injected by the
  * step) and explicit domain args, never a workflow `ctx`.
  */
-export async function routeTools(
-  agent: Agent,
-  entries: IdNameEntry[],
-  availableAgentTools: AvailableAgentTool[],
-): Promise<RoutedTools> {
+export async function routeTools(agent: Agent, entries: IdNameEntry[], availableAgentTools: AvailableAgentTool[]) {
   const typeById = new Map(availableAgentTools.map(item => [item.id, item.type] as const));
 
   const candidates = entries.filter(

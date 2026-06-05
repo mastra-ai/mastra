@@ -22,7 +22,7 @@ export async function resolveInstructions(
   description: string,
   explicitInstructions?: string,
   userOutcome?: UserOutcome,
-): Promise<string> {
+) {
   if (typeof explicitInstructions === 'string') {
     return explicitInstructions;
   }

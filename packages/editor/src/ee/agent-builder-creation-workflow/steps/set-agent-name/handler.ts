@@ -15,12 +15,7 @@ const nameSchema = z.object({
  * Infra-agnostic: receives a ready-to-use `Agent` (dependency-injected by the
  * step) and explicit domain args, never a workflow `ctx`.
  */
-export async function resolveName(
-  agent: Agent,
-  description: string,
-  explicitName?: string,
-  userOutcome?: UserOutcome,
-): Promise<string> {
+export async function resolveName(agent: Agent, description: string, explicitName?: string, userOutcome?: UserOutcome) {
   const trimmed = explicitName?.trim();
   if (trimmed) {
     return trimmed;

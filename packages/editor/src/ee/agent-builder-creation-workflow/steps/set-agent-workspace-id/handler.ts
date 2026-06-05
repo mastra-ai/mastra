@@ -20,11 +20,7 @@ const workspaceSelectionSchema = z.object({
  * Infra-agnostic: receives a ready-to-use `Agent` (dependency-injected by the
  * step) and explicit domain args, never a workflow `ctx`.
  */
-export async function resolveWorkspaceId(
-  agent: Agent,
-  workspaceId?: string,
-  availableWorkspaces?: IdNameEntry[],
-): Promise<string | undefined> {
+export async function resolveWorkspaceId(agent: Agent, workspaceId?: string, availableWorkspaces?: IdNameEntry[]) {
   const trimmed = workspaceId?.trim();
   if (trimmed && trimmed.length > 0) {
     return trimmed;

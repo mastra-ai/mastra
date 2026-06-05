@@ -1,6 +1,6 @@
 import type { Agent } from '@mastra/core/agent';
 
-import { userOutcomeSchema, type UserOutcome } from '../../types';
+import { userOutcomeSchema } from '../../types';
 
 /**
  * Resolve the structured user outcome from the raw user prompt. Asks the
@@ -11,7 +11,7 @@ import { userOutcomeSchema, type UserOutcome } from '../../types';
  * Infra-agnostic: receives a ready-to-use `Agent` (dependency-injected by the
  * step) and the raw prompt, never a workflow `ctx`.
  */
-export async function resolveUserOutcome(agent: Agent, prompt: string): Promise<UserOutcome> {
+export async function resolveUserOutcome(agent: Agent, prompt: string) {
   const result = await agent.generate(
     `Interpret this request for an AI agent and produce the structured user outcome:\n\n${prompt}`,
     { structuredOutput: { schema: userOutcomeSchema } },

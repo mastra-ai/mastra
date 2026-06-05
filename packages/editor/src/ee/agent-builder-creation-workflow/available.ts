@@ -3,7 +3,7 @@ import type { StorageBrowserRef } from '@mastra/core/storage';
 
 import { buildProviderModelCatalog } from '../utils/provider-catalog';
 
-import type { AvailableAgentTool, IdNameEntry, AgentModel, FeatureCapabilities } from './types';
+import type { AvailableAgentTool, FeatureCapabilities } from './types';
 
 /**
  * Per-step availability resolution.
@@ -73,7 +73,7 @@ const resolveName = (entity: unknown, fallback: string): string => {
  * the admin picker allowlists. A `null` visibility for a kind means
  * "unrestricted" (all registered entries are offered).
  */
-export async function resolveAvailableAgentTools(mastra: Mastra): Promise<AvailableAgentTool[]> {
+export async function resolveAvailableAgentTools(mastra: Mastra) {
   const ctx = await resolveBuilderContext(mastra);
   if (!ctx) return [];
 
@@ -122,7 +122,7 @@ export async function resolveAvailableAgentTools(mastra: Mastra): Promise<Availa
  * Resolve the registered skills as `{ id, name }`. Uses the editor skill
  * namespace; returns `[]` when no editor / builder is available.
  */
-export async function resolveAvailableSkills(mastra: Mastra): Promise<IdNameEntry[]> {
+export async function resolveAvailableSkills(mastra: Mastra) {
   const ctx = await resolveBuilderContext(mastra);
   if (!ctx) return [];
 
@@ -138,7 +138,7 @@ export async function resolveAvailableSkills(mastra: Mastra): Promise<IdNameEntr
 /**
  * Resolve the registered workspaces as `{ id, name }` from the Mastra instance.
  */
-export async function resolveAvailableWorkspaces(mastra: Mastra): Promise<IdNameEntry[]> {
+export async function resolveAvailableWorkspaces(mastra: Mastra) {
   const ctx = await resolveBuilderContext(mastra);
   if (!ctx) return [];
 
@@ -156,7 +156,7 @@ export async function resolveAvailableWorkspaces(mastra: Mastra): Promise<IdName
  * only when the admin model policy is active with a non-empty allowlist.
  * Inactive / unrestricted policies return the full catalog.
  */
-export async function resolveAvailableModels(mastra: Mastra): Promise<AgentModel[]> {
+export async function resolveAvailableModels(mastra: Mastra) {
   const catalog = await buildProviderModelCatalog(mastra);
 
   const ctx = await resolveBuilderContext(mastra);
@@ -182,7 +182,7 @@ export async function resolveAvailableModels(mastra: Mastra): Promise<AgentModel
  * policy is inactive, or there is no default model entry, so the caller can fall
  * back to the first available model / the hard fallback.
  */
-export async function resolveDefaultModel(mastra: Mastra): Promise<AgentModel | undefined> {
+export async function resolveDefaultModel(mastra: Mastra) {
   const ctx = await resolveBuilderContext(mastra);
   if (!ctx) return undefined;
 
@@ -205,7 +205,7 @@ export async function resolveDefaultModel(mastra: Mastra): Promise<AgentModel | 
  * when the agent config declares a browser provider. Returns `undefined` when
  * no builder context is resolvable so the step can leave `browserEnabled` unset.
  */
-export async function resolveBrowserAvailable(mastra: Mastra): Promise<boolean> {
+export async function resolveBrowserAvailable(mastra: Mastra) {
   const ctx = await resolveBuilderContext(mastra);
   if (!ctx) return false;
 
@@ -225,7 +225,7 @@ export async function resolveBrowserAvailable(mastra: Mastra): Promise<boolean> 
  * browser config is wired (in which case browser access is silently dropped,
  * matching the server's warn-and-skip behaviour).
  */
-export async function resolveDefaultBrowserRef(mastra: Mastra): Promise<StorageBrowserRef | undefined> {
+export async function resolveDefaultBrowserRef(mastra: Mastra) {
   const ctx = await resolveBuilderContext(mastra);
   if (!ctx) return undefined;
 
@@ -248,7 +248,7 @@ const FEATURE_KEYS = [
   'model',
 ] as const satisfies ReadonlyArray<keyof FeatureCapabilities>;
 
-const allFeaturesDisabled = (): FeatureCapabilities =>
+const allFeaturesDisabled = () =>
   Object.fromEntries(FEATURE_KEYS.map(key => [key, false])) as FeatureCapabilities;
 
 /**
@@ -258,7 +258,7 @@ const allFeaturesDisabled = (): FeatureCapabilities =>
  * Returns an all-`false` map when there is no editor or the builder is disabled,
  * so the calling step can store a deterministic capability map either way.
  */
-export async function resolveFeatureCapabilities(mastra: Mastra): Promise<FeatureCapabilities> {
+export async function resolveFeatureCapabilities(mastra: Mastra) {
   const ctx = await resolveBuilderContext(mastra);
   if (!ctx) return allFeaturesDisabled();
 

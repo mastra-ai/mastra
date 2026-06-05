@@ -15,7 +15,7 @@ const selectionSchema = z.object({
  * Infra-agnostic: receives a ready-to-use `Agent` (dependency-injected by the
  * step) and explicit domain args, never a workflow `ctx`.
  */
-export async function resolveSkills(agent: Agent, entries: IdNameEntry[]): Promise<Record<string, boolean>> {
+export async function resolveSkills(agent: Agent, entries: IdNameEntry[]) {
   const candidates = entries.filter(entry => entry && typeof entry.id === 'string' && entry.id.length > 0);
 
   const record: Record<string, boolean> = {};

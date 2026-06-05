@@ -16,11 +16,7 @@ const descriptionSchema = z.object({
  * Infra-agnostic: receives a ready-to-use `Agent` (dependency-injected by the
  * step) and explicit domain args, never a workflow `ctx`.
  */
-export async function resolveDescription(
-  agent: Agent,
-  description: string,
-  userOutcome?: UserOutcome,
-): Promise<string> {
+export async function resolveDescription(agent: Agent, description: string, userOutcome?: UserOutcome) {
   const result = await agent.generate(
     `Describe, in one plain sentence, an agent for:\n\n${description}${formatUserOutcome(userOutcome)}`,
     { structuredOutput: { schema: descriptionSchema } },

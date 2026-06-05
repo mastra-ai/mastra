@@ -5,8 +5,8 @@ import { resolveAvailableModels, resolveDefaultModel, resolveDefaultBrowserRef }
 import { DEFAULT_BUILDER_REQUEST_CONTEXT_SCHEMA, DEFAULT_VISIBILITY, FALLBACK_MODEL } from '../../constant';
 import { configSchema, createResultSchema, type Config, type StepFactoryArgs } from '../../types';
 import { mapConfigToCreateInput } from './handler';
-import { RequestContext } from '@mastra/core/di';
-import { Mastra } from '@mastra/core';
+import type { RequestContext } from '@mastra/core/di';
+import type { Mastra } from '@mastra/core';
 
 /** Minimal shape of the editor agent namespace this step depends on. */
 type EditorWithAgentCreate = {
@@ -27,7 +27,7 @@ type EditorWithAgentCreate = {
 function resolveAuthorId(requestContext: RequestContext) {
   const user = requestContext?.get?.('user');
   if (user && typeof user === 'object' && 'id' in user) {
-    const id = (user as { id: unknown }).id;
+    const id = user.id;
     if (typeof id === 'string' && id.length > 0) {
       return id;
     }
@@ -48,7 +48,7 @@ function resolveAuthorId(requestContext: RequestContext) {
  * The agent already exists at this point, so a store that lacks versioning is
  * tolerated: we log and continue rather than throwing.
  */
-async function publishInitialVersion(mastra: Mastra, editor: EditorWithAgentCreate, id: string): Promise<void> {
+async function publishInitialVersion(mastra: Mastra, editor: EditorWithAgentCreate, id: string) {
   try {
     const agentsStore = await mastra.getStorage?.()?.getStore?.('agents');
     if (typeof agentsStore?.listVersions !== 'function' || typeof agentsStore.update !== 'function') {
@@ -74,7 +74,7 @@ async function publishInitialVersion(mastra: Mastra, editor: EditorWithAgentCrea
  *   hard `FALLBACK_MODEL`.
  */
 async function resolveModelToPersist(config: Config, mastra: Parameters<typeof resolveAvailableModels>[0]) {
-  if (config.model) return config.model as StorageModelConfig;
+  if (config.model) return config.model;
 
   const policyDefault = await resolveDefaultModel(mastra);
   if (policyDefault) return policyDefault as StorageModelConfig;

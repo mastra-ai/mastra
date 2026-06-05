@@ -28,11 +28,7 @@ function isValidModel(model?: AgentModel): model is AgentModel {
  * Infra-agnostic: receives a ready-to-use `Agent` (dependency-injected by the
  * step) and explicit domain args, never a workflow `ctx`.
  */
-export async function resolveModel(
-  agent: Agent,
-  model?: AgentModel,
-  availableModels?: AgentModel[],
-): Promise<AgentModel | undefined> {
+export async function resolveModel(agent: Agent, model?: AgentModel, availableModels?: AgentModel[]) {
   if (isValidModel(model)) {
     return { provider: model.provider, name: model.name };
   }
