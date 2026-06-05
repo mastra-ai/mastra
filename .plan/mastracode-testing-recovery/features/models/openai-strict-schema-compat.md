@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13695](https://github.com/mastra-ai/mastra/pull/13695) — fixed OpenAI strict-mode schema rejection for agent networks and workspace/tool schemas.
-- Later changes: none mapped yet.
+- Later changes: [#14157](https://github.com/mastra-ai/mastra/pull/14157) — adds generic Zod v4 Standard Schema JSON Schema export support that feeds the provider-specific strict-schema paths.
 
 ## User-visible behavior
 
@@ -41,6 +41,7 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | OpenAI compat applicability | provider/model detection in schema compat layers and core agent structured-output path | structured output, agent networks, workspace tools |
+| Base Standard Schema conversion | generic `toStandardSchema()` adapters, including Zod v4 wrapper from #14157 | provider-specific compatibility layers |
 | Strict JSON schema shape | `prepareJsonSchemaForOpenAIStrictMode()` / `ensureAllPropertiesRequired()` + OpenAI compat post-processors | AI SDK response format/tool schema serialization |
 | Null-to-undefined parsing | `wrapSchemaWithNullTransform()` and OpenAI schema transforms | structured output parsing for optional fields |
 | Native strict flag | `packages/core/src/stream/aisdk/v5/execute.ts` provider options | OpenAI API calls |
@@ -50,11 +51,13 @@
 - `packages/core/src/agent/agent.ts` — applies null-transform compatibility when structured output targets OpenAI, including undefined/empty `modelId` provider-only cases.
 - `packages/core/src/stream/aisdk/v5/execute.ts` — prepares strict schemas and sets `openai.strictJsonSchema`.
 - `packages/schema-compat/src/zod-to-json.ts` — exports `ensureAllPropertiesRequired()` and `prepareJsonSchemaForOpenAIStrictMode()`.
+- `packages/schema-compat/src/standard-schema/standard-schema.ts` and `adapters/zod-v4.ts` — generic Standard Schema JSON Schema conversion feeding provider-specific schema compat.
 - `packages/schema-compat/src/provider-compats/openai.ts` — OpenAI schema compatibility, optional/default/null transforms, required-key and `additionalProperties` handling.
 - `packages/schema-compat/src/provider-compats/openai-reasoning.ts` — reasoning-model variant with null-safe `modelId` checks.
 
 ## Dependencies / related features
 
+- [Tool schema compatibility](./tool-schema-compatibility.md) — generic schema conversion layer that provider-specific strict handling builds on.
 - [Model auth, selection, and modes](./model-auth-and-modes.md) — model/provider routing determines when OpenAI compatibility applies.
 - [Workspace-backed coding tools](../tools/workspace-tools.md) — workspace tool schemas are a key consumer of strict schema compatibility.
 - [Headless prompt mode](../headless/prompt-mode.md) — headless uses the same model/tool schema paths.

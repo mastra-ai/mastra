@@ -140,11 +140,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 118 | 2026-03-11 | #14102 | `ab866ec480` | likely skip | skipped | chore: version packages (alpha) (#14102) | 2 |
 | 119 | 2026-03-11 | #14146 | `05f93dc393` | likely skip | skipped | chore: version packages (alpha) (#14146) | 2 |
 | 120 | 2026-03-11 | #13750 | `930302b249` | review | done | feat(mastracode): allow passing MCP server configs to createMastraCode (#13750) | 3 |
-| 121 | 2026-03-11 | #13996 | `a554cca518` | review | current | fix(mastracode): restore /om typing in Kitty terminals (#13996) | 2 |
-| 122 | 2026-03-11 | #14157 | `787f3ac08b` | likely skip | | fix: handle Zod v4 schemas without ~standard.jsonSchema (#14157) | 1 |
-| 123 | 2026-03-11 | #14147 | `dbb4c690f3` | likely skip | | chore: version packages (alpha) (#14147) | 2 |
-| 124 | 2026-03-11 | #14168 | `89c209dd1a` | review | | fix(mastracode): stop hiding tool validation errors in TUI (#14168) | 1 |
-| 125 | 2026-03-11 | #14167 | `1e4db5e5ea` | likely skip | | chore: version packages (alpha) (#14167) | 2 |
+| 121 | 2026-03-11 | #13996 | `a554cca518` | review | done | fix(mastracode): restore /om typing in Kitty terminals (#13996) | 2 |
+| 122 | 2026-03-11 | #14157 | `787f3ac08b` | review | done | fix: handle Zod v4 schemas without ~standard.jsonSchema (#14157) | 1 |
+| 123 | 2026-03-11 | #14147 | `dbb4c690f3` | likely skip | skipped | chore: version packages (alpha) (#14147) | 2 |
+| 124 | 2026-03-11 | #14168 | `89c209dd1a` | review | done | fix(mastracode): stop hiding tool validation errors in TUI (#14168) | 1 |
+| 125 | 2026-03-11 | #14167 | `1e4db5e5ea` | likely skip | current | chore: version packages (alpha) (#14167) | 2 |
 | 126 | 2026-03-12 | #13568 | `86f242631d` | review | | feat(memory): observer context optimization (#13568) | 1 |
 | 127 | 2026-03-13 | #14264 | `c562ec228f` | likely skip | | fix(schema-compat): avoid false z.toJSONSchema unavailable errors (#14264) | 1 |
 | 128 | 2026-03-13 | #14201 | `6fa8b85bf8` | likely skip | | chore: version packages (alpha) (#14201) | 2 |

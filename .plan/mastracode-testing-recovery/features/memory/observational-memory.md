@@ -3,12 +3,12 @@
 ## Origin PR / commit
 
 - PR: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — dynamic memory configuration, configurable thresholds, observational memory support.
-- Later changes: [#13305](https://github.com/mastra-ai/mastra/pull/13305) — improved OM activation chunk selection, overshoot safeguards, and absolute buffer activation support; [#13330](https://github.com/mastra-ai/mastra/pull/13330) — restored streamed OM status/lifecycle events and observer/reflector model-change events; [#13349](https://github.com/mastra-ai/mastra/pull/13349) — temporarily raised observation `bufferActivation` to 4000 to avoid aggressive message-window shrinking while token-counting precision was investigated; [#13354](https://github.com/mastra-ai/mastra/pull/13354) — preserved OM continuation hints (`currentTask` / `suggestedContinuation`) through low-activation buffering and added degenerate observer-output guards; [#13421](https://github.com/mastra-ai/mastra/pull/13421) — added setup/global settings OM pack defaults; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — centralized OM UI progress in `HarnessDisplayState`; [#13476](https://github.com/mastra-ai/mastra/pull/13476) — fixed buffering precision, mid-step activation, blockAfter semantics, and retained-context safeguards; [#13563](https://github.com/mastra-ai/mastra/pull/13563) — made Codex-resolved OM models and OM failure aborts work with Mastra Code streams; [#13569](https://github.com/mastra-ai/mastra/pull/13569) — clones thread-scoped OM, remaps message/thread IDs, and preserves resource-scoped sharing semantics when forking threads; [#13815](https://github.com/mastra-ai/mastra/pull/13815) — adds `createMastraCode({ omScope })` and disables async OM buffering when resource scope is active; [#13953](https://github.com/mastra-ai/mastra/pull/13953) — forwards image/file attachments into observer input and makes OM token counting attachment-aware.
+- Later changes: [#13305](https://github.com/mastra-ai/mastra/pull/13305) — improved OM activation chunk selection, overshoot safeguards, and absolute buffer activation support; [#13330](https://github.com/mastra-ai/mastra/pull/13330) — restored streamed OM status/lifecycle events and observer/reflector model-change events; [#13349](https://github.com/mastra-ai/mastra/pull/13349) — temporarily raised observation `bufferActivation` to 4000 to avoid aggressive message-window shrinking while token-counting precision was investigated; [#13354](https://github.com/mastra-ai/mastra/pull/13354) — preserved OM continuation hints (`currentTask` / `suggestedContinuation`) through low-activation buffering and added degenerate observer-output guards; [#13421](https://github.com/mastra-ai/mastra/pull/13421) — added setup/global settings OM pack defaults; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — centralized OM UI progress in `HarnessDisplayState`; [#13476](https://github.com/mastra-ai/mastra/pull/13476) — fixed buffering precision, mid-step activation, blockAfter semantics, and retained-context safeguards; [#13563](https://github.com/mastra-ai/mastra/pull/13563) — made Codex-resolved OM models and OM failure aborts work with Mastra Code streams; [#13569](https://github.com/mastra-ai/mastra/pull/13569) — clones thread-scoped OM, remaps message/thread IDs, and preserves resource-scoped sharing semantics when forking threads; [#13815](https://github.com/mastra-ai/mastra/pull/13815) — adds `createMastraCode({ omScope })` and disables async OM buffering when resource scope is active; [#13953](https://github.com/mastra-ai/mastra/pull/13953) — forwards image/file attachments into observer input and makes OM token counting attachment-aware; [#13996](https://github.com/mastra-ai/mastra/pull/13996) — restored typed filtering in `/om` model search for Kitty CSI-u terminal input sequences.
 
 ## User-visible behavior
 
-- What the user can do: use persistent observational memory across Mastra Code conversations/resources, configure thread-vs-resource scope before startup, control whether attachments are observed, and fork threads with relevant OM state preserved.
-- Success looks like: observations/reflections happen in the background without polluting chat or forgetting important context; pasted/uploaded images/files are represented for the observer without inflated counts; forking a thread carries the relevant OM forward without mutating the source.
+- What the user can do: use persistent observational memory across Mastra Code conversations/resources, configure thread-vs-resource scope before startup, control whether attachments are observed, search/select OM models in terminals such as Kitty, and fork threads with relevant OM state preserved.
+- Success looks like: observations/reflections happen in the background without polluting chat or forgetting important context; pasted/uploaded images/files are represented for the observer without inflated counts; `/om` model search accepts printable typed input in Kitty/CSI-u terminals; forking a thread carries the relevant OM forward without mutating the source.
 - Must preserve: observer/reflector model settings, thresholds, scope, attachment filters, provider-aware token counting, activation/window-retention behavior, continuation hints, message-ID remapping on clone, and loaded memory after restart.
 
 ## Entry points / commands
@@ -44,6 +44,7 @@
 | Observer/reflector models | Harness request context + thread settings + settings | OM model functions, `/setup`, `/om`, `om_model_changed` subscribers, Codex OAuth remapping |
 | Thresholds | Harness state + thread settings + settings | Memory factory, `/om` |
 | OM UI progress | Harness display state + transient TUI components | Chat/status rendering |
+| OM modal model search input | `ModelSelectorComponent` / pi-tui input parsing; originally fixed for Kitty CSI-u search in #13996 | `/om` observer/reflector model pickers |
 | OM scope | `createMastraCode({ omScope })` override, then `MASTRA_OM_SCOPE`, project/global `database.json`, then `thread` default | Memory factory, OM storage keying |
 | Resource-scope buffering | `getDynamicMemory()` disables `bufferTokens`/`bufferActivation` when scope is `resource` | Core OM validation and activation behavior |
 | Attachment observation | Harness state/thread setting/global setting `observeAttachments` + core attachment filter | Observer input, `/om` modal, TUI image/file submit path |
@@ -68,7 +69,8 @@
 - `mastracode/src/tui/commands/om.ts` — `/om` settings modal wiring, including observe-attachments persistence.
 - `mastracode/src/tui/mastra-tui.ts` — pending pasted images, `[image]` placeholders, optimistic user messages, and Harness file/image signal dispatch.
 - `mastracode/src/tui/handlers/om.ts` — OM event rendering.
-- `mastracode/src/tui/components/om-settings.ts` — settings UI.
+- `mastracode/src/tui/components/om-settings.ts` and `mastracode/src/tui/components/model-selector.ts` — settings UI and observer/reflector model search picker, including Kitty CSI-u typed filtering coverage.
+- `mastracode/src/tui/key-input.ts` — current shared printable shortcut decoder for Kitty CSI-u / xterm modifyOtherKeys sequences.
 - `mastracode/src/index.ts` — `MastraCodeConfig.omScope` startup override, memory/vector store wiring, and heartbeat setup.
 - `mastracode/src/schema.ts`, `utils/project.ts` — state schema and `getOmScope()` env/project/global/default precedence.
 
@@ -86,7 +88,8 @@
 ## Existing tests
 
 - `mastracode/src/tui/commands/__tests__/om.test.ts` — OM role override persistence behavior.
-- `mastracode/src/tui/components/__tests__/om-settings.test.ts` — model picker behavior for OM settings.
+- `mastracode/src/tui/components/__tests__/om-settings.test.ts` — model picker behavior for OM settings, including Kitty CSI-u printable-key filtering.
+- `mastracode/src/tui/__tests__/key-input.test.ts` — shared printable shortcut decoding for Kitty CSI-u and xterm modifyOtherKeys forms.
 - `mastracode/src/tui/handlers/__tests__/om.test.ts` — OM marker rendering/quiet-mode behavior.
 - `packages/memory/src/processors/observational-memory/__tests__/observational-memory.test.ts` — core activation, reflection, overshoot, retention behavior, blockAfter fallback, continuation-hint parsing, most-recent activated chunk hint selection, observer attachment formatting, tool-result attachment extraction, and image-heavy threshold checks.
 - `packages/memory/src/processors/observational-memory/__tests__/token-counter.test.ts` — image/file token estimates, provider count-token endpoint fallback/caching/dedup, remote image probing, client-stamped estimates, and non-image file byte heuristics.

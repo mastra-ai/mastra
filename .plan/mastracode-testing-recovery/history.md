@@ -1191,3 +1191,27 @@ Verification:
 
 - `pnpm --filter ./mastracode exec vitest run src/mcp/__tests__/manager.test.ts --bail=1 --reporter=dot` — 1 file / 44 tests passed.
 - `pnpm --filter ./mastracode test -- --run src/mcp/__tests__/manager.test.ts --bail 1 --reporter=dot` unexpectedly expanded into the broader suite and hit known baseline failures (including stale `/github` autocomplete drift); focused direct Vitest run above passed.
+
+### PR #13996 / #14157 / #14147 / #14168 feature-map checkpoint
+
+Verified rows 121-124:
+
+- #13996 restored typed filtering in the `/om` model picker for Kitty CSI-u terminal input. Original merge added a local decoder in `om-settings.ts`; current HEAD has evolved the picker around `ModelSelectorComponent` and shared key-input coverage (`key-input.ts` / `key-input.test.ts`).
+- #14157 is a real schema-compatibility feature, not a skip: `toStandardSchema()` now detects Zod v4 schemas without `~standard.jsonSchema`, wraps them with `adapters/zod-v4.ts`, and uses `z.toJSONSchema()` so Harness/Mastra Code tool schemas serialize as valid JSON Schema objects. `mastracode` also ships `zod` as a CLI dependency.
+- #14147 is a Changesets alpha/version-package batch; skipped for feature mapping.
+- #14168 removes the generic TUI replacement for tool validation errors and keeps the actual parsed validation message visible in formatted error output. Current HEAD also has specialized tool validation rendering in `tool-execution-enhanced.ts`.
+
+Documentation actions:
+
+- Created `features/models/tool-schema-compatibility.md` for generic Standard Schema / Zod v4 schema conversion.
+- Updated `features/models/openai-strict-schema-compat.md`, `features/memory/observational-memory.md`, `features/tools/coding-tools-permissions.md`, `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #13996 done, #14157 done, #14147 skipped, #14168 done, #14167 current.
+
+Focused evidence read: PR metadata for #13996/#14157/#14147/#14168; original #13996 and #14168 merge diffs; current `mastracode/src/tui/components/om-settings.ts`, `model-selector.ts`, `key-input.ts`, `display.ts`, `utils/errors.ts`, `tool-execution-enhanced.ts`; current `packages/schema-compat/src/standard-schema/standard-schema.ts`, `adapters/zod-v4.ts`, and `adapters/zod-v4.test.ts`.
+
+Verification:
+
+- `corepack pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/key-input.test.ts src/tui/components/__tests__/om-settings.test.ts --bail=1 --reporter=dot` via combined command — 2 files / 64 tests passed.
+- `corepack pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/tool-execution-enhanced.test.ts --bail=1 --reporter=dot` — 1 file / 61 tests passed.
+- `corepack pnpm --filter ./packages/schema-compat exec vitest run src/standard-schema/adapters/zod-v4.test.ts src/zod-to-json.test.ts --bail=1 --reporter=dot` — 3 files / 107 passed / 1 skipped.
+- Initial `pnpm` runs failed because the active shim was pnpm 10.29.3 while this repo requires pnpm >=11; `corepack prepare pnpm@11.3.0 --activate` fixed the local runner.
