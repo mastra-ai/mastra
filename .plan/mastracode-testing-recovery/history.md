@@ -2058,3 +2058,24 @@ Verification:
 
 - `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/multiline-input.test.ts --bail=1 --reporter=dot` — 1 file / 16 tests passed.
 - `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/ask-question-inline-multiline.test.ts --bail=1 --reporter=dot` — 1 file / 6 tests passed.
+
+### PR #16023 / #16022 / #16024 / #16068 feature-map checkpoint
+
+Verified rows 255-258:
+
+- #16023 is formatting-only cleanup for `ask-question-inline-multiline.test.ts`; current source retains the formatted `StubSelectList` constructor and multiline opt-in tests.
+- #16022 and #16024 are Changesets alpha package-version batches; skipped for feature mapping after `gh pr view` confirmed changelog/package metadata changes under Mastra Code.
+- #16068 reduces noisy skill startup logging. Current source has since removed the old unconditional `Skills loaded from:` startup log entirely; the relevant surviving behavior is that `collectSkillPaths()` still guards directory reads with `existsSync()` before symlink expansion while `buildSkillPaths()` continues returning candidate skill roots for workspace access.
+
+Documentation actions:
+
+- Updated `features/integrations/skills-command.md` for quiet skill startup behavior, existing-dir symlink scanning, key files, and test coverage.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16023 done, #16022 skipped, #16024 skipped, #16068 done, #16094 current.
+
+Focused evidence read: PR metadata for #16023/#16022/#16024/#16068; current `mastracode/src/tui/components/__tests__/ask-question-inline-multiline.test.ts`, `mastracode/src/agents/workspace.ts`, and `mastracode/src/agents/__tests__/build-skill-paths.test.ts`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/ask-question-inline-multiline.test.ts --bail=1 --reporter=dot` — 1 file / 6 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/agents/__tests__/build-skill-paths.test.ts --bail=1 --reporter=dot` — 1 file / 9 tests passed.

@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #15395 (row 254) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, #15390, #15403, #15544, #15515, #15601, #15606, #15629, #15653, #15656, #15699, #15710, #15857, #15896, #15770, #15909, #15928, #15940, #15979, #16009, #16011, #16016, and #16020 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 255 #16023 (ask-question-inline-multiline test formatting), then row 256 #16022 (Changesets alpha skip).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #16068 (row 258) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, #15390, #15403, #15544, #15515, #15601, #15606, #15629, #15653, #15656, #15699, #15710, #15857, #15896, #15770, #15909, #15928, #15940, #15979, #16009, #16011, #16016, #16020, #16022, and #16024 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 259 #16094 (`/tmp` default allowed workspace path), then row 260 #16135 (settings submenu Enter/Esc handling).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 255: PR #16023 (ask-question-inline-multiline test formatting), then row 256 #16022 (Changesets alpha skip).
+1. Continue at `_pr-queue.md` row 259: PR #16094 (`/tmp` default allowed workspace path), then row 260 #16135 (settings submenu Enter/Esc handling).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -44,6 +44,7 @@ None known.
 
 ## Last commands/evidence
 
+- Rows 255-258 verified/documented: #16022/#16024 Changesets alpha skips, #16023 formatting-only cleanup for `ask-question-inline-multiline.test.ts`, and #16068 quiet skill startup behavior. Current source has no unconditional `Skills loaded from:` startup log; `collectSkillPaths()` still uses `existsSync()` before reading directories for symlink expansion. Focused verification passed: ask-question-inline multiline tests (6) and build-skill-paths tests (9).
 - Rows 251-254 verified/documented: #16011/#16016/#16020 Changesets alpha skips and #15395 multiline `ask_user` question input via `MultilineInput`, Shift+Enter/backslash+Enter newline support, raw multiline answer submission, and single-line fallback without TUI. Focused verification passed: MultilineInput tests (16) and ask-question-inline multiline tests (6).
 - Rows 247-250 verified/documented: #15979/#16009 Changesets alpha skips, #15993 user-message border sizing for full-width first lines, and #16006 piped stdin as an initial TUI message with headless fallback when no TTY can be reopened. Focused verification passed: stdin pipe utility tests (21), MastraTUI initial-message/optimistic queueing tests (3), and render-messages user-message tests (6).
 - Rows 243-246 verified/documented: #15928/#15940 Changesets alpha skips, #15924 changelog summaries in startup/manual update prompts, and #15942 optimistic user-message rendering before async prompt hooks/thread creation/signal dispatch. Focused verification passed: update-check parseChangelog tests (10) and MastraTUI optimistic/pending-thread queueing tests (3).

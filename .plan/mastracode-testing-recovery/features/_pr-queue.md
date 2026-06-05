@@ -274,11 +274,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 252 | 2026-04-30 | #16016 | `a127afaa86` | likely skip | skipped | chore: version packages (alpha) (#16016) | 2 |
 | 253 | 2026-04-30 | #16020 | `7510bcac37` | likely skip | skipped | chore: version packages (alpha) (#16020) | 2 |
 | 254 | 2026-05-01 | #15395 | `7974532bb9` | review | done | feat(mastracode): add multiline support to question input box (#15395) | 14 |
-| 255 | 2026-04-30 | #16023 | `ac386b56fc` | review | current | chore: format ask-question-inline-multiline test (#16023) | 1 |
-| 256 | 2026-04-30 | #16022 | `bba1790449` | likely skip | | chore: version packages (alpha) (#16022) | 2 |
-| 257 | 2026-04-30 | #16024 | `20ed4654c0` | likely skip | | chore: version packages (alpha) (#16024) | 2 |
-| 258 | 2026-05-01 | #16068 | `8ed4c6a630` | review | | fix(mastracode): only log skill directories that exist on disk (#16068) | 1 |
-| 259 | 2026-05-01 | #16094 | `3566b34eac` | review | | feat(mastracode): add /tmp as default allowed workspace path (#16094) | 1 |
+| 255 | 2026-04-30 | #16023 | `ac386b56fc` | review | done | chore: format ask-question-inline-multiline test (#16023) | 1 |
+| 256 | 2026-04-30 | #16022 | `bba1790449` | likely skip | skipped | chore: version packages (alpha) (#16022) | 2 |
+| 257 | 2026-04-30 | #16024 | `20ed4654c0` | likely skip | skipped | chore: version packages (alpha) (#16024) | 2 |
+| 258 | 2026-05-01 | #16068 | `8ed4c6a630` | review | done | fix(mastracode): only log skill directories that exist on disk (#16068) | 1 |
+| 259 | 2026-05-01 | #16094 | `3566b34eac` | review | current | feat(mastracode): add /tmp as default allowed workspace path (#16094) | 1 |
 | 260 | 2026-05-04 | #16135 | `d563e7599b` | review | | fix(mastracode): normalize Enter/Esc handling in settings submenu (#16135) | 1 |
 | 261 | 2026-05-04 | #16028 | `da37169958` | likely skip | | chore: version packages (alpha) (#16028) | 2 |
 | 262 | 2026-05-04 | #16182 | `b474594310` | likely skip | | chore: version packages (alpha) (#16182) | 2 |
