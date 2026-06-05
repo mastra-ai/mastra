@@ -2101,3 +2101,28 @@ Verification:
 
 - `pnpm --filter ./mastracode exec vitest run src/agents/__tests__/build-skill-paths.test.ts --bail=1 --reporter=dot` — 1 file / 9 tests passed.
 - `pnpm --filter ./mastracode check` — passed.
+
+### PR #16192 / #16250 / #16176 / #13891 feature-map checkpoint
+
+Verified rows 263-266:
+
+- #16192 is a Changesets alpha package-version batch; skipped for feature mapping after `gh pr view` confirmed changelog/package metadata changes under Mastra Code.
+- #16250 is a README/docs-only update. It improved Mastra Code README and docs/reference copy without adding runtime behavior to map beyond the existing documentation/Harness/OM cards.
+- #16176 adds the provider-boundary `processLLMRequest` hook. Current core resolves a separate LLM request input-processor list, converts `MessageList` to `LanguageModelV2Prompt`, runs `ProcessorRunner.runProcessLLMRequest()` immediately before the provider call, keeps prompt rewrites transient, forwards retry/request context, and allows the first processor-supplied cached response to short-circuit the model call.
+- #13891 allows external `createMastraCode()` consumers to override the Harness memory instance/factory. Current `MastraCodeConfig.memory` replaces the default `getDynamicMemory(storage, vectorStore)` path, primarily for custom providers whose models Mastra Code's built-in resolver cannot resolve.
+
+Documentation actions:
+
+- Updated `features/models/provider-history-compat.md` for #16176 provider-boundary prompt rewriting, ProcessorRunner/LLM execution wiring, tests, and risks.
+- Updated `features/integrations/harness-api.md` for #13891 memory override ownership, key files, missing tests, and docs-related #16250 attribution.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16192 skipped, #16250 done, #16176 done, #13891 done, #16274 current.
+
+Focused evidence read: PR metadata for #16192/#16250/#16176/#13891; current `packages/core/src/processors/index.ts`, `packages/core/src/processors/runner.ts`, `packages/core/src/processors/provider-history-compat.ts`, `packages/core/src/processors/provider-history-compat.test.ts`, `packages/core/src/loop/workflows/agentic-execution/llm-execution-step.ts`, `packages/core/src/loop/workflows/agentic-execution/llm-execution-step.test.ts`, `mastracode/src/index.ts`, and `mastracode/src/__tests__/index.test.ts`.
+
+Verification:
+
+- `pnpm --filter ./packages/core exec vitest run src/processors/provider-history-compat.test.ts --bail=1 --reporter=dot` — 1 file / 33 tests passed / no type errors.
+- `pnpm --filter ./packages/core exec vitest run src/loop/workflows/agentic-execution/llm-execution-step.test.ts -t "processLLMRequest" --bail=1 --reporter=dot` — 1 file / 3 tests passed / 15 skipped / no type errors.
+- `pnpm --filter ./mastracode exec vitest run src/__tests__/index.test.ts -t "memory|ProviderHistoryCompat|processor" --bail=1 --reporter=dot` — 1 file / 3 tests passed / 13 skipped.
+- `pnpm --filter ./packages/core check` — passed.

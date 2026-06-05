@@ -282,11 +282,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 260 | 2026-05-04 | #16135 | `d563e7599b` | review | done | fix(mastracode): normalize Enter/Esc handling in settings submenu (#16135) | 1 |
 | 261 | 2026-05-04 | #16028 | `da37169958` | likely skip | skipped | chore: version packages (alpha) (#16028) | 2 |
 | 262 | 2026-05-04 | #16182 | `b474594310` | likely skip | skipped | chore: version packages (alpha) (#16182) | 2 |
-| 263 | 2026-05-04 | #16192 | `a6e9417968` | likely skip | current | chore: version packages (alpha) (#16192) | 2 |
-| 264 | 2026-05-06 | #16250 | `98bae8da6e` | review | | chore(mastracode): Improve README & docs (#16250) | 1 |
-| 265 | 2026-05-06 | #16176 | `d1fdbd012a` | review | | feat(core): add provider-boundary prompt processor hook (#16176) | 3 |
-| 266 | 2026-05-06 | #13891 | `aa0cb0ddd8` | review | | feat(mastracode): allow overriding memory instance via config (#13891) | 1 |
-| 267 | 2026-05-06 | #16274 | `e2055ca7cd` | review | | fix(mastracode): standardize setup and config overlays (#16274) | 32 |
+| 263 | 2026-05-04 | #16192 | `a6e9417968` | likely skip | skipped | chore: version packages (alpha) (#16192) | 2 |
+| 264 | 2026-05-06 | #16250 | `98bae8da6e` | review | done | chore(mastracode): Improve README & docs (#16250) | 1 |
+| 265 | 2026-05-06 | #16176 | `d1fdbd012a` | review | done | feat(core): add provider-boundary prompt processor hook (#16176) | 3 |
+| 266 | 2026-05-06 | #13891 | `aa0cb0ddd8` | review | done | feat(mastracode): allow overriding memory instance via config (#13891) | 1 |
+| 267 | 2026-05-06 | #16274 | `e2055ca7cd` | review | current | fix(mastracode): standardize setup and config overlays (#16274) | 32 |
 | 268 | 2026-05-06 | #16196 | `3bdb5cee50` | likely skip | | chore: version packages (alpha) (#16196) | 2 |
 | 269 | 2026-05-07 | #16126 | `9f1741080d` | likely skip | | chore(deps): update ai sdk (#16126) | 1 |
 | 270 | 2026-05-07 | #16294 | `e97b9ec4af` | review | | Fix Codex OAuth callback port fallback (#16294) | 2 |
