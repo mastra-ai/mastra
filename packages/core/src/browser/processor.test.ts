@@ -242,5 +242,104 @@ describe('BrowserContextProcessor', () => {
 
       expect(result).toBeUndefined();
     });
+
+    it('does not emit when browser was never opened (no previous state and currently closed)', async () => {
+      const result = await processor.computeStateSignal(createStateArgs({ provider: 'agent-browser', isOpen: false }));
+
+      expect(result).toBeUndefined();
+    });
+
+    it('emits when browser transitions from open to closed (has previous state)', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          browser: { open: true, activeUrl: 'https://example.com' },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: false }, [activeSignal as any]),
+      );
+
+      expect(result).toBeDefined();
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: expect.stringContaining('browser closed'),
+        }),
+      );
+    });
+
+    it('includes process_restart close reason in snapshot', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          browser: { open: true },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: false, closeReason: 'process_restart' }, [
+          activeSignal as any,
+        ]),
+      );
+
+      expect(result).toBeDefined();
+      expect(result).toEqual(
+        expect.objectContaining({
+          contents: expect.stringContaining('session process restarted'),
+        }),
+      );
+    });
+
+    it('includes user close reason in delta', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          browser: { open: true },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: false, closeReason: 'user' }, [activeSignal as any]),
+      );
+
+      expect(result).toBeDefined();
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: expect.stringContaining('user closed the browser'),
+        }),
+      );
+    });
+
+    it('includes error close reason in delta', async () => {
+      const activeSignal = createSignal({
+        type: 'state',
+        contents: 'Browser is open.',
+        metadata: {
+          state: { id: 'browser', threadId: 'thread-1', cacheKey: 'old', version: 1 },
+          browser: { open: true },
+        },
+      });
+
+      const result = await processor.computeStateSignal(
+        createStateArgs({ provider: 'agent-browser', isOpen: false, closeReason: 'error' }, [activeSignal as any]),
+      );
+
+      expect(result).toBeDefined();
+      expect(result).toEqual(
+        expect.objectContaining({
+          mode: 'delta',
+          contents: expect.stringContaining('closed unexpectedly due to an error'),
+        }),
+      );
+    });
   });
 });

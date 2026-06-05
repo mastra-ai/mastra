@@ -5869,7 +5869,7 @@ export class Agent<
             tabCount: state?.tabs.length,
           };
         } catch {
-          return { isOpen: false };
+          return { isOpen: false, closeReason: 'error' };
         }
       };
       const currentBrowserState = await getBrowserContextState();

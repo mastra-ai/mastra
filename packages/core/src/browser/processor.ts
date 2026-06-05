@@ -52,6 +52,12 @@ export interface BrowserContext {
   /** Whether the browser is currently open/connected. Defaults to true when browser context is present. */
   isOpen?: boolean;
 
+  /**
+   * Reason the browser was closed, when isOpen is false.
+   * Helps differentiate between agent-initiated close, user action, process restart, or error.
+   */
+  closeReason?: 'agent' | 'user' | 'process_restart' | 'error';
+
   /** Number of currently open tabs, when available. */
   tabCount?: number;
 
@@ -108,6 +114,12 @@ export class BrowserContextProcessor {
     const browserState = getBrowserState(refreshedState ? { ...ctx, ...refreshedState } : ctx);
     const shouldRefreshSnapshot = Boolean(args.lastSnapshot && !args.contextWindow.hasSnapshot);
     const previousState = getMostRecentBrowserState(args.activeStateSignals);
+
+    // Suppress the signal entirely when the browser was never opened in this thread.
+    // If there's no previous state (never reported as open) and the browser is currently closed,
+    // the agent hasn't used the browser yet — don't emit a confusing "Browser is closed" message.
+    if (!previousState && !browserState.open) return;
+
     const changed = getChangedBrowserState(previousState, browserState);
     if (previousState && Object.keys(changed).length === 0 && !shouldRefreshSnapshot) return;
 
@@ -137,6 +149,7 @@ type BrowserState = {
   pageTitle?: string;
   tabCount?: number;
   pageMetadata?: Record<string, string | number | boolean | null | undefined>;
+  closeReason?: 'agent' | 'user' | 'process_restart' | 'error';
 };
 
 function getBrowserState(ctx: BrowserContext): BrowserState {
@@ -146,6 +159,7 @@ function getBrowserState(ctx: BrowserContext): BrowserState {
     ...(ctx.pageTitle ? { pageTitle: ctx.pageTitle } : {}),
     ...(typeof ctx.tabCount === 'number' ? { tabCount: ctx.tabCount } : {}),
     ...(ctx.pageMetadata ? { pageMetadata: ctx.pageMetadata } : {}),
+    ...(ctx.closeReason ? { closeReason: ctx.closeReason } : {}),
   };
 }
 
@@ -187,7 +201,7 @@ function getChangedBrowserState(previous: BrowserState | undefined, current: Bro
 }
 
 function formatBrowserStateSnapshot(state: BrowserState): string {
-  const parts = [`Browser is ${state.open ? 'open' : 'closed'}.`];
+  const parts = [formatOpenClosedStatus(state)];
   if (state.activeUrl) parts.push(`Active tab URL: ${state.activeUrl}.`);
   if (state.pageTitle) parts.push(`Page title: ${state.pageTitle}.`);
   if (typeof state.tabCount === 'number')
@@ -200,7 +214,13 @@ function formatBrowserStateSnapshot(state: BrowserState): string {
 
 function formatBrowserStateDelta(delta: Partial<BrowserState>): string {
   const parts: string[] = [];
-  if (typeof delta.open === 'boolean') parts.push(`browser ${delta.open ? 'opened' : 'closed'}`);
+  if (typeof delta.open === 'boolean') {
+    if (delta.open) {
+      parts.push('browser opened');
+    } else {
+      parts.push(formatCloseReason(delta.closeReason));
+    }
+  }
   if (delta.activeUrl) parts.push(`active tab URL changed to ${delta.activeUrl}`);
   if (delta.pageTitle) parts.push(`page title changed to ${delta.pageTitle}`);
   if (typeof delta.tabCount === 'number') parts.push(`${delta.tabCount} open ${delta.tabCount === 1 ? 'tab' : 'tabs'}`);
@@ -208,4 +228,35 @@ function formatBrowserStateDelta(delta: Partial<BrowserState>): string {
     parts.push(`page metadata changed to ${JSON.stringify(delta.pageMetadata)}`);
   }
   return `changed: ${parts.join('; ')}`;
+}
+
+function formatOpenClosedStatus(state: BrowserState): string {
+  if (state.open) return 'Browser is open.';
+  switch (state.closeReason) {
+    case 'process_restart':
+      return 'The session process restarted, which closed the browser.';
+    case 'user':
+      return 'The user closed the browser.';
+    case 'error':
+      return 'Browser closed unexpectedly due to an error.';
+    case 'agent':
+      return 'Browser is closed.';
+    default:
+      return 'Browser is closed.';
+  }
+}
+
+function formatCloseReason(reason?: 'agent' | 'user' | 'process_restart' | 'error'): string {
+  switch (reason) {
+    case 'process_restart':
+      return 'the session process restarted, which closed the browser';
+    case 'user':
+      return 'the user closed the browser';
+    case 'error':
+      return 'browser closed unexpectedly due to an error';
+    case 'agent':
+      return 'browser closed';
+    default:
+      return 'browser closed';
+  }
 }
