@@ -86,14 +86,16 @@ export class FilesystemAgentsStorage extends AgentsStorage {
 
   constructor({ db }: { db: FilesystemDB }) {
     super();
-    const isCodeAgent = (entityId: string): boolean => {
-      const agent = this.storageMastra?.getAgentById?.(entityId);
-      return agent?.source === 'code';
+    const getCodeAgent = (entityId: string) => {
+      try {
+        const agent = this.storageMastra?.getAgentById?.(entityId);
+        return agent?.source === 'code' ? agent : undefined;
+      } catch {
+        return undefined;
+      }
     };
-    const editorConfigFor = (entityId: string): unknown => {
-      const agent = this.storageMastra?.getAgentById?.(entityId);
-      return agent?.__getEditorConfig?.();
-    };
+    const isCodeAgent = (entityId: string): boolean => Boolean(getCodeAgent(entityId));
+    const editorConfigFor = (entityId: string): unknown => getCodeAgent(entityId)?.__getEditorConfig?.();
     this.helpers = new FilesystemVersionedHelpers({
       db,
       entitiesFile: 'agents.json',

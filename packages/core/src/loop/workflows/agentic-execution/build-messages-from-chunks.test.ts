@@ -303,6 +303,25 @@ describe('buildMessagesFromChunks', () => {
     expect(types).toEqual(['text', 'text']);
   });
 
+  it('should preserve tool-call input when args is missing', () => {
+    const result = parts([
+      {
+        type: 'tool-call',
+        payload: { toolCallId: 'tc1', toolName: 'myTool', input: { name: 'Support Email Triager' } },
+      },
+    ]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      toolInvocation: {
+        state: 'call',
+        toolCallId: 'tc1',
+        toolName: 'myTool',
+        args: { name: 'Support Email Triager' },
+      },
+    });
+  });
+
   // ── Mixed content ordering ──────────────────────────────────
 
   it('should preserve stream start order when text-end arrives after tool-call', () => {

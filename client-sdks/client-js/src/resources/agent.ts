@@ -769,9 +769,13 @@ export class Agent extends BaseResource {
               type: 'tool-result',
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
+              input: toolCall.args,
               output: { type: 'json', value: result as JSONValue },
               ...(observability ? { __mastraObservability: observability } : {}),
-            } satisfies AIV5Type.ToolResultPart & { __mastraObservability?: ClientToolObservabilityEnvelope };
+            } satisfies AIV5Type.ToolResultPart & {
+              input?: unknown;
+              __mastraObservability?: ClientToolObservabilityEnvelope;
+            };
 
             toolResultMessages.push({
               role: 'assistant',

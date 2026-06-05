@@ -233,7 +233,8 @@ export function buildMessagesFromChunks({
 
       // ── Tool call ──────────────────────────────────────────────
       case 'tool-call': {
-        const p = chunk.payload as ToolCallPayload;
+        const p = chunk.payload as ToolCallPayload & { input?: unknown };
+        const args = p.args ?? p.input;
         const toolDef = tools?.[p.toolName] || findProviderToolByName(tools, p.toolName);
         const providerExecuted = inferProviderExecuted(p.providerExecuted, toolDef);
         const providerMetadata = withToolPayloadTransformProviderMetadata(p.providerMetadata, chunk.metadata);
@@ -250,7 +251,7 @@ export function buildMessagesFromChunks({
               state: 'result' as const,
               toolCallId: p.toolCallId,
               toolName: p.toolName,
-              args: p.args,
+              args,
               result: result.result,
             },
             providerMetadata: result.providerMetadata ?? providerMetadata,
@@ -264,7 +265,7 @@ export function buildMessagesFromChunks({
               state: 'call' as const,
               toolCallId: p.toolCallId,
               toolName: p.toolName,
-              args: p.args,
+              args,
             },
             providerMetadata,
             providerExecuted,

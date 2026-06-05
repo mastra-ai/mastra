@@ -865,7 +865,7 @@ export class AIV5Adapter {
             state: 'call',
             toolCallId: toolResultPart.toolCallId,
             toolName: sanitizeToolName(toolResultPart.toolName),
-            args: {},
+            args: (toolResultPart as AIV5Type.ToolResultPart & { input?: unknown }).input ?? {},
           };
           updateMatchingCallInvocationResult(toolResultPart, call);
           toolInvocations.push(call);
@@ -883,7 +883,7 @@ export class AIV5Adapter {
             toolInvocation: {
               toolCallId: toolResultPart.toolCallId,
               toolName: sanitizeToolName(toolResultPart.toolName),
-              args: {},
+              args: (toolResultPart as AIV5Type.ToolResultPart & { input?: unknown }).input ?? {},
               state: 'call',
             },
           };
