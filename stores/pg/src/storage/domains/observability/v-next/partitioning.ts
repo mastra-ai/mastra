@@ -23,30 +23,7 @@
 
 import type { DbClient } from '../../../client';
 import { ALL_SIGNAL_TABLES, qualifiedName, qualifiedTable, SIGNAL_TIME_COLUMN } from './ddl';
-
-/**
- * Postgres `CREATE TABLE IF NOT EXISTS` is not atomic — two concurrent
- * backends can both pass the existence check and one will surface
- * `42P07 — relation "…" already exists`. We swallow that specific error so
- * concurrent `init()` calls (multi-process startup, blue/green deploy, two
- * stores against the same schema) converge to a clean "exists" state.
- */
-function isDuplicateRelationError(error: unknown): boolean {
-  const code = (error as { code?: string } | undefined)?.code;
-  const message = (error as { message?: string } | undefined)?.message ?? '';
-  // `42P07 duplicate_table` is the clean case. Under high concurrency,
-  // `CREATE TABLE IF NOT EXISTS` can also surface `23505 unique_violation`
-  // on `pg_type_typname_nsp_index` (the row in pg_type for the new
-  // relation's rowtype) when two backends race past the existence check
-  // and both insert into the catalog before either commits. Treat it the
-  // same as a duplicate relation — the table exists by the time we look.
-  const constraint = (error as { constraint?: string } | undefined)?.constraint;
-  if (code === '42P07') return true;
-  if (code === '23505' && (constraint === 'pg_type_typname_nsp_index' || /pg_type_typname/i.test(message))) {
-    return true;
-  }
-  return /already exists/i.test(message);
-}
+import { isDuplicateRelationError } from './pg-errors';
 
 export type PartitionMode = 'timescale' | 'partman' | 'native';
 

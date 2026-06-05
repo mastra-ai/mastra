@@ -561,6 +561,120 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         await pool.end();
       }
     });
+
+    it('two concurrent init() calls against a fresh non-existent schema both resolve without throwing', async () => {
+      // Regression for the CREATE SCHEMA IF NOT EXISTS race: like
+      // CREATE TABLE, it is not atomic under concurrency, and the loser
+      // surfaces 42P06 duplicate_schema (or a 23505 on
+      // pg_namespace_nspname_index depending on timing). isDuplicateSchemaError
+      // in pg-errors.ts must swallow both.
+      const schema = schemaName('obs_vnext_schema_race');
+      const pool = new Pool({ connectionString, max: 4 });
+      const client = new PoolAdapter(pool);
+
+      // Intentionally do NOT pre-create the schema — both init() calls
+      // must race to create it.
+      const first = new ObservabilityStoragePostgresVNext({ client, schemaName: schema });
+      const second = new ObservabilityStoragePostgresVNext({ client, schemaName: schema });
+
+      try {
+        await expect(Promise.all([first.init(), second.init()])).resolves.toHaveLength(2);
+
+        await first.createSpan({
+          span: makeSpan({
+            traceId: 'schema-race-trace',
+            spanId: 'schema-race-root',
+            startedAt: dayAt(0, 9),
+            endedAt: dayAt(0, 9, 0, 1),
+          }),
+        });
+        const trace = await second.getTrace({ traceId: 'schema-race-trace' });
+        expect(trace?.spans.map(span => span.spanId)).toEqual(['schema-race-root']);
+      } finally {
+        await client.none(`DROP SCHEMA IF EXISTS ${quotedIdentifier(schema)} CASCADE`);
+        await pool.end();
+      }
+    });
+
+    it('init() against an initialized schema does not block concurrent writes', async () => {
+      // Regression for partition-lock-mode (M1): CREATE TABLE ... PARTITION OF
+      // takes ACCESS EXCLUSIVE on the parent, which blocks every concurrent
+      // read AND write against the signal table for the duration of init().
+      // The fix uses CREATE TABLE (LIKE parent INCLUDING ALL) + ALTER TABLE
+      // ATTACH PARTITION (SHARE UPDATE EXCLUSIVE since PG 12), which allows
+      // INSERTs to continue against existing partitions in parallel.
+      //
+      // We assert this by running a second init() that re-validates the
+      // schema (no-op DDLs all hit the IF NOT EXISTS branch) in parallel
+      // with a steady stream of createSpan() calls, and asserting (a) every
+      // write succeeds, and (b) the wall-clock time of the writes is not
+      // dominated by waiting on the init's parent locks.
+      //
+      // Force native mode so we exercise the CREATE TABLE PARTITION OF path
+      // (timescale and partman both go through their own DDL).
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_init_under_writes',
+        partitioning: { mode: 'native' },
+      });
+
+      const writePool = new Pool({ connectionString, max: 4 });
+      const writeClient = new PoolAdapter(writePool);
+      const writer = new ObservabilityStoragePostgresVNext({
+        client: writeClient,
+        schemaName: harness.schema,
+        partitioning: { mode: 'native' },
+      });
+      // The writer shares the already-initialized schema — its init() is a
+      // no-op DDL pass that proves the SHARE UPDATE EXCLUSIVE lock is held.
+      // We don't call init() on the writer for the workload itself; we
+      // explicitly race it against the workload below.
+
+      try {
+        const writeCount = 50;
+        const writeStartedAt: number[] = [];
+        const writeFinishedAt: number[] = [];
+        const writes = Array.from({ length: writeCount }, (_, i) =>
+          (async () => {
+            const startedAt = Date.now();
+            writeStartedAt.push(startedAt);
+            await harness.domain.createSpan({
+              span: makeSpan({
+                traceId: `init-write-trace-${i}`,
+                spanId: `init-write-root-${i}`,
+                startedAt: dayAt(0, 10, 0, i % 60),
+                endedAt: dayAt(0, 10, 0, (i % 60) + 1),
+              }),
+            });
+            writeFinishedAt.push(Date.now() - startedAt);
+          })(),
+        );
+
+        const reinit = writer.init();
+
+        await Promise.all([reinit, ...writes]);
+
+        // Every write must succeed.
+        expect(writeFinishedAt).toHaveLength(writeCount);
+
+        // Every write must individually finish quickly. With ACCESS
+        // EXCLUSIVE on the parent, writes serialize behind the init's
+        // catalog lock and individual createSpan() calls regularly exceed
+        // 1s on a loaded test box. With SHARE UPDATE EXCLUSIVE they finish
+        // in single-digit ms. Use a generous threshold to keep the test
+        // stable on CI but catch the lock-mode regression.
+        const slowestWriteMs = Math.max(...writeFinishedAt);
+        expect(slowestWriteMs).toBeLessThan(2_000);
+
+        // Sanity-check that the rows actually landed.
+        for (let i = 0; i < writeCount; i++) {
+          const trace = await harness.domain.getTrace({ traceId: `init-write-trace-${i}` });
+          expect(trace?.spans.map(span => span.spanId)).toEqual([`init-write-root-${i}`]);
+        }
+      } finally {
+        await writePool.end();
+        await harness.close();
+      }
+    });
   });
 
   describe('page-mode pagination ordering', () => {

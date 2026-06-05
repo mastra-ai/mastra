@@ -118,6 +118,7 @@ import * as logsOps from './logs';
 import * as metricsOps from './metrics';
 import { detectPartman, detectTimescale, setupPartitioning } from './partitioning';
 import type { PartitioningOptions, PartitionMode } from './partitioning';
+import { isDuplicateRelationError, isDuplicateSchemaError } from './pg-errors';
 import { deltaPollingFeatureEnabled } from './polling';
 import * as scoresOps from './scores';
 import * as tracesOps from './traces';
@@ -147,16 +148,7 @@ function wrapError(op: string, error: unknown, details?: Record<string, unknown>
   );
 }
 
-function isDuplicateRelationError(error: unknown): boolean {
-  const code = (error as { code?: string } | undefined)?.code;
-  const constraint = (error as { constraint?: string } | undefined)?.constraint;
-  const message = (error as { message?: string } | undefined)?.message ?? '';
-  return (
-    code === '42P07' ||
-    (code === '23505' && (constraint === 'pg_type_typname_nsp_index' || constraint === 'pg_class_relname_nsp_index')) ||
-    /already exists/i.test(message)
-  );
-}
+
 
 export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   readonly #client: DbClient;
@@ -206,7 +198,15 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
       const ddlMode = mode === 'timescale' ? 'timescale' : 'partitioned';
 
-      await this.#client.none(schemaDDL(this.#schema));
+      try {
+        await this.#client.none(schemaDDL(this.#schema));
+      } catch (error) {
+        // `CREATE SCHEMA IF NOT EXISTS` is not atomic; two concurrent
+        // init() calls against a fresh schema can both pass the
+        // existence probe and one will surface 42P06 or a 23505 on
+        // pg_namespace_nspname_index. Treat it as success.
+        if (!isDuplicateSchemaError(error)) throw error;
+      }
 
       for (const ddl of allTableDDL(this.#schema, ddlMode)) {
         try {
