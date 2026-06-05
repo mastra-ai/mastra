@@ -35,6 +35,7 @@ import { SchedulesPG } from './domains/schedules';
 import { ScorerDefinitionsPG } from './domains/scorer-definitions';
 import { ScoresPG } from './domains/scores';
 import { SkillsPG } from './domains/skills';
+import { ToolProviderConnectionsPG } from './domains/tool-provider-connections';
 import { WorkflowsPG } from './domains/workflows';
 import { WorkspacesPG } from './domains/workspaces';
 import { buildConnectionStringPoolConfig } from './pool-config';
@@ -96,6 +97,12 @@ const ALL_DOMAINS = [
   ScorerDefinitionsPG,
   PromptBlocksPG,
   AgentsPG,
+  MCPClientsPG,
+  MCPServersPG,
+  WorkspacesPG,
+  SkillsPG,
+  BlobsPG,
+  ToolProviderConnectionsPG,
   WorkflowsPG,
   DatasetsPG,
   ExperimentsPG,
@@ -145,6 +152,7 @@ export {
   SchedulesPG,
   SkillsPG,
   FavoritesPG,
+  ToolProviderConnectionsPG,
   WorkflowsPG,
   WorkspacesPG,
 };
@@ -224,6 +232,7 @@ export class PostgresStore extends MastraCompositeStore {
         workspaces: new WorkspacesPG(domainConfig),
         skills: new SkillsPG(domainConfig),
         favorites: new FavoritesPG(domainConfig),
+        toolProviderConnections: new ToolProviderConnectionsPG(domainConfig),
         blobs: new BlobsPG(domainConfig),
         datasets: new DatasetsPG(domainConfig),
         experiments: new ExperimentsPG(domainConfig),

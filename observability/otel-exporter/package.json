@@ -34,22 +34,22 @@
     "@mastra/observability": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/api-logs": "^0.218.0",
-    "@opentelemetry/core": "^2.7.0",
-    "@opentelemetry/resources": "^2.7.0",
+    "@opentelemetry/core": "^2.7.1",
+    "@opentelemetry/resources": "^2.7.1",
     "@opentelemetry/sdk-logs": "^0.218.0",
-    "@opentelemetry/sdk-trace-base": "^2.7.0",
-    "@opentelemetry/sdk-trace-node": "^2.7.0",
-    "@opentelemetry/semantic-conventions": "^1.40.0"
+    "@opentelemetry/sdk-trace-base": "^2.7.1",
+    "@opentelemetry/sdk-trace-node": "^2.7.1",
+    "@opentelemetry/semantic-conventions": "^1.41.1"
   },
   "optionalDependencies": {
-    "@grpc/grpc-js": "^1.14.3",
+    "@grpc/grpc-js": "^1.14.4",
     "@opentelemetry/exporter-logs-otlp-grpc": "^0.218.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.218.0",
     "@opentelemetry/exporter-logs-otlp-proto": "^0.218.0",
     "@opentelemetry/exporter-trace-otlp-grpc": "^0.218.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.218.0",
-    "@opentelemetry/exporter-zipkin": "^2.7.0"
+    "@opentelemetry/exporter-zipkin": "^2.7.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -58,7 +58,7 @@
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

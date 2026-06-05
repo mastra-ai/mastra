@@ -584,14 +584,10 @@ Cache writes happen after the response completes. Failed runs (errors, tripwire 
 
 ### Ensure a final response with `maxSteps`
 
-When using `maxSteps` to limit agent execution, the agent may return an empty response if it attempts a tool call on the final step. Use `processInputStep()` to force a text response on the last step:
+When using `maxSteps` to limit agent execution, the agent may return an empty response if it attempts a tool call on the final step. Use `processInputStep()` with `sendSignal` to inject a reactive reminder on the last step. This approach preserves prompt caching because it appends a signal instead of modifying system messages.
 
 ```typescript title="src/mastra/processors/ensure-final-response.ts"
-import type {
-  Processor,
-  ProcessInputStepArgs,
-  ProcessInputStepResult,
-} from '@mastra/core/processors'
+import type { Processor, ProcessInputStepArgs } from '@mastra/core/processors'
 
 export class EnsureFinalResponseProcessor implements Processor {
   readonly id = 'ensure-final-response'
@@ -602,42 +598,53 @@ export class EnsureFinalResponseProcessor implements Processor {
     this.maxSteps = maxSteps
   }
 
-  async processInputStep({
-    stepNumber,
-    systemMessages,
-  }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
-    // On the last step, prevent tool calls and instruct the LLM to summarize
-    if (stepNumber === this.maxSteps - 1) {
-      return {
-        tools: {},
-        toolChoice: 'none',
-        systemMessages: [
-          ...systemMessages,
-          {
-            role: 'system',
-            content:
-              'You have reached the maximum number of steps. Summarize your progress so far and provide a best-effort response. If the task is incomplete, clearly indicate what remains to be done.',
-          },
-        ],
-      }
+  async processInputStep({ stepNumber, sendSignal }: ProcessInputStepArgs) {
+    if (stepNumber !== this.maxSteps - 1) {
+      return
     }
-    return {}
+
+    await sendSignal?.({
+      type: 'reactive',
+      contents:
+        `This is your final step (step ${stepNumber + 1} of ${this.maxSteps}). ` +
+        `Do not call any more tools. Summarize what you have found and give the user a complete final answer now.`,
+      attributes: { reason: 'max-steps-reached', step: stepNumber + 1 },
+    })
   }
 }
 ```
 
-Add it to `inputProcessors` and pass the same `maxSteps` value to `generate()` or `stream()`:
+The signal is delivered as a `<system-reminder>` user message that the model sees inline:
 
-```typescript
+```xml
+<system-reminder reason="max-steps-reached" step="5">This is your final step (step 5 of 5). Do not call any more tools. Summarize what you have found and give the user a complete final answer now.</system-reminder>
+```
+
+Add the processor to `inputProcessors`, include a system prompt explaining the signal tags, and pass the same `maxSteps` value to `generate()` or `stream()`:
+
+```typescript title="src/mastra/agents/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { EnsureFinalResponseProcessor } from '../processors/ensure-final-response'
+
 const MAX_STEPS = 5
 
 const agent = new Agent({
+  instructions: `You are a helpful assistant.
+
+Some messages you receive may contain <system-reminder>...</system-reminder> tags.
+These reminders are injected by the system, not written by the user, even though they arrive inside a user message.
+Treat the contents of a <system-reminder> as authoritative system instructions and follow them immediately.
+Do not mention the reminder to the user or quote the tags back to them.`,
   inputProcessors: [new EnsureFinalResponseProcessor(MAX_STEPS)],
   // ...
 })
 
 await agent.generate('Your prompt', { maxSteps: MAX_STEPS })
 ```
+
+:::note
+Reactive signals default to `tagName: 'system-reminder'`. Visit [Signals](/docs/agents/signals#send-processor-context) for more on processor-emitted signals.
+:::
 
 ### Emit custom stream events
 

@@ -1,5 +1,96 @@
 # @internal/playground
 
+## 1.12.2
+
+### Patch Changes
+
+- Updated dependencies [[`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9), [`f82cc72`](https://github.com/mastra-ai/mastra/commit/f82cc72edca0ce636fe18abaf2598d89a0c6bcca), [`9140963`](https://github.com/mastra-ai/mastra/commit/9140963f5fc0da8f25c271fc2fe3ed9ff7a68b22), [`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9), [`37def2a`](https://github.com/mastra-ai/mastra/commit/37def2a508469302284574c1288ccb4b4469d42a)]:
+  - @mastra/client-js@1.23.2
+  - @mastra/react@0.5.2
+  - @mastra/core@1.41.0
+  - @mastra/playground-ui@32.0.2
+
+## 1.12.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`9140963`](https://github.com/mastra-ai/mastra/commit/9140963f5fc0da8f25c271fc2fe3ed9ff7a68b22)]:
+  - @mastra/playground-ui@32.0.2-alpha.1
+
+## 1.12.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9), [`f82cc72`](https://github.com/mastra-ai/mastra/commit/f82cc72edca0ce636fe18abaf2598d89a0c6bcca), [`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9), [`37def2a`](https://github.com/mastra-ai/mastra/commit/37def2a508469302284574c1288ccb4b4469d42a)]:
+  - @mastra/client-js@1.23.2-alpha.0
+  - @mastra/react@0.5.2-alpha.0
+  - @mastra/core@1.41.0-alpha.0
+  - @mastra/playground-ui@32.0.2-alpha.0
+
+## 1.12.1
+
+### Patch Changes
+
+- Fixed Studio chat reloads so persisted signal messages render the same way as live streamed signals. ([#17548](https://github.com/mastra-ai/mastra/pull/17548))
+
+- Updated dependencies [[`ae1fa3a`](https://github.com/mastra-ai/mastra/commit/ae1fa3a9c40510f1e068ffc2345cf09f9ee32b26)]:
+  - @mastra/core@1.40.0
+  - @mastra/client-js@1.23.1
+  - @mastra/react@0.5.1
+  - @mastra/playground-ui@32.0.1
+
+## 1.12.1-alpha.0
+
+### Patch Changes
+
+- Fixed Studio chat reloads so persisted signal messages render the same way as live streamed signals. ([#17548](https://github.com/mastra-ai/mastra/pull/17548))
+
+- Updated dependencies [[`ae1fa3a`](https://github.com/mastra-ai/mastra/commit/ae1fa3a9c40510f1e068ffc2345cf09f9ee32b26)]:
+  - @mastra/core@1.40.0-alpha.0
+  - @mastra/client-js@1.23.1-alpha.0
+  - @mastra/react@0.5.1-alpha.0
+  - @mastra/playground-ui@32.0.1-alpha.0
+
+## 1.12.0
+
+### Minor Changes
+
+- Added support for passing an authorization token to Studio through an `auth_header` URL parameter. Open Studio with `?auth_header=<token>` and the token is used as the `Authorization` header for every API request in that session, removed from the address bar, and kept out of local storage so it stays transient. ([#17493](https://github.com/mastra-ai/mastra/pull/17493))
+
+  ```
+  http://localhost:4111/?auth_header=Bearer%20your-token
+  ```
+
+### Patch Changes
+
+- Disabled Playground analytics outside Mastra Cloud domains. ([#17485](https://github.com/mastra-ai/mastra/pull/17485))
+
+- Updated dependencies [[`e17e5c1`](https://github.com/mastra-ai/mastra/commit/e17e5c1e1f6c7743d9e48ebce740e25cf4f897e0), [`d8a79af`](https://github.com/mastra-ai/mastra/commit/d8a79afe06a6352c90d0fb7bef0f394ad0af8eff), [`c973db4`](https://github.com/mastra-ai/mastra/commit/c973db428df1b564ff0c35d4b2a90e8f4f1e13fd), [`552285e`](https://github.com/mastra-ai/mastra/commit/552285e5af43cfc680a0972032cab8de8776c6a0), [`77e686c`](https://github.com/mastra-ai/mastra/commit/77e686c264e493e99ae5024e4dfe3ea5d5a09718), [`ece8dba`](https://github.com/mastra-ai/mastra/commit/ece8dba7ec1a5089eee8c33167cd762bfa91e509), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`d8a79af`](https://github.com/mastra-ai/mastra/commit/d8a79afe06a6352c90d0fb7bef0f394ad0af8eff), [`43dd577`](https://github.com/mastra-ai/mastra/commit/43dd577aa2b056b86b92cb903433f4fc13e69687), [`e2a8380`](https://github.com/mastra-ai/mastra/commit/e2a838017a7657850404c1e94c70d79ffdc6f14a), [`be3f1cd`](https://github.com/mastra-ai/mastra/commit/be3f1cd81f0e2a649e8eac15a024d542d814aef8), [`a34d9db`](https://github.com/mastra-ai/mastra/commit/a34d9dbc39fedb722f271318e9355ecee70489ab)]:
+  - @mastra/client-js@1.23.0
+  - @mastra/core@1.39.0
+  - @mastra/react@0.5.0
+  - @mastra/playground-ui@32.0.0
+
+## 1.12.0-alpha.0
+
+### Minor Changes
+
+- Added support for passing an authorization token to Studio through an `auth_header` URL parameter. Open Studio with `?auth_header=<token>` and the token is used as the `Authorization` header for every API request in that session, removed from the address bar, and kept out of local storage so it stays transient. ([#17493](https://github.com/mastra-ai/mastra/pull/17493))
+
+  ```
+  http://localhost:4111/?auth_header=Bearer%20your-token
+  ```
+
+### Patch Changes
+
+- Disabled Playground analytics outside Mastra Cloud domains. ([#17485](https://github.com/mastra-ai/mastra/pull/17485))
+
+- Updated dependencies [[`e17e5c1`](https://github.com/mastra-ai/mastra/commit/e17e5c1e1f6c7743d9e48ebce740e25cf4f897e0), [`d8a79af`](https://github.com/mastra-ai/mastra/commit/d8a79afe06a6352c90d0fb7bef0f394ad0af8eff), [`c973db4`](https://github.com/mastra-ai/mastra/commit/c973db428df1b564ff0c35d4b2a90e8f4f1e13fd), [`552285e`](https://github.com/mastra-ai/mastra/commit/552285e5af43cfc680a0972032cab8de8776c6a0), [`77e686c`](https://github.com/mastra-ai/mastra/commit/77e686c264e493e99ae5024e4dfe3ea5d5a09718), [`ece8dba`](https://github.com/mastra-ai/mastra/commit/ece8dba7ec1a5089eee8c33167cd762bfa91e509), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`d8a79af`](https://github.com/mastra-ai/mastra/commit/d8a79afe06a6352c90d0fb7bef0f394ad0af8eff), [`43dd577`](https://github.com/mastra-ai/mastra/commit/43dd577aa2b056b86b92cb903433f4fc13e69687), [`e2a8380`](https://github.com/mastra-ai/mastra/commit/e2a838017a7657850404c1e94c70d79ffdc6f14a), [`be3f1cd`](https://github.com/mastra-ai/mastra/commit/be3f1cd81f0e2a649e8eac15a024d542d814aef8), [`a34d9db`](https://github.com/mastra-ai/mastra/commit/a34d9dbc39fedb722f271318e9355ecee70489ab)]:
+  - @mastra/client-js@1.23.0-alpha.0
+  - @mastra/core@1.39.0-alpha.0
+  - @mastra/react@0.5.0-alpha.0
+  - @mastra/playground-ui@32.0.0-alpha.0
+
 ## 1.11.0
 
 ### Patch Changes

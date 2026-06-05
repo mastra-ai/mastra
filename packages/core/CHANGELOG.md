@@ -1,5 +1,413 @@
 # @mastra/core
 
+## 1.41.0
+
+### Minor Changes
+
+- Workspace `sandbox` now accepts a resolver function for per-request sandboxes. ([#16048](https://github.com/mastra-ai/mastra/pull/16048))
+
+  **Before:** `sandbox: WorkspaceSandbox` (static, same sandbox for every request)
+  **After:** `sandbox: WorkspaceSandbox | (({ requestContext }) => WorkspaceSandbox)` (static or per-request)
+
+  This enables per-request sandbox routing from a single Workspace — useful for multi-tenant deployments where each user/role needs an isolated working directory or different execution permissions.
+
+  ```ts
+  const workspace = new Workspace({
+    sandbox: ({ requestContext }) => {
+      const userId = requestContext.get('user-id') as string;
+      return new LocalSandbox({ workingDirectory: `/workspaces/${userId}` });
+    },
+  });
+  ```
+
+  When using a resolver, the caller owns the returned sandbox's lifecycle — the Workspace will not call `start()` or `destroy()` on it. `mounts` throws an `INVALID_CONFIG` error with a resolver, and `lsp: true` is disabled with a warning because both require a concrete sandbox instance up front.
+
+  **Stable prompts by default**
+
+  Building workspace instructions no longer calls a sandbox resolver. Resolver-backed sandboxes contribute stable placeholder text to the agent's system message, so constructing the prompt never provisions a caller-owned sandbox and the prompt stays cache-friendly. Opt into concrete per-request instructions with `instructions.dynamicSandbox`:
+
+  ```ts
+  const workspace = new Workspace({
+    sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+    instructions: { dynamicSandbox: 'resolve' }, // or a ({ requestContext }) => string function
+  });
+  ```
+
+  **Background process continuity**
+
+  Set `sandboxCacheKey` to keep `execute_command({ background: true })`, `get_process_output`, and `kill_process` on the same sandbox across follow-up requests — continuity is keyed by a stable id rather than the `RequestContext` instance:
+
+  ```ts
+  const workspace = new Workspace({
+    sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+    sandboxCacheKey: ({ requestContext }) => requestContext.get('thread-id') as string,
+  });
+  ```
+
+  Failed sandbox resolver calls are removed from the cache so later calls can retry. Use `workspace.clearSandboxCache(cacheKey)` to drop a keyed sandbox reference when your own lifecycle code has destroyed or replaced that sandbox.
+
+  When background process tools cannot find a PID on a dynamic sandbox without `sandboxCacheKey`, the tool output now points to `sandboxCacheKey` so callers can fix continuity across follow-up requests.
+
+### Patch Changes
+
+- Added `untilIdle` option to `stream()` and `resumeStream()` methods. Pass `untilIdle: true` (or `untilIdle: { maxIdleMs: 60_000 }`) to keep the stream open across background-task continuations — same behavior as the now-deprecated `streamUntilIdle()` method. ([#17536](https://github.com/mastra-ai/mastra/pull/17536))
+
+  **Example:**
+
+  ```ts
+  const result = await agent.stream('Research solana for me', {
+    untilIdle: true,
+    memory: { thread: 't1', resource: 'u1' },
+  });
+  ```
+
+  Deprecated `streamUntilIdle()` and `resumeStreamUntilIdle()` — they still work but now delegate internally to `stream({ untilIdle: true })`.
+
+## 1.41.0-alpha.0
+
+### Minor Changes
+
+- Workspace `sandbox` now accepts a resolver function for per-request sandboxes. ([#16048](https://github.com/mastra-ai/mastra/pull/16048))
+
+  **Before:** `sandbox: WorkspaceSandbox` (static, same sandbox for every request)
+  **After:** `sandbox: WorkspaceSandbox | (({ requestContext }) => WorkspaceSandbox)` (static or per-request)
+
+  This enables per-request sandbox routing from a single Workspace — useful for multi-tenant deployments where each user/role needs an isolated working directory or different execution permissions.
+
+  ```ts
+  const workspace = new Workspace({
+    sandbox: ({ requestContext }) => {
+      const userId = requestContext.get('user-id') as string;
+      return new LocalSandbox({ workingDirectory: `/workspaces/${userId}` });
+    },
+  });
+  ```
+
+  When using a resolver, the caller owns the returned sandbox's lifecycle — the Workspace will not call `start()` or `destroy()` on it. `mounts` throws an `INVALID_CONFIG` error with a resolver, and `lsp: true` is disabled with a warning because both require a concrete sandbox instance up front.
+
+  **Stable prompts by default**
+
+  Building workspace instructions no longer calls a sandbox resolver. Resolver-backed sandboxes contribute stable placeholder text to the agent's system message, so constructing the prompt never provisions a caller-owned sandbox and the prompt stays cache-friendly. Opt into concrete per-request instructions with `instructions.dynamicSandbox`:
+
+  ```ts
+  const workspace = new Workspace({
+    sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+    instructions: { dynamicSandbox: 'resolve' }, // or a ({ requestContext }) => string function
+  });
+  ```
+
+  **Background process continuity**
+
+  Set `sandboxCacheKey` to keep `execute_command({ background: true })`, `get_process_output`, and `kill_process` on the same sandbox across follow-up requests — continuity is keyed by a stable id rather than the `RequestContext` instance:
+
+  ```ts
+  const workspace = new Workspace({
+    sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+    sandboxCacheKey: ({ requestContext }) => requestContext.get('thread-id') as string,
+  });
+  ```
+
+  Failed sandbox resolver calls are removed from the cache so later calls can retry. Use `workspace.clearSandboxCache(cacheKey)` to drop a keyed sandbox reference when your own lifecycle code has destroyed or replaced that sandbox.
+
+  When background process tools cannot find a PID on a dynamic sandbox without `sandboxCacheKey`, the tool output now points to `sandboxCacheKey` so callers can fix continuity across follow-up requests.
+
+### Patch Changes
+
+- Added `untilIdle` option to `stream()` and `resumeStream()` methods. Pass `untilIdle: true` (or `untilIdle: { maxIdleMs: 60_000 }`) to keep the stream open across background-task continuations — same behavior as the now-deprecated `streamUntilIdle()` method. ([#17536](https://github.com/mastra-ai/mastra/pull/17536))
+
+  **Example:**
+
+  ```ts
+  const result = await agent.stream('Research solana for me', {
+    untilIdle: true,
+    memory: { thread: 't1', resource: 'u1' },
+  });
+  ```
+
+  Deprecated `streamUntilIdle()` and `resumeStreamUntilIdle()` — they still work but now delegate internally to `stream({ untilIdle: true })`.
+
+## 1.40.0
+
+### Minor Changes
+
+- Added support for Gateway embedding routing with `mastra/provider/model` IDs: ([#17469](https://github.com/mastra-ai/mastra/pull/17469))
+
+  ```ts
+  const embedder = new ModelRouterEmbeddingModel('mastra/__GATEWAY_OPENAI_EMBEDDING_MODEL__');
+  ```
+
+## 1.40.0-alpha.0
+
+### Minor Changes
+
+- Added support for Gateway embedding routing with `mastra/provider/model` IDs: ([#17469](https://github.com/mastra-ai/mastra/pull/17469))
+
+  ```ts
+  const embedder = new ModelRouterEmbeddingModel('mastra/__GATEWAY_OPENAI_EMBEDDING_MODEL__');
+  ```
+
+## 1.39.0
+
+### Minor Changes
+
+- Add a type-safe `MessageFactory` component to `@mastra/react` for rendering a `MastraDBMessage` with your own per-part components, and align its tripwire/task-verdict types with `@mastra/core`. ([#17514](https://github.com/mastra-ai/mastra/pull/17514))
+
+  **@mastra/react**
+
+  `MessageFactory` provides optional, fully type-safe render functions for each kind of message part. Only the renderer matching a part's type runs, and each receives correctly narrowed props; missing renderers fall back gracefully. Runtime-only `dynamic-tool` and AI SDK v5 `tool-${string}` parts are covered by a dedicated `DynamicTool` renderer, and optional role wrappers let you frame parts per message role.
+
+  ```tsx
+  import { MessageFactory } from '@mastra/react';
+
+  <MessageFactory
+    message={message}
+    Text={part => <p>{part.text}</p>}
+    ToolInvocation={part => <ToolCard name={part.toolInvocation.toolName} />}
+    DynamicTool={part => <ToolCard name={part.toolName} state={part.state} />}
+    Data={part => <DataView type={part.type} data={part.data} />}
+    roles={{ Signal: ({ children }) => <SignalFrame>{children}</SignalFrame> }}
+  />;
+  ```
+
+  It also accepts an optional `status` prop with four strongly-typed slots that render from a message's metadata while keeping part renderers pure. `Tripwire`, `Warning`, and `Error` are _replacement_ slots (rendered instead of the parts when `metadata.status` matches); `Task` is an _adjacent_ slot (rendered alongside the parts when a task-completion verdict exists). The factory only surfaces metadata to the slots and never filters it (for example, it still invokes `Task` when `suppressFeedback` is true) — the consumer decides what to render or skip. Existing behavior is unchanged when `status` is omitted.
+
+  ```tsx
+  <MessageFactory
+    message={message}
+    status={{
+      Error: ({ text }) => <ErrorNotice>{text}</ErrorNotice>,
+      Task: ({ passed, suppressFeedback }) => (suppressFeedback ? null : <TaskVerdict passed={passed} />),
+    }}
+    {...renderers}
+  />
+  ```
+
+  The narrowed part types used by the renderers are exported so consumers can type their own components: `TextPart`, `ReasoningPart`, `FilePart`, `StepStartPart`, `ToolInvocationPart`, `SourceDocumentPart`, and `SourceUrlPart`, plus `MessageFactoryPart` (the exact union of part shapes `MessageFactory` can dispatch — the typed accumulator parts plus the runtime-only `dynamic-tool` / `tool-${string}` parts) for typing part arrays precisely instead of `unknown[]`.
+
+  `MastraDBMessageMetadata.isTaskCompleteResult` is now typed as the `{ passed?, suppressFeedback? }` completion-verdict shape (matching `completionResult`) instead of `boolean`, so the `Task` slot resolves verdicts from either field without a cast.
+
+  `TripwireMetadata` is now an alias of core's `TripwirePayload`, and the message accumulator persists the canonical shape. Two behavioral changes to persisted `metadata.tripwire`:
+  - The tripwire `reason` is now persisted as `tripwire.reason` (previously it was only stored in the message text part).
+  - The processor metadata field was renamed from `tripwire.tripwirePayload` to `tripwire.metadata` to match the canonical type.
+
+  The `MessageFactory` `Tripwire` slot receives `reason` through `props.tripwire`.
+
+  **@mastra/core**
+
+  Exported the canonical `IsTaskCompletePayload` and `TripwirePayload` types from `@mastra/core/stream` so consumers can type their own task/completion and tripwire UI against them instead of redeclaring the shapes.
+
+  ```ts
+  import type { IsTaskCompletePayload, TripwirePayload } from '@mastra/core/stream';
+  ```
+
+- Add experimental record-first notification signals with thread-scoped inbox storage, `agent.sendNotificationSignal()`, priority-aware notification delivery policies, due-notification dispatch, summary rollups for low-priority notifications, a structured `metadata.notification` signal contract, and a flexible notification inbox tool. ([#17241](https://github.com/mastra-ai/mastra/pull/17241))
+
+  ```ts
+  await agent.sendNotificationSignal(
+    {
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed on main',
+    },
+    { resourceId: 'user-1', threadId: 'thread-1' },
+  );
+  ```
+
+  Agents can then use the `notification_inbox` tool to list, read, dismiss, or archive persisted inbox records.
+
+- Add processor state signals for memory-backed thread context. ([#17240](https://github.com/mastra-ai/mastra/pull/17240))
+
+  Processors can now publish named state lanes with `computeStateSignal()`, and external producers can update the same lanes with `agent.sendStateSignal()`. The runtime tracks each lane by `id`, `cacheKey`, and `mode`, so unchanged state is deduped and snapshot/delta history can be replayed efficiently.
+
+  Browser context now uses this state-signal path, so browser state is represented as thread state instead of being injected as ad hoc context.
+
+  ```ts
+  // External producer: push browser state outside a model run.
+  await agent.sendStateSignal(
+    {
+      id: 'browser',
+      cacheKey: 'tab-42:https://app.example.com/dashboard',
+      mode: 'snapshot',
+      contents: 'Browser is open on https://app.example.com/dashboard',
+      value: { url: 'https://app.example.com/dashboard', title: 'Dashboard' },
+    },
+    { resourceId, threadId, ifIdle: { behavior: 'persist' } },
+  );
+
+  // Processor-owned state: compute state before the model request.
+  const browserProcessor = {
+    id: 'browser-state',
+    stateId: 'browser',
+    async computeStateSignal({ lastSnapshot }) {
+      const nextBrowserState = await getBrowserState();
+
+      return {
+        cacheKey: nextBrowserState.url,
+        mode: 'snapshot',
+        contents: `Browser is open on ${nextBrowserState.url}`,
+        value: nextBrowserState,
+      };
+    },
+  };
+  ```
+
+### Patch Changes
+
+- Fixed CostGuardProcessor thread and resource scope resolution when running without auth middleware (e.g. Studio dev mode). The processor now falls back to the MastraMemory context on RequestContext to resolve threadId and resourceId, matching the pattern used by other processor helpers. ([#17522](https://github.com/mastra-ai/mastra/pull/17522))
+
+- Removed Hono from @mastra/core and auth package runtime dependencies. Auth providers now receive framework-agnostic request types that support standard Request objects and Hono-compatible request shapes. MCP and deployer avoid relying on core-bundled Hono context types at package boundaries. ([#17410](https://github.com/mastra-ai/mastra/pull/17410))
+
+- Improved notification delivery targeting and inbox search so notification records can be found and delivered to the intended thread. ([#17447](https://github.com/mastra-ai/mastra/pull/17447))
+
+- Fixed subscribed client tools so browser-executed tool results continue through the existing thread subscription instead of opening and canceling a second stream. This prevents closed-stream errors in apps like Agent Builder when multiple client tools run during one response. ([#17532](https://github.com/mastra-ai/mastra/pull/17532))
+
+- Added experimental `workingMemory.useStateSignals` opt-in. When set to `true`, working memory is delivered to the model as a `state` signal (via the new state-signals API) instead of being folded into the system message. `Memory` auto-attaches a `WorkingMemoryStateProcessor` that emits a signal with `stateId: 'working-memory'` and dedups via `cacheKey`. Subsequent turns emit unified-diff deltas against the prior snapshot when the diff is smaller than the snapshot (markdown mode only); schema mode and the fallback path always emit a full snapshot. The working-memory tool is registered as `setWorkingMemory` instead of `updateWorkingMemory` under this opt-in so legacy persistence/prompt strip filters naturally bypass it. The default (`false`) preserves the existing system-message behavior. `useStateSignals` is not supported with template working memory `version: 'vnext'`. ([#17497](https://github.com/mastra-ai/mastra/pull/17497))
+
+  ```ts
+  import { Memory } from '@mastra/memory';
+
+  const memory = new Memory({
+    options: {
+      workingMemory: {
+        enabled: true,
+        useStateSignals: true,
+      },
+    },
+  });
+  ```
+
+## 1.39.0-alpha.0
+
+### Minor Changes
+
+- Add a type-safe `MessageFactory` component to `@mastra/react` for rendering a `MastraDBMessage` with your own per-part components, and align its tripwire/task-verdict types with `@mastra/core`. ([#17514](https://github.com/mastra-ai/mastra/pull/17514))
+
+  **@mastra/react**
+
+  `MessageFactory` provides optional, fully type-safe render functions for each kind of message part. Only the renderer matching a part's type runs, and each receives correctly narrowed props; missing renderers fall back gracefully. Runtime-only `dynamic-tool` and AI SDK v5 `tool-${string}` parts are covered by a dedicated `DynamicTool` renderer, and optional role wrappers let you frame parts per message role.
+
+  ```tsx
+  import { MessageFactory } from '@mastra/react';
+
+  <MessageFactory
+    message={message}
+    Text={part => <p>{part.text}</p>}
+    ToolInvocation={part => <ToolCard name={part.toolInvocation.toolName} />}
+    DynamicTool={part => <ToolCard name={part.toolName} state={part.state} />}
+    Data={part => <DataView type={part.type} data={part.data} />}
+    roles={{ Signal: ({ children }) => <SignalFrame>{children}</SignalFrame> }}
+  />;
+  ```
+
+  It also accepts an optional `status` prop with four strongly-typed slots that render from a message's metadata while keeping part renderers pure. `Tripwire`, `Warning`, and `Error` are _replacement_ slots (rendered instead of the parts when `metadata.status` matches); `Task` is an _adjacent_ slot (rendered alongside the parts when a task-completion verdict exists). The factory only surfaces metadata to the slots and never filters it (for example, it still invokes `Task` when `suppressFeedback` is true) — the consumer decides what to render or skip. Existing behavior is unchanged when `status` is omitted.
+
+  ```tsx
+  <MessageFactory
+    message={message}
+    status={{
+      Error: ({ text }) => <ErrorNotice>{text}</ErrorNotice>,
+      Task: ({ passed, suppressFeedback }) => (suppressFeedback ? null : <TaskVerdict passed={passed} />),
+    }}
+    {...renderers}
+  />
+  ```
+
+  The narrowed part types used by the renderers are exported so consumers can type their own components: `TextPart`, `ReasoningPart`, `FilePart`, `StepStartPart`, `ToolInvocationPart`, `SourceDocumentPart`, and `SourceUrlPart`, plus `MessageFactoryPart` (the exact union of part shapes `MessageFactory` can dispatch — the typed accumulator parts plus the runtime-only `dynamic-tool` / `tool-${string}` parts) for typing part arrays precisely instead of `unknown[]`.
+
+  `MastraDBMessageMetadata.isTaskCompleteResult` is now typed as the `{ passed?, suppressFeedback? }` completion-verdict shape (matching `completionResult`) instead of `boolean`, so the `Task` slot resolves verdicts from either field without a cast.
+
+  `TripwireMetadata` is now an alias of core's `TripwirePayload`, and the message accumulator persists the canonical shape. Two behavioral changes to persisted `metadata.tripwire`:
+  - The tripwire `reason` is now persisted as `tripwire.reason` (previously it was only stored in the message text part).
+  - The processor metadata field was renamed from `tripwire.tripwirePayload` to `tripwire.metadata` to match the canonical type.
+
+  The `MessageFactory` `Tripwire` slot receives `reason` through `props.tripwire`.
+
+  **@mastra/core**
+
+  Exported the canonical `IsTaskCompletePayload` and `TripwirePayload` types from `@mastra/core/stream` so consumers can type their own task/completion and tripwire UI against them instead of redeclaring the shapes.
+
+  ```ts
+  import type { IsTaskCompletePayload, TripwirePayload } from '@mastra/core/stream';
+  ```
+
+- Add experimental record-first notification signals with thread-scoped inbox storage, `agent.sendNotificationSignal()`, priority-aware notification delivery policies, due-notification dispatch, summary rollups for low-priority notifications, a structured `metadata.notification` signal contract, and a flexible notification inbox tool. ([#17241](https://github.com/mastra-ai/mastra/pull/17241))
+
+  ```ts
+  await agent.sendNotificationSignal(
+    {
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed on main',
+    },
+    { resourceId: 'user-1', threadId: 'thread-1' },
+  );
+  ```
+
+  Agents can then use the `notification_inbox` tool to list, read, dismiss, or archive persisted inbox records.
+
+- Add processor state signals for memory-backed thread context. ([#17240](https://github.com/mastra-ai/mastra/pull/17240))
+
+  Processors can now publish named state lanes with `computeStateSignal()`, and external producers can update the same lanes with `agent.sendStateSignal()`. The runtime tracks each lane by `id`, `cacheKey`, and `mode`, so unchanged state is deduped and snapshot/delta history can be replayed efficiently.
+
+  Browser context now uses this state-signal path, so browser state is represented as thread state instead of being injected as ad hoc context.
+
+  ```ts
+  // External producer: push browser state outside a model run.
+  await agent.sendStateSignal(
+    {
+      id: 'browser',
+      cacheKey: 'tab-42:https://app.example.com/dashboard',
+      mode: 'snapshot',
+      contents: 'Browser is open on https://app.example.com/dashboard',
+      value: { url: 'https://app.example.com/dashboard', title: 'Dashboard' },
+    },
+    { resourceId, threadId, ifIdle: { behavior: 'persist' } },
+  );
+
+  // Processor-owned state: compute state before the model request.
+  const browserProcessor = {
+    id: 'browser-state',
+    stateId: 'browser',
+    async computeStateSignal({ lastSnapshot }) {
+      const nextBrowserState = await getBrowserState();
+
+      return {
+        cacheKey: nextBrowserState.url,
+        mode: 'snapshot',
+        contents: `Browser is open on ${nextBrowserState.url}`,
+        value: nextBrowserState,
+      };
+    },
+  };
+  ```
+
+### Patch Changes
+
+- Fixed CostGuardProcessor thread and resource scope resolution when running without auth middleware (e.g. Studio dev mode). The processor now falls back to the MastraMemory context on RequestContext to resolve threadId and resourceId, matching the pattern used by other processor helpers. ([#17522](https://github.com/mastra-ai/mastra/pull/17522))
+
+- Removed Hono from @mastra/core and auth package runtime dependencies. Auth providers now receive framework-agnostic request types that support standard Request objects and Hono-compatible request shapes. MCP and deployer avoid relying on core-bundled Hono context types at package boundaries. ([#17410](https://github.com/mastra-ai/mastra/pull/17410))
+
+- Improved notification delivery targeting and inbox search so notification records can be found and delivered to the intended thread. ([#17447](https://github.com/mastra-ai/mastra/pull/17447))
+
+- Fixed subscribed client tools so browser-executed tool results continue through the existing thread subscription instead of opening and canceling a second stream. This prevents closed-stream errors in apps like Agent Builder when multiple client tools run during one response. ([#17532](https://github.com/mastra-ai/mastra/pull/17532))
+
+- Added experimental `workingMemory.useStateSignals` opt-in. When set to `true`, working memory is delivered to the model as a `state` signal (via the new state-signals API) instead of being folded into the system message. `Memory` auto-attaches a `WorkingMemoryStateProcessor` that emits a signal with `stateId: 'working-memory'` and dedups via `cacheKey`. Subsequent turns emit unified-diff deltas against the prior snapshot when the diff is smaller than the snapshot (markdown mode only); schema mode and the fallback path always emit a full snapshot. The working-memory tool is registered as `setWorkingMemory` instead of `updateWorkingMemory` under this opt-in so legacy persistence/prompt strip filters naturally bypass it. The default (`false`) preserves the existing system-message behavior. `useStateSignals` is not supported with template working memory `version: 'vnext'`. ([#17497](https://github.com/mastra-ai/mastra/pull/17497))
+
+  ```ts
+  import { Memory } from '@mastra/memory';
+
+  const memory = new Memory({
+    options: {
+      workingMemory: {
+        enabled: true,
+        useStateSignals: true,
+      },
+    },
+  });
+  ```
+
 ## 1.38.0
 
 ### Minor Changes

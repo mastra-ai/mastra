@@ -44,6 +44,11 @@ jobs:
           if [ ! -s /tmp/changed-test-files ]; then
             echo "has_tests=false" >> "$GITHUB_OUTPUT"
 
+            if [ "$HEAD_REPO_FULL_NAME" = "$BASE_REPOSITORY" ]; then
+              echo "No changed test files detected for a branch in the base repository."
+              exit 0
+            fi
+
             case "$AUTHOR_ASSOCIATION" in
               OWNER|MEMBER|COLLABORATOR)
                 echo "No changed test files detected for an official contributor."
@@ -65,8 +70,10 @@ jobs:
           cat /tmp/changed-test-files
         env:
           AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+          BASE_REPOSITORY: ${{ github.repository }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.clone_url }}
+          HEAD_REPO_FULL_NAME: ${{ github.event.pull_request.head.repo.full_name }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup pnpm

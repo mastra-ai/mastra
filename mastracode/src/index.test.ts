@@ -12,6 +12,7 @@ vi.mock('@mastra/core/llm', () => ({
 
 vi.mock('@mastra/core/agent', () => ({
   Agent: class {},
+  SignalProvider: class {},
 }));
 
 vi.mock('@mastra/core/harness', () => ({

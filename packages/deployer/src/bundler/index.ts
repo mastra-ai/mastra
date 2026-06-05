@@ -72,14 +72,12 @@ export abstract class Bundler extends MastraBundler {
         {
           name: 'server',
           version: '1.0.0',
-          description: '',
+          private: true,
           type: 'module',
           main: 'index.mjs',
           scripts: {
             start: 'node ./index.mjs',
           },
-          author: 'Mastra',
-          license: 'ISC',
           dependencies: Object.fromEntries(dependenciesMap.entries()),
           ...(Object.keys(resolutions ?? {}).length > 0 && { resolutions }),
         },
