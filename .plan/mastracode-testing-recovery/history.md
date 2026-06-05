@@ -2708,3 +2708,18 @@ Local baseline evidence after rebase:
 - Sanitized run passed: `env -u OPENAI_API_KEY -u OPENROUTER_API_KEY -u ANTHROPIC_API_KEY -u GOOGLE_GENERATIVE_AI_API_KEY -u COHERE_API_KEY pnpm test:mastracode -- --run --reporter=dot` — 107 files / 1202 tests passed.
 
 Implication: workstream 1 is close locally, but env sanitization remains a required baseline rule. Workstream 2 may already have generic CI coverage via root Vitest project discovery, but should be audited explicitly before marking done.
+
+### TUI/AIMock harness discovery
+
+Inspected `/Users/tylerbarnes/code/microsoft/tui-test` and `/Users/tylerbarnes/code/CopilotKit/aimock` for workstream 4.
+
+Findings written to `.plan/mastracode-testing-recovery/tui-aimock-discovery.md` and linked from the recovery README.
+
+Summary:
+
+- `@microsoft/tui-test` is a strong fit for real Mastra Code TUI e2e tests: it drives a real PTY via `node-pty`, observes output through `@xterm/headless`, supports text locators, key/mouse input, cursor/buffer inspection, snapshots, retries, and traces.
+- AIMock is a strong fit for deterministic model behavior: `LLMock` can start on a random port, serve fixtures, expose request journals, and match requests by user/system text, tool name, tool-call id, model, turn/sequence index, endpoint, or predicate.
+- AIMock can record real interactions: on fixture miss it can proxy to real upstream providers, relay the response, collapse supported streaming responses, save fixtures to disk, and replay later. This should be a local fixture-generation workflow only; CI should use replay-only fixtures.
+- AIMock's Mastra docs are useful for capability context but appear stale for current Mastra APIs (`provider: "OPEN_AI"` object-style config), so future MC tests should follow current repo model configuration instead of copying those snippets.
+
+Recommended next spike: one tiny Mastra Code TUI e2e test that starts AIMock, creates a hermetic MC config dir pointed at AIMock, spawns MC under `tui-test`, submits one prompt, asserts the mocked assistant response appears, and verifies AIMock saw exactly one model request.

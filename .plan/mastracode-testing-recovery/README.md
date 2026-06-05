@@ -12,6 +12,8 @@ Use the `mastracode-testing-recovery` skill for the overall operating protocol: 
 
 Use [`test-recovery-system.md`](./test-recovery-system.md) as the draft system for turning the completed feature map into regression-shield test coverage.
 
+Use [`tui-aimock-discovery.md`](./tui-aimock-discovery.md) for the first-pass findings on `@microsoft/tui-test`, AIMock, AIMock record/replay, and the recommended Mastra Code e2e harness shape.
+
 For feature-map documentation, start a goal from the project command:
 
 ```text
