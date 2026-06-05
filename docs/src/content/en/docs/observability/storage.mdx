@@ -9,7 +9,7 @@ packages:
 
 Storage determines which observability signals persist, which queries are available, and whether metrics aggregation works. Use a dedicated observability store instead of your primary application store.
 
-## When to use storage guidance
+## When to use storage
 
 - Keep traces, logs, and metrics available in Mastra Studio during development.
 - Enable metrics with an OLAP-capable observability store.
@@ -68,7 +68,7 @@ For local development, the recommended setup is:
 
 This setup is for local testing and development. It gives you persisted traces, logs, and metrics without introducing external infrastructure.
 
-## Production guidance
+## Production deployment
 
 Observability traffic is usually more write-heavy than the rest of the application. In production:
 
