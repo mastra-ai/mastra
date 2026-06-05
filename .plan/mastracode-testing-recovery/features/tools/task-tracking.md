@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved todo tools into core Harness and renamed them to task tools.
-- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — moved current/previous task snapshots into `HarnessDisplayState` for UI rendering and history reconciliation; [#15192](https://github.com/mastra-ai/mastra/pull/15192) — clears task/plan/access projections on thread switch or creation so stale global task state does not leak across threads.
+- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — moved current/previous task snapshots into `HarnessDisplayState` for UI rendering and history reconciliation; [#15192](https://github.com/mastra-ai/mastra/pull/15192) — clears task/plan/access projections on thread switch or creation so stale global task state does not leak across threads; [#15749](https://github.com/mastra-ai/mastra/pull/15749) — broadens thread-boundary cleanup to reset task progress UI, `taskToolInsertIndex`, queued state, and other per-thread TUI projections on switch/create/clone.
 
 ## User-visible behavior
 
 - Agents maintain a structured task list with `task_write`, `task_update`, `task_complete`, and `task_check`.
 - Success: tool results, pinned TUI progress, prompt context, and reload/history agree on the same tasks.
-- Must preserve: stable task IDs, one `in_progress` task, no stale tasks across threads, no stale active plans or sandbox approvals across thread boundaries, no parent task tools in non-forked execute subagents.
+- Must preserve: stable task IDs, one `in_progress` task, no stale tasks across threads, no stale active plans, sandbox approvals, task insertion indexes, or task progress UI across thread boundaries, no parent task tools in non-forked execute subagents.
 
 ## Entry points / commands
 
@@ -51,6 +51,7 @@
 - `packages/core/src/harness/tools.ts` — task schemas, ID assignment, state mutation, `task_updated`.
 - `packages/core/src/harness/harness.ts` — built-in task tool injection and display state.
 - `mastracode/src/tui/components/task-progress.ts`, `tui/event-dispatch.ts`, `tui/handlers/tool.ts` — TUI projections and thread-boundary cleanup.
+- `mastracode/src/tui/commands/new.ts` and `mastracode/src/tui/commands/clone.ts` — explicit TUI reset paths for new/cloned threads, component caches, task state, active plan, sandbox paths, and `taskToolInsertIndex`.
 - `mastracode/src/agents/prompts/index.ts`, `mastracode/src/permissions.ts` — prompt injection and always-allowed policy.
 
 ## Dependencies / related features

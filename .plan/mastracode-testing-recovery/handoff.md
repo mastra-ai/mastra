@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #15653 (row 226) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, #15390, #15403, #15544, #15515, #15601, #15606, #15629, and #15653 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 227 #15678 (custom slash commands remain active-thread scoped).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #15749 (row 230) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, #15390, #15403, #15544, #15515, #15601, #15606, #15629, #15653, #15656, and #15699 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 231 #15730 (ProviderHistoryCompat error processor).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 227: PR #15678 (custom slash commands remain active-thread scoped), then row 228 #15656 (Changesets alpha skip) and row 230 #15749 (per-thread state clearing follow-up).
+1. Continue at `_pr-queue.md` row 231: PR #15730 (ProviderHistoryCompat error processor), then row 232 #15703 (custom model strings in `/om`), row 233 #15642 (evals system), and row 234 #15710 (Changesets alpha skip).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -44,6 +44,7 @@ None known.
 
 ## Last commands/evidence
 
+- Rows 227-230 verified/documented: #15678 active-thread-scoped custom slash command dispatch, #15656/#15699 Changesets alpha skips, and #15749 thread-boundary cleanup for tasks/plan/sandbox/task UI plus per-thread TUI projections. Focused verification passed: targeted thread lifecycle tests (5) and custom slash-command dispatch tests (7).
 - Rows 223-226 verified/documented: #15631 TUI status-line normalization for Fireworks/generic `p` model IDs, #15605 opt-in temporal-gap OM markers with Mastra Code defaults/rendering, and #15629/#15653 Changesets alpha skips. Focused verification passed: status-line normalization tests (4), memory temporal-marker tests (5), core temporalMarkers serialization test (1, no type errors), and MastraCode render-messages temporal-gap tests (3).
 - Rows 219-222 verified/documented: #15448 standalone `@mastra/tavily` integration package plus Mastra Code web-search/web-extract wrapper delegation, and #15515/#15601/#15606 Changesets alpha skips. Focused verification passed: Tavily package tests (31), targeted MastraCode web-search renderer test (1), and MastraCode dynamic/extra-tools tests (23).
 - Rows 215-218 verified/documented: #15403 Changesets alpha skip, #15423 headless `--output-format text|json|stream-json`, #15566 bounded/procedural ReDoS hardening for Mastra Code TUI parsers, OM tag stripping, and workspace/skill path normalization, and #15544 formatting/lint dependency skip. Focused verification passed: headless output-format unit tests (4), OM message-utils tests (6), core skill-versioning path-normalization tests (11, no type errors), and MastraCode ANSI/tool validation/enhanced renderer tests (75).

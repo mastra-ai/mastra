@@ -246,11 +246,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 224 | 2026-04-22 | #15605 | `01a7d51349` | review | done | feat(memory): opt-in temporal-gap markers for observational memory (#15605) | 11 |
 | 225 | 2026-04-22 | #15629 | `83224849d1` | likely skip | skipped | chore: version packages (alpha) (#15629) | 2 |
 | 226 | 2026-04-22 | #15653 | `8e75750997` | likely skip | skipped | chore: version packages (alpha) (#15653) | 2 |
-| 227 | 2026-04-23 | #15678 | `090c9558a3` | review | current | fix(mastracode): keep custom slash commands in the active thread (#15678) | 2 |
-| 228 | 2026-04-23 | #15656 | `f51df5d95a` | likely skip | | chore: version packages (alpha) (#15656) | 2 |
-| 229 | 2026-04-24 | #15699 | `d86bfacf70` | likely skip | | chore: version packages (alpha) (#15699) | 2 |
-| 230 | 2026-04-24 | #15749 | `5a0fca7986` | review | | fix(mastracode): clear per-thread state on thread switch/create (#15749) | 7 |
-| 231 | 2026-04-24 | #15730 | `7a7b3138fb` | review | | feat(core,mastracode): add ProviderHistoryCompat error processor with extensible rule architecture (#15730) | 1 |
+| 227 | 2026-04-23 | #15678 | `090c9558a3` | review | done | fix(mastracode): keep custom slash commands in the active thread (#15678) | 2 |
+| 228 | 2026-04-23 | #15656 | `f51df5d95a` | likely skip | skipped | chore: version packages (alpha) (#15656) | 2 |
+| 229 | 2026-04-24 | #15699 | `d86bfacf70` | likely skip | skipped | chore: version packages (alpha) (#15699) | 2 |
+| 230 | 2026-04-24 | #15749 | `5a0fca7986` | review | done | fix(mastracode): clear per-thread state on thread switch/create (#15749) | 7 |
+| 231 | 2026-04-24 | #15730 | `7a7b3138fb` | review | current | feat(core,mastracode): add ProviderHistoryCompat error processor with extensible rule architecture (#15730) | 1 |
 | 232 | 2026-04-24 | #15703 | `299f6fd1fb` | review | | mastracode: allow custom model strings in /om (#15703) | 14 |
 | 233 | 2026-04-27 | #15642 | `cf25a03132` | review | | feat(mastracode): add evals system with live scorers, offline experiments, and Studio feedback (#15642) | 24 |
 | 234 | 2026-04-28 | #15710 | `68a4cec599` | likely skip | | chore: version packages (alpha) (#15710) | 2 |

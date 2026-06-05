@@ -1898,3 +1898,25 @@ Verification:
 - `pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/temporal-markers.test.ts --bail=1 --reporter=dot` — 1 file / 5 tests passed.
 - `pnpm --filter ./packages/core exec vitest run src/memory/memory-config.test.ts -t "temporalMarkers" --bail=1 --reporter=dot` — 1 file / 1 test passed / 6 skipped / no type errors.
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/render-messages.test.ts -t "temporal-gap" --bail=1 --reporter=dot` — 1 file / 3 tests passed / 21 skipped.
+
+### PR #15678 / #15656 / #15699 / #15749 feature-map checkpoint
+
+Verified rows 227-230:
+
+- #15678 keeps custom slash commands scoped to the active thread. Current `command-dispatch.ts` routes `//name` through `state.customSlashCommands`, keeps built-in `/name` commands preferred over custom collisions, and still lets `//name` force a custom command even when a built-in command has the same name.
+- #15656 and #15699 are Changesets alpha package-version batches; skipped for feature mapping.
+- #15749 clears per-thread ephemeral state on thread switch/create. Current `event-dispatch.ts`, `/new`, and clone reset paths clear tasks, active plan, sandbox allowed paths, `taskToolInsertIndex`, live task progress, queued/custom command projections, and component caches while preserving non-ephemeral state such as the current model.
+
+Documentation actions:
+
+- Updated `features/chat/queued-followups.md` for active-thread custom command dispatch, state ownership, key files, and command-dispatch tests.
+- Updated `features/threads/persistent-conversations.md` and `features/tools/task-tracking.md` for #15749 thread-boundary cleanup, reset paths, and test coverage.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #15678 done, #15656 skipped, #15699 skipped, #15749 done, #15730 current.
+
+Focused evidence read: PR metadata for #15678/#15656/#15699/#15749; current `mastracode/src/tui/command-dispatch.ts`, `mastracode/src/tui/__tests__/command-dispatch.test.ts`, `mastracode/src/tui/event-dispatch.ts`, `mastracode/src/tui/__tests__/event-dispatch.test.ts`, `mastracode/src/tui/commands/{new,clone}.ts`, and `mastracode/src/schema.ts`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/command-dispatch.test.ts src/tui/__tests__/event-dispatch.test.ts -t "custom slash|thread_changed|thread_created|taskToolInsertIndex|taskProgress|non-ephemeral" --bail=1 --reporter=dot` — targeted thread lifecycle tests passed (1 file / 5 tests passed / 15 skipped).
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/command-dispatch.test.ts -t "custom slash command|//deploy|//new|built-in command" --bail=1 --reporter=dot` — targeted custom slash-command tests passed (1 file / 7 tests passed / 13 skipped).
