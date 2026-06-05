@@ -39,6 +39,17 @@ const errorMessage = (error: unknown): string => (error instanceof Error ? error
 const isSummaryDue = (record: NotificationRecord, now: Date): boolean =>
   Boolean(record.summaryAt && record.summaryAt.getTime() <= now.getTime());
 
+const individualDeliveryPriority: Record<NotificationRecord['priority'], number> = {
+  urgent: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+};
+
+const compareIndividualDeliveryPriority = (a: NotificationRecord, b: NotificationRecord): number =>
+  individualDeliveryPriority[a.priority] - individualDeliveryPriority[b.priority] ||
+  a.createdAt.getTime() - b.createdAt.getTime();
+
 const groupKey = (record: NotificationRecord): string | undefined => {
   if (!record.agentId || !record.resourceId || !record.threadId) return undefined;
   return [record.agentId, record.resourceId, record.threadId].join('\0');
@@ -197,6 +208,8 @@ export async function dispatchDueNotifications({
       }
     }
   }
+
+  individual.sort(compareIndividualDeliveryPriority);
 
   for (const record of individual) {
     try {
