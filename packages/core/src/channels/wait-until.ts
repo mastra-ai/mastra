@@ -8,34 +8,27 @@ import type { Context } from 'hono';
 export type WaitUntilFn = (promise: Promise<unknown>) => void;
 
 /**
- * User-supplied resolver that returns a `waitUntil` for the current request.
+ * Function that takes the request's Hono `Context` and returns a `waitUntil` for
+ * the current request, or undefined.
  *
- * Receives the request's Hono `Context` (optional — some resolvers don't need it,
- * e.g. `@vercel/functions`'s `waitUntil` uses AsyncLocalStorage). Channel providers
- * accept this on construction to support runtimes Hono doesn't bridge automatically
- * (Vercel, Netlify, custom platforms).
- *
- * @example
- * // Vercel
- * import { waitUntil } from '@vercel/functions';
- * new SlackProvider({ resolveWaitUntil: () => waitUntil });
- *
- * @example
- * // Cloudflare Workers (explicit; usually unneeded since core resolves this by default)
- * new SlackProvider({
- *   resolveWaitUntil: (c) => c?.executionCtx?.waitUntil?.bind(c.executionCtx),
- * });
+ * Use this when the runtime exposes `waitUntil` through the request context and
+ * Mastra's default resolver doesn't cover it (Cloudflare Workers and Netlify are
+ * handled automatically; this is the escape hatch for custom adapters).
  */
-export type WaitUntilResolver = (c?: Context) => WaitUntilFn | undefined;
+export type WaitUntilResolver = (c: Context) => WaitUntilFn | undefined;
 
 /**
- * Resolve `waitUntil` from a Hono context's `executionCtx`.
+ * Resolve `waitUntil` from the Hono context using runtime-specific conventions.
  *
- * Hono populates `c.executionCtx` only when the runtime hands it an ExecutionContext
- * (Cloudflare Workers' `app.fetch(req, env, ctx)` convention). Vercel and Netlify's
- * Hono adapters do NOT bridge the platform's `waitUntil` here — on those runtimes the
- * user should import `waitUntil` from `@vercel/functions` (or read it off the Netlify
- * `Context`) and pass it through a constructor option instead.
+ * Lookup order:
+ *  1. Cloudflare Workers — `c.executionCtx.waitUntil` (Hono populates this when
+ *     the runtime hands `app.fetch(req, env, ctx)` the third arg).
+ *  2. Netlify Functions — `c.env.context.waitUntil` (`hono/netlify` adapter
+ *     forwards Netlify's per-request `context` as Hono's `env`).
+ *
+ * Vercel's `waitUntil` lives in `@vercel/functions` and uses AsyncLocalStorage,
+ * not the request context — users on Vercel must pass `waitUntil` explicitly via
+ * the channel option.
  *
  * Hono's `executionCtx` getter throws in Node.js when no ExecutionContext exists,
  * so the access must be guarded by try/catch.
@@ -43,11 +36,51 @@ export type WaitUntilResolver = (c?: Context) => WaitUntilFn | undefined;
  * @returns A bound `waitUntil` function when the runtime provides one, otherwise undefined.
  */
 export function resolveWaitUntil(c: Context): WaitUntilFn | undefined {
+  // 1. Cloudflare Workers (and anything else that bridges executionCtx through Hono)
   let execCtx: { waitUntil?: WaitUntilFn } | undefined;
   try {
     execCtx = c.executionCtx as { waitUntil?: WaitUntilFn } | undefined;
   } catch {
     execCtx = undefined;
   }
-  return execCtx?.waitUntil?.bind(execCtx);
+  if (typeof execCtx?.waitUntil === 'function') {
+    return execCtx.waitUntil.bind(execCtx);
+  }
+
+  // 2. Netlify Functions (hono/netlify forwards Netlify's per-request context as env)
+  const netlifyCtx = (c.env as { context?: { waitUntil?: WaitUntilFn } } | undefined)?.context;
+  if (typeof netlifyCtx?.waitUntil === 'function') {
+    return netlifyCtx.waitUntil.bind(netlifyCtx);
+  }
+
+  return undefined;
+}
+
+/**
+ * Temporary debug helper: shapes the Hono context for logging so we can diagnose
+ * waitUntil resolution on different runtimes. Strip before release.
+ *
+ * @internal
+ */
+export function describeWaitUntilContext(c: Context): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    envType: typeof c.env,
+    envKeys: c.env && typeof c.env === 'object' ? Object.keys(c.env as object) : undefined,
+    hasContextOnEnv: Boolean((c.env as { context?: unknown } | undefined)?.context),
+    contextKeysOnEnv:
+      (c.env as { context?: object } | undefined)?.context && typeof (c.env as any).context === 'object'
+        ? Object.keys((c.env as any).context)
+        : undefined,
+    envVarVercel: process.env.VERCEL,
+    envVarNetlify: process.env.NETLIFY,
+    envVarCfPages: process.env.CF_PAGES,
+  };
+  try {
+    const execCtx = c.executionCtx as unknown;
+    out.executionCtxType = typeof execCtx;
+    out.executionCtxKeys = execCtx && typeof execCtx === 'object' ? Object.keys(execCtx as object) : undefined;
+  } catch (err) {
+    out.executionCtxAccessError = (err as Error)?.message;
+  }
+  return out;
 }
