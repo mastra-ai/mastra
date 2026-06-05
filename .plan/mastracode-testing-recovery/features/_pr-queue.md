@@ -190,10 +190,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 168 | 2026-03-30 | #14656 | `0771fa8909` | likely skip | skipped | chore: version packages (alpha) (#14656) | 2 |
 | 169 | 2026-03-30 | #14867 | `43b86882f7` | review | done | fix(mastracode): quote digit-leading provider names in gateway sync (#14867) | 1 |
 | 170 | 2026-03-31 | #14804 | `3ae348c76f` | review | done | fix(mastracode): show configured subagents in /subagents (#14804) | 2 |
-| 171 | 2026-03-31 | #14535 | `acf5fbcb89` | review | current | fix: handle circular references in tool results to prevent JSON.stringify crashes (#14535) | 4 |
-| 172 | 2026-03-31 | #14870 | `0cd1c8dd9d` | likely skip | | chore: version packages (alpha) (#14870) | 2 |
-| 173 | 2026-03-31 | #14904 | `051aece9c3` | likely skip | | chore: version packages (alpha) (#14904) | 2 |
-| 174 | 2026-04-01 | #14911 | `2737684b2a` | likely skip | | chore: version packages (alpha) (#14911) | 2 |
+| 171 | 2026-03-31 | #14535 | `acf5fbcb89` | review | done | fix: handle circular references in tool results to prevent JSON.stringify crashes (#14535) | 4 |
+| 172 | 2026-03-31 | #14870 | `0cd1c8dd9d` | likely skip | skipped | chore: version packages (alpha) (#14870) | 2 |
+| 173 | 2026-03-31 | #14904 | `051aece9c3` | likely skip | skipped | chore: version packages (alpha) (#14904) | 2 |
+| 174 | 2026-04-01 | #14911 | `2737684b2a` | likely skip | current | chore: version packages (alpha) (#14911) | 2 |
 | 175 | 2026-04-01 | #14960 | `a9d47b786f` | review | | fix(mastracode): disable MCP tool result timeout for long-running tools (#14960) | 1 |
 | 176 | 2026-04-01 | #14961 | `b016d2d4b7` | review | | fix: instruct agent to use request_access tool instead of telling user to run /sandbox (#14961) | 1 |
 | 177 | 2026-04-01 | #14929 | `121c67f169` | likely skip | | chore: version packages (alpha) (#14929) | 2 |

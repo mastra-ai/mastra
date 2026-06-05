@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14804 (row 170) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, and #14656 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #14535 (safe circular tool-result serialization).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14904 (row 173) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, and #14904 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #14911 (version package skip), then #14960 (long-running MCP tool timeout).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 171: PR #14535 (safe circular-reference handling in tool results), then row 172 #14870 and row 173 #14904 (version-package skips).
+1. Continue at `_pr-queue.md` row 174: PR #14911 (version-package skip), then row 175 #14960 (disable MCP tool result timeout for long-running tools), and row 176 #14961 (request_access guidance).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -44,6 +44,8 @@ None known.
 
 ## Last commands/evidence
 
+- Rows 171-173 verified/documented: #14535 safe circular tool-result serialization plus #14870/#14904 version-package skips.
+- Focused verification for rows 171-173 passed: core `utils.test.ts` (66 tests).
 - Rows 168-170 verified/documented: #14656 version-package skip, #14867 gateway provider key quoting for digit-leading names, and #14804 configured subagents in `/subagents`.
 - Focused verification for rows 168-170 passed: core registry generator (3 tests), MastraCode gateway sync wrapper + subagents command (10 tests).
 - Rows 165-167 verified/documented: #14788 persisted OM threshold settings, #14790 capped dynamic instruction reminders, and #14845 custom responses for option prompts.

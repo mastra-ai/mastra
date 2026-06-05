@@ -1529,3 +1529,23 @@ Verification:
 
 - `corepack pnpm --filter ./packages/core exec vitest run src/llm/model/registry-generator.test.ts --bail=1 --reporter=dot` — 1 file / 3 tests passed / no type errors.
 - `corepack pnpm --filter ./mastracode exec vitest run src/utils/__tests__/gateway-sync.test.ts src/tui/commands/__tests__/subagents.test.ts --bail=1 --reporter=dot` — 2 files / 10 tests passed.
+
+### PR #14535 / #14870 / #14904 feature-map checkpoint
+
+Verified rows 171-173:
+
+- #14535 prevents circular tool-result payloads from crashing JSON serialization. Current core source exports `safeStringify()` and `ensureSerializable()`, sanitizes raw tool execution results in `tool-call-step.ts`, and uses safe stringification in Harness/TUI/network rendering call sites so circular references become `[Circular]` markers.
+- #14870 and #14904 are Changesets alpha package-version batches across packages; skipped for feature mapping.
+
+Documentation actions:
+
+- Updated `features/tools/coding-tools-permissions.md` with safe tool-result serialization ownership, key files, tests, and JSON-safety-vs-output-budgeting risks.
+- Updated `features/tools/streaming-tool-arguments.md` with circular-result display behavior for completed tool boxes and history projections.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #14535 done, #14870 skipped, #14904 skipped, #14911 current.
+
+Focused evidence read: PR metadata/diffs for #14535/#14870/#14904; current `packages/core/src/utils.ts`, `utils.test.ts`, `packages/core/src/loop/workflows/agentic-execution/tool-call-step.ts`, Harness/TUI safeStringify call sites, and affected feature cards.
+
+Verification:
+
+- `corepack pnpm --filter ./packages/core exec vitest run src/utils.test.ts --bail=1 --reporter=dot` — 1 file / 66 tests passed / no type errors.

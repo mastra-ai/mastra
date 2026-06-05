@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13328](https://github.com/mastra-ai/mastra/pull/13328) — streamed tool arguments incrementally across tool renderers.
-- Later changes: [#13335](https://github.com/mastra-ai/mastra/pull/13335) — preserved assistant message text before task/todo tool calls by splitting the streaming assistant component; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — renamed todo streaming paths to task tools and moved tool ownership into core Harness; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — folded active tool and tool-input buffers into canonical `HarnessDisplayState`; [#14472](https://github.com/mastra-ai/mastra/pull/14472) — removed italic styling from rendered tool arguments while preserving argument color tinting.
+- Later changes: [#13335](https://github.com/mastra-ai/mastra/pull/13335) — preserved assistant message text before task/todo tool calls by splitting the streaming assistant component; [#13344](https://github.com/mastra-ai/mastra/pull/13344) — renamed todo streaming paths to task tools and moved tool ownership into core Harness; [#13427](https://github.com/mastra-ai/mastra/pull/13427) — folded active tool and tool-input buffers into canonical `HarnessDisplayState`; [#14472](https://github.com/mastra-ai/mastra/pull/14472) — removed italic styling from rendered tool arguments while preserving argument color tinting; [#14535](https://github.com/mastra-ai/mastra/pull/14535) — makes tool-result object rendering JSON-safe for circular structures using shared safe serialization helpers.
 
 ## User-visible behavior
 
-- What the user sees: tool boxes can appear before the final tool call is available, then fill in readable non-italic argument previews as the model streams JSON.
+- What the user sees: tool boxes can appear before the final tool call is available, then fill in readable non-italic argument previews as the model streams JSON; completed object results render even when they contain circular references.
 - Special cases: `ask_user`, `submit_plan`, and task mutation tools update dedicated inline/pinned components from partial args.
-- Must preserve: no duplicate tool boxes, final args replace partial args, pre-tool assistant text stays visible, history reload renders stable final args only, and argument styling remains legible in normal/quiet modes.
+- Must preserve: no duplicate tool boxes, final args replace partial args, pre-tool assistant text stays visible, history reload renders stable final args/results only, circular results are marked instead of crashing, and argument styling remains legible in normal/quiet modes.
 
 ## Entry points / commands
 
@@ -43,7 +43,7 @@
 | --- | --- | --- |
 | Raw streamed arg text | Harness display state `toolInputBuffers` | TUI tool handlers |
 | Parsed partial args | TUI `handleToolInputDelta()` | Tool/ask/plan/task components |
-| Final args | `tool_start` / stored `tool_call.args` | TUI live and history renderers |
+| Final args/results | `tool_start` / stored `tool_call.args`; core `ensureSerializable()` and TUI `safeStringify()` for object results | TUI live and history renderers |
 | Argument styling | `CODE_HIGHLIGHT_THEME` / `QUIET_CODE_HIGHLIGHT_THEME` token colors without italic font style | Tool argument previews and shell arg segments |
 | Pending tool components | TUI state `pendingTools` | Tool handlers/renderers |
 | Assistant message split | TUI `streamingComponent` | Preserves text before and after tool calls |
@@ -55,12 +55,13 @@
 - `mastracode/src/tui/event-dispatch.ts` — routes input events to handlers.
 - `mastracode/src/tui/handlers/tool.ts` — creates early components and parses partial JSON.
 - `mastracode/src/tui/components/tool-execution-enhanced.ts` — renders and updates argument previews.
+- `packages/core/src/utils.ts`, `tool-call-step.ts`, and MastraCode tool renderers — safe serialization path for circular tool results before display/history projections.
 - `mastracode/src/tui/render-messages.ts` — reload/history rendering from final tool calls.
 - `mastracode/src/tui/components/task-progress.ts` — pinned task progress projection for task mutation tools.
 
 ## Dependencies / related features
 
-- [Coding tools and approval permissions](./coding-tools-permissions.md) — tool execution surface.
+- [Coding tools and approval permissions](./coding-tools-permissions.md) — tool execution surface, result serialization, and approval/error renderers.
 - [Workspace-backed coding tools](./workspace-tools.md) — workspace tool calls are rendered through the streaming tool UI.
 - [Task tracking tools and TUI progress](./task-tracking.md) — task tools are the main special-case renderer.
 - [Interactive TUI chat](../tui/interactive-chat.md) — streaming chat renderer.
@@ -71,6 +72,7 @@
 
 - `packages/core/src/harness/display-state.test.ts` covers `tool_input_start/delta/end` buffers and streaming-input status.
 - `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts` covers preview updates from partial args.
+- `packages/core/src/utils.test.ts` covers safe circular-reference serialization helpers used by tool results.
 - `mastracode/src/tui/components/__tests__/ask-question-inline-long-labels.test.ts` covers streaming inline question args.
 - `mastracode/src/tui/components/__tests__/task-progress.test.ts` covers pinned task progress rendering.
 
@@ -79,13 +81,14 @@
 - TUI handler test for `handleToolInputDelta()` parsing partial JSON into `pendingTools`.
 - End-to-end TUI test covering live partial args then final `tool_start` replacement.
 - Regression test for pre-tool assistant text surviving task mutation tool input streaming.
-- History reload test proving partial args are not replayed and final args render correctly.
+- History reload test proving partial args are not replayed and final args/results render correctly after circular-result sanitization.
 
 ## Known risks / regressions
 
 - Partial JSON parsing can silently skip malformed chunks until enough text arrives.
 - Live streaming and history reload are intentionally different projections; regressions can hide if only one path is tested.
 - Task tools have special pinned-state behavior and can diverge from generic tool boxes.
+- Safe JSON serialization is not the same as output budgeting; circular results can still be large if a renderer skips truncation.
 
 ## Verification checklist
 
