@@ -184,10 +184,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 162 | 2026-03-25 | #14637 | `86e326363e` | review | done | feat: add dynamic AGENTS.md loading in mastracode (#14637) | 15 |
 | 163 | 2026-03-27 | #14727 | `a98a9c7930` | review | done | fix(mastracode): fix custom slash commands not loading (#14727) | 2 |
 | 164 | 2026-03-27 | #14567 | `949b7bfd4e` | review | done | feat(memory): cross-thread recall browsing, search, and scope-based access control (#14567) | 15 |
-| 165 | 2026-03-27 | #14788 | `60a224dd49` | review | current | fix: persist observational memory threshold settings across restarts (#14788) | 3 |
-| 166 | 2026-03-27 | #14790 | `d084b66923` | review | | fix: cap injected AGENTS.md reminders (#14790) | 1 |
-| 167 | 2026-03-30 | #14845 | `2bac10d032` | review | | feat(mastracode): allow custom response on questions with options (#14845) | 2 |
-| 168 | 2026-03-30 | #14656 | `0771fa8909` | likely skip | | chore: version packages (alpha) (#14656) | 2 |
+| 165 | 2026-03-27 | #14788 | `60a224dd49` | review | done | fix: persist observational memory threshold settings across restarts (#14788) | 3 |
+| 166 | 2026-03-27 | #14790 | `d084b66923` | review | done | fix: cap injected AGENTS.md reminders (#14790) | 1 |
+| 167 | 2026-03-30 | #14845 | `2bac10d032` | review | done | feat(mastracode): allow custom response on questions with options (#14845) | 2 |
+| 168 | 2026-03-30 | #14656 | `0771fa8909` | likely skip | current | chore: version packages (alpha) (#14656) | 2 |
 | 169 | 2026-03-30 | #14867 | `43b86882f7` | review | | fix(mastracode): quote digit-leading provider names in gateway sync (#14867) | 1 |
 | 170 | 2026-03-31 | #14804 | `3ae348c76f` | review | | fix(mastracode): show configured subagents in /subagents (#14804) | 2 |
 | 171 | 2026-03-31 | #14535 | `acf5fbcb89` | review | | fix: handle circular references in tool results to prevent JSON.stringify crashes (#14535) | 4 |

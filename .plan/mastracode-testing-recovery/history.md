@@ -1482,3 +1482,28 @@ Verification:
 - `corepack pnpm --filter ./packages/core exec vitest run src/processors/tool-result-reminder.test.ts --bail=1 --reporter=dot` — 1 file / 14 tests passed / no type errors.
 - `corepack pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/system-reminder.test.ts src/utils/__tests__/slash-command-loader.test.ts src/tui/commands/__tests__/thread.test.ts --bail=1 --reporter=dot` — 3 files / 17 tests passed.
 - `corepack pnpm --filter ./packages/memory exec vitest run src/tools/om-tools.test.ts --bail=1 --reporter=dot` — 1 file / 91 tests passed.
+
+### PR #14788 / #14790 / #14845 feature-map checkpoint
+
+Verified rows 165-167:
+
+- #14788 persists observational-memory threshold settings across restarts. Current source stores `omObservationThreshold` and `omReflectionThreshold` in global settings, seeds Harness initial state at startup, writes settings from `/om` threshold callbacks, and restores/backfills per-thread threshold metadata in the core Harness.
+- #14790 caps dynamically injected AGENTS/CLAUDE/CONTEXT reminders. Current `AgentsMDInjector` uses `tokenx` token estimation, truncates at newline boundaries with a visible marker, defaults to about 1000 tokens, dedupes by metadata/path, and Mastra Code memory instructions tell OM not to observe those ephemeral reminders.
+- #14845 allows custom responses for single-select questions with options. Current inline and dialog question components append a `Custom response...` option when allowed, switch from select mode to free-text input when selected, and omit the escape hatch for multi-select prompts.
+
+Documentation actions:
+
+- Updated `features/memory/observational-memory.md` with OM threshold persistence and dynamic-reminder exclusion/capping.
+- Updated `features/settings/onboarding-and-global-settings.md` with global OM threshold defaults and startup/thread ownership.
+- Updated `features/chat/prompt-context.md` with dynamic instruction reminder token caps and truncation behavior.
+- Updated `features/tui/interactive-prompts.md` with custom-response option prompts.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #14788 done, #14790 done, #14845 done, #14656 current.
+
+Focused evidence read: PR metadata/diffs for #14788/#14790/#14845; current `mastracode/src/onboarding/settings.ts`, `mastracode/src/index.ts`, `mastracode/src/tui/commands/om.ts`, `packages/core/src/harness/harness.ts`, `packages/core/src/harness/om-threshold-persistence.test.ts`, `packages/core/src/processors/tool-result-reminder.ts`, `tool-result-reminder.test.ts`, `mastracode/src/agents/memory.ts`, `mastracode/src/tui/components/ask-question-inline.ts`, `ask-question-dialog.ts`, and inline question tests.
+
+Verification:
+
+- `corepack pnpm --filter ./packages/core exec vitest run src/harness/om-threshold-persistence.test.ts --bail=1 --reporter=dot` — 1 file / 2 tests passed / no type errors.
+- `corepack pnpm --filter ./packages/core exec vitest run src/processors/tool-result-reminder.test.ts --bail=1 --reporter=dot` — 1 file / 14 tests passed / no type errors.
+- `corepack pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/ask-question-inline-long-labels.test.ts src/tui/components/__tests__/ask-question-inline-multi-select.test.ts src/tui/components/__tests__/ask-question-inline-multiline.test.ts --bail=1 --reporter=dot` — 3 files / 15 tests passed.

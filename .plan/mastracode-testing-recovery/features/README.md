@@ -41,18 +41,18 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Headless | Prompt mode | #13648 | CLI args + Harness events + auto-resolution | Partial | High | [page](./headless/prompt-mode.md) |
 | TUI | Startup banner | #13422 | TUI options + terminal width | Partial | Medium | [page](./tui/startup-banner.md) |
 | TUI | Help and shortcuts | #13426, #13712, #13723, #13787, #14250 | TUI command metadata + settings + queueing shortcut labels | Partial | Medium | [page](./tui/help-and-shortcuts.md) |
-| TUI | Interactive prompts and access requests | #13696, #13753, #14479 | TUI active prompt + pending prompt queue + answered-prompt wrapping + sandbox allowed paths | Partial | High | [page](./tui/interactive-prompts.md) |
+| TUI | Interactive prompts and access requests | #13696, #13753, #14479, #14845 | TUI active prompt + pending prompt queue + answered-prompt wrapping/custom response mode + sandbox allowed paths | Partial | High | [page](./tui/interactive-prompts.md) |
 | TUI | Process suspend shortcut | #13723 | TUI keyboard routing + Unix signal handling | Partial | Medium | [page](./tui/process-suspend.md) |
 | TUI | Clipboard paste | #13712, #13953 | OS clipboard helpers + editor paste buffer + pending pasted images | Partial | High | [page](./tui/clipboard-paste.md) |
 | TUI | File autocomplete | #13460 | editor autocomplete provider + `fd` detection | Partial | Medium | [page](./tui/file-autocomplete.md) |
 | TUI | Terminal theme and contrast | #13487, #13503, #14337, #14359 | settings preference + terminal detection + adapted palette + solid editor border | Partial | Medium | [page](./tui/terminal-theme.md) |
 | TUI | Quiet mode | #13556 | settings preference + TUI render state | Partial | High | [page](./tui/quiet-mode.md) |
-| Settings | Onboarding and global settings | #13421, #13431, #13487, #13494, #13500, #13505, #13508, #13512, #13566, #13603, #13611, #13748, #13953, #13573, #14604, #14605 | settings.json + thread settings + provider registry + AuthStorage/stored API keys + built-in pack defaults | Partial | High | [page](./settings/onboarding-and-global-settings.md) |
+| Settings | Onboarding and global settings | #13421, #13431, #13487, #13494, #13500, #13505, #13508, #13512, #13566, #13603, #13611, #13748, #13953, #13573, #14604, #14605, #14788 | settings.json + thread settings + provider registry + AuthStorage/stored API keys + built-in pack defaults + OM threshold defaults | Partial | High | [page](./settings/onboarding-and-global-settings.md) |
 | Settings | Storage backend configuration | #13435, #13815 | env/settings/database config + storage factory | Partial | High | [page](./settings/storage-backend.md) |
 | TUI | Interactive chat | #13218, #13350, #13413, #13427, #13456, #13460, #13442, #13487, #13609, #13696, #13712, #13723, #13999, #14423 | TUI + Harness display state + prompt/editor animation | Partial | High | [page](./tui/interactive-chat.md) |
 | TUI | Shell passthrough streaming | #13999 | TUI input router + shell subprocess + live output component | Partial | Medium | [page](./tui/shell-passthrough.md) |
 | TUI | Debug logging | #13691, #13701 | env vars + app-data/debug trace files | Partial | Medium | [page](./tui/debug-logging.md) |
-| Chat | Prompt context and project instructions | #13234, #13346, #13376, #13456, #14587, #14688, #14637 | Harness request context + static/dynamic instruction files + git metadata + model-specific prompt sections + late tone/style guidance | Partial | High | [page](./chat/prompt-context.md) |
+| Chat | Prompt context and project instructions | #13234, #13346, #13376, #13456, #14587, #14688, #14637, #14790 | Harness request context + static/dynamic capped instruction files + git metadata + model-specific prompt sections + late tone/style guidance | Partial | High | [page](./chat/prompt-context.md) |
 | Chat | File attachments in chat input | #13574, #13712, #13953 | Harness signal content + message-list adapters + TUI pending images + OM attachment input | Partial | High | [page](./chat/file-attachments.md) |
 | Git | Branch context and status | #13456 | live git branch + TUI project info | Missing | High | [page](./git/branch-context.md) |
 | Chat | Queued follow-ups and slash commands | #13345, #13493, #14250, #14727 | TUI transient queue state + custom command loader/processor + active-run signal/queue routing | Partial | High | [page](./chat/queued-followups.md) |
@@ -79,7 +79,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Goals | Plan approval and build handoff | #13416, #13557, #13598 | Core Harness plan resolver + TUI plan card + plan files | Partial | High | [page](./goals/plan-approval.md) |
 | Subagents | Delegation to Explore / Plan / Execute | #13227, #13339, #13700, #13940 | Harness config + parent Workspace + subagent request context/session state | Partial | High | [page](./subagents/delegation.md) |
 | Subagents | Audit-tests subagent | #13331 | Harness subagent config | Missing | High | [page](./subagents/audit-tests.md) |
-| Memory | Observational memory | #13231, #13305, #13330, #13349, #13354, #13476, #13568, #13563, #13569, #13815, #13953, #13996, #14436, #14437, #14567 | Memory storage/vector index + harness/settings OM state + scope config + retrieval/recall provenance + cross-thread access guards + observer-context budgeting + attachment filtering/token estimates + OM model picker + clone remapping + generated thread titles | Partial | High | [page](./memory/observational-memory.md) |
+| Memory | Observational memory | #13231, #13305, #13330, #13349, #13354, #13476, #13568, #13563, #13569, #13815, #13953, #13996, #14436, #14437, #14567, #14788, #14790 | Memory storage/vector index + harness/settings OM state + persisted thresholds + scope config + retrieval/recall provenance + cross-thread access guards + observer-context budgeting + attachment filtering/token estimates + OM model picker + dynamic-reminder exclusion + clone remapping + generated thread titles | Partial | High | [page](./memory/observational-memory.md) |
 
 Use terse values:
 
