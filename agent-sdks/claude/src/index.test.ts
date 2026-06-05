@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClaudeSDKAgent } from './index';
 
 const queryMock = vi.hoisted(() => vi.fn());
+const TEST_CLAUDE_MODEL = 'claude-sonnet-4-6';
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   query: queryMock,
@@ -49,7 +50,7 @@ function createResultMessage(result: string, structuredOutput?: unknown): SDKMes
       cache_creation_input_tokens: 3,
     },
     modelUsage: {
-      __GATEWAY_ANTHROPIC_MODEL_SONNET__: {
+      [TEST_CLAUDE_MODEL]: {
         inputTokens: 10,
         outputTokens: 4,
         cacheReadInputTokens: 2,
@@ -92,7 +93,7 @@ function createAssistantMessage(id: string, usage: Record<string, number>): SDKM
       type: 'message',
       role: 'assistant',
       content: [],
-      model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+      model: TEST_CLAUDE_MODEL,
       stop_reason: 'end_turn',
       stop_sequence: null,
       usage,
@@ -113,7 +114,7 @@ describe('ClaudeSDKAgent', () => {
       name: 'Claude Agent',
       description: 'Use Claude Agent as a Mastra agent.',
       sdkOptions: {
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
       },
     });
 
@@ -132,7 +133,7 @@ describe('ClaudeSDKAgent', () => {
       description: 'Claude',
       sdkOptions: {
         cwd: '/tmp/project',
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
         maxTurns: 1,
         permissionMode: 'acceptEdits',
         tools: ['Read', 'Bash'],
@@ -169,7 +170,7 @@ describe('ClaudeSDKAgent', () => {
     expect(result.providerMetadata).toMatchObject({
       claude: {
         totalCostUsd: 0.0123,
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
         cwd: '/tmp/project',
         permissionMode: 'acceptEdits',
         maxTurns: 1,
@@ -181,7 +182,7 @@ describe('ClaudeSDKAgent', () => {
       prompt: 'Generate prompt',
       options: expect.objectContaining({
         cwd: '/tmp/project',
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
         maxTurns: 1,
         permissionMode: 'acceptEdits',
         tools: ['Read', 'Bash'],
@@ -216,7 +217,7 @@ describe('ClaudeSDKAgent', () => {
       id: 'claude-agent',
       description: 'Claude',
       sdkOptions: {
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
       },
     });
 
@@ -247,7 +248,7 @@ describe('ClaudeSDKAgent', () => {
       id: 'claude-agent',
       description: 'Claude',
       sdkOptions: {
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
       },
     });
 
@@ -278,7 +279,7 @@ describe('ClaudeSDKAgent', () => {
       id: 'claude-agent',
       description: 'Claude',
       sdkOptions: {
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
       },
     });
 
@@ -298,7 +299,7 @@ describe('ClaudeSDKAgent', () => {
     expect(queryMock).toHaveBeenCalledWith({
       prompt: 'Return a JSON answer',
       options: expect.objectContaining({
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
         outputFormat: {
           type: 'json_schema',
           schema: expect.objectContaining({
@@ -318,7 +319,7 @@ describe('ClaudeSDKAgent', () => {
       id: 'claude-agent',
       description: 'Claude',
       sdkOptions: {
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
       },
     });
 
@@ -337,7 +338,7 @@ describe('ClaudeSDKAgent', () => {
     expect(queryMock).toHaveBeenCalledWith({
       prompt: 'Continue prompt',
       options: expect.objectContaining({
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
         resume: 'session-id',
         forkSession: true,
         resumeSessionAt: 'assistant-message-id',
@@ -353,7 +354,7 @@ describe('ClaudeSDKAgent', () => {
       id: 'claude-agent',
       description: 'Claude',
       sdkOptions: {
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
       },
     });
 
@@ -366,7 +367,7 @@ describe('ClaudeSDKAgent', () => {
     expect(queryMock).toHaveBeenCalledWith({
       prompt: 'Continue prompt',
       options: expect.objectContaining({
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
         continue: true,
       }),
     });

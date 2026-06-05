@@ -338,7 +338,7 @@ describe('OpenAISDKAgent', () => {
       description: 'OpenAI',
       sdkOptions: {
         name: 'SDK Agent',
-        model: '__GATEWAY_OPENAI_MODEL_BASE__',
+        model: TEST_OPENAI_MODEL,
       },
     });
 
@@ -383,7 +383,7 @@ describe('OpenAISDKAgent', () => {
       description: 'OpenAI',
       sdkOptions: {
         name: 'SDK Agent',
-        model: '__GATEWAY_OPENAI_MODEL_BASE__',
+        model: TEST_OPENAI_MODEL,
       },
     });
 
@@ -412,7 +412,7 @@ describe('OpenAISDKAgent', () => {
       description: 'OpenAI',
       sdkOptions: {
         name: 'SDK Agent',
-        model: '__GATEWAY_OPENAI_MODEL_BASE__',
+        model: TEST_OPENAI_MODEL,
       },
     });
 
@@ -447,7 +447,7 @@ describe('OpenAISDKAgent', () => {
       description: 'OpenAI',
       sdkOptions: {
         name: 'SDK Agent',
-        model: '__GATEWAY_OPENAI_MODEL_BASE__',
+        model: TEST_OPENAI_MODEL,
       },
     });
 

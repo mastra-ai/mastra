@@ -290,7 +290,7 @@ describe('CursorSDKAgent', () => {
     const agent = new CursorSDKAgent({
       id: 'cursor-agent',
       description: 'Cursor',
-      agent: sdkAgent,
+      agent: () => sdkAgent,
       sdkOptions: {
         mcpServers: {
           filesystem: { command: 'node', args: ['server.js'] },

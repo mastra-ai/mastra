@@ -69,7 +69,7 @@ export type CursorSDKAgentResumeData = {
   sdkOptions?: Partial<CursorCreateOptions>;
 };
 
-export type CursorAgentOptions = {
+type CursorSDKAgentBaseOptions = {
   /**
    * Mastra agent id used when registering this wrapper with Mastra.
    */
@@ -82,26 +82,35 @@ export type CursorAgentOptions = {
    * Description surfaced by Mastra when listing or selecting agents.
    */
   description: string;
-  /**
-   * Cursor SDK agent or factory. Pass a pre-created SDK agent when you manage
-   * its lifecycle elsewhere. Omit this option to let this wrapper call
-   * `CursorAgent.create()` with `sdkOptions`.
-   *
-   * If you pass `CursorAgent.create({...})`, that promise has already been
-   * created by the Cursor SDK and wrapper-level create options cannot be
-   * merged into it. Put all Cursor create options in that call, or pass the
-   * factory itself as `agent: CursorAgent.create`.
-   *
-   * The factory path allows Mastra to hydrate defaults such as `apiKey`.
-   */
-  agent?: CursorAgentInput;
-  /**
-   * Cursor SDK options used when `agent` is omitted or when `agent` is a
-   * factory. Defaults `apiKey` to `process.env.CURSOR_API_KEY` when not
-   * provided.
-   */
-  sdkOptions?: CursorCreateOptions;
 };
+
+export type CursorAgentOptions = CursorSDKAgentBaseOptions &
+  (
+    | {
+        /**
+         * Pre-created Cursor SDK agent. Pass this when you manage the SDK
+         * agent lifecycle yourself.
+         */
+        agent: SDKAgent | Promise<SDKAgent>;
+        sdkOptions?: never;
+      }
+    | {
+        /**
+         * Cursor SDK agent factory. The wrapper calls it with `sdkOptions`,
+         * including defaults such as `process.env.CURSOR_API_KEY`.
+         */
+        agent: CursorAgentFactory;
+        sdkOptions?: CursorCreateOptions;
+      }
+    | {
+        agent?: never;
+        /**
+         * Cursor SDK options used to create an SDK agent. Defaults `apiKey` to
+         * `process.env.CURSOR_API_KEY` when not provided.
+         */
+        sdkOptions: CursorCreateOptions;
+      }
+  );
 
 export class CursorSDKAgent extends Agent {
   readonly options: CursorAgentOptions;
