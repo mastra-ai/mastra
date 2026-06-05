@@ -55,7 +55,7 @@ describe('defaultNameGenerator', () => {
   it('does not match directory suffixes like -auth in worktree paths', () => {
     expect(
       defaultNameGenerator(
-        '/Users/ward/.herdr/worktrees/mastra-oss/wardpeet-gateway-resolve-auth/packages/core/src/agent/__tests__/workspace-tools-openai.e2e.test.ts',
+        '/Users/yo/mastra-oss/wardpeet-gateway-resolve-auth/packages/core/src/agent/__tests__/workspace-tools-openai.e2e.test.ts',
       ),
     ).toBe('core-src-agent-__tests__-workspace-tools-openai.e2e');
   });

@@ -32,3 +32,10 @@ const myGateway: MastraModelGatewayInterface = {
 // Register and route through the gateway
 const router = new ModelRouterLanguageModel({ modelId: 'my-gateway/provider/model' }, [myGateway]);
 ```
+
+**Additional changes in this release:**
+
+- Inline three-tier auth resolution (explicit → gateway.resolveAuth → legacy getApiKey) into `ModelRouterLanguageModel.resolveAuth` and deprecate the standalone `resolveModelAuth` helper.
+- Fix `defaultGateways` deduplication in the `Mastra` class to use `getGatewayId(gateway)` instead of registry keys.
+- Remove no-op `resolveModelId` identity function in mastracode in favor of direct usage.
+- Fix `defaultNameGenerator` regex in `_llm-recorder` to anchor directory matches to path boundaries (prevents false matches like `-auth` suffixes).
