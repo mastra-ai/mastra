@@ -1,5 +1,5 @@
 import { createClient } from '@libsql/client';
-import type { Client } from '@libsql/client';
+import type { Client, InArgs, InStatement, ResultSet, Transaction, TransactionMode } from '@libsql/client';
 import type { StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
@@ -120,6 +120,173 @@ export type LibSQLConfig =
       client: Client;
     });
 
+function beginForMode(mode: TransactionMode): string {
+  switch (mode) {
+    case 'write':
+      return 'BEGIN IMMEDIATE';
+    case 'read':
+      return 'BEGIN';
+    case 'deferred':
+    default:
+      return 'BEGIN DEFERRED';
+  }
+}
+
+/**
+ * Wraps a local (`file:`/`:memory:`) libsql client so that `transaction()` does
+ * not orphan the underlying connection.
+ *
+ * `@libsql/client`'s sqlite3 transport implements `transaction()` by handing its
+ * single connection to the returned transaction and setting its own connection
+ * reference to `null` (see Sqlite3Client.transaction). The next `execute()`/
+ * `batch()` call then lazily opens a brand-new connection. For local databases
+ * this is broken in two ways, both tracked upstream:
+ *   - `:memory:` — the new connection is a separate, empty in-memory database,
+ *     so previously created tables vanish (`SQLITE_ERROR: no such table`).
+ *     See libsql-client-ts#229.
+ *   - `file:` — the new connection loses the PRAGMAs we applied at startup
+ *     (notably `busy_timeout`), so concurrent writers fail instantly with
+ *     `SQLITE_BUSY` instead of waiting. See libsql-client-ts#288.
+ *
+ * To avoid this entirely we route transactions over the same managed connection:
+ * `transaction()` issues `BEGIN`/`COMMIT`/`ROLLBACK` as ordinary statements and
+ * returns a transaction-shaped object whose operations delegate back to the
+ * shared client. The underlying connection is never detached, so tables and
+ * PRAGMAs persist across transaction boundaries. Write transactions begin with
+ * `BEGIN IMMEDIATE` so the lock is taken up front, the other workaround called
+ * out in libsql-client-ts#288.
+ *
+ * Remote (HRANA/HTTP) clients are not wrapped: their `transaction()` opens a
+ * dedicated stream and is correct as-is.
+ *
+ * @see https://github.com/tursodatabase/libsql-client-ts/issues/288 (file: busy_timeout dropped)
+ * @see https://github.com/tursodatabase/libsql-client-ts/issues/229 (:memory: database discarded)
+ *
+ * @internal Exported for testing.
+ */
+export function wrapLocalClient(client: Client): Client {
+  // The shared connection can only hold one transaction at a time, so concurrent
+  // transaction() callers are serialized: each waits for the previous transaction
+  // to finish before issuing its own BEGIN. The real driver achieved concurrency
+  // by handing each transaction its own connection, but that is exactly the
+  // behavior that corrupts local databases (see the doc comment above).
+  let txTail: Promise<void> = Promise.resolve();
+
+  const makeTransaction = (release: () => void): Transaction => {
+    let finished = false;
+
+    const ensureOpen = () => {
+      if (finished) {
+        throw new Error('The transaction is closed');
+      }
+    };
+
+    const finalize = async (sql: 'COMMIT' | 'ROLLBACK'): Promise<void> => {
+      finished = true;
+      try {
+        await client.execute(sql);
+      } finally {
+        release();
+      }
+    };
+
+    const transaction: Transaction = {
+      async execute(stmtOrSql: InStatement | string, args?: InArgs): Promise<ResultSet> {
+        ensureOpen();
+        const stmt = typeof stmtOrSql === 'string' ? ({ sql: stmtOrSql, args: args ?? [] } as InStatement) : stmtOrSql;
+        return client.execute(stmt);
+      },
+      async batch(stmts: Array<InStatement | [string, InArgs?]>): Promise<Array<ResultSet>> {
+        ensureOpen();
+        // Run statements individually on the open connection. Routing through
+        // client.batch() would wrap them in its own BEGIN/COMMIT, which is
+        // invalid inside an already-open transaction.
+        const results: ResultSet[] = [];
+        for (const stmt of stmts) {
+          const normalized = Array.isArray(stmt) ? ({ sql: stmt[0], args: stmt[1] ?? [] } as InStatement) : stmt;
+          results.push(await client.execute(normalized));
+        }
+        return results;
+      },
+      async executeMultiple(sql: string): Promise<void> {
+        ensureOpen();
+        return client.executeMultiple(sql);
+      },
+      async commit(): Promise<void> {
+        ensureOpen();
+        await finalize('COMMIT');
+      },
+      async rollback(): Promise<void> {
+        if (finished) {
+          return;
+        }
+        await finalize('ROLLBACK');
+      },
+      close(): void {
+        if (!finished) {
+          // Best-effort rollback for an abandoned transaction.
+          void this.rollback().catch(() => {});
+        }
+      },
+      get closed(): boolean {
+        return finished;
+      },
+    };
+
+    return transaction;
+  };
+
+  // Claim the connection's transaction slot, waiting for any in-flight
+  // transaction/batch to finish. Returns a release function.
+  const acquire = async (): Promise<() => void> => {
+    const previous = txTail;
+    let release!: () => void;
+    txTail = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    await previous;
+    return release;
+  };
+
+  return new Proxy(client, {
+    get(target, prop, receiver) {
+      if (prop === 'transaction') {
+        return async (mode: TransactionMode = 'write'): Promise<Transaction> => {
+          const release = await acquire();
+          try {
+            await target.execute(beginForMode(mode));
+          } catch (err) {
+            // BEGIN failed; free the slot so we don't deadlock the chain.
+            release();
+            throw err;
+          }
+          return makeTransaction(release);
+        };
+      }
+
+      if (prop === 'batch') {
+        // batch() issues its own BEGIN/COMMIT on the shared connection, so it
+        // must not overlap with an open transaction. Serialize it with the
+        // transaction slot.
+        return async (
+          stmts: Array<InStatement | [string, InArgs?]>,
+          mode?: TransactionMode,
+        ): Promise<Array<ResultSet>> => {
+          const release = await acquire();
+          try {
+            return await target.batch(stmts, mode);
+          } finally {
+            release();
+          }
+        };
+      }
+
+      const value = Reflect.get(target, prop, receiver);
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+}
+
 /**
  * LibSQL/Turso storage adapter for Mastra.
  *
@@ -167,12 +334,15 @@ export class LibSQLStore extends MastraCompositeStore {
         this.shouldCacheInit = false;
       }
 
-      this.client = createClient({
+      const rawClient = createClient({
         url: config.url,
         ...(config.authToken ? { authToken: config.authToken } : {}),
       });
 
       this.isLocalDb = config.url.startsWith('file:') || config.url.includes(':memory:');
+      // Local clients route transactions over the shared connection to avoid
+      // @libsql/client's connection-detach behavior (see wrapLocalClient).
+      this.client = this.isLocalDb ? wrapLocalClient(rawClient) : rawClient;
       this.pragmasReady = this.isLocalDb ? this.applyLocalPragmas() : Promise.resolve();
     } else {
       this.client = config.client;
