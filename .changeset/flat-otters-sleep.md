@@ -1,5 +1,5 @@
 ---
-'@internal/playground': patch
+'@mastra/playground': patch
 ---
 
 fix(playground): allow esbuild postinstall in kitchen-sink workspace
