@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13768 (row 102) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, and #13761 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13748 (`a3c16eb1be`, persisted thinking-level preference), then #13787 (`02cbb66435`, `/update` slash command).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13787 (row 104) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, and #13761 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13753 (`633370bdf4`, request_access rename/tilde expansion/mid-turn allowed paths), then #13611 (`f6b91c454b`, auth routing/tool injection/auth storage init).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 103: PR #13748 (persist thinking level as global preference), then row 104: PR #13787 (`/update` slash command).
+1. Continue at `_pr-queue.md` row 105: PR #13753 (request access rename, tilde expansion, mid-turn allowed paths), then row 106: PR #13611 (auth routing, tool injection, auth storage init).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.

@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13426](https://github.com/mastra-ai/mastra/pull/13426) — replaced the old verbose `/help` output with a compact command/shortcut reference.
-- Later changes: [#13487](https://github.com/mastra-ai/mastra/pull/13487) — added `/theme` to the command surface/help list; [#13605](https://github.com/mastra-ai/mastra/pull/13605) — added `/report-issue` to the command surface/help list; [#13682](https://github.com/mastra-ai/mastra/pull/13682) — added `/custom-providers` to the command surface/help list; [#13690](https://github.com/mastra-ai/mastra/pull/13690) — lists `/resource` as resource switching help; [#13712](https://github.com/mastra-ai/mastra/pull/13712) — adds Ctrl+V / Alt+V clipboard paste to the editor shortcut surface; [#13723](https://github.com/mastra-ai/mastra/pull/13723) — changes Ctrl+Z to process suspend and moves undo-last-clear to Alt+Z.
+- Later changes: [#13487](https://github.com/mastra-ai/mastra/pull/13487) — added `/theme` to the command surface/help list; [#13787](https://github.com/mastra-ai/mastra/pull/13787) — added `/update` to the command surface/help list; [#13605](https://github.com/mastra-ai/mastra/pull/13605) — added `/report-issue` to the command surface/help list; [#13682](https://github.com/mastra-ai/mastra/pull/13682) — added `/custom-providers` to the command surface/help list; [#13690](https://github.com/mastra-ai/mastra/pull/13690) — lists `/resource` as resource switching help; [#13712](https://github.com/mastra-ai/mastra/pull/13712) — adds Ctrl+V / Alt+V clipboard paste to the editor shortcut surface; [#13723](https://github.com/mastra-ai/mastra/pull/13723) — changes Ctrl+Z to process suspend and moves undo-last-clear to Alt+Z.
 
 ## User-visible behavior
 
@@ -40,7 +40,7 @@
 
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
-| Help command list | `buildHelpText()` hardcoded entries + `ctx.harness.listModes()` | `/help` command, including `/theme`, `/report-issue`, `/custom-providers`, `/resource`, `/mcp`, Ctrl+Z suspend, and Alt+Z undo |
+| Help command list | `buildHelpText()` hardcoded entries + `ctx.harness.listModes()` | `/help` command, including `/theme`, `/update`, `/report-issue`, `/custom-providers`, `/resource`, `/mcp`, Ctrl+Z suspend, and Alt+Z undo |
 | Custom commands | `SlashCommandContext.customSlashCommands` | Help text custom section |
 | Shell passthrough label | Global settings + shell resolver | Help text shell section |
 | Startup hint | `buildLayout()` | TUI startup header |
@@ -57,6 +57,7 @@
 - [Interactive TUI chat](./interactive-chat.md) — `/help` renders inside chat.
 - [Startup banner](./startup-banner.md) — banner/header now delegates command details to `/help`.
 - [Terminal theme and contrast](./terminal-theme.md) — `/theme` command is listed here.
+- [Auto-update prompts](../setup/auto-update-prompts.md) — `/update` command is listed here.
 - [GitHub issue reporting command](../integrations/github-issue-reporting.md) — `/report-issue` command is listed here.
 - [Custom OpenAI-compatible providers](../models/custom-providers.md) — `/custom-providers` command is listed here.
 - [Resource ID switching](../threads/resource-id-switching.md) — `/resource` command is listed here.
@@ -77,7 +78,7 @@
 
 ## Known risks / regressions
 
-- Command/shortcut list is manually maintained and can drift from registered commands/keys, including `/theme`, `/report-issue`, `/custom-providers`, `/resource`, `/mcp`, Ctrl+Z, Alt+Z, and provider-specific subcommands.
+- Command/shortcut list is manually maintained and can drift from registered commands/keys, including `/theme`, `/update`, `/report-issue`, `/custom-providers`, `/resource`, `/mcp`, Ctrl+Z, Alt+Z, and provider-specific subcommands.
 - Custom slash commands are listed, but command namespace collisions or hidden commands are not modeled by the help builder.
 - Headless/non-TUI help parity is unverified.
 

@@ -3,22 +3,22 @@
 ## Origin PR / commit
 
 - PR: [#13490](https://github.com/mastra-ai/mastra/pull/13490) — wire Mastra Code thinking settings into OpenAI Codex reasoning effort.
-- Later changes: [#13563](https://github.com/mastra-ai/mastra/pull/13563) — made Codex reasoning/middleware compatible with OM model resolution and Mastra Code streams.
+- Later changes: [#13563](https://github.com/mastra-ai/mastra/pull/13563) — made Codex reasoning/middleware compatible with OM model resolution and Mastra Code streams; [#13748](https://github.com/mastra-ai/mastra/pull/13748) — persists `/think`, Settings UI, and OpenAI pack auto-bump changes to the global thinking preference.
 
 ## User-visible behavior
 
-- What the user can do: set reasoning depth with `/think`, `/think <level>`, `/think status`, or `--thinking-level`.
-- Success looks like: OpenAI Codex/GPT-5 OAuth requests include the intended `reasoningEffort`, so models use tools instead of only narrating.
+- What the user can do: set reasoning depth with `/think`, `/think <level>`, `/think status`, `/settings`, or `--thinking-level`.
+- Success looks like: OpenAI Codex/GPT-5 OAuth requests include the intended `reasoningEffort`, and the selected level persists across restarts via global settings.
 - Must preserve: levels `off`, `low`, `medium`, `high`, `xhigh`; GPT-5 Codex minimum of `low`; warning-only behavior for models that may not support thinking.
 
 ## Entry points / commands
 
-- Commands / shortcuts / flags: `/think`, `/think low|medium|high|xhigh|off`, `/think status`, `--thinking-level`.
-- Automatic triggers: activating an OpenAI model pack auto-sets thinking to `low` when the current value is `off`.
+- Commands / shortcuts / flags: `/think`, `/think low|medium|high|xhigh|off`, `/think status`, `/settings` thinking-level selector, `--thinking-level`.
+- Automatic triggers: activating an OpenAI-heavy model pack auto-sets thinking to `low` when the current value is `off`, and persists that bump.
 
 ## TUI states
 
-- Idle: `/think` opens an inline selector; direct args update harness state and global settings immediately.
+- Idle: `/think` opens an inline selector; direct args and `/settings` changes update harness state and global settings immediately.
 - Active / modal / error: selector warns for non-OpenAI models but still allows the persisted choice; invalid args list valid levels.
 
 ## Headless / non-TUI behavior
@@ -40,17 +40,18 @@
 
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
-| Thinking level | Harness state + `settings.preferences.thinkingLevel` | `/think`, `/models`, headless startup, model resolver |
+| Thinking level | Harness state + `settings.preferences.thinkingLevel` | `/think`, `/settings`, `/models`, headless startup, model resolver |
 | Codex effective level | `getEffectiveThinkingLevel()` + request-context state | OpenAI Codex OAuth provider, OM observer/reflector models |
 | Provider value labels | `getThinkingLevelsForModel()` | `/think` selector, settings UI |
 
 ## Key files
 
-- `mastracode/src/tui/commands/think.ts` — command/selector behavior.
+- `mastracode/src/tui/commands/think.ts` — command/selector behavior and global preference persistence.
 - `mastracode/src/providers/openai-codex.ts` — `ThinkingLevel`, `reasoningEffort` mapping, GPT-5 minimum, Codex fetch/middleware request shaping.
 - `mastracode/src/agents/model.ts` — reads `thinkingLevel` from request context, remaps Codex OAuth models when requested, and passes it into Codex resolution.
 - `mastracode/src/tui/components/thinking-settings.ts` — level labels and provider values.
-- `mastracode/src/tui/commands/models-pack.ts` — OpenAI pack auto-enables low thinking.
+- `mastracode/src/tui/commands/models-pack.ts` — OpenAI pack auto-enables and persists low thinking.
+- `mastracode/src/tui/commands/settings.ts` — Settings UI writes thinking-level changes back to `settings.json`.
 
 ## Dependencies / related features
 
@@ -66,8 +67,9 @@
 
 ## Missing tests
 
-- `/think` selector/direct-argument command test, including invalid arg and non-OpenAI warning behavior.
-- `/models` OpenAI pack activation test that verifies `off` auto-upgrades to `low`.
+- `/think` selector/direct-argument command test, including invalid arg, non-OpenAI warning behavior, and settings persistence.
+- `/settings` thinking-level persistence test.
+- `/models` OpenAI pack activation test that verifies `off` auto-upgrades to `low` and writes `settings.preferences.thinkingLevel`.
 - Provider request-shape test that asserts `reasoningEffort`, `instructions`, `store: false`, and `topP` removal land in Codex `providerOptions`.
 
 ## Known risks / regressions

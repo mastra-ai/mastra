@@ -1045,3 +1045,22 @@ Verification:
 - Focused tests passed: `corepack pnpm.3.0 --filter ./mastracode exec vitest run src/utils/__tests__/update-check.test.ts --reporter=dot --bail 1` (1 file / 13 tests).
 
 Next queue checkpoint: PR #13748 (persist thinking level as a global preference), then PR #13787 (`/update` slash command).
+
+### Feature map batch: persistent thinking preference and manual update command
+
+Processed PR [#13748](https://github.com/mastra-ai/mastra/pull/13748), `a3c16eb1be` (`fix: persist thinking level as a global preference`). Verified current `/think` direct args and selector update both Harness state and `settings.preferences.thinkingLevel` through `persistGlobalThinkingLevel()`. Settings UI also writes thinking-level changes to settings, and OpenAI-heavy model-pack activation persists the automatic `off` → `low` bump alongside the Harness state change.
+
+Processed PR [#13787](https://github.com/mastra-ai/mastra/pull/13787), `02cbb66435` (`feat(mastracode): add /update slash command`). Verified current `/update` command fetches latest npm version, compares with current runtime version, clears prior dismissed-version state before prompting, displays optional changelog text, runs the detected package-manager install on Yes, persists `updateDismissedVersion` on No, and is registered in slash dispatch/setup/help surfaces.
+
+Documentation actions:
+
+- Updated `features/models/thinking-and-reasoning.md` with #13748 persistence behavior across `/think`, `/settings`, and OpenAI pack auto-bumps.
+- Updated `features/setup/auto-update-prompts.md` with #13787 manual `/update` command behavior, state ownership, and missing command coverage.
+- Updated `features/settings/onboarding-and-global-settings.md`, `features/tui/help-and-shortcuts.md`, `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13748 done, #13787 done, #13753 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/tui/commands/think.ts`, `mastracode/src/tui/commands/settings.ts`, `mastracode/src/tui/commands/models-pack.ts`, `mastracode/src/onboarding/settings.ts`, `mastracode/src/index.ts`, `mastracode/src/tui/commands/update.ts`, `mastracode/src/tui/command-dispatch.ts`, `mastracode/src/tui/components/help-overlay.ts`, `mastracode/src/tui/setup.ts`, `mastracode/src/utils/update-check.ts`, settings tests, models-pack tests, and update-check tests.
+- Focused tests passed: `corepack pnpm@11.3.0 --filter ./mastracode exec vitest run src/utils/__tests__/update-check.test.ts src/onboarding/__tests__/settings.test.ts src/tui/commands/__tests__/models-pack.test.ts src/tui/__tests__/command-dispatch.test.ts --reporter=dot --bail 1`.
+
+Next queue checkpoint: PR #13753 (request access rename, tilde expansion, mid-turn allowed paths), then PR #13611 (auth routing fix, tool injection, and auth storage init).
