@@ -13,7 +13,7 @@ import {
   createSetBrowserEnabledStep,
   createPersistAgentStep,
 } from './steps';
-import { inputSchema, createResultSchema } from './types';
+import { inputSchema, createResultSchema, type Config } from './types';
 
 export * from './types';
 export * from './constant';
@@ -66,35 +66,58 @@ export function createAgentBuilderCreationWorkflow({ model }: { model: string })
   const setBrowserEnabledStep = createSetBrowserEnabledStep({ model });
   const persistAgentStep = createPersistAgentStep({ model });
 
-  return createWorkflow({
-    id: 'agent-builder-creation',
-    description: 'Turn a plain-language description into an agent configuration for the agent builder',
-    inputSchema,
-    outputSchema: createResultSchema,
-    steps: [
-      understandUserOutcomeStep,
-      featureCapabilityStep,
-      setDescriptionStep,
-      setNameStep,
-      setInstructionsStep,
-      setWorkspaceIdStep,
-      setToolsStep,
-      setSkillsStep,
-      setModelStep,
-      setBrowserEnabledStep,
-      persistAgentStep,
-    ],
-  })
-    .then(understandUserOutcomeStep)
-    .then(featureCapabilityStep)
-    .then(setDescriptionStep)
-    .then(setNameStep)
-    .then(setInstructionsStep)
-    .then(setWorkspaceIdStep)
-    .then(setToolsStep)
-    .then(setSkillsStep)
-    .then(setModelStep)
-    .then(setBrowserEnabledStep)
-    .then(persistAgentStep)
-    .commit();
+  return (
+    createWorkflow({
+      id: 'agent-builder-creation',
+      description: 'Turn a plain-language description into an agent configuration for the agent builder',
+      inputSchema,
+      outputSchema: createResultSchema,
+      steps: [
+        understandUserOutcomeStep,
+        featureCapabilityStep,
+        setDescriptionStep,
+        setNameStep,
+        setInstructionsStep,
+        setWorkspaceIdStep,
+        setToolsStep,
+        setSkillsStep,
+        setModelStep,
+        setBrowserEnabledStep,
+        persistAgentStep,
+      ],
+    })
+      // The first two steps are sequential: every later step reads the structured
+      // `userOutcome` (and the resolved `featureCapabilities`) they produce.
+      .then(understandUserOutcomeStep)
+      .then(featureCapabilityStep)
+      // Independent fields only depend on `userOutcome`/`featureCapabilities`, so
+      // they run concurrently. Each branch is handed the same accumulated config
+      // and returns it with its own field added; `.parallel` keys those outputs by
+      // step id, which the following `.map` merges back into one config.
+      .parallel([setNameStep, setDescriptionStep, setWorkspaceIdStep, setToolsStep, setSkillsStep, setModelStep])
+      .map(async ({ inputData }) => mergeParallelConfig(inputData))
+      // `instructions` needs the resolved `name` + `description`, and
+      // `browser-enabled` needs `description`, so they run after the merge — but
+      // are independent of each other, so they too run concurrently.
+      .parallel([setInstructionsStep, setBrowserEnabledStep])
+      .map(async ({ inputData }) => mergeParallelConfig(inputData))
+      .then(persistAgentStep)
+      .commit()
+  );
+}
+
+/**
+ * Merge the branch outputs of a `.parallel([...])` group back into a single
+ * accumulated config.
+ *
+ * `.parallel` yields `{ [stepId]: branchOutput }`. Every creation step spreads
+ * the config it received and adds its own field, so each branch output is a full
+ * `Config` that already carries `userOutcome`/`featureCapabilities` plus exactly
+ * one freshly-resolved field. Spreading the branch outputs in order rebuilds the
+ * combined config; later branches never clobber earlier ones because each only
+ * sets its own field on top of the shared base.
+ */
+function mergeParallelConfig(inputData: Record<string, unknown>): Config {
+  const branches = Object.values(inputData) as Config[];
+  return branches.reduce<Config>((merged, branch) => ({ ...merged, ...branch }), branches[0] ?? ({} as Config));
 }

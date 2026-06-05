@@ -46,6 +46,34 @@ export const successfulCreationChunks = (createdAgentId: string): StreamVNextChu
   },
 ];
 
+/**
+ * Build a non-terminal stream for a run that is actively in flight: the
+ * `workflow-start` chunk (which sets `status: 'running'`) followed by a couple of
+ * per-step events, but no `workflow-finish`. The starter only shows the
+ * running-state timeline once the workflow is actually streaming, so this is what
+ * a mid-run snapshot looks like on the wire: one step finished, the next running.
+ */
+export const runningCreationChunks = (): StreamVNextChunkType[] => [
+  {
+    type: 'workflow-start',
+    from: 'WORKFLOW',
+    runId: RUN_ID,
+    payload: { runId: RUN_ID },
+  },
+  {
+    type: 'workflow-step-result',
+    from: 'WORKFLOW',
+    runId: RUN_ID,
+    payload: { id: 'understand-user-outcome', status: 'success', output: {} },
+  },
+  {
+    type: 'workflow-step-start',
+    from: 'WORKFLOW',
+    runId: RUN_ID,
+    payload: { id: 'feature-capability', status: 'running' },
+  },
+];
+
 /** A failed creation run: terminal chunk reports `workflowStatus: 'failed'`. */
 export const failedCreationChunks = (): StreamVNextChunkType[] => [
   {

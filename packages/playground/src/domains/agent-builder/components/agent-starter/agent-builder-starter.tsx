@@ -3,6 +3,7 @@ import { useCreateWorkflowRun, useStreamWorkflow } from '@mastra/react';
 import { ArrowUpIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
+import { AgentCreationInProgress } from './agent-creation-in-progress';
 import { ExampleList } from './example-list';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 
@@ -14,20 +15,36 @@ const getCreatedAgentId = (result: unknown): string | undefined => {
   return typeof id === 'string' && id.length > 0 ? id : undefined;
 };
 
+type CreationPhase = 'initial' | 'creating';
+
 export const AgentBuilderStarter = () => {
   const [message, setMessage] = useState('');
+  const [phase, setPhase] = useState<CreationPhase>('initial');
   const [createdAgentId, setCreatedAgentId] = useState<string | null>(null);
   const navigate = useNavigate();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: currentUser } = useCurrentUser();
   const createWorkflowRun = useCreateWorkflowRun();
-  const { streamWorkflow, streamResult, isStreaming } = useStreamWorkflow({
+  const { streamWorkflow, streamResult } = useStreamWorkflow({
     debugMode: false,
     onError: error => toast.error(error.message),
   });
 
   const trimmed = message.trim();
-  const isCreating = createWorkflowRun.isPending || isStreaming;
+  // `phase` tracks that a run is in flight (from submit until it resolves or
+  // fails): it disables the composer and shows the submit spinner. We never flip
+  // back to the composer on a transient pending flag, so a finished stream can't
+  // strand the user before the result is captured.
+  const isCreating = phase === 'creating';
+  // The running-state timeline is shown only once the workflow is *actually*
+  // streaming. The run goes `submit → createWorkflowRun → stream start`; the
+  // `workflow-start` chunk sets `status: 'running'`, which is the first moment
+  // real per-step data exists. Until then we keep the composer (with its submit
+  // spinner) up rather than flashing an all-gray timeline. We also keep the
+  // timeline up through `success` until the created agent id is captured (the
+  // effect below runs a tick later), so the composer never flashes between the
+  // last step completing and the complete view appearing.
+  const isStreaming = isCreating && (streamResult.status === 'running' || streamResult.status === 'success');
   const isSubmitBlocked = trimmed.length === 0 || isCreating;
 
   // When the creation workflow finishes successfully its terminal `persist-agent`
@@ -38,10 +55,20 @@ export const AgentBuilderStarter = () => {
     if (resultId) setCreatedAgentId(resultId);
   }, [resultId]);
 
+  // A run that terminates as failed surfaces an error toast via `onError`; bring
+  // the user back to the composer so they can retry rather than stranding them
+  // on the timeline.
+  useEffect(() => {
+    if (streamResult.status === 'failed') setPhase('initial');
+  }, [streamResult.status]);
+
   const handleSubmit = async (e: React.SubmitEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (isSubmitBlocked) return;
 
+    // Enter the running state up front so the timeline takes over immediately and
+    // stays put for the whole run, regardless of stream/mutation timing.
+    setPhase('creating');
     try {
       const run = await createWorkflowRun.mutateAsync({ workflowId: AGENT_BUILDER_CREATION_WORKFLOW_ID });
 
@@ -54,6 +81,9 @@ export const AgentBuilderStarter = () => {
         requestContext: currentUser ? { user: currentUser } : {},
       });
     } catch {
+      // The run could not start (or streaming threw): return to the composer so
+      // the user can retry, and surface the failure.
+      setPhase('initial');
       toast.error('Failed to create your agent');
     }
   };
@@ -115,6 +145,10 @@ export const AgentBuilderStarter = () => {
         </div>
       </div>
     );
+  }
+
+  if (isStreaming) {
+    return <AgentCreationInProgress steps={streamResult.steps ?? {}} />;
   }
 
   return (

@@ -9,12 +9,15 @@ import { MemoryRouter } from 'react-router';
 import type * as ReactRouter from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentBuilderStarter } from '../agent-builder-starter';
-import { server } from '@/test/msw-server';
+import { AgentCreationInProgress } from '../agent-creation-in-progress';
+import { CREATION_STEPS } from '../creation-steps';
 import {
   encodeChunks,
   failedCreationChunks,
+  runningCreationChunks,
   successfulCreationChunks,
 } from './fixtures/creation-workflow';
+import { server } from '@/test/msw-server';
 
 const navigateMock = vi.fn();
 const { toastErrorMock } = vi.hoisted(() => ({ toastErrorMock: vi.fn() }));
@@ -204,7 +207,7 @@ describe('AgentBuilderStarter', () => {
     expect(streamBody.requestContext?.user).toBeUndefined();
   });
 
-  it('shows a spinner and disables input while the workflow is in flight', async () => {
+  it('keeps the composer (not the timeline) up after submit until the workflow actually streams', async () => {
     let releaseStream: () => void = () => {};
     const streamGate = new Promise<void>(resolve => {
       releaseStream = resolve;
@@ -214,27 +217,93 @@ describe('AgentBuilderStarter', () => {
         HttpResponse.json({ runId: 'run-creation-1' }),
       ),
       http.post(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/stream`, async () => {
+        // Hold the stream so it never emits `workflow-start`: the run is in
+        // flight but not yet streaming, so the timeline must not be shown.
         await streamGate;
-        return new HttpResponse(encodeChunks(successfulCreationChunks(CREATED_AGENT_ID)), {
+        return new HttpResponse(encodeChunks(runningCreationChunks()), {
           headers: { 'Content-Type': 'application/json' },
         });
       }),
     );
 
     const { getByTestId, queryByTestId } = renderStarter();
-    const { input, submit } = await enableSubmit(getByTestId, 'standup bot');
+    const { submit, input } = await enableSubmit(getByTestId, 'standup bot');
     fireEvent.click(submit);
 
+    // Before any chunk arrives the composer stays mounted (disabled, with its
+    // submit spinner) — the timeline only appears once the stream is running.
     await waitFor(() => expect(submit.disabled).toBe(true));
-    expect(input.disabled).toBe(true);
-    expect(queryByTestId('agent-builder-starter-submit-spinner')).not.toBeNull();
-    expect(navigateMock).not.toHaveBeenCalled();
+    expect(input).not.toBeNull();
+    expect(queryByTestId('agent-creation-in-progress')).toBeNull();
 
     await act(async () => {
       releaseStream();
     });
 
-    await waitFor(() => expect(queryByTestId('agent-builder-starter-complete')).not.toBeNull());
+    // Once the stream starts (a non-terminal body that stays `running`) the
+    // timeline replaces the prompt form.
+    await waitFor(() => expect(queryByTestId('agent-creation-in-progress')).not.toBeNull());
+    expect(queryByTestId('agent-builder-starter-input')).toBeNull();
+    expect(queryByTestId('agent-builder-starter-submit')).toBeNull();
+    expect(navigateMock).not.toHaveBeenCalled();
+  });
+
+  it('renders the centered step timeline with every workflow step while the workflow streams', async () => {
+    server.use(
+      http.post(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/create-run`, () =>
+        HttpResponse.json({ runId: 'run-creation-1' }),
+      ),
+      // A non-terminal stream (no `workflow-finish`) keeps the run in the
+      // `running` state, so the timeline stays mounted for assertions.
+      http.post(
+        `${BASE_URL}/api/workflows/${WORKFLOW_ID}/stream`,
+        () =>
+          new HttpResponse(encodeChunks(runningCreationChunks()), {
+            headers: { 'Content-Type': 'application/json' },
+          }),
+      ),
+    );
+
+    const { getByTestId, queryByTestId } = renderStarter();
+    const { submit } = await enableSubmit(getByTestId, 'standup bot');
+    fireEvent.click(submit);
+
+    // The prompt form is replaced by the dedicated running-state timeline, which
+    // lists every workflow step up front.
+    await waitFor(() => expect(queryByTestId('agent-creation-in-progress')).not.toBeNull());
+    expect(queryByTestId('agent-builder-starter-input')).toBeNull();
+    for (const step of CREATION_STEPS) {
+      expect(getByTestId(`creation-step-${step.id}`)).not.toBeNull();
+    }
+    // The live chunks drive per-step status: the first step finished, the next
+    // is running, and steps absent from the stream stay not-started.
+    await waitFor(() =>
+      expect(getByTestId('creation-step-understand-user-outcome').getAttribute('data-status')).toBe('success'),
+    );
+    expect(getByTestId('creation-step-feature-capability').getAttribute('data-status')).toBe('running');
+    expect(getByTestId('creation-step-persist-agent').getAttribute('data-status')).toBe('pending');
+  });
+
+  it('maps live per-step status to success, running and not-started states', () => {
+    // The timeline derives each row's state from `streamResult.steps`. Render it
+    // directly with a representative mid-run snapshot: an earlier step done, the
+    // current step running, and the remaining steps absent (not started).
+    const steps = {
+      'understand-user-outcome': { status: 'success' },
+      'feature-capability': { status: 'running' },
+    };
+
+    const { getByTestId } = render(<AgentCreationInProgress steps={steps} />);
+
+    expect(getByTestId('agent-creation-in-progress')).not.toBeNull();
+    expect(getByTestId('creation-step-understand-user-outcome').getAttribute('data-status')).toBe('success');
+    expect(getByTestId('creation-step-feature-capability').getAttribute('data-status')).toBe('running');
+    // A step absent from the stream record is treated as not started.
+    expect(getByTestId('creation-step-persist-agent').getAttribute('data-status')).toBe('pending');
+    // Every step in the manifest is listed up front.
+    for (const step of CREATION_STEPS) {
+      expect(getByTestId(`creation-step-${step.id}`)).not.toBeNull();
+    }
   });
 
   it('renders View agent and Review config CTAs on completion and navigates to the right routes', async () => {

@@ -157,12 +157,20 @@ th:has(header) {
   .starter-chip {
     animation: starter-enter 420ms var(--ease-out-custom) both;
   }
+  .creation-timeline {
+    animation: starter-enter 520ms var(--ease-out-custom) both;
+  }
+  .creation-step {
+    animation: starter-enter 420ms var(--ease-out-custom) both;
+  }
 
   @media (prefers-reduced-motion: reduce) {
     .starter-aurora::before,
     .starter-heading,
     .starter-prompt,
-    .starter-chip {
+    .starter-chip,
+    .creation-timeline,
+    .creation-step {
       animation: none;
     }
   }
