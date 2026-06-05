@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13416](https://github.com/mastra-ai/mastra/pull/13416) — fixed Plan mode so the agent calls `submit_plan` instead of only writing plan text.
-- Later changes: [#13557](https://github.com/mastra-ai/mastra/pull/13557) — persists approved plans as Markdown files on disk; [#13598](https://github.com/mastra-ai/mastra/pull/13598) — keeps the submitted plan visible while the user types requested-change feedback; current source also supports `Use as /goal` from the plan approval UI; exact later PR still needs mapping in queue order.
+- Later changes: [#13557](https://github.com/mastra-ai/mastra/pull/13557) — persists approved plans as Markdown files on disk; [#13598](https://github.com/mastra-ai/mastra/pull/13598) — keeps the submitted plan visible while the user types requested-change feedback; [#16065](https://github.com/mastra-ai/mastra/pull/16065) — adds `Use as /goal` from the plan approval UI so approved plans can enter persistent goal pursuit.
 
 ## User-visible behavior
 
@@ -64,6 +64,7 @@
 - [Prompt context and project instructions](../chat/prompt-context.md) — prompt assembly injects Plan-mode and tool guidance.
 - [Core Harness API and reference docs](../integrations/harness-api.md) — approval uses object-param Harness APIs.
 - [Interactive TUI chat](../tui/interactive-chat.md) — plan cards render inside chat history/streaming UI.
+- [Persistent `/goal` mode](./persistent-goals.md) — `Use as /goal` delegates approved plan execution to the judge-driven goal loop.
 
 ## Existing tests
 

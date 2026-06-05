@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #16294 (row 270) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, #15390, #15403, #15544, #15515, #15601, #15606, #15629, #15653, #15656, #15699, #15710, #15857, #15896, #15770, #15909, #15928, #15940, #15979, #16009, #16011, #16016, #16020, #16022, #16024, #16028, #16182, #16192, #16196, and #16126 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 271 #16065 (/goal command Ralph loop).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #16326 (row 276) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, #15390, #15403, #15544, #15515, #15601, #15606, #15629, #15653, #15656, #15699, #15710, #15857, #15896, #15770, #15909, #15928, #15940, #15979, #16009, #16011, #16016, #16020, #16022, #16024, #16028, #16182, #16192, #16196, #16126, #16295, and #16320 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 277 #16351 (dependency dedupe skip).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 271: PR #16065 (/goal command Ralph loop), then row 272 #16295 (Changesets alpha skip).
+1. Continue at `_pr-queue.md` row 277: PR #16351 (dependency dedupe skip), then row 278 #16254 (stable task patch tools).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -44,6 +44,7 @@ None known.
 
 ## Last commands/evidence
 
+- Rows 271-276 verified/documented: #16065 persistent `/goal` command/Ralph loop, #16322 goal command/user-choice preservation, #16275 `/om` caveman observations toggle with thread-state restore/seed, #16326 `tokenx` token-estimation migration, and #16295/#16320 Changesets alpha skips. Targeted verification passed: selected goal-manager tests (14), goal command tests (15), goal dispatch/prompt/editor tests (25), caveman/thread-state tests (9), and core token-limiter tests (39). Note: an initial full `goal-manager.test.ts` + `goal.test.ts` run failed on the existing `uses stream with structured output and judge memory thread parent-goalId` assertion.
 - Rows 267-270 verified/documented: #16274 setup/config modal overlays (`showModalOverlay`, `askModalQuestion`, setup/config command overlays, neutral tool pending/success backgrounds), #16196 Changesets alpha skip, #16126 AI SDK dependency-update skip, and #16294 OpenAI Codex OAuth callback fallback (1455 → 1457 → manual-code warning, explicit redirect URI through authorization and token exchange). Focused verification passed: overlay/quiet-mode modal tests (7) and OpenAI Codex OAuth tests (19).
 - Rows 263-266 verified/documented: #16192 Changesets alpha skip, #16250 README/docs-only update, #16176 core provider-boundary `processLLMRequest` hook plus ProviderHistoryCompat prompt-only reasoning rewrites, and #13891 `createMastraCode({ memory })` override for custom Harness memory. Focused verification passed: ProviderHistoryCompat tests, LLM execution-step `processLLMRequest` tests, MastraCode index memory/processor wiring tests, and core typecheck.
 - Rows 259-262 verified/documented: #16028/#16182 Changesets alpha skips, #16094 default temp workspace allowed paths (`os.tmpdir()` and `/tmp`), and #16135 normalized Enter/Escape handling in the storage settings connection submenu. Focused verification passed: build-skill-paths tests (9) and `pnpm --filter ./mastracode check`.

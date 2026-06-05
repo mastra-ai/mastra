@@ -2151,3 +2151,33 @@ Verification:
 
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/overlay.test.ts src/tui/__tests__/mastra-tui-quiet-mode.test.ts --bail=1 --reporter=dot` — 2 files / 7 tests passed.
 - `pnpm --filter ./mastracode exec vitest run src/auth/providers/openai-codex.test.ts --bail=1 --reporter=dot` — 1 file / 19 tests passed.
+
+### PR #16065 / #16295 / #16322 / #16320 / #16275 / #16326 feature-map checkpoint
+
+Verified rows 271-276:
+
+- #16065 adds persistent `/goal` mode. Current source has `GoalManager` persisted in thread metadata, `/goal` and `/judge` command flows, judge-agent structured decisions (`done`/`continue`/`waiting`), active-duration tracking, input locking during judge evaluation, queued-action precedence before automatic continuation, and plan-mode return after approved-goal completion.
+- #16295 and #16320 are Changesets alpha package-version batches; skipped for feature mapping after PR metadata confirmed package/changelog-only changes under Mastra Code.
+- #16322 preserves goal command and user-choice text. Current command dispatch keeps raw multiline `/goal` objectives as one argument, supports `/goal/<custom>` and `/goal/<skill>` routes only when goal-enabled, keeps `ask_user` prompts user-controlled while a goal is active, and resolves editor autocomplete before Enter/Ctrl+F submission without stripping slash prefixes.
+- #16275 adds `/om` caveman observations controls with thread-state restoration/seeding. Current source mirrors `cavemanObservations` and `observeAttachments` between harness state and thread metadata on startup/thread changes, persists caveman changes through `/om`, and keeps the base prompt warning that caveman memories are storage-only.
+- #16326 replaces `js-tiktoken` with `tokenx` in Mastra Code token-estimation helpers and core `TokenLimiterProcessor`, accepting heuristic token estimation in exchange for removing bundled BPE rank tables.
+
+Documentation actions:
+
+- Created `features/goals/persistent-goals.md` for `/goal` state ownership, judge loop, command routing, tests, and risks.
+- Updated `features/goals/plan-approval.md` for the `Use as /goal` handoff.
+- Updated `features/memory/observational-memory.md` for #16275 caveman/attachment thread-state persistence.
+- Updated `features/chat/prompt-context.md`, `features/tools/coding-tools-permissions.md`, and `features/tools/web-search-rendering.md` for goal prompt context and `tokenx` token-budget ownership.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16065 done, #16295 skipped, #16322 done, #16320 skipped, #16275 done, #16326 done, #16351 current.
+
+Focused evidence read: PR metadata for #16065/#16295/#16322/#16320/#16275/#16326; current `mastracode/src/tui/goal-manager.ts`, `commands/goal.ts`, `goal-input-lock.ts`, `handlers/agent-lifecycle.ts`, `command-dispatch.ts`, `components/custom-editor.ts`, `components/judge-display.ts`, `status-line.ts`, goal/queueing/dispatch/setup/prompt tests, `mastracode/src/agents/thread-caveman-state.ts`, `commands/om.ts`, `components/om-settings.ts`, `agents/memory.ts`, `thread-caveman-state.test.ts`, `mastracode/src/utils/token-estimator.ts`, and `packages/core/src/processors/processors/token-limiter.ts`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/goal-manager.test.ts src/tui/commands/__tests__/goal.test.ts --bail=1 --reporter=dot` — failed on the existing `GoalManager > uses stream with structured output and judge memory thread parent-goalId` assertion before docs-only changes touched no runtime/test files; targeted follow-up coverage below passed.
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/goal-manager.test.ts -t "preserves turn|does not keep|updates judge|no judge model|judge resume|budget exhaustion|readonly|reports judge activity|provider compatibility|waiting on the user|paused before|cleared before|different goal" --bail=1 --reporter=dot` — 1 file / 14 tests passed / 10 skipped.
+- `pnpm --filter ./mastracode exec vitest run src/tui/commands/__tests__/goal.test.ts --bail=1 --reporter=dot` — 1 file / 15 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/command-dispatch.test.ts src/tui/__tests__/setup-keyboard-shortcuts.test.ts src/tui/handlers/__tests__/prompts.test.ts src/tui/__tests__/parallel-interactive-prompts.test.ts src/tui/components/__tests__/custom-editor.test.ts -t "goal|Goal|ask_user|plan approval|slash autocomplete|Ctrl\\+F" --bail=1 --reporter=dot` — 5 files / 25 tests passed / 35 skipped.
+- `pnpm --filter ./mastracode exec vitest run src/agents/thread-caveman-state.test.ts src/__tests__/index.test.ts -t "caveman|observeAttachments" --bail=1 --reporter=dot` — 2 files / 9 tests passed / 16 skipped.
+- `pnpm --filter ./packages/core exec vitest run src/processors/processors/token-limiter.test.ts --bail=1 --reporter=dot` — 1 file / 39 tests passed / no type errors.

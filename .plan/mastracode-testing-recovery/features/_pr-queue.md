@@ -290,13 +290,13 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 268 | 2026-05-06 | #16196 | `3bdb5cee50` | likely skip | skipped | chore: version packages (alpha) (#16196) | 2 |
 | 269 | 2026-05-07 | #16126 | `9f1741080d` | likely skip | skipped | chore(deps): update ai sdk (#16126) | 1 |
 | 270 | 2026-05-07 | #16294 | `e97b9ec4af` | review | done | Fix Codex OAuth callback port fallback (#16294) | 2 |
-| 271 | 2026-05-07 | #16065 | `33f5061cd1` | review | current | feat(mastracode): add /goal slash command for persistent cross-turn goals (Ralph loop) (#16065) | 38 |
-| 272 | 2026-05-07 | #16295 | `8519846579` | likely skip | | chore: version packages (alpha) (#16295) | 2 |
-| 273 | 2026-05-07 | #16322 | `91db9e771f` | review | | fix: keep goal commands and user choices intact (#16322) | 11 |
-| 274 | 2026-05-07 | #16320 | `de93ce2a87` | likely skip | | chore: version packages (alpha) (#16320) | 2 |
-| 275 | 2026-05-07 | #16275 | `0586486462` | review | | feat(mastracode): add /om toggle for caveman observations (#16275) | 13 |
-| 276 | 2026-05-07 | #16326 | `b275631dc1` | review | | Replace js-tiktoken with tokenx in @mastra/core and mastracode (#16326) | 2 |
-| 277 | 2026-05-08 | #16351 | `25cd423cd8` | likely skip | | chore: dedupe and clean up external dependencies (#16351) | 1 |
+| 271 | 2026-05-07 | #16065 | `33f5061cd1` | review | done | feat(mastracode): add /goal slash command for persistent cross-turn goals (Ralph loop) (#16065) | 38 |
+| 272 | 2026-05-07 | #16295 | `8519846579` | likely skip | skipped | chore: version packages (alpha) (#16295) | 2 |
+| 273 | 2026-05-07 | #16322 | `91db9e771f` | review | done | fix: keep goal commands and user choices intact (#16322) | 11 |
+| 274 | 2026-05-07 | #16320 | `de93ce2a87` | likely skip | skipped | chore: version packages (alpha) (#16320) | 2 |
+| 275 | 2026-05-07 | #16275 | `0586486462` | review | done | feat(mastracode): add /om toggle for caveman observations (#16275) | 13 |
+| 276 | 2026-05-07 | #16326 | `b275631dc1` | review | done | Replace js-tiktoken with tokenx in @mastra/core and mastracode (#16326) | 2 |
+| 277 | 2026-05-08 | #16351 | `25cd423cd8` | likely skip | current | chore: dedupe and clean up external dependencies (#16351) | 1 |
 | 278 | 2026-05-08 | #16254 | `e2a079cc37` | review | | feat(harness): add stable task patch tools (#16254) | 31 |
 | 279 | 2026-05-08 | #16332 | `db34bc6fb3` | review | | fix(core, mastracode): silence provider cache corruption warning and consolidate gateway sync (#16332) | 2 |
 | 280 | 2026-05-08 | #16340 | `7c275a8105` | review | | fix(mastracode): trigger plan execution when accepting plan via /goal (#16340) | 8 |

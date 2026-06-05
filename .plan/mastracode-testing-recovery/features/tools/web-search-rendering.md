@@ -4,7 +4,7 @@
 
 - PR: [#13870](https://github.com/mastra-ai/mastra/pull/13870) — renders provider `web_search` results as readable TUI output instead of raw JSON/encrypted blobs.
 - Related earlier change: [#13609](https://github.com/mastra-ai/mastra/pull/13609) — added OpenAI native `web_search` fallback when Tavily is absent.
-- Later change: [#15448](https://github.com/mastra-ai/mastra/pull/15448) — extracts Tavily search/extract/crawl/map into the standalone `@mastra/tavily` integration package and rewires Mastra Code `web-search` / `web-extract` wrappers to delegate to it while preserving Mastra Code-specific markdown formatting and 2k-token truncation.
+- Later changes: [#15448](https://github.com/mastra-ai/mastra/pull/15448) — extracts Tavily search/extract/crawl/map into the standalone `@mastra/tavily` integration package and rewires Mastra Code `web-search` / `web-extract` wrappers to delegate to it while preserving Mastra Code-specific markdown formatting and 2k-token truncation; [#16326](https://github.com/mastra-ai/mastra/pull/16326) — switches the wrapper token estimator from `js-tiktoken` to `tokenx`.
 
 ## User-visible behavior
 
@@ -44,6 +44,7 @@
 | Tool call name | Harness/provider event (`web_search` or `web_search_YYYYMMDD`) | TUI renderer detection |
 | Query summary | tool args `query` or nested `action.query` | footer / quiet badge |
 | Search result content | tool result text (`sources`, provider arrays, or Mastra Code-formatted Tavily markdown from `@mastra/tavily`) | rendered result rows and quiet preview |
+| Wrapper token budget | `mastracode/src/utils/token-estimator.ts` using `tokenx` estimate/slice helpers | 2k-token search/extract result truncation before model/TUI consumption |
 | Output truncation/collapse | `ToolExecutionComponentEnhanced` collapsed/expanded state | normal TUI output |
 | Quiet preview cap | `settings.preferences.quietModeMaxToolPreviewLines` | compact quiet output |
 
@@ -51,7 +52,7 @@
 
 - `mastracode/src/tui/components/tool-execution-enhanced.ts` — web-search detection, bordered renderer, provider result parser, quiet preview.
 - `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts` — compact web-search preview coverage.
-- `mastracode/src/tools/web-search.ts` — thin Mastra Code wrapper around `@mastra/tavily` search/extract tools that applies relevance filtering, markdown formatting, and 2k token budgets before TUI rendering.
+- `mastracode/src/tools/web-search.ts` and `mastracode/src/utils/token-estimator.ts` — thin Mastra Code wrapper around `@mastra/tavily` search/extract tools that applies relevance filtering, markdown formatting, and `tokenx`-estimated 2k token budgets before TUI rendering.
 - `integrations/tavily/src/{client,search,extract,crawl,map,tools}.ts` — standalone Tavily client/tool package with zod schemas and API response mapping.
 - `mastracode/src/agents/tools.ts` — dynamic web-search tool availability, including native provider fallbacks.
 
