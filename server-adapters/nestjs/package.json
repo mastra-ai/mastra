@@ -48,7 +48,7 @@
     "@ai-sdk/openai": "^2.0.106",
     "cors": "^2.8.5",
     "@types/cors": "^2.8.19",
-    "eslint": "^9.37.0",
+    "eslint": "^9.39.4",
     "express": "^5.1.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",

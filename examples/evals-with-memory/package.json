@@ -29,7 +29,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.12.7",
-    "tsx": "^4.19.0"
+    "tsx": "catalog:"
   },
   "keywords": [],
   "author": "",
