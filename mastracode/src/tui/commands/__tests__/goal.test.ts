@@ -71,6 +71,7 @@ vi.mock('../../overlay.js', () => ({
 
 vi.mock('@mastra/core/agent', () => ({
   Agent: vi.fn(),
+  SignalProvider: class {},
 }));
 
 vi.mock('@mastra/core/processors', () => ({

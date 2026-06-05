@@ -234,7 +234,10 @@ describe('StreamChatProvider', () => {
     expect(payload).toMatchObject({
       message: 'hi',
       threadId: 'thread-xyz',
-      modelSettings: { instructions: 'snapshot-text' },
+      modelSettings: {
+        instructions: 'snapshot-text',
+        providerOptions: { openai: { reasoningEffort: 'low' } },
+      },
     });
     expect(payload).not.toHaveProperty('instructions');
   });
@@ -262,6 +265,9 @@ describe('StreamChatProvider', () => {
     expect((sentMessages[0] as { modelSettings?: { instructions?: string } }).modelSettings).not.toHaveProperty(
       'instructions',
     );
+    expect(sentMessages[0]).toMatchObject({
+      modelSettings: { providerOptions: { openai: { reasoningEffort: 'low' } } },
+    });
 
     rerender(
       <StreamChatProvider agentId="a" threadId="thread-xyz" initialMessages={[]} extraInstructions="">
@@ -273,6 +279,9 @@ describe('StreamChatProvider', () => {
     expect((sentMessages[1] as { modelSettings?: { instructions?: string } }).modelSettings).not.toHaveProperty(
       'instructions',
     );
+    expect(sentMessages[1]).toMatchObject({
+      modelSettings: { providerOptions: { openai: { reasoningEffort: 'low' } } },
+    });
   });
 
   it('does not call sendMessage when extraInstructions changes between sends', () => {
@@ -306,7 +315,12 @@ describe('StreamChatProvider', () => {
 
     send!('go');
     expect(sentMessages).toHaveLength(1);
-    expect(sentMessages[0]).toMatchObject({ modelSettings: { instructions: 'v2' } });
+    expect(sentMessages[0]).toMatchObject({
+      modelSettings: {
+        instructions: 'v2',
+        providerOptions: { openai: { reasoningEffort: 'low' } },
+      },
+    });
   });
 
   it('keeps the chat messages state limited to the user message after a send (snapshot is invisible)', () => {
