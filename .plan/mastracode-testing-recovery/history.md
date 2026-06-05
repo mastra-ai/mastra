@@ -1266,3 +1266,24 @@ Documentation actions:
 - Queue status: #13573 done, #14260 dependency/build-only skip, #14280 skipped, #14337 current.
 
 Focused evidence read: PR metadata/diffs for #13573/#14260/#14280; current `auth/storage.ts`, `prompt-api-key.ts`, `components/api-key-dialog.ts`, `components/model-selector.ts`, `commands/models-pack.ts`, `commands/om.ts`, `commands/subagents.ts`, `headless.ts`, `index.ts`, `packages/mcp/src/client/client.ts`, `packages/mcp/src/server/server.ts`, and `packages/mcp/src/server/types.ts`; tests/fixtures from `model.test.ts`, `index.test.ts`, and command mocks around prompt/API-key storage.
+
+### PR #14337 / #13933 / #14359 feature-map checkpoint
+
+Verified rows 134-136:
+
+- #14337 expands terminal theme/styling behavior: startup still resolves `MASTRA_THEME` > persisted preference > auto-detection, `detect-theme.ts` queries OSC 11 and falls back to `COLORFGBG`, `theme.ts` computes adapted brand/surface/theme colors against detected backgrounds, enforces 5.5:1 text and 4.5:1 brand contrast targets, applies OSC 10 foreground color, and restores foreground via OSC 110 on exit. The PR also refines status-line, tool, assistant, user-message, overlay, and editor colors through shared theme helpers.
+- #13933 is build-tool dependency churn in Mastra Code scope (`mastracode/package.json` only); skipped for feature mapping.
+- #14359 replaces the editor border's per-character animated gradient with a single cached solid mode-color `chalk.hex()` path in `CustomEditor.render()`, avoiding ~150-200 unique ANSI RGB sequences per frame and terminal corruption while keeping short status/prompt gradient animation intact.
+
+Documentation actions:
+
+- Updated `features/tui/terminal-theme.md` with #14337/#14359, adapted palette state ownership, solid editor border ownership, key files, tests, missing test gap, and ANSI-gradient regression risk.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #14337 done, #13933 build-tool dependency skip, #14359 done, #14377 current.
+
+Focused evidence read: PR metadata for #14337/#13933/#14359; current `main.ts`, `detect-theme.ts`, `theme.ts`, `commands/theme.ts`, `custom-editor.ts`, `status-line.ts`, `state.ts`, `setup.ts`, `obi-loader.ts`, `assistant-message.ts`, `user-message.ts`, `tool-execution-enhanced.ts`; tests in `theme-contrast.test.ts` and `status-line.test.ts`; `git show --name-status 531607166e -- mastracode` for the #13933 dep-only skip.
+
+Verification:
+
+- Accidental broad package-script run: `corepack pnpm --filter ./mastracode test -- --run src/tui/__tests__/theme-contrast.test.ts src/tui/__tests__/status-line.test.ts src/tui/components/__tests__/custom-editor.test.ts --bail=1 --reporter=dot` routed through the package script and ran the full Mastra Code suite, reproducing known baseline failures (`goal-manager.test.ts` Zod/nanoid snapshot drift and stale `/github sync` autocomplete ordering). Result: 5 files failed / 103 passed, 1221 tests passed before exit, 81.58s.
+- Correct focused run: `corepack pnpm --filter ./mastracode exec vitest run src/tui/__tests__/theme-contrast.test.ts src/tui/__tests__/status-line.test.ts src/tui/components/__tests__/custom-editor.test.ts --bail=1 --reporter=dot` — 3 files / 67 tests passed in 495ms.

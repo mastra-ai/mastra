@@ -153,10 +153,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 131 | 2026-03-15 | #13573 | `d46c9e95a1` | review | done | feat: prompt for API keys in mastracode TUI (#13573) | 9 |
 | 132 | 2026-03-16 | #14260 | `bbcbbce4f0` | review | skip: dependency/build-only for MC feature map | chore: update dependencies and fix mcp build for @modelcontextprotocol/sdk@1.27.1 (#14260) | 1 |
 | 133 | 2026-03-16 | #14280 | `660aeff223` | likely skip | skipped | chore: version packages (alpha) (#14280) | 2 |
-| 134 | 2026-03-16 | #14337 | `3f47335cac` | review | current | feat(mastracode): theme with adaptive colors and refined TUI styling (#14337) | 37 |
-| 135 | 2026-03-16 | #13933 | `531607166e` | review | | chore(deps): update build tools (#13933) | 1 |
-| 136 | 2026-03-16 | #14359 | `1179b045bb` | review | | fix(mastracode): replace editor border animation with solid mode color (#14359) | 2 |
-| 137 | 2026-03-17 | #14377 | `133ef20c39` | review | | feat(mastracode): improve MCP server management with interactive /mcp selector (#14377) | 9 |
+| 134 | 2026-03-16 | #14337 | `3f47335cac` | review | done | feat(mastracode): theme with adaptive colors and refined TUI styling (#14337) | 37 |
+| 135 | 2026-03-16 | #13933 | `531607166e` | review | skip: build-tool deps only | chore(deps): update build tools (#13933) | 1 |
+| 136 | 2026-03-16 | #14359 | `1179b045bb` | review | done | fix(mastracode): replace editor border animation with solid mode color (#14359) | 2 |
+| 137 | 2026-03-17 | #14377 | `133ef20c39` | review | current | feat(mastracode): improve MCP server management with interactive /mcp selector (#14377) | 9 |
 | 138 | 2026-03-17 | #14343 | `6611d73d42` | likely skip | | chore: version packages (alpha) (#14343) | 2 |
 | 139 | 2026-03-17 | #14427 | `52715cf453` | likely skip | | chore: version packages (alpha) (#14427) | 2 |
 | 140 | 2026-03-18 | #14432 | `0256b9b00a` | likely skip | | ci: optimize turbo cache inputs, config, and workflow concurrency (#14432) | 1 |

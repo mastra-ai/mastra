@@ -45,7 +45,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | TUI | Process suspend shortcut | #13723 | TUI keyboard routing + Unix signal handling | Partial | Medium | [page](./tui/process-suspend.md) |
 | TUI | Clipboard paste | #13712, #13953 | OS clipboard helpers + editor paste buffer + pending pasted images | Partial | High | [page](./tui/clipboard-paste.md) |
 | TUI | File autocomplete | #13460 | editor autocomplete provider + `fd` detection | Partial | Medium | [page](./tui/file-autocomplete.md) |
-| TUI | Terminal theme and contrast | #13487, #13503 | settings preference + terminal detection + theme helper API | Partial | Medium | [page](./tui/terminal-theme.md) |
+| TUI | Terminal theme and contrast | #13487, #13503, #14337, #14359 | settings preference + terminal detection + adapted palette + solid editor border | Partial | Medium | [page](./tui/terminal-theme.md) |
 | TUI | Quiet mode | #13556 | settings preference + TUI render state | Partial | High | [page](./tui/quiet-mode.md) |
 | Settings | Onboarding and global settings | #13421, #13431, #13487, #13494, #13500, #13505, #13508, #13512, #13566, #13603, #13611, #13748, #13953, #13573 | settings.json + thread settings + provider registry + AuthStorage/stored API keys | Partial | High | [page](./settings/onboarding-and-global-settings.md) |
 | Settings | Storage backend configuration | #13435, #13815 | env/settings/database config + storage factory | Partial | High | [page](./settings/storage-backend.md) |
