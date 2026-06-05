@@ -1456,3 +1456,29 @@ Verification:
 
 - `corepack pnpm --filter ./mastracode exec vitest run src/tui/commands/__tests__/threads.test.ts src/tui/components/__tests__/thread-selector.test.ts --bail=1 --reporter=dot` — 2 files / 6 tests passed.
 - `corepack pnpm --filter ./packages/core exec vitest run src/workspace/tools/__tests__/lsp-inspect.test.ts --bail=1 --reporter=dot` — 1 file / 13 tests passed / no type errors.
+
+### PR #14637 / #14727 / #14567 feature-map checkpoint
+
+Verified rows 162-164:
+
+- #14637 adds dynamic nested instruction loading. Current source wires `AgentsMDInjector` as a core input processor, ignores statically loaded global/project instruction files, scans path-bearing tool calls for nearest `AGENTS.md`/`CLAUDE.md`/`CONTEXT.md`, dedupes by metadata/path, emits `dynamic-agents-md` system reminders, renders them in the TUI, and tells OM not to observe those ephemeral reminders.
+- #14727 fixes custom slash-command loading. Current `slash-command-loader.ts` scans OpenCode/Claude/Mastra user and project directories in priority order, derives names/namespaces from paths or frontmatter, parses templates, and uses Map-based dedupe so later higher-priority sources override earlier duplicates.
+- #14567 expands OM recall to cross-thread browsing/search with scope-based access control. Current `recall` defaults message browsing to the current thread, validates explicit `threadId` values against the active resource, allows cursor-only same-resource browsing, exposes resource thread listing/search, indexes observation groups into the selected vector store, and adds `/thread` to show active thread/resource/fork provenance.
+
+Documentation actions:
+
+- Updated `features/chat/prompt-context.md` with dynamic AGENTS/CLAUDE/CONTEXT reminders, `AgentsMDInjector` ownership, TUI rendering, tests, and dedupe/truncation risks.
+- Updated `features/chat/queued-followups.md` with #14727 custom slash-command loading/discovery priority and tests.
+- Updated `features/memory/observational-memory.md` with #14567 cross-thread recall/search/indexing, vector metadata ownership, `/thread`, tests, and storage/vector risks.
+- Updated `features/threads/persistent-conversations.md` with `/thread` current-thread/fork provenance behavior.
+- Updated `features/settings/storage-backend.md` with recall vector-store pairing.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #14637 done, #14727 done, #14567 done, #14788 current.
+
+Focused evidence read: PR metadata/diffs for #14637/#14727/#14567; current `mastracode/src/agents/prompts/agent-instructions.ts`, `packages/core/src/processors/tool-result-reminder.ts`, `mastracode/src/tui/components/system-reminder.ts`, `mastracode/src/tui/message.ts`, `mastracode/src/index.ts`, `mastracode/src/utils/slash-command-loader.ts`, `mastracode/src/tui/command-dispatch.ts`, `packages/memory/src/tools/om-tools.ts`, `packages/memory/src/index.ts`, `packages/memory/src/processors/observational-memory/observation-strategies/*`, `mastracode/src/agents/memory.ts`, `mastracode/src/utils/storage-factory.ts`, `mastracode/src/tui/commands/thread.ts`, and related tests.
+
+Verification:
+
+- `corepack pnpm --filter ./packages/core exec vitest run src/processors/tool-result-reminder.test.ts --bail=1 --reporter=dot` — 1 file / 14 tests passed / no type errors.
+- `corepack pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/system-reminder.test.ts src/utils/__tests__/slash-command-loader.test.ts src/tui/commands/__tests__/thread.test.ts --bail=1 --reporter=dot` — 3 files / 17 tests passed.
+- `corepack pnpm --filter ./packages/memory exec vitest run src/tools/om-tools.test.ts --bail=1 --reporter=dot` — 1 file / 91 tests passed.

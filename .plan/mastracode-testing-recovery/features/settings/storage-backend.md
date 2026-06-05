@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13435](https://github.com/mastra-ai/mastra/pull/13435) — added opt-in PostgreSQL storage alongside default LibSQL, plus `/settings` backend selection.
-- Later changes: [#13815](https://github.com/mastra-ai/mastra/pull/13815) — database config files can also carry `omScope` for observational-memory scope selection.
+- Later changes: [#13815](https://github.com/mastra-ai/mastra/pull/13815) — database config files can also carry `omScope` for observational-memory scope selection; [#14567](https://github.com/mastra-ai/mastra/pull/14567) — pairs the selected storage backend with a vector store used by OM recall search/indexing.
 
 ## User-visible behavior
 
@@ -45,6 +45,7 @@
 | LibSQL URL/token | `MASTRA_DB_URL`/`MASTRA_DB_AUTH_TOKEN` or `settings.storage.libsql` | `LibSQLStore`, `LibSQLVector` |
 | PostgreSQL connection | `MASTRA_PG_*` vars or `settings.storage.pg` | `PostgresStore`, `PgVector` |
 | Effective backend after fallback | `createStorage()` result | Vector-store selection, startup warnings |
+| Recall vector store | `createVectorStore()` uses `PgVector` for effective PG or separate local `LibSQLVector` file for LibSQL | OM observation indexing, `Memory.searchMessages()`, agent `recall` search mode |
 
 ## Key files
 

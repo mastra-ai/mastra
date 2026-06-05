@@ -181,10 +181,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 159 | 2026-03-25 | #14690 | `b174c63a09` | review | done | fix(mastracode): speed up loading and show all threads in thread selector (#14690) | 2 |
 | 160 | 2026-03-25 | #14691 | `faede8c392` | review | done | fix: remove thread selector preview lookup (#14691) | 2 |
 | 161 | 2026-03-25 | #14565 | `404fea1304` | review | done | feat: add lsp_inspect workspace inspection tool (#14565) | 5 |
-| 162 | 2026-03-25 | #14637 | `86e326363e` | review | current | feat: add dynamic AGENTS.md loading in mastracode (#14637) | 15 |
-| 163 | 2026-03-27 | #14727 | `a98a9c7930` | review | | fix(mastracode): fix custom slash commands not loading (#14727) | 2 |
-| 164 | 2026-03-27 | #14567 | `949b7bfd4e` | review | | feat(memory): cross-thread recall browsing, search, and scope-based access control (#14567) | 15 |
-| 165 | 2026-03-27 | #14788 | `60a224dd49` | review | | fix: persist observational memory threshold settings across restarts (#14788) | 3 |
+| 162 | 2026-03-25 | #14637 | `86e326363e` | review | done | feat: add dynamic AGENTS.md loading in mastracode (#14637) | 15 |
+| 163 | 2026-03-27 | #14727 | `a98a9c7930` | review | done | fix(mastracode): fix custom slash commands not loading (#14727) | 2 |
+| 164 | 2026-03-27 | #14567 | `949b7bfd4e` | review | done | feat(memory): cross-thread recall browsing, search, and scope-based access control (#14567) | 15 |
+| 165 | 2026-03-27 | #14788 | `60a224dd49` | review | current | fix: persist observational memory threshold settings across restarts (#14788) | 3 |
 | 166 | 2026-03-27 | #14790 | `d084b66923` | review | | fix: cap injected AGENTS.md reminders (#14790) | 1 |
 | 167 | 2026-03-30 | #14845 | `2bac10d032` | review | | feat(mastracode): allow custom response on questions with options (#14845) | 2 |
 | 168 | 2026-03-30 | #14656 | `0771fa8909` | likely skip | | chore: version packages (alpha) (#14656) | 2 |

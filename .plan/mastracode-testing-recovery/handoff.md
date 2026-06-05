@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14565 (row 161) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, and #14654 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #14637 (dynamic AGENTS.md loading), then #14727 (custom slash commands) and #14567 (cross-thread recall).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14567 (row 164) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, and #14654 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #14788 (persist observational memory threshold settings), then #14790 (cap injected AGENTS.md reminders).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 162: PR #14637 (dynamic AGENTS.md loading), then row 163 #14727 (custom slash commands), and row 164 #14567 (cross-thread recall browsing/search).
+1. Continue at `_pr-queue.md` row 165: PR #14788 (persist observational memory threshold settings), then row 166 #14790 (cap injected AGENTS.md reminders), and row 167 #14845 (custom response on questions with options).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -44,6 +44,8 @@ None known.
 
 ## Last commands/evidence
 
+- Rows 162-164 verified/documented: #14637 dynamic nested instruction reminders, #14727 custom slash-command loading, and #14567 cross-thread recall/search/indexing plus `/thread` info.
+- Focused verification for rows 162-164 passed: core `tool-result-reminder` (14 tests), MastraCode system-reminder/slash-loader/thread command (17 tests), and memory `om-tools` (91 tests).
 - Rows 159-161 verified/documented: #14690 all-resource thread selector loading, #14691 removal of live thread-preview lookup, and #14565 `lsp_inspect` workspace tool/TUI renderer.
 - Focused verification for rows 159-161 passed: `threads.test.ts` + `thread-selector.test.ts` (6 tests) and `lsp-inspect.test.ts` (13 tests).
 - Rows 156-158 verified/documented: #14549/#14654 version-package skips and #14688 response guidance prompt placement/wording.
