@@ -360,10 +360,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 338 | 2026-05-27 | #17138 | `c3baf471a4` | likely skip | skipped | chore: version packages (alpha) (#17138) | 2 |
 | 339 | 2026-05-28 | #17220 | `97b974e292` | likely skip | skipped | chore: add missing lint-staged configs (#17220) | 1 |
 | 340 | 2026-05-30 | #17333 | `0f7f06bc92` | review | done | fix(mastracode): wrap long slash-command descriptions in autocomplete picker (#17333) | 3 |
-| 341 | 2026-05-30 | #17334 | `27c2376c99` | review | | fix(mastracode): render ask_user multi_select as a multi-select picker (#17334) | 8 |
-| 342 | 2026-05-31 | #17283 | `c5eca07f1d` | review | | feat(mastracode): configure TUI shell passthrough (#17283) | 11 |
-| 343 | 2026-05-31 | #17174 | `4517213d91` | likely skip | | chore: version packages (alpha) (#17174) | 2 |
-| 344 | 2026-05-31 | #17365 | `98eb19b2bc` | likely skip | | chore: version packages (alpha) (#17365) | 2 |
+| 341 | 2026-05-30 | #17334 | `27c2376c99` | review | done | fix(mastracode): render ask_user multi_select as a multi-select picker (#17334) | 8 |
+| 342 | 2026-05-31 | #17283 | `c5eca07f1d` | review | done | feat(mastracode): configure TUI shell passthrough (#17283) | 11 |
+| 343 | 2026-05-31 | #17174 | `4517213d91` | likely skip | skipped | chore: version packages (alpha) (#17174) | 2 |
+| 344 | 2026-05-31 | #17365 | `98eb19b2bc` | likely skip | skipped | chore: version packages (alpha) (#17365) | 2 |
 | 345 | 2026-06-01 | #17276 | `8f1c6e2a90` | review | | feat(core, mastracode): add scoped Harness V1 session owner IDs (#17276) | 4 |
 | 346 | 2026-06-01 | #17387 | `bc0d14181d` | likely skip | | chore: version packages (alpha) (#17387) | 2 |
 | 347 | 2026-06-01 | #17431 | `5d47971add` | review | | fix(mastracode): truncate TUI lines that exceed terminal width on narrow terminals (#17431) | 3 |

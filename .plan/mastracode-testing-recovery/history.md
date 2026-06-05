@@ -2583,3 +2583,24 @@ Focused evidence read: PR metadata and commit stats for #17114/#17138/#17220/#17
 Verification:
 
 - `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/wrapping-autocomplete-list.test.ts --bail=1 --reporter=dot` — 1 file / 11 tests passed.
+
+### PR #17334 / #17283 / #17174 / #17365 feature-map checkpoint
+
+Verified rows 341-344:
+
+- #17334 renders `ask_user` `multi_select` prompts as true checkbox multi-select pickers. Current source threads `selectionMode` through `dispatchEvent()` and `handleAskQuestion()`, wires `onSubmitMulti` in inline/dialog prompt components, omits `Custom response...` for multi-select, and responds to Harness with an array of selected option labels.
+- #17283 adds configurable TUI shell passthrough for local `!` commands. Current source persists `settings.shellPassthrough`, supports `MASTRACODE_SHELL` / `MASTRACODE_SHELL_MODE`, resolves POSIX/cmd/PowerShell families, uses default shell fallback with warnings for invalid config, and preserves explicit shell invocation through `createShellPassthroughSubprocess()`.
+- #17174 and #17365 are Changesets alpha package-version batches; skipped for feature mapping after commit stats confirmed only `.changeset/pre.json`, `mastracode/CHANGELOG.md`, and `mastracode/package.json` under Mastra Code scope.
+
+Documentation actions:
+
+- Updated `features/tui/interactive-prompts.md` for #17334 multi-select picker behavior, array answers, hints, tests, and state ownership.
+- Updated `features/tui/shell-passthrough.md` and `features/settings/onboarding-and-global-settings.md` for #17283 persisted/env shell passthrough config.
+- Updated `features/README.md`, `features/_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #17334 done, #17283 done, #17174 skipped, #17365 skipped, #17276 current.
+
+Focused evidence read: PR metadata and commit stats for #17334/#17283/#17174/#17365; current `ask-question-inline.ts`, `ask-question-dialog.ts`, `handlers/prompts.ts`, `event-dispatch.ts`, `ask-question-inline-multi-select.test.ts`, `handlers/__tests__/prompts.test.ts`, `shell-config.ts`, `shell-runner.ts`, `shell-result.ts`, `shell.ts`, `settings.ts`, `shell-config.test.ts`, `shell.test.ts`, and `shell-result.test.ts`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/ask-question-inline-multi-select.test.ts src/tui/handlers/__tests__/prompts.test.ts src/tui/__tests__/shell-config.test.ts src/tui/__tests__/shell.test.ts src/tui/__tests__/shell-result.test.ts --bail=1 --reporter=dot` — 5 files / 43 tests passed.
