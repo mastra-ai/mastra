@@ -3,12 +3,12 @@
 ## Origin PR / commit
 
 - PR: [#15036](https://github.com/mastra-ai/mastra/pull/15036) — added configurable browser automation support for Mastra Code agents.
-- Later changes: [#15194](https://github.com/mastra-ai/mastra/pull/15194) — adds browser `profile` and `executablePath` launch options, CDP/profile/executable mutual exclusion, profile provider mismatch checks, storage-state export, and profile lock cleanup helpers.
+- Later changes: [#15194](https://github.com/mastra-ai/mastra/pull/15194) — adds browser `profile` and `executablePath` launch options, CDP/profile/executable mutual exclusion, profile provider mismatch checks, storage-state export, and profile lock cleanup helpers; [#17240](https://github.com/mastra-ai/mastra/pull/17240) — turns browser context into a processor-backed `browser` state-signal lane with snapshots/deltas and live-state refresh.
 
 ## User-visible behavior
 
 - What the user can do: run `/browser` to inspect, enable, disable, or configure browser automation using Stagehand or Agent Browser, including headless mode, viewport, CDP connection, custom executable path, profile persistence, and Agent Browser storage-state export.
-- Success looks like: settings persist in `settings.json`, enabled browser instances attach to all mode agents, `/browser status` reports the active configuration, and browser tools/context are available during agent runs.
+- Success looks like: settings persist in `settings.json`, enabled browser instances attach to all mode agents, `/browser status` reports the active configuration, browser tools/context are available during agent runs, and browser open/tab/title/url changes can be emitted as deduped state snapshots or deltas.
 - Must preserve: provider mismatch warnings for reused profiles, mutual exclusion between CDP and launch-time profile/executable options, Browserbase env requirements, profile directory creation/lock cleanup, and storage-state export limited to Agent Browser.
 
 ## Entry points / commands
@@ -28,7 +28,7 @@
 
 ## Streaming / loading / interrupted states
 
-- Streaming / loading: browser context is attached at agent execution time; browser state lookup failure degrades without aborting the run.
+- Streaming / loading: browser context is attached at agent execution time; `BrowserContextProcessor.computeStateSignal()` can refresh live browser state via `getState()` and stream a `browser` state snapshot/delta before the model request finalizes.
 - Abort / retry / resume: browser sessions are runtime state; persisted chat history does not reconstruct live browser instances.
 
 ## Streaming vs loaded-from-history behavior
@@ -45,6 +45,7 @@
 | Active settings projection | Harness state `activeBrowserSettings` | `/browser status`, config drift checks |
 | Profile provider marker | Profile metadata written by `/browser` when profile persistence is enabled | Provider mismatch confirmation |
 | Browser session scope | Browser settings `scope` plus provider implementation | Core Agent browser context/session IDs |
+| Browser state signal | `BrowserContextProcessor.stateId = 'browser'` + request-context browser state | processor state signals, TUI `State snapshot/delta: browser` rows, thread metadata tracking |
 
 ## Key files
 
@@ -54,6 +55,7 @@
 - `mastracode/src/index.ts` — `MastraCodeConfig.browser` pass-through to Harness.
 - `packages/core/src/harness/harness.ts` — Harness-level browser storage and propagation to mode agents.
 - `packages/core/src/agent/__tests__/browser.test.ts` — Agent browser context behavior.
+- `packages/core/src/browser/processor.test.ts` — browser state-signal snapshots, metadata-backed deltas, live-state refresh, and snapshot refresh when prior snapshots fall out of the active context window.
 - `packages/core/src/browser/browser.ts` and `browser.test.ts` — profile/executable option contract, Chrome lock-file cleanup, and process-group kill helpers.
 
 ## Dependencies / related features
@@ -75,6 +77,7 @@
 - Startup regression proving saved browser settings create a browser and set `activeBrowserSettings`.
 - TUI status/config-drift tests for profile provider mismatch warnings.
 - End-to-end agent run proving browser tools/context are available from saved settings in Mastra Code.
+- Mastra Code TUI/browser integration proving live browser state signals render during streaming and reload from persisted history.
 
 ## Known risks / regressions
 

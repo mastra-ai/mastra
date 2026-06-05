@@ -2628,3 +2628,27 @@ Verification:
 - `pnpm --filter ./packages/core exec vitest run src/harness/v1/session.test.ts src/storage/domains/harness/inmemory.test.ts --bail=1 --reporter=dot` — 2 files / 24 tests passed / no type errors.
 - `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/ask-question-inline-long-labels.test.ts src/tui/components/__tests__/plan-approval-inline.test.ts --bail=1 --reporter=dot` — 2 files / 8 tests passed.
 - `pnpm --filter ./mastracode exec vitest run src/__tests__/index.test.ts -t 'owner|session|Harness|thread' --bail=1 --reporter=dot` — 1 file / 6 tests passed / 10 skipped.
+
+### PR #17452 / #17476 / #17480 / #17240 feature-map checkpoint
+
+Verified rows 349-352:
+
+- #17452 is a Changesets alpha package-version batch; skipped after current commit stats confirmed only `mastracode/CHANGELOG.md` and `mastracode/package.json` changes in Mastra Code scope.
+- #17476 is a Changesets alpha package-version batch; skipped after current commit stats confirmed only `mastracode/CHANGELOG.md` and `mastracode/package.json` changes in Mastra Code scope.
+- #17480 is a Changesets alpha package-version batch; skipped after current commit stats confirmed only `mastracode/CHANGELOG.md` and `mastracode/package.json` changes in Mastra Code scope.
+- #17240 adds processor-driven state signals. Current source exposes `computeStateSignal()`/`sendStateSignal()` types, persists snapshots/deltas through `applyStateSignal()`, tracks dedupe/versioning in thread `metadata.mastra.stateSignals`, makes `BrowserContextProcessor` emit `browser` snapshots/deltas, and renders streamed/loaded `state_signal` and `reactive_signal` parts in Mastra Code TUI.
+
+Documentation actions:
+
+- Created `features/chat/processor-state-signals.md` for #17240.
+- Updated `features/chat/agent-signals.md`, `features/integrations/browser-automation.md`, and `features/tui/interactive-chat.md` for state/reactive signal variants, browser state-signal behavior, and TUI rendering.
+- Updated `features/README.md`, `features/_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #17452 skipped, #17476 skipped, #17480 skipped, #17240 done, #17241 current.
+
+Focused evidence read: PR metadata and commit stats for #17452/#17476/#17480/#17240; current `packages/core/src/agent/state-signals.ts`, `thread-stream-runtime.ts`, `signals.ts`, `processors/index.ts`, `processors/runner.ts`, `browser/processor.ts`, `mastracode/src/tui/components/state-signal.ts`, `reactive-signal.ts`, `handlers/message.ts`, `render-messages.ts`, and focused tests.
+
+Verification:
+
+- `pnpm --filter ./packages/core exec vitest run src/agent/__tests__/agent-signals.test.ts -t 'state signals|state signal|sendStateSignal|processor state signals' --bail=1 --reporter=dot` — 1 file / 1 test passed / 72 skipped / no type errors.
+- `pnpm --filter ./packages/core exec vitest run src/browser/processor.test.ts src/processors/runner.test.ts -t 'state signal|computeStateSignal|state signals|BrowserContextProcessor' --bail=1 --reporter=dot` — 2 files / 22 tests passed / 61 skipped / no type errors.
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/render-messages.test.ts src/tui/handlers/__tests__/message.test.ts -t 'state signal|reactive signal|reactive signals|GitHub subscribe operation signals' --bail=1 --reporter=dot` — 2 files / 6 tests passed / 34 skipped.

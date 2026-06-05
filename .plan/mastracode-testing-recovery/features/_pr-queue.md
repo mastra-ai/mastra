@@ -368,10 +368,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 346 | 2026-06-01 | #17387 | `bc0d14181d` | likely skip | skipped | chore: version packages (alpha) (#17387) | 2 |
 | 347 | 2026-06-01 | #17431 | `5d47971add` | review | done | fix(mastracode): truncate TUI lines that exceed terminal width on narrow terminals (#17431) | 3 |
 | 348 | 2026-06-01 | #17421 | `09a59230c3` | likely skip | skipped | chore: version packages (alpha) (#17421) | 2 |
-| 349 | 2026-06-02 | #17452 | `bf35088a0b` | likely skip | | chore: version packages (alpha) (#17452) | 2 |
-| 350 | 2026-06-02 | #17476 | `0d2110ddd4` | likely skip | | chore: version packages (alpha) (#17476) | 2 |
-| 351 | 2026-06-02 | #17480 | `bfbcf46aa8` | likely skip | | chore: version packages (alpha) (#17480) | 2 |
-| 352 | 2026-06-02 | #17240 | `e2a838017a` | review | | 05 feat(core): add processor state signals (#17240) | 6 |
+| 349 | 2026-06-02 | #17452 | `bf35088a0b` | likely skip | skipped | chore: version packages (alpha) (#17452) | 2 |
+| 350 | 2026-06-02 | #17476 | `0d2110ddd4` | likely skip | skipped | chore: version packages (alpha) (#17476) | 2 |
+| 351 | 2026-06-02 | #17480 | `bfbcf46aa8` | likely skip | skipped | chore: version packages (alpha) (#17480) | 2 |
+| 352 | 2026-06-02 | #17240 | `e2a838017a` | review | done | 05 feat(core): add processor state signals (#17240) | 6 |
 | 353 | 2026-06-02 | #17241 | `e751af2194` | review | | 06 feat(core): add notification inbox signals (#17241) | 16 |
 | 354 | 2026-06-03 | #17447 | `77e686c264` | review | | 07 feat(mastracode): add GitHub signal subscriptions (#17447) | 27 |
 | 355 | 2026-06-03 | #17411 | `23c3b74ac7` | review | | feat(core): compose Harness v1 session state (#17411) | 6 |
