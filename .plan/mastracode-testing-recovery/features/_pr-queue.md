@@ -270,11 +270,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 248 | 2026-04-30 | #15979 | `e19c4e5c81` | likely skip | skipped | chore: version packages (alpha) (#15979) | 2 |
 | 249 | 2026-04-30 | #16006 | `2f53bdc6bc` | review | done | feat(mastracode): support piped stdin as initial TUI message (#16006) | 5 |
 | 250 | 2026-04-30 | #16009 | `3c4712b259` | likely skip | skipped | chore: version packages (alpha) (#16009) | 2 |
-| 251 | 2026-04-30 | #16011 | `861f59af84` | likely skip | current | chore: version packages (alpha) (#16011) | 2 |
-| 252 | 2026-04-30 | #16016 | `a127afaa86` | likely skip | | chore: version packages (alpha) (#16016) | 2 |
-| 253 | 2026-04-30 | #16020 | `7510bcac37` | likely skip | | chore: version packages (alpha) (#16020) | 2 |
-| 254 | 2026-05-01 | #15395 | `7974532bb9` | review | | feat(mastracode): add multiline support to question input box (#15395) | 14 |
-| 255 | 2026-04-30 | #16023 | `ac386b56fc` | review | | chore: format ask-question-inline-multiline test (#16023) | 1 |
+| 251 | 2026-04-30 | #16011 | `861f59af84` | likely skip | skipped | chore: version packages (alpha) (#16011) | 2 |
+| 252 | 2026-04-30 | #16016 | `a127afaa86` | likely skip | skipped | chore: version packages (alpha) (#16016) | 2 |
+| 253 | 2026-04-30 | #16020 | `7510bcac37` | likely skip | skipped | chore: version packages (alpha) (#16020) | 2 |
+| 254 | 2026-05-01 | #15395 | `7974532bb9` | review | done | feat(mastracode): add multiline support to question input box (#15395) | 14 |
+| 255 | 2026-04-30 | #16023 | `ac386b56fc` | review | current | chore: format ask-question-inline-multiline test (#16023) | 1 |
 | 256 | 2026-04-30 | #16022 | `bba1790449` | likely skip | | chore: version packages (alpha) (#16022) | 2 |
 | 257 | 2026-04-30 | #16024 | `20ed4654c0` | likely skip | | chore: version packages (alpha) (#16024) | 2 |
 | 258 | 2026-05-01 | #16068 | `8ed4c6a630` | review | | fix(mastracode): only log skill directories that exist on disk (#16068) | 1 |

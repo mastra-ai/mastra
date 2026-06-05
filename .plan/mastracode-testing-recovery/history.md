@@ -2038,3 +2038,23 @@ Verification:
 - `pnpm --filter ./mastracode exec vitest run src/utils/__tests__/stdin-pipe.test.ts --bail=1 --reporter=dot` — 1 file / 21 tests passed.
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/mastra-tui-queueing.test.ts -t "initialMessage|pending new thread|optimistic" --bail=1 --reporter=dot` — 1 file / 3 tests passed / 27 skipped.
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/render-messages.test.ts -t "UserMessageComponent|pending|interjection|user message" --bail=1 --reporter=dot` — 1 file / 6 tests passed / 18 skipped.
+
+### PR #16011 / #16016 / #16020 / #15395 feature-map checkpoint
+
+Verified rows 251-254:
+
+- #16011, #16016, and #16020 are Changesets alpha package-version batches; skipped for feature mapping after `gh pr view` confirmed only changelog/package metadata changes under Mastra Code.
+- #15395 adds multiline support to `ask_user` question input. Current source uses `MultilineInput` around `@mariozechner/pi-tui` `Editor`, Enter submits, Shift+Enter inserts `\n`, backslash+Enter follows the pi-tui newline convention, Escape cancels, render strips editor border/scroll chrome, and raw text is forwarded while trim is used only for emptiness checks. `handleAskQuestion()` opts `ask_user` inline and dialog free-text prompts into multiline by passing `multiline: true` and `state.ui`; components fall back to single-line `Input` when no TUI is available.
+
+Documentation actions:
+
+- Updated `features/tui/interactive-prompts.md` for multiline `ask_user` behavior, keybindings, streaming activation, state ownership, key files, tests, missing tests, and risks.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16011 skipped, #16016 skipped, #16020 skipped, #15395 done, #16023 current.
+
+Focused evidence read: PR metadata for #16011/#16016/#16020/#15395; current `mastracode/src/tui/components/multiline-input.ts`, `ask-question-inline.ts`, `ask-question-dialog.ts`, `handlers/prompts.ts`, `handlers/tool.ts`, `components/__tests__/multiline-input.test.ts`, and `components/__tests__/ask-question-inline-multiline.test.ts`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/multiline-input.test.ts --bail=1 --reporter=dot` — 1 file / 16 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/ask-question-inline-multiline.test.ts --bail=1 --reporter=dot` — 1 file / 6 tests passed.

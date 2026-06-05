@@ -3,32 +3,32 @@
 ## Origin PR / commit
 
 - PR: [#13696](https://github.com/mastra-ai/mastra/pull/13696) — queues parallel interactive tool prompts so concurrent `ask_user` / sandbox access requests do not overwrite each other.
-- Later changes: [#13753](https://github.com/mastra-ai/mastra/pull/13753) — renames the sandbox request tool to `request_access`, expands `~`, and updates the active workspace filesystem immediately after approval; [#14479](https://github.com/mastra-ai/mastra/pull/14479) — wraps long free-text answers in inline question history/rendering so answered prompt boxes do not overflow terminal width; [#14845](https://github.com/mastra-ai/mastra/pull/14845) — adds a single-select `Custom response...` option that switches option prompts into free-text input when none of the predefined answers fit; [#14936](https://github.com/mastra-ai/mastra/pull/14936) — masks sensitive TUI input fields for API keys, login prompts, and storage connection strings.
+- Later changes: [#13753](https://github.com/mastra-ai/mastra/pull/13753) — renames the sandbox request tool to `request_access`, expands `~`, and updates the active workspace filesystem immediately after approval; [#14479](https://github.com/mastra-ai/mastra/pull/14479) — wraps long free-text answers in inline question history/rendering so answered prompt boxes do not overflow terminal width; [#14845](https://github.com/mastra-ai/mastra/pull/14845) — adds a single-select `Custom response...` option that switches option prompts into free-text input when none of the predefined answers fit; [#14936](https://github.com/mastra-ai/mastra/pull/14936) — masks sensitive TUI input fields for API keys, login prompts, and storage connection strings; [#15395](https://github.com/mastra-ai/mastra/pull/15395) — adds multiline free-text question input for `ask_user` via `MultilineInput`, with Enter submit and Shift+Enter/backslash+Enter newline support.
 
 ## User-visible behavior
 
-- What the user can do: answer multiple interactive tool prompts sequentially when the agent triggers them in parallel, choose a predefined option, choose `Custom response...` to type an answer not present in a single-select option list, or enter sensitive values without echoing them in cleartext, including access requests for paths outside the project root.
-- Success looks like: the first prompt stays active, later prompts wait their turn, every tool promise resolves after the user answers, custom responses switch cleanly from select-list to input mode, sensitive input renders as mask characters while submitting the raw value, long submitted answers wrap inside the bordered prompt box, and aborting a run clears both the active prompt and queued prompts.
+- What the user can do: answer multiple interactive tool prompts sequentially when the agent triggers them in parallel, write multiline free-text `ask_user` answers with wrapping/newlines, choose a predefined option, choose `Custom response...` to type an answer not present in a single-select option list, or enter sensitive values without echoing them in cleartext, including access requests for paths outside the project root.
+- Success looks like: the first prompt stays active, later prompts wait their turn, every tool promise resolves after the user answers, multiline prompts submit raw text while using trim only for emptiness checks, custom responses switch cleanly from select-list to input mode, sensitive input renders as mask characters while submitting the raw value, long submitted answers wrap inside the bordered prompt box, and aborting a run clears both the active prompt and queued prompts.
 - Must preserve: no unreachable prompts, no editor input corruption, no answered-prompt terminal overflow, no custom-response sentinel leaking as the submitted answer, no sensitive prompt cleartext echo, no queued prompt activation after Ctrl+C/Escape/SIGINT abort.
 
 ## Entry points / commands
 
-- Commands / shortcuts / flags: agent calls to `ask_user` and `request_access`; Ctrl+C/Escape abort handling.
+- Commands / shortcuts / flags: agent calls to `ask_user` and `request_access`; Enter submits free-text questions, Shift+Enter or backslash+Enter inserts a newline in multiline `ask_user` prompts, Escape cancels; Ctrl+C/Escape abort handling.
 - Automatic triggers: Harness prompt events handled by `handleAskQuestion()` and `handleSandboxAccessRequest()`.
 
 ## TUI states
 
 - Idle: no active prompt.
-- Active / modal / error: one `activeInlineQuestion` receives editor input; additional prompt activations sit in `pendingInlineQuestions` until the active prompt submits/cancels.
+- Active / modal / error: one `activeInlineQuestion` receives editor input; `ask_user` free-text prompts opt into `MultilineInput` when a TUI is available; additional prompt activations sit in `pendingInlineQuestions` until the active prompt submits/cancels.
 
 ## Headless / non-TUI behavior
 
-- Supported: headless uses separate resolver behavior, not the inline TUI queue.
+- Supported: headless uses separate resolver behavior, not the inline TUI queue; prompt components fall back to single-line `Input` when no `TUI` instance is available.
 - Not supported / unknown: this page only verifies TUI inline prompt queueing.
 
 ## Streaming / loading / interrupted states
 
-- Streaming / loading: prompt events may arrive fire-and-forget while tools execute in parallel; queueing preserves the first active prompt.
+- Streaming / loading: prompt events may arrive fire-and-forget while tools execute in parallel; queueing preserves the first active prompt; streaming `ask_user` components are created early and later activated with multiline input when the final question event arrives.
 - Abort / retry / resume: Ctrl+C/Escape and SIGINT clear `activeInlineQuestion` and empty `pendingInlineQuestions` before aborting Harness.
 
 ## Streaming vs loaded-from-history behavior
@@ -44,15 +44,17 @@
 | Queued inline prompts | `TUIState.pendingInlineQuestions` | Prompt handlers, abort cleanup |
 | Prompt resolution | Core Harness pending prompt/question resolver | `ask_user`, `request_access` |
 | Answered prompt wrapping/custom free text | `AskQuestionBorderedBox` answer render path using `wrapTextWithAnsi()` and continuation indentation; ask-question components' `Custom response...` sentinel switches select mode to input mode | Inline question history/live answered-state rendering, `ask_user` option prompts |
+| Multiline free-text answers | `MultilineInput` wrapping `@mariozechner/pi-tui` `Editor`; `handleAskQuestion()` passes `multiline: true` + `state.ui` for inline/dialog `ask_user` | Paragraph/log answers, newline keybindings, wrapped active question input |
 | Sensitive prompt masking | `MaskedInput` wrapper swaps rendered value for mask characters while preserving the real `Input` value for submit handlers | API-key dialog, OAuth/login prompt dialog, storage backend connection-string settings |
 | Approved access paths | Harness `sandboxAllowedPaths` plus active `LocalFilesystem.setAllowedPaths()` | Same-turn and later workspace file tools |
 | Abort cleanup | `tui/setup.ts` Ctrl+C/Escape/SIGINT handlers | Active/queued prompt state |
 
 ## Key files
 
-- `mastracode/src/tui/handlers/prompts.ts` — inline prompt activation queue and `processNextInlineQuestion()`.
-- `mastracode/src/tui/components/ask-question-inline.ts` — inline question rendering, selected answer freeze state, single-select custom-response mode switch, and long option/answer wrapping.
-- `mastracode/src/tui/components/ask-question-dialog.ts` — modal question rendering and custom-response mode switch for option prompts.
+- `mastracode/src/tui/handlers/prompts.ts` — inline prompt activation queue, `processNextInlineQuestion()`, and `ask_user` multiline opt-in for inline/dialog free-text answers.
+- `mastracode/src/tui/components/ask-question-inline.ts` — inline question rendering, selected answer freeze state, single-select custom-response mode switch, multiline input activation/fallback, and long option/answer wrapping.
+- `mastracode/src/tui/components/ask-question-dialog.ts` — modal question rendering, custom-response mode switch for option prompts, and multiline editor construction when a `TUI` is provided.
+- `mastracode/src/tui/components/multiline-input.ts` — `Editor` wrapper with Enter submit, Shift+Enter/backslash+Enter newline handling, raw-text submit preservation, and border/scroll chrome stripping.
 - `mastracode/src/tui/components/masked-input.ts` — masked rendering wrapper for sensitive input fields.
 - `mastracode/src/tui/components/api-key-dialog.ts`, `login-dialog.ts`, and `settings.ts` — dialogs/settings menus that use masked input for provider keys, login prompts, and storage URLs.
 - `mastracode/src/tui/state.ts` — `activeInlineQuestion` and `pendingInlineQuestions` state.
@@ -70,12 +72,15 @@
 
 - `mastracode/src/tui/__tests__/parallel-interactive-prompts.test.ts` — concurrent `ask_user`, concurrent sandbox access, mixed prompt types, and abort-clears-queue behavior.
 - `mastracode/src/tui/components/__tests__/ask-question-inline-long-labels.test.ts` — long option-label wrapping; #14479 adds the same render-path concern for long free-text answers.
+- `mastracode/src/tui/components/__tests__/multiline-input.test.ts` — multiline submit/newline/escape/focus/render cleanup behavior.
+- `mastracode/src/tui/components/__tests__/ask-question-inline-multiline.test.ts` — opt-in/fallback rules and hint text for multiline inline question input.
 - `mastracode/src/tui/components/__tests__/ask-question-inline-multi-select.test.ts` — multi-select behavior and guard that `Custom response...` is omitted in multi-select mode.
 - `mastracode/src/tools/__tests__/request-sandbox-access.test.ts` — approve/deny outcomes, tilde expansion, same-turn `setAllowedPaths()`, missing filesystem fallback, and no-`setAllowedPaths` fallback.
 
 ## Missing tests
 
 - Full TUI/keyboard integration test proving real editor focus routes to the next queued prompt after the first answer.
+- End-to-end TUI/PTY test proving a real `ask_user` prompt accepts Shift+Enter multiline text and submits raw multiline content to Harness.
 - Direct regression test for long answered free-text values overflowing the inline bordered box.
 - Direct regression test that selecting `Custom response...` in inline and dialog single-select prompts switches to free-text input, preserves focus, and submits the typed answer rather than the sentinel value.
 - Direct `MaskedInput` regression proving rendered output hides sensitive input while submit/getValue preserve the unmasked value; no such test exists today.
@@ -90,6 +95,7 @@
 - Prompt answer rendering must pass the correct available width to `wrapTextWithAnsi()` before colorizing text; wrapping after ANSI styling or using full box width can reintroduce overflow.
 - Sensitive dialogs now rely on the wrapper temporarily mutating the inner input value during render; future `Input` changes could expose cleartext if the restore path regresses.
 - Custom response is intentionally single-select only; multi-select prompts must keep a fixed option set so callback shape remains predictable.
+- Multiline prompts preserve raw leading/trailing whitespace on submit; callers that expect trimmed values must opt into single-line input or trim explicitly.
 
 ## Verification checklist
 
