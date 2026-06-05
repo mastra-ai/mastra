@@ -11,8 +11,9 @@ import {
   createSetSkillsStep,
   createSetModelStep,
   createSetBrowserEnabledStep,
+  createPersistAgentStep,
 } from './steps';
-import { inputSchema, outputSchema } from './types';
+import { inputSchema, createResultSchema } from './types';
 
 export * from './types';
 export * from './constant';
@@ -36,6 +37,9 @@ export * from './constant';
  * - `skills` (set-agent-skills)
  * - `model` (set-agent-model)
  * - `browserEnabled` (set-agent-browser-enabled)
+ * - persisted agent (persist-agent) — the terminal step that maps the resolved
+ *   config onto a `StorageCreateAgentInput` and calls `editor.agent.create(...)`,
+ *   returning the created agent's id, visibility and resolved config.
  *
  * Each step lives in its own folder under `./steps` with three siblings: the
  * step (`index.ts`), a `handler.ts` with the infra-agnostic field logic, and an
@@ -60,12 +64,13 @@ export function createAgentBuilderCreationWorkflow({ model }: { model: string })
   const setSkillsStep = createSetSkillsStep({ model });
   const setModelStep = createSetModelStep({ model });
   const setBrowserEnabledStep = createSetBrowserEnabledStep({ model });
+  const persistAgentStep = createPersistAgentStep({ model });
 
   return createWorkflow({
     id: 'agent-builder-creation',
     description: 'Turn a plain-language description into an agent configuration for the agent builder',
     inputSchema,
-    outputSchema,
+    outputSchema: createResultSchema,
     steps: [
       understandUserOutcomeStep,
       featureCapabilityStep,
@@ -77,6 +82,7 @@ export function createAgentBuilderCreationWorkflow({ model }: { model: string })
       setSkillsStep,
       setModelStep,
       setBrowserEnabledStep,
+      persistAgentStep,
     ],
   })
     .then(understandUserOutcomeStep)
@@ -89,5 +95,6 @@ export function createAgentBuilderCreationWorkflow({ model }: { model: string })
     .then(setSkillsStep)
     .then(setModelStep)
     .then(setBrowserEnabledStep)
+    .then(persistAgentStep)
     .commit();
 }

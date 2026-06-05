@@ -8,3 +8,4 @@ export { createSetToolsStep } from './set-agent-tools';
 export { createSetSkillsStep } from './set-agent-skills';
 export { createSetModelStep } from './set-agent-model';
 export { createSetBrowserEnabledStep } from './set-agent-browser-enabled';
+export { createPersistAgentStep } from './persist-agent';

@@ -1,4 +1,5 @@
 import type { Mastra } from '@mastra/core';
+import type { StorageBrowserRef } from '@mastra/core/storage';
 
 import { buildProviderModelCatalog } from '../utils/provider-catalog';
 
@@ -174,6 +175,25 @@ export async function resolveAvailableModels(mastra: Mastra): Promise<AgentModel
 }
 
 /**
+ * Resolve the builder's policy default model (`configuration.agent.models.default`)
+ * as an `AgentModel`, when one is configured. Mirrors the playground starter's
+ * `resolveStarterModel`, which prefers the admin `modelPolicy.default`. Returns
+ * `undefined` when there is no builder context or no default model entry, so the
+ * caller can fall back to the first available model / the hard fallback.
+ */
+export async function resolveDefaultModel(mastra: Mastra): Promise<AgentModel | undefined> {
+  const ctx = await resolveBuilderContext(mastra);
+  if (!ctx) return undefined;
+
+  const { builderToModelPolicy } = await import('@mastra/core/agent-builder/ee');
+  const policy = builderToModelPolicy(ctx.builder as never);
+
+  const def = policy.default as { provider?: string; modelId?: string } | undefined;
+  if (!def?.provider || !def.modelId) return undefined;
+  return { provider: def.provider, name: def.modelId };
+}
+
+/**
  * Whether browser automation is configured for the builder. Mirrors the
  * infrastructure handler's browser block: a browser is considered available
  * when the agent config declares a browser provider. Returns `undefined` when
@@ -189,6 +209,22 @@ export async function resolveBrowserAvailable(mastra: Mastra): Promise<boolean> 
   // Configured when a type or a provider is declared.
   const provider = (browser.config as { provider?: string } | undefined)?.provider;
   return Boolean(browser.type || provider);
+}
+
+/**
+ * Resolve the builder's default browser reference, used when the workflow
+ * decides to enable browser access for the new agent. Mirrors the server's
+ * `resolveBrowserField(true, ...)`: it returns the configured
+ * `builder.configuration.agent.browser` ref, or `undefined` when no default
+ * browser config is wired (in which case browser access is silently dropped,
+ * matching the server's warn-and-skip behaviour).
+ */
+export async function resolveDefaultBrowserRef(mastra: Mastra): Promise<StorageBrowserRef | undefined> {
+  const ctx = await resolveBuilderContext(mastra);
+  if (!ctx) return undefined;
+
+  const agent = ctx.configuration?.agent as { browser?: StorageBrowserRef } | undefined;
+  return agent?.browser;
 }
 
 /** The builder feature keys, matching `FeatureCapabilities` / core's `AgentFeatures`. */

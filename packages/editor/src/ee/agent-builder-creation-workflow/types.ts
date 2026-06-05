@@ -83,8 +83,22 @@ export const outputSchema = z.object({
   browserEnabled: z.boolean().optional(),
 });
 
+/**
+ * Final workflow output: the persisted agent. The terminal `persist-agent` step
+ * maps the accumulated config onto a `StorageCreateAgentInput`, calls
+ * `editor.agent.create(...)`, and returns the created agent's `id` plus the
+ * resolved config it was created from (so callers can inspect what was stored
+ * without re-reading it).
+ */
+export const createResultSchema = z.object({
+  id: z.string(),
+  visibility: z.enum(['private', 'public']),
+  config: outputSchema,
+});
+
 export type WorkflowInput = z.infer<typeof inputSchema>;
 export type Config = z.infer<typeof configSchema>;
+export type CreateResult = z.infer<typeof createResultSchema>;
 export type UserOutcome = z.infer<typeof userOutcomeSchema>;
 export type FeatureCapabilities = z.infer<typeof featureCapabilitiesSchema>;
 
