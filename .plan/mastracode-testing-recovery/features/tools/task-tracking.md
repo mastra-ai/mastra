@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved todo tools into core Harness and renamed them to task tools.
-- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — moved current/previous task snapshots into `HarnessDisplayState` for UI rendering and history reconciliation.
+- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — moved current/previous task snapshots into `HarnessDisplayState` for UI rendering and history reconciliation; [#15192](https://github.com/mastra-ai/mastra/pull/15192) — clears task/plan/access projections on thread switch or creation so stale global task state does not leak across threads.
 
 ## User-visible behavior
 
 - Agents maintain a structured task list with `task_write`, `task_update`, `task_complete`, and `task_check`.
 - Success: tool results, pinned TUI progress, prompt context, and reload/history agree on the same tasks.
-- Must preserve: stable task IDs, one `in_progress` task, no stale tasks across threads, no parent task tools in non-forked execute subagents.
+- Must preserve: stable task IDs, one `in_progress` task, no stale tasks across threads, no stale active plans or sandbox approvals across thread boundaries, no parent task tools in non-forked execute subagents.
 
 ## Entry points / commands
 
@@ -43,13 +43,14 @@
 | Task list/mutations | Core Harness state + task tools | Runtime, prompt, TUI, headless |
 | Task display snapshots | `HarnessDisplayState.tasks` / `previousTasks` | TUI progress + history reconciliation |
 | Pinned/inline projection | TUI `TaskProgressComponent` + `taskToolInsertIndex` | Interactive chat |
+| Thread boundary reset | `event-dispatch.ts` handles `thread_changed` / `thread_created` by clearing tasks, active plan, sandbox allowed paths, task insert index, and live task progress component | Thread switch/create UI and prompt context |
 | Prompt snapshot | `buildFullPrompt()` from Harness state | Model context |
 
 ## Key files
 
 - `packages/core/src/harness/tools.ts` — task schemas, ID assignment, state mutation, `task_updated`.
 - `packages/core/src/harness/harness.ts` — built-in task tool injection and display state.
-- `mastracode/src/tui/components/task-progress.ts`, `tui/event-dispatch.ts`, `tui/handlers/tool.ts` — TUI projections.
+- `mastracode/src/tui/components/task-progress.ts`, `tui/event-dispatch.ts`, `tui/handlers/tool.ts` — TUI projections and thread-boundary cleanup.
 - `mastracode/src/agents/prompts/index.ts`, `mastracode/src/permissions.ts` — prompt injection and always-allowed policy.
 
 ## Dependencies / related features
@@ -64,7 +65,7 @@
 ## Existing tests
 
 - Core Harness display-state/task tests cover `task_updated`, task mutation, replay, and subagent restrictions.
-- MC TUI tests cover `TaskProgressComponent`, `task_updated` dispatch, completed/cleared inline rendering, and prompt task injection.
+- MC TUI tests cover `TaskProgressComponent`, `task_updated` dispatch, completed/cleared inline rendering, prompt task injection, and `event-dispatch.test.ts` thread boundary resets for tasks/active plan/sandbox paths/task insert index/task progress component.
 - `mastracode/src/agents/subagents/execute.test.ts` covers task tools not being exposed to non-forked execute subagents.
 
 ## Missing tests

@@ -216,11 +216,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 194 | 2026-04-08 | #15092 | `166e39a7d6` | review | done | feat: add collapsible output for shell passthrough (! commands) (#15092) | 11 |
 | 195 | 2026-04-08 | #15174 | `6f63b8c638` | likely skip | skipped | chore: version packages (alpha) (#15174) | 2 |
 | 196 | 2026-04-08 | #14962 | `061adb3329` | review | done | feat(mastracode): add thread control CLI options to headless mode (#14962) | 3 |
-| 197 | 2026-04-08 | #15190 | `d93b410668` | likely skip | current | chore: version packages (alpha) (#15190) | 2 |
-| 198 | 2026-04-08 | #15192 | `32b122470c` | review | | fix(mastracode): clear task list on thread switch instead of reading stale global state (#15192) | 1 |
-| 199 | 2026-04-08 | #15191 | `ee35ec6944` | likely skip | | chore: version packages (alpha) (#15191) | 2 |
-| 200 | 2026-04-09 | #15228 | `5d84914e0e` | review | | fix: resolve symlinked workspace skill aliases (#15228) | 3 |
-| 201 | 2026-04-13 | #15014 | `d292618171` | review | | feat(mastracode): add /api-keys slash command for managing provider API keys (#15014) | 6 |
+| 197 | 2026-04-08 | #15190 | `d93b410668` | likely skip | skipped | chore: version packages (alpha) (#15190) | 2 |
+| 198 | 2026-04-08 | #15192 | `32b122470c` | review | done | fix(mastracode): clear task list on thread switch instead of reading stale global state (#15192) | 1 |
+| 199 | 2026-04-08 | #15191 | `ee35ec6944` | likely skip | skipped | chore: version packages (alpha) (#15191) | 2 |
+| 200 | 2026-04-09 | #15228 | `5d84914e0e` | review | done | fix: resolve symlinked workspace skill aliases (#15228) | 3 |
+| 201 | 2026-04-13 | #15014 | `d292618171` | review | current | feat(mastracode): add /api-keys slash command for managing provider API keys (#15014) | 6 |
 | 202 | 2026-04-14 | #14435 | `cbdf3e12b3` | review | | feat: add processAPIError processor method for handling LLM API rejections (#14435) | 2 |
 | 203 | 2026-04-14 | #15194 | `190f45258b` | review | | feat(browser): add profile and executablePath options (#15194) | 2 |
 | 204 | 2026-04-14 | #15352 | `c809341c0f` | review | | refactor: refine Mastra Code autonomy prompts (#15352) | 2 |

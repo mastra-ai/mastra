@@ -1703,3 +1703,25 @@ Verification:
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/shell.test.ts src/tui/__tests__/shell-result.test.ts src/tui/__tests__/prune-chat.test.ts src/headless.test.ts --bail=1 --reporter=dot` — 4 files / 54 tests passed.
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/setup-keyboard-shortcuts.test.ts -t "toggles system reminder expansion with Ctrl\\+E" --bail=1 --reporter=dot` — targeted Ctrl+E test passed (1 passed / 9 skipped).
 - `pnpm --filter ./mastracode exec vitest run src/headless-integration.test.ts -t "headless mode — thread control" --bail=1 --reporter=dot` — targeted thread-control integration tests passed (5 passed / 18 skipped).
+
+### PR #15190 / #15192 / #15191 / #15228 feature-map checkpoint
+
+Verified rows 197-200:
+
+- #15190 and #15191 are Changesets alpha package-version batches; skipped for feature mapping.
+- #15192 clears stale task-list state on thread boundaries. Current `mastracode/src/tui/event-dispatch.ts` handles `thread_changed` and `thread_created` by clearing Harness state for `tasks`, `activePlan`, and `sandboxAllowedPaths`, resetting `state.taskToolInsertIndex`, and clearing the live task-progress component before rendering the new thread.
+- #15228 resolves symlinked workspace skill aliases. Current core skill sources expose `realpath()`, local skill source readdir is symlink-aware, and `WorkspaceSkillsImpl` canonicalizes candidate skill directories before list/search/get tie-breaking so duplicate aliases of the same skill collapse while distinct same-named local skills still conflict.
+
+Documentation actions:
+
+- Updated `features/tools/task-tracking.md` for #15192 thread-boundary task/plan/access cleanup and tests.
+- Updated `features/integrations/skills-command.md` and `features/tools/workspace-tools.md` for #15228 canonical skill alias resolution, symlink allowed-root behavior, key files, tests, and risks.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #15190 skipped, #15192 done, #15191 skipped, #15228 done, #15014 current.
+
+Focused evidence read: PR metadata for #15190/#15192/#15191/#15228; current `mastracode/src/tui/event-dispatch.ts`, `mastracode/src/tui/event-dispatch.test.ts`, `packages/core/src/workspace/skills/workspace-skills.ts`, `workspace-skills.test.ts`, `skill-source.ts`, `local-skill-source.ts`, `composite-versioned-skill-source.ts`, `local-filesystem.ts`, and symlink/canonical skill test searches.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/event-dispatch.test.ts --bail=1 --reporter=dot` — 1 file / 11 tests passed.
+- `pnpm --filter ./packages/core exec vitest run src/workspace/skills/workspace-skills.test.ts src/workspace/filesystem/local-filesystem.test.ts src/workspace/skills/tools.test.ts src/workspace/workspace.test.ts --bail=1 --reporter=dot` — 4 files / 386 tests passed / no type errors.
