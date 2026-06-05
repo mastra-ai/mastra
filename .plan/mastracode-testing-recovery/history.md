@@ -1597,3 +1597,19 @@ Verification:
 - `pnpm --filter ./packages/core exec vitest run src/agent/__tests__/memory-gateway-duck-typing.test.ts --bail=1 --reporter=dot` — 1 file / 1 test passed / no type errors.
 - `pnpm --filter ./packages/server exec vitest run src/server/handlers/memory.test.ts --bail=1 --reporter=dot` — 1 file / 85 tests passed.
 - Note: the first MastraCode model run without env isolation failed because local `OPENAI_API_KEY` changed the intended no-auth branch; rerun above isolated provider env and passed.
+
+### PR #14965 / #15034 / #15042 / #15055 / #15059 feature-map checkpoint
+
+Verified rows 180-184:
+
+- #14965, #15034, #15042, #15055, and #15059 are Changesets alpha package-version batches across packages. Each PR only touches `.changeset/pre.json`, package `CHANGELOG.md`, and package version fields, including `mastracode/CHANGELOG.md` and `mastracode/package.json`; no Mastra Code feature behavior to map.
+
+Documentation actions:
+
+- Updated `_pr-queue.md` rows 180-184 to `skipped` and advanced row 185 #15082 to `current`.
+- Updated `handoff.md` to set the next checkpoint to #15082.
+- Added this history entry.
+
+Focused evidence read: `gh pr view` metadata/files for #14965/#15034/#15042/#15055/#15059.
+
+Verification: no focused tests needed; skip-only package-version/docs churn.

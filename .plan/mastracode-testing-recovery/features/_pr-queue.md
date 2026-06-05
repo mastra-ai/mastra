@@ -199,12 +199,12 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 177 | 2026-04-01 | #14929 | `121c67f169` | likely skip | skipped | chore: version packages (alpha) (#14929) | 2 |
 | 178 | 2026-04-01 | #14952 | `c8c86aa145` | review | done | feat: Mastra Gateway model router provider + memory integration (#14952) | 23 |
 | 179 | 2026-04-02 | #14936 | `323b31fe37` | review | done | feat(mastracode): mask sensitive input fields in TUI dialogs (#14936) | 4 |
-| 180 | 2026-04-03 | #14965 | `176278f52a` | likely skip | current | chore: version packages (alpha) (#14965) | 2 |
-| 181 | 2026-04-03 | #15034 | `8eed048de4` | likely skip | | chore: version packages (alpha) (#15034) | 2 |
-| 182 | 2026-04-03 | #15042 | `c14a638639` | likely skip | | chore: version packages (alpha) (#15042) | 2 |
-| 183 | 2026-04-04 | #15055 | `ee09cbf675` | likely skip | | chore: version packages (alpha) (#15055) | 2 |
-| 184 | 2026-04-05 | #15059 | `f5b553c7a9` | likely skip | | chore: version packages (alpha) (#15059) | 2 |
-| 185 | 2026-04-05 | #15082 | `0073994124` | review | | fix: prune mastracode chat memory growth (#15082) | 13 |
+| 180 | 2026-04-03 | #14965 | `176278f52a` | likely skip | skipped | chore: version packages (alpha) (#14965) | 2 |
+| 181 | 2026-04-03 | #15034 | `8eed048de4` | likely skip | skipped | chore: version packages (alpha) (#15034) | 2 |
+| 182 | 2026-04-03 | #15042 | `c14a638639` | likely skip | skipped | chore: version packages (alpha) (#15042) | 2 |
+| 183 | 2026-04-04 | #15055 | `ee09cbf675` | likely skip | skipped | chore: version packages (alpha) (#15055) | 2 |
+| 184 | 2026-04-05 | #15059 | `f5b553c7a9` | likely skip | skipped | chore: version packages (alpha) (#15059) | 2 |
+| 185 | 2026-04-05 | #15082 | `0073994124` | review | current | fix: prune mastracode chat memory growth (#15082) | 13 |
 | 186 | 2026-04-05 | #15036 | `7d6f52164d` | review | | feat(mastracode): add browser automation support (#15036) | 13 |
 | 187 | 2026-04-05 | #15088 | `9f58f3a305` | review | | fix: address mastracode review follow-ups (#15088) | 2 |
 | 188 | 2026-04-06 | #15083 | `679003c3f6` | likely skip | | chore: version packages (alpha) (#15083) | 2 |
