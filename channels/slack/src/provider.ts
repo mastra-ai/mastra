@@ -7,6 +7,7 @@ import {
   type ChannelConnectResult,
   type ChannelAdapterConfig,
   AgentChannels,
+  describeWaitUntilContext,
   resolveWaitUntil,
 } from '@mastra/core/channels';
 import type { ApiRoute, ContextWithMastra } from '@mastra/core/server';
@@ -1432,12 +1433,19 @@ export class SlackProvider implements ChannelProvider {
       body: rawBody,
     });
 
-    // Resolve waitUntil for this request. User-supplied resolver wins (covers Vercel
-    // via `@vercel/functions`, Netlify via Netlify Context, custom runtimes). Falls
-    // back to Hono's `c.executionCtx.waitUntil` (Cloudflare Workers). Without
-    // waitUntil, the serverless invocation freezes after returning 200 and kills the
-    // agent run mid-flight.
-    const waitUntilFn = this.#channelConfig.resolveWaitUntil?.(c) ?? resolveWaitUntil(c);
+    // Resolve waitUntil for this request. Lookup order: bare fn from config (Vercel
+    // users pass `waitUntil` from `@vercel/functions` here), user resolver, then the
+    // core default (Cloudflare Workers + Netlify). Without waitUntil, the serverless
+    // invocation freezes after returning 200 and kills the agent run mid-flight.
+    const waitUntilFn =
+      this.#channelConfig.waitUntil ?? this.#channelConfig.resolveWaitUntil?.(c) ?? resolveWaitUntil(c);
+    // TEMP: log context shape so we can diagnose runtime-specific resolution.
+    // Strip before release.
+    try {
+      console.info(
+        `[wait-until] slack resolved=${Boolean(waitUntilFn)} ${JSON.stringify(describeWaitUntilContext(c))}`,
+      );
+    } catch {}
 
     try {
       return await agentChannels.handleWebhookEvent(
@@ -1529,7 +1537,8 @@ export class SlackProvider implements ChannelProvider {
       }
     })();
 
-    const slashWaitUntil = this.#channelConfig.resolveWaitUntil?.(c) ?? resolveWaitUntil(c);
+    const slashWaitUntil =
+      this.#channelConfig.waitUntil ?? this.#channelConfig.resolveWaitUntil?.(c) ?? resolveWaitUntil(c);
     slashWaitUntil?.(task);
 
     // Return immediate acknowledgment

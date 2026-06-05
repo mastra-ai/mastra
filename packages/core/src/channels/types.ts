@@ -4,6 +4,7 @@ import type { Mastra } from '../mastra';
 import type { ApiRoute, CorsOptions } from '../server/types';
 import type { InlineLinkEntry } from './inline-media';
 import type { TypingStatusFn } from './typing-status';
+import type { WaitUntilFn, WaitUntilResolver } from './wait-until';
 
 export type { InlineLinkEntry } from './inline-media';
 
@@ -511,6 +512,40 @@ export interface ChannelConfig {
    * ```
    */
   resolveResourceId?: ResolveResourceId;
+
+  /**
+   * Keep the serverless invocation alive while background work (agent stream → platform)
+   * runs after the webhook returns 200. Required on Vercel/AWS Lambda — without it the
+   * runtime freezes the function as soon as the response is sent, killing in-flight runs.
+   *
+   * Pass the bare `waitUntil(promise)` function imported from your platform's SDK.
+   * Cloudflare Workers and Netlify users typically don't need this — core resolves
+   * `waitUntil` from `c.executionCtx` and `c.env.context` automatically.
+   *
+   * If `waitUntil` requires the request context to derive, use {@link resolveWaitUntil}
+   * instead.
+   *
+   * @example
+   * ```ts
+   * // Vercel
+   * import { waitUntil } from '@vercel/functions';
+   * channels: { adapters: { ... }, waitUntil }
+   * ```
+   */
+  waitUntil?: WaitUntilFn;
+
+  /**
+   * Resolve `waitUntil` from the request's Hono `Context`. Use this when the runtime
+   * exposes `waitUntil` through the request and core's default resolver doesn't cover
+   * it (custom adapters, exotic runtimes).
+   *
+   * For platforms whose `waitUntil` is a bare import (e.g. `@vercel/functions`), pass
+   * it via {@link waitUntil} instead — no resolver needed.
+   *
+   * Resolution order: {@link waitUntil} (if set) → {@link resolveWaitUntil} (if set)
+   * → core's default.
+   */
+  resolveWaitUntil?: WaitUntilResolver;
 }
 
 // =============================================================================

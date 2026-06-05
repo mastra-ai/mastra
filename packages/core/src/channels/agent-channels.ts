@@ -45,7 +45,7 @@ import type {
 } from './types';
 import { defaultTypingStatus } from './typing-status';
 import type { TypingStatusContext, TypingStatusFn } from './typing-status';
-import { resolveWaitUntil } from './wait-until';
+import { describeWaitUntilContext, resolveWaitUntil } from './wait-until';
 
 /**
  * Manages a single Chat SDK instance for an agent, wiring all adapters
@@ -615,7 +615,16 @@ export class AgentChannels {
 
             // Pass platform execution context (e.g. Vercel/Cloudflare waitUntil)
             // to the Chat SDK so background processing survives serverless responses.
-            const waitUntilFn = resolveWaitUntil(c);
+            // Resolution order: bare `waitUntil` fn from config → user resolver → default.
+            const waitUntilFn =
+              self.channelConfig.waitUntil ?? self.channelConfig.resolveWaitUntil?.(c) ?? resolveWaitUntil(c);
+            // TEMP: log context shape so we can diagnose runtime-specific resolution.
+            // Strip before release.
+            try {
+              console.info(
+                `[wait-until] agent-channels resolved=${Boolean(waitUntilFn)} ${JSON.stringify(describeWaitUntilContext(c))}`,
+              );
+            } catch {}
             return webhookHandler(c.req.raw, waitUntilFn ? { waitUntil: waitUntilFn } : undefined);
           };
         },

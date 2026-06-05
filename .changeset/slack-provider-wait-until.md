@@ -3,32 +3,38 @@
 '@mastra/core': minor
 ---
 
-Forward a runtime-provided `waitUntil` from `SlackProvider` to AgentChannels and the
-Chat SDK so background agent runs survive serverless responses. Without `waitUntil`
-the runtime freezes the invocation as soon as the 200 ack returns, killing the agent
-run mid-flight and leaving Slack with no reply.
+Forward a runtime-provided `waitUntil` from channels to the Chat SDK so background
+agent runs survive serverless responses. Without `waitUntil` the runtime freezes the
+invocation as soon as the 200 ack returns, killing the agent run mid-flight and
+leaving the user with no reply.
 
-**`@mastra/core/channels`** now exports a small helper and resolver type:
+**Defaults (no config needed):** `@mastra/core/channels` ships a default resolver
+that reads `waitUntil` from the request context for the common cases:
 
-```ts
-import { resolveWaitUntil, type WaitUntilResolver } from '@mastra/core/channels';
-```
+- **Cloudflare Workers** — `c.executionCtx.waitUntil` (populated by Hono's CF adapter).
+- **Netlify Functions** — `c.env.context.waitUntil` (forwarded by `hono/netlify`).
 
-`resolveWaitUntil(c)` reads `c.executionCtx.waitUntil` (populated by Hono's
-Cloudflare Workers adapter) — guarded against Hono's getter that throws in Node.js
-when no ExecutionContext exists.
-
-**`SlackProvider`** accepts an optional `resolveWaitUntil` resolver for runtimes
-Hono doesn't bridge automatically (Vercel, Netlify, custom platforms). The resolver
-receives the request's Hono `Context` and returns the platform's `waitUntil`.
+**Vercel and AWS Lambda** need an explicit `waitUntil` because Vercel exposes
+`waitUntil` via AsyncLocalStorage (not the request context) and AWS Lambda has none
+natively. Pass it via the new `waitUntil` option on `SlackProvider` or `ChannelConfig`:
 
 ```ts
 import { waitUntil } from '@vercel/functions';
+import { SlackProvider } from '@mastra/slack';
 
-new SlackProvider({
-  resolveWaitUntil: () => waitUntil,
+new SlackProvider({ waitUntil });
+```
+
+```ts
+new Agent({
+  channels: {
+    adapters: { slack: createSlackAdapter({ ... }) },
+    waitUntil,
+  },
 });
 ```
 
-Cloudflare Workers users don't need to pass anything — the default helper reads
-`c.executionCtx.waitUntil` automatically.
+For runtimes where `waitUntil` lives on the request context but isn't covered by the
+default helper, pass `resolveWaitUntil: (c) => fn | undefined` instead.
+
+Resolution order: bare `waitUntil` → `resolveWaitUntil(c)` → core default.
