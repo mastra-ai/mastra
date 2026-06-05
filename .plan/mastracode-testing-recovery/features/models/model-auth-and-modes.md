@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — OAuth/API-key providers, model selection, and Build/Plan/Fast modes.
-- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — runtime model selection from request context and gateway heartbeat sync; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved mode/model runtime ownership onto core Harness sessions; [#13307](https://github.com/mastra-ai/mastra/pull/13307) — reloads AuthStorage before model resolution to avoid stale OpenAI Codex credentials; [#13421](https://github.com/mastra-ai/mastra/pull/13421) — added onboarding/global settings and model packs; [#13431](https://github.com/mastra-ai/mastra/pull/13431) — temporarily changed Codex defaults, but current source now uses OpenAI `gpt-5.5` pack/login defaults; [#13500](https://github.com/mastra-ai/mastra/pull/13500) — onboarding accepts API-key-only access without OAuth; [#13505](https://github.com/mastra-ai/mastra/pull/13505) / [#13508](https://github.com/mastra-ai/mastra/pull/13508) — added and strengthened Claude Max OAuth warning, later removed by #14605 in current source; [#13490](https://github.com/mastra-ai/mastra/pull/13490) — wired `/think`/thinking state into OpenAI Codex reasoning effort; [#13512](https://github.com/mastra-ai/mastra/pull/13512) — unified `/models` around the pack selector and improved custom pack edit/import/delete behavior; [#13566](https://github.com/mastra-ai/mastra/pull/13566) — checks the full provider registry for API-key access instead of only hardcoded providers; [#13600](https://github.com/mastra-ai/mastra/pull/13600) — makes Anthropic API keys a fallback when Claude Max OAuth is not configured; [#13682](https://github.com/mastra-ai/mastra/pull/13682) — adds user-defined OpenAI-compatible providers to model routing and model catalogs; [#13716](https://github.com/mastra-ai/mastra/pull/13716) — exports `resolveModel` from `createMastraCode()` for external consumers; [#13611](https://github.com/mastra-ai/mastra/pull/13611) — fixes explicit `mastra/` gateway routing, OAuth direct-provider bypass, and shared auth-storage initialization across Anthropic/OpenAI/GitHub Copilot providers.
+- Later changes: [#13231](https://github.com/mastra-ai/mastra/pull/13231) — runtime model selection from request context and gateway heartbeat sync; [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved mode/model runtime ownership onto core Harness sessions; [#13307](https://github.com/mastra-ai/mastra/pull/13307) — reloads AuthStorage before model resolution to avoid stale OpenAI Codex credentials; [#13421](https://github.com/mastra-ai/mastra/pull/13421) — added onboarding/global settings and model packs; [#13431](https://github.com/mastra-ai/mastra/pull/13431) — temporarily changed Codex defaults, but current source now uses OpenAI `gpt-5.5` pack/login defaults; [#13500](https://github.com/mastra-ai/mastra/pull/13500) — onboarding accepts API-key-only access without OAuth; [#13505](https://github.com/mastra-ai/mastra/pull/13505) / [#13508](https://github.com/mastra-ai/mastra/pull/13508) — added and strengthened Claude Max OAuth warning, later removed by #14605 in current source; [#13490](https://github.com/mastra-ai/mastra/pull/13490) — wired `/think`/thinking state into OpenAI Codex reasoning effort; [#13512](https://github.com/mastra-ai/mastra/pull/13512) — unified `/models` around the pack selector and improved custom pack edit/import/delete behavior; [#13566](https://github.com/mastra-ai/mastra/pull/13566) — checks the full provider registry for API-key access instead of only hardcoded providers; [#13600](https://github.com/mastra-ai/mastra/pull/13600) — makes Anthropic API keys a fallback when Claude Max OAuth is not configured; [#13682](https://github.com/mastra-ai/mastra/pull/13682) — adds user-defined OpenAI-compatible providers to model routing and model catalogs; [#13716](https://github.com/mastra-ai/mastra/pull/13716) — exports `resolveModel` from `createMastraCode()` for external consumers; [#13611](https://github.com/mastra-ai/mastra/pull/13611) — fixes explicit `mastra/` gateway routing, OAuth direct-provider bypass, and shared auth-storage initialization across Anthropic/OpenAI/GitHub Copilot providers; [#13695](https://github.com/mastra-ai/mastra/pull/13695) — keeps OpenAI structured-output/schema compatibility active when agent-network models have no concrete `modelId`.
 
 ## User-visible behavior
 
@@ -50,6 +50,7 @@
 | Custom pack CRUD/import/share | `settings.json` custom packs + clipboard payloads | `/models` custom action flow, startup defaults |
 | Model use counts | `settings.json` `modelUseCounts`, updated by Harness `switchModel()` | Model selector ranking |
 | Thinking level | Harness/settings | Model provider options, prompt context, `/think` |
+| OpenAI schema compatibility | Core agent + `@mastra/schema-compat` | Structured output, agent-network completion checks, workspace/tool schemas |
 
 ## Key files
 
@@ -63,6 +64,7 @@
 - `mastracode/src/tui/components/model-selector.ts` — model search/sort list with current/auth/use-count ordering.
 - `mastracode/src/tui/commands/mode.ts` — `/mode`.
 - `mastracode/src/headless.ts` — model/mode flags.
+- `packages/core/src/agent/agent.ts` and `packages/schema-compat/src/provider-compats/openai*.ts` — OpenAI structured-output/schema compatibility used after model routing.
 
 ## Dependencies / related features
 
@@ -70,6 +72,7 @@
 - [Interactive TUI chat](../tui/interactive-chat.md) — active chat runs through selected model/mode.
 - [Thinking and reasoning effort](./thinking-and-reasoning.md) — model selection determines whether `/think` affects provider options.
 - [Custom OpenAI-compatible providers](./custom-providers.md) — custom provider models are model-selector/model-router entries.
+- [OpenAI strict schema compatibility](./openai-strict-schema-compat.md) — provider/model detection controls strict-schema handling.
 
 ## Existing tests
 
@@ -91,6 +94,7 @@
 - Startup/onboarding regression for a non-hardcoded registry provider API key (for example Groq/Mistral) enabling provider access and custom model selection.
 - End-to-end Anthropic API-key fallback through real `createAnthropic()`/network-disabled provider construction, not only mocked model resolver tests.
 - Integration test that `createAuthStorage()` initializes every provider-specific auth module used by model resolution and catalog refresh.
+- Mastra Code runtime regression for OpenAI structured-output/tool schema compatibility through the selected model path.
 
 ## Known risks / regressions
 

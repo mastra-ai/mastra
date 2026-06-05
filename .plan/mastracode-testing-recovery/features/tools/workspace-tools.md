@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13437](https://github.com/mastra-ai/mastra/pull/13437) — switched Mastra Code from MC-local file/edit/shell tools to core Workspace tools with TUI streaming support.
-- Later changes: [#13526](https://github.com/mastra-ai/mastra/pull/13526) — aligned edit tool path resolution with project-root command semantics; [#13609](https://github.com/mastra-ai/mastra/pull/13609) — added OpenAI native web-search fallback in the remaining MC dynamic tool map; [#13687](https://github.com/mastra-ai/mastra/pull/13687) — added core Workspace `name` remapping so the exposed tool dictionary and tool IDs use Mastra Code's stable names; [#13693](https://github.com/mastra-ai/mastra/pull/13693) — lets `createMastraCode({ workspace })` provide a custom workspace instead of the default dynamic local workspace; [#13700](https://github.com/mastra-ai/mastra/pull/13700) — forwards request context and skill/sandbox paths into subagent tool runs; [#13724](https://github.com/mastra-ai/mastra/pull/13724) — adds `.gitignore` filtering, lowers `find_files` default depth to 2, and updates tool guidance; [#13753](https://github.com/mastra-ai/mastra/pull/13753) — lets approved `request_access` paths update the active `LocalFilesystem` immediately for same-turn follow-up tools.
+- Later changes: [#13526](https://github.com/mastra-ai/mastra/pull/13526) — aligned edit tool path resolution with project-root command semantics; [#13609](https://github.com/mastra-ai/mastra/pull/13609) — added OpenAI native web-search fallback in the remaining MC dynamic tool map; [#13687](https://github.com/mastra-ai/mastra/pull/13687) — added core Workspace `name` remapping so the exposed tool dictionary and tool IDs use Mastra Code's stable names; [#13693](https://github.com/mastra-ai/mastra/pull/13693) — lets `createMastraCode({ workspace })` provide a custom workspace instead of the default dynamic local workspace; [#13700](https://github.com/mastra-ai/mastra/pull/13700) — forwards request context and skill/sandbox paths into subagent tool runs; [#13724](https://github.com/mastra-ai/mastra/pull/13724) — adds `.gitignore` filtering, lowers `find_files` default depth to 2, and updates tool guidance; [#13753](https://github.com/mastra-ai/mastra/pull/13753) — lets approved `request_access` paths update the active `LocalFilesystem` immediately for same-turn follow-up tools; [#13695](https://github.com/mastra-ai/mastra/pull/13695) — fixes OpenAI strict-mode schema preparation for workspace tool schemas and agent-network structured output.
 
 ## User-visible behavior
 
@@ -47,6 +47,7 @@
 | Sandbox process env | `getDynamicWorkspace()` / `LocalSandbox` | `execute_command`, process manager |
 | Tool name mapping | Core `WorkspaceToolsConfig.name` + MC `TOOL_NAME_OVERRIDES` | model-visible tool dictionary keys, tool IDs, permissions, TUI components |
 | Gitignore filtering | Core `loadGitignore()` + `respectGitignore` / explicit ignored-target bypass | `find_files`, `search_content`, prompt guidance |
+| Tool schema compatibility | Core agent/stream schema compat | OpenAI strict-mode workspace tool calls |
 | Plan-mode write disable | `getDynamicWorkspace()` tools config | Plan mode tool visibility |
 | LSP config | `settings.json` lsp + detected package runner + MC module search path | `lsp_inspect`, edit diagnostics |
 
@@ -62,11 +63,13 @@
 - `packages/core/src/workspace/tools/tools.ts` and `types.ts` — core workspace tool factory and `WorkspaceToolConfig.name` remapping support.
 - `packages/core/src/workspace/tools/*` — core read/list/search/edit/write/LSP/shell/process tool implementations.
 - `packages/core/src/workspace/gitignore.ts` — `.gitignore` loader used by list/search tree walkers.
+- `packages/core/src/stream/aisdk/v5/execute.ts` and `packages/schema-compat/src/zod-to-json.ts` — OpenAI strict-mode schema preparation for workspace tool schemas.
 - `mastracode/src/tui/components/tool-execution-enhanced.ts` — TUI summaries for workspace tool output, LSP diagnostics, tree summaries, quiet previews.
 
 ## Dependencies / related features
 
 - [Coding tools and approval permissions](./coding-tools-permissions.md) — permissions apply to workspace-backed tools.
+- [OpenAI strict schema compatibility](../models/openai-strict-schema-compat.md) — workspace tools rely on provider-compatible schemas for OpenAI strict mode.
 - [Streaming tool arguments](./streaming-tool-arguments.md) — live tool-call chunks drive workspace tool rendering.
 - [Skills command and workspace resolution](../integrations/skills-command.md) — workspace owns skill paths and skill tools.
 - [Quiet mode](../tui/quiet-mode.md) — quiet rendering compacts workspace tool calls.

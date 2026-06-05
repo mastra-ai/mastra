@@ -36,8 +36,9 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 
 | Area | Feature | Origin | State owner | Tests | Risk | Page |
 | --- | --- | --- | --- | --- | --- | --- |
-| Setup | Installation and launch | #13294, #13560, #13760, #13767, #13768 | package metadata + startup runtime | Partial | Medium | [page](./setup/installation-and-launch.md) |
+| Setup | Installation and launch | #13294, #13560, #13648, #13760, #13767, #13768 | package metadata + startup runtime | Partial | Medium | [page](./setup/installation-and-launch.md) |
 | Setup | Auto-update prompts | #13603, #13760, #13767, #13768, #13787 | npm registry helpers + build-time/source version + settings dismissed version | Partial | Medium | [page](./setup/auto-update-prompts.md) |
+| Headless | Prompt mode | #13648 | CLI args + Harness events + auto-resolution | Partial | High | [page](./headless/prompt-mode.md) |
 | TUI | Startup banner | #13422 | TUI options + terminal width | Partial | Medium | [page](./tui/startup-banner.md) |
 | TUI | Help and shortcuts | #13426, #13712, #13723, #13787 | TUI command metadata + settings | Partial | Medium | [page](./tui/help-and-shortcuts.md) |
 | TUI | Interactive prompts and access requests | #13696, #13753 | TUI active prompt + pending prompt queue + sandbox allowed paths | Partial | High | [page](./tui/interactive-prompts.md) |
@@ -56,12 +57,13 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Chat | Queued follow-ups and slash commands | #13345, #13493 | TUI transient queue state + command template processor | Partial | High | [page](./chat/queued-followups.md) |
 | Threads | Persistent conversations / switching | #13218, #13334, #13343 | Harness session + thread metadata | Partial | High | [page](./threads/persistent-conversations.md) |
 | Threads | Resource ID switching | #13690 | Harness resource ID + resource-scoped threads | Partial | High | [page](./threads/resource-id-switching.md) |
-| Models | Model auth, selection, modes | #13218, #13307, #13490, #13512, #13566, #13600, #13611, #13716 | Settings + harness session + thread pack metadata + provider registry + AuthStorage | Partial | High | [page](./models/model-auth-and-modes.md) |
+| Models | Model auth, selection, modes | #13218, #13307, #13490, #13512, #13566, #13600, #13611, #13695, #13716 | Settings + harness session + thread pack metadata + provider registry + AuthStorage | Partial | High | [page](./models/model-auth-and-modes.md) |
 | Models | Custom OpenAI-compatible providers | #13682, #13611 | settings customProviders + Harness custom catalog | Partial | High | [page](./models/custom-providers.md) |
 | Models | Thinking and reasoning effort | #13490, #13563, #13748 | Harness/request context + settings | Partial | High | [page](./models/thinking-and-reasoning.md) |
+| Models | OpenAI strict schema compatibility | #13695 | schema-compat + core stream strict-mode preparation | Partial | High | [page](./models/openai-strict-schema-compat.md) |
 | Tools | Coding tools and approval permissions | #13218, #13344, #13347, #13348, #13355, #13385, #13384, #13428, #13442, #13519, #13526, #13564, #13609, #13611, #13687, #13696, #13713, #13724, #13753, #13870 | Harness state + permission policy + workspace filesystem + extraTools | Partial | High | [page](./tools/coding-tools-permissions.md) |
 | Tools | Web search tool rendering | #13609, #13870 | provider/Tavily result shape + TUI renderer | Partial | Medium | [page](./tools/web-search-rendering.md) |
-| Tools | Workspace-backed coding tools | #13437, #13526, #13687, #13693, #13700, #13724, #13753 | core/custom Workspace + LocalFilesystem/LocalSandbox + tool-name overrides + allowed paths | Partial | High | [page](./tools/workspace-tools.md) |
+| Tools | Workspace-backed coding tools | #13437, #13526, #13687, #13693, #13695, #13700, #13724, #13753 | core/custom Workspace + LocalFilesystem/LocalSandbox + tool-name overrides + allowed paths + schema compat | Partial | High | [page](./tools/workspace-tools.md) |
 | Tools | Streaming tool arguments | #13328, #13335 | Harness display state + TUI pending tools | Partial | High | [page](./tools/streaming-tool-arguments.md) |
 | Tools | Task tracking tools and TUI progress | #13344 | Harness task state + TUI progress | Partial | High | [page](./tools/task-tracking.md) |
 | Integrations | MCP status and reload command | #13311, #13347 | MCP manager | Partial | High | [page](./integrations/mcp-status-command.md) |

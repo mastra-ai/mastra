@@ -1122,3 +1122,22 @@ Verification:
 - Focused tests passed: `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u MASTRA_GATEWAY_API_KEY corepack pnpm@11.3.0 --filter ./mastracode exec vitest run src/tui/components/__tests__/tool-execution-enhanced.test.ts --reporter=dot --bail 1` (1 file / 61 tests). Normal-mode provider-specific web-search rendering still needs dedicated tests and is recorded as a gap.
 
 Next queue checkpoint: PR #13648 (headless non-interactive `--prompt` mode), then PR #13695 (OpenAI strict mode fix).
+
+### Feature map batch: headless prompt mode and OpenAI strict schema compatibility
+
+Processed PR [#13648](https://github.com/mastra-ai/mastra/pull/13648), `4df211619d` (`feat(mastracode): add headless non-interactive mode via --prompt flag`). Verified current `headless.ts` parses `--prompt`/`-p`, stdin prompts, timeout, JSON/text/stream-json output modes, model/mode/thinking flags, thread/resource controls, and settings override. `main.ts` dispatches to `headlessMain()` when a headless flag is present. Runtime subscribes to Harness events, streams assistant text to stdout, writes tools/subagents/shell/status to stderr, auto-approves tool/plan/access prompts, auto-answers `ask_user`, aborts on timeout with exit 2, and cleans up thread locks/MCP/workers/heartbeats/signals pubsub.
+
+Processed PR [#13695](https://github.com/mastra-ai/mastra/pull/13695), `aae2295838` (`fix(schema-compat, core): fix OpenAI strict mode schema rejection for agent networks (#12284)`). Verified current core agent structured-output path applies OpenAI null-transform compatibility when provider identifies OpenAI even if `modelId` is undefined/empty. `prepareJsonSchemaForOpenAIStrictMode()` now ensures every object property is required and all object schemas get `additionalProperties: false` before OpenAI strict JSON requests. OpenAI and OpenAI-reasoning schema compat layers use null-safe `modelId` checks and preserve optional/default/nullish Zod semantics through nullable transforms.
+
+Documentation actions:
+
+- Created `features/headless/prompt-mode.md` for non-interactive CLI behavior, output contracts, auto-resolution, state ownership, and risks.
+- Created `features/models/openai-strict-schema-compat.md` for OpenAI strict-mode schema preparation, agent-network modelId fallback, and workspace/tool schema risks.
+- Updated `features/setup/installation-and-launch.md`, `features/models/model-auth-and-modes.md`, `features/tools/workspace-tools.md`, `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13648 done, #13695 done, #13999 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/headless.ts`, `mastracode/src/main.ts`, `mastracode/src/headless.test.ts`, `mastracode/src/headless-integration.test.ts`, `packages/core/src/agent/agent.ts`, `packages/core/src/agent/__tests__/structured-output-openai-compat.test.ts`, `packages/core/src/stream/aisdk/v5/execute.ts`, `packages/schema-compat/src/zod-to-json.ts`, `packages/schema-compat/src/provider-compats/openai.ts`, and `packages/schema-compat/src/provider-compats/openai-reasoning.ts`.
+- Focused tests passed: `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u MASTRA_GATEWAY_API_KEY corepack pnpm@11.3.0 --filter ./mastracode exec vitest run src/headless.test.ts --reporter=dot --bail 1` (1 file / 44 tests); `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u MASTRA_GATEWAY_API_KEY corepack pnpm@11.3.0 --filter ./mastracode exec vitest run src/headless-integration.test.ts -t 'emits agent_start|emits tool_start|streams message_update|AgentsMDInjector|switches model|returns exit code 1|emits JSON error|emits warning|structured warning|does not switch|--mode|--model still|no effectiveDefaults|resumes|renames|thread_cloned' --reporter=dot --bail 1` (22 passed / 1 skipped); `corepack pnpm@11.3.0 --filter ./packages/core exec vitest run src/agent/__tests__/structured-output-openai-compat.test.ts --reporter=dot --bail 1` (1 file / 5 tests); `corepack pnpm@11.3.0 --filter ./packages/schema-compat exec vitest run src/zod-to-json.test.ts src/provider-compats/openai.test.ts src/provider-compats/openai-reasoning.test.ts --reporter=dot --bail 1` (4 files / 179 passed / 1 skipped). Full `headless.test.ts + headless-integration.test.ts` run timed out in the existing abort integration case and is recorded as a headless risk.
+
+Next queue checkpoint: PR #13999 (shell passthrough real-time streaming), then PR #13940 (subagent workspace inheritance).
