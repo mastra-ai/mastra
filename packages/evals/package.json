@@ -54,7 +54,7 @@
   "scripts": {
     "check": "tsc --noEmit",
     "build:lib": "pnpm check && tsup --silent --config tsup.config.ts",
-    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "test": "vitest",
     "lint": "eslint ."
@@ -86,6 +86,7 @@
     "dotenv": "^17.3.1",
     "eslint": "^10.2.1",
     "tsup": "^8.5.1",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"

@@ -20,7 +20,7 @@
   },
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "pretest": "docker compose up -d && (for i in $(seq 1 30); do curl -s http://localhost:9200/_cluster/health | grep -q '\"status\"' && break || (sleep 1; [ $i -eq 30 ] && exit 1); done)",
     "test": "vitest run",
@@ -43,6 +43,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^10.2.1",
     "tsup": "^8.5.1",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
