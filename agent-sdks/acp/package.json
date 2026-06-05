@@ -1,6 +1,6 @@
 {
   "name": "@mastra/acp",
-  "version": "0.2.1-alpha.0",
+  "version": "0.2.1",
   "description": "ACP package for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -25,7 +25,7 @@
   "scripts": {
     "build": "pnpm build:lib",
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "test": "vitest run --passWithNoTests",
     "lint": "eslint ."
@@ -43,6 +43,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^10.2.1",
     "tsup": "^8.5.1",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"

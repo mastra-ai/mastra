@@ -24,7 +24,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
-    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "lint": "eslint ."
@@ -32,7 +32,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@google-cloud/speech": "^6.7.1",
-    "@google-cloud/text-to-speech": "^6.4.0"
+    "@google-cloud/text-to-speech": "^6.4.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -43,6 +43,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^10.2.1",
     "tsup": "^8.5.1",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
