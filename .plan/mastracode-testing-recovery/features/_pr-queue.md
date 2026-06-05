@@ -262,11 +262,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 240 | 2026-04-28 | #15820 | `b430eef4e5` | review | done | feat(mastracode): include common binaries in system prompt (#15820) | 6 |
 | 241 | 2026-04-29 | #15770 | `30fe03e5f5` | likely skip | skipped | chore(deps): update ai sdk (#15770) | 1 |
 | 242 | 2026-04-29 | #15909 | `7179450363` | likely skip | skipped | chore: version packages (alpha) (#15909) | 2 |
-| 243 | 2026-04-29 | #15928 | `f1589291e3` | likely skip | current | chore: version packages (alpha) (#15928) | 2 |
-| 244 | 2026-04-29 | #15924 | `93a7e6f5e3` | review | | feat(mastracode): show changelog in update prompt (#15924) | 4 |
-| 245 | 2026-04-29 | #15942 | `8f1c0e7c9f` | review | | fix(mastracode): display user message in TUI before async operations (#15942) | 1 |
-| 246 | 2026-04-30 | #15940 | `3b11cdd283` | likely skip | | chore: version packages (alpha) (#15940) | 2 |
-| 247 | 2026-04-30 | #15993 | `0a6f95b8e6` | review | | fix(mastracode): fix user message border misalignment when first line is full width (#15993) | 1 |
+| 243 | 2026-04-29 | #15928 | `f1589291e3` | likely skip | skipped | chore: version packages (alpha) (#15928) | 2 |
+| 244 | 2026-04-29 | #15924 | `93a7e6f5e3` | review | done | feat(mastracode): show changelog in update prompt (#15924) | 4 |
+| 245 | 2026-04-29 | #15942 | `8f1c0e7c9f` | review | done | fix(mastracode): display user message in TUI before async operations (#15942) | 1 |
+| 246 | 2026-04-30 | #15940 | `3b11cdd283` | likely skip | skipped | chore: version packages (alpha) (#15940) | 2 |
+| 247 | 2026-04-30 | #15993 | `0a6f95b8e6` | review | current | fix(mastracode): fix user message border misalignment when first line is full width (#15993) | 1 |
 | 248 | 2026-04-30 | #15979 | `e19c4e5c81` | likely skip | | chore: version packages (alpha) (#15979) | 2 |
 | 249 | 2026-04-30 | #16006 | `2f53bdc6bc` | review | | feat(mastracode): support piped stdin as initial TUI message (#16006) | 5 |
 | 250 | 2026-04-30 | #16009 | `3c4712b259` | likely skip | | chore: version packages (alpha) (#16009) | 2 |

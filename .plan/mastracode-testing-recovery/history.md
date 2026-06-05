@@ -1993,3 +1993,25 @@ Focused evidence read: PR metadata for #15896/#15820/#15770/#15909; current `mas
 Verification:
 
 - `pnpm --filter ./mastracode exec vitest run src/agents/__tests__/prompts.test.ts -t "common binary|model-specific" --bail=1 --reporter=dot` — 1 file / 4 tests passed / 2 skipped.
+
+### PR #15928 / #15924 / #15942 / #15940 feature-map checkpoint
+
+Verified rows 243-246:
+
+- #15928 and #15940 are Changesets alpha package-version batches; skipped for feature mapping.
+- #15924 shows changelog summaries in update prompts. Current source fetches `CHANGELOG.md` from unpkg for the latest version, parses the matching version section into up to 20 concise bullet entries, filters dependency-update rows/sub-items, strips markdown links and PR/commit references, and injects the optional `What's new:` block into both startup and manual `/update` prompts.
+- #15942 displays submitted user messages before async operations complete. Current source renders an optimistic user message immediately after input/image consumption, before `runUserPromptHook()`, pending-thread creation, and `sendSignal()`; blocked hooks remove the optimistic component, while successful signals remap the component id to the Harness signal id for echo dedupe.
+
+Documentation actions:
+
+- Updated `features/setup/auto-update-prompts.md` for changelog fetch/parse behavior, prompt insertion, tests, missing tests, and parser risks.
+- Updated `features/tui/interactive-chat.md` for optimistic user-message rendering/remap/removal around async prompt hooks, thread creation, and signal dispatch.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #15928 skipped, #15924 done, #15942 done, #15940 skipped, #15993 current.
+
+Focused evidence read: PR metadata for #15928/#15924/#15942/#15940; current `mastracode/src/utils/update-check.ts`, `mastracode/src/utils/__tests__/update-check.test.ts`, `mastracode/src/tui/commands/update.ts`, `mastracode/src/tui/mastra-tui.ts`, and `mastracode/src/tui/__tests__/mastra-tui-queueing.test.ts`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/utils/__tests__/update-check.test.ts -t "parseChangelog" --bail=1 --reporter=dot` — 1 file / 10 tests passed / 3 skipped.
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/mastra-tui-queueing.test.ts -t "optimistic|pending new thread" --bail=1 --reporter=dot` — 1 file / 3 tests passed / 27 skipped.
