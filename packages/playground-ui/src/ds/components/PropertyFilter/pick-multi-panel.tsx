@@ -61,7 +61,7 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
 
       {field.isLoading ? (
         <div className="flex items-center gap-2 px-2 py-1.5 text-ui-sm text-neutral3">
-          <Spinner size="sm" className="w-3 h-3" color="var(--neutral3)" />
+          <Spinner size="sm" className="size-3 text-neutral3" />
           Loading options…
         </div>
       ) : filteredOptions.length === 0 ? (

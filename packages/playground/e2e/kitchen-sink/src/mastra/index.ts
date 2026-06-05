@@ -4,7 +4,7 @@ import { computeNextFireAt } from '@mastra/core/workflows';
 import { MastraEditor } from '@mastra/editor';
 import { PinoLogger } from '@mastra/loggers';
 
-import { weatherAgent, omAgent, omAdaptiveAgent } from './agents';
+import { weatherAgent, omAgent, omAdaptiveAgent, codeOverrideEditableAgent, codeOverrideLockedAgent } from './agents';
 import { simpleMcpServer } from './mcps';
 import { loggingProcessor, contentFilterProcessor } from './processors';
 import { responseQualityScorer, responseTimeScorer } from './scorers';
@@ -14,13 +14,14 @@ import { scheduledWorkflow, multiScheduledWorkflow } from './workflows/scheduled
 
 export const mastra = new Mastra({
   workflows: { complexWorkflow, lessComplexWorkflow, enumWorkflow, scheduledWorkflow, multiScheduledWorkflow },
-  agents: { weatherAgent, omAgent, omAdaptiveAgent },
+  agents: { weatherAgent, omAgent, omAdaptiveAgent, codeOverrideEditableAgent, codeOverrideLockedAgent },
   logger: new PinoLogger({
     name: 'Mastra',
     level: 'error',
   }),
   storage,
   editor: new MastraEditor({
+    source: 'code',
     builder: {
       enabled: true,
       features: {
@@ -47,6 +48,8 @@ export const mastra = new Mastra({
       registerApiRoute('/e2e/reset-storage', {
         method: 'POST',
         handler: async c => {
+          await storage.init();
+
           const clearTasks: Promise<void>[] = [];
 
           const workflowStore = await storage.getStore('workflows');

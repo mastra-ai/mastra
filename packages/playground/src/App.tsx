@@ -92,7 +92,8 @@ import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersona
 import { createFetchWithRefresh } from '@/domains/auth/hooks/fetch-with-refresh';
 
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
-import { StudioConfigProvider, useStudioConfig } from '@/domains/configuration/context/studio-config-context';
+import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
+import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 import { McpServerCrumb, McpServerToolCrumb } from '@/domains/mcps/mcp-crumbs';
 import { ProcessorCrumb } from '@/domains/processors/processor-crumb';
 import { PromptBlockCrumb } from '@/domains/prompt-blocks/prompt-block-crumb';
@@ -120,6 +121,7 @@ declare global {
     MASTRA_HIDE_CLOUD_CTA: string;
     MASTRA_SERVER_PROTOCOL: string;
     MASTRA_CLOUD_API_ENDPOINT: string;
+    MASTRA_PLATFORM_PROJECT_ID?: string;
     MASTRA_EXPERIMENTAL_FEATURES?: string;
     MASTRA_TEMPLATES?: string;
     MASTRA_AUTO_DETECT_URL?: string;

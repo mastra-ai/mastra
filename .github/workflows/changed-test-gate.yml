@@ -43,8 +43,22 @@ jobs:
 
           if [ ! -s /tmp/changed-test-files ]; then
             echo "has_tests=false" >> "$GITHUB_OUTPUT"
-            echo "No changed test files detected."
-            exit 0
+
+            if [ "$HEAD_REPO_FULL_NAME" = "$BASE_REPOSITORY" ]; then
+              echo "No changed test files detected for a branch in the base repository."
+              exit 0
+            fi
+
+            case "$AUTHOR_ASSOCIATION" in
+              OWNER|MEMBER|COLLABORATOR)
+                echo "No changed test files detected for an official contributor."
+                exit 0
+                ;;
+              *)
+                echo "::error::No changed test files detected. External contributors should add or update tests."
+                exit 1
+                ;;
+            esac
           fi
 
           while IFS= read -r file; do
@@ -55,8 +69,11 @@ jobs:
           echo "Changed test files:"
           cat /tmp/changed-test-files
         env:
+          AUTHOR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+          BASE_REPOSITORY: ${{ github.repository }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_REPO: ${{ github.event.pull_request.head.repo.clone_url }}
+          HEAD_REPO_FULL_NAME: ${{ github.event.pull_request.head.repo.full_name }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
       - name: Setup pnpm
@@ -92,6 +109,7 @@ jobs:
           set -euo pipefail
           mapfile -t test_files < /tmp/changed-test-files
 
+          vitest_args=(run --passWithNoTests --reporter=dot --silent)
           root_test_files=()
           test_status=0
 
@@ -112,7 +130,7 @@ jobs:
               relative_file="${file#"$test_dir"/}"
 
               set +e
-              pnpm --dir "$test_dir" exec vitest run --passWithNoTests "$relative_file"
+              pnpm --dir "$test_dir" exec vitest "${vitest_args[@]}" "$relative_file"
               status=$?
               set -e
 
@@ -126,7 +144,7 @@ jobs:
 
           set +e
           if [ "${#root_test_files[@]}" -gt 0 ]; then
-            pnpm vitest run --passWithNoTests "${root_test_files[@]}"
+            pnpm vitest "${vitest_args[@]}" "${root_test_files[@]}"
             status=$?
             if [ "$status" -ne 0 ]; then
               test_status="$status"

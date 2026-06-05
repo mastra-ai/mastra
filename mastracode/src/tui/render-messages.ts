@@ -15,10 +15,14 @@ import {
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
+import { NotificationSummaryComponent } from './components/notification-summary.js';
+import { NotificationComponent } from './components/notification.js';
 import { OMMarkerComponent } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
 import { PlanResultComponent } from './components/plan-approval-inline.js';
+import { ReactiveSignalComponent } from './components/reactive-signal.js';
 import { SlashCommandComponent } from './components/slash-command.js';
+import { StateSignalComponent } from './components/state-signal.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
@@ -32,6 +36,13 @@ import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 export { formatToolResult };
 
 const WHILE_ACTIVE_USER_MESSAGE_LABEL = 'steer';
+// These are internal control-plane signals handled by GithubSignals. The user-visible
+// result is rendered by github-sync-status, so showing these would duplicate the UI.
+const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
+
+function shouldRenderReactiveSignal(tagName: string): boolean {
+  return !HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName);
+}
 
 type MessageWithAttributes = HarnessMessage & {
   attributes?: Record<string, string | number | boolean | null | undefined>;
@@ -343,6 +354,87 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     }
 
     addChildBeforeMessageOrFollowUps(state, reminderComponent, reminderPart.precedesMessageId);
+    state.ui.requestRender();
+    return;
+  }
+
+  const stateSignalPart = message.content.find(content => (content as { type?: string }).type === 'state_signal') as
+    | { type: 'state_signal'; stateId: string; mode: 'snapshot' | 'delta'; version?: number; message?: string }
+    | undefined;
+
+  if (stateSignalPart) {
+    const component = new StateSignalComponent({
+      stateId: stateSignalPart.stateId,
+      mode: stateSignalPart.mode,
+      version: stateSignalPart.version,
+      message: stateSignalPart.message,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
+    state.ui.requestRender();
+    return;
+  }
+
+  const reactiveSignalPart = message.content.find(
+    content => (content as { type?: string }).type === 'reactive_signal',
+  ) as { type: 'reactive_signal'; tagName: string; message?: string } | undefined;
+
+  if (reactiveSignalPart) {
+    if (!shouldRenderReactiveSignal(reactiveSignalPart.tagName)) return;
+    const component = new ReactiveSignalComponent({
+      tagName: reactiveSignalPart.tagName,
+      message: reactiveSignalPart.message,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
+    state.ui.requestRender();
+    return;
+  }
+
+  const notificationPart = message.content.find(content => (content as { type?: string }).type === 'notification') as
+    | {
+        type: 'notification';
+        message: string;
+        source?: string;
+        kind?: string;
+        priority?: string;
+        status?: string;
+      }
+    | undefined;
+
+  if (notificationPart) {
+    const component = new NotificationComponent({
+      message: notificationPart.message,
+      source: notificationPart.source,
+      kind: notificationPart.kind,
+      priority: notificationPart.priority,
+      status: notificationPart.status,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
+    state.ui.requestRender();
+    return;
+  }
+
+  const notificationSummaryPart = message.content.find(
+    content => (content as { type?: string }).type === 'notification_summary',
+  ) as
+    | {
+        type: 'notification_summary';
+        message: string;
+        pending: number;
+        bySource: Record<string, number>;
+      }
+    | undefined;
+
+  if (notificationSummaryPart) {
+    const component = new NotificationSummaryComponent({
+      message: notificationSummaryPart.message,
+      pending: notificationSummaryPart.pending,
+      bySource: notificationSummaryPart.bySource,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
     state.ui.requestRender();
     return;
   }

@@ -266,7 +266,7 @@ const agent = new Agent({
 })
 ```
 
-The model router automatically handles API key detection from environment variables (`OPENAI_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, `OPENROUTER_API_KEY`).
+The model router automatically handles API key detection from environment variables (`OPENAI_API_KEY`, `GOOGLE_API_KEY`, `OPENROUTER_API_KEY`). Google models also fall back to `GOOGLE_GENERATIVE_AI_API_KEY`.
 
 ### Using AI SDK Packages
 

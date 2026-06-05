@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { deepMergeWorkingMemory } from './working-memory';
+import { z } from 'zod';
+import { deepMergeWorkingMemory, updateWorkingMemoryTool } from './working-memory';
 
 describe('deepMergeWorkingMemory', () => {
   describe('null/undefined/empty update handling', () => {
@@ -247,5 +248,54 @@ describe('deepMergeWorkingMemory', () => {
 
       expect(update).toEqual(updateCopy);
     });
+  });
+});
+
+describe('updateWorkingMemoryTool schema validation (issue #17301)', () => {
+  const makeTool = () =>
+    updateWorkingMemoryTool({
+      workingMemory: { enabled: true, schema: z.object({ name: z.string(), age: z.number() }) },
+    } as any);
+
+  it('validates a Zod working-memory schema without code generation (new Function/eval)', async () => {
+    const inputSchema = makeTool().inputSchema as any;
+
+    const OriginalFunction = globalThis.Function;
+    const originalEval = globalThis.eval;
+    let codegenUsed = false;
+    const blowUp = () => {
+      codegenUsed = true;
+      throw new Error('Code generation from strings disallowed (e.g. Cloudflare Workers)');
+    };
+    // Emulate a runtime that forbids dynamic code generation. An AJV-compiled validator
+    // calls `new Function` synchronously inside validate(); the native Zod validator must not.
+    globalThis.Function = blowUp as unknown as FunctionConstructor;
+    globalThis.eval = blowUp as unknown as typeof eval;
+
+    let result: any;
+    try {
+      result = inputSchema['~standard'].validate({ memory: { name: 'Ada', age: 36 } });
+    } finally {
+      globalThis.Function = OriginalFunction;
+      globalThis.eval = originalEval;
+    }
+
+    const resolved = await result;
+    expect('issues' in resolved && resolved.issues).toBeFalsy();
+    expect(resolved.value).toEqual({ memory: { name: 'Ada', age: 36 } });
+    expect(codegenUsed).toBe(false);
+  });
+
+  it('returns issues for input that does not match the schema', async () => {
+    const inputSchema = makeTool().inputSchema as any;
+    const resolved = await inputSchema['~standard'].validate({ memory: { name: 'Ada', age: 'not-a-number' } });
+    expect('issues' in resolved && resolved.issues).toBeTruthy();
+  });
+
+  it('accepts the inner object when the model omits the `memory` wrapper', async () => {
+    const inputSchema = makeTool().inputSchema as any;
+    const resolved = await inputSchema['~standard'].validate({ name: 'Grace', age: 42 });
+    expect('issues' in resolved && resolved.issues).toBeFalsy();
+    expect(resolved.value).toEqual({ memory: { name: 'Grace', age: 42 } });
   });
 });

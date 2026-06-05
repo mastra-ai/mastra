@@ -162,7 +162,7 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
       case 'importing':
         return (
           <div className="flex flex-col items-center gap-4 py-8">
-            <Spinner size="lg" />
+            <Spinner />
             <div className="text-center">
               <div className="text-lg font-medium text-neutral1">Importing items...</div>
               <div className="text-sm text-neutral4 mt-1">

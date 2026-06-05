@@ -56,6 +56,10 @@ import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
 import type { WorkspaceToolsConfig } from './tools';
 import type { WorkspaceStatus } from './types';
 
+/** Workspace instructions for a resolver-backed sandbox in `'placeholder'` mode. */
+const DYNAMIC_SANDBOX_INSTRUCTIONS =
+  'Dynamic sandbox configured. Shell commands execute in a request-scoped sandbox resolved at tool execution time.';
+
 // =============================================================================
 // Workspace Configuration
 // =============================================================================
@@ -67,6 +71,34 @@ import type { WorkspaceStatus } from './types';
 export type WorkspaceFilesystemResolver = (context: {
   requestContext: RequestContext;
 }) => WorkspaceFilesystem | Promise<WorkspaceFilesystem>;
+
+/**
+ * A function that resolves a WorkspaceSandbox dynamically based on request context.
+ * Called on each tool invocation, allowing different sandboxes per request.
+ *
+ * The caller owns the returned sandbox's lifecycle.
+ */
+export type WorkspaceSandboxResolver = (context: {
+  requestContext: RequestContext;
+}) => WorkspaceSandbox | Promise<WorkspaceSandbox>;
+
+/**
+ * How a resolver-backed sandbox contributes to workspace instructions:
+ * `'placeholder'` (default) emits stable text without calling the resolver,
+ * `'resolve'` uses the resolved sandbox's instructions, a function returns
+ * custom text from `requestContext` without resolving.
+ */
+export type DynamicSandboxInstructions =
+  | 'placeholder'
+  | 'resolve'
+  | ((context: { requestContext: RequestContext }) => string);
+
+/**
+ * Produces a stable cache key (e.g. a thread or tenant id) for a resolver-backed
+ * sandbox. Resolved sandboxes are memoized per key instead of per RequestContext
+ * instance. Return `undefined` to fall back to per-RequestContext memoization.
+ */
+export type WorkspaceSandboxCacheKey = (context: { requestContext: RequestContext }) => string | undefined;
 
 /**
  * Configuration for creating a Workspace.
@@ -99,11 +131,34 @@ export interface WorkspaceConfig<
   filesystem?: TFilesystem | WorkspaceFilesystemResolver;
 
   /**
-   * Sandbox provider instance.
-   * Use ComputeSDKSandbox to access E2B, Modal, Docker, etc.
-   * Extend MastraSandbox for automatic logger integration.
+   * Sandbox provider instance, or a resolver function for dynamic per-request sandboxes.
+   *
+   * Static: Pass a LocalSandbox, ComputeSDKSandbox, or any WorkspaceSandbox instance.
+   * Dynamic: Pass a function `({ requestContext }) => WorkspaceSandbox` to resolve
+   * a different sandbox per request. The resolver is called at tool execution time.
+   *
+   * When using a resolver, the caller owns the returned sandbox's lifecycle.
+   * Mounts and `lsp: true` are incompatible with a resolver.
+   *
+   * Extend MastraSandbox for automatic logger integration (static instances only).
    */
-  sandbox?: TSandbox;
+  sandbox?: TSandbox | WorkspaceSandboxResolver;
+
+  /**
+   * Controls how a resolver-backed `sandbox` contributes to workspace instructions.
+   * Defaults to `dynamicSandbox: 'placeholder'`. No effect on a static sandbox.
+   * See {@link DynamicSandboxInstructions}.
+   */
+  instructions?: {
+    dynamicSandbox?: DynamicSandboxInstructions;
+  };
+
+  /**
+   * Stable cache key for a resolver-backed `sandbox`, so background-process tools
+   * reach the same sandbox across requests. No effect on a static sandbox.
+   * See {@link WorkspaceSandboxCacheKey}.
+   */
+  sandboxCacheKey?: WorkspaceSandboxCacheKey;
 
   /**
    * Mount multiple filesystems at different paths.
@@ -476,6 +531,14 @@ export class Workspace<
   private readonly _fs?: WorkspaceFilesystem;
   private readonly _filesystemResolver?: WorkspaceFilesystemResolver;
   private readonly _sandbox?: WorkspaceSandbox;
+  private readonly _sandboxResolver?: WorkspaceSandboxResolver;
+  // Per-request memoization so one resolver call serves both instructions and tool execution.
+  private readonly _filesystemRequestCache = new WeakMap<RequestContext, Promise<WorkspaceFilesystem>>();
+  private readonly _sandboxRequestCache = new WeakMap<RequestContext, Promise<WorkspaceSandbox>>();
+  // Resolver memoization keyed by sandboxCacheKey (survives RequestContext churn).
+  private readonly _sandboxKeyCache = new Map<string, Promise<WorkspaceSandbox>>();
+  private readonly _sandboxCacheKey?: WorkspaceSandboxCacheKey;
+  private readonly _dynamicSandboxInstructions: DynamicSandboxInstructions;
   private readonly _browser?: MastraBrowser;
   private readonly _config: WorkspaceConfig<TFilesystem, TSandbox, TMounts>;
   private readonly _searchEngine?: SearchEngine;
@@ -490,13 +553,28 @@ export class Workspace<
     this.lastAccessedAt = new Date();
 
     this._config = config;
-    this._sandbox = config.sandbox;
+
+    if (typeof config.sandbox === 'function') {
+      this._sandboxResolver = config.sandbox as WorkspaceSandboxResolver;
+    } else {
+      this._sandbox = config.sandbox;
+    }
+    this._sandboxCacheKey = config.sandboxCacheKey;
+    this._dynamicSandboxInstructions = config.instructions?.dynamicSandbox ?? 'placeholder';
 
     // Setup mounts - creates CompositeFilesystem and informs sandbox
     if (config.mounts && Object.keys(config.mounts).length > 0) {
       // Validate: can't use both filesystem and mounts
       if (config.filesystem) {
         throw new WorkspaceError('Cannot use both "filesystem" and "mounts"', 'INVALID_CONFIG');
+      }
+      if (this._sandboxResolver) {
+        throw new WorkspaceError(
+          'Cannot use "mounts" with a dynamic sandbox resolver. ' +
+            'Mounts are attached to a sandbox instance at construction time. ' +
+            'Either pass a static sandbox instance, or have your resolver return a sandbox with its mounts already configured.',
+          'INVALID_CONFIG',
+        );
       }
 
       // Warn: contained: false is incompatible with mounts
@@ -598,7 +676,11 @@ export class Workspace<
     // Initialize LSP if configured and a process manager is available
     if (config.lsp) {
       const processes = this._sandbox?.processes;
-      if (!this._sandbox) {
+      if (this._sandboxResolver) {
+        console.warn(
+          `[Workspace "${this.name}"] lsp: true is incompatible with a dynamic sandbox resolver — LSP needs a process manager at construction time, but the sandbox is resolved per request. LSP disabled.`,
+        );
+      } else if (!this._sandbox) {
         console.warn(
           `[Workspace "${this.name}"] lsp: true requires a sandbox with a process manager. No sandbox configured — LSP disabled.`,
         );
@@ -619,7 +701,7 @@ export class Workspace<
 
     // Validate at least one provider is given
     // Note: skills alone is also valid - uses LocalSkillSource for read-only skills
-    if (!this._fs && !this._filesystemResolver && !this._sandbox && !this.hasSkillsConfig()) {
+    if (!this._fs && !this._filesystemResolver && !this._sandbox && !this._sandboxResolver && !this.hasSkillsConfig()) {
       throw new WorkspaceError('Workspace requires at least a filesystem, sandbox, or skills', 'NO_PROVIDERS');
     }
   }
@@ -723,10 +805,88 @@ export class Workspace<
   }: {
     requestContext: RequestContext;
   }): Promise<WorkspaceFilesystem | undefined> {
-    if (this._filesystemResolver) {
-      return await this._filesystemResolver({ requestContext });
+    if (!this._filesystemResolver) return this._fs;
+    let pending = this._filesystemRequestCache.get(requestContext);
+    if (!pending) {
+      pending = Promise.resolve(this._filesystemResolver({ requestContext }));
+      this._filesystemRequestCache.set(requestContext, pending);
     }
-    return this._fs;
+    return pending;
+  }
+
+  /**
+   * Returns true if a sandbox is configured, either as a static instance or a resolver function.
+   */
+  hasSandboxConfig(): boolean {
+    return this._sandbox !== undefined || this._sandboxResolver !== undefined;
+  }
+
+  /**
+   * Returns true when the sandbox is resolved dynamically per request.
+   */
+  hasSandboxResolver(): boolean {
+    return this._sandboxResolver !== undefined;
+  }
+
+  /**
+   * Returns true when resolver-backed sandboxes are cached by a stable key.
+   */
+  hasSandboxCacheKey(): boolean {
+    return this._sandboxCacheKey !== undefined;
+  }
+
+  /**
+   * Resolve the sandbox for a given request context. Calls the resolver function
+   * if configured, otherwise returns the static sandbox (or undefined). Results
+   * are memoized by `sandboxCacheKey` when set, else per RequestContext instance.
+   */
+  async resolveSandbox({ requestContext }: { requestContext: RequestContext }): Promise<WorkspaceSandbox | undefined> {
+    if (!this._sandboxResolver) return this._sandbox;
+
+    const cacheKey = this._sandboxCacheKey?.({ requestContext });
+    if (cacheKey != null) {
+      let keyed = this._sandboxKeyCache.get(cacheKey);
+      if (!keyed) {
+        keyed = Promise.resolve().then(() => this._sandboxResolver!({ requestContext }));
+        this._sandboxKeyCache.set(cacheKey, keyed);
+        keyed.catch(() => {
+          if (this._sandboxKeyCache.get(cacheKey) === keyed) {
+            this._sandboxKeyCache.delete(cacheKey);
+          }
+        });
+      }
+      return keyed;
+    }
+
+    let pending = this._sandboxRequestCache.get(requestContext);
+    if (!pending) {
+      pending = Promise.resolve().then(() => this._sandboxResolver!({ requestContext }));
+      this._sandboxRequestCache.set(requestContext, pending);
+      pending.catch(() => {
+        if (this._sandboxRequestCache.get(requestContext) === pending) {
+          this._sandboxRequestCache.delete(requestContext);
+        }
+      });
+    }
+    return pending;
+  }
+
+  /**
+   * Clear cached resolver-backed sandboxes stored by `sandboxCacheKey`.
+   *
+   * This only clears the keyed cache. Per-RequestContext WeakMap entries are
+   * garbage-collection managed and cannot be cleared by this method.
+   *
+   * The workspace does not own resolver-returned sandboxes, so this only drops
+   * references from the workspace cache. Callers remain responsible for
+   * destroying any sandbox instances they created.
+   */
+  clearSandboxCache(cacheKey?: string): void {
+    if (cacheKey === undefined) {
+      this._sandboxKeyCache.clear();
+      return;
+    }
+    this._sandboxKeyCache.delete(cacheKey);
   }
 
   /**
@@ -1051,6 +1211,9 @@ export class Workspace<
   /**
    * Initialize the workspace.
    * Starts the sandbox, initializes the filesystem, and auto-mounts filesystems.
+   *
+   * Resolver-backed providers are skipped because there is no instance until
+   * the resolver runs.
    */
   async init(): Promise<void> {
     this._status = 'initializing';
@@ -1114,6 +1277,8 @@ export class Workspace<
         await callLifecycle(this._fs, 'destroy');
       }
 
+      this.clearSandboxCache();
+
       this._status = 'destroyed';
     } catch (error) {
       this._status = 'error';
@@ -1125,7 +1290,11 @@ export class Workspace<
    * Get workspace information.
    * @param options.includeFileCount - Whether to count total files (can be slow for large workspaces)
    */
-  async getInfo(options?: { includeFileCount?: boolean; requestContext?: RequestContext }): Promise<WorkspaceInfo> {
+  async getInfo(options?: {
+    includeFileCount?: boolean;
+    requestContext?: RequestContext;
+    resolveDynamicProviders?: boolean;
+  }): Promise<WorkspaceInfo> {
     const info: WorkspaceInfo = {
       id: this.id,
       name: this.name,
@@ -1134,9 +1303,13 @@ export class Workspace<
       lastAccessedAt: this.lastAccessedAt,
     };
 
+    const shouldResolveDynamicProviders = options?.resolveDynamicProviders ?? true;
+    // Prefer a provider already resolved for this request. When getInfo runs on
+    // the effective workspace proxy during tool execution, `this.filesystem` is
+    // the resolved instance, so metadata stays accurate without re-resolving.
     const filesystem =
-      this._fs ??
-      (this._filesystemResolver
+      (this.filesystem as WorkspaceFilesystem | undefined) ??
+      (this._filesystemResolver && shouldResolveDynamicProviders
         ? await this.resolveFilesystem({ requestContext: options?.requestContext ?? new RequestContext() })
         : undefined);
 
@@ -1161,15 +1334,29 @@ export class Workspace<
           // Ignore errors - filesystem may not support listing
         }
       }
+    } else if (this._filesystemResolver) {
+      info.filesystem = {
+        id: `${this.id}-dynamic-filesystem`,
+        name: 'DynamicFilesystem',
+        provider: 'dynamic',
+        status: 'pending',
+      };
     }
 
-    if (this._sandbox) {
-      const sandboxInfo = await this._sandbox.getInfo?.();
+    // `this.sandbox` picks up a sandbox already resolved for this request when
+    // getInfo runs on the effective workspace proxy. getInfo never invokes the
+    // sandbox resolver itself — resolver-backed sandboxes can provision real
+    // infrastructure, so resolving stays a tool-execution concern.
+    const sandbox = this.sandbox as WorkspaceSandbox | undefined;
+    if (sandbox) {
+      const sandboxInfo = await sandbox.getInfo?.();
       info.sandbox = {
-        provider: this._sandbox.provider,
-        status: sandboxInfo?.status ?? this._sandbox.status,
+        provider: sandbox.provider,
+        status: sandboxInfo?.status ?? sandbox.status,
         resources: sandboxInfo?.resources,
       };
+    } else if (this._sandboxResolver) {
+      info.sandbox = { provider: 'dynamic', status: 'pending' };
     }
 
     return info;
@@ -1186,19 +1373,23 @@ export class Workspace<
    * @param opts - Optional options including request context for per-request customisation
    * @returns Combined instructions string (may be empty)
    */
-  getInstructions(opts?: { requestContext?: RequestContext }): string {
+  private getInstructionsForProviders(
+    filesystem: WorkspaceFilesystem | undefined,
+    sandbox: WorkspaceSandbox | undefined,
+    opts?: { requestContext?: RequestContext },
+  ): string {
     const parts: string[] = [];
 
     // Sandbox-level instructions (working directory, provider type)
-    const sandboxInstructions = this._sandbox?.getInstructions?.(opts);
+    const sandboxInstructions = sandbox?.getInstructions?.(opts);
     if (sandboxInstructions) parts.push(sandboxInstructions);
 
     // Mount state overlay: check actual MountManager state
-    const mountEntries = this._sandbox?.mounts?.entries;
+    const mountEntries = sandbox?.mounts?.entries;
     if (mountEntries && mountEntries.size > 0) {
       const sandboxAccessible: string[] = [];
       const workspaceOnly: string[] = [];
-      const workingDir = this._sandbox instanceof LocalSandbox ? this._sandbox.workingDirectory : undefined;
+      const workingDir = sandbox instanceof LocalSandbox ? sandbox.workingDirectory : undefined;
 
       for (const [mountPath, entry] of mountEntries) {
         const fsName = entry.filesystem.displayName || entry.filesystem.provider;
@@ -1228,11 +1419,40 @@ export class Workspace<
       }
     } else {
       // No mounts or no sandbox — fall back to filesystem-level instructions
-      const fsInstructions = this._fs?.getInstructions?.(opts);
+      const fsInstructions = filesystem?.getInstructions?.(opts);
       if (fsInstructions) parts.push(fsInstructions);
     }
 
     return parts.join('\n\n');
+  }
+
+  getInstructions(opts?: { requestContext?: RequestContext }): string {
+    return this.getInstructionsForProviders(this._fs, this._sandbox, opts);
+  }
+
+  /**
+   * Get human-readable instructions describing the workspace environment.
+   *
+   * Resolves a dynamic filesystem per request. A resolver-backed sandbox is not
+   * resolved here unless `instructions.dynamicSandbox` is `'resolve'`.
+   */
+  async getInstructionsAsync(opts?: { requestContext?: RequestContext }): Promise<string> {
+    const requestContext = opts?.requestContext ?? new RequestContext();
+    const filesystem = this._filesystemResolver ? await this.resolveFilesystem({ requestContext }) : this._fs;
+    const resolvedOpts = { ...opts, requestContext };
+
+    // Resolver-backed sandbox: emit placeholder text without calling the resolver.
+    if (this._sandboxResolver && this._dynamicSandboxInstructions !== 'resolve') {
+      const sandboxText =
+        typeof this._dynamicSandboxInstructions === 'function'
+          ? this._dynamicSandboxInstructions({ requestContext })
+          : DYNAMIC_SANDBOX_INSTRUCTIONS;
+      const fsText = this.getInstructionsForProviders(filesystem, undefined, resolvedOpts);
+      return [sandboxText, fsText].filter(Boolean).join('\n\n');
+    }
+
+    const sandbox = this._sandboxResolver ? await this.resolveSandbox({ requestContext }) : this._sandbox;
+    return this.getInstructionsForProviders(filesystem, sandbox, resolvedOpts);
   }
 
   /**
@@ -1246,27 +1466,30 @@ export class Workspace<
    * @returns PathContext with paths and instructions from providers
    */
   getPathContext(): PathContext {
-    // Get instructions from providers
-    const fsInstructions = this._fs?.getInstructions?.();
-    const sandboxInstructions = this._sandbox?.getInstructions?.();
+    return this.getPathContextForProviders(this._fs, this._sandbox);
+  }
 
-    // Combine instructions from both providers
-    const instructions = [fsInstructions, sandboxInstructions].filter(Boolean).join(' ');
+  private getPathContextForProviders(
+    filesystem: WorkspaceFilesystem | undefined,
+    sandbox: WorkspaceSandbox | undefined,
+  ): PathContext {
+    const fsInstructions = filesystem?.getInstructions?.();
+    const sandboxInstructions = sandbox?.getInstructions?.();
 
     return {
-      filesystem: this._fs
+      filesystem: filesystem
         ? {
-            provider: this._fs.provider,
-            basePath: this._fs.basePath,
+            provider: filesystem.provider,
+            basePath: filesystem.basePath,
           }
         : undefined,
-      sandbox: this._sandbox
+      sandbox: sandbox
         ? {
-            provider: this._sandbox.provider,
-            workingDirectory: this._sandbox instanceof LocalSandbox ? this._sandbox.workingDirectory : undefined,
+            provider: sandbox.provider,
+            workingDirectory: sandbox instanceof LocalSandbox ? sandbox.workingDirectory : undefined,
           }
         : undefined,
-      instructions,
+      instructions: [fsInstructions, sandboxInstructions].filter(Boolean).join(' '),
     };
   }
 

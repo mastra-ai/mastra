@@ -1,4 +1,5 @@
 import type { Mastra } from '../../mastra';
+import { parseMemoryRequestContext } from '../../memory/types';
 import { EntityType } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../../request-context';
@@ -195,13 +196,21 @@ export class CostGuardProcessor implements Processor<'cost-guard', CostGuardTrip
       if (!traceId) return undefined;
       return { filter: { traceId } };
     }
+
+    // Reserved keys from RequestContext take precedence (set by auth middleware).
+    // Fall back to the MastraMemory context populated by prepare-memory-step,
+    // which is how threadId/resourceId are available when there is no auth layer
+    // (e.g. Studio dev mode).
+    const memoryContext = parseMemoryRequestContext(requestContext);
+
     if (this.scope === 'resource') {
-      const resourceId = requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+      const resourceId =
+        (requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined) ?? memoryContext?.resourceId;
       if (!resourceId) return undefined;
       return { filter: { resourceId }, scopeKey: `resource:${resourceId}` };
     }
     if (this.scope === 'thread') {
-      const threadId = requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+      const threadId = (requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined) ?? memoryContext?.thread?.id;
       if (!threadId) return undefined;
       return { filter: { threadId }, scopeKey: `thread:${threadId}` };
     }

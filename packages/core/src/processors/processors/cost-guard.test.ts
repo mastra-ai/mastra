@@ -816,4 +816,265 @@ describe('CostGuardProcessor', () => {
       await expect(guard.processInputStep(args)).resolves.toBeUndefined();
     });
   });
+
+  describe('MastraMemory fallback (no auth middleware)', () => {
+    it('thread scope resolves threadId from MastraMemory context', async () => {
+      const obsStorage = createMockObservabilityStorage({
+        inputCost: 0.4,
+        outputCost: 0.2,
+        costUnit: 'usd',
+      });
+
+      const guard = new CostGuardProcessor({
+        maxCost: 0.5,
+        scope: 'thread',
+      });
+      (guard as any).observabilityStorage = obsStorage;
+
+      // Simulate prepare-memory-step setting MastraMemory (no reserved keys)
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: { id: 'memory-thread-1' },
+        resourceId: 'memory-resource-1',
+      });
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        requestContext,
+      });
+
+      // Total: 0.60 > 0.50 → blocks
+      await expect(guard.processInputStep(args)).rejects.toThrow(TripWire);
+
+      expect(obsStorage.getMetricAggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ threadId: 'memory-thread-1' }),
+        }),
+      );
+    });
+
+    it('resource scope resolves resourceId from MastraMemory context', async () => {
+      const obsStorage = createMockObservabilityStorage({
+        inputCost: 0.4,
+        outputCost: 0.2,
+        costUnit: 'usd',
+      });
+
+      const guard = new CostGuardProcessor({
+        maxCost: 0.5,
+        scope: 'resource',
+      });
+      (guard as any).observabilityStorage = obsStorage;
+
+      // Simulate prepare-memory-step setting MastraMemory (no reserved keys)
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: { id: 'memory-thread-2' },
+        resourceId: 'memory-resource-2',
+      });
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        requestContext,
+      });
+
+      // Total: 0.60 > 0.50 → blocks
+      await expect(guard.processInputStep(args)).rejects.toThrow(TripWire);
+
+      expect(obsStorage.getMetricAggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ resourceId: 'memory-resource-2' }),
+        }),
+      );
+    });
+
+    it('reserved keys take precedence over MastraMemory context', async () => {
+      const obsStorage = createMockObservabilityStorage();
+
+      const guard = new CostGuardProcessor({
+        maxCost: 10.0,
+        scope: 'thread',
+      });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_THREAD_ID_KEY, 'auth-thread');
+      requestContext.set('MastraMemory', {
+        thread: { id: 'memory-thread' },
+        resourceId: 'memory-resource',
+      });
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        requestContext,
+      });
+
+      await guard.processInputStep(args);
+
+      // Should use the auth-middleware key, not the MastraMemory fallback
+      expect(obsStorage.getMetricAggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ threadId: 'auth-thread' }),
+        }),
+      );
+    });
+
+    it('resource reserved key takes precedence over MastraMemory resourceId', async () => {
+      const obsStorage = createMockObservabilityStorage();
+
+      const guard = new CostGuardProcessor({
+        maxCost: 10.0,
+        scope: 'resource',
+      });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_RESOURCE_ID_KEY, 'auth-resource');
+      requestContext.set('MastraMemory', {
+        thread: { id: 'memory-thread' },
+        resourceId: 'memory-resource',
+      });
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        requestContext,
+      });
+
+      await guard.processInputStep(args);
+
+      // Should use the auth-middleware key, not the MastraMemory fallback
+      expect(obsStorage.getMetricAggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ resourceId: 'auth-resource' }),
+        }),
+      );
+    });
+
+    it('thread scope includes correct scopeKey from MastraMemory', async () => {
+      const obsStorage = createMockObservabilityStorage({
+        inputCost: 1.0,
+        outputCost: 1.0,
+        costUnit: 'usd',
+      });
+
+      const guard = new CostGuardProcessor({
+        maxCost: 1.0,
+        scope: 'thread',
+      });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: { id: 'scoped-thread' },
+        resourceId: 'scoped-resource',
+      });
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        requestContext,
+      });
+
+      try {
+        await guard.processInputStep(args);
+        expect.fail('Expected TripWire to be thrown');
+      } catch (error) {
+        const tripwire = error as TripWire<any>;
+        expect(tripwire.options.metadata).toMatchObject({
+          scope: 'thread',
+          scopeKey: 'thread:scoped-thread',
+        });
+      }
+    });
+
+    it('resource scope includes correct scopeKey from MastraMemory', async () => {
+      const obsStorage = createMockObservabilityStorage({
+        inputCost: 1.0,
+        outputCost: 1.0,
+        costUnit: 'usd',
+      });
+
+      const guard = new CostGuardProcessor({
+        maxCost: 1.0,
+        scope: 'resource',
+      });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: { id: 'scoped-thread' },
+        resourceId: 'scoped-resource',
+      });
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        requestContext,
+      });
+
+      try {
+        await guard.processInputStep(args);
+        expect.fail('Expected TripWire to be thrown');
+      } catch (error) {
+        const tripwire = error as TripWire<any>;
+        expect(tripwire.options.metadata).toMatchObject({
+          scope: 'resource',
+          scopeKey: 'resource:scoped-resource',
+        });
+      }
+    });
+
+    it('still allows when neither reserved keys nor MastraMemory are set', async () => {
+      const obsStorage = createMockObservabilityStorage({
+        inputCost: 10.0,
+        outputCost: 10.0,
+        costUnit: 'usd',
+      });
+
+      const guard = new CostGuardProcessor({
+        maxCost: 1.0,
+        scope: 'thread',
+      });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const args = createInputStepArgs({ stepNumber: 1 });
+
+      // No threadId from any source → scope filter unresolvable → allows
+      await expect(guard.processInputStep(args)).resolves.toBeUndefined();
+      expect(obsStorage.getMetricAggregate).not.toHaveBeenCalled();
+    });
+
+    it('run scope is unaffected by MastraMemory (uses traceId only)', async () => {
+      const obsStorage = createMockObservabilityStorage({
+        inputCost: 0.4,
+        outputCost: 0.2,
+        costUnit: 'usd',
+      });
+
+      const guard = new CostGuardProcessor({
+        maxCost: 0.5,
+        scope: 'run',
+      });
+      (guard as any).observabilityStorage = obsStorage;
+
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', {
+        thread: { id: 'memory-thread' },
+        resourceId: 'memory-resource',
+      });
+
+      const args = createInputStepArgs({
+        stepNumber: 1,
+        requestContext,
+        tracing: createMockTracing('trace-run-memory') as any,
+      });
+
+      // Total: 0.60 > 0.50 → blocks (uses traceId, not MastraMemory)
+      await expect(guard.processInputStep(args)).rejects.toThrow(TripWire);
+
+      expect(obsStorage.getMetricAggregate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ traceId: 'trace-run-memory' }),
+        }),
+      );
+    });
+  });
 });

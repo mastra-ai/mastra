@@ -19,6 +19,7 @@ const workspace = new Workspace({
   sandbox: new BlaxelSandbox({
     timeout: '5m', // sandbox TTL (default: 5 minutes)
     memory: 4096, // memory in MB (default: 4096)
+    region: 'auto', // region selection (default: BL_REGION or auto)
   }),
 });
 
@@ -37,6 +38,7 @@ const agent = new Agent({
 | `image`    | `string`                              | `'blaxel/ts-app:latest'`     | Docker image to use                                    |
 | `memory`   | `number`                              | `4096`                       | Memory allocation in MB                                |
 | `timeout`  | `string`                              | `'5m'`                       | Sandbox TTL as a duration string (e.g. `'5m'`, `'1h'`) |
+| `region`   | `string`                              | `BL_REGION` or `'auto'`      | Blaxel region where the sandbox should be created      |
 | `env`      | `Record<string, string>`              | —                            | Environment variables to set in the sandbox            |
 | `labels`   | `Record<string, string>`              | —                            | Custom labels for the sandbox                          |
 | `runtimes` | `SandboxRuntime[]`                    | `['node', 'python', 'bash']` | Supported runtimes                                     |

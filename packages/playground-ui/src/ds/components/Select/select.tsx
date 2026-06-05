@@ -5,6 +5,7 @@ import * as React from 'react';
 import type { ButtonProps } from '../Button';
 import { formElementSizes } from '@/ds/primitives/form-element';
 import type { FormElementSize } from '@/ds/primitives/form-element';
+import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -154,30 +155,35 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
   (
     { className, children, position: _position, container, side = 'bottom', align = 'start', sideOffset = 4, ...props },
     ref,
-  ) => (
-    <SelectPrimitive.Portal container={container ?? undefined}>
-      <SelectPrimitive.Positioner
-        className="z-50 outline-none"
-        side={side}
-        align={align}
-        sideOffset={sideOffset}
-        alignItemWithTrigger={false}
-      >
-        <SelectPrimitive.Popup
-          ref={ref}
-          className={cn(
-            'relative z-50 min-w-32 min-w-[var(--anchor-width)] max-h-dropdown-max-height max-h-[var(--available-height)] overflow-y-auto overflow-x-hidden rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog origin-[var(--transform-origin)]',
-            'data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95',
-            'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
-            className,
-          )}
-          {...props}
+  ) => {
+    // Default to the nearest SideDialog/Drawer popup so the dropdown stays
+    // interactive inside a modal drawer; an explicit `container` still wins.
+    const resolvedContainer = usePortalContainer(container);
+    return (
+      <SelectPrimitive.Portal container={resolvedContainer}>
+        <SelectPrimitive.Positioner
+          className="z-50 outline-none"
+          side={side}
+          align={align}
+          sideOffset={sideOffset}
+          alignItemWithTrigger={false}
         >
-          <SelectPrimitive.List>{children}</SelectPrimitive.List>
-        </SelectPrimitive.Popup>
-      </SelectPrimitive.Positioner>
-    </SelectPrimitive.Portal>
-  ),
+          <SelectPrimitive.Popup
+            ref={ref}
+            className={cn(
+              'relative z-50 min-w-32 min-w-[var(--anchor-width)] max-h-dropdown-max-height max-h-[var(--available-height)] overflow-y-auto overflow-x-hidden rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog origin-[var(--transform-origin)]',
+              'data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95',
+              'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
+              className,
+            )}
+            {...props}
+          >
+            <SelectPrimitive.List>{children}</SelectPrimitive.List>
+          </SelectPrimitive.Popup>
+        </SelectPrimitive.Positioner>
+      </SelectPrimitive.Portal>
+    );
+  },
 );
 SelectContent.displayName = 'SelectContent';
 

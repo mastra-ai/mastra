@@ -277,7 +277,8 @@ export function createStep<TProcessorId extends string>(
     | (Processor<TProcessorId> & { processInputStep: Function })
     | (Processor<TProcessorId> & { processOutputStream: Function })
     | (Processor<TProcessorId> & { processOutputResult: Function })
-    | (Processor<TProcessorId> & { processOutputStep: Function }),
+    | (Processor<TProcessorId> & { processOutputStep: Function })
+    | (Processor<TProcessorId> & { computeStateSignal: Function }),
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
@@ -1116,7 +1117,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1142,7 +1143,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: checkedMessageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1212,6 +1213,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...passThrough,
                 messages,
                 ...validatedResult,
+                systemMessages: checkedMessageList.getSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
             }
@@ -1332,7 +1334,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1358,7 +1360,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1415,7 +1417,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1441,7 +1443,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: checkedMessageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1511,7 +1513,8 @@ export function isProcessor(obj: unknown): obj is Processor {
       typeof (obj as any).processOutputStream === 'function' ||
       typeof (obj as any).processOutputResult === 'function' ||
       typeof (obj as any).processOutputStep === 'function' ||
-      typeof (obj as any).processAPIError === 'function')
+      typeof (obj as any).processAPIError === 'function' ||
+      typeof (obj as any).computeStateSignal === 'function')
   );
 }
 
@@ -1647,6 +1650,7 @@ export class Workflow<
 {
   public id: TWorkflowId;
   public description?: string | undefined;
+  public metadata?: Record<string, unknown> | undefined;
   public inputSchema: StandardSchemaWithJSON<TInput>;
   public outputSchema: StandardSchemaWithJSON<TOutput>;
   public stateSchema?: StandardSchemaWithJSON<TState>;
@@ -1681,6 +1685,7 @@ export class Workflow<
     stateSchema,
     requestContextSchema,
     description,
+    metadata,
     executionEngine,
     retryConfig,
     steps,
@@ -1690,6 +1695,7 @@ export class Workflow<
     super({ name: id, component: RegisteredLogger.WORKFLOW });
     this.id = id;
     this.description = description;
+    this.metadata = metadata;
     this.inputSchema = inputSchema ? toStandardSchema(inputSchema) : inputSchema;
     this.outputSchema = outputSchema ? toStandardSchema(outputSchema) : outputSchema;
     this.stateSchema = stateSchema ? toStandardSchema(stateSchema) : undefined;
@@ -2762,8 +2768,10 @@ export class Workflow<
   }
 
   public async listActiveWorkflowRuns() {
-    const runningRuns = await this.listWorkflowRuns({ status: 'running' });
-    const waitingRuns = await this.listWorkflowRuns({ status: 'waiting' });
+    const [runningRuns, waitingRuns] = await Promise.all([
+      this.listWorkflowRuns({ status: 'running' }),
+      this.listWorkflowRuns({ status: 'waiting' }),
+    ]);
 
     return {
       runs: [...runningRuns.runs, ...waitingRuns.runs],

@@ -36,6 +36,14 @@ const agent = new Agent({
 });
 ```
 
+Use the same prefix for embedding models that should run through the gateway:
+
+```typescript title="src/mastra/rag/embed.ts"
+import { ModelRouterEmbeddingModel } from "@mastra/core/llm";
+
+const embedder = new ModelRouterEmbeddingModel("mastra/__GATEWAY_OPENAI_EMBEDDING_MODEL__");
+```
+
 Pass `memory.thread` and `memory.resource` when you generate/stream responses to enable Observational Memory:
 
 ```typescript title="src/mastra/run.ts"
