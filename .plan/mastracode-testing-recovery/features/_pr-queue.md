@@ -328,10 +328,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 306 | 2026-05-19 | #16682 | `c960279c56` | review | done | feat(mastracode): /om toggle to skip attachments when observer is text-only (#16682) | 11 |
 | 307 | 2026-05-19 | #16667 | `8a52e03557` | likely skip | skipped | chore: version packages (alpha) (#16667) | 2 |
 | 308 | 2026-05-19 | #15173 | `2c47b7e7a0` | review | done | Add MastraCode product analytics (#15173) | 14 |
-| 309 | 2026-05-19 | #16771 | `ac79462b98` | review | | feat(mastracode): add quiet mode (#16771) | 31 |
-| 310 | 2026-05-19 | #16797 | `6209a1f157` | likely skip | | chore: version packages (alpha) (#16797) | 2 |
-| 311 | 2026-05-19 | #16669 | `71a820b235` | review | | fix(mastracode): coordinate signals over Unix socket PubSub (#16669) | 6 |
-| 312 | 2026-05-20 | #16804 | `7dd705f2b4` | likely skip | | chore: version packages (alpha) (#16804) | 2 |
+| 309 | 2026-05-19 | #16771 | `ac79462b98` | review | done | feat(mastracode): add quiet mode (#16771) | 31 |
+| 310 | 2026-05-19 | #16797 | `6209a1f157` | likely skip | skipped | chore: version packages (alpha) (#16797) | 2 |
+| 311 | 2026-05-19 | #16669 | `71a820b235` | review | done | fix(mastracode): coordinate signals over Unix socket PubSub (#16669) | 6 |
+| 312 | 2026-05-20 | #16804 | `7dd705f2b4` | likely skip | skipped | chore: version packages (alpha) (#16804) | 2 |
 | 313 | 2026-05-19 | #16807 | `2b27920c3a` | review | | fix(mastracode): polish quiet mode follow-ups (#16807) | 18 |
 | 314 | 2026-05-20 | #16809 | `7dd82acbeb` | likely skip | | chore: version packages (alpha) (#16809) | 2 |
 | 315 | 2026-05-20 | #16835 | `7b74651a51` | review | | fix(mastracode): improve tui render scheduling (#16835) | 15 |

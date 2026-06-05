@@ -3,24 +3,24 @@
 ## Origin PR / commit
 
 - PR: [#13556](https://github.com/mastra-ai/mastra/pull/13556) — added persisted Quiet mode settings for compact TUI output and subagent completion behavior.
-- Later changes: [#13870](https://github.com/mastra-ai/mastra/pull/13870) — quiet compact web-search previews use the dedicated web-search formatter.
-- Later queued changes: [#16771](https://github.com/mastra-ai/mastra/pull/16771), [#16807](https://github.com/mastra-ai/mastra/pull/16807), and [#16839](https://github.com/mastra-ai/mastra/pull/16839) also touch quiet mode and still need mapping when the queue reaches them.
+- Later changes: [#13870](https://github.com/mastra-ai/mastra/pull/13870) — quiet compact web-search previews use the dedicated web-search formatter; [#16771](https://github.com/mastra-ai/mastra/pull/16771) — adds the current compact quiet-mode renderer, rollout prompt, task summary, tool grouping/preview caps, and settings plumbing.
+- Later queued changes: [#16807](https://github.com/mastra-ai/mastra/pull/16807) and [#16839](https://github.com/mastra-ai/mastra/pull/16839) also touch quiet mode and still need mapping when the queue reaches them.
 
 ## User-visible behavior
 
-- What the user can do: enable Quiet mode from `/settings` to render tools compactly, tune preview line count, and reduce completed task/subagent noise.
-- Success looks like: live tools, loaded history, completed tasks, OM markers, and subagent boxes compact consistently without hiding final useful output.
-- Must preserve: classic mode compatibility for existing users and persisted settings across restart.
+- What the user can do: enable Quiet mode from the first-run rollout prompt or `/settings`, choose 0/1/2/4/8 tool preview lines, and render tools/tasks more compactly.
+- Success looks like: live tools, loaded history, completed tasks, OM markers, and subagent boxes compact consistently; same-label compact tools group together, mode color is preserved, and previews do not duplicate summaries.
+- Must preserve: classic mode compatibility for existing users, persisted settings across restart, visible errors/final results, and rollout state so users are not prompted repeatedly.
 
 ## Entry points / commands
 
-- Commands / shortcuts / flags: `/settings` → `Quiet mode` and `Quiet mode tool preview lines`.
-- Automatic triggers: startup loads `settings.preferences.quietMode` and `quietModeMaxToolPreviewLines`; new installs currently default to Quiet mode on.
+- Commands / shortcuts / flags: `/settings` → `Quiet mode` and conditional `Quiet mode tool preview lines`; Ctrl+E still expands compact tool output when needed.
+- Automatic triggers: startup loads `settings.preferences.quietMode` and `quietModeMaxToolPreviewLines`; the one-time quiet-mode preference prompt asks existing unselected users whether to enable it and, if accepted, which preview cap to use.
 
 ## TUI states
 
-- Idle: `/settings` toggles Quiet mode and preview line limit.
-- Active / modal / error: live tool components use compact quiet rendering; task transitions and subagent output read the same state.
+- Idle: `/settings` toggles Quiet mode and preview line limit; the rollout prompt is a modal flow before normal chat input.
+- Active / modal / error: live tool components use compact quiet rendering; task transitions render item-aware one-line summaries; shell tools use quiet-shell spacing while other tools use compact grouping.
 
 ## Headless / non-TUI behavior
 
@@ -29,8 +29,8 @@
 
 ## Streaming / loading / interrupted states
 
-- Streaming / loading: `handleToolStart()` applies compact display and preview-line cap when quiet mode is enabled.
-- Abort / retry / resume: abort/error cleanup still updates pending tool components; quiet mode should not suppress error visibility.
+- Streaming / loading: `handleToolStart()` applies compact display and preview-line cap when quiet mode is enabled; streaming previews wait for complete segments and hide duplicate preview lines.
+- Abort / retry / resume: abort/error cleanup still updates pending tool components; quiet mode keeps failed tool state visible and does not block Ctrl+E expansion.
 
 ## Streaming vs loaded-from-history behavior
 
@@ -41,20 +41,23 @@
 
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
-| Quiet mode enabled | `settings.preferences.quietMode`, copied into `TUIState` at startup | `/settings`, live tool/subagent/task renderers, history renderer |
-| Preview line cap | `settings.preferences.quietModeMaxToolPreviewLines` | Tool compact preview rendering, including web-search result preview rows |
-| Rollout prompt state | `settings.onboarding.quietModePreferenceSelected` | Settings/onboarding migration logic |
-| Compact tool mode color | active mode color via `harness.getCurrentMode()` | `ToolExecutionComponentEnhanced` quiet badge |
+| Quiet mode enabled | `settings.preferences.quietMode`, copied into `TUIState` at startup | `/settings`, rollout prompt, live tool/subagent/task renderers, history renderer |
+| Preview line cap | `settings.preferences.quietModeMaxToolPreviewLines` normalized to 0–8 | Tool compact preview rendering, including web-search/result/code preview rows |
+| Rollout prompt state | `settings.onboarding.quietModePreferenceSelected` | Settings/onboarding migration logic and one-time modal prompt |
+| Compact tool mode color | active mode color via `harness.getCurrentMode()` | `ToolExecutionComponentEnhanced` quiet badge and grouped compact labels |
+| Compact grouping state | `ToolExecutionComponentEnhanced` group key/continuation flags + chat boundary reconciliation | spacing between same-label quiet tools and connector rendering |
 
 ## Key files
 
 - `mastracode/src/onboarding/settings.ts` — persisted quiet-mode fields, new-install defaults, rollout parsing, preview cap normalization.
 - `mastracode/src/tui/components/settings.ts` — `/settings` rows for Quiet mode and preview line limit.
-- `mastracode/src/tui/mastra-tui.ts` — startup settings load into `TUIState`.
+- `mastracode/src/tui/mastra-tui.ts` — startup settings load into `TUIState`, one-time quiet-mode prompt, and runtime application to existing tools/tasks.
 - `mastracode/src/tui/state.ts` — transient quiet-mode projection defaults.
 - `mastracode/src/tui/handlers/tool.ts` — live compact tool rendering.
 - `mastracode/src/tui/render-messages.ts` — loaded-history compact tool/task/subagent rendering.
-- `mastracode/src/tui/components/tool-execution-enhanced.ts` — compact quiet tool UI.
+- `mastracode/src/tui/components/tool-execution-enhanced.ts` — compact quiet tool UI, preview slicing, grouping keys, and quiet spacing kind.
+- `mastracode/src/tui/components/task-progress.ts` — item-aware one-line quiet task summaries.
+- `mastracode/src/tui/chat-boundary-reconciliation.ts` and `chat-spacing.ts` — quiet compact grouping/spacing.
 - `mastracode/src/tui/components/subagent-execution.ts` — subagent completion expansion/collapse behavior.
 
 ## Dependencies / related features
@@ -69,22 +72,24 @@
 ## Existing tests
 
 - `mastracode/src/onboarding/__tests__/settings.test.ts` — quiet-mode defaults, rollout prompt state, and preview line cap normalization.
+- `mastracode/src/tui/__tests__/mastra-tui-quiet-mode.test.ts` — one-time quiet-mode preference prompt, accept/decline paths, preview cap selection, and applying settings to live components.
+- `mastracode/src/tui/components/__tests__/task-progress.test.ts` — item-aware quiet task summary order, wrapping, wide characters, and expanded/quiet transitions.
 - `mastracode/src/tui/components/__tests__/subagent-execution.test.ts` — subagent collapse/expand options and final-result rendering.
-- `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts` — quiet compact tool summaries, previews, colors, and web-search preview rendering.
-- `mastracode/src/tui/handlers/__tests__/message.test.ts` — spacing around quiet tool previews.
+- `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts` — quiet compact tool summaries, previews, colors, grouping/continuation behavior, code/list previews, and web-search preview rendering.
+- `mastracode/src/tui/handlers/__tests__/message.test.ts` and `chat-spacing` coverage — spacing around quiet tool previews.
 - `mastracode/src/tui/__tests__/render-messages.test.ts` — loaded-history rendering, including quiet-mode-sensitive paths.
 
 ## Missing tests
 
 - End-to-end `/settings` toggle → restart → live tool + loaded-history parity.
-- Direct test that the current source behavior for subagents is intentional: `quietMode` now passes `expandOnComplete`, while the setting copy still says completed subagents collapse.
+- Manual TUI smoke covering quiet-mode grouped tools, Ctrl+E expansion, and task summaries in a real terminal width.
 - Error/abort path proving quiet compact tools still surface failed pending tool results.
 
 ## Known risks / regressions
 
-- The setting description says Quiet mode collapses completed subagents, but current source passes `expandOnComplete: state.quietMode`; later quiet-mode PRs may have changed the intended behavior.
 - Quiet mode has multiple projections (settings, TUI state, live tools, loaded history, tasks, subagents), so classic/quiet parity can drift.
 - New-install defaults and existing-user rollout state are handled separately; migration bugs can silently flip user preferences.
+- Compact grouping depends on terminal visible-width calculations and boundary reconciliation, so later layout changes can reintroduce spacing glitches.
 
 ## Verification checklist
 

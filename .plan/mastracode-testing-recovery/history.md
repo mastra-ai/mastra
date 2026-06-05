@@ -2379,3 +2379,28 @@ Verification:
 - `pnpm --filter ./packages/core exec vitest run src/agent/__tests__/agent-signals.test.ts -t "PubSub|pubsub|runtime instances|injected PubSub|Mastra-based" --bail=1 --reporter=dot` — 1 file / 5 tests passed / 68 skipped / no type errors.
 - `pnpm --filter ./mastracode exec vitest run src/__tests__/index.test.ts src/agents/thread-caveman-state.test.ts -t "PubSub|observeAttachments" --bail=1 --reporter=dot` — 2 files / 8 tests passed / 17 skipped.
 - `pnpm --filter ./mastracode exec vitest run src/__tests__/analytics.test.ts src/tui/__tests__/command-dispatch.test.ts src/tui/commands/__tests__/threads.test.ts -t "analytics|tracks" --bail=1 --reporter=dot` — 2 files passed + 1 skipped / 6 tests passed / 23 skipped.
+
+### PR #16771 / #16797 / #16669 / #16804 feature-map checkpoint
+
+Verified rows 309-312:
+
+- #16771 adds quiet mode's current compact renderer. Current source persists `quietMode` and `quietModeMaxToolPreviewLines`, shows the one-time quiet-mode preference prompt, applies quiet display to live/rendered tools, groups compact tool runs, caps preview lines, and renders task progress as item-aware quiet summaries.
+- #16669 coordinates Mastra Code signals over Unix socket PubSub. Current source resolves `signalsPubSub` from explicit PubSub or `unixSocketPubSub`, maps thread topics to `/tmp/mc/<resourceId>/<threadId>.sock`, uses core `UnixSocketPubSub` broker election/backpressure/recovery, and disables file thread locks only when cross-process PubSub is active.
+- #16797 and #16804 are Changesets alpha package-version batches; skipped for feature mapping after PR metadata confirmed package/changelog-only changes.
+
+Documentation actions:
+
+- Updated `features/tui/quiet-mode.md` for #16771 quiet-mode rollout, preview caps, compact tool grouping, task summaries, key files, tests, and risks.
+- Updated `features/chat/agent-signals.md` and `features/integrations/harness-api.md` for #16669 Unix socket PubSub transport, per-thread socket routing, cross-process signal delivery, and tests.
+- Updated `features/settings/onboarding-and-global-settings.md` for #16771 quiet preferences and #16669 signal transport flags.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16771 done, #16797 skipped, #16669 done, #16804 skipped, #16807 current.
+
+Focused evidence read: PR metadata for #16771/#16797/#16669/#16804; current `mastracode/src/tui/mastra-tui.ts`, `tui/components/settings.ts`, `tui/components/task-progress.ts`, `tui/components/tool-execution-enhanced.ts`, `tui/chat-boundary-reconciliation.ts`, `tui/chat-spacing.ts`, `tui/handlers/tool.ts`, `tui/render-messages.ts`, `mastracode/src/onboarding/settings.ts`, `mastracode/src/index.ts`, `mastracode/src/utils/signals-pubsub.ts`, `packages/core/src/events/unix-socket-pubsub.ts`, and focused tests under `mastracode/src/tui/__tests__/mastra-tui-quiet-mode.test.ts`, `components/__tests__/task-progress.test.ts`, `components/__tests__/tool-execution-enhanced.test.ts`, `packages/core/src/events/__tests__/unix-socket-pubsub.test.ts`, `mastracode/src/utils/__tests__/signals-pubsub.test.ts`, and `packages/core/src/agent/__tests__/agent-signals.test.ts`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/mastra-tui-quiet-mode.test.ts src/tui/components/__tests__/task-progress.test.ts src/tui/components/__tests__/tool-execution-enhanced.test.ts -t "quiet|Quiet|compact" --bail=1 --reporter=dot` — 3 files / 61 tests passed / 10 skipped.
+- `pnpm --filter ./mastracode exec vitest run src/utils/__tests__/signals-pubsub.test.ts src/__tests__/index.test.ts -t "SignalsPubSub|unixSocketPubSub|crossProcessPubSub|explicit pubsub|threadLock" --bail=1 --reporter=dot` — 1 file passed + 1 skipped / 4 tests passed / 16 skipped.
+- `pnpm --filter ./packages/core exec vitest run src/events/unix-socket-pubsub.test.ts --bail=1 --reporter=dot` — 1 file / 8 tests passed / no type errors. An earlier attempt used the wrong `src/events/__tests__/unix-socket-pubsub.test.ts` path and failed with "No test files found" before this corrected run.
+- `pnpm --filter ./packages/core exec vitest run src/agent/__tests__/agent-signals.test.ts -t "UnixSocketPubSub|remote subscriber without same-runtime" --bail=1 --reporter=dot` — 1 file / 1 test passed / 72 skipped / no type errors.
