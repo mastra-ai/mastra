@@ -195,9 +195,11 @@ Output is non-deterministic because the fake client randomizes status and the mo
 
 You can extend this signal provider to:
 
-- Replace `fetchBuildStatus()` with a real API client and persist subscriptions so they survive a restart.
-- Add a [webhook](/docs/agents/signal-providers#receive-events-by-webhook) entry point with `handleWebhook()` for push-based sources.
-- Expose `subscribe` and `unsubscribe` [tools](/docs/agents/signal-providers#add-processors-and-tools) so the agent can manage its own subscriptions.
+- Replace `fetchBuildStatus()` with a real API client.
+- Persist subscriptions so they survive a restart, then rehydrate them in [`start()`](/reference/signals/signal-provider#start).
+- Add a [webhook](/docs/agents/signal-providers#polling-and-webhook-providers) entry point with [`handleWebhook()`](/reference/signals/signal-provider#handlewebhookrequest) for push-based sources.
+- Expose `subscribe` and `unsubscribe` tools with [`getTools()`](/reference/signals/signal-provider#gettools) so the agent can manage its own subscriptions.
+- Use [`dedupeKey` and `coalesceKey`](/reference/agents/agent#sendnotificationsignalnotification-options) when notifications need deduplication or batching.
 
 Learn more:
 

@@ -22,22 +22,22 @@ A signal provider monitors an external source, such as GitHub, Slack, continuous
 Use a signal provider when an external system produces events that an agent should react to, and you want Mastra to manage the subscription bookkeeping for you.
 
 - The source emits events tied to a resource a thread cares about, such as a pull request, a channel, or a build.
-- You want a single place that tracks which threads are watching which external resources.
+- You want one place that tracks which threads watch which external resources.
 - You want to receive events by polling, by webhook, or both.
 
-If you only need to push a one-off event into a thread, call [`agent.sendNotificationSignal()`](/docs/agents/signals#notification-signals) directly instead.
+If you only need to push a one-off event into a thread, call [`agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) directly instead.
 
-## How it works
+## How signal providers work
 
 A signal provider is the producing side of the [signals](/docs/agents/signals) system. It brings external events into a thread, while the signal APIs control how the thread consumes them.
 
 A signal provider combines three capabilities:
 
-- **Subscription tracking.** The `SignalProvider` base class keeps an in-memory registry mapping each agent thread to the external resources it watches.
-- **Ingestion.** You override `poll()` for pull-based sources or `handleWebhook()` for push-based sources.
-- **Delivery.** When an event matches a subscription, you call the protected `notify()` helper, which forwards a notification signal to the connected agent's thread.
+- **Subscription tracking:** The `SignalProvider` base class keeps an in-memory registry that maps each agent thread to the external resources it watches.
+- **Ingestion:** You override `poll()` for pull-based sources or `handleWebhook()` for push-based sources.
+- **Delivery:** When an event matches a subscription, call the protected `notify()` helper to forward a notification signal to the connected agent's thread.
 
-You register a provider by passing it to the agent. The agent connects the provider, starts polling if a `pollInterval` is set, and merges any processors or tools the provider exposes. A provider implements only the hooks its source needs.
+Register a provider by passing it to an agent. The agent connects the provider, starts polling if a `pollInterval` is set, and merges any processors or tools the provider exposes.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -58,32 +58,35 @@ Notification delivery requires a storage adapter with notification support, such
 
 ## Quickstart
 
-A minimal provider implements the abstract `id` field and one ingestion hook. The following provider polls a build-status endpoint and emits a notification for each subscribed pipeline that failed.
+The following example demonstrates a polling provider that watches CI pipelines and emits a notification when a subscribed pipeline fails.
 
 ```typescript title="src/mastra/signals/ci-signals.ts"
 import { SignalProvider } from '@mastra/core/signals'
-import type { SignalSubscription } from '@mastra/core/signals'
+import type { SignalProviderTarget, SignalSubscription } from '@mastra/core/signals'
 
 type BuildStatus = {
   id: string
   status: 'passed' | 'failed'
 }
 
-async function fetchBuildStatus(pipeline: string): Promise<BuildStatus> {
-  const response = await fetch(`https://ci.example.com/builds/${pipeline}`)
-  if (!response.ok) {
-    throw new Error(`Failed to fetch build status for ${pipeline}`)
-  }
+const builds = new Map<string, BuildStatus>([
+  ['acme-app-main', { id: 'build_123', status: 'failed' }],
+])
 
-  return response.json() as Promise<BuildStatus>
+async function fetchBuildStatus(pipeline: string): Promise<BuildStatus> {
+  return builds.get(pipeline) ?? { id: 'build_unknown', status: 'passed' }
 }
 
 export class CiSignals extends SignalProvider<'ci-signals'> {
   readonly id = 'ci-signals' as const
   readonly pollInterval = 30_000
 
-  watch(thread: { resourceId: string; threadId: string }, pipeline: string) {
-    return this.subscribe(thread, pipeline)
+  watch(target: SignalProviderTarget, pipeline: string) {
+    return this.subscribe(target, pipeline)
+  }
+
+  unwatch(target: SignalProviderTarget, pipeline: string) {
+    return this.unsubscribe(target, pipeline)
   }
 
   async poll(subscriptions: SignalSubscription[]) {
@@ -126,51 +129,17 @@ export const supportAgent = new Agent({
 ciSignals.watch({ resourceId: 'user_123', threadId: 'thread_456' }, 'acme-app-main')
 ```
 
-The framework calls `poll()` on the `pollInterval` with all active subscriptions. It skips a cycle when there are no subscriptions and never overlaps cycles, so a slow `poll()` doesn't run concurrently with itself.
-
-## Track subscriptions
-
-A subscription links one agent thread to one external resource. The `externalResourceId` is a provider-specific string you choose, such as `"github:mastra-ai/mastra#123"` or `"slack:C0B01RW7A4T"`.
-
-The base class exposes protected methods to manage and query subscriptions. Expose them through your own public API so callers, tools, or processors can subscribe threads.
-
-```typescript title="src/mastra/signals/ci-signals.ts"
-import { SignalProvider } from '@mastra/core/signals'
-import type { SignalProviderTarget, SignalSubscription } from '@mastra/core/signals'
-
-export class CiSignals extends SignalProvider<'ci-signals'> {
-  readonly id = 'ci-signals' as const
-  readonly pollInterval = 30_000
-
-  watch(target: SignalProviderTarget, pipeline: string) {
-    return this.subscribe(target, pipeline)
-  }
-
-  unwatch(target: SignalProviderTarget, pipeline: string) {
-    return this.unsubscribe(target, pipeline)
-  }
-
-  async poll(subscriptions: SignalSubscription[]) {
-    // ...
-  }
-}
-```
-
-```typescript title="src/mastra/index.ts"
-const ci = new CiSignals()
-
-ci.watch({ resourceId: 'user_123', threadId: 'thread_456' }, 'acme/app:main')
-```
-
-The registry is indexed for lookup by resource and by thread. It's in-memory and per-process, so it doesn't survive a restart. If your provider needs durable subscriptions, persist them yourself, for example on thread metadata, and rehydrate the registry in `start()`.
+Mastra calls `poll()` on the `pollInterval` with all active subscriptions. It skips a cycle when there are no subscriptions and doesn't overlap cycles, so a slow `poll()` doesn't run concurrently with itself.
 
 :::note
-Visit [SignalProvider reference](/reference/signals/signal-provider#subscription-tracking) for the full subscription method list.
+For a complete polling-provider build with notification storage, agent registration, thread subscription, and testing, follow [Building a signal provider](/guides/guide/signal-provider).
 :::
 
-## Receive events by webhook
+## Polling and webhook providers
 
-For push-based sources, override `handleWebhook()`. Parse the incoming payload, match it to subscriptions with `getSubscriptionsForResource()`, and call `notify()` for each match.
+Use polling when the external source doesn't push events to your app. Set `pollInterval` and override `poll(subscriptions)`. Each subscription includes the thread target and the external resource id to inspect.
+
+Use webhooks when the external source can call your app. Override `handleWebhook(request)`, parse the payload, find matching subscriptions, and call `notify()` for each match.
 
 ```typescript title="src/mastra/signals/ci-signals.ts"
 import { SignalProvider } from '@mastra/core/signals'
@@ -201,112 +170,15 @@ export class CiSignals extends SignalProvider<'ci-signals'> {
 }
 ```
 
-`handleWebhook()` is a method on the provider, not an auto-mounted HTTP route. Invoke it from your own endpoint, passing the request body, headers, and any route params.
+`handleWebhook()` is a provider method, not an auto-mounted HTTP route. Invoke it from your own endpoint, passing the request body, headers, and any route params.
 
-```typescript title="src/api/ci-webhook.ts"
-import { ci } from '../mastra/signals/ci-signals' // your provider instance
+:::note
+Visit [`SignalProvider` reference](/reference/signals/signal-provider) for subscription, polling, lifecycle, and `notify()` details. For the complete notification payload shape, including deduplication and coalescing fields, visit [`Agent.sendNotificationSignal()` reference](/reference/agents/agent#sendnotificationsignalnotification-options).
+:::
 
-const result = await ci.handleWebhook({
-  body: await request.json(),
-  headers: Object.fromEntries(request.headers),
-})
+## Built-in webhook provider
 
-return Response.json(result.body, { status: result.status ?? 200 })
-```
-
-A provider can support both delivery modes. Leave `pollInterval` undefined for a webhook-only provider, or set it to also poll as a fallback.
-
-## Send notifications
-
-Call the protected `notify()` helper to push a notification signal into a thread. It's a convenience wrapper around the connected agent's `sendNotificationSignal()`, so the notification flows through the agent's [delivery policy](/docs/agents/signals#notification-signals) and lands in the thread's inbox.
-
-```typescript
-await this.notify(
-  {
-    source: this.id,
-    kind: 'mention',
-    priority: 'medium',
-    summary: 'New mention in #support',
-    dedupeKey: `${this.id}:channel-42:msg-987`,
-    coalesceKey: `${this.id}:channel-42`,
-  },
-  { resourceId: sub.resourceId, threadId: sub.threadId },
-)
-```
-
-Use `dedupeKey` to avoid storing the same event twice, and `coalesceKey` to group related events into a single summary. `notify()` throws if the provider isn't connected to an agent, which only happens if it was never passed to `Agent({ signals: [...] })`.
-
-## Add processors and tools
-
-A provider can extend agent execution by returning processors and tools. The agent registers them automatically when the provider is connected. Implement only the hooks you need.
-
-- `getInputProcessors()` and `getOutputProcessors()` return [processors](/docs/agents/processors) the agent runs during execution, for example to inject a subscription hint.
-- `getTools()` returns agent-callable tools, for example `subscribe` and `unsubscribe` commands the model can invoke.
-
-A common pattern is to make the provider its own processor by implementing `processInputStep()` on the class and returning `[this]` from the getter, as the [GitHub provider](#real-world-example) does.
-
-```typescript title="src/mastra/signals/ci-signals.ts"
-import { SignalProvider } from '@mastra/core/signals'
-import { createTool } from '@mastra/core/tools'
-import { z } from 'zod'
-
-export class CiSignals extends SignalProvider<'ci-signals'> {
-  readonly id = 'ci-signals' as const
-
-  getTools() {
-    return {
-      watch_pipeline: createTool({
-        id: 'watch_pipeline',
-        description: 'Subscribe this thread to a CI pipeline.',
-        inputSchema: z.object({ pipeline: z.string() }),
-        execute: async ({ context, runtimeContext }) => {
-          this.subscribe(
-            {
-              resourceId: runtimeContext.get('resourceId') as string,
-              threadId: runtimeContext.get('threadId') as string,
-            },
-            context.pipeline,
-          )
-          return { watching: context.pipeline }
-        },
-      }),
-    }
-  }
-}
-```
-
-Not every signal provider needs processors or tools. A provider that only polls an API and pushes notifications can omit all three hooks.
-
-## Run setup and cleanup
-
-Override the lifecycle hooks for async setup and teardown.
-
-- `start()` runs once after the provider connects to the agent. Use it for setup that needs the agent or Mastra instance, such as rehydrating durable subscriptions.
-- `stop()` runs on shutdown. The default implementation stops polling and clears the registry. Override it to release your own resources, and call `super.stop()`.
-
-```typescript title="src/mastra/signals/ci-signals.ts"
-export class CiSignals extends SignalProvider<'ci-signals'> {
-  readonly id = 'ci-signals' as const
-
-  async start() {
-    const saved = await loadSubscriptionsFromStorage()
-    for (const sub of saved) {
-      this.subscribe({ resourceId: sub.resourceId, threadId: sub.threadId }, sub.resource)
-    }
-  }
-
-  stop() {
-    closeMyConnection()
-    super.stop()
-  }
-}
-```
-
-You can also call `startPolling()` and `stopPolling()` manually, for example to pause polling during maintenance and resume it later.
-
-## Use the built-in webhook provider
-
-For generic webhook sources, use `WebhookSignalProvider` instead of writing a subclass. Configure it with a function that extracts a resource id from the payload, and an optional function that builds the notification.
+For generic webhook sources, use [`WebhookSignalProvider`](/reference/signals/webhook-signal-provider) instead of writing a subclass. Configure it with a function that extracts a resource id from the payload, and an optional function that builds the notification.
 
 ```typescript title="src/mastra/index.ts"
 import { Agent } from '@mastra/core/agent'
@@ -333,19 +205,17 @@ export const supportAgent = new Agent({
 webhooks.subscribeThread({ resourceId: 'user_123', threadId: 'thread_456' }, 'acme/app')
 ```
 
-When a webhook arrives, call `webhooks.handleWebhook({ body, headers })` from your route. The provider matches the extracted resource id against its subscriptions and notifies each matching thread. Without a `buildNotification` function, it emits a default `webhook-event` notification.
+When a webhook arrives, call `webhooks.handleWebhook({ body, headers })` from your route. The provider matches the extracted resource id against its subscriptions and notifies each matching thread.
 
-## Real-world example
+## Advanced provider capabilities
 
-The `@mastra/github-signals` package is a full signal provider that watches GitHub pull requests and notifies threads about new comments, review state, CI status, and merges. It's a useful reference for building your own provider because it exercises every hook on the base class:
+A provider can support more than event ingestion. Add only the capabilities your source needs.
 
-- **Polling.** It sets a configurable poll interval (default five minutes) and overrides `poll()` to fetch each subscribed pull request and emit notifications only when the observed state changes.
-- **Processors.** It returns `[this]` from `getInputProcessors()` and `getOutputProcessors()` and implements `processInputStep()` / `processOutputStep()` on the class to detect subscribe and unsubscribe intent during a run.
-- **Tools and signal factories.** It exposes a `static signals` object with `subscribeToPR()` and `unsubscribeFromPR()` helpers that build reactive signals the agent can act on.
-- **Durable subscriptions.** It persists subscriptions on thread metadata through a thread store and rehydrates them, so subscriptions survive a restart rather than living only in the in-memory registry.
-- **Lifecycle overrides.** It overrides `connect()` and `__registerMastra()` (always calling `super`) to capture the agent and Mastra instance it needs for syncing.
+- **Durable subscriptions:** The base registry is in-memory and per-process. Persist subscriptions yourself when they must survive a restart, then rehydrate them in [`start()`](/reference/signals/signal-provider#start).
+- **Lifecycle hooks:** Override [`start()`](/reference/signals/signal-provider#start) for async setup and [`stop()`](/reference/signals/signal-provider#stop) for cleanup. Call `super.stop()` when overriding `stop()` so the base provider can stop polling and clear its registry.
+- **Processors and tools:** Return processors from [`getInputProcessors()`](/reference/signals/signal-provider#getinputprocessors) or [`getOutputProcessors()`](/reference/signals/signal-provider#getoutputprocessors), and return agent-callable tools from [`getTools()`](/reference/signals/signal-provider#gettools).
 
-Register it the same way as any provider:
+The `@mastra/github-signals` package is a production signal provider that watches GitHub pull requests and notifies threads about comments, review state, continuous integration status, and merges. Use it as a reference for polling, durable subscriptions, tools, processors, and lifecycle hooks.
 
 ```typescript title="src/mastra/agents/dev-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -365,7 +235,5 @@ export const devAgent = new Agent({
 - [Guide: Building a signal provider](/guides/guide/signal-provider)
 - [Signals](/docs/agents/signals)
 - [Notification signals](/docs/agents/signals#notification-signals)
-- [Processors](/docs/agents/processors)
-- [Using tools](/docs/agents/using-tools)
 - [`SignalProvider` reference](/reference/signals/signal-provider)
 - [`WebhookSignalProvider` reference](/reference/signals/webhook-signal-provider)
