@@ -7,15 +7,17 @@
 
 ## User-visible behavior
 
-- Intended: parent agents can call `subagent({ agentType: 'audit-tests', task: ... })` to get a read-only audit of test quality.
-- Current verified behavior: `mastracode/src/agents/subagents/audit-tests.ts` exists, but `mastracode/src/index.ts` only registers `explore`, `plan`, and `execute` as default subagents.
-- Must preserve: read-only access, repo-specific test convention discovery, line-referenced findings, and actionable recommendations.
+- Historical intent: parent agents could call `subagent({ agentType: 'audit-tests', task: ... })` to get a read-only audit of test quality.
+- Current verified behavior: `mastracode/src/agents/subagents/audit-tests.ts` exists, and the base prompt still mentions the single-use exception, but `mastracode/src/index.ts` only registers `explore`, `plan`, and `execute` as default subagents.
+- Disposition: remove the stale subagent instead of reviving it. If test-audit behavior returns, it should be redesigned as a skill or explicit slash command rather than a built-in default subagent.
+- Must preserve in any replacement: read-only access, repo-specific test convention discovery, line-referenced findings, and actionable recommendations.
 
 ## Entry points / commands
 
-- Tool call: `subagent({ agentType: 'audit-tests', task })`.
-- Prompt guidance: base instructions allow `audit-tests` as the one subagent exception that can be used alone.
-- No slash command found.
+- Current stale tool shape: `subagent({ agentType: 'audit-tests', task })`, but the default runtime no longer exposes this agent type.
+- Current stale prompt guidance: base instructions allow `audit-tests` as the one subagent exception that can be used alone.
+- Planned removal: delete the stale subagent definition and prompt exception.
+- Future replacement option: a skill for reusable test-audit instructions, or a slash command such as `/audit-tests` that gathers changed files and injects a structured audit prompt.
 
 ## TUI states
 
@@ -62,16 +64,24 @@
 - No audit-tests-specific test found.
 - `mastracode/src/agents/subagents/execute.test.ts` covers a different subagent.
 
+## Removal plan
+
+1. Delete `mastracode/src/agents/subagents/audit-tests.ts`.
+2. Remove the stale single-use exception from `mastracode/src/agents/prompts/base.ts`.
+3. Add a Mastra Code changeset noting that the unused, unavailable `audit-tests` subagent definition and prompt guidance were removed.
+4. Verify with `rg "audit-tests|auditTestsSubagent|Audit Tests" mastracode/src .plan/mastracode-testing-recovery`, focused prompt/subagent tests, and `pnpm --filter ./mastracode check`.
+5. Do not add replacement behavior in the removal PR. If test-audit behavior is wanted later, design it as a skill or slash command in separate work.
+
 ## Missing tests
 
-- Test that `audit-tests` is registered in default subagents and accepted by the `subagent` tool.
-- Test that it only exposes read tools (`view`, `search_content`, `find_files`).
-- Prompt/test snapshot that the single-subagent exception is consistent with actual availability.
+- No new product tests are needed for the removal beyond prompt/subagent regression coverage; the desired end state is that `audit-tests` is no longer advertised or available.
+- If reintroduced as a skill or slash command, add tests for input gathering, read-only behavior, and generated audit prompt content.
 
 ## Known risks / regressions
 
-- Current registration gap: the definition exists but is not imported into `createMastraCode()` defaults.
-- Prompt says `audit-tests` can be used alone, which may mislead the agent if the runtime rejects the agent type.
+- Until removal lands, the definition exists but is not imported into `createMastraCode()` defaults.
+- Until removal lands, the prompt says `audit-tests` can be used alone, which may mislead the agent if the runtime rejects the agent type.
+- A future replacement should not silently re-add a built-in subagent unless there is a clear user-facing entry point and direct coverage.
 
 ## Verification checklist
 
