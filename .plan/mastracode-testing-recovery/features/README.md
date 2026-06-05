@@ -62,7 +62,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Models | Custom OpenAI-compatible providers | #13682, #13611 | settings customProviders + Harness custom catalog | Partial | High | [page](./models/custom-providers.md) |
 | Models | Thinking and reasoning effort | #13490, #13563, #13748 | Harness/request context + settings | Partial | High | [page](./models/thinking-and-reasoning.md) |
 | Models | OpenAI strict schema compatibility | #13695, #14157 | schema-compat + core stream strict-mode preparation | Partial | High | [page](./models/openai-strict-schema-compat.md) |
-| Models | Tool schema compatibility | #13253, #13695, #14157 | Standard Schema adapters + Zod JSON Schema conversion | Partial | High | [page](./models/tool-schema-compatibility.md) |
+| Models | Tool schema compatibility | #13253, #13695, #14157, #14264 | Standard Schema adapters + Zod JSON Schema conversion + Zod module export handling | Partial | High | [page](./models/tool-schema-compatibility.md) |
 | Tools | Coding tools and approval permissions | #13218, #13344, #13347, #13348, #13355, #13385, #13384, #13428, #13442, #13519, #13526, #13564, #13609, #13611, #13687, #13696, #13713, #13724, #13753, #13870, #13999, #14157, #14168 | Harness state + permission policy + workspace filesystem + extraTools + schemas + local shell passthrough + validation errors | Partial | High | [page](./tools/coding-tools-permissions.md) |
 | Tools | Web search tool rendering | #13609, #13870 | provider/Tavily result shape + TUI renderer | Partial | Medium | [page](./tools/web-search-rendering.md) |
 | Tools | Workspace-backed coding tools | #13437, #13526, #13687, #13693, #13695, #13700, #13724, #13753, #13940 | core/custom Workspace + LocalFilesystem/LocalSandbox + tool-name overrides + allowed paths + schema compat + subagent inheritance | Partial | High | [page](./tools/workspace-tools.md) |
@@ -79,7 +79,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Goals | Plan approval and build handoff | #13416, #13557, #13598 | Core Harness plan resolver + TUI plan card + plan files | Partial | High | [page](./goals/plan-approval.md) |
 | Subagents | Delegation to Explore / Plan / Execute | #13227, #13339, #13700, #13940 | Harness config + parent Workspace + subagent request context/session state | Partial | High | [page](./subagents/delegation.md) |
 | Subagents | Audit-tests subagent | #13331 | Harness subagent config | Missing | High | [page](./subagents/audit-tests.md) |
-| Memory | Observational memory | #13231, #13305, #13330, #13349, #13354, #13476, #13563, #13569, #13815, #13953, #13996 | Memory storage + harness/settings OM state + scope config + attachment filtering/token estimates + OM model picker + clone remapping | Partial | High | [page](./memory/observational-memory.md) |
+| Memory | Observational memory | #13231, #13305, #13330, #13349, #13354, #13476, #13568, #13563, #13569, #13815, #13953, #13996 | Memory storage + harness/settings OM state + scope config + observer-context budgeting + attachment filtering/token estimates + OM model picker + clone remapping | Partial | High | [page](./memory/observational-memory.md) |
 
 Use terse values:
 

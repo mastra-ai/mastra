@@ -1215,3 +1215,20 @@ Verification:
 - `corepack pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/tool-execution-enhanced.test.ts --bail=1 --reporter=dot` — 1 file / 61 tests passed.
 - `corepack pnpm --filter ./packages/schema-compat exec vitest run src/standard-schema/adapters/zod-v4.test.ts src/zod-to-json.test.ts --bail=1 --reporter=dot` — 3 files / 107 passed / 1 skipped.
 - Initial `pnpm` runs failed because the active shim was pnpm 10.29.3 while this repo requires pnpm >=11; `corepack prepare pnpm@11.3.0 --activate` fixed the local runner.
+
+### PR #14167 / #13568 / #14264 feature-map checkpoint
+
+Verified rows 125-127:
+
+- #14167 is a Changesets alpha/version-package batch touching only changelogs/package manifests; skipped for feature mapping.
+- #13568 adds observer context optimization for OM: `observation.previousObserverTokens` defaults to `2000`, `false` disables the optimization, and `0` omits previous observations. `prepareObserverContext()` swaps reflected raw observation lines for buffered reflection summaries, token-bounds previous observations, keeps a recent raw tail, preserves important 🔴/✅ older lines when budget allows, emits `[N observations truncated here]` markers, and passes explicit `wasTruncated` state plus prior `current-task` / `suggested-response` metadata into observer prompts.
+- #14264 is a schema-compat follow-up, not a skip: it fixed false `z.toJSONSchema is not available` failures by broadening Zod export-shape resolution and adding `@typescript-eslint/no-require-imports`. Current HEAD has later schema-compat loader follow-ups (#14268/#14275/#14401/#14617 in file history), so the feature card records #14264's intent and current drift risk rather than treating its exact `createRequire` fallback as current source.
+
+Documentation actions:
+
+- Updated `features/memory/observational-memory.md` with `previousObserverTokens`, buffered-reflection replacement, prior metadata hints, state ownership, tests, and risk.
+- Updated `features/models/tool-schema-compatibility.md` with #14264 and Zod module export-shape risk.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #14167 skipped, #13568 done, #14264 done, #14201 current.
+
+Focused evidence read: PR metadata for #14167/#13568/#14264; current `observational-memory.ts`, `observer-agent.ts`, `types.ts`, `observational-memory.test.ts`; current `standard-schema.ts`, `zod-v4.ts`, `zod-v4.test.ts`; `git show c562ec228f` for the #14264 adapter/package/lint diff; `git log` on `zod-v4.ts` showing later loader/draft-target follow-ups.

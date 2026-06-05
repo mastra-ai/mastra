@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14168 (row 124) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, and #14147 recorded as version/dependency skips plus #12532 recorded as build-tool-dependency-only. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #14167 (`1e4db5e5ea`, likely version-package skip), then #13568 (`86f242631d`, observer context optimization), then #14264 (`c562ec228f`, schema-compat false z.toJSONSchema errors).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14264 (row 127) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, and #14167 recorded as version/dependency skips plus #12532 recorded as build-tool-dependency-only. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #14201 (`6fa8b85bf8`, likely version-package skip), then #14266 (`057dbc0ddf`, likely version-package skip), then #14250 (`5d6075b445`, queued follow-up UX).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 125: PR #14167 (likely version-package skip), then row 126: PR #13568 (observer context optimization), then row 127: PR #14264 (schema-compat false z.toJSONSchema errors).
+1. Continue at `_pr-queue.md` row 128: PR #14201 (likely version-package skip), then row 129: PR #14266 (likely version-package skip), then row 130: PR #14250 (refine queued follow-up UX in Mastra Code).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
