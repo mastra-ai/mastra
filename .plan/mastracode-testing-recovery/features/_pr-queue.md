@@ -136,11 +136,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 114 | 2026-03-09 | #13940 | `28c85b184f` | review | done | fix(mastracode): subagents inherit workspace from parent agent (#13940) | 25 |
 | 115 | 2026-03-09 | #13953 | `57c739108b` | review | done | feat: add attachment support to observational memory and MastraCode (#13953) | 6 |
 | 116 | 2026-03-10 | #14062 | `6ba1788c15` | likely skip | skipped | chore(deps): update formatting & linting (#14062) | 1 |
-| 117 | 2026-03-10 | #13883 | `868dcde021` | likely skip | current | chore: version packages (alpha) (#13883) | 2 |
-| 118 | 2026-03-11 | #14102 | `ab866ec480` | likely skip | | chore: version packages (alpha) (#14102) | 2 |
-| 119 | 2026-03-11 | #14146 | `05f93dc393` | likely skip | | chore: version packages (alpha) (#14146) | 2 |
-| 120 | 2026-03-11 | #13750 | `930302b249` | review | | feat(mastracode): allow passing MCP server configs to createMastraCode (#13750) | 3 |
-| 121 | 2026-03-11 | #13996 | `a554cca518` | review | | fix(mastracode): restore /om typing in Kitty terminals (#13996) | 2 |
+| 117 | 2026-03-10 | #13883 | `868dcde021` | likely skip | skipped | chore: version packages (alpha) (#13883) | 2 |
+| 118 | 2026-03-11 | #14102 | `ab866ec480` | likely skip | skipped | chore: version packages (alpha) (#14102) | 2 |
+| 119 | 2026-03-11 | #14146 | `05f93dc393` | likely skip | skipped | chore: version packages (alpha) (#14146) | 2 |
+| 120 | 2026-03-11 | #13750 | `930302b249` | review | done | feat(mastracode): allow passing MCP server configs to createMastraCode (#13750) | 3 |
+| 121 | 2026-03-11 | #13996 | `a554cca518` | review | current | fix(mastracode): restore /om typing in Kitty terminals (#13996) | 2 |
 | 122 | 2026-03-11 | #14157 | `787f3ac08b` | likely skip | | fix: handle Zod v4 schemas without ~standard.jsonSchema (#14157) | 1 |
 | 123 | 2026-03-11 | #14147 | `dbb4c690f3` | likely skip | | chore: version packages (alpha) (#14147) | 2 |
 | 124 | 2026-03-11 | #14168 | `89c209dd1a` | review | | fix(mastracode): stop hiding tool validation errors in TUI (#14168) | 1 |

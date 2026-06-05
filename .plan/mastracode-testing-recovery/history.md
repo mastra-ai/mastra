@@ -1172,3 +1172,22 @@ Verification:
 
 - `corepack pnpm@11.3.0 --filter ./mastracode exec vitest run src/tui/__tests__/mastra-tui-images.test.ts src/tui/__tests__/mastra-tui-queueing.test.ts --reporter=dot --bail 1` — 2 files / 33 tests passed.
 - `corepack pnpm@11.3.0 --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/token-counter.test.ts src/processors/observational-memory/__tests__/observational-memory.test.ts --reporter=dot --bail 1` — 2 files / 496 passed / 1 todo.
+
+### PR #13883 / #14102 / #14146 / #13750 feature-map checkpoint
+
+Verified rows 117-120:
+
+- #13883, #14102, and #14146 are Changesets alpha/version-package batches touching CHANGELOG/package metadata across many packages; skipped for user-visible Mastra Code feature mapping.
+- #13750 adds programmatic MCP server configuration via `createMastraCode({ mcpServers })`. Current source exposes `MastraCodeConfig.mcpServers`, passes it to `createMcpManager(project.rootPath, configDir, config?.mcpServers)`, merges those programmatic servers over file-loaded MCP config, and reapplies the same overrides on manager reload. `disableMcp: true` still disables file and programmatic MCP.
+
+Documentation actions:
+
+- Updated `features/integrations/mcp-server-configuration.md` with programmatic config ownership, precedence, reload behavior, key files, tests, and risks.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13883/#14102/#14146 skipped, #13750 done, #13996 current.
+
+Focused evidence read: PR metadata for #13883/#14102/#14146/#13750; `mastracode/src/index.ts`, `mastracode/src/mcp/manager.ts`, `mastracode/src/mcp/types.ts`, and `mastracode/src/mcp/__tests__/manager.test.ts`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/mcp/__tests__/manager.test.ts --bail=1 --reporter=dot` — 1 file / 44 tests passed.
+- `pnpm --filter ./mastracode test -- --run src/mcp/__tests__/manager.test.ts --bail 1 --reporter=dot` unexpectedly expanded into the broader suite and hit known baseline failures (including stale `/github` autocomplete drift); focused direct Vitest run above passed.

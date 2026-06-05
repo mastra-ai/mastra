@@ -68,7 +68,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Tools | Streaming tool arguments | #13328, #13335 | Harness display state + TUI pending tools | Partial | High | [page](./tools/streaming-tool-arguments.md) |
 | Tools | Task tracking tools and TUI progress | #13344 | Harness task state + TUI progress | Partial | High | [page](./tools/task-tracking.md) |
 | Integrations | MCP status and reload command | #13311, #13347 | MCP manager | Partial | High | [page](./integrations/mcp-status-command.md) |
-| Integrations | MCP server configuration | #13613 | MCP config files + manager runtime state | Partial | High | [page](./integrations/mcp-server-configuration.md) |
+| Integrations | MCP server configuration | #13613, #13750 | MCP config files + programmatic config + manager runtime state | Partial | High | [page](./integrations/mcp-server-configuration.md) |
 | Integrations | Core Harness API and reference docs | #13353, #13457, #13519, #13525, #13716 | Core Harness runtime + docs | Partial | High | [page](./integrations/harness-api.md) |
 | Integrations | Harness display state | #13427 | Core Harness display projection | Partial | High | [page](./integrations/harness-display-state.md) |
 | Integrations | Skills command and workspace resolution | #13457, #13700 | Core Harness workspace cache + Workspace skills provider | Partial | High | [page](./integrations/skills-command.md) |
