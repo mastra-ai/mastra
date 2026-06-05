@@ -6,9 +6,10 @@ import { createSkillsAgent } from './agent';
 import { resolveSkills } from './handler';
 
 /**
- * Resolve the agent's skills. Reads the registered Mastra editor to enumerate
- * the available stored skills, then injects the scoped skills agent into the
- * handler so it selects the minimum relevant set. No-ops when none available.
+ * Resolve the agent's skills. No-ops when the `skills` capability isn't enabled
+ * for the builder. Otherwise reads the registered Mastra editor to enumerate the
+ * available stored skills, then injects the scoped skills agent into the handler
+ * so it selects the minimum relevant set. Also no-ops when none are available.
  */
 export const createSetSkillsStep = ({ model }: StepFactoryArgs) =>
   createStep({
@@ -18,6 +19,9 @@ export const createSetSkillsStep = ({ model }: StepFactoryArgs) =>
     outputSchema: configSchema,
     execute: async ({ inputData, mastra }) => {
       const config = inputData as Config;
+      // Skip entirely when the `skills` capability isn't enabled for the builder.
+      if (!config.featureCapabilities?.skills) return config;
+
       const availableSkills = await resolveAvailableSkills(mastra);
       if (availableSkills.length === 0) return config;
 
