@@ -8,7 +8,7 @@
     "get-port": "^7.1.0",
     "npm-cli-login": "^1.0.0",
     "tinyglobby": "^0.2.16",
-    "tsx": "catalog:",
+    "tsx": "^4.22.4",
     "verdaccio": "^6.2.5",
     "verdaccio-auth-memory": "^10.3.1"
   },
