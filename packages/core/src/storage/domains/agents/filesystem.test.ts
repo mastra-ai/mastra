@@ -46,4 +46,29 @@ describe('FilesystemAgentsStorage', () => {
     });
     expect(existsSync(join(storageDir, 'agents', 'stored-agent.json'))).toBe(false);
   });
+
+  it('rethrows unexpected code-agent lookup failures', async () => {
+    storageDir = mkdtempSync(join(tmpdir(), 'mastra-agents-storage-'));
+    const storage = new FilesystemAgentsStorage({ db: new FilesystemDB(storageDir) });
+    storage.__registerMastra({
+      getAgentById: () => {
+        throw new Error('registry unavailable');
+      },
+    } as any);
+
+    await storage.init();
+    await storage.create({
+      agent: {
+        id: 'stored-agent',
+        name: 'Stored Agent',
+        instructions: 'Help users.',
+        model: { provider: 'openai', name: '__AI_SDK_OPENAI_MODEL_BASE__' },
+      },
+    });
+    const version = await storage.getLatestVersion('stored-agent');
+
+    await expect(
+      storage.update({ id: 'stored-agent', status: 'published', activeVersionId: version?.id }),
+    ).rejects.toThrow('registry unavailable');
+  });
 });
