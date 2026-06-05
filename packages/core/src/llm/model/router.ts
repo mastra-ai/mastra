@@ -15,13 +15,13 @@ import type {
   GatewayLanguageModelWithStreamTransport,
   GatewayStreamTransportHandle,
   MastraModelGatewayInterface,
+  GatewayAuthRequest,
 } from './gateways/base.js';
 import { findGatewayForModel, getGatewayId } from './gateways/index.js';
 
 import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
-import { resolveModelAuth } from './model-auth-resolver.js';
 import { createOpenAIWebSocketFetch } from './openai-websocket-fetch.js';
 import type { OpenAIWebSocketFetch } from './openai-websocket-fetch.js';
 import type { OpenAITransport, ProviderOptions, ResponsesWebSocketOptions } from './provider-options.js';
@@ -343,19 +343,43 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       return { apiKey: this.config.apiKey ?? '', headers: this.config.headers, source: 'explicit' };
     }
 
-    return resolveModelAuth({
-      gateway: this.gateway,
-      request: {
-        gatewayId: this.gatewayId,
-        providerId,
-        modelId,
-        routerId: this.config.routerId,
-      },
-      explicit: {
-        apiKey: this.config.apiKey,
-        headers: this.config.headers,
-      },
-    });
+    const explicitHeaders = this.config.headers;
+    const explicitApiKey = this.config.apiKey;
+    const request: GatewayAuthRequest = {
+      gatewayId: this.gatewayId,
+      providerId,
+      modelId,
+      routerId: this.config.routerId,
+    };
+
+    // explicit apiKey takes precedence
+    if (explicitApiKey) {
+      return { apiKey: explicitApiKey, headers: explicitHeaders, source: 'explicit' };
+    }
+
+    // try gateway.resolveAuth
+    const rawGatewayAuth = await this.gateway.resolveAuth?.(request);
+    const gatewayAuth = rawGatewayAuth?.bearerToken
+      ? {
+          ...rawGatewayAuth,
+          headers: { ...rawGatewayAuth.headers, Authorization: `Bearer ${rawGatewayAuth.bearerToken}` },
+        }
+      : rawGatewayAuth;
+
+    if (gatewayAuth?.apiKey || gatewayAuth?.headers || gatewayAuth?.bearerToken) {
+      return {
+        ...gatewayAuth,
+        headers: { ...explicitHeaders, ...gatewayAuth.headers },
+        source: gatewayAuth.source ?? 'gateway',
+      };
+    }
+
+    // legacy fallback
+    return {
+      apiKey: await this.gateway.getApiKey(request.routerId),
+      headers: explicitHeaders,
+      source: 'legacy',
+    };
   }
 
   private setStreamTransportFromCache({

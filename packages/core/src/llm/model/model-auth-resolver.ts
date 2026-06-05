@@ -23,6 +23,11 @@ function hasExplicitAuth(explicit?: Pick<GatewayAuthResult, 'apiKey' | 'headers'
   );
 }
 
+/**
+ * @deprecated This function is deprecated and will be removed in a future release.
+ * Auth resolution is now handled internally by {@link ModelRouterLanguageModel}.
+ * This function is kept for backward compatibility.
+ */
 export async function resolveModelAuth({
   gateway,
   request,
