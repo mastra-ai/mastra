@@ -18,21 +18,18 @@ const codeAgentId = 'code-agent';
 const modes: HarnessModeV1[] = [
   {
     id: 'build',
-    agentId: codeAgentId,
     description: 'Build',
     defaultModelId: 'anthropic/claude-sonnet-4-20250514',
     metadata: { default: true },
   },
   {
     id: 'plan',
-    agentId: codeAgentId,
     description: 'Plan',
     transitionsTo: 'build',
     defaultModelId: 'openai/gpt-4o',
   },
   {
     id: 'fast',
-    agentId: codeAgentId,
     description: 'Fast',
     defaultModelId: 'anthropic/claude-3-5-haiku-20241022',
   },
@@ -66,7 +63,7 @@ const resourceId = `resource-${hash(cwd)}`;
 // ─── Create HarnessV1 ───────────────────────────────────────────────────────
 const harness = new HarnessV1({
   ownerId,
-  agents: { [codeAgentId]: codeAgent },
+  agent: codeAgent,
   memory,
   modes,
   defaultModeId,

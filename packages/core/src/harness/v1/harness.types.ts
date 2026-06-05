@@ -305,16 +305,14 @@ export type HarnessConfig<MODES extends HarnessMode[], TState = {}> = HarnessCon
          * registered there under a configured harness name.
          */
         mastra: Mastra;
-        agents?: never;
+        /**
+         * Backing agent. Must reference a key in `HarnessConfig.agents`.
+         * Validated at construction — unknown id throws `HarnessConfigError`.
+         */
+        agent: string;
       }
     | {
         mastra?: never;
-        /**
-         * Agents addressable by id. `HarnessMode.agentId` references resolve
-         * against the keys of this map. Validated at construction — an
-         * unknown id in any mode throws `HarnessConfigError`. May be omitted
-         * when the harness will be registered onto an existing Mastra.
-         */
-        agents: Record<string, Agent>;
+        agent: Agent;
       }
   );

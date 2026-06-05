@@ -39,9 +39,9 @@ export interface SessionConfig<TState = {}> {
   events: EventEmitter;
   stateSchema?: PublicSchema<TState>;
   initialState?: Partial<TState>;
-  workspace?: DynamicArgument<
-    Workspace | undefined
-  >; /** Subagent registry the session can spawn through the built-in tool. */
+  workspace?: DynamicArgument<Workspace | undefined>;
+  agent: Agent;
+  /** Subagent registry the session can spawn through the built-in tool. */
   subagents?: SubagentRegistryConfig;
   /** Resolves a model id to a `LanguageModel`. Required for subagent spawn. */
   resolveModel?: ModelResolver;

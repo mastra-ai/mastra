@@ -43,7 +43,7 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
   readonly #stateSchema?: HarnessConfig<MODES, TState>['stateSchema'];
   readonly #initialState?: Partial<TState>;
   readonly #workspace?: DynamicArgument<Workspace | undefined>;
-  readonly #agents: Record<string, Agent>;
+  readonly #agent: Agent;
   readonly #subagents?: SubagentRegistryConfig;
   readonly #resolveModel?: ModelResolver;
   readonly #runtimeCompatibilityGeneration?: string | null;
@@ -75,7 +75,7 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       this.#workspace = new Workspace(config.workspace);
     }
 
-    this.#agents = { ...(config.agents ?? {}) };
+    this.#agent = this.#mastra ? this.#mastra.getAgentById(config.agent) : (config.agent as Agent);
 
     if (config.subagents) {
       const entries = Object.entries(config.subagents.types ?? {});
@@ -89,9 +89,9 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
         // When using an inline `agents` map, validate eagerly. When backed by
         // a Mastra instance, the agent registry may grow over time; defer the
         // check to resolution time.
-        if (!config.mastra && !this.#agents[def.agentId]) {
-          throw new Error(`Subagent "${typeId}" references unknown agent "${def.agentId}"`);
-        }
+        // if (!config.mastra && !this.#agents[def.agentId]) {
+        //   throw new Error(`Subagent "${typeId}" references unknown agent "${def.agentId}"`);
+        // }
       }
       const maxDepth = config.sessions?.maxSubagentDepth ?? config.subagents.maxDepth ?? 1;
       if (!Number.isInteger(maxDepth) || maxDepth < 0) {
@@ -288,6 +288,7 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       model: record.modelId,
       createdAt: record.createdAt,
       lastActivityAt: record.lastActivityAt,
+      agent: this.#agent,
       memory: this.#memory,
       storage,
       record,
@@ -306,8 +307,6 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
   }
 
   #resolveAgent(agentId: string): Agent {
-    const inline = this.#agents[agentId];
-    if (inline) return inline;
     if (this.#mastra) return this.#mastra.getAgentById(agentId) as Agent;
     throw new Error(`Harness mode references unknown agent "${agentId}"`);
   }

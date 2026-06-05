@@ -35,6 +35,7 @@ export class Session<TState = {}> {
   readonly #threadId: string;
   readonly #createdAt: Date;
   #lastActivityAt: Date;
+  readonly #agent: Agent;
   readonly #storage: HarnessStorage;
   readonly #runtimeCompatibilityGeneration?: string | null;
   readonly #parentSessionId?: string;
@@ -104,6 +105,7 @@ export class Session<TState = {}> {
     this.#resolveModel = config.resolveModel;
     this.#defaultPermissionPolicy = config.defaultPermissionPolicy ?? 'ask';
     this.#toolCategoryResolver = config.toolCategoryResolver;
+    this.#agent = config.agent;
   }
 
   get id(): string {
@@ -341,6 +343,7 @@ export class Session<TState = {}> {
       model: opts.modelId ?? this.#modelId,
       createdAt: result.thread.createdAt,
       lastActivityAt: result.thread.updatedAt,
+      agent: this.#agent,
       memory: this.#memory,
       storage: this.#storage,
       events: this.#events.scoped({ sessionId: cloneId }),
@@ -447,7 +450,7 @@ export class Session<TState = {}> {
       throw new Error('Harness session cannot signal because no agent resolver is configured');
     }
 
-    const agent = await this.#resolveAgent(this.#mode.agentId);
+    const agent = this.#agent;
     const runId = options.runId ?? randomUUID();
     this.#markRunning(runId);
 
@@ -717,10 +720,12 @@ export class Session<TState = {}> {
       const approved = response.approved;
       const runId = typeof payload.runId === 'string' ? payload.runId : item.runId;
       const toolCallId = typeof payload.toolCallId === 'string' ? payload.toolCallId : undefined;
-      const agentId = typeof payload.agentId === 'string' ? payload.agentId : this.#mode.agentId;
+      const agent =
+        typeof payload.agentId === 'string' && this.#resolveAgent
+          ? await this.#resolveAgent(payload.agentId)
+          : this.#agent;
       if (typeof approved !== 'boolean' || !runId || !this.#resolveAgent) return undefined;
 
-      const agent = await this.#resolveAgent(agentId);
       const result = approved
         ? await agent.approveToolCallGenerate({ runId, toolCallId, requestContext: await this.#buildRequestContext() })
         : await agent.declineToolCallGenerate({ runId, toolCallId, requestContext: await this.#buildRequestContext() });
