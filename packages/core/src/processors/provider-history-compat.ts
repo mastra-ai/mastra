@@ -257,6 +257,28 @@ function isAnthropicReasoningPart(part: { providerOptions?: unknown; providerMet
   return false;
 }
 
+function getProviderMetadataForProvider(metadata: unknown, provider: string): Record<string, unknown> | undefined {
+  if (!metadata || typeof metadata !== 'object') return undefined;
+  const value = (metadata as Record<string, unknown>)[provider];
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined;
+}
+
+function hasAnthropicSignatureWithoutText(part: {
+  text?: unknown;
+  providerOptions?: unknown;
+  providerMetadata?: unknown;
+}): boolean {
+  const anthropic =
+    getProviderMetadataForProvider(part.providerOptions, 'anthropic') ??
+    getProviderMetadataForProvider(part.providerMetadata, 'anthropic');
+
+  return (
+    typeof anthropic?.signature === 'string' &&
+    anthropic.signature.length > 0 &&
+    (typeof part.text !== 'string' || part.text.length === 0)
+  );
+}
+
 /**
  * Cerebras's API rejects assistant messages carrying a `reasoning_content`
  * field with HTTP 400 (`property '...reasoning_content' is unsupported`).
@@ -292,6 +314,20 @@ export const cerebrasStripReasoningContent: CompatRule = {
 };
 
 /**
+ * Legacy records could contain Anthropic signed thinking metadata with an
+ * empty reasoning text. Anthropic signs the exact thinking text, so forwarding
+ * that mismatched pair is worse than dropping the invalid block at the provider
+ * boundary.
+ */
+export const anthropicStripEmptySignedReasoningContent: CompatRule = {
+  name: 'anthropic-strip-empty-signed-reasoning-content',
+  applyToPrompt({ prompt, model }) {
+    if (!isMaybeAnthropic(model)) return undefined;
+    return stripReasoningFromPrompt(prompt, hasAnthropicSignatureWithoutText);
+  },
+};
+
+/**
  * Anthropic accepts its own thinking/reasoning history, but rejects reasoning
  * parts emitted by other providers. Strip only foreign reasoning parts at the
  * Anthropic provider boundary so persisted history remains intact and native
@@ -316,6 +352,7 @@ export const anthropicStripForeignReasoningContent: CompatRule = {
 export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   anthropicToolIdFormat,
   cerebrasStripReasoningContent,
+  anthropicStripEmptySignedReasoningContent,
   anthropicStripForeignReasoningContent,
 ];
 
@@ -340,6 +377,10 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   that serializes them as `reasoning_content` (a field Cerebras's API
  *   rejects). Preemptive; runs in `processLLMRequest` so the persisted
  *   message list keeps the reasoning trace.
+ * - **anthropic-strip-empty-signed-reasoning-content** — strips legacy
+ *   Anthropic signed reasoning blocks whose text was already lost before
+ *   replay, preventing an empty thinking block with a non-empty signature from
+ *   reaching Anthropic.
  * - **anthropic-strip-foreign-reasoning-content** — strips non-Anthropic
  *   `reasoning` parts from assistant messages in the outbound prompt when the
  *   resolved model is Anthropic. Anthropic-native reasoning parts are kept.
