@@ -58,15 +58,33 @@ Notification delivery requires a storage adapter with notification support, such
 
 ## Quickstart
 
-A minimal provider implements the abstract `id` field and one ingestion hook. The following provider polls an external API and emits a notification for each subscribed resource that changed.
+A minimal provider implements the abstract `id` field and one ingestion hook. The following provider polls a build-status endpoint and emits a notification for each subscribed pipeline that failed.
 
 ```typescript title="src/mastra/signals/ci-signals.ts"
 import { SignalProvider } from '@mastra/core/signals'
 import type { SignalSubscription } from '@mastra/core/signals'
 
+type BuildStatus = {
+  id: string
+  status: 'passed' | 'failed'
+}
+
+async function fetchBuildStatus(pipeline: string): Promise<BuildStatus> {
+  const response = await fetch(`https://ci.example.com/builds/${pipeline}`)
+  if (!response.ok) {
+    throw new Error(`Failed to fetch build status for ${pipeline}`)
+  }
+
+  return response.json() as Promise<BuildStatus>
+}
+
 export class CiSignals extends SignalProvider<'ci-signals'> {
   readonly id = 'ci-signals' as const
-  readonly pollInterval = 30_000 // poll every 30 seconds
+  readonly pollInterval = 30_000
+
+  watch(thread: { resourceId: string; threadId: string }, pipeline: string) {
+    return this.subscribe(thread, pipeline)
+  }
 
   async poll(subscriptions: SignalSubscription[]) {
     for (const sub of subscriptions) {
@@ -87,6 +105,25 @@ export class CiSignals extends SignalProvider<'ci-signals'> {
     }
   }
 }
+```
+
+Register the provider with an agent and subscribe a thread to the pipeline you want to watch.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { CiSignals } from '../signals/ci-signals'
+
+export const ciSignals = new CiSignals()
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Help the user triage CI updates.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  signals: [ciSignals],
+})
+
+ciSignals.watch({ resourceId: 'user_123', threadId: 'thread_456' }, 'acme-app-main')
 ```
 
 The framework calls `poll()` on the `pollInterval` with all active subscriptions. It skips a cycle when there are no subscriptions and never overlaps cycles, so a slow `poll()` doesn't run concurrently with itself.

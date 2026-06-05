@@ -22,18 +22,26 @@ Use message APIs for user-authored input. Use `sendSignal()` for lower-level sys
 
 ## Quickstart
 
-Subscribe to the thread before sending messages. The subscription receives the active stream when the message wakes the agent or enters a running loop.
+Create an agent, subscribe to a thread, then send a message to that thread. The subscription receives the active stream when the message wakes the agent or enters a running loop.
 
 ```typescript title="src/mastra/signals.ts"
-const subscription = await agent.subscribeToThread({
-  resourceId: 'user_123',
-  threadId: 'thread_456',
+import { Agent } from '@mastra/core/agent'
+
+const agent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Help the user compare options.',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 
-agent.sendMessage('Compare that with the previous option.', {
+const thread = {
   resourceId: 'user_123',
   threadId: 'thread_456',
-})
+}
+
+const subscription = await agent.subscribeToThread(thread)
+
+await agent.sendMessage('Compare that with the previous option.', thread)
 
 for await (const chunk of subscription.stream) {
   console.log(chunk)
