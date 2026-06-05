@@ -1,6 +1,6 @@
 import { Button, Spinner, Textarea, toast } from '@mastra/playground-ui';
 import { useCreateWorkflowRun, useStreamWorkflow } from '@mastra/react';
-import { ArrowUpIcon } from 'lucide-react';
+import { ArrowUpIcon, CheckIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { AgentCreationInProgress } from './agent-creation-in-progress';
@@ -15,12 +15,29 @@ const getCreatedAgentId = (result: unknown): string | undefined => {
   return typeof id === 'string' && id.length > 0 ? id : undefined;
 };
 
+/**
+ * The terminal `persist-agent` step output is `createResultSchema`
+ * ({ id, config: { name, description, ... } }). Pull the resolved name and
+ * description so the completion view can welcome the user to their agent.
+ */
+const getCreatedAgentSummary = (result: unknown): { name?: string; description?: string } => {
+  if (!result || typeof result !== 'object') return {};
+  const config = (result as { config?: unknown }).config;
+  if (!config || typeof config !== 'object') return {};
+  const { name, description } = config as { name?: unknown; description?: unknown };
+  return {
+    name: typeof name === 'string' && name.trim().length > 0 ? name : undefined,
+    description: typeof description === 'string' && description.trim().length > 0 ? description : undefined,
+  };
+};
+
 type CreationPhase = 'initial' | 'creating';
 
 export const AgentBuilderStarter = () => {
   const [message, setMessage] = useState('');
   const [phase, setPhase] = useState<CreationPhase>('initial');
   const [createdAgentId, setCreatedAgentId] = useState<string | null>(null);
+  const [createdAgent, setCreatedAgent] = useState<{ name?: string; description?: string }>({});
   const navigate = useNavigate();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: currentUser } = useCurrentUser();
@@ -50,9 +67,17 @@ export const AgentBuilderStarter = () => {
   // When the creation workflow finishes successfully its terminal `persist-agent`
   // step output (createResultSchema) surfaces on `streamResult.result`. Capture
   // the created agent id so the user can choose where to go next.
-  const resultId = streamResult.status === 'success' ? getCreatedAgentId(streamResult.result) : undefined;
+  const successResult = streamResult.status === 'success' ? streamResult.result : undefined;
+  const resultId = getCreatedAgentId(successResult);
+  const resultSummary = getCreatedAgentSummary(successResult);
   useEffect(() => {
-    if (resultId) setCreatedAgentId(resultId);
+    if (resultId) {
+      setCreatedAgentId(resultId);
+      setCreatedAgent(resultSummary);
+    }
+    // `resultId` is the stable signal that a successful result is captured; the
+    // summary is derived from the same result object.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resultId]);
 
   // A run that terminates as failed surfaces an error toast via `onError`; bring
@@ -103,20 +128,37 @@ export const AgentBuilderStarter = () => {
   };
 
   if (createdAgentId) {
+    const agentName = createdAgent.name;
+    const headline = agentName ? `Welcome to ${agentName}` : 'Your agent is ready';
+    const description =
+      createdAgent.description ??
+      'Your new agent has been created and saved. Open it to start a conversation, or review its configuration to fine-tune the details.';
     return (
       <div className="starter-aurora flex min-h-full flex-col items-center justify-center bg-surface1 px-6 py-24">
         <div
-          className="relative z-10 flex w-full max-w-xl flex-col items-center gap-8 text-center"
+          className="starter-complete relative z-10 flex w-full max-w-xl flex-col items-center gap-6 text-center"
           data-testid="agent-builder-starter-complete"
         >
-          <h1
-            className="starter-heading font-serif text-neutral6"
-            style={{ fontSize: 'clamp(1.875rem, 3.5vw, 2.5rem)', lineHeight: 1.1, letterSpacing: '-0.015em' }}
-          >
-            Your agent is ready
-          </h1>
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accent1Dark shadow-glow-accent1">
+            <CheckIcon className="h-7 w-7 text-white" />
+          </span>
 
-          <div className="flex flex-col gap-3 sm:flex-row">
+          <div className="flex flex-col gap-3">
+            <h1
+              className="font-serif text-neutral6"
+              style={{ fontSize: 'clamp(1.875rem, 3.5vw, 2.5rem)', lineHeight: 1.1, letterSpacing: '-0.015em' }}
+            >
+              {headline}
+            </h1>
+            <p
+              className="mx-auto max-w-md text-ui-lg text-neutral4"
+              data-testid="agent-builder-starter-complete-description"
+            >
+              {description}
+            </p>
+          </div>
+
+          <div className="mt-2 flex flex-col gap-3 sm:flex-row">
             <Button
               variant="default"
               size="lg"

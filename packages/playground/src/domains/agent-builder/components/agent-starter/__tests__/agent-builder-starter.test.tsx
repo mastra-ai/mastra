@@ -346,7 +346,11 @@ describe('AgentBuilderStarter', () => {
       fireEvent.click(submit);
     });
 
-    await waitFor(() => expect(getByTestId('agent-builder-starter-complete')).not.toBeNull());
+    const complete = await waitFor(() => getByTestId('agent-builder-starter-complete'));
+    // The completion view welcomes the user to their named agent and surfaces the
+    // resolved description, both read from the persisted config result.
+    expect(complete.textContent).toContain('Welcome to Tutor');
+    expect(getByTestId('agent-builder-starter-complete-description').textContent).toBe('A tutor');
 
     fireEvent.click(getByTestId('agent-builder-starter-view'));
     expect(navigateMock).toHaveBeenLastCalledWith(`/agent-builder/agents/${CREATED_AGENT_ID}/view`, {

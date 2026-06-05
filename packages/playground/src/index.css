@@ -163,6 +163,9 @@ th:has(header) {
   .creation-step {
     animation: starter-enter 420ms var(--ease-out-custom) both;
   }
+  .starter-complete {
+    animation: starter-enter 560ms var(--ease-out-custom) both;
+  }
 
   @media (prefers-reduced-motion: reduce) {
     .starter-aurora::before,
@@ -170,7 +173,8 @@ th:has(header) {
     .starter-prompt,
     .starter-chip,
     .creation-timeline,
-    .creation-step {
+    .creation-step,
+    .starter-complete {
       animation: none;
     }
   }
