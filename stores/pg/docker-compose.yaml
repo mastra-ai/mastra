@@ -9,6 +9,17 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: ${POSTGRES_DB:-mastra}
+    # The combined stores/pg vitest suite spins up many PostgresStore instances
+    # in parallel, each backed by its own pg-pool. The default max_connections
+    # of 100 is enough to flake CI under load (53300 "too many clients") and
+    # the related max_locks_per_transaction cap drives "out of shared memory"
+    # when multiple init() calls collide. Bump both with headroom.
+    command:
+      - 'postgres'
+      - '-c'
+      - 'max_connections=300'
+      - '-c'
+      - 'max_locks_per_transaction=256'
     volumes:
       - pgdata:/var/lib/postgresql/data
 volumes:
