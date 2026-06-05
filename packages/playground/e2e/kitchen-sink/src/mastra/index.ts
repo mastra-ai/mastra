@@ -123,8 +123,8 @@ export const mastra = new Mastra({
                     ...schedule,
                     status: 'active',
                     nextFireAt,
-                    lastFireAt: null,
-                    lastRunId: null,
+                    lastFireAt: undefined,
+                    lastRunId: undefined,
                     createdAt: now,
                     updatedAt: now,
                   });

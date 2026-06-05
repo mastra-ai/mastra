@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import type { BuilderAvailableModelsResponse } from '@mastra/client-js';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
@@ -9,8 +11,6 @@ import { Models } from '../models';
 
 vi.mock('@/domains/agent-builder', () => ({
   useBuilderModelPolicy: () => ({ active: false, pickerVisible: true }),
-  useBuilderFilteredProviders: (providers: unknown) => providers,
-  useBuilderFilteredModels: (models: unknown) => models,
 }));
 
 vi.mock('@/domains/llm', () => ({
@@ -20,14 +20,11 @@ vi.mock('@/domains/llm', () => ({
     { provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o' },
     { provider: 'anthropic', providerName: 'Anthropic', model: 'claude-3-5-sonnet' },
   ],
-  useLLMProviders: () => ({
-    isLoading: false,
-    data: {
-      providers: [
-        { id: 'openai', name: 'OpenAI', label: 'OpenAI', description: '', models: ['gpt-4o'] },
-        { id: 'anthropic', name: 'Anthropic', label: 'Anthropic', description: '', models: ['claude-3-5-sonnet'] },
-      ],
-    },
+}));
+
+vi.mock('@mastra/react', () => ({
+  useMastraClient: () => ({
+    getBuilderAvailableModels: async (): Promise<BuilderAvailableModelsResponse> => ({ providers: [] }),
   }),
 }));
 
@@ -37,10 +34,15 @@ const FormHarness = ({ agentId = 'agent_test', children }: { agentId?: string; c
       model: { provider: 'openai', name: 'gpt-4o' },
     } as AgentBuilderEditFormValues,
   });
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  // Seed the available-models query so the picker renders synchronously.
+  queryClient.setQueryData(['builder-available-models'], { providers: [] });
   return (
-    <FormProvider {...methods}>
-      <AgentColorProvider agentId={agentId}>{children}</AgentColorProvider>
-    </FormProvider>
+    <QueryClientProvider client={queryClient}>
+      <FormProvider {...methods}>
+        <AgentColorProvider agentId={agentId}>{children}</AgentColorProvider>
+      </FormProvider>
+    </QueryClientProvider>
   );
 };
 
