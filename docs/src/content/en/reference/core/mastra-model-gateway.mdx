@@ -26,7 +26,7 @@ class MyCustomGateway extends MastraModelGateway {
     return {
       'my-provider': {
         name: 'My Provider',
-        models: ['model-1', 'model-2'],
+        models: ['__GATEWAY_OPENAI_MODEL__', '__GATEWAY_ANTHROPIC_MODEL_SONNET__'],
         apiKeyEnvVar: 'MY_API_KEY',
         gateway: this.id,
       },
@@ -181,7 +181,22 @@ Retrieves the API key for authentication.
 
 Resolves credentials before Mastra creates the language model. Implement this optional hook when a gateway owns authentication. If omitted, Mastra falls back to `getApiKey()`.
 
+**Parameters:**
+
+<PropertiesTable
+  content={[
+  {
+    name: 'request',
+    type: 'GatewayAuthRequest',
+    description:
+      'Incoming request context containing gatewayId, providerId, modelId, and routerId for the gateway to inspect and validate.',
+  },
+]}
+/>
+
 **Returns:** `GatewayAuthResult | undefined | Promise<GatewayAuthResult | undefined>`
+
+A `GatewayAuthResult` may include `apiKey`, `bearerToken`, `headers`, and an optional `source` field to trace where auth came from.
 
 ### `resolveLanguageModel()`
 

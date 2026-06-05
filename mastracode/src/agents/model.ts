@@ -346,6 +346,11 @@ function createMastraCodeGateway({
   };
 }
 
+/**
+ * Placeholder for future model ID normalization.
+ * Currently returns the input unchanged, but exists as a seam
+ * for aliasing, casing fixes, or validation in the future.
+ */
 export function resolveModelId(modelId: string): string {
   return modelId;
 }

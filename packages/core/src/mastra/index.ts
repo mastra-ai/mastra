@@ -1170,7 +1170,13 @@ export class Mastra<
     // Added directly to #gateways to avoid triggering #syncGatewayRegistry for built-ins.
     for (const gateway of defaultGateways) {
       const key = getGatewayId(gateway);
-      if (!(this.#gateways as Record<string, MastraModelGatewayInterface>)[key]) {
+      // Check by logical ID to avoid duplicates when a user-registered gateway
+      // exists under a different registry key but has the same gateway ID.
+      const existingGateways = Object.values(this.#gateways as Record<string, MastraModelGatewayInterface>);
+      const alreadyRegistered = existingGateways.some(
+        existingGateway => existingGateway != null && getGatewayId(existingGateway) === key,
+      );
+      if (!alreadyRegistered) {
         (this.#gateways as Record<string, MastraModelGatewayInterface>)[key] = gateway;
       }
     }

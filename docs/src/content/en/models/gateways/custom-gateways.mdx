@@ -38,7 +38,7 @@ const myPrivateGateway: MastraModelGatewayInterface = {
     return {
       'my-provider': {
         name: 'My Provider',
-        models: ['model-1'],
+        models: ['__GATEWAY_OPENAI_MODEL__'],
         apiKeyEnvVar: 'MY_API_KEY',
         gateway: 'private',
         url: 'https://api.myprovider.com/v1',
@@ -84,7 +84,7 @@ class MyPrivateGateway extends MastraModelGateway {
     return {
       'my-provider': {
         name: 'My Provider',
-        models: ['model-1', 'model-2', 'model-3'],
+        models: ['__GATEWAY_OPENAI_MODEL__', '__GATEWAY_ANTHROPIC_MODEL_SONNET__'],
         apiKeyEnvVar: 'MY_API_KEY',
         gateway: this.id,
         url: 'https://api.myprovider.com/v1',
@@ -195,7 +195,7 @@ const agent = new Agent({
   id: 'my-agent',
   name: 'My Agent',
   instructions: 'You are a helpful assistant',
-  model: 'private/my-provider/model-1', // Uses MyPrivateGateway
+  model: 'private/my-provider/__GATEWAY_OPENAI_MODEL__', // Uses MyPrivateGateway
 });
 
 mastra.addAgent(agent, 'myAgent');
