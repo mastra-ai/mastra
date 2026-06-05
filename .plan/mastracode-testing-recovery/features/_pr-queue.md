@@ -364,10 +364,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 342 | 2026-05-31 | #17283 | `c5eca07f1d` | review | done | feat(mastracode): configure TUI shell passthrough (#17283) | 11 |
 | 343 | 2026-05-31 | #17174 | `4517213d91` | likely skip | skipped | chore: version packages (alpha) (#17174) | 2 |
 | 344 | 2026-05-31 | #17365 | `98eb19b2bc` | likely skip | skipped | chore: version packages (alpha) (#17365) | 2 |
-| 345 | 2026-06-01 | #17276 | `8f1c6e2a90` | review | | feat(core, mastracode): add scoped Harness V1 session owner IDs (#17276) | 4 |
-| 346 | 2026-06-01 | #17387 | `bc0d14181d` | likely skip | | chore: version packages (alpha) (#17387) | 2 |
-| 347 | 2026-06-01 | #17431 | `5d47971add` | review | | fix(mastracode): truncate TUI lines that exceed terminal width on narrow terminals (#17431) | 3 |
-| 348 | 2026-06-01 | #17421 | `09a59230c3` | likely skip | | chore: version packages (alpha) (#17421) | 2 |
+| 345 | 2026-06-01 | #17276 | `8f1c6e2a90` | review | done | feat(core, mastracode): add scoped Harness V1 session owner IDs (#17276) | 4 |
+| 346 | 2026-06-01 | #17387 | `bc0d14181d` | likely skip | skipped | chore: version packages (alpha) (#17387) | 2 |
+| 347 | 2026-06-01 | #17431 | `5d47971add` | review | done | fix(mastracode): truncate TUI lines that exceed terminal width on narrow terminals (#17431) | 3 |
+| 348 | 2026-06-01 | #17421 | `09a59230c3` | likely skip | skipped | chore: version packages (alpha) (#17421) | 2 |
 | 349 | 2026-06-02 | #17452 | `bf35088a0b` | likely skip | | chore: version packages (alpha) (#17452) | 2 |
 | 350 | 2026-06-02 | #17476 | `0d2110ddd4` | likely skip | | chore: version packages (alpha) (#17476) | 2 |
 | 351 | 2026-06-02 | #17480 | `bfbcf46aa8` | likely skip | | chore: version packages (alpha) (#17480) | 2 |

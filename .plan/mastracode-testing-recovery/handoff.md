@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #17365 (row 344) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, #15390, #15403, #15544, #15515, #15601, #15606, #15629, #15653, #15656, #15699, #15710, #15857, #15896, #15770, #15909, #15928, #15940, #15979, #16009, #16011, #16016, #16020, #16022, #16024, #16028, #16182, #16192, #16196, #16126, #16295, #16320, #16351, #16398, #16409, #16458, #16501, #16511, #16516, #16559, #16611, #16624, #16657, #16667, #16797, #16804, #16809, #16831, #16872, #17108, #17114, #17138, #17174, and #17365 recorded as version/dependency skips plus #12532, #14260, #13933, #14432, and #17220 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 345 #17276 (scoped Harness V1 session owner IDs).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #17421 (row 348) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, #15390, #15403, #15544, #15515, #15601, #15606, #15629, #15653, #15656, #15699, #15710, #15857, #15896, #15770, #15909, #15928, #15940, #15979, #16009, #16011, #16016, #16020, #16022, #16024, #16028, #16182, #16192, #16196, #16126, #16295, #16320, #16351, #16398, #16409, #16458, #16501, #16511, #16516, #16559, #16611, #16624, #16657, #16667, #16797, #16804, #16809, #16831, #16872, #17108, #17114, #17138, #17174, #17365, #17387, and #17421 recorded as version/dependency skips plus #12532, #14260, #13933, #14432, and #17220 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 349 #17452 (version-package alpha skip).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 345: PR #17276 (scoped Harness V1 session owner IDs).
+1. Continue at `_pr-queue.md` row 349: PR #17452 (version-package alpha skip).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -44,6 +44,7 @@ None known.
 
 ## Last commands/evidence
 
+- Rows 345-348 verified/documented: #17276 scoped Harness v1 owner IDs/deterministic session IDs, #17431 narrow-terminal truncation for user-message, inline question, and plan-approval boxes, and #17387/#17421 Changesets alpha skips. Focused verification passed: core Harness v1 session/storage tests (24), MC ask-question/plan inline tests (8), and MC index owner/session slice (6 passed / 10 skipped).
 - Rows 341-344 verified/documented: #17334 `ask_user` multi-select picker/array answers, #17283 configurable TUI shell passthrough, and #17174/#17365 Changesets alpha skips. Focused verification passed: ask-question multi-select and shell config/runner/result tests.
 - Rows 337-340 verified/documented: #17333 slash/custom/skill autocomplete description wrapping with `WrappingAutocompleteList`, #17114/#17138 Changesets alpha skips, and #17220 lint-staged config-only skip. Focused verification passed: wrapping autocomplete list tests (11).
 - Rows 333-336 verified/documented: #17054 wrapping ask_user picker labels with `↳` continuation rows, #17071 Kitty CSI-u/xterm modifyOtherKeys tool approval shortcut decoding, and #16872/#17108 Changesets alpha skips. Focused verification passed: wrapping select list, key-input decoding, and tool approval dialog shortcut tests (86 total).

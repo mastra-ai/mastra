@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13416](https://github.com/mastra-ai/mastra/pull/13416) — fixed Plan mode so the agent calls `submit_plan` instead of only writing plan text.
-- Later changes: [#13557](https://github.com/mastra-ai/mastra/pull/13557) — persists approved plans as Markdown files on disk; [#13598](https://github.com/mastra-ai/mastra/pull/13598) — keeps the submitted plan visible while the user types requested-change feedback; [#16065](https://github.com/mastra-ai/mastra/pull/16065) — adds `Use as /goal` from the plan approval UI so approved plans can enter persistent goal pursuit; [#16340](https://github.com/mastra-ai/mastra/pull/16340) — fixes `Use as /goal` ordering so the suspended plan tool resolves before the goal reminder starts Build-mode execution; [#16521](https://github.com/mastra-ai/mastra/pull/16521) — fixes regular approval by sending one structured system-reminder signal after resolver/abort cleanup.
+- Later changes: [#13557](https://github.com/mastra-ai/mastra/pull/13557) — persists approved plans as Markdown files on disk; [#13598](https://github.com/mastra-ai/mastra/pull/13598) — keeps the submitted plan visible while the user types requested-change feedback; [#16065](https://github.com/mastra-ai/mastra/pull/16065) — adds `Use as /goal` from the plan approval UI so approved plans can enter persistent goal pursuit; [#16340](https://github.com/mastra-ai/mastra/pull/16340) — fixes `Use as /goal` ordering so the suspended plan tool resolves before the goal reminder starts Build-mode execution; [#16521](https://github.com/mastra-ai/mastra/pull/16521) — fixes regular approval by sending one structured system-reminder signal after resolver/abort cleanup; [#17431](https://github.com/mastra-ai/mastra/pull/17431) — truncates over-wide rendered plan lines to the inline plan box width on narrow terminals.
 
 ## User-visible behavior
 
 - What the user can do: ask for a plan in Plan mode, receive an inline rendered plan approval card, then approve, start as a goal, reject, or request changes.
-- Success looks like: the plan appears in the approval UI; approval switches/hands off to Build-mode execution through exactly one structured system-reminder signal; request-changes keeps the plan visible while collecting feedback; rejection keeps the agent in Plan mode with feedback.
-- Must preserve: `submit_plan` tool call requirement, inline plan rendering in every approval sub-mode, approval/rejection resolver semantics, best-effort plan file persistence, resolver-before-signal ordering, and single handoff signal after approval.
+- Success looks like: the plan appears in the approval UI; approval switches/hands off to Build-mode execution through exactly one structured system-reminder signal; request-changes keeps the plan visible while collecting feedback; rejection keeps the agent in Plan mode with feedback; long plan lines do not overflow bordered boxes on narrow terminals.
+- Must preserve: `submit_plan` tool call requirement, inline plan rendering in every approval sub-mode, approval/rejection resolver semantics, best-effort plan file persistence, resolver-before-signal ordering, width-safe rendering, and single handoff signal after approval.
 
 ## Entry points / commands
 
@@ -42,7 +42,7 @@
 | --- | --- | --- |
 | Plan text/title while streaming | Harness tool input buffer + `PlanApprovalInlineComponent` | TUI plan card |
 | Pending plan approval | Core Harness resolver map + `plan_approval_required` event | TUI handler, display state |
-| Active plan approval UI | `TUIState.activeInlinePlanApproval` / `lastSubmitPlanComponent` + component-local `planTitle`/`planContent` | Input focus, chat renderer, feedback sub-mode |
+| Active plan approval UI | `TUIState.activeInlinePlanApproval` / `lastSubmitPlanComponent` + component-local `planTitle`/`planContent`; `PlanContentBox` truncates rendered markdown lines to the bordered inner width | Input focus, chat renderer, feedback sub-mode, narrow-terminal rendering |
 | Approval result | Core Harness `respondToPlanApproval()` | Suspended `submit_plan` tool, persisted tool result |
 | Approved plan files | `savePlanToDisk()` + app data / `MASTRA_PLANS_DIR` | User archive/reference outside chat history |
 | Build/goal handoff | TUI prompt handler + goal manager; `respondToPlanApproval()` resolves before either build signal or `/goal` start | Harness structured `sendSignal()` system-reminder / `/goal` flow |
@@ -55,7 +55,7 @@
 - `mastracode/src/tui/handlers/tool.ts:199` and `:300` — `submit_plan` uses `PlanApprovalInlineComponent` instead of a generic tool box.
 - `mastracode/src/tui/handlers/prompts.ts:266` — `handlePlanApproval()` wires approve / goal / reject actions.
 - `mastracode/src/utils/plans.ts` — `savePlanToDisk()` writes timestamped Markdown under app data or `MASTRA_PLANS_DIR`.
-- `mastracode/src/tui/components/plan-approval-inline.ts` — inline plan approval and persisted plan-result components.
+- `mastracode/src/tui/components/plan-approval-inline.ts` — inline plan approval, width-clamped `PlanContentBox`, and persisted plan-result components.
 - `mastracode/src/tui/render-messages.ts:828` — history reconstruction renders `submit_plan` results as resolved plan cards.
 
 ## Dependencies / related features
@@ -83,6 +83,7 @@
 - Regression test that denied `submit_plan` removes Plan-mode tool guidance and prevents accidental text-only plan completion.
 - Mapping test for the later PR that added `Use as /goal` to plan approval UI.
 - Direct assertion that feedback mode itself keeps the full submitted plan visible while typing requested changes, not only after feedback is submitted.
+- Narrow-terminal regression test proving long markdown plan lines are truncated/wrapped inside `PlanContentBox` without exceeding render width.
 
 ## Known risks / regressions
 

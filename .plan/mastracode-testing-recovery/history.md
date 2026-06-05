@@ -2604,3 +2604,27 @@ Focused evidence read: PR metadata and commit stats for #17334/#17283/#17174/#17
 Verification:
 
 - `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/ask-question-inline-multi-select.test.ts src/tui/handlers/__tests__/prompts.test.ts src/tui/__tests__/shell-config.test.ts src/tui/__tests__/shell.test.ts src/tui/__tests__/shell-result.test.ts --bail=1 --reporter=dot` — 5 files / 43 tests passed.
+
+### PR #17276 / #17387 / #17431 / #17421 feature-map checkpoint
+
+Verified rows 345-348:
+
+- #17276 adds scoped Harness v1 owner IDs. Current source stores `ownerId` on `Harness`, `Session`, and `SessionRecord`; fresh thread sessions get deterministic `sess-${sha256(resourceId\0threadId).slice(0,32)}` IDs; Mastra Code derives a stable `mastracode-${sha256(hostname\0projectPath).slice(0,32)}` owner ID and pre-fills Harness v1 sessions from existing memory threads.
+- #17387 is a Changesets alpha package-version batch; skipped for feature mapping after current commit stats confirmed only Mastra Code changelog/package changes.
+- #17431 truncates bordered TUI content that still exceeds the available inner width on narrow terminals. Current source uses `truncateToWidth()` in `UserMessageComponent`, `AskQuestionBorderedBox`, and `PlanContentBox` after measuring with `visibleWidth()`.
+- #17421 is a Changesets alpha package-version batch; skipped for feature mapping after current commit stats confirmed only Mastra Code changelog/package changes.
+
+Documentation actions:
+
+- Updated `features/integrations/harness-api.md` and `features/threads/persistent-conversations.md` for #17276 owner-scoped Harness v1 session records and deterministic session IDs.
+- Updated `features/tui/interactive-chat.md`, `features/tui/interactive-prompts.md`, and `features/goals/plan-approval.md` for #17431 narrow-terminal truncation behavior and test gaps.
+- Updated `features/README.md`, `features/_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #17276 done, #17387 skipped, #17431 done, #17421 skipped, #17452 current.
+
+Focused evidence read: PR metadata and commit stats for #17276/#17387/#17431/#17421; current `packages/core/src/harness/v1/harness.ts`, `session.ts`, `harness.types.ts`, storage `domains/harness/*`, `mastracode/src/index.ts`, `HarnessCompat.ts`, `tui/commands/threads.ts`, `user-message.ts`, `ask-question-inline.ts`, `plan-approval-inline.ts`, and focused tests.
+
+Verification:
+
+- `pnpm --filter ./packages/core exec vitest run src/harness/v1/session.test.ts src/storage/domains/harness/inmemory.test.ts --bail=1 --reporter=dot` — 2 files / 24 tests passed / no type errors.
+- `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/ask-question-inline-long-labels.test.ts src/tui/components/__tests__/plan-approval-inline.test.ts --bail=1 --reporter=dot` — 2 files / 8 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/__tests__/index.test.ts -t 'owner|session|Harness|thread' --bail=1 --reporter=dot` — 1 file / 6 tests passed / 10 skipped.
