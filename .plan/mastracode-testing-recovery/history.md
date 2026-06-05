@@ -2540,3 +2540,25 @@ Verification:
 - `pnpm --filter ./mastracode exec vitest run src/utils/__tests__/gateway-sync.test.ts --bail=1 --reporter=dot` — 1 file / 7 tests passed.
 - `pnpm --filter ./mastracode exec vitest run src/HarnessCompat.test.ts -t "subagent|Subagent|subagent model" --bail=1 --reporter=dot` — 1 file / 1 test passed / 4 skipped.
 - `pnpm --filter ./packages/core exec vitest run --project unit:packages/core src/agent/__tests__/supervisor-integration.test.ts -t "hide sub-agent tool results" --bail=1 --reporter=dot` — 1 file / 1 test passed / 41 skipped / no type errors.
+
+### PR #17054 / #16872 / #17071 / #17108 feature-map checkpoint
+
+Verified rows 333-336:
+
+- #17054 adds a visible-width-safe `WrappingSelectList` picker for long `ask_user` option labels. Current source renders long labels with `↳` continuation rows, keeps arrow navigation item-based instead of row-based, and supports fixed-option multi-select checkbox rendering.
+- #16872 is a Changesets alpha package-version batch; skipped for feature mapping after PR metadata confirmed package/changelog-only changes.
+- #17071 decodes Kitty CSI-u and xterm modifyOtherKeys printable key sequences for tool approval shortcuts. Current source normalizes raw bytes, unmodified printable CSI-u values, and Shift+letter forms before mapping `y`/`n`/`a`/`Y` to approval actions while rejecting Ctrl/Alt variants.
+- #17108 is a Changesets alpha package-version batch; skipped for feature mapping after PR metadata confirmed package/changelog-only changes.
+
+Documentation actions:
+
+- Updated `features/tui/interactive-prompts.md` for #17054 wrapping picker labels, `↳` continuation rows, item-based navigation, and checkbox multi-select support.
+- Updated `features/tools/coding-tools-permissions.md` for #17071 terminal-protocol-aware approval shortcut decoding.
+- Updated `features/README.md`, `features/_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #17054 done, #16872 skipped, #17071 done, #17108 skipped, #17114 current.
+
+Focused evidence read: PR metadata for #17054/#16872/#17071/#17108; current `mastracode/src/tui/components/wrapping-select-list.ts`, `ask-question-inline.ts`, `ask-question-dialog.ts`, `tui/key-input.ts`, `components/tool-approval-dialog.ts`, and focused tests.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/wrapping-select-list.test.ts src/tui/__tests__/key-input.test.ts src/tui/components/__tests__/tool-approval-dialog.test.ts --bail=1 --reporter=dot` — 3 files / 86 tests passed.

@@ -352,10 +352,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 330 | 2026-05-25 | #17032 | `b970a83042` | review | done | fix: preserve unresolved slash command references and update pr-triage command (#17032) | 2 |
 | 331 | 2026-05-25 | #16984 | `7f9da22efd` | review | done | fix(core): suppress gateway fetch errors and stop retrying on failure (#16984) | 2 |
 | 332 | 2026-05-26 | #17070 | `c35b9625c7` | review | done | Fix legacy subagent results and MastraCode type checks (#17070) | 8 |
-| 333 | 2026-05-27 | #17054 | `c49655fb6d` | review | | feat(mastracode): wrap long ask_user picker option labels with ↳ continuation (#17054) | 3 |
-| 334 | 2026-05-26 | #16872 | `ed376fe8d7` | likely skip | | chore: version packages (alpha) (#16872) | 2 |
-| 335 | 2026-05-27 | #17071 | `029668d5d6` | review | | fix(mastracode): decode kitty CSI-u keys for tool approval shortcuts (#17071) | 7 |
-| 336 | 2026-05-26 | #17108 | `1d57d5c806` | likely skip | | chore: version packages (alpha) (#17108) | 2 |
+| 333 | 2026-05-27 | #17054 | `c49655fb6d` | review | done | feat(mastracode): wrap long ask_user picker option labels with ↳ continuation (#17054) | 3 |
+| 334 | 2026-05-26 | #16872 | `ed376fe8d7` | likely skip | skipped | chore: version packages (alpha) (#16872) | 2 |
+| 335 | 2026-05-27 | #17071 | `029668d5d6` | review | done | fix(mastracode): decode kitty CSI-u keys for tool approval shortcuts (#17071) | 7 |
+| 336 | 2026-05-26 | #17108 | `1d57d5c806` | likely skip | skipped | chore: version packages (alpha) (#17108) | 2 |
 | 337 | 2026-05-26 | #17114 | `ff5858afa2` | likely skip | | chore: version packages (alpha) (#17114) | 2 |
 | 338 | 2026-05-27 | #17138 | `c3baf471a4` | likely skip | | chore: version packages (alpha) (#17138) | 2 |
 | 339 | 2026-05-28 | #17220 | `97b974e292` | likely skip | | chore: add missing lint-staged configs (#17220) | 1 |
