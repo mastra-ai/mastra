@@ -2695,3 +2695,16 @@ Verification:
 
 - `pnpm --filter ./mastracode exec vitest run src/tui/commands/__tests__/github.test.ts --bail=1 --reporter=dot` — 1 file / 17 tests passed.
 - Queue exhaustion check: `rows=358 first=1 last=358 blank_status=[]`.
+
+### Rebase onto main and baseline check
+
+Rebased `tests/mc` cleanly onto `origin/main` after committing the audit-tests removal planning note. Root Vitest config on main includes `mastracode/vitest.config.ts`, so Mastra Code unit tests are discoverable through the generic `unit:*` CI path, though explicit `build:mastracode` / `test:mastracode` workflow wiring was not found in the inspected workflows.
+
+Local baseline evidence after rebase:
+
+- `pnpm run build:mastracode` initially failed because local install metadata referenced `eslint@10.3.0`; `pnpm install --no-frozen-lockfile --ignore-scripts` refreshed metadata and exposed a one-line committed `pnpm-lock.yaml` mismatch for `agent-sdks/openai` (`eslint` resolution updated to `10.4.1`).
+- `pnpm run build:mastracode` passed after the lockfile refresh.
+- Unsanitized `pnpm test:mastracode -- --run --reporter=dot` failed in `src/agents/__tests__/model.test.ts` because local provider env leaked into model auth expectations.
+- Sanitized run passed: `env -u OPENAI_API_KEY -u OPENROUTER_API_KEY -u ANTHROPIC_API_KEY -u GOOGLE_GENERATIVE_AI_API_KEY -u COHERE_API_KEY pnpm test:mastracode -- --run --reporter=dot` — 107 files / 1202 tests passed.
+
+Implication: workstream 1 is close locally, but env sanitization remains a required baseline rule. Workstream 2 may already have generic CI coverage via root Vitest project discovery, but should be audited explicitly before marking done.

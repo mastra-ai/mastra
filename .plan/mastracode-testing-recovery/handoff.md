@@ -27,8 +27,9 @@ None known.
 ## Next steps
 
 1. Current `_pr-queue.md` is exhausted through row 358. If new Mastra Code PRs land, append them to the queue and resume oldest-to-newest.
-2. Audit high-risk `Partial`/`Missing` feature cards for remaining test gaps before moving from mapping to implementation work.
-3. Keep future feature-map updates concise and commit/push in reviewable chunks.
+2. Workstream 1/2 status after rebasing onto `origin/main`: `pnpm run build:mastracode` passes; `pnpm test:mastracode -- --run --reporter=dot` passes only with provider env sanitized. Root Vitest discovery includes `mastracode/vitest.config.ts`, so CI likely covers Mastra Code through generic `unit:*`; explicit workflow/script wiring still needs a final CI audit.
+3. Audit high-risk `Partial`/`Missing` feature cards for remaining test gaps before moving from mapping to implementation work.
+4. Keep future feature-map updates concise and commit/push in reviewable chunks.
 
 ## Files to read first
 
