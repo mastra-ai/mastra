@@ -3,12 +3,12 @@
 ## Origin PR / commit
 
 - PR: [#13435](https://github.com/mastra-ai/mastra/pull/13435) — added opt-in PostgreSQL storage alongside default LibSQL, plus `/settings` backend selection.
-- Later changes: [#13815](https://github.com/mastra-ai/mastra/pull/13815) — database config files can also carry `omScope` for observational-memory scope selection; [#14567](https://github.com/mastra-ai/mastra/pull/14567) — pairs the selected storage backend with a vector store used by OM recall search/indexing.
+- Later changes: [#13815](https://github.com/mastra-ai/mastra/pull/13815) — database config files can also carry `omScope` for observational-memory scope selection; [#14567](https://github.com/mastra-ai/mastra/pull/14567) — pairs the selected storage backend with a vector store used by OM recall search/indexing; [#16135](https://github.com/mastra-ai/mastra/pull/16135) — normalizes Enter/Escape handling in the storage connection submenu using pi-tui `matchesKey()` plus raw-byte fallbacks.
 
 ## User-visible behavior
 
 - What the user can do: use default local LibSQL, configure remote LibSQL/Turso, or switch to PostgreSQL from `/settings` or environment variables.
-- Success looks like: threads, memory, approvals, and agent data use the selected backend after restart; failed PostgreSQL startup falls back to LibSQL with a warning so `/settings` remains reachable.
+- Success looks like: threads, memory, approvals, and agent data use the selected backend after restart; failed PostgreSQL startup falls back to LibSQL with a warning so `/settings` remains reachable; Enter saves and Escape cancels the storage connection prompt across terminal emulators.
 - Must preserve: backend precedence, connection-string persistence, restart-required UX, LibSQL fallback, and vector-store pairing.
 
 ## Entry points / commands
@@ -18,7 +18,7 @@
 
 ## TUI states
 
-- Idle: settings overlay opens a backend picker, then a masked connection input for PostgreSQL or LibSQL URL.
+- Idle: settings overlay opens a backend picker, then a masked connection input for PostgreSQL or LibSQL URL; the connection input accepts normalized Enter/Escape events and raw `\r`/`\n`/`\x1b` fallbacks.
 - Active / modal / error: saving a storage change writes `settings.json`, hides the overlay, stops the TUI, prints a restart-required notice, and exits.
 
 ## Headless / non-TUI behavior
@@ -52,7 +52,7 @@
 - `mastracode/src/utils/project.ts` — storage config precedence, `omScope` precedence, and env/settings/legacy parsing.
 - `mastracode/src/utils/storage-factory.ts` — creates LibSQL/PostgreSQL stores, tests PG startup, and falls back to LibSQL with warnings.
 - `mastracode/src/onboarding/settings.ts` — persisted `StorageSettings` schema/defaults.
-- `mastracode/src/tui/components/settings.ts` — storage backend submenu and connection input.
+- `mastracode/src/tui/components/settings.ts` — storage backend submenu and connection input, including normalized `matchesKey(data, 'enter'|'escape')` plus raw-byte fallbacks.
 - `mastracode/src/tui/commands/settings.ts` — saves backend settings and forces restart.
 - `mastracode/src/index.ts` — startup wires storage, vector store, memory, and warnings.
 - `mastracode/src/main.ts` — displays storage warnings and fatal PG repair guidance.
@@ -70,7 +70,7 @@
 
 ## Missing tests
 
-- `/settings` storage backend overlay interaction, masked input behavior, saved settings, and forced restart.
+- `/settings` storage backend overlay interaction, masked input behavior, normalized Enter/Escape handling, saved settings, and forced restart.
 - Restart after switching backend: selected backend, footer/runtime warning, and history visibility.
 - Successful PostgreSQL integration against a real test database, including `PgVector` usage and schema/index flags.
 - Data migration story when switching LibSQL ↔ PostgreSQL.

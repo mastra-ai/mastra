@@ -278,11 +278,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 256 | 2026-04-30 | #16022 | `bba1790449` | likely skip | skipped | chore: version packages (alpha) (#16022) | 2 |
 | 257 | 2026-04-30 | #16024 | `20ed4654c0` | likely skip | skipped | chore: version packages (alpha) (#16024) | 2 |
 | 258 | 2026-05-01 | #16068 | `8ed4c6a630` | review | done | fix(mastracode): only log skill directories that exist on disk (#16068) | 1 |
-| 259 | 2026-05-01 | #16094 | `3566b34eac` | review | current | feat(mastracode): add /tmp as default allowed workspace path (#16094) | 1 |
-| 260 | 2026-05-04 | #16135 | `d563e7599b` | review | | fix(mastracode): normalize Enter/Esc handling in settings submenu (#16135) | 1 |
-| 261 | 2026-05-04 | #16028 | `da37169958` | likely skip | | chore: version packages (alpha) (#16028) | 2 |
-| 262 | 2026-05-04 | #16182 | `b474594310` | likely skip | | chore: version packages (alpha) (#16182) | 2 |
-| 263 | 2026-05-04 | #16192 | `a6e9417968` | likely skip | | chore: version packages (alpha) (#16192) | 2 |
+| 259 | 2026-05-01 | #16094 | `3566b34eac` | review | done | feat(mastracode): add /tmp as default allowed workspace path (#16094) | 1 |
+| 260 | 2026-05-04 | #16135 | `d563e7599b` | review | done | fix(mastracode): normalize Enter/Esc handling in settings submenu (#16135) | 1 |
+| 261 | 2026-05-04 | #16028 | `da37169958` | likely skip | skipped | chore: version packages (alpha) (#16028) | 2 |
+| 262 | 2026-05-04 | #16182 | `b474594310` | likely skip | skipped | chore: version packages (alpha) (#16182) | 2 |
+| 263 | 2026-05-04 | #16192 | `a6e9417968` | likely skip | current | chore: version packages (alpha) (#16192) | 2 |
 | 264 | 2026-05-06 | #16250 | `98bae8da6e` | review | | chore(mastracode): Improve README & docs (#16250) | 1 |
 | 265 | 2026-05-06 | #16176 | `d1fdbd012a` | review | | feat(core): add provider-boundary prompt processor hook (#16176) | 3 |
 | 266 | 2026-05-06 | #13891 | `aa0cb0ddd8` | review | | feat(mastracode): allow overriding memory instance via config (#13891) | 1 |

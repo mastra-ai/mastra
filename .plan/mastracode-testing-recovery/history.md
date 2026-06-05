@@ -2079,3 +2079,25 @@ Verification:
 
 - `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/ask-question-inline-multiline.test.ts --bail=1 --reporter=dot` — 1 file / 6 tests passed.
 - `pnpm --filter ./mastracode exec vitest run src/agents/__tests__/build-skill-paths.test.ts --bail=1 --reporter=dot` — 1 file / 9 tests passed.
+
+### PR #16094 / #16135 / #16028 / #16182 feature-map checkpoint
+
+Verified rows 259-262:
+
+- #16094 adds default temp scratch paths to the dynamic workspace. Current `DEFAULT_ALLOWED_PATHS` resolves and de-duplicates `os.tmpdir()` and `/tmp`, then `getDynamicWorkspace()` inserts them between skill paths and per-thread `sandboxAllowedPaths`; reused workspaces receive the same updated allowlist through `existing.filesystem.setAllowedPaths()`.
+- #16135 normalizes storage settings connection prompt key handling. Current `StorageBackendSubmenu.handleInput()` accepts `matchesKey(data, 'enter')`/`matchesKey(data, 'escape')` plus raw `\r`/`\n` and `\x1b`/`\x1b\x1b` fallbacks before delegating to `MaskedInput`.
+- #16028 and #16182 are Changesets alpha package-version batches; skipped for feature mapping after `gh pr view` confirmed changelog/package metadata changes under Mastra Code.
+
+Documentation actions:
+
+- Updated `features/tools/workspace-tools.md` for default temp allowed paths and missing direct test coverage.
+- Updated `features/settings/storage-backend.md` for normalized storage connection prompt Enter/Escape behavior.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16094 done, #16135 done, #16028 skipped, #16182 skipped, #16192 current.
+
+Focused evidence read: PR metadata for #16094/#16135/#16028/#16182; current `mastracode/src/agents/workspace.ts`, `mastracode/src/tui/components/settings.ts`, and feature-adjacent tests.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/agents/__tests__/build-skill-paths.test.ts --bail=1 --reporter=dot` — 1 file / 9 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
