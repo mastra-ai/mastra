@@ -39,7 +39,7 @@ type OpenAIUsageTotals = {
 
 type OpenAIToolTelemetry = Pick<SDKAgentTelemetry, 'startToolCall' | 'endToolCall'>;
 
-export type OpenAISDKAgentOptions = {
+type OpenAISDKAgentBaseOptions = {
   /**
    * Mastra agent id used when registering this wrapper with Mastra.
    */
@@ -52,17 +52,26 @@ export type OpenAISDKAgentOptions = {
    * Description surfaced by Mastra when listing or selecting agents.
    */
   description: string;
-  /**
-   * Pre-created OpenAI Agents SDK agent. Pass this when you manage the SDK
-   * agent lifecycle yourself.
-   */
-  agent?: OpenAIAgent;
-  /**
-   * OpenAI Agents SDK options used to create an SDK agent when `agent` is not
-   * provided.
-   */
-  sdkOptions?: OpenAIAgentOptions;
 };
+
+export type OpenAISDKAgentOptions = OpenAISDKAgentBaseOptions &
+  (
+    | {
+        /**
+         * Pre-created OpenAI Agents SDK agent. Pass this when you manage the
+         * SDK agent lifecycle yourself.
+         */
+        agent: OpenAIAgent;
+        sdkOptions?: never;
+      }
+    | {
+        agent?: never;
+        /**
+         * OpenAI Agents SDK options used to create an SDK agent.
+         */
+        sdkOptions: OpenAIAgentOptions;
+      }
+  );
 
 export class OpenAISDKAgent extends Agent {
   readonly options: OpenAISDKAgentOptions;
