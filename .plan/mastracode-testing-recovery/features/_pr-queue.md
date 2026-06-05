@@ -220,10 +220,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 198 | 2026-04-08 | #15192 | `32b122470c` | review | done | fix(mastracode): clear task list on thread switch instead of reading stale global state (#15192) | 1 |
 | 199 | 2026-04-08 | #15191 | `ee35ec6944` | likely skip | skipped | chore: version packages (alpha) (#15191) | 2 |
 | 200 | 2026-04-09 | #15228 | `5d84914e0e` | review | done | fix: resolve symlinked workspace skill aliases (#15228) | 3 |
-| 201 | 2026-04-13 | #15014 | `d292618171` | review | current | feat(mastracode): add /api-keys slash command for managing provider API keys (#15014) | 6 |
-| 202 | 2026-04-14 | #14435 | `cbdf3e12b3` | review | | feat: add processAPIError processor method for handling LLM API rejections (#14435) | 2 |
-| 203 | 2026-04-14 | #15194 | `190f45258b` | review | | feat(browser): add profile and executablePath options (#15194) | 2 |
-| 204 | 2026-04-14 | #15352 | `c809341c0f` | review | | refactor: refine Mastra Code autonomy prompts (#15352) | 2 |
+| 201 | 2026-04-13 | #15014 | `d292618171` | review | done | feat(mastracode): add /api-keys slash command for managing provider API keys (#15014) | 6 |
+| 202 | 2026-04-14 | #14435 | `cbdf3e12b3` | review | done | feat: add processAPIError processor method for handling LLM API rejections (#14435) | 2 |
+| 203 | 2026-04-14 | #15194 | `190f45258b` | review | done | feat(browser): add profile and executablePath options (#15194) | 2 |
+| 204 | 2026-04-14 | #15352 | `c809341c0f` | review | current | refactor: refine Mastra Code autonomy prompts (#15352) | 2 |
 | 205 | 2026-04-14 | #15359 | `274504c739` | review | | feat: compress mastracode OM memory with caveman speak (#15359) | 2 |
 | 206 | 2026-04-14 | #15200 | `74f927608f` | likely skip | | chore: version packages (alpha) (#15200) | 2 |
 | 207 | 2026-04-15 | #15370 | `95b144b2d5` | review | | feat(mastracode): add share and import for model packs (#15370) | 3 |

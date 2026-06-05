@@ -1725,3 +1725,27 @@ Verification:
 
 - `pnpm --filter ./mastracode exec vitest run src/tui/event-dispatch.test.ts --bail=1 --reporter=dot` — 1 file / 11 tests passed.
 - `pnpm --filter ./packages/core exec vitest run src/workspace/skills/workspace-skills.test.ts src/workspace/filesystem/local-filesystem.test.ts src/workspace/skills/tools.test.ts src/workspace/workspace.test.ts --bail=1 --reporter=dot` — 4 files / 386 tests passed / no type errors.
+
+### PR #15014 / #14435 / #15194 feature-map checkpoint
+
+Verified rows 201-203:
+
+- #15014 adds `/api-keys` for provider API-key management. Current Mastra Code source lists providers from `harness.listAvailableModels()`, de-dupes by provider, labels env/stored/none status, opens the masked `ApiKeyDialogComponent` for add/update, deletes stored keys via AuthStorage, clears the runtime env projection, and exposes the flow from slash-command dispatch plus the Settings submenu.
+- #14435 adds the core `processAPIError` processor hook and `PrefillErrorHandler`. Current core source detects Anthropic/Qwen assistant-prefill rejection messages from `error.message` or `APICallError.responseBody`, appends a hidden reactive `anthropic-prefill-processor-retry` system-reminder containing `continue`, and requests exactly one retry through the agent runner.
+- #15194 adds browser `profile` and `executablePath` options. Current source validates browser settings, enforces CDP vs launch-time profile/executable mutual exclusion, creates profile dirs for launched browsers, tracks profile provider metadata, supports `/browser set`/`clear` flows, and keeps core profile lock-file cleanup/process-group kill helpers covered.
+
+Documentation actions:
+
+- Updated `features/models/model-auth-and-modes.md` and `features/tui/help-and-shortcuts.md` for `/api-keys` command behavior, state ownership, tests, missing tests, and command-list drift risks.
+- Updated `features/chat/prompt-context.md` for `processAPIError`/`PrefillErrorHandler` retry reminders and associated runner/system-reminder behavior.
+- Updated `features/integrations/browser-automation.md` and `features/settings/onboarding-and-global-settings.md` for profile/executable browser settings and `/api-keys` settings ownership.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #15014 done, #14435 done, #15194 done, #15352 current.
+
+Focused evidence read: PR metadata for #15014/#14435/#15194; current `mastracode/src/tui/commands/api-keys.ts`, command/settings wiring, `packages/core/src/processors/prefill-error-handler.ts`, `processors/index.ts`, `runner.ts`, prefill recovery tests, `mastracode/src/tui/commands/browser.ts`, `mastracode/src/onboarding/settings.ts`, and `packages/core/src/browser/browser.ts` / browser tests.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/command-dispatch.test.ts src/tui/components/__tests__/help-overlay.test.ts src/onboarding/__tests__/settings.test.ts --bail=1 --reporter=dot` — 3 files / 51 tests passed.
+- `pnpm --filter ./packages/core exec vitest run src/processors/prefill-error-handler.test.ts src/processors/runner.test.ts src/agent/__tests__/prefill-error-recovery.test.ts --bail=1 --reporter=dot` — 3 files / 92 tests passed / no type errors.
+- `pnpm --filter ./packages/core exec vitest run src/browser/browser.test.ts src/agent/__tests__/browser.test.ts --bail=1 --reporter=dot` — 2 files / 18 tests passed / no type errors.
