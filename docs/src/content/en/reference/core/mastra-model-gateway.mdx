@@ -1,6 +1,6 @@
 ---
 title: "Reference: MastraModelGateway | Core"
-description: "Base class for creating custom model gateways"
+description: "Base class and interface for creating custom model gateways"
 packages:
   - "@mastra/core"
 ---
@@ -8,6 +8,8 @@ packages:
 # MastraModelGateway
 
 Abstract base class for implementing custom model gateways. Gateways handle provider-specific logic for accessing language models, including provider configuration, authentication, URL construction, and model instantiation.
+
+Use `MastraModelGatewayInterface` when you want to provide a plain object gateway instead of extending the base class.
 
 ## Class overview
 
@@ -174,6 +176,12 @@ Retrieves the API key for authentication.
 />
 
 **Returns:** `Promise<string>`
+
+### `resolveAuth()`
+
+Resolves credentials before Mastra creates the language model. Implement this optional hook when a gateway owns authentication. If omitted, Mastra falls back to `getApiKey()`.
+
+**Returns:** `GatewayAuthResult | undefined | Promise<GatewayAuthResult | undefined>`
 
 ### `resolveLanguageModel()`
 
