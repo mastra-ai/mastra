@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13487](https://github.com/mastra-ai/mastra/pull/13487) — inherit terminal light/dark theme, add `/theme`, and adapt TUI colors for contrast.
-- Later changes: [#13503](https://github.com/mastra-ai/mastra/pull/13503) — fixed a startup crash by removing direct `fg`/`bg`/`bold`/`italic`/`dim`/`getTheme`/`setTheme` exports and making the `theme` object the single access point for those helpers; [#14337](https://github.com/mastra-ai/mastra/pull/14337) — expanded adaptive colors, contrast thresholds, light-theme palette, OSC foreground handling, and refined TUI component styling; [#14359](https://github.com/mastra-ai/mastra/pull/14359) — replaced the animated editor border gradient with a solid mode-color border to avoid terminal rendering corruption.
+- Later changes: [#13503](https://github.com/mastra-ai/mastra/pull/13503) — fixed a startup crash by removing direct `fg`/`bg`/`bold`/`italic`/`dim`/`getTheme`/`setTheme` exports and making the `theme` object the single access point for those helpers; [#14337](https://github.com/mastra-ai/mastra/pull/14337) — expanded adaptive colors, contrast thresholds, light-theme palette, OSC foreground handling, and refined TUI component styling; [#14359](https://github.com/mastra-ai/mastra/pull/14359) — replaced the animated editor border gradient with a solid mode-color border to avoid terminal rendering corruption; [#16839](https://github.com/mastra-ai/mastra/pull/16839) — adds near-black-aware glyph contrast helpers for quiet-mode rails, task glyphs, and muted terminal output.
 
 ## User-visible behavior
 
@@ -43,6 +43,7 @@
 | Theme preference | `settings.json` `preferences.theme`, unless `MASTRA_THEME` is set | Startup theme resolution, `/theme` |
 | Detected terminal background | Runtime OSC 11 / `COLORFGBG` detection | `applyThemeMode()`, contrast adaptation |
 | Adapted palette | `theme.ts` computes adapted brand/surface/theme colors against the detected background | TUI components, markdown/editor/select themes, tool output, user/assistant messages |
+| Glyph contrast floor | `ensureContrastUnlessNearBlack()` and `ensureTerminalGlyphContrast()` | subdued quiet-mode rails/dividers/tasks on near-black terminals; full contrast adaptation on brighter backgrounds |
 | Active theme mode | module state in `theme.ts` | TUI components, status line, markdown/editor/select themes |
 | Theme helper API | `theme` object in `theme.ts` | TUI components and public `mastracode/tui` export |
 | Prompt/status animation | `GradientAnimator` in `TUIState` | status-line badges/model labels and editor prompt glyph only; editor border stays solid |

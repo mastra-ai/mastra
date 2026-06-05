@@ -2404,3 +2404,29 @@ Verification:
 - `pnpm --filter ./mastracode exec vitest run src/utils/__tests__/signals-pubsub.test.ts src/__tests__/index.test.ts -t "SignalsPubSub|unixSocketPubSub|crossProcessPubSub|explicit pubsub|threadLock" --bail=1 --reporter=dot` — 1 file passed + 1 skipped / 4 tests passed / 16 skipped.
 - `pnpm --filter ./packages/core exec vitest run src/events/unix-socket-pubsub.test.ts --bail=1 --reporter=dot` — 1 file / 8 tests passed / no type errors. An earlier attempt used the wrong `src/events/__tests__/unix-socket-pubsub.test.ts` path and failed with "No test files found" before this corrected run.
 - `pnpm --filter ./packages/core exec vitest run src/agent/__tests__/agent-signals.test.ts -t "UnixSocketPubSub|remote subscriber without same-runtime" --bail=1 --reporter=dot` — 1 file / 1 test passed / 72 skipped / no type errors.
+
+### PR #16807 / #16809 / #16835 / #16839 feature-map checkpoint
+
+Verified rows 313-316:
+
+- #16807 polishes quiet mode follow-ups. Current source handles compact continuation labels, path-prefix trimming, preview rails/caps, quiet code highlighting, same-tool grouped spacing, loaded-history parity, and quiet shell/compact spacing distinctions.
+- #16835 improves TUI render scheduling, especially thread-selector preview loads. Current source batches initial preview candidates, delays follow-up loads, persists preview seed maps, and uses `previewLoadVersion` to prevent stale async results from overwriting newer selector state.
+- #16839 improves quiet-mode task/list contrast and alignment. Current source adds near-black-aware glyph contrast helpers, preserves subdued glyphs on black terminals, applies stronger contrast on brighter backgrounds, and covers hue-preserving contrast adaptation.
+- #16809 is a Changesets alpha package-version batch; skipped for feature mapping after PR metadata confirmed package/changelog-only changes.
+
+Documentation actions:
+
+- Updated `features/tui/quiet-mode.md` for #16807/#16839 continuation labels, path-prefix trimming, preview rails, grouped spacing, glyph contrast, key files, and tests.
+- Updated `features/tui/terminal-theme.md` for #16839 near-black-aware glyph contrast helpers and terminal-output contrast state.
+- Updated `features/threads/persistent-conversations.md` for #16835 thread-selector preview scheduling, stale-version guards, delayed preview batches, and tests.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16807 done, #16809 skipped, #16835 done, #16839 done, #16849 current.
+
+Focused evidence read: PR metadata for #16807/#16809/#16835/#16839; current `mastracode/src/tui/components/tool-execution-enhanced.ts`, `task-progress.ts`, `chat-spacing.ts`, `chat-boundary-reconciliation.ts`, `theme.ts`, `thread-selector.ts`, `mastracode/src/tui/mastra-tui.ts`, `handlers/tool.ts`, `handlers/message.ts`, `render-messages.ts`, and focused tests under `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts`, `task-progress.test.ts`, `chat-boundary-spacer.test.ts`, `thread-selector.test.ts`, `mastracode/src/tui/__tests__/theme-contrast.test.ts`, and `render-messages.test.ts`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/tool-execution-enhanced.test.ts src/tui/components/__tests__/task-progress.test.ts --bail=1 --reporter=dot` — 2 files / 68 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/chat-boundary-spacer.test.ts src/tui/components/__tests__/thread-selector.test.ts --bail=1 --reporter=dot` — 2 files / 16 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/theme-contrast.test.ts src/tui/__tests__/render-messages.test.ts --bail=1 --reporter=dot` — 2 files / 62 tests passed.
+- Note: an initial `pnpm --filter ./mastracode test -- --run ...` attempt incorrectly ran the broad Mastra Code suite and hit unrelated known/baseline failures (`goal-manager` Zod matcher, GitHub command completion expecting no `sync`, `save-plan` temp cleanup). The focused `exec vitest run` commands above passed.

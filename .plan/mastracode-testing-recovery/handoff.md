@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #16804 (row 312) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, #15390, #15403, #15544, #15515, #15601, #15606, #15629, #15653, #15656, #15699, #15710, #15857, #15896, #15770, #15909, #15928, #15940, #15979, #16009, #16011, #16016, #16020, #16022, #16024, #16028, #16182, #16192, #16196, #16126, #16295, #16320, #16351, #16398, #16409, #16458, #16501, #16511, #16516, #16559, #16611, #16624, #16657, #16667, #16797, and #16804 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 313 #16807 (quiet mode polish).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #16839 (row 316) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, #15390, #15403, #15544, #15515, #15601, #15606, #15629, #15653, #15656, #15699, #15710, #15857, #15896, #15770, #15909, #15928, #15940, #15979, #16009, #16011, #16016, #16020, #16022, #16024, #16028, #16182, #16192, #16196, #16126, #16295, #16320, #16351, #16398, #16409, #16458, #16501, #16511, #16516, #16559, #16611, #16624, #16657, #16667, #16797, #16804, and #16809 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 317 #16849 (visible-width terminal output).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 313: PR #16807 (quiet mode polish).
+1. Continue at `_pr-queue.md` row 317: PR #16849 (visible-width terminal output).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -44,6 +44,7 @@ None known.
 
 ## Last commands/evidence
 
+- Rows 313-316 verified/documented: #16807 quiet mode follow-up polish (continuation labels, path-prefix trimming, preview rails, grouped spacing), #16835 TUI render scheduling/thread-selector preview batching, #16839 quiet-mode contrast/alignment, and #16809 Changesets alpha skip. Focused verification passed: quiet compact/task components (68), chat boundary + thread selector (16), and theme/render history tests (62). Note: an initial attempt used the package `test -- --run` wrapper, which ignored the file filter and ran the broad suite; reran with `exec vitest run` focused paths.
 - Rows 309-312 verified/documented: #16771 quiet mode compact renderer/rollout prompt/task summaries/tool grouping, #16669 Unix socket PubSub signal coordination, and #16797/#16804 Changesets alpha skips. Focused verification passed: MC quiet-mode components (61), MC SignalsPubSub/startup config slice (4), core Unix socket PubSub (8), and core Agent signal Unix socket slice (1). Note: one attempted core command used the wrong `src/events/__tests__/...` path before rerunning the real `src/events/unix-socket-pubsub.test.ts` path.
 - Rows 305-308 verified/documented: #16665 PubSub-routed Agent thread subscriptions/signals with cross-runtime broadcasting, #16682 `/om` Observe Attachments Auto/On/Off persistence, #15173 product analytics with PostHog/no-op opt-out, and #16667 Changesets alpha skip. Focused verification passed: core PubSub signal slice (5), MC PubSub/observeAttachments startup+thread settings (8), and analytics/command prompt tracking slice (6).
 - Rows 301-304 verified/documented: #16690 active goal pursuit timing, #16691 sandbox env inheritance with trace redaction, #16676 return-to-plan after approved-goal completion, and #16663 provider-aware OM idle activation/idle counter/Gateway skip. Focused verification passed: goal timer/queue/prompt/status tests (51), workspace env (1), core workspace trace redaction (6), memory OM TTL/API tests (16), core memory gateway duck-typing (1), and TUI OM handler tests (3).

@@ -332,10 +332,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 310 | 2026-05-19 | #16797 | `6209a1f157` | likely skip | skipped | chore: version packages (alpha) (#16797) | 2 |
 | 311 | 2026-05-19 | #16669 | `71a820b235` | review | done | fix(mastracode): coordinate signals over Unix socket PubSub (#16669) | 6 |
 | 312 | 2026-05-20 | #16804 | `7dd705f2b4` | likely skip | skipped | chore: version packages (alpha) (#16804) | 2 |
-| 313 | 2026-05-19 | #16807 | `2b27920c3a` | review | | fix(mastracode): polish quiet mode follow-ups (#16807) | 18 |
-| 314 | 2026-05-20 | #16809 | `7dd82acbeb` | likely skip | | chore: version packages (alpha) (#16809) | 2 |
-| 315 | 2026-05-20 | #16835 | `7b74651a51` | review | | fix(mastracode): improve tui render scheduling (#16835) | 15 |
-| 316 | 2026-05-20 | #16839 | `7d36258d59` | review | | fix(mastracode): improve quiet mode task list contrast and alignment (#16839) | 5 |
+| 313 | 2026-05-19 | #16807 | `2b27920c3a` | review | done | fix(mastracode): polish quiet mode follow-ups (#16807) | 18 |
+| 314 | 2026-05-20 | #16809 | `7dd82acbeb` | likely skip | skipped | chore: version packages (alpha) (#16809) | 2 |
+| 315 | 2026-05-20 | #16835 | `7b74651a51` | review | done | fix(mastracode): improve tui render scheduling (#16835) | 15 |
+| 316 | 2026-05-20 | #16839 | `7d36258d59` | review | done | fix(mastracode): improve quiet mode task list contrast and alignment (#16839) | 5 |
 | 317 | 2026-05-20 | #16849 | `f7692254ea` | review | | fix(mastracode): use visible width for terminal output (#16849) | 9 |
 | 318 | 2026-05-20 | #16843 | `27fd1b79ac` | review | | fix: goal judge maxSteps, retry, resume retrigger, and task auto-demote (#16843) | 4 |
 | 319 | 2026-05-20 | #16831 | `bb34e3dc4d` | likely skip | | chore: version packages (alpha) (#16831) | 2 |

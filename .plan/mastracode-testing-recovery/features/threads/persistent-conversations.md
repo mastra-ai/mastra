@@ -3,12 +3,12 @@
 ## Origin PR / commit
 
 - PR: [#13218](https://github.com/mastra-ai/mastra/pull/13218) — project-scoped persistent conversations and thread switching.
-- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved conversation runtime onto the shared core Harness primitive and session records; [#13334](https://github.com/mastra-ai/mastra/pull/13334) — restored optional thread locking through core Harness config; [#13343](https://github.com/mastra-ai/mastra/pull/13343) — scoped startup auto-resume to current working directory/worktree via `projectPath` metadata; [#13690](https://github.com/mastra-ai/mastra/pull/13690) — added Harness resource ID helpers and improved `/resource` switching; [#14428](https://github.com/mastra-ai/mastra/pull/14428) — speeds `/threads` by caching and lazily loading message previews; [#14436](https://github.com/mastra-ai/mastra/pull/14436) — lets observer output update thread titles through OM metadata and Harness events; [#14690](https://github.com/mastra-ai/mastra/pull/14690) — lists threads across all resources and keeps the selector responsive; [#14691](https://github.com/mastra-ai/mastra/pull/14691) — removes live preview lookup so the selector only uses fresh cache/title data; [#14567](https://github.com/mastra-ai/mastra/pull/14567) — adds `/thread` for current-thread/resource/fork provenance and exposes thread IDs for recall browsing; [#15749](https://github.com/mastra-ai/mastra/pull/15749) — clears per-thread ephemeral projections on thread switch/create so custom commands, tasks, plans, sandbox paths, queued state, and task progress do not leak into the next active thread.
+- Later changes: [#13245](https://github.com/mastra-ai/mastra/pull/13245) — moved conversation runtime onto the shared core Harness primitive and session records; [#13334](https://github.com/mastra-ai/mastra/pull/13334) — restored optional thread locking through core Harness config; [#13343](https://github.com/mastra-ai/mastra/pull/13343) — scoped startup auto-resume to current working directory/worktree via `projectPath` metadata; [#13690](https://github.com/mastra-ai/mastra/pull/13690) — added Harness resource ID helpers and improved `/resource` switching; [#14428](https://github.com/mastra-ai/mastra/pull/14428) — speeds `/threads` by caching and lazily loading message previews; [#14436](https://github.com/mastra-ai/mastra/pull/14436) — lets observer output update thread titles through OM metadata and Harness events; [#14690](https://github.com/mastra-ai/mastra/pull/14690) — lists threads across all resources and keeps the selector responsive; [#14691](https://github.com/mastra-ai/mastra/pull/14691) — removes live preview lookup so the selector only uses fresh cache/title data; [#14567](https://github.com/mastra-ai/mastra/pull/14567) — adds `/thread` for current-thread/resource/fork provenance and exposes thread IDs for recall browsing; [#15749](https://github.com/mastra-ai/mastra/pull/15749) — clears per-thread ephemeral projections on thread switch/create so custom commands, tasks, plans, sandbox paths, queued state, and task progress do not leak into the next active thread; [#16835](https://github.com/mastra-ai/mastra/pull/16835) — improves TUI render scheduling around thread-selector preview loads with delayed batching, stale-version guards, and persisted preview seed maps.
 
 ## User-visible behavior
 
-- What the user can do: resume, create, switch, clone, inspect the active thread, and browse conversations across resources/worktrees with cached previews and generated titles.
-- Success looks like: startup resumes only threads from the current directory, `/threads` lists all resources without blocking on message preview retrieval, `/thread` shows the active ID/resource/fork provenance, then messages and metadata reload without leaking another thread’s ephemeral state, custom commands, queued actions, or task progress.
+- What the user can do: resume, create, switch, clone, inspect the active thread, and browse conversations across resources/worktrees with cached/staged previews and generated titles.
+- Success looks like: startup resumes only threads from the current directory, `/threads` lists all resources without blocking on message preview retrieval, delayed preview batches hydrate visible rows without stale results overwriting newer searches, `/thread` shows the active ID/resource/fork provenance, then messages and metadata reload without leaking another thread’s ephemeral state, custom commands, queued actions, or task progress.
 - Must preserve: history, title/resource, cache freshness by `updatedAt`, mode/model metadata, goals, project path tagging, thread lock ownership, fork provenance, and related status projections.
 
 ## Entry points / commands
@@ -43,7 +43,7 @@
 | Thread history | Harness memory/storage | TUI history renderer, headless |
 | Current thread/resource | Harness session + resource ID helpers | TUI status, `/resource`, commands |
 | Thread title/metadata | Thread metadata/session records, optionally updated by OM `threadTitle` output | TUI footer, `/threads`, `/thread`, goals, GitHub badges |
-| Thread preview/title display | Thread `title` first; cache-only `state.threadPreviewCache` + `attemptedThreadPreviewIds` fallback, invalidated by thread `updatedAt` | `/threads` selector rows without live preview lookup |
+| Thread preview/title display | Thread `title` first; cache-only `state.threadPreviewCache` + `attemptedThreadPreviewIds` fallback, invalidated by thread `updatedAt`; selector-local `previewLoadVersion` rejects stale async batches | `/threads` selector rows without live preview lookup |
 | Project path scope | Thread `metadata.projectPath` + legacy directory birthtime fallback | Startup auto-resume filtering |
 | Ephemeral tasks/plan/sandbox | Harness state for active thread | Prompt context, TUI projection |
 | Ephemeral TUI thread state | `event-dispatch.ts`, `/new`, and clone reset helpers clear `customSlashCommands`, queued/follow-up state, task progress, component caches, active plan, sandbox paths, and `taskToolInsertIndex` at thread boundaries | Thread switch/create/clone UI and active prompt context |
@@ -55,7 +55,7 @@
 - `mastracode/src/tui/commands/clone.ts` — clone reset helper for TUI component maps and thread-local task/plan/access state.
 - `mastracode/src/tui/commands/threads.ts` — all-resource selector, switch, clone, lock conflicts, cached preview invalidation, and cache-only preview callback.
 - `mastracode/src/tui/commands/thread.ts` — active thread info display, pending-new-thread state, local timestamps, and fork provenance.
-- `mastracode/src/tui/components/thread-selector.ts` — generated-title/cached-preview display, debounced cache checks, sorting/filtering, and selector rendering.
+- `mastracode/src/tui/components/thread-selector.ts` — generated-title/cached-preview display, delayed preview batches, stale-version guards, sorting/filtering, and selector rendering.
 - `mastracode/src/tui/event-dispatch.ts` — thread event cleanup/reload and OM thread-title update events.
 - `mastracode/src/tui/setup.ts` — startup auto-resume filtering by `projectPath` and legacy birthtime fallback.
 - `mastracode/src/tui/mastra-tui.ts` — startup thread sync.
@@ -76,7 +76,7 @@
 ## Existing tests
 
 - `mastracode/src/tui/commands/__tests__/threads.test.ts` — thread command behavior, preview cache invalidation, and no-live-preview lookup guarantee.
-- `mastracode/src/tui/components/__tests__/thread-selector.test.ts` — selector preview-cache seeding, debounced cache checks, navigation debounce, and merged preview callbacks.
+- `mastracode/src/tui/components/__tests__/thread-selector.test.ts` — selector preview-cache seeding, delayed/stale preview loading, navigation debounce, and merged preview callbacks.
 - `mastracode/src/tui/commands/__tests__/thread.test.ts` — direct thread command behavior.
 - `mastracode/src/headless.test.ts` — headless thread flags.
 - `mastracode/src/HarnessCompat.test.ts` — v1 session/thread composition.
