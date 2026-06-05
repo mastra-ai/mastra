@@ -553,6 +553,32 @@ describe('runExperiment', () => {
       expect(result.results[0].input).toEqual({ prompt: 'from-factory' });
     });
 
+    // Test 2b — Per-item requestContext on inline data reaches agent.generate
+    it('forwards per-item requestContext from inline data, merged over the global context', async () => {
+      const mockAgent = createMockAgent('Response');
+      const localMastra = {
+        ...mastra,
+        getAgent: vi.fn().mockReturnValue(mockAgent),
+        getAgentById: vi.fn().mockReturnValue(mockAgent),
+      } as unknown as Mastra;
+
+      await runExperiment(localMastra, {
+        datasetId,
+        data: [{ input: { prompt: 'Hello' }, requestContext: { clinicId: 'clinic-1' } }],
+        targetType: 'agent',
+        targetId: 'test-agent',
+        // Global context — per-item value should win on key collision
+        requestContext: { clinicId: 'global-clinic', environment: 'development' },
+      });
+
+      const callOptions = (mockAgent.generate as ReturnType<typeof vi.fn>).mock.calls[0][1];
+      expect(callOptions.requestContext).toBeInstanceOf(RequestContext);
+      expect(callOptions.requestContext.all).toEqual({
+        clinicId: 'clinic-1',
+        environment: 'development',
+      });
+    });
+
     // Test 3 — Inline task function
     it('runs experiment with inline task function', async () => {
       const result = await runExperiment(mastra, {

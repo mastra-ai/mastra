@@ -89,7 +89,7 @@
     "@types/shell-quote": "^1.7.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.1",
     "memfs": "^4.56.11",
     "rollup": "^4.59.0",
     "tsup": "^8.5.1",
