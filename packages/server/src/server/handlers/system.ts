@@ -63,7 +63,7 @@ async function getEditorSourceCapabilities(editor: {
       displayName: configuredProvider.displayName,
     };
     try {
-      const capabilities = await getSourceProviderCapabilities(configuredProvider.getCapabilities);
+      const capabilities = await getSourceProviderCapabilities(() => configuredProvider.getCapabilities());
       return {
         source: editorSource,
         storage: 'source-provider' as const,
