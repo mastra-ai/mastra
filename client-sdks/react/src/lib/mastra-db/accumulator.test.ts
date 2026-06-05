@@ -976,7 +976,12 @@ describe('accumulateChunk - tripwire', () => {
     expect(text).toMatchObject({ text: 'blocked by guardrail' });
     expect(msg.content.metadata).toMatchObject({
       status: 'tripwire',
-      tripwire: { retry: false, tripwirePayload: { hint: 'blocked' }, processorId: 'guardrail-1' },
+      tripwire: {
+        reason: 'blocked by guardrail',
+        retry: false,
+        metadata: { hint: 'blocked' },
+        processorId: 'guardrail-1',
+      },
     });
   });
 });

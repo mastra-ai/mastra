@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-okta",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Mastra Okta Auth and RBAC integration",
   "type": "module",
   "main": "dist/index.js",
@@ -35,8 +35,7 @@
     "lru-cache": "^11.2.7"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0",
-    "hono": "^4.0.0"
+    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -46,7 +45,6 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "eslint": "^10.2.1",
-    "hono": "^4.12.8",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

@@ -50,6 +50,7 @@ import type {
   LoggingLevel,
 } from '@modelcontextprotocol/sdk/types.js';
 import type { jsonSchemaValidator } from '@modelcontextprotocol/sdk/validation/types.js';
+import type { Context } from 'hono';
 import type { SSEStreamingApi } from 'hono/streaming';
 import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
@@ -1434,9 +1435,11 @@ export class MCPServer extends MCPServerBase {
    * ```
    */
   public async startHonoSSE({ url, ssePath, messagePath, context }: MCPServerHonoSSEOptions) {
+    const honoContext = context as unknown as Context;
+
     try {
       if (url.pathname === ssePath) {
-        return streamSSE(context, async stream => {
+        return streamSSE(honoContext, async stream => {
           await this.connectHonoSSE({
             messagePath,
             stream,
@@ -1444,22 +1447,22 @@ export class MCPServer extends MCPServerBase {
         });
       } else if (url.pathname === messagePath) {
         this.logger.debug('Received message');
-        const sessionId = context.req.query('sessionId');
+        const sessionId = honoContext.req.query('sessionId');
         this.logger.debug('Received message for sessionId', { sessionId });
         if (!sessionId) {
-          return context.text('No sessionId provided', 400);
+          return honoContext.text('No sessionId provided', 400);
         }
         if (!this.sseHonoTransports.has(sessionId)) {
-          return context.text(`No transport found for sessionId ${sessionId}`, 400);
+          return honoContext.text(`No transport found for sessionId ${sessionId}`, 400);
         }
-        const message = await this.sseHonoTransports.get(sessionId)?.handlePostMessage(context);
+        const message = await this.sseHonoTransports.get(sessionId)?.handlePostMessage(honoContext);
         if (!message) {
-          return context.text('Transport not found', 400);
+          return honoContext.text('Transport not found', 400);
         }
         return message;
       } else {
         this.logger.debug('Unknown path:', { path: url.pathname });
-        return context.text('Unknown path', 404);
+        return honoContext.text('Unknown path', 404);
       }
     } catch (e) {
       const mastraError = new MastraError(

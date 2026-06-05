@@ -1,4 +1,5 @@
 import type {
+  BuilderAvailableModelsResponse,
   BuilderSettingsResponse,
   GetAgentResponse,
   GetToolResponse,
@@ -33,6 +34,10 @@ export const settingsPartialFeatures: BuilderSettingsResponse = {
       skills: false,
     },
   },
+};
+
+export const emptyAvailableModels: BuilderAvailableModelsResponse = {
+  providers: [],
 };
 
 export const emptyAgents: Record<string, GetAgentResponse> = {};

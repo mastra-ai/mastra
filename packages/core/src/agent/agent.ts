@@ -76,6 +76,7 @@ import { ProcessorRunner } from '../processors/runner';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, MASTRA_VERSIONS_KEY } from '../request-context';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
+import type { SignalProvider } from '../signals/signal-provider';
 import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
@@ -361,6 +362,7 @@ export class Agent<
   #requestContextSchema?: StandardSchemaWithJSON<TRequestContext>;
   #backgroundTasks?: AgentBackgroundConfig;
   #notifications?: AgentNotificationConfig;
+  #signals?: SignalProvider[];
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #editorConfig?: AgentEditorConfig;
   /**
@@ -572,6 +574,78 @@ export class Agent<
 
     if (config.notifications) {
       this.#notifications = config.notifications;
+    }
+
+    if (config.signals && config.signals.length > 0) {
+      this.#signals = config.signals;
+
+      // Collect processors and tools from signal providers that opt in
+      const signalInputProcessors: InputProcessorOrWorkflow[] = [];
+      const signalOutputProcessors: OutputProcessorOrWorkflow[] = [];
+      let signalTools: Record<string, unknown> = {};
+
+      for (const provider of config.signals) {
+        // Propagate Mastra instance before lifecycle so providers have storage access
+        if (this.#mastra) {
+          provider.__registerMastra(this.#mastra);
+        }
+
+        // Skip re-wiring providers that are already connected (e.g. via __fork())
+        if (!provider.isConnected) {
+          provider.connect(this as Agent<any, any, any, any>);
+          provider.startPolling();
+          void provider.start?.();
+        }
+
+        if (provider.getInputProcessors) {
+          signalInputProcessors.push(...provider.getInputProcessors());
+        }
+        if (provider.getOutputProcessors) {
+          signalOutputProcessors.push(...provider.getOutputProcessors());
+        }
+        if (provider.getTools) {
+          signalTools = { ...signalTools, ...provider.getTools() };
+        }
+      }
+
+      // Merge signal provider tools into the agent's tool set
+      if (Object.keys(signalTools).length > 0) {
+        if (typeof this.#tools === 'function') {
+          const existingToolsFn = this.#tools;
+          this.#tools = ((ctx: any) => {
+            const result = existingToolsFn(ctx);
+            return resolveMaybePromise(result, (tools: any) => ({ ...signalTools, ...tools }));
+          }) as any;
+        } else {
+          this.#tools = { ...signalTools, ...this.#tools } as TTools;
+        }
+      }
+
+      // Register collected input processors
+      if (signalInputProcessors.length > 0) {
+        const existingInput = this.#inputProcessors;
+        this.#inputProcessors = existingInput
+          ? typeof existingInput === 'function'
+            ? async (ctx: { requestContext: RequestContext<TRequestContext> }) => {
+                const resolved = await existingInput(ctx);
+                return [...signalInputProcessors, ...resolved];
+              }
+            : [...signalInputProcessors, ...existingInput]
+          : signalInputProcessors;
+      }
+
+      // Register collected output processors
+      if (signalOutputProcessors.length > 0) {
+        const existingOutput = this.#outputProcessors;
+        this.#outputProcessors = existingOutput
+          ? typeof existingOutput === 'function'
+            ? async (ctx: { requestContext: RequestContext<TRequestContext> }) => {
+                const resolved = await existingOutput(ctx);
+                return [...resolved, ...signalOutputProcessors];
+              }
+            : [...existingOutput, ...signalOutputProcessors]
+          : signalOutputProcessors;
+      }
     }
 
     // @ts-expect-error Flag for agent network messages
@@ -788,7 +862,11 @@ export class Agent<
     if (!workspace) return [];
 
     // Skip if workspace has no filesystem or sandbox (nothing to describe)
-    if (!workspace.filesystem && !workspace.sandbox) return [];
+    const hasFilesystemConfig =
+      typeof workspace.hasFilesystemConfig === 'function' ? workspace.hasFilesystemConfig() : !!workspace.filesystem;
+    const hasSandboxConfig =
+      typeof workspace.hasSandboxConfig === 'function' ? workspace.hasSandboxConfig() : !!workspace.sandbox;
+    if (!hasFilesystemConfig && !hasSandboxConfig) return [];
 
     // Check for existing processor to avoid duplicates
     const hasProcessor = configuredProcessors.some(
@@ -2614,6 +2692,13 @@ export class Agent<
         // Always register the configuration with agent context
         mastra.addProcessorConfiguration(processor, this.id, 'output');
       });
+    }
+
+    // Propagate Mastra instance to signal providers
+    if (this.#signals) {
+      for (const provider of this.#signals) {
+        provider.__registerMastra(mastra);
+      }
     }
   }
 
@@ -6814,6 +6899,23 @@ export class Agent<
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
 
+    // Delegate to the idle-loop wrapper when `untilIdle` is set (from
+    // per-call options OR defaultOptions). Strip `untilIdle` before passing
+    // to the wrapper so its internal agent.stream() call doesn't recurse.
+    if (mergedOptions.untilIdle) {
+      const { untilIdle, ...rest } = mergedOptions ?? {};
+      const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
+      return runStreamUntilIdle<OUTPUT>(
+        this,
+        messages,
+        { ...rest, maxIdleMs },
+        {
+          activeStreams: this.#activeStreamUntilIdle,
+          bgManager: this.#mastra?.backgroundTaskManager,
+        },
+      );
+    }
+
     await this.#requireAgentExecutionFGA(mergedOptions);
 
     const llm = await this.getLLM({
@@ -6910,6 +7012,8 @@ export class Agent<
   }
 
   /**
+   * @deprecated Use `stream(messages, { untilIdle: true })` instead.
+   *
    * Streams the agent's response and keeps the stream open until all
    * background tasks dispatched during this turn (and any triggered by
    * follow-up turns) complete. When a background task finishes, its tool
@@ -6987,6 +7091,8 @@ export class Agent<
   }
 
   /**
+   * @deprecated Use `resumeStream(resumeData, { untilIdle: true, ... })` instead.
+   *
    * Resume-flavored counterpart to {@link streamUntilIdle}. Resumes a
    * previously suspended stream identified by `streamOptions.runId`, then
    * keeps the outer stream open across any continuations that background
@@ -7103,6 +7209,23 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+
+    // Delegate to the idle-loop wrapper when `untilIdle` is set (from
+    // per-call options OR defaultOptions). Strip `untilIdle` before passing
+    // to the wrapper so its internal agent.stream() call doesn't recurse.
+    if (mergedStreamOptions.untilIdle) {
+      const { untilIdle, ...rest } = mergedStreamOptions ?? {};
+      const maxIdleMs = typeof untilIdle === 'object' ? untilIdle.maxIdleMs : undefined;
+      return runResumeStreamUntilIdle<OUTPUT>(
+        this,
+        resumeData,
+        { ...rest, maxIdleMs },
+        {
+          activeStreams: this.#activeStreamUntilIdle,
+          bgManager: this.#mastra?.backgroundTaskManager,
+        },
+      );
+    }
 
     const runId = streamOptions?.runId ?? '';
     const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
@@ -7376,9 +7499,30 @@ export class Agent<
       resourceId: string;
       toolCallId?: string;
       approved: boolean;
+      messages?: MessageListInput;
+      streamOptions?: AgentExecutionOptions<OUTPUT>;
     },
   ): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
-    const { threadId, resourceId, approved, ...executionOptions } = options;
+    const { threadId, resourceId, approved, messages, streamOptions, ...executionOptions } = options;
+
+    if (messages && approved) {
+      const continuation = agentThreadStreamRuntime.continueWithMessages(
+        this as Agent<any, any, any, any>,
+        messages,
+        {
+          resourceId,
+          threadId,
+          runId: executionOptions.runId,
+          streamOptions: deepMerge(
+            (streamOptions ?? {}) as Record<string, unknown>,
+            executionOptions as Record<string, unknown>,
+          ) as unknown as AgentExecutionOptions<OUTPUT>,
+        },
+        this.getPubSub(),
+      );
+      return { accepted: continuation.accepted, runId: continuation.runId, toolCallId: options.toolCallId };
+    }
+
     const runId = this.getActiveThreadRunId({ threadId, resourceId });
     if (!runId) {
       throw new MastraError({

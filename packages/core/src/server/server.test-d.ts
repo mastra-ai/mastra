@@ -1,3 +1,4 @@
+import type { HonoRequest } from 'hono';
 import { describe, expectTypeOf, it } from 'vitest';
 import { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
@@ -84,6 +85,40 @@ describe('CompositeAuth TUser variance', () => {
 
     const _assignable: MastraAuthProvider<unknown> = typed;
     new CompositeAuth([typed]);
+  });
+});
+
+describe('Auth request compatibility type tests', () => {
+  it('accepts HonoRequest-typed custom auth providers', () => {
+    interface CustomUser {
+      id: string;
+    }
+
+    class HonoAuthProvider extends SimpleAuth<CustomUser> {
+      async authenticateToken(token: string, request: HonoRequest): Promise<CustomUser | null> {
+        request.header('Cookie');
+        return super.authenticateToken(token, request);
+      }
+
+      async authorizeUser(user: CustomUser, request: HonoRequest): Promise<boolean> {
+        request.header('Authorization');
+        return !!user.id;
+      }
+    }
+
+    const provider = new HonoAuthProvider({ tokens: { example: { id: '1' } } });
+    const _assignable: MastraAuthProvider<CustomUser> = provider;
+
+    new Mastra({
+      server: {
+        auth: {
+          authenticateToken: async (_token: string, request: HonoRequest) => {
+            request.header('Cookie');
+            return { id: '1' };
+          },
+        },
+      },
+    });
   });
 });
 

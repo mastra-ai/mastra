@@ -47,6 +47,7 @@ import type {
 } from '../processors/index';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
+import type { SignalProvider } from '../signals/signal-provider';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { AgentChunkType, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
 import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
@@ -621,6 +622,23 @@ interface AgentConfigBase<
    * Notification delivery configuration for record-first notification signals.
    */
   notifications?: AgentNotificationConfig;
+  /**
+   * Signal providers that monitor external sources and push
+   * notification signals into agent threads.
+   *
+   * Each provider is automatically registered as both an input and
+   * output processor, and connected to this agent instance.
+   *
+   * @example
+   * ```ts
+   * const agent = new Agent({
+   *   signals: [new GithubSignals({ cwd: project.rootPath })],
+   * });
+   * ```
+   *
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  signals?: SignalProvider[];
   /**
    * Optional agent-level transform policy for tool payloads before they are
    * serialized into display streams or user-visible transcripts.

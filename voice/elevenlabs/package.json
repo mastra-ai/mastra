@@ -24,7 +24,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
-    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup build --watch && tsc -p tsconfig.build.json",
     "test": "vitest run",
     "lint": "eslint ."
@@ -42,6 +42,7 @@
     "@vitest/ui": "catalog:",
     "eslint": "^10.2.1",
     "tsup": "^8.5.1",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

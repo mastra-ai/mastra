@@ -121,7 +121,7 @@ describe('Memory Handlers', () => {
       expect(result).toMatchObject({ result: true });
     });
 
-    it('should use storage fallback when a registered agent has no local memory', async () => {
+    it('should return false when a registered agent has no local memory even if storage is configured', async () => {
       const agentWithoutMemory = new Agent({
         id: 'no-memory-agent',
         name: 'Agent Without Memory',
@@ -139,7 +139,46 @@ describe('Memory Handlers', () => {
         agentId: 'no-memory-agent',
       });
 
-      expect(result).toEqual({ result: true });
+      expect(result).toEqual({ result: false });
+    });
+
+    it('detects memory via hasOwnMemory(): resolved agent without memory is false, with memory is true', async () => {
+      const withoutMemory = new Agent({
+        id: 'agent-without-own-memory',
+        name: 'Agent Without Own Memory',
+        instructions: 'test-instructions',
+        model: {} as any,
+      });
+      const withMemory = new Agent({
+        id: 'agent-with-own-memory',
+        name: 'Agent With Own Memory',
+        instructions: 'test-instructions',
+        model: {} as any,
+        memory: new MockMemory({ storage }),
+      });
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        agents: {
+          'agent-without-own-memory': withoutMemory,
+          'agent-with-own-memory': withMemory,
+        },
+      });
+
+      expect(withoutMemory.hasOwnMemory()).toBe(false);
+      expect(withMemory.hasOwnMemory()).toBe(true);
+
+      const negative = await GET_MEMORY_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'agent-without-own-memory',
+      });
+      expect(negative).toEqual({ result: false });
+
+      const positive = await GET_MEMORY_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'agent-with-own-memory',
+      });
+      expect(positive).toMatchObject({ result: true });
     });
 
     it('should return false when an agent explicitly does not support Mastra memory', async () => {

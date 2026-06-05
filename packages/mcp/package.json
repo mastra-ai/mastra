@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -24,7 +24,7 @@
   },
   "scripts": {
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "test:client": "vitest run ./src/client/client.test.ts ./src/client/configuration.test.ts",
     "test:server": "vitest run ./src/server/server.test.ts",
@@ -61,7 +61,7 @@
     "hono": "^4.12.8",
     "hono-mcp-server-sse-transport": "0.0.7",
     "tsup": "^8.5.1",
-    "tsx": "^4.21.0",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:",

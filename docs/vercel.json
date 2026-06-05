@@ -749,6 +749,11 @@
       "source": "/docs/mcp/publishing-mcp-server",
       "destination": "/guides/guide/publishing-mcp-server",
       "permanent": true
+    },
+    {
+      "source": "/docs/agents/response-caching",
+      "destination": "/docs/agents/processors#response-caching",
+      "permanent": true
     }
   ]
 }

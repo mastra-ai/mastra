@@ -67,6 +67,7 @@ import {
   resumeStreamBodySchema,
   resumeStreamUntilIdleBodySchema,
 } from '../schemas/agents';
+import type { ProviderListItem } from '../schemas/agents';
 import { createStoredAgentResponseSchema } from '../schemas/stored-agents';
 import { getAgentSkillResponseSchema, skillDisambiguationQuerySchema } from '../schemas/workspace';
 import type { InferParams, RouteSchemas, ServerRoute } from '../server-adapter/routes';
@@ -1478,6 +1479,63 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
   },
 });
 
+/**
+ * Collect the full list of configured AI model providers (static registry +
+ * gateway providers) in the shape returned by `GET /agents/providers`.
+ *
+ * Extracted so the agent-builder available-models endpoint can reuse the exact
+ * same source data before applying the model policy.
+ */
+export async function buildProvidersList(mastra: Context['mastra']): Promise<ProviderListItem[]> {
+  const allProviders: Record<string, ProviderConfig> = {};
+
+  for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
+    allProviders[id] = provider as ProviderConfig;
+  }
+
+  // Include gateway providers (defaults + user-registered)
+  if (mastra) {
+    const allGateways = mastra.listGateways();
+    if (allGateways) {
+      for (const gateway of Object.values(allGateways)) {
+        // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
+        if (gateway.id === 'models.dev') continue;
+        try {
+          const gatewayProviders = await gateway.fetchProviders();
+          for (const [providerId, config] of Object.entries(gatewayProviders)) {
+            // Apply the same prefixing logic as registry-generator to avoid
+            // creating duplicate entries alongside PROVIDER_REGISTRY data.
+            // If providerId matches gateway.id, it's a unified gateway — use just the gateway ID.
+            // Otherwise, prefix with gateway.id (e.g., "netlify/anthropic").
+            const prefixedId = providerId === gateway.id ? gateway.id : `${gateway.id}/${providerId}`;
+            // Only add if not already present from PROVIDER_REGISTRY to prevent
+            // duplicates when PROVIDER_REGISTRY already has the prefixed key
+            // (e.g. dev mode where GatewayRegistry includes custom gateways).
+            if (!(prefixedId in allProviders)) {
+              allProviders[prefixedId] = config;
+            }
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
+        }
+      }
+    }
+  }
+
+  return Object.entries(allProviders).map(([id, provider]) => {
+    return {
+      id,
+      name: provider.name,
+      label: (provider as any).label || provider.name,
+      description: (provider as any).description || '',
+      envVar: provider.apiKeyEnvVar,
+      connected: isProviderConnected(id, allProviders),
+      docUrl: provider.docUrl,
+      models: [...provider.models],
+    };
+  });
+}
+
 export const GET_PROVIDERS_ROUTE = createRoute({
   method: 'GET',
   path: '/agents/providers',
@@ -1490,53 +1548,7 @@ export const GET_PROVIDERS_ROUTE = createRoute({
   requiresPermission: ['agents:read'],
   handler: async ({ mastra }) => {
     try {
-      const allProviders: Record<string, ProviderConfig> = {};
-
-      for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
-        allProviders[id] = provider as ProviderConfig;
-      }
-
-      // Include gateway providers (defaults + user-registered)
-      if (mastra) {
-        const allGateways = mastra.listGateways();
-        if (allGateways) {
-          for (const gateway of Object.values(allGateways)) {
-            // Skip models.dev gateway (already covered by PROVIDER_REGISTRY)
-            if (gateway.id === 'models.dev') continue;
-            try {
-              const gatewayProviders = await gateway.fetchProviders();
-              for (const [providerId, config] of Object.entries(gatewayProviders)) {
-                // Apply the same prefixing logic as registry-generator to avoid
-                // creating duplicate entries alongside PROVIDER_REGISTRY data.
-                // If providerId matches gateway.id, it's a unified gateway — use just the gateway ID.
-                // Otherwise, prefix with gateway.id (e.g., "netlify/anthropic").
-                const prefixedId = providerId === gateway.id ? gateway.id : `${gateway.id}/${providerId}`;
-                // Only add if not already present from PROVIDER_REGISTRY to prevent
-                // duplicates when PROVIDER_REGISTRY already has the prefixed key
-                // (e.g. dev mode where GatewayRegistry includes custom gateways).
-                if (!(prefixedId in allProviders)) {
-                  allProviders[prefixedId] = config;
-                }
-              }
-            } catch (error) {
-              console.warn(`Failed to fetch providers from gateway "${gateway.id}":`, error);
-            }
-          }
-        }
-      }
-
-      const providers = Object.entries(allProviders).map(([id, provider]) => {
-        return {
-          id,
-          name: provider.name,
-          label: (provider as any).label || provider.name,
-          description: (provider as any).description || '',
-          envVar: provider.apiKeyEnvVar,
-          connected: isProviderConnected(id, allProviders),
-          docUrl: provider.docUrl,
-          models: [...provider.models],
-        };
-      });
+      const providers = await buildProvidersList(mastra);
       return { providers };
     } catch (error) {
       return handleError(error, 'Error fetching providers');
@@ -1636,14 +1648,20 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         };
       }
 
-      const { structuredOutput, ...restOptions } = rest;
+      const { structuredOutput, untilIdle, ...restOptions } = rest;
 
-      const options = {
+      const options: Record<string, any> = {
         ...restOptions,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
         abortSignal,
       };
+
+      // Support `untilIdle` option on the /stream endpoint — delegates to
+      // the idle-loop wrapper internally (same behaviour as /stream-until-idle).
+      if (untilIdle) {
+        options.untilIdle = untilIdle;
+      }
 
       const streamResult = structuredOutput
         ? await agent.stream(messages, { ...options, structuredOutput })
@@ -2511,9 +2529,9 @@ export const RESUME_STREAM_ROUTE = createRoute({
       const workflowRun = await workflowsStore?.getWorkflowRunById({ workflowName: 'agentic-loop', runId });
       await validateRunOwnership(workflowRun, getEffectiveResourceId(serverRequestContext, undefined));
 
-      const { structuredOutput, ...restOptions } = rest;
+      const { structuredOutput, untilIdle, ...restOptions } = rest;
 
-      const options = {
+      const options: Record<string, any> = {
         runId,
         toolCallId,
         ...restOptions,
@@ -2521,6 +2539,12 @@ export const RESUME_STREAM_ROUTE = createRoute({
         memory: authorizedMemoryOption,
         abortSignal,
       };
+
+      // Support `untilIdle` option on the /resume-stream endpoint — delegates
+      // to the idle-loop wrapper internally (same behaviour as /resume-stream-until-idle).
+      if (untilIdle) {
+        options.untilIdle = untilIdle;
+      }
 
       const streamResult = structuredOutput
         ? await agent.resumeStream(resumeData, { ...options, structuredOutput })

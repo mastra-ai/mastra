@@ -1,5 +1,129 @@
 # @mastra/client-js
 
+## 1.23.2
+
+### Patch Changes
+
+- The `/agents/:agentId/stream` and `/agents/:agentId/resume-stream` endpoints now accept an `untilIdle` field in the request body. When set, the stream stays open across background-task continuations (same behavior as the `/stream-until-idle` endpoint). The dedicated `/stream-until-idle` and `/resume-stream-until-idle` endpoints remain available but are deprecated. ([#17536](https://github.com/mastra-ai/mastra/pull/17536))
+
+  **Server example:**
+
+  ```ts
+  // POST /api/agents/:agentId/stream
+  fetch(`/api/agents/${agentId}/stream`, {
+    method: 'POST',
+    body: JSON.stringify({
+      messages: [{ role: 'user', content: 'Research solana for me' }],
+      untilIdle: true, // or { maxIdleMs: 60000 }
+    }),
+  });
+  ```
+
+  **Client SDK:** `streamUntilIdle()` and `resumeStreamUntilIdle()` are deprecated — use `stream(messages, { untilIdle: true })` instead.
+
+- Updated dependencies [[`f82cc72`](https://github.com/mastra-ai/mastra/commit/f82cc72edca0ce636fe18abaf2598d89a0c6bcca), [`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9)]:
+  - @mastra/core@1.41.0
+
+## 1.23.2-alpha.0
+
+### Patch Changes
+
+- The `/agents/:agentId/stream` and `/agents/:agentId/resume-stream` endpoints now accept an `untilIdle` field in the request body. When set, the stream stays open across background-task continuations (same behavior as the `/stream-until-idle` endpoint). The dedicated `/stream-until-idle` and `/resume-stream-until-idle` endpoints remain available but are deprecated. ([#17536](https://github.com/mastra-ai/mastra/pull/17536))
+
+  **Server example:**
+
+  ```ts
+  // POST /api/agents/:agentId/stream
+  fetch(`/api/agents/${agentId}/stream`, {
+    method: 'POST',
+    body: JSON.stringify({
+      messages: [{ role: 'user', content: 'Research solana for me' }],
+      untilIdle: true, // or { maxIdleMs: 60000 }
+    }),
+  });
+  ```
+
+  **Client SDK:** `streamUntilIdle()` and `resumeStreamUntilIdle()` are deprecated — use `stream(messages, { untilIdle: true })` instead.
+
+- Updated dependencies [[`f82cc72`](https://github.com/mastra-ai/mastra/commit/f82cc72edca0ce636fe18abaf2598d89a0c6bcca), [`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9)]:
+  - @mastra/core@1.41.0-alpha.0
+
+## 1.23.1
+
+### Patch Changes
+
+- Updated dependencies [[`ae1fa3a`](https://github.com/mastra-ai/mastra/commit/ae1fa3a9c40510f1e068ffc2345cf09f9ee32b26)]:
+  - @mastra/core@1.40.0
+
+## 1.23.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`ae1fa3a`](https://github.com/mastra-ai/mastra/commit/ae1fa3a9c40510f1e068ffc2345cf09f9ee32b26)]:
+  - @mastra/core@1.40.0-alpha.0
+
+## 1.23.0
+
+### Minor Changes
+
+- Added `GET /stored/agents/:storedAgentId/dependents` endpoint that lists agents ([#17183](https://github.com/mastra-ai/mastra/pull/17183))
+  referencing a stored agent as a sub-agent.
+
+  ```ts
+  const { dependents, hiddenCount } = await client.getStoredAgent(id).dependents();
+  // { dependents: [{ id: 'parent-1', name: 'Triager' }], hiddenCount: 2 }
+  ```
+
+  - `dependents` — caller-readable agents (public agents and the caller's own private
+    agents) with `id` + `name`.
+  - `hiddenCount` — cross-workspace dependents the caller cannot read, only surfaced
+    when the target agent is public.
+
+  Access mirrors `GET /stored/agents/:storedAgentId` — 404 when the caller cannot
+  read the target.
+
+- Add experimental `agent.sendMessage()` and `agent.queueMessage()` helpers for the new message-first server routes. ([#17238](https://github.com/mastra-ai/mastra/pull/17238))
+
+### Patch Changes
+
+- Improved agent message, stream, and observational-memory type handling across the client SDKs and playground UI. ([#17208](https://github.com/mastra-ai/mastra/pull/17208))
+
+- Fixed subscribed client tools so browser-executed tool results continue through the existing thread subscription instead of opening and canceling a second stream. This prevents closed-stream errors in apps like Agent Builder when multiple client tools run during one response. ([#17532](https://github.com/mastra-ai/mastra/pull/17532))
+
+- Updated dependencies [[`c973db4`](https://github.com/mastra-ai/mastra/commit/c973db428df1b564ff0c35d4b2a90e8f4f1e13fd), [`552285e`](https://github.com/mastra-ai/mastra/commit/552285e5af43cfc680a0972032cab8de8776c6a0), [`77e686c`](https://github.com/mastra-ai/mastra/commit/77e686c264e493e99ae5024e4dfe3ea5d5a09718), [`ece8dba`](https://github.com/mastra-ai/mastra/commit/ece8dba7ec1a5089eee8c33167cd762bfa91e509), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`e2a8380`](https://github.com/mastra-ai/mastra/commit/e2a838017a7657850404c1e94c70d79ffdc6f14a), [`be3f1cd`](https://github.com/mastra-ai/mastra/commit/be3f1cd81f0e2a649e8eac15a024d542d814aef8), [`a34d9db`](https://github.com/mastra-ai/mastra/commit/a34d9dbc39fedb722f271318e9355ecee70489ab)]:
+  - @mastra/core@1.39.0
+
+## 1.23.0-alpha.0
+
+### Minor Changes
+
+- Added `GET /stored/agents/:storedAgentId/dependents` endpoint that lists agents ([#17183](https://github.com/mastra-ai/mastra/pull/17183))
+  referencing a stored agent as a sub-agent.
+
+  ```ts
+  const { dependents, hiddenCount } = await client.getStoredAgent(id).dependents();
+  // { dependents: [{ id: 'parent-1', name: 'Triager' }], hiddenCount: 2 }
+  ```
+
+  - `dependents` — caller-readable agents (public agents and the caller's own private
+    agents) with `id` + `name`.
+  - `hiddenCount` — cross-workspace dependents the caller cannot read, only surfaced
+    when the target agent is public.
+
+  Access mirrors `GET /stored/agents/:storedAgentId` — 404 when the caller cannot
+  read the target.
+
+- Add experimental `agent.sendMessage()` and `agent.queueMessage()` helpers for the new message-first server routes. ([#17238](https://github.com/mastra-ai/mastra/pull/17238))
+
+### Patch Changes
+
+- Improved agent message, stream, and observational-memory type handling across the client SDKs and playground UI. ([#17208](https://github.com/mastra-ai/mastra/pull/17208))
+
+- Fixed subscribed client tools so browser-executed tool results continue through the existing thread subscription instead of opening and canceling a second stream. This prevents closed-stream errors in apps like Agent Builder when multiple client tools run during one response. ([#17532](https://github.com/mastra-ai/mastra/pull/17532))
+
+- Updated dependencies [[`c973db4`](https://github.com/mastra-ai/mastra/commit/c973db428df1b564ff0c35d4b2a90e8f4f1e13fd), [`552285e`](https://github.com/mastra-ai/mastra/commit/552285e5af43cfc680a0972032cab8de8776c6a0), [`77e686c`](https://github.com/mastra-ai/mastra/commit/77e686c264e493e99ae5024e4dfe3ea5d5a09718), [`ece8dba`](https://github.com/mastra-ai/mastra/commit/ece8dba7ec1a5089eee8c33167cd762bfa91e509), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`e2a8380`](https://github.com/mastra-ai/mastra/commit/e2a838017a7657850404c1e94c70d79ffdc6f14a), [`be3f1cd`](https://github.com/mastra-ai/mastra/commit/be3f1cd81f0e2a649e8eac15a024d542d814aef8), [`a34d9db`](https://github.com/mastra-ai/mastra/commit/a34d9dbc39fedb722f271318e9355ecee70489ab)]:
+  - @mastra/core@1.39.0-alpha.0
+
 ## 1.22.0
 
 ### Minor Changes

@@ -56,7 +56,7 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
 
     server.use(
       http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
-      http.post(`${BASE_URL}/api/agents/builder-agent/stream-until-idle`, async ({ request }) => {
+      http.post(`${BASE_URL}/api/agents/builder-agent/stream`, async ({ request }) => {
         captured.body = await request.json();
         // Minimal "no events" response body — useChat closes out cleanly.
         const stream = new ReadableStream<Uint8Array>({
@@ -107,6 +107,7 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
     expect(captured.body.modelSettings.maxRetries).toBe(3);
     expect(captured.body.modelSettings.maxOutputTokens).toBe(5000);
     expect(captured.body.modelSettings.temperature).toBe(1);
+    expect(captured.body.providerOptions).toEqual({ openai: { reasoningEffort: 'low' } });
 
     // Confirm the snapshot is NOT smuggled into the user-facing messages array.
     const messages = captured.body.messages ?? [];
@@ -121,7 +122,7 @@ describe('StreamChatProvider — modelSettings.instructions on the wire', () => 
 
     server.use(
       http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
-      http.post(`${BASE_URL}/api/agents/builder-agent/stream-until-idle`, async ({ request }) => {
+      http.post(`${BASE_URL}/api/agents/builder-agent/stream`, async ({ request }) => {
         captured.body = await request.json();
         const stream = new ReadableStream<Uint8Array>({
           start(controller) {
