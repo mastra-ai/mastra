@@ -1477,7 +1477,7 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
-  it('dispatches due high full notifications before medium notifications that can wake the thread', async () => {
+  it('plans due notifications by thread so medium summaries cannot starve high full delivery', async () => {
     let releaseRun!: () => void;
     const runFinished = new Promise<void>(resolve => {
       releaseRun = resolve;
@@ -1521,7 +1521,7 @@ describe('Agent signals', () => {
       kind: 'pull-request-ci-pending',
       priority: 'medium',
       summary: 'CI is still pending',
-      deliverAt: dueAt,
+      summaryAt: dueAt,
       createdAt: new Date('2026-06-05T22:55:00Z'),
     });
     const high = await notifications.createNotification({
@@ -1546,7 +1546,7 @@ describe('Agent signals', () => {
     const dispatchResult = await dispatchDueNotifications({ mastra, storage: notifications, now: dueAt });
 
     expect(dispatchResult.failed).toEqual([]);
-    expect(dispatchResult.signals.map(signal => signal.contents)).toEqual(['Devin commented', 'CI is still pending']);
+    expect(dispatchResult.signals.map(signal => signal.contents)).toEqual(['Devin commented', 'github: 1']);
     await expect(
       notifications.getNotification({ threadId: 'priority-dispatch-thread', id: 'high-comment' }),
     ).resolves.toMatchObject({
@@ -1556,8 +1556,9 @@ describe('Agent signals', () => {
     await expect(
       notifications.getNotification({ threadId: 'priority-dispatch-thread', id: 'medium-ci-pending' }),
     ).resolves.toMatchObject({
-      status: 'delivered',
-      deliveredSignalId: dispatchResult.signals[1]?.id,
+      status: 'pending',
+      summaryAt: undefined,
+      summarySignalId: dispatchResult.signals[1]?.id,
     });
 
     releaseRun();
