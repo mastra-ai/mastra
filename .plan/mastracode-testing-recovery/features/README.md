@@ -36,7 +36,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 
 | Area | Feature | Origin | State owner | Tests | Risk | Page |
 | --- | --- | --- | --- | --- | --- | --- |
-| Setup | Installation and launch | #13294, #13560, #13648, #13760, #13767, #13768 | package metadata + startup runtime | Partial | Medium | [page](./setup/installation-and-launch.md) |
+| Setup | Installation and launch | #13294, #13560, #13648, #13760, #13767, #13768, #14541 | package metadata + dependency ranges + startup runtime | Partial | Medium | [page](./setup/installation-and-launch.md) |
 | Setup | Auto-update prompts | #13603, #13760, #13767, #13768, #13787 | npm registry helpers + build-time/source version + settings dismissed version | Partial | Medium | [page](./setup/auto-update-prompts.md) |
 | Headless | Prompt mode | #13648 | CLI args + Harness events + auto-resolution | Partial | High | [page](./headless/prompt-mode.md) |
 | TUI | Startup banner | #13422 | TUI options + terminal width | Partial | Medium | [page](./tui/startup-banner.md) |
@@ -52,7 +52,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | TUI | Interactive chat | #13218, #13350, #13413, #13427, #13456, #13460, #13442, #13487, #13609, #13696, #13712, #13723, #13999, #14423 | TUI + Harness display state + prompt/editor animation | Partial | High | [page](./tui/interactive-chat.md) |
 | TUI | Shell passthrough streaming | #13999 | TUI input router + shell subprocess + live output component | Partial | Medium | [page](./tui/shell-passthrough.md) |
 | TUI | Debug logging | #13691, #13701 | env vars + app-data/debug trace files | Partial | Medium | [page](./tui/debug-logging.md) |
-| Chat | Prompt context and project instructions | #13234, #13346, #13376, #13456 | Harness request context + instruction files + git metadata | Partial | High | [page](./chat/prompt-context.md) |
+| Chat | Prompt context and project instructions | #13234, #13346, #13376, #13456, #14587 | Harness request context + instruction files + git metadata + model-specific prompt sections | Partial | High | [page](./chat/prompt-context.md) |
 | Chat | File attachments in chat input | #13574, #13712, #13953 | Harness signal content + message-list adapters + TUI pending images + OM attachment input | Partial | High | [page](./chat/file-attachments.md) |
 | Git | Branch context and status | #13456 | live git branch + TUI project info | Missing | High | [page](./git/branch-context.md) |
 | Chat | Queued follow-ups and slash commands | #13345, #13493, #14250 | TUI transient queue state + command template processor + active-run signal/queue routing | Partial | High | [page](./chat/queued-followups.md) |

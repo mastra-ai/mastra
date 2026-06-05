@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13234](https://github.com/mastra-ai/mastra/pull/13234) — moved prompt building into agent prompt modules and added runtime instruction assembly.
-- Later changes: [#13346](https://github.com/mastra-ai/mastra/pull/13346) — static instruction discovery switched from dead `AGENT.md` to plural `AGENTS.md`; [#13416](https://github.com/mastra-ai/mastra/pull/13416) — split mode-aware tool guidance into `tool-guidance.ts` and made Plan mode explicitly require `submit_plan`; [#13376](https://github.com/mastra-ai/mastra/pull/13376) — passed current model ID into Git Safety commit attribution guidance; [#13456](https://github.com/mastra-ai/mastra/pull/13456) — refreshes current Git branch during dynamic instruction assembly; task-list injection, model-specific prompt sections, goal-mode prompt guidance, and dynamic AGENTS.md injection changed this behavior later.
+- Later changes: [#13346](https://github.com/mastra-ai/mastra/pull/13346) — static instruction discovery switched from dead `AGENT.md` to plural `AGENTS.md`; [#13416](https://github.com/mastra-ai/mastra/pull/13416) — split mode-aware tool guidance into `tool-guidance.ts` and made Plan mode explicitly require `submit_plan`; [#13376](https://github.com/mastra-ai/mastra/pull/13376) — passed current model ID into Git Safety commit attribution guidance; [#13456](https://github.com/mastra-ai/mastra/pull/13456) — refreshes current Git branch during dynamic instruction assembly; [#14587](https://github.com/mastra-ai/mastra/pull/14587) — expands base autonomy/common-sense guidance and inserts model-specific prompt sections during assembly; task-list injection, goal-mode prompt guidance, and dynamic AGENTS.md injection changed this behavior later.
 
 ## User-visible behavior
 
-- What the user can do: influence agent behavior through project/global `AGENTS.md` or `CLAUDE.md` instruction files and current runtime state.
-- Success looks like: the agent sees the right project, branch, mode, model, tools, tasks, plan, and instructions for the current run.
-- Must preserve: `AGENTS.md` wins over `CLAUDE.md` at the same location; singular `AGENT.md` is not loaded as a static instruction file.
+- What the user can do: influence agent behavior through project/global `AGENTS.md` or `CLAUDE.md` instruction files, current runtime state, and selected model.
+- Success looks like: the agent sees the right project, branch, mode, model, model-specific prompt guidance, tools, tasks, plan, and instructions for the current run.
+- Must preserve: `AGENTS.md` wins over `CLAUDE.md` at the same location; singular `AGENT.md` is not loaded as a static instruction file; model-specific sections only apply to matching model IDs.
 
 ## Entry points / commands
 
@@ -41,6 +41,8 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | Mode/model | Harness session | Prompt mode/model sections, runtime model selection, commit attribution |
+| Model-specific prompt text | `modelSpecificPrompts` keyed by selected model ID | `buildFullPrompt()` assembled system prompt |
+| Base autonomy guidance | `buildBasePrompt()` | Shared behavior instructions for all modes/models |
 | Project metadata and branch | Project detection + live git branch refresh | Environment section |
 | Task list | Harness state | `<current-task-list>` prompt section |
 | Active plan | Harness state | Base/mode prompt guidance |
@@ -50,8 +52,9 @@
 ## Key files
 
 - `mastracode/src/agents/instructions.ts` — builds prompt context from harness request context and refreshes current Git branch.
-- `mastracode/src/agents/prompts/index.ts` — assembles base, tasks, instructions, model, and mode sections.
-- `mastracode/src/agents/prompts/base.ts` — shared environment and behavior prompt.
+- `mastracode/src/agents/prompts/index.ts` — assembles base, tasks, instructions, model-specific, and mode sections using blank-line-separated non-empty sections.
+- `mastracode/src/agents/prompts/base.ts` — shared environment, behavior, autonomy, and communication prompt.
+- `mastracode/src/agents/prompts/model.ts` — model-specific prompt snippets keyed by exact model ID.
 - `mastracode/src/agents/prompts/agent-instructions.ts` — loads `AGENTS.md`/`CLAUDE.md` instruction files from global and project locations.
 - `mastracode/src/index.ts` — wires `getDynamicInstructions()` and `AgentsMDInjector` ignored static paths into the code agent.
 
@@ -68,7 +71,7 @@
 
 ## Existing tests
 
-- `mastracode/src/agents/__tests__/prompts.test.ts` — model-specific prompts, goal prompt guidance, common binary context.
+- `mastracode/src/agents/__tests__/prompts.test.ts` — model-specific prompts (`openai/gpt-5.4`, `openai/gpt-5.5`), autonomy/base prompt guidance, goal prompt guidance, common binary context.
 - `mastracode/src/agents/prompts/index.test.ts` — task-list prompt injection and escaping.
 - `mastracode/src/__tests__/index.test.ts` — verifies runtime wiring uses `getDynamicInstructions()`.
 - `mastracode/src/headless-integration.test.ts` — includes nested `AGENTS.md` dynamic reminder persistence coverage.
@@ -76,12 +79,14 @@
 ## Missing tests
 
 - Final prompt after thread reload preserves model/mode/task/plan state.
+- Packaged/source smoke that verifies model-specific prompt IDs still match model pack IDs after model default changes.
 - Direct unit coverage for static `loadAgentInstructions()` precedence: `AGENTS.md` over `CLAUDE.md`, config-dir variants, global before project, and singular `AGENT.md` ignored.
 - Permission-denied tools disappear from prompt guidance in real runs.
 
 ## Known risks / regressions
 
 - Prompt context can drift if harness state, thread metadata, and TUI footer disagree.
+- Model-specific prompt text is exact-ID keyed; model-pack renames can silently drop a model-specific section unless prompt tests cover the new ID.
 - Loaded-from-history runs can silently use current filesystem instructions, not the instructions that existed when history was created.
 - Attachments are user-message content, not instruction context; prompt-audit tests need to inspect both channels separately.
 - Static instruction loading and dynamic `AgentsMDInjector` both touch AGENTS guidance; ignored-path handling must avoid duplicate instruction reminders.

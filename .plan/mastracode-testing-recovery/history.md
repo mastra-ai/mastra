@@ -1371,3 +1371,24 @@ Verification:
 - `corepack pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/ask-question-inline-long-labels.test.ts --bail=1 --reporter=dot` — 1 file / 3 tests passed.
 - `corepack pnpm --filter ./packages/memory exec vitest run src/tools/om-tools.test.ts --bail=1 --reporter=dot` — 1 file / 91 tests passed.
 - `corepack pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/observational-memory.test.ts --bail=1 --reporter=dot -t "anchor|observation group|retrieval"` — 1 file / 13 tests passed / 437 skipped.
+
+### PR #14541 / #14518 / #14587 feature-map checkpoint
+
+Verified rows 150-152:
+
+- #14541 pins Mastra Code package dependency specifiers by replacing `latest` ranges in `mastracode/package.json` with explicit semver ranges and matching `pnpm-lock.yaml` changes. Current `mastracode/package.json` has no remaining `latest` specifiers.
+- #14518 is Changesets alpha package-version churn for `mastracode`; skipped for feature mapping.
+- #14587 expands the base system prompt with common-sense autonomy, decision, communication, and ask/don't-ask guidance. It also changes `buildFullPrompt()` to assemble non-empty sections (`base`, current tasks, agent instructions, model-specific prompt, mode prompt) with blank-line separators and adds `modelSpecificPrompts` keyed by exact model ID. Current HEAD includes prompts for `openai/gpt-5.4` and `openai/gpt-5.5`.
+
+Documentation actions:
+
+- Updated `features/setup/installation-and-launch.md` with #14541 dependency-range ownership and install reproducibility risk.
+- Updated `features/chat/prompt-context.md` with #14587 autonomy guidance, model-specific prompt sections, assembly ownership, tests, and exact-ID risk.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #14541 done, #14518 skipped, #14587 done, #14586 current.
+
+Focused evidence read: PR metadata/diffs for #14541/#14518/#14587; current `mastracode/package.json`, `mastracode/src/agents/prompts/base.ts`, `index.ts`, `model.ts`, and `mastracode/src/agents/__tests__/prompts.test.ts`.
+
+Verification:
+
+- `corepack pnpm --filter ./mastracode exec vitest run src/agents/__tests__/prompts.test.ts --bail=1 --reporter=dot` — 1 file / 6 tests passed.

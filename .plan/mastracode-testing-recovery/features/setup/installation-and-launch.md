@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13294](https://github.com/mastra-ai/mastra/pull/13294) — installation/startup README guidance for Mastra Code.
-- Later changes: [#13560](https://github.com/mastra-ai/mastra/pull/13560) — treats `ERR_STREAM_DESTROYED` as a non-fatal global exception/rejection during CLI runtime; [#13691](https://github.com/mastra-ai/mastra/pull/13691) — makes debug logging opt-in via `MASTRA_DEBUG` and caps app-data `debug.log`; [#13603](https://github.com/mastra-ai/mastra/pull/13603) — checks for newer npm versions on TUI startup and prompts for update; [#13648](https://github.com/mastra-ai/mastra/pull/13648) — adds non-interactive headless startup through `--prompt`; [#13760](https://github.com/mastra-ai/mastra/pull/13760) — inlines package version metadata at build time to avoid runtime `package.json` dependency in npm installs; [#13767](https://github.com/mastra-ai/mastra/pull/13767) and [#13768](https://github.com/mastra-ai/mastra/pull/13768) — keep direct source runs working with an ESM-safe package metadata fallback.
+- Later changes: [#13560](https://github.com/mastra-ai/mastra/pull/13560) — treats `ERR_STREAM_DESTROYED` as a non-fatal global exception/rejection during CLI runtime; [#13691](https://github.com/mastra-ai/mastra/pull/13691) — makes debug logging opt-in via `MASTRA_DEBUG` and caps app-data `debug.log`; [#13603](https://github.com/mastra-ai/mastra/pull/13603) — checks for newer npm versions on TUI startup and prompts for update; [#13648](https://github.com/mastra-ai/mastra/pull/13648) — adds non-interactive headless startup through `--prompt`; [#13760](https://github.com/mastra-ai/mastra/pull/13760) — inlines package version metadata at build time to avoid runtime `package.json` dependency in npm installs; [#13767](https://github.com/mastra-ai/mastra/pull/13767) and [#13768](https://github.com/mastra-ai/mastra/pull/13768) — keep direct source runs working with an ESM-safe package metadata fallback; [#14541](https://github.com/mastra-ai/mastra/pull/14541) — replaces `latest` package dependency specifiers with explicit semver ranges for reproducible installs.
 
 ## User-visible behavior
 
@@ -41,6 +41,7 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | Package entry point | `mastracode/package.json` bin/exports | npm/npx/global install |
+| Dependency ranges | `mastracode/package.json` + `pnpm-lock.yaml` | npm/npx/global install reproducibility, package-manager resolution |
 | Package version detection | `tsup.config.ts` `MASTRACODE_VERSION` define + ESM-safe source fallback | `getCurrentVersion()`, analytics, startup/update UI |
 | Startup runtime | `mastracode/src/main.ts` + `headless.ts` + `error-classification.ts` + `utils/debug-log.ts` | TUI/headless entry, global error handlers, debug logging |
 | Onboarding state | settings/auth storage | First-run setup |
@@ -49,7 +50,7 @@
 ## Key files
 
 - `mastracode/README.md` — current install and usage guidance.
-- `mastracode/package.json` — package name, bin path, exports.
+- `mastracode/package.json` — package name, bin path, exports, and explicit dependency semver ranges.
 - `mastracode/tsup.config.ts` — build-time `MASTRACODE_VERSION` injection for packaged startup.
 - `mastracode/src/main.ts` — CLI/TUI startup path and global uncaught exception / rejection handlers.
 - `mastracode/src/error-classification.ts` — classifies `ERR_STREAM_DESTROYED` through causes/AggregateError while leaving real fatal errors to `handleFatalError()`.
@@ -75,7 +76,7 @@
 
 - Built package smoke: install/pack, run `mastracode --help` and `mastracode --prompt`.
 - Integration test for a real terminal stream closing during active TUI output, not only subprocess detector scripts.
-- Global/npx startup test that catches missing workspace dependency builds or bad ESM subpaths.
+- Global/npx startup test that catches missing workspace dependency builds, dependency range drift, or bad ESM subpaths.
 - First-run onboarding smoke from a clean config dir.
 
 ## Known risks / regressions
@@ -84,6 +85,7 @@
 - Global install can expose ESM/export-map problems not caught by source-mode tests.
 - Error classification must stay narrow: swallowing broader stream errors could hide real startup/runtime failures.
 - Workspace package build assumptions can break local contributors if docs are stale.
+- Dependency pins protect published installs, but broad package checks can still fail from unrelated existing TypeScript/test baseline issues.
 
 ## Verification checklist
 
