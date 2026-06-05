@@ -125,7 +125,7 @@
 
 - Slack reported “No model selected” after reload using model packs.
 - PR #17411 / #17546 history suggests session-state composition was risky here.
-- Env leakage caused model tests to fail in audits; isolate env before blaming product code.
+- Env leakage caused model tests to fail in audits; `mastracode/src/agents/__tests__/model.test.ts` should clear provider `*_API_KEY` variables in its setup so local shell credentials cannot affect “no API key configured” expectations.
 - Provider registry `apiKeyEnvVar` can be string or array; startup/setup/model-picker access can drift if one path only handles one shape.
 - Env vars intentionally take priority over stored `apikey:<provider>` credentials; prompts/storage and `/api-keys` must avoid overwriting a user's shell environment unexpectedly.
 - Anthropic has three runtime outcomes (OAuth, API key, OAuth prompt fallback); auth-copy, onboarding state, and `resolveModel()` priority must stay synchronized. The old Claude Max warning acknowledgement is intentionally gone in current source.

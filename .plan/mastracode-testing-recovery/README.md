@@ -45,7 +45,7 @@ Purpose: fix or quarantine current test failures so the suite becomes a trustwor
 
 Initial scope:
 - Build first with `pnpm run build:mastracode`.
-- Sanitize provider env so local credentials do not affect model tests.
+- Sanitize provider env so local credentials do not affect model tests; preferred fix is for `mastracode/src/agents/__tests__/model.test.ts` to clear provider `*_API_KEY` variables in its own setup.
 - Fix known mock/fixture drift.
 - Separate pre-existing noise from real regressions.
 
