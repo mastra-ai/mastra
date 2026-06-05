@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { OpenAISDKAgent } from './index';
 
 const runMock = vi.hoisted(() => vi.fn());
+const TEST_OPENAI_MODEL = 'gpt-5.1';
 
 vi.mock('@openai/agents', () => {
   class Agent {
@@ -60,7 +61,7 @@ function createUsage({
 
 function createRunResult({
   finalOutput = 'OpenAI SDK result',
-  model = '__GATEWAY_OPENAI_MODEL_BASE__',
+  model = TEST_OPENAI_MODEL,
   usage = createUsage(),
   newItems = [],
 }: {
@@ -99,7 +100,7 @@ function createRunResult({
 
 function createStreamedRunResult({
   finalOutput = 'hello world',
-  model = '__GATEWAY_OPENAI_MODEL_BASE__',
+  model = TEST_OPENAI_MODEL,
   usage = createUsage(),
   events = [
     {
@@ -173,7 +174,7 @@ describe('OpenAISDKAgent', () => {
       description: 'Use OpenAI Agents SDK as a Mastra agent.',
       sdkOptions: {
         name: 'SDK Agent',
-        model: '__GATEWAY_OPENAI_MODEL_BASE__',
+        model: TEST_OPENAI_MODEL,
       },
     });
 
@@ -194,7 +195,7 @@ describe('OpenAISDKAgent', () => {
       sdkOptions: {
         name: 'SDK Agent',
         instructions: 'Answer clearly.',
-        model: '__GATEWAY_OPENAI_MODEL_BASE__',
+        model: TEST_OPENAI_MODEL,
       },
     });
 
@@ -211,7 +212,7 @@ describe('OpenAISDKAgent', () => {
     expect(result.usage.totalTokens).toBe(14);
     expect(result.providerMetadata).toMatchObject({
       openai: {
-        model: '__GATEWAY_OPENAI_MODEL_BASE__',
+        model: TEST_OPENAI_MODEL,
         responseId: 'response-id',
         lastResponseId: 'response-id',
         rawResponseCount: 1,
@@ -221,7 +222,7 @@ describe('OpenAISDKAgent', () => {
       expect.objectContaining({
         name: 'SDK Agent',
         instructions: 'Answer clearly.',
-        model: '__GATEWAY_OPENAI_MODEL_BASE__',
+        model: TEST_OPENAI_MODEL,
       }),
       'Generate prompt',
       {
@@ -236,7 +237,7 @@ describe('OpenAISDKAgent', () => {
     runMock.mockResolvedValueOnce(createRunResult({ finalOutput: 'direct text' }));
     const sdkAgent = new OpenAIAgent({
       name: 'Direct SDK Agent',
-      model: '__GATEWAY_OPENAI_MODEL_BASE__',
+      model: TEST_OPENAI_MODEL,
     });
     const agent = new OpenAISDKAgent({
       id: 'openai-agent',
@@ -263,7 +264,7 @@ describe('OpenAISDKAgent', () => {
       description: 'OpenAI',
       sdkOptions: {
         name: 'SDK Agent',
-        model: '__GATEWAY_OPENAI_MODEL_BASE__',
+        model: TEST_OPENAI_MODEL,
       },
     });
 
@@ -298,7 +299,7 @@ describe('OpenAISDKAgent', () => {
       description: 'OpenAI',
       sdkOptions: {
         name: 'SDK Agent',
-        model: '__GATEWAY_OPENAI_MODEL_BASE__',
+        model: TEST_OPENAI_MODEL,
       },
     });
 
