@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14264 (row 127) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, and #14167 recorded as version/dependency skips plus #12532 recorded as build-tool-dependency-only. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #14201 (`6fa8b85bf8`, likely version-package skip), then #14266 (`057dbc0ddf`, likely version-package skip), then #14250 (`5d6075b445`, queued follow-up UX).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #14250 (row 130) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, and #14266 recorded as version/dependency skips plus #12532 recorded as build-tool-dependency-only. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13573 (`d46c9e95a1`, API-key prompt in MastraCode TUI), then #14260 (`bbcbbce4f0`, MCP SDK dependency/build fix), then #14280 (`660aeff223`, likely version-package skip).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 128: PR #14201 (likely version-package skip), then row 129: PR #14266 (likely version-package skip), then row 130: PR #14250 (refine queued follow-up UX in Mastra Code).
+1. Continue at `_pr-queue.md` row 131: PR #13573 (prompt for API keys in Mastra Code TUI), then row 132: PR #14260 (dependency/build follow-up for MCP SDK), then row 133: PR #14280 (likely version-package skip).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.

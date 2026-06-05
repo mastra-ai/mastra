@@ -147,10 +147,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 125 | 2026-03-11 | #14167 | `1e4db5e5ea` | likely skip | skipped | chore: version packages (alpha) (#14167) | 2 |
 | 126 | 2026-03-12 | #13568 | `86f242631d` | review | done | feat(memory): observer context optimization (#13568) | 1 |
 | 127 | 2026-03-13 | #14264 | `c562ec228f` | review | done | fix(schema-compat): avoid false z.toJSONSchema unavailable errors (#14264) | 1 |
-| 128 | 2026-03-13 | #14201 | `6fa8b85bf8` | likely skip | current | chore: version packages (alpha) (#14201) | 2 |
-| 129 | 2026-03-13 | #14266 | `057dbc0ddf` | likely skip | | chore: version packages (alpha) (#14266) | 2 |
-| 130 | 2026-03-13 | #14250 | `5d6075b445` | review | | fix: refine queued follow-up UX in Mastra Code (#14250) | 18 |
-| 131 | 2026-03-15 | #13573 | `d46c9e95a1` | review | | feat: prompt for API keys in mastracode TUI (#13573) | 9 |
+| 128 | 2026-03-13 | #14201 | `6fa8b85bf8` | likely skip | skipped | chore: version packages (alpha) (#14201) | 2 |
+| 129 | 2026-03-13 | #14266 | `057dbc0ddf` | likely skip | skipped | chore: version packages (alpha) (#14266) | 2 |
+| 130 | 2026-03-13 | #14250 | `5d6075b445` | review | done | fix: refine queued follow-up UX in Mastra Code (#14250) | 18 |
+| 131 | 2026-03-15 | #13573 | `d46c9e95a1` | review | current | feat: prompt for API keys in mastracode TUI (#13573) | 9 |
 | 132 | 2026-03-16 | #14260 | `bbcbbce4f0` | review | | chore: update dependencies and fix mcp build for @modelcontextprotocol/sdk@1.27.1 (#14260) | 1 |
 | 133 | 2026-03-16 | #14280 | `660aeff223` | likely skip | | chore: version packages (alpha) (#14280) | 2 |
 | 134 | 2026-03-16 | #14337 | `3f47335cac` | review | | feat(mastracode): theme with adaptive colors and refined TUI styling (#14337) | 37 |

@@ -1232,3 +1232,20 @@ Documentation actions:
 - Queue status: #14167 skipped, #13568 done, #14264 done, #14201 current.
 
 Focused evidence read: PR metadata for #14167/#13568/#14264; current `observational-memory.ts`, `observer-agent.ts`, `types.ts`, `observational-memory.test.ts`; current `standard-schema.ts`, `zod-v4.ts`, `zod-v4.test.ts`; `git show c562ec228f` for the #14264 adapter/package/lint diff; `git log` on `zod-v4.ts` showing later loader/draft-target follow-ups.
+
+### PR #14201 / #14266 / #14250 feature-map checkpoint
+
+Verified rows 128-130:
+
+- #14201 and #14266 are Changesets alpha/version-package batches touching `.changeset/pre.json`, package `CHANGELOG.md`, and `package.json` files only; skipped for feature mapping.
+- #14250 refined Mastra Code queued follow-up UX. PR intent: Enter queued follow-ups while an agent was streaming, queued messages and slash commands drained FIFO, queued text entered editor history, slash-command autocomplete selected the first visible match, custom slash commands used `//` precedence, and status line showed queued count.
+- Current HEAD has evolved after #14250: active-run Enter text now goes through Harness `sendSignal()` (`signalMessage()`), active-run slash commands run immediately, and Ctrl+F is the explicit FIFO queue shortcut. Image follow-ups still queue when active-run signal routing cannot safely carry pending pasted images. The feature page now records both #14250's queue refinements and the current post-#14250 signal/queue split.
+
+Documentation actions:
+
+- Updated `features/chat/queued-followups.md` with #14250, current Enter/Ctrl+F behavior, FIFO state ownership, queued-count status, pending slash-message cleanup, signal-message state, and focused tests.
+- Updated `features/tui/help-and-shortcuts.md` with #14250 shortcut labels (`Enter` send, `Ctrl+F` queue follow-up).
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #14201 skipped, #14266 skipped, #14250 done, #13573 current.
+
+Focused evidence read: PR metadata/body/diff for #14250; current `mastra-tui.ts` (`getUserInput()`, `signalMessage()`, `queueFollowUpMessage()`), `setup.ts` Enter/Ctrl+F handlers, `agent-lifecycle.ts` `drainQueuedAction()`, `custom-editor.ts` autocomplete completion and first-match logic, `status-line.ts` queued-count label; tests in `mastra-tui-queueing.test.ts`, `custom-editor.test.ts`, `status-line.test.ts`, and `help-overlay.test.ts`.

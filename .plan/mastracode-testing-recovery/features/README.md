@@ -40,7 +40,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Setup | Auto-update prompts | #13603, #13760, #13767, #13768, #13787 | npm registry helpers + build-time/source version + settings dismissed version | Partial | Medium | [page](./setup/auto-update-prompts.md) |
 | Headless | Prompt mode | #13648 | CLI args + Harness events + auto-resolution | Partial | High | [page](./headless/prompt-mode.md) |
 | TUI | Startup banner | #13422 | TUI options + terminal width | Partial | Medium | [page](./tui/startup-banner.md) |
-| TUI | Help and shortcuts | #13426, #13712, #13723, #13787 | TUI command metadata + settings | Partial | Medium | [page](./tui/help-and-shortcuts.md) |
+| TUI | Help and shortcuts | #13426, #13712, #13723, #13787, #14250 | TUI command metadata + settings + queueing shortcut labels | Partial | Medium | [page](./tui/help-and-shortcuts.md) |
 | TUI | Interactive prompts and access requests | #13696, #13753 | TUI active prompt + pending prompt queue + sandbox allowed paths | Partial | High | [page](./tui/interactive-prompts.md) |
 | TUI | Process suspend shortcut | #13723 | TUI keyboard routing + Unix signal handling | Partial | Medium | [page](./tui/process-suspend.md) |
 | TUI | Clipboard paste | #13712, #13953 | OS clipboard helpers + editor paste buffer + pending pasted images | Partial | High | [page](./tui/clipboard-paste.md) |
@@ -55,7 +55,7 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Chat | Prompt context and project instructions | #13234, #13346, #13376, #13456 | Harness request context + instruction files + git metadata | Partial | High | [page](./chat/prompt-context.md) |
 | Chat | File attachments in chat input | #13574, #13712, #13953 | Harness signal content + message-list adapters + TUI pending images + OM attachment input | Partial | High | [page](./chat/file-attachments.md) |
 | Git | Branch context and status | #13456 | live git branch + TUI project info | Missing | High | [page](./git/branch-context.md) |
-| Chat | Queued follow-ups and slash commands | #13345, #13493 | TUI transient queue state + command template processor | Partial | High | [page](./chat/queued-followups.md) |
+| Chat | Queued follow-ups and slash commands | #13345, #13493, #14250 | TUI transient queue state + command template processor + active-run signal/queue routing | Partial | High | [page](./chat/queued-followups.md) |
 | Threads | Persistent conversations / switching | #13218, #13334, #13343 | Harness session + thread metadata | Partial | High | [page](./threads/persistent-conversations.md) |
 | Threads | Resource ID switching | #13690 | Harness resource ID + resource-scoped threads | Partial | High | [page](./threads/resource-id-switching.md) |
 | Models | Model auth, selection, modes | #13218, #13307, #13490, #13512, #13566, #13600, #13611, #13695, #13716 | Settings + harness session + thread pack metadata + provider registry + AuthStorage | Partial | High | [page](./models/model-auth-and-modes.md) |
