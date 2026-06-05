@@ -2301,3 +2301,28 @@ Verification:
 - `pnpm --filter ./mastracode exec vitest run src/auth/providers/openai-codex.test.ts src/providers/__tests__/openai-codex-fetch.test.ts --bail=1 --reporter=dot` — 2 files / 20 tests passed.
 - `pnpm --filter ./mastracode exec vitest run src/mcp/__tests__/config.test.ts src/mcp/__tests__/manager.test.ts --bail=1 --reporter=dot` — 2 files / 66 tests passed.
 - `env -u OPENAI_API_KEY -u MASTRA_OPENAI_API_KEY pnpm --filter ./mastracode exec vitest run src/agents/__tests__/model.test.ts -t "Codex|openai|mastra-prefixed" --bail=1 --reporter=dot` — 1 file / 15 tests passed / 21 skipped. Initial run without unsetting OpenAI env failed one expected router-path assertion because local `OPENAI_API_KEY` made the resolver take the direct OpenAI path.
+
+### PR #16654 / #16657 / #16618 / #16622 feature-map checkpoint
+
+Verified rows 297-300:
+
+- #16654 improves goal judge UX. Current source supports a `waiting` judge decision for explicit user checkpoints, retries once when the judge stream returns no structured output, records `lastPauseWasJudgeFailure` so `/goal resume` retriggers judgment instead of sending a stale main-agent continuation, guards no-assistant-response judge resumes, streams readonly judge-tool activity into `JudgeDisplayComponent`, and switches the status line to a blue `judge` badge/model while evaluation is active.
+- #16657 is a Changesets alpha package-version batch; skipped for feature mapping after PR metadata confirmed package/changelog-only changes.
+- #16618 adds explicit `/skill/<name> [args]` activation. Current source dispatches `skill/` commands, resolves workspace skills eagerly, hides `user-invocable: false` skills from `/skills` and direct activation, wraps formatted skill instructions in `<skill name="...">`, escapes embedded `</skill>` boundaries, supports pending-new-thread activation, and keeps goal-skill aliases via `/goal/<skill>`.
+- #16622 narrows `AgentSignalContents` to string or text/file parts and fixes multimodal signal handling. Current source persists canonical text/file DB parts, preserves providerOptions, inlines XML markers into text parts (or prepends a marker for file-only signals), decodes legacy `metadata.signal.contents` shapes from prior string/parts/CoreUserMessage rows, updates server schemas, and keeps React `useChat` signal content normalization aligned.
+
+Documentation actions:
+
+- Updated `features/goals/persistent-goals.md` for #16654 judge waiting/retry/resume behavior, active judge badge/model display, and updated test/risk notes.
+- Updated `features/integrations/skills-command.md` for #16618 explicit skill activation, `user-invocable` filtering, `<skill>` wrapping, and tests.
+- Updated `features/chat/agent-signals.md` for #16622 narrowed multimodal signal contents, legacy DB rehydration, providerOptions preservation, and server/React surfaces.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16654 done, #16657 skipped, #16618 done, #16622 done, #16690 current.
+
+Focused evidence read: PR metadata for #16654/#16657/#16618/#16622; current `mastracode/src/tui/goal-manager.ts`, `components/judge-display.ts`, `commands/goal.ts`, `handlers/agent-lifecycle.ts`, `handlers/prompts.ts`, `status-line.ts`, `command-dispatch.ts`, `commands/skills.ts`, `commands/skill-filters.ts`, `state.ts`; current `packages/core/src/agent/signals.ts`, `client-sdks/react/src/agent/hooks.ts`, `client-sdks/react/src/agent/signal-data.ts`, `packages/server/src/server/schemas/agents.ts`, and focused tests under `goal-manager.test.ts`, `commands/__tests__/goal.test.ts`, `commands/__tests__/skills.test.ts`, and `packages/core/src/agent/__tests__/agent-signals.test.ts`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/goal-manager.test.ts src/tui/commands/__tests__/goal.test.ts src/tui/components/__tests__/judge-display.test.ts src/tui/__tests__/status-line.test.ts -t "pauses|retry|resume|waiting|activity|interrupted|status|JudgeDisplay|status line|does not auto-continue|tells the judge|clears stale|budget exhaustion|readonly" --bail=1 --reporter=dot` — 4 files / 25 tests passed / 31 skipped. A broader first run of the same goal files hit the known fragile `uses stream with structured output and judge memory thread parent-goalId` Zod matcher assertion.
+- `pnpm --filter ./mastracode exec vitest run src/tui/commands/__tests__/skills.test.ts src/tui/__tests__/command-dispatch.test.ts src/tui/components/__tests__/help-overlay.test.ts --bail=1 --reporter=dot` — 3 files / 33 tests passed.
+- `pnpm --filter ./packages/core exec vitest run src/agent/__tests__/agent-signals.test.ts src/harness/signal-history.test.ts src/harness/signal-messages.test.ts --bail=1 --reporter=dot` — 3 files / 102 tests passed / no type errors.

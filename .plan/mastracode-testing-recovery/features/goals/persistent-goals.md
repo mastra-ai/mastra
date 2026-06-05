@@ -3,12 +3,12 @@
 ## Origin PR / commit
 
 - PR: [#16065](https://github.com/mastra-ai/mastra/pull/16065) — adds persistent `/goal` mode and judge-driven continuation loop.
-- Later changes: [#16322](https://github.com/mastra-ai/mastra/pull/16322) — keeps multiline `/goal` objectives, goal-enabled custom slash commands/skills, and user choices intact while goal mode is active; [#16340](https://github.com/mastra-ai/mastra/pull/16340) — ensures approving a plan as `/goal` first resolves the suspended plan approval, then starts the canonical goal reminder as a fresh build-mode run; [#16231](https://github.com/mastra-ai/mastra/pull/16231) — routes judge continuations through the same Agent signal path as active-run follow-ups.
+- Later changes: [#16322](https://github.com/mastra-ai/mastra/pull/16322) — keeps multiline `/goal` objectives, goal-enabled custom slash commands/skills, and user choices intact while goal mode is active; [#16340](https://github.com/mastra-ai/mastra/pull/16340) — ensures approving a plan as `/goal` first resolves the suspended plan approval, then starts the canonical goal reminder as a fresh build-mode run; [#16231](https://github.com/mastra-ai/mastra/pull/16231) — routes judge continuations through the same Agent signal path as active-run follow-ups; [#16654](https://github.com/mastra-ai/mastra/pull/16654) — improves judge UX with explicit `waiting` decisions, retry-on-empty-output, judge-failure resume, readonly judge-tool activity, and active judge status-line mode.
 
 ## User-visible behavior
 
 - What the user can do: run `/goal <objective>` to pursue a cross-turn objective, check `/goal status`, pause/resume/clear, set `/judge` defaults, or start an approved plan as a goal.
-- Success looks like: the judge evaluates each assistant turn, marks the goal done/waiting, pauses on failure/budget, or sends a structured continuation reminder; user follow-ups and allowed escape commands take precedence over automatic continuation.
+- Success looks like: the judge evaluates each assistant turn, marks the goal done/waiting, pauses on failure/budget, retries once when structured output is missing, or sends a structured continuation reminder; user follow-ups and allowed escape commands take precedence over automatic continuation.
 - Must preserve: thread-persisted goal state, judge model/max-turn defaults, active-time accounting, plan approval resolver ordering before goal start, plan-mode return after approved-goal completion, input locks during judge evaluation, and slash/custom command text preservation.
 
 ## Entry points / commands
@@ -28,8 +28,8 @@
 
 ## Streaming / loading / interrupted states
 
-- Streaming / loading: judge activity lines stream into `JudgeDisplayComponent`; continuation reminders route through normal signal handling.
-- Abort / retry / resume: keyboard abort marks the judge interrupted; judge failures pause with `lastPauseWasJudgeFailure` so `/goal resume` retries judgment instead of sending main-agent continuation.
+- Streaming / loading: judge activity lines stream into `JudgeDisplayComponent`; the status line switches to a blue `judge` badge/model while evaluation is active; continuation reminders route through normal signal handling.
+- Abort / retry / resume: keyboard abort marks the judge interrupted; missing structured output gets one retry prompt; judge failures pause with `lastPauseWasJudgeFailure` so `/goal resume` retries judgment instead of sending main-agent continuation.
 
 ## Streaming vs loaded-from-history behavior
 
@@ -42,7 +42,7 @@
 | --- | --- | --- |
 | Active goal | thread metadata key `goal` + `GoalManager` in `TUIState` | `/goal` command, status line, lifecycle continuation |
 | Judge defaults | settings `models.goalJudgeModel` / `goalMaxTurns` | `/judge`, `startGoalWithDefaults()`, plan approval goal start |
-| Judge run state | `activeGoalJudge`, abort controller, `JudgeDisplayComponent` | input lock, keyboard abort, lifecycle cleanup |
+| Judge run state | `activeGoalJudge`, abort controller, `JudgeDisplayComponent`, `lastPauseWasJudgeFailure` | input lock, keyboard abort, lifecycle cleanup, `/goal resume` judge retry |
 | Goal continuations | `GoalManager.evaluateAfterTurn()` decision + structured Agent `system-reminder` signal | Harness signal path, subscribed chat history, next agent turn |
 | Approved-plan goal start | `handlePlanApproval().onGoal` resolves `respondToPlanApproval()` before `ctx.startGoal()` and records `planStartedGoalId` | suspended plan tool, Build-mode start, goal completion return-to-plan behavior |
 | Goal command text | command-dispatch raw-arg handling + custom editor autocomplete completion | multiline `/goal` objectives, `/goal/<custom>` and `/goal/<skill>` routes |
@@ -55,7 +55,7 @@
 - `mastracode/src/tui/goal-input-lock.ts` and `setup.ts` — input lock rules and keyboard abort during judge evaluation.
 - `mastracode/src/tui/handlers/prompts.ts` — plan approval `Use as /goal` ordering: resolve the suspended plan approval, start the goal, then remember `planStartedGoalId`.
 - `mastracode/src/tui/command-dispatch.ts` and `components/custom-editor.ts` — preserve raw multiline `/goal` objectives and slash autocomplete text.
-- `mastracode/src/tui/components/judge-display.ts` and `status-line.ts` — judge UI and goal duration label.
+- `mastracode/src/tui/components/judge-display.ts` and `status-line.ts` — judge UI, activity-line rendering, active judge mode badge/model display, and goal duration label.
 
 ## Dependencies / related features
 
@@ -67,21 +67,21 @@
 
 ## Existing tests
 
-- `mastracode/src/tui/__tests__/goal-manager.test.ts` — persistence, judge decisions, active duration, judge failure resume, budget exhaustion, readonly judge tools, activity reporting, and processor wiring.
+- `mastracode/src/tui/__tests__/goal-manager.test.ts` — persistence, judge decisions including `waiting`, active duration, judge failure resume, budget exhaustion, retry-on-empty-output, readonly judge tools, activity reporting, and processor wiring.
 - `mastracode/src/tui/commands/__tests__/goal.test.ts` — `/goal` command lifecycle, defaults, continuation failure, plan-mode completion handling, and pending-thread creation.
 - `mastracode/src/tui/__tests__/mastra-tui-queueing.test.ts` — editor lock during judge, queued action precedence, pending signal behavior.
-- `mastracode/src/tui/__tests__/command-dispatch.test.ts` and `setup-keyboard-shortcuts.test.ts` — multiline `/goal` raw args, `/goal/<custom>`/skill routing, escape hatches, autocomplete, and abort shortcuts.
+- `mastracode/src/tui/__tests__/command-dispatch.test.ts` and `setup-keyboard-shortcuts.test.ts` — multiline `/goal` raw args, `/goal/<custom>`/skill routing, judge input locks/escape hatches, autocomplete, and abort shortcuts.
 - `mastracode/src/tui/handlers/__tests__/prompts.test.ts` and `parallel-interactive-prompts.test.ts` — ask_user prompts remain user-controlled during active goals, and plan approval goal mode resolves the suspended plan before starting `/goal` without sending a duplicate build reminder.
 
 ## Missing tests
 
-- End-to-end run that starts a real `/goal`, completes several model turns, reloads, resumes, and verifies persisted status/duration/history.
+- End-to-end run that starts a real `/goal`, completes several model turns including a `waiting` checkpoint, reloads, resumes, and verifies persisted status/duration/history.
 - Non-TUI/headless behavior for goal state and continuation when slash-command UI is unavailable.
 - Snapshot coverage for narrow status-line fallback with active goal, judge badge, OM badge interactions, and long model IDs.
 
 ## Known risks / regressions
 
-- The judge loop depends on transient lifecycle ordering: queued user actions must drain before continuation, plan approval must resolve before abort/mode switch/goal start, and judge failure resume must not accidentally send stale continuation prompts.
+- The judge loop depends on transient lifecycle ordering: queued user actions must drain before continuation, plan approval must resolve before abort/mode switch/goal start, and judge failure resume must not accidentally send stale continuation prompts or skip the no-assistant-response guard.
 - Goal commands intentionally bypass some normal slash-command argument splitting; future command parser changes can break multiline objective preservation.
 - Judge agents use readonly workspace tools and provider processors; expanding tool access or prompt context can make judge decisions slower or less deterministic.
 

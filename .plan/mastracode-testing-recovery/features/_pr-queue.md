@@ -316,11 +316,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 294 | 2026-05-14 | #16559 | `046cb4a2e9` | likely skip | skipped | chore: version packages (alpha) (#16559) | 2 |
 | 295 | 2026-05-14 | #16611 | `b23d30dd83` | likely skip | skipped | chore: version packages (alpha) (#16611) | 2 |
 | 296 | 2026-05-15 | #16624 | `fd5fbb4ce7` | likely skip | skipped | chore: version packages (alpha) (#16624) | 2 |
-| 297 | 2026-05-15 | #16654 | `87e0c9886a` | review | current | fix: improve goal mode judge UX (#16654) | 21 |
-| 298 | 2026-05-15 | #16657 | `bbbf6d015a` | likely skip | | chore: version packages (alpha) (#16657) | 2 |
-| 299 | 2026-05-16 | #16618 | `64c1e0b351` | review | | feat(mastracode): add /skill/<name> command to activate skills explicitly (#16618) | 14 |
-| 300 | 2026-05-15 | #16622 | `40d83a90d9` | review | | feat(core)!: simplify AgentSignalContents and fix multimodal signal handling (#16622) | 1 |
-| 301 | 2026-05-19 | #16690 | `7ab779ad87` | review | | fix(mastracode): track active goal pursuit time (#16690) | 9 |
+| 297 | 2026-05-15 | #16654 | `87e0c9886a` | review | done | fix: improve goal mode judge UX (#16654) | 21 |
+| 298 | 2026-05-15 | #16657 | `bbbf6d015a` | likely skip | skipped | chore: version packages (alpha) (#16657) | 2 |
+| 299 | 2026-05-16 | #16618 | `64c1e0b351` | review | done | feat(mastracode): add /skill/<name> command to activate skills explicitly (#16618) | 14 |
+| 300 | 2026-05-15 | #16622 | `40d83a90d9` | review | done | feat(core)!: simplify AgentSignalContents and fix multimodal signal handling (#16622) | 1 |
+| 301 | 2026-05-19 | #16690 | `7ab779ad87` | review | current | fix(mastracode): track active goal pursuit time (#16690) | 9 |
 | 302 | 2026-05-19 | #16691 | `359439bb8c` | review | | fix: inherit env for MastraCode commands (#16691) | 2 |
 | 303 | 2026-05-19 | #16676 | `5e16cf0c6b` | review | | feat(mastracode): return to plan after approved goal (#16676) | 7 |
 | 304 | 2026-05-19 | #16663 | `c272d50610` | review | | feat(memory): add provider-aware OM idle activation (#16663) | 12 |
