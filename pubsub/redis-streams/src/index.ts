@@ -306,6 +306,84 @@ export class RedisStreamsPubSub extends PubSub {
   }
 
   /**
+   * Reservation key used in Redis. Distinct prefix from streams so reservations
+   * and streams can't collide on key namespace.
+   */
+  #reservationKey(key: string): string {
+    return `${this.#keyPrefix}:reserve:${key}`;
+  }
+
+  /**
+   * Atomic claim via SET NX PX. Idempotent for the same owner: if the
+   * current value is already this owner, we refresh the TTL instead of
+   * failing. Cross-process callers race here; Redis serializes them.
+   */
+  override async tryReserve(key: string, owner: string, ttlMs: number): Promise<{ acquired: boolean; owner?: string }> {
+    if (this.#closed) return { acquired: false };
+    await this.#ensureWriterConnected();
+    const redisKey = this.#reservationKey(key);
+    const result = await this.#writeClient.set(redisKey, owner, { NX: true, PX: ttlMs });
+    if (result === 'OK') return { acquired: true, owner };
+    // Someone holds the key — check if it's us, and renew if so.
+    const current = await this.#writeClient.get(redisKey);
+    if (current === owner) {
+      // Same owner re-claiming: refresh TTL.
+      await this.#writeClient.pExpire(redisKey, ttlMs);
+      return { acquired: true, owner };
+    }
+    return { acquired: false, owner: current ?? undefined };
+  }
+
+  override async getReservation(key: string): Promise<string | undefined> {
+    if (this.#closed) return undefined;
+    await this.#ensureWriterConnected();
+    const current = await this.#writeClient.get(this.#reservationKey(key));
+    return current ?? undefined;
+  }
+
+  /**
+   * Release only if we still own it. Implemented as GET+DEL with a Lua
+   * script so the check-and-delete is atomic against concurrent renewals
+   * from other processes.
+   */
+  override async releaseReservation(key: string, owner: string): Promise<void> {
+    if (this.#closed) return;
+    await this.#ensureWriterConnected();
+    const script = `
+      if redis.call("GET", KEYS[1]) == ARGV[1] then
+        return redis.call("DEL", KEYS[1])
+      else
+        return 0
+      end
+    `;
+    await this.#writeClient.eval(script, {
+      keys: [this.#reservationKey(key)],
+      arguments: [owner],
+    });
+  }
+
+  /**
+   * Extend the TTL only if we still own the reservation. Returns false if
+   * the reservation was lost (expired or another owner took it).
+   */
+  override async renewReservation(key: string, owner: string, ttlMs: number): Promise<boolean> {
+    if (this.#closed) return false;
+    await this.#ensureWriterConnected();
+    const script = `
+      if redis.call("GET", KEYS[1]) == ARGV[1] then
+        return redis.call("PEXPIRE", KEYS[1], ARGV[2])
+      else
+        return 0
+      end
+    `;
+    const result = await this.#writeClient.eval(script, {
+      keys: [this.#reservationKey(key)],
+      arguments: [owner, String(ttlMs)],
+    });
+    return result === 1;
+  }
+
+  /**
    * Disconnect all clients and stop all subscription loops.
    */
   async close(): Promise<void> {

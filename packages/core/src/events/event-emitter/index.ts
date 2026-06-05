@@ -350,4 +350,47 @@ export class EventEmitterPubSub extends PubSub {
       member(eventWithAttempt, ack, nack);
     }
   }
+
+  // key → { owner, expiresAt }. In-process so a single Map is enough;
+  // there is no other process to race against. The same owner can renew
+  // their own reservation; expired entries are reclaimed lazily on the
+  // next tryReserve call.
+  private reservations: Map<string, { owner: string; expiresAt: number }> = new Map();
+
+  override tryReserve(key: string, owner: string, ttlMs: number): Promise<{ acquired: boolean; owner?: string }> {
+    const now = Date.now();
+    const existing = this.reservations.get(key);
+    if (existing && existing.expiresAt > now && existing.owner !== owner) {
+      return Promise.resolve({ acquired: false, owner: existing.owner });
+    }
+    this.reservations.set(key, { owner, expiresAt: now + ttlMs });
+    return Promise.resolve({ acquired: true, owner });
+  }
+
+  override getReservation(key: string): Promise<string | undefined> {
+    const existing = this.reservations.get(key);
+    if (!existing) return Promise.resolve(undefined);
+    if (existing.expiresAt <= Date.now()) {
+      this.reservations.delete(key);
+      return Promise.resolve(undefined);
+    }
+    return Promise.resolve(existing.owner);
+  }
+
+  override releaseReservation(key: string, owner: string): Promise<void> {
+    const existing = this.reservations.get(key);
+    if (existing && existing.owner === owner) {
+      this.reservations.delete(key);
+    }
+    return Promise.resolve();
+  }
+
+  override renewReservation(key: string, owner: string, ttlMs: number): Promise<boolean> {
+    const existing = this.reservations.get(key);
+    if (!existing || existing.owner !== owner || existing.expiresAt <= Date.now()) {
+      return Promise.resolve(false);
+    }
+    existing.expiresAt = Date.now() + ttlMs;
+    return Promise.resolve(true);
+  }
 }

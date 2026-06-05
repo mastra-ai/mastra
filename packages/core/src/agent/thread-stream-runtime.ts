@@ -29,6 +29,15 @@ import type {
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
+/**
+ * TTL for the cross-process thread reservation acquired in the idle-wake
+ * path. Sized to comfortably exceed typical Lambda max durations so a
+ * winning run does not lose its reservation mid-stream.
+ *
+ * Reservations are released explicitly on run-completed / run-aborted
+ * and on stream error, so the TTL is only a safety net for crashes.
+ */
+const AGENT_THREAD_RESERVATION_TTL_MS = 15 * 60 * 1000;
 
 export let defaultAgentThreadPubSub: PubSub = new EventEmitterPubSub();
 
@@ -142,6 +151,18 @@ export class AgentThreadStreamRuntime {
 
   #threadTopic(key: string): string {
     return `${AGENT_THREAD_STREAM_TOPIC_PREFIX}.${encodeURIComponent(key)}`;
+  }
+
+  /**
+   * Fire-and-forget release of the cross-process thread reservation held
+   * by this owner. Safe to call when no reservation was ever acquired —
+   * the pubsub's `releaseReservation` is a no-op for non-owners (Lua-
+   * guarded GET+DEL on Redis), and the default in-memory implementation
+   * is identical.
+   */
+  #releaseThreadReservation(pubsub: PubSub | undefined, key: string, runId: string): void {
+    const resolved = this.#getPubSub(pubsub);
+    void resolved.releaseReservation(key, runId).catch(() => {});
   }
 
   #isApprovalSuspendedRun(state: AgentThreadRuntimeState, runId: string) {
@@ -342,6 +363,7 @@ export class AgentThreadStreamRuntime {
 
     const key = state.threadKeysByRunId.get(runId);
     if (key) {
+      this.#releaseThreadReservation(pubsub, key, runId);
       this.#publish(pubsub, key, { type: 'run-aborted', runId });
     }
 
@@ -478,6 +500,7 @@ export class AgentThreadStreamRuntime {
         if (state.activeThreadRunIds.get(key) === runId) {
           state.activeThreadRunIds.delete(key);
         }
+        this.#releaseThreadReservation(pubsub, key, runId);
         this.#publish(pubsub, key, { type: 'run-completed', runId });
       }, 0);
     });
@@ -556,6 +579,7 @@ export class AgentThreadStreamRuntime {
       if (state.activeThreadRunIds.get(key) === record.runId) {
         state.activeThreadRunIds.delete(key);
       }
+      this.#releaseThreadReservation(pubsub, key, record.runId);
       this.#publish(pubsub, key, { type: 'run-completed', runId: record.runId });
       void this.#drainPendingSignals(state, pubsub, key, record);
     });
@@ -1320,26 +1344,71 @@ export class AgentThreadStreamRuntime {
     // the idle stream so concurrent callers do not launch duplicate runs.
     state.activeThreadRunIds.set(key, runId);
     state.threadKeysByRunId.set(runId, key);
-    const ownerStream = agent
-      .stream(signal, {
-        ...(target.ifIdle?.streamOptions as any),
-        runId,
-        memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
-      })
-      .catch(error => {
-        state.threadKeysByRunId.delete(runId);
-        this.#cleanupPreparedRun(state, runId);
-        if (state.activeThreadRunIds.get(key) === runId) {
-          state.activeThreadRunIds.delete(key);
+    const reservedKey = key;
+    const reservedRunId = runId;
+    const resolvedPubSub = this.#getPubSub(pubsub);
+    const reservationTtlMs = AGENT_THREAD_RESERVATION_TTL_MS;
+    // First reserve cross-process via pubsub; on win, kick off the stream. On loss,
+    // hand the user message off to the winning process via signal-enqueued and resolve
+    // ownerStream to undefined so the caller skips local consumption.
+    const ownerStream: Promise<MastraModelOutput<OUTPUT> | undefined> = (async () => {
+      const reservation = await resolvedPubSub.tryReserve(reservedKey, reservedRunId, reservationTtlMs).catch(() => ({
+        acquired: true as boolean,
+        owner: reservedRunId as string | undefined,
+      }));
+
+      if (!reservation.acquired) {
+        // Lost the wake race to another process. Roll back our optimistic local reservation
+        // so we don't trip our own activeThreadRunIds check on a follow-up.
+        if (state.activeThreadRunIds.get(reservedKey) === reservedRunId) {
+          state.activeThreadRunIds.delete(reservedKey);
         }
+        state.threadKeysByRunId.delete(reservedRunId);
+
+        // Forward the user signal to the winning runId so the message is not dropped.
+        const winnerRunId = reservation.owner;
+        if (winnerRunId) {
+          this.#publish(pubsub, reservedKey, {
+            type: 'signal-enqueued',
+            runId: winnerRunId,
+            signal: this.#serializeSignal(signal),
+            sourceId: this.#getSourceId(),
+          });
+        }
+        return undefined;
+      }
+
+      // We own the reservation. Start the stream.
+      try {
+        const stream = await agent.stream(signal, {
+          ...(target.ifIdle?.streamOptions as any),
+          runId: reservedRunId,
+          memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
+        });
+        return stream;
+      } catch (error) {
+        state.threadKeysByRunId.delete(reservedRunId);
+        this.#cleanupPreparedRun(state, reservedRunId);
+        if (state.activeThreadRunIds.get(reservedKey) === reservedRunId) {
+          state.activeThreadRunIds.delete(reservedKey);
+        }
+        // Release the cross-process reservation so a follow-up signal can re-wake.
+        void resolvedPubSub.releaseReservation(reservedKey, reservedRunId).catch(() => {});
         throw error;
-      });
+      }
+    })();
+
     // Always attach a no-op catch to the promise we keep internally so an unawaited
     // ownerStream cannot surface as an unhandled rejection. Callers that opt in to
     // `ownerStream` will see the rejection via their own await/catch.
     void ownerStream.catch(() => {});
 
-    return { accepted: true, runId, signal, ownerStream: ownerStream as Promise<MastraModelOutput<OUTPUT>> };
+    return {
+      accepted: true,
+      runId,
+      signal,
+      ownerStream: ownerStream as Promise<MastraModelOutput<OUTPUT> | undefined>,
+    };
   }
 }
 

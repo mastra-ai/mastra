@@ -164,12 +164,17 @@ export interface SendAgentSignalResult<OUTPUT = unknown> {
    * completion. In serverless environments, awaiting this keeps the function alive long
    * enough for the run (and any stream processors attached to it) to finish.
    *
+   * The promise resolves to `undefined` when this caller lost a cross-process wake race
+   * — another process won the reservation and will run the agent, so the caller should
+   * not consume the stream locally. The user message is still forwarded to the winning
+   * run via the signals pubsub before `ownerStream` resolves.
+   *
    * When the signal is delivered to an already-running stream, joins a remote run, is
    * persisted, queued, or otherwise does not start a new stream, this field is `undefined`.
    *
    * @experimental
    */
-  ownerStream?: Promise<MastraModelOutput<OUTPUT>>;
+  ownerStream?: Promise<MastraModelOutput<OUTPUT> | undefined>;
 }
 
 /**
@@ -240,7 +245,7 @@ export type SendAgentNotificationSignalResult<OUTPUT = unknown> = {
    *
    * @experimental
    */
-  ownerStream?: Promise<MastraModelOutput<OUTPUT>>;
+  ownerStream?: Promise<MastraModelOutput<OUTPUT> | undefined>;
 };
 
 export interface AgentThreadRun<OUTPUT = unknown> {

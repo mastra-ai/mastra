@@ -96,4 +96,65 @@ export abstract class PubSub {
   subscribeFromOffset(topic: string, _offset: number, cb: EventCallback): Promise<void> {
     return this.subscribeWithReplay(topic, cb);
   }
+
+  /**
+   * Atomically try to claim a reservation for a key.
+   *
+   * Used by the signals layer to elect a single owner across multiple
+   * processes (e.g. serverless invocations) for a given resource — most
+   * commonly a thread-key, where the owner is the process that will wake
+   * and run the agent stream.
+   *
+   * Returns `{ acquired: true, owner }` if the caller claimed the
+   * reservation, or `{ acquired: false, owner }` where `owner` is the
+   * current holder (so the caller can route follow-up work to them).
+   * `owner` may be `undefined` if the holder could not be read (rare).
+   *
+   * Default implementation returns `acquired: true` — i.e. single-process
+   * pubsub implementations always "win" their own race, preserving
+   * today's behavior. Distributed implementations (Redis, etc.) override
+   * with atomic SET-NX semantics.
+   *
+   * @param key - The reservation key (e.g. thread key)
+   * @param owner - Identifier for the owner (e.g. runId) — used so the
+   *   same owner can call `tryReserve` idempotently and renew/release.
+   * @param ttlMs - Time-to-live in milliseconds for the reservation
+   */
+  tryReserve(_key: string, owner: string, _ttlMs: number): Promise<{ acquired: boolean; owner?: string }> {
+    return Promise.resolve({ acquired: true, owner });
+  }
+
+  /**
+   * Read the current owner of a reservation, or `undefined` if no
+   * reservation is held.
+   *
+   * Default implementation returns `undefined`.
+   */
+  getReservation(_key: string): Promise<string | undefined> {
+    return Promise.resolve(undefined);
+  }
+
+  /**
+   * Release a reservation. No-op if the caller is not the current owner
+   * (implementations should atomically check ownership before releasing
+   * to avoid clobbering a renewal that happened concurrently).
+   *
+   * Default implementation is a no-op.
+   */
+  releaseReservation(_key: string, _owner: string): Promise<void> {
+    return Promise.resolve();
+  }
+
+  /**
+   * Renew an existing reservation owned by `owner`, extending its TTL.
+   *
+   * Returns `true` if the renewal succeeded (caller still owns it),
+   * `false` if the reservation was lost (TTL expired or another owner
+   * took it).
+   *
+   * Default implementation returns `true`.
+   */
+  renewReservation(_key: string, _owner: string, _ttlMs: number): Promise<boolean> {
+    return Promise.resolve(true);
+  }
 }
