@@ -30,7 +30,7 @@ const workspace = new Workspace({
 
 const tursoUrl = process.env.TURSO_DATABASE_URL;
 if (!tursoUrl) {
-  throw new Error('TURSO_DATABASE_URL is not set. Use `file:./mastra.db` for local dev or a Turso libSQL URL.');
+  throw new Error('TURSO_DATABASE_URL is not set. Provide a Turso libSQL URL.');
 }
 
 export const mastra = new Mastra({
