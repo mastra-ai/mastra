@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13556](https://github.com/mastra-ai/mastra/pull/13556) — added persisted Quiet mode settings for compact TUI output and subagent completion behavior.
-- Later changes: [#13870](https://github.com/mastra-ai/mastra/pull/13870) — quiet compact web-search previews use the dedicated web-search formatter; [#16771](https://github.com/mastra-ai/mastra/pull/16771) — adds the current compact quiet-mode renderer, rollout prompt, task summary, tool grouping/preview caps, and settings plumbing; [#16807](https://github.com/mastra-ai/mastra/pull/16807) — polishes quiet follow-ups with smarter compact labels, path-prefix trimming, preview rails, grouped spacing, and loaded-history parity; [#16839](https://github.com/mastra-ai/mastra/pull/16839) — improves quiet task/list contrast and glyph alignment on varied terminal backgrounds.
+- Later changes: [#13870](https://github.com/mastra-ai/mastra/pull/13870) — quiet compact web-search previews use the dedicated web-search formatter; [#16771](https://github.com/mastra-ai/mastra/pull/16771) — adds the current compact quiet-mode renderer, rollout prompt, task summary, tool grouping/preview caps, and settings plumbing; [#16807](https://github.com/mastra-ai/mastra/pull/16807) — polishes quiet follow-ups with smarter compact labels, path-prefix trimming, preview rails, grouped spacing, and loaded-history parity; [#16839](https://github.com/mastra-ai/mastra/pull/16839) — improves quiet task/list contrast and glyph alignment on varied terminal backgrounds; [#16849](https://github.com/mastra-ai/mastra/pull/16849) — fits compact terminal output by visible width, preserving ANSI color and OSC 8 hyperlink sequences while truncating.
 
 ## User-visible behavior
 
@@ -41,7 +41,7 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | Quiet mode enabled | `settings.preferences.quietMode`, copied into `TUIState` at startup | `/settings`, rollout prompt, live tool/subagent/task renderers, history renderer |
-| Preview line cap | `settings.preferences.quietModeMaxToolPreviewLines` normalized to 0–8 | Tool compact preview rendering, including web-search/result/code preview rows |
+| Preview line cap | `settings.preferences.quietModeMaxToolPreviewLines` normalized to 0–8 | Tool compact preview rendering, including web-search/result/code preview rows fit with `truncateAnsi()` visible-width limits |
 | Rollout prompt state | `settings.onboarding.quietModePreferenceSelected` | Settings/onboarding migration logic and one-time modal prompt |
 | Compact tool mode color | active mode color via `harness.getCurrentMode()` | `ToolExecutionComponentEnhanced` quiet badge and grouped compact labels |
 | Compact grouping state | `ToolExecutionComponentEnhanced` group key/summary/continuation flags + chat boundary reconciliation | spacing between same-label quiet tools, repeated-prefix trimming, connector rendering, and preview closure |
@@ -55,7 +55,7 @@
 - `mastracode/src/tui/state.ts` — transient quiet-mode projection defaults.
 - `mastracode/src/tui/handlers/tool.ts` — live compact tool rendering.
 - `mastracode/src/tui/render-messages.ts` — loaded-history compact tool/task/subagent rendering.
-- `mastracode/src/tui/components/tool-execution-enhanced.ts` — compact quiet tool UI, preview slicing, grouping keys, continuation labels, path-prefix trimming, and quiet spacing kind.
+- `mastracode/src/tui/components/tool-execution-enhanced.ts` and `tui/ansi.ts` — compact quiet tool UI, visible-width/ANSI-safe preview fitting, preview slicing, grouping keys, continuation labels, path-prefix trimming, and quiet spacing kind.
 - `mastracode/src/tui/components/task-progress.ts` — item-aware one-line quiet task summaries.
 - `mastracode/src/tui/chat-boundary-reconciliation.ts` and `chat-spacing.ts` — quiet compact grouping/spacing.
 - `mastracode/src/tui/theme.ts` — contrast-adapted glyph/rail colors for quiet compact output.

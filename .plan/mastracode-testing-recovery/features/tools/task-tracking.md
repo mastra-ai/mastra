@@ -3,7 +3,7 @@
 ## Origin PR / commit
 
 - PR: [#13344](https://github.com/mastra-ai/mastra/pull/13344) — moved todo tools into core Harness and renamed them to task tools.
-- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — moved current/previous task snapshots into `HarnessDisplayState` for UI rendering and history reconciliation; [#15192](https://github.com/mastra-ai/mastra/pull/15192) — clears task/plan/access projections on thread switch or creation so stale global task state does not leak across threads; [#15749](https://github.com/mastra-ai/mastra/pull/15749) — broadens thread-boundary cleanup to reset task progress UI, `taskToolInsertIndex`, queued state, and other per-thread TUI projections on switch/create/clone; [#16254](https://github.com/mastra-ai/mastra/pull/16254) — adds stable patch tools (`task_update`, `task_complete`, `task_check`) plus deterministic task ID assignment.
+- Later changes: [#13427](https://github.com/mastra-ai/mastra/pull/13427) — moved current/previous task snapshots into `HarnessDisplayState` for UI rendering and history reconciliation; [#15192](https://github.com/mastra-ai/mastra/pull/15192) — clears task/plan/access projections on thread switch or creation so stale global task state does not leak across threads; [#15749](https://github.com/mastra-ai/mastra/pull/15749) — broadens thread-boundary cleanup to reset task progress UI, `taskToolInsertIndex`, queued state, and other per-thread TUI projections on switch/create/clone; [#16254](https://github.com/mastra-ai/mastra/pull/16254) — adds stable patch tools (`task_update`, `task_complete`, `task_check`) plus deterministic task ID assignment; [#16843](https://github.com/mastra-ai/mastra/pull/16843) — auto-demotes extra `in_progress` tasks during single-task patch updates while preserving full-list validation.
 
 ## User-visible behavior
 
@@ -41,7 +41,7 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | Task list/mutations | Core Harness state + task tools; `assignTaskIds()` gives deterministic stable IDs and patch tools mutate by ID | Runtime, prompt, TUI, headless |
-| Single-task patch semantics | `task_update`, `task_complete`, and `task_check` in core Harness tools | Agent task maintenance without full-list rewrites; user-visible status summaries |
+| Single-task patch semantics | `task_update`, `task_complete`, `task_check`, and `demoteExtraInProgress()` in core Harness tools | Agent task maintenance without full-list rewrites; user-visible status summaries; automatic cleanup of accidental multiple active tasks on patch updates |
 | Task display snapshots | `HarnessDisplayState.tasks` / `previousTasks` | TUI progress + history reconciliation |
 | Pinned/inline projection | TUI `TaskProgressComponent` + `taskToolInsertIndex` | Interactive chat |
 | Thread boundary reset | `event-dispatch.ts` handles `thread_changed` / `thread_created` by clearing tasks, active plan, sandbox allowed paths, task insert index, and live task progress component | Thread switch/create UI and prompt context |

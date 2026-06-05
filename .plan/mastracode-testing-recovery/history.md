@@ -2430,3 +2430,31 @@ Verification:
 - `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/chat-boundary-spacer.test.ts src/tui/components/__tests__/thread-selector.test.ts --bail=1 --reporter=dot` — 2 files / 16 tests passed.
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/theme-contrast.test.ts src/tui/__tests__/render-messages.test.ts --bail=1 --reporter=dot` — 2 files / 62 tests passed.
 - Note: an initial `pnpm --filter ./mastracode test -- --run ...` attempt incorrectly ran the broad Mastra Code suite and hit unrelated known/baseline failures (`goal-manager` Zod matcher, GitHub command completion expecting no `sync`, `save-plan` temp cleanup). The focused `exec vitest run` commands above passed.
+
+### PR #16849 / #16843 / #16831 / #16920 feature-map checkpoint
+
+Verified rows 317-320:
+
+- #16849 fits compact terminal output by visible width. Current source uses `truncateAnsi()` / `fitVisibleText()` for quiet compact previews, preserves ANSI SGR and OSC 8 hyperlink sequences, and applies visible-width fitting in compact tool summaries/previews.
+- #16843 tightens goal judge and task patch behavior. Current source uses `JUDGE_MAX_STEPS=50`, a retry prompt for missing structured output, `lastPauseWasJudgeFailure` resume retriggering, and `demoteExtraInProgress()` for patch-tool updates while preserving full-list validation.
+- #16920 converts update prompts to inline chat questions. Current source uses `AskQuestionInlineComponent`, clears dismissed-version state on manual `/update`, keeps passive 45-minute update banners, and shares registry/changelog/package-manager helpers.
+- #16831 is a Changesets alpha package-version batch; skipped for feature mapping after PR metadata confirmed package/changelog-only changes.
+
+Documentation actions:
+
+- Updated `features/tui/quiet-mode.md` for #16849 visible-width/ANSI-safe compact terminal output.
+- Updated `features/goals/persistent-goals.md` for #16843 judge max-step/retry/resume behavior.
+- Updated `features/tools/task-tracking.md` for #16843 patch-tool auto-demotion of extra active tasks.
+- Updated `features/setup/auto-update-prompts.md` for #16920 inline update prompts and passive update rechecks.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16849 done, #16843 done, #16831 skipped, #16920 done, #16923 current.
+
+Focused evidence read: PR metadata for #16849/#16843/#16831/#16920; current `mastracode/src/tui/ansi.ts`, `mastracode/src/tui/components/tool-execution-enhanced.ts`, `mastracode/src/tui/goal-manager.ts`, `mastracode/src/tui/commands/goal.ts`, `packages/core/src/harness/tools.ts`, `mastracode/src/utils/update-check.ts`, `mastracode/src/tui/commands/update.ts`, and `mastracode/src/tui/mastra-tui.ts`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/ansi.test.ts src/tui/components/__tests__/tool-execution-enhanced.test.ts --bail=1 --reporter=dot` — 2 files / 70 tests passed.
+- `pnpm --filter ./packages/core exec vitest run src/harness/task-tools.test.ts --bail=1 --reporter=dot` — 1 file / 30 tests passed / no type errors.
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/goal-manager.test.ts -t "judge resume|no structured|stale judge|budget exhaustion|waiting" --bail=1 --reporter=dot` — 1 file / 7 tests passed / 17 skipped.
+- `pnpm --filter ./mastracode exec vitest run src/tui/commands/__tests__/goal.test.ts src/utils/__tests__/update-check.test.ts --bail=1 --reporter=dot` — 2 files / 28 tests passed.
+- Note: an initial broader goal/update command hit the known `goal-manager.test.ts` Zod structured-output matcher object-diff failure at line 338; the narrower changed-path goal tests above passed.
