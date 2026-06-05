@@ -987,3 +987,23 @@ Verification:
 - Focused tests passed: MC prompt/extra-tools tests (2 files / 27 tests) and core workspace list/search/tree tests (3 files / 99 tests, no type errors).
 
 Next queue checkpoint: PR #13723 (Ctrl+Z suspend), then PR #13523 (likely version-package skip).
+
+### Feature map batch: process suspend shortcut and version-package skip
+
+Processed PR [#13723](https://github.com/mastra-ai/mastra/pull/13723), `52022c842c` (`feat(mastracode): Ctrl+Z now suspends the process (SIGTSTP)`). Verified current TUI editor routing maps Ctrl+Z to a `suspend` action and Alt+Z to the prior undo-last-clear action. `setupKeyboardShortcuts()` stops the UI, registers a one-shot `SIGCONT` handler, sends `SIGTSTP` to the current process, and restarts/render-refreshes the UI on continuation. Windows is guarded with an info message, and signal failure removes the listener, restarts UI, requests render, and shows an error. Alt+Z restores `TUIState.lastClearedText` only when the editor is empty.
+
+Reviewed PR [#13523](https://github.com/mastra-ai/mastra/pull/13523), `edfda994ef` (`chore: version packages (alpha)`). This is a version-package batch. Relevant MastraCode/core touched files are only `CHANGELOG.md` and `package.json` updates, so it is recorded as a skip and no behavior feature page was created.
+
+Documentation actions:
+
+- Created `features/tui/process-suspend.md` for Ctrl+Z suspend / Alt+Z undo behavior, state ownership, risks, and test gaps.
+- Updated `features/tui/help-and-shortcuts.md` with Ctrl+Z/Alt+Z shortcut semantics.
+- Updated `features/tui/interactive-chat.md` with process suspend as part of editor/setup lifecycle.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13723 done, #13523 skipped, #13760 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/tui/components/custom-editor.ts`, `mastracode/src/tui/setup.ts`, `mastracode/src/tui/state.ts`, `mastracode/src/tui/components/help-overlay.ts`, `mastracode/src/tui/components/settings.ts`, `mastracode/src/tui/components/__tests__/custom-editor.test.ts`, `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts`, and PR #13523 changed-file list.
+- Focused tests passed for direct editor/help coverage: `custom-editor.test.ts` and `help-overlay.test.ts` (2 files / 22 tests). Broader shortcut setup run also included `setup-keyboard-shortcuts.test.ts` but hit the known stale /github autocomplete drift: expected `subscribe, unsubscribe, debug`, received `subscribe, unsubscribe, sync, debug`.
+
+Next queue checkpoint: PR #13760 (inline version at build time), then PR #13761 (likely version-package skip).

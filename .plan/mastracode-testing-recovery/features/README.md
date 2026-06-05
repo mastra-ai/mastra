@@ -39,15 +39,16 @@ Use one page per concrete user behavior. Update an existing page when a later PR
 | Setup | Installation and launch | #13294, #13560 | package metadata + startup runtime | Partial | Medium | [page](./setup/installation-and-launch.md) |
 | Setup | Auto-update prompts | #13603 | npm registry helpers + settings dismissed version | Partial | Medium | [page](./setup/auto-update-prompts.md) |
 | TUI | Startup banner | #13422 | TUI options + terminal width | Partial | Medium | [page](./tui/startup-banner.md) |
-| TUI | Help and shortcuts | #13426, #13712 | TUI command metadata + settings | Partial | Medium | [page](./tui/help-and-shortcuts.md) |
+| TUI | Help and shortcuts | #13426, #13712, #13723 | TUI command metadata + settings | Partial | Medium | [page](./tui/help-and-shortcuts.md) |
 | TUI | Interactive prompts and access requests | #13696 | TUI active prompt + pending prompt queue | Partial | High | [page](./tui/interactive-prompts.md) |
+| TUI | Process suspend shortcut | #13723 | TUI keyboard routing + Unix signal handling | Partial | Medium | [page](./tui/process-suspend.md) |
 | TUI | Clipboard paste | #13712 | OS clipboard helpers + editor paste buffer | Partial | High | [page](./tui/clipboard-paste.md) |
 | TUI | File autocomplete | #13460 | editor autocomplete provider + `fd` detection | Partial | Medium | [page](./tui/file-autocomplete.md) |
 | TUI | Terminal theme and contrast | #13487, #13503 | settings preference + terminal detection + theme helper API | Partial | Medium | [page](./tui/terminal-theme.md) |
 | TUI | Quiet mode | #13556 | settings preference + TUI render state | Partial | High | [page](./tui/quiet-mode.md) |
 | Settings | Onboarding and global settings | #13421, #13431, #13487, #13494, #13500, #13505, #13508, #13512, #13566, #13603 | settings.json + thread settings + provider registry | Partial | High | [page](./settings/onboarding-and-global-settings.md) |
 | Settings | Storage backend configuration | #13435 | env/settings + storage factory | Partial | High | [page](./settings/storage-backend.md) |
-| TUI | Interactive chat | #13218, #13350, #13413, #13427, #13456, #13460, #13442, #13487, #13609, #13696, #13712 | TUI + Harness display state | Partial | High | [page](./tui/interactive-chat.md) |
+| TUI | Interactive chat | #13218, #13350, #13413, #13427, #13456, #13460, #13442, #13487, #13609, #13696, #13712, #13723 | TUI + Harness display state | Partial | High | [page](./tui/interactive-chat.md) |
 | TUI | Debug logging | #13691, #13701 | env vars + app-data/debug trace files | Partial | Medium | [page](./tui/debug-logging.md) |
 | Chat | Prompt context and project instructions | #13234, #13346, #13376, #13456 | Harness request context + instruction files + git metadata | Partial | High | [page](./chat/prompt-context.md) |
 | Chat | File attachments in chat input | #13574, #13712 | Harness signal content + message-list adapters | Partial | High | [page](./chat/file-attachments.md) |
