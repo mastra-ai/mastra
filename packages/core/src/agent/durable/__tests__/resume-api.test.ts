@@ -257,14 +257,18 @@ describe('Resume with CachingPubSub Event Replay', () => {
     // Start streaming - this will emit some events before suspending
     const { runId, cleanup: initialCleanup } = await durableAgent.stream('Delete the file');
 
-    // Wait a bit for events to be cached
-    await new Promise(resolve => setTimeout(resolve, 50));
+    // Wait for events to be cached (evented engine is async)
+    const topic = `agent.stream.${runId}`;
+    for (let i = 0; i < 100; i++) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const events = await cachingPubsub.getHistory(topic);
+      if (events.length > 0) break;
+    }
 
     // Disconnect (cleanup)
     initialCleanup();
 
     // Verify events were cached - use the correct topic format
-    const topic = `agent.stream.${runId}`;
     const cachedEvents = await cachingPubsub.getHistory(topic);
     // Events should be cached (at least the start event)
     expect(cachedEvents.length).toBeGreaterThan(0);
@@ -289,12 +293,16 @@ describe('Resume with CachingPubSub Event Replay', () => {
     // Start and get runId
     const { runId, cleanup } = await durableAgent.stream('Hello');
 
-    // Wait for events
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Wait for events to be cached (evented engine is async)
+    const topic = `agent.stream.${runId}`;
+    for (let i = 0; i < 100; i++) {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const events = await cachingPubsub.getHistory(topic);
+      if (events.length > 0) break;
+    }
     cleanup();
 
     // Subscribe with replay - should get events without duplicates
-    const topic = `agent.stream.${runId}`;
     await cachingPubsub.subscribeWithReplay(topic, event => {
       receivedEvents.push(event);
     });

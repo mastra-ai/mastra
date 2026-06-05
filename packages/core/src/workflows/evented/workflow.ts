@@ -1764,6 +1764,8 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
+    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
+
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -1774,7 +1776,7 @@ export class EventedRun<
         serializedStepGraph: this.serializedStepGraph,
         status: 'running',
         value: {},
-        context: {} as any,
+        context: { input: inputDataToUse } as any,
         requestContext: requestContext.toJSON(),
         activePaths: [],
         activeStepsPath: {},
@@ -1784,8 +1786,6 @@ export class EventedRun<
         timestamp: Date.now(),
       },
     });
-
-    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     if (!this.mastra?.pubsub) {
@@ -1880,6 +1880,9 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
+    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
+    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
+
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
@@ -1890,7 +1893,7 @@ export class EventedRun<
         serializedStepGraph: this.serializedStepGraph,
         status: 'running',
         value: {},
-        context: {} as any,
+        context: { input: inputDataToUse } as any,
         requestContext: requestContext.toJSON(),
         activePaths: [],
         activeStepsPath: {},
@@ -1900,9 +1903,6 @@ export class EventedRun<
         timestamp: Date.now(),
       },
     });
-
-    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
-    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');

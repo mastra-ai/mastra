@@ -1222,6 +1222,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
         //create nested workflow run snapshot in storage. use parent workflow resource id in nested workflow
         if (shouldPersist) {
+          const inputResult = prevResult?.status === 'success' ? prevResult.output : undefined;
           await workflowsStore?.persistWorkflowSnapshot({
             workflowName: nestedWorkflow.id,
             runId: nestedRunId,
@@ -1230,7 +1231,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               runId: nestedRunId,
               status: 'pending',
               value: {},
-              context: {},
+              context: inputResult !== undefined ? { input: inputResult } : {},
               activePaths: [],
               serializedStepGraph: nestedWorkflow.serializedStepGraph,
               activeStepsPath: {},

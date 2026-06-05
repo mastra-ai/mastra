@@ -4,6 +4,7 @@ import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import type { Mastra } from '../../mastra';
+import { InMemoryStore } from '../../storage/mock';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType } from '../../stream/types';
 import { Agent } from '../agent';
@@ -228,6 +229,13 @@ export class DurableAgent<
   readonly #cleanupTimeoutMs: number;
 
   /**
+   * Lazily-created ephemeral Mastra for standalone durable agents (no user-provided Mastra).
+   * The evented workflow engine requires a Mastra instance with pubsub and storage.
+   * Torn down when a real Mastra is registered via __registerMastra.
+   */
+  #ephemeralMastra?: Mastra;
+
+  /**
    * Create a new DurableAgent that wraps an existing Agent
    */
   constructor(config: DurableAgentConfig<TAgentId, TTools, TOutput>) {
@@ -294,6 +302,71 @@ export class DurableAgent<
       const resolvedCache = this.#cacheConfig ?? this.#mastra?.serverCache ?? new InMemoryServerCache();
       this.#resolvedCache = resolvedCache;
       this.#cachingPubsub = new CachingPubSub(this.#innerPubsub, resolvedCache);
+    }
+  }
+
+  // ===========================================================================
+  // Evented engine helpers
+  // ===========================================================================
+
+  /**
+   * Get or create an effective Mastra instance for evented workflow execution.
+   * The evented engine publishes events through mastra.pubsub, so the returned
+   * Mastra's pubsub MUST match the agent's inner pubsub (which the stream
+   * subscription listens on).
+   *
+   * - If the user's Mastra already uses the same pubsub → return it directly.
+   * - If the agent has a custom pubsub (different from mastra.pubsub) → create
+   *   an ephemeral Mastra that wraps the agent's pubsub + user's storage.
+   * - If no Mastra at all → create an ephemeral Mastra from scratch.
+   * @internal
+   */
+  async #getEffectiveMastra(): Promise<Mastra> {
+    // If pubsubs match, the user's Mastra works directly.
+    if (this.#mastra && this.#mastra.pubsub === this.#innerPubsub) {
+      return this.#mastra;
+    }
+
+    if (this.#ephemeralMastra) return this.#ephemeralMastra;
+
+    // Imported lazily: a static import of `../../mastra` would pull the evented
+    // workflow engine into this module's init-time graph and form an ESM cycle.
+    const { Mastra: MastraClass } = await import('../../mastra');
+    const ephemeral = new MastraClass({
+      logger: false,
+      // Inherit storage from user's Mastra when available, otherwise use in-memory.
+      storage: this.#mastra?.getStorage() ?? new InMemoryStore(),
+      pubsub: this.#innerPubsub,
+    });
+    await ephemeral.startWorkers();
+    this.#ephemeralMastra = ephemeral;
+    return ephemeral;
+  }
+
+  /**
+   * Ensure the evented workflow module is loaded so createEventedWorkflow works.
+   * Must be called before getWorkflow() in any async execution path.
+   * @internal
+   */
+  async #ensureEventedModuleLoaded(): Promise<void> {
+    await import('../../workflows/evented/workflow');
+  }
+
+  /**
+   * Unregister the workflow run from the effective Mastra's internal registry.
+   * Called during cleanup (manual or auto-cleanup timer) after the run is
+   * finished, suspended, or errored. Safe to call multiple times.
+   * @internal
+   */
+  #unregisterWorkflowRun(runId: string): void {
+    const workflow = this.#workflow;
+    if (!workflow) return;
+    const mastra = this.#mastra ?? this.#ephemeralMastra;
+    if (!mastra) return;
+    try {
+      mastra.__unregisterInternalWorkflow(workflow.id, runId);
+    } catch {
+      // Best-effort: swallow errors so cleanup is never blocked.
     }
   }
 
@@ -384,10 +457,46 @@ export class DurableAgent<
    * @internal
    */
   protected async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
+    // Ensure the evented workflow module is loaded before getWorkflow() calls createEventedWorkflow.
+    await this.#ensureEventedModuleLoaded();
+
     const workflow = this.getWorkflow();
+
+    // The evented engine requires a Mastra with pubsub and storage.
+    // Register the workflow as an internal run-scoped workflow so the event
+    // processor can resolve it by id. __registerInternalWorkflow also calls
+    // __registerMastra on the workflow, which wires up mastra.pubsub.
+    const effectiveMastra = await this.#getEffectiveMastra();
+    await effectiveMastra.startWorkers();
+    effectiveMastra.__registerInternalWorkflow(workflow as any, runId);
+
+    // NOTE: We do NOT unregister in a `finally` block here because subclasses
+    // (e.g. EventedAgent) use fire-and-forget execution where the workflow
+    // continues running after this method returns. Instead, unregistration
+    // happens in the cleanup path (see #unregisterWorkflowRun, called from
+    // stream()/resume() cleanup callbacks and auto-cleanup timers).
+    await this.runWorkflow(workflow, runId, workflowInput);
+  }
+
+  /**
+   * Run the workflow execution. Override in subclasses to change execution
+   * strategy (e.g. fire-and-forget vs blocking).
+   *
+   * - DurableAgent (this): Uses run.start() for blocking execution
+   * - EventedAgent: Uses run.startAsync() for fire-and-forget
+   *
+   * @internal
+   */
+  protected async runWorkflow(
+    workflow: ReturnType<typeof createDurableAgenticWorkflow>,
+    runId: string,
+    workflowInput: DurableAgenticWorkflowInput,
+  ): Promise<void> {
     const requestContext = globalRunRegistry.get(runId)?.requestContext;
 
-    const run = await workflow.createRun({ runId, pubsub: this.pubsub });
+    // EventedWorkflow.createRun does NOT accept a pubsub parameter —
+    // it uses mastra.pubsub internally (wired via __registerMastra in executeWorkflow).
+    const run = await workflow.createRun({ runId });
     const result = await run.start({ inputData: workflowInput, requestContext });
 
     if (result?.status === 'failed') {
@@ -462,6 +571,7 @@ export class DurableAgent<
           this.#runRegistry.cleanup(runId);
           globalRunRegistry.delete(runId);
           this.#clearPubsubTopic(runId);
+          this.#unregisterWorkflowRun(runId);
           cleanedUp = true;
         }
       }, this.#cleanupTimeoutMs);
@@ -515,6 +625,7 @@ export class DurableAgent<
         this.#runRegistry.cleanup(runId);
         globalRunRegistry.delete(runId);
         this.#clearPubsubTopic(runId);
+        this.#unregisterWorkflowRun(runId);
         cleanedUp = true;
       }
     };
@@ -563,6 +674,7 @@ export class DurableAgent<
           this.#runRegistry.cleanup(runId);
           globalRunRegistry.delete(runId);
           this.#clearPubsubTopic(runId);
+          this.#unregisterWorkflowRun(runId);
           cleanedUp = true;
         }
       }, this.#cleanupTimeoutMs);
@@ -600,11 +712,20 @@ export class DurableAgent<
     });
 
     // Wait for subscription to be ready, then resume workflow
-    const workflow = this.getWorkflow();
-    const requestContext = globalRunRegistry.get(runId)?.requestContext;
     ready
       .then(async () => {
-        const run = await workflow.createRun({ runId, pubsub: this.pubsub });
+        // Ensure the evented workflow module is loaded before getWorkflow().
+        await this.#ensureEventedModuleLoaded();
+
+        const workflow = this.getWorkflow();
+        const requestContext = globalRunRegistry.get(runId)?.requestContext;
+
+        // Register with the evented engine (same pattern as executeWorkflow).
+        const effectiveMastra = await this.#getEffectiveMastra();
+        await effectiveMastra.startWorkers();
+        effectiveMastra.__registerInternalWorkflow(workflow as any, runId);
+
+        const run = await workflow.createRun({ runId });
         const result = await run.resume({ resumeData, requestContext });
         if (result?.status === 'failed') {
           const error = new Error((result as any).error?.message || 'Workflow resume failed');
@@ -625,6 +746,7 @@ export class DurableAgent<
         this.#runRegistry.cleanup(runId);
         globalRunRegistry.delete(runId);
         this.#clearPubsubTopic(runId);
+        this.#unregisterWorkflowRun(runId);
         cleanedUp = true;
       }
     };
@@ -675,6 +797,7 @@ export class DurableAgent<
           this.#runRegistry.cleanup(runId);
           globalRunRegistry.delete(runId);
           this.#clearPubsubTopic(runId);
+          this.#unregisterWorkflowRun(runId);
           cleanedUp = true;
         }
       }, this.#cleanupTimeoutMs);
@@ -722,6 +845,7 @@ export class DurableAgent<
         this.#runRegistry.cleanup(runId);
         globalRunRegistry.delete(runId);
         this.#clearPubsubTopic(runId);
+        this.#unregisterWorkflowRun(runId);
         cleanedUp = true;
       }
     };
@@ -857,6 +981,12 @@ export class DurableAgent<
     this.#mastra = mastra;
     // Also set on wrapped agent
     this.#wrappedAgent.__registerMastra(mastra);
+
+    // Tear down ephemeral Mastra if a real one is being registered.
+    if (this.#ephemeralMastra) {
+      void this.#ephemeralMastra.stopWorkers().catch(() => {});
+      this.#ephemeralMastra = undefined;
+    }
 
     // Wire mastra.pubsub as the inner pubsub if user didn't provide a custom one.
     // This must happen before CachingPubSub initialization.

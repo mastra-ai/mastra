@@ -15,6 +15,7 @@ import type { ToolsInput } from '../types';
 import { DurableAgent } from './durable-agent';
 import type { DurableAgentConfig } from './durable-agent';
 import type { DurableAgenticWorkflowInput } from './types';
+import type { createDurableAgenticWorkflow } from './workflows';
 
 /**
  * Configuration for EventedAgent - wraps an existing Agent with fire-and-forget execution
@@ -68,27 +69,25 @@ export class EventedAgent<
   }
 
   /**
-   * Execute the durable workflow using fire-and-forget pattern.
+   * Run the workflow using fire-and-forget pattern.
    *
-   * Unlike DurableAgent which runs the workflow synchronously, EventedAgent uses
+   * Unlike DurableAgent which blocks on run.start(), EventedAgent uses
    * the workflow's startAsync() method for non-blocking execution.
+   * The evented engine lifecycle (registration, worker startup, cleanup)
+   * is handled by the parent executeWorkflow method.
    *
-   * @param runId - The unique run ID
-   * @param workflowInput - The serialized workflow input
    * @internal
    */
-  protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
-    try {
-      const workflow = this.getWorkflow();
-      const run = await workflow.createRun({
-        runId,
-        pubsub: this.pubsubInternal,
-      });
-      // Fire and forget - use startAsync for non-blocking execution
-      await run.startAsync({ inputData: workflowInput });
-    } catch (error) {
-      await this.emitError(runId, error instanceof Error ? error : new Error(String(error)));
-    }
+  protected override async runWorkflow(
+    workflow: ReturnType<typeof createDurableAgenticWorkflow>,
+    runId: string,
+    workflowInput: DurableAgenticWorkflowInput,
+  ): Promise<void> {
+    // EventedWorkflow.createRun does NOT accept a pubsub parameter —
+    // it uses mastra.pubsub internally (wired via __registerMastra in executeWorkflow).
+    const run = await workflow.createRun({ runId });
+    // Fire and forget - use startAsync for non-blocking execution
+    await run.startAsync({ inputData: workflowInput });
   }
 }
 
