@@ -71,6 +71,7 @@ minimumReleaseAgeExclude:
   - '@internal/*'
   - 'mastra'
   - 'create-mastra'
+  - 'create-agentbuilder'
   - 'mastracode'
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).

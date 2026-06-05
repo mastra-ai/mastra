@@ -506,6 +506,61 @@ export const createComponentsDir = async (dirPath: string, component: string) =>
   await fsExtra.ensureDir(componentPath);
 };
 
+export const writeAgentBuilderIndexFile = async ({ dirPath }: { dirPath: string }) => {
+  const indexPath = path.join(dirPath, 'index.ts');
+  await fs.writeFile(
+    indexPath,
+    `import { Mastra } from '@mastra/core/mastra';
+import { MastraEditor } from '@mastra/editor';
+import { createBuilderAgent } from '@mastra/editor/ee';
+import { LibSQLStore } from '@mastra/libsql';
+import { DuckDBStore } from '@mastra/duckdb';
+import { MastraCompositeStore } from '@mastra/core/storage';
+import { Observability, MastraStorageExporter, MastraPlatformExporter, SensitiveDataFilter } from '@mastra/observability';
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new LibSQLStore({
+      id: 'mastra-storage',
+      url: 'file:./mastra.db',
+    }),
+    domains: {
+      observability: await new DuckDBStore().getStore('observability'),
+    },
+  }),
+  agents: {
+    builderAgent: createBuilderAgent(),
+  },
+  observability: new Observability({
+    configs: {
+      default: {
+        serviceName: 'mastra',
+        exporters: [
+          new MastraStorageExporter(),
+          new MastraPlatformExporter(),
+        ],
+        spanOutputProcessors: [
+          new SensitiveDataFilter(),
+        ],
+      },
+    },
+  }),
+  editor: new MastraEditor({
+    builder: {
+      enabled: true,
+      configuration: {
+        agent: {
+          memory: { observationalMemory: true },
+        },
+      },
+    },
+  }),
+});
+`,
+  );
+};
+
 export const writeIndexFile = async ({
   dirPath,
   addAgent,

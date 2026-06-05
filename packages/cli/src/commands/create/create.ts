@@ -33,6 +33,8 @@ export const create = async (args: {
   analytics?: PosthogAnalytics;
   observability?: boolean;
   observabilityProject?: string;
+  /** Scaffold the project for Agent Builder instead of the default agent template. */
+  agentBuilder?: boolean;
 }) => {
   if (args.template !== undefined) {
     await createFromTemplate({
@@ -47,9 +49,16 @@ export const create = async (args: {
 
   /**
    * We need to explicitly check for undefined instead of using the falsy (!) check because the user might have passed args that are explicitly set to false (in this case, no example code) and we need to distinguish between those and the case where the args were not passed at all.
+   *
+   * Agent Builder mode always runs interactively for project name and
+   * observability, but pre-fills LLM provider (OpenAI) and skips
+   * component/example/skills/MCP prompts.
    */
   const needsInteractive =
-    args.components === undefined || args.llmProvider === undefined || args.addExample === undefined;
+    args.agentBuilder ||
+    args.components === undefined ||
+    args.llmProvider === undefined ||
+    args.addExample === undefined;
 
   const directory = args.directory || 'src/';
 
@@ -57,12 +66,13 @@ export const create = async (args: {
     projectName: args?.projectName,
     createVersionTag: args?.createVersionTag,
     timeout: args?.timeout,
-    llmProvider: args?.llmProvider,
+    llmProvider: args.agentBuilder ? 'openai' : args?.llmProvider,
     llmApiKey: args?.llmApiKey,
     skills: args?.skills,
     mcpServer: args?.mcpServer,
     observability: args?.observability,
     needsInteractive,
+    agentBuilder: args?.agentBuilder,
     onObservabilitySelected: event => getAnalytics()?.trackEvent('cli_observability_selected', event),
   });
 
@@ -89,7 +99,7 @@ export const create = async (args: {
       ...result,
       llmApiKey: result?.llmApiKey as string | undefined,
       components: interactiveComponents,
-      addExample: true,
+      addExample: !args.agentBuilder,
       skills: result?.skills || args.skills,
       mcpServer: result?.mcpServer || args.mcpServer,
       versionTag: args.createVersionTag,
@@ -99,8 +109,9 @@ export const create = async (args: {
       observabilityToken: result?.observabilityToken,
       observabilityOrgId: result?.observabilityOrgId,
       observabilityOrgName: result?.observabilityOrgName,
+      agentBuilder: args.agentBuilder,
     });
-    postCreate({ projectName });
+    postCreate({ projectName, agentBuilder: args.agentBuilder });
     return;
   }
 
@@ -136,13 +147,24 @@ export const create = async (args: {
     observability: args.observability,
     observabilityProject: args.observabilityProject,
     observabilityMode: 'create',
+    agentBuilder: args.agentBuilder,
   });
 
-  postCreate({ projectName });
+  postCreate({ projectName, agentBuilder: args.agentBuilder });
 };
 
-const postCreate = ({ projectName }: { projectName: string }) => {
+const postCreate = ({ projectName, agentBuilder }: { projectName: string; agentBuilder?: boolean }) => {
   const packageManager = getPackageManager();
+
+  if (agentBuilder) {
+    p.note(
+      `${color.green('Agent Builder is mounted at')} ${color.cyan('http://localhost:4111/agent-builder')}
+
+  The chat-based editor requires an ${color.cyan('OPENAI_API_KEY')} environment variable.
+  Rename ${color.cyan('.env.example')} to ${color.cyan('.env')} and add your key.`,
+    );
+  }
+
   p.outro(`
    ${color.green('To start your project:')}
 

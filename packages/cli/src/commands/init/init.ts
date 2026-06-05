@@ -13,6 +13,7 @@ import {
   createMastraDir,
   getAPIKey,
   readPackageName,
+  writeAgentBuilderIndexFile,
   writeAgentsMarkdown,
   writeAPIKey,
   writeClaudeMarkdown,
@@ -40,6 +41,7 @@ export const init = async ({
   observabilityToken,
   observabilityOrgId,
   observabilityOrgName,
+  agentBuilder = false,
 }: {
   directory?: string;
   components: Component[];
@@ -61,6 +63,8 @@ export const init = async ({
    * shows the existing-or-new project picker (used by `mastra init`).
    */
   observabilityMode?: 'create' | 'pick';
+  /** Scaffold the project for Agent Builder instead of the default agent template. */
+  agentBuilder?: boolean;
 }) => {
   s.start('Initializing Mastra');
   const packageVersionTag = versionTag ? `@${versionTag}` : '';
@@ -75,19 +79,40 @@ export const init = async ({
 
     const dirPath = result.dirPath;
 
-    await Promise.all([
-      writeIndexFile({
-        dirPath,
-        addExample,
-        addWorkflow: components.includes('workflows'),
-        addAgent: components.includes('agents'),
-        addScorers: components.includes('scorers'),
-      }),
-      ...components.map(component => createComponentsDir(dirPath, component)),
-      writeAPIKey({ provider: llmProvider, apiKey: llmApiKey }),
-    ]);
+    if (agentBuilder) {
+      await Promise.all([
+        writeAgentBuilderIndexFile({ dirPath }),
+        writeAPIKey({ provider: 'openai', apiKey: llmApiKey }),
+      ]);
+    } else {
+      await Promise.all([
+        writeIndexFile({
+          dirPath,
+          addExample,
+          addWorkflow: components.includes('workflows'),
+          addAgent: components.includes('agents'),
+          addScorers: components.includes('scorers'),
+        }),
+        ...components.map(component => createComponentsDir(dirPath, component)),
+        writeAPIKey({ provider: llmProvider, apiKey: llmApiKey }),
+      ]);
+    }
 
-    if (addExample) {
+    if (agentBuilder) {
+      const depService = new DepsService();
+      const agentBuilderDeps = ['@mastra/editor', '@mastra/libsql', '@mastra/duckdb', '@mastra/observability'];
+      const missing = (
+        await Promise.all(
+          agentBuilderDeps.map(async dep => {
+            const status = await depService.checkDependencies([dep]);
+            return status !== 'ok' ? dep : null;
+          }),
+        )
+      ).filter(Boolean) as string[];
+      if (missing.length > 0) {
+        await depService.installPackages(missing.map(dep => `${dep}${packageVersionTag}`));
+      }
+    } else if (addExample) {
       await Promise.all([
         ...components.map(component =>
           writeCodeSample(dirPath, component as Component, llmProvider, components as Component[]),
