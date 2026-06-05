@@ -70,9 +70,7 @@ const resolveInitialMessages = (messages: MastraDBMessage[]): MastraDBMessage[] 
   messages
     .filter(message => {
       const metadata = message.content?.metadata as MastraDBMessageMetadata | undefined;
-      const completion = metadata?.completionResult as { suppressFeedback?: boolean } | undefined;
-      const isTaskComplete = metadata?.isTaskCompleteResult as { suppressFeedback?: boolean } | undefined;
-      if (completion?.suppressFeedback || isTaskComplete?.suppressFeedback) {
+      if (metadata?.completionResult?.suppressFeedback || metadata?.isTaskCompleteResult?.suppressFeedback) {
         return false;
       }
       return true;
@@ -249,9 +247,9 @@ export const useChat = ({
   const _networkRunId = useRef<string | undefined>(undefined);
   const _onNetworkChunk = useRef<((chunk: NetworkChunkType) => Promise<void>) | undefined>(undefined);
   const _requestContext = useRef<RequestContext | undefined>(propsRequestContext);
-  // Tracks the active streamUntilIdle request so a subsequent stream() call can
-  // abort the previous one. Without this, a still-open prior stream keeps its
-  // background-task pubsub subscription alive and fans events into a second
+  // Tracks the active stream (untilIdle) request so a subsequent stream() call
+  // can abort the previous one. Without this, a still-open prior stream keeps
+  // its background-task pubsub subscription alive and fans events into a second
   // concurrent UI consumer, producing duplicate bg-task events and duplicate
   // continuation turns on the server.
   const _streamAbortRef = useRef<AbortController | null>(null);
@@ -653,9 +651,10 @@ export const useChat = ({
 
     const streamWithLegacyRoute = async () => {
       const runId = uuid();
-      const response = await agent.streamUntilIdle(coreUserMessages, {
+      const response = await agent.stream(coreUserMessages, {
         runId,
         maxSteps,
+        untilIdle: true,
         modelSettings: {
           frequencyPenalty,
           presencePenalty,

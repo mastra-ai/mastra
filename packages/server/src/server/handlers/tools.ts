@@ -121,8 +121,32 @@ export const LIST_TOOLS_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, registeredTools, requestContext }) => {
     try {
-      const allTools =
-        registeredTools && Object.keys(registeredTools).length > 0 ? registeredTools : mastra.listTools() || {};
+      // Merge tools from two sources: mastra.listTools() includes dynamically created tools
+      // (e.g. MCP tools, or agent tools registered by their intrinsic id), while registeredTools
+      // includes tools discovered by the CLI bundler (keyed by export name).
+      //
+      // The same tool instance can appear in both maps under different keys (e.g. an agent
+      // registers it by `tool.id` while the bundler registers it by export name). Dedupe by
+      // `tool.id`, preferring the registeredTools (bundler) key, so each tool appears once.
+      const registered = registeredTools && Object.keys(registeredTools).length > 0 ? registeredTools : {};
+
+      const allTools: Record<string, any> = {};
+      const seenToolIds = new Map<string, string>();
+
+      // registeredTools first so their key wins for a given tool.id.
+      for (const [key, tool] of Object.entries(registered)) {
+        const toolId = typeof (tool as any)?.id === 'string' ? (tool as any).id : undefined;
+        if (toolId !== undefined) seenToolIds.set(toolId, key);
+        allTools[key] = tool;
+      }
+
+      for (const [key, tool] of Object.entries(mastra.listTools() ?? {})) {
+        const toolId = typeof (tool as any)?.id === 'string' ? (tool as any).id : undefined;
+        // Skip if this exact tool.id was already registered (under any key) by registeredTools.
+        if (toolId !== undefined && seenToolIds.has(toolId)) continue;
+        if (toolId !== undefined) seenToolIds.set(toolId, key);
+        allTools[key] = tool;
+      }
 
       const serializedTools = Object.entries(allTools).reduce(
         (acc, [id, _tool]) => {

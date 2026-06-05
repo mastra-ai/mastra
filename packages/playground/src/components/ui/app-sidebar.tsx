@@ -45,13 +45,7 @@ export function AppSidebar() {
   const { isMastraPlatform } = useMastraPlatform();
   const { data: authCapabilities } = useAuthCapabilities();
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
-  const {
-    hasPermission,
-    hasAnyPermission,
-    rbacEnabled,
-    isAuthenticated: isPermissionsAuthenticated,
-    isLoading: isPermissionsLoading,
-  } = usePermissions();
+  const { hasPermission, hasAnyPermission, isLoading: isPermissionsLoading } = usePermissions();
 
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
   const cmsOnlyLinks = new Set(['/prompts']);
@@ -61,7 +55,18 @@ export function AppSidebar() {
   const filterItem = (item: NavItem) => {
     if (cmsOnlyLinks.has(item.url) && !isCmsAvailable && !isCmsLoading) return false;
     if (isMastraPlatform && !item.isOnMastraPlatform) return false;
-    if (rbacEnabled && isPermissionsAuthenticated && isPermissionsLoading) return true;
+    // While the user's permissions are still loading, hide permission-gated
+    // links. Being permissive here would briefly flash links the user may not
+    // be allowed to see. We can't yet know rbacEnabled/isAuthenticated during
+    // this window (auth capabilities are still resolving), so we gate purely on
+    // the loading state and only reveal a link once permissions have resolved.
+    // The authoritative permission patterns are already loaded and validated by
+    // RoutePermissionsGate before the sidebar renders.
+    if (isPermissionsLoading) {
+      const pending = getPermissionForRoute(item.url);
+      // Public/unknown routes have no permission requirement — keep showing them.
+      if (pending && pending !== 'public') return false;
+    }
     const requiredPermission = getPermissionForRoute(item.url);
     if (!hasRoutePermission(requiredPermission, hasPermission, hasAnyPermission)) {
       return false;

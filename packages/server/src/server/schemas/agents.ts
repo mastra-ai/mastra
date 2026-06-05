@@ -246,6 +246,8 @@ export const providersResponseSchema = z.object({
   providers: z.array(providerSchema),
 });
 
+export type ProviderListItem = z.infer<typeof providerSchema>;
+
 /**
  * Schema for list agents endpoint response
  * Returns a record of agent ID to serialized agent
@@ -375,6 +377,9 @@ export const agentExecutionBodySchema = z
         fallbackValue: z.any().optional(),
       })
       .optional(),
+
+    // Idle-loop streaming (collapses streamUntilIdle into stream)
+    untilIdle: z.union([z.boolean(), z.object({ maxIdleMs: z.number().int().positive().optional() })]).optional(),
   })
   .passthrough(); // Allow additional fields for forward compatibility
 
@@ -390,6 +395,7 @@ export const agentExecutionLegacyBodySchema = agentExecutionBodySchema.extend({
 
 export const streamUntilIdleBodySchema = agentExecutionBodySchema.extend({
   maxIdleMs: z.number().int().positive().optional(),
+  untilIdle: z.union([z.boolean(), z.object({ maxIdleMs: z.number().int().positive().optional() })]).optional(),
 });
 
 export const resumeStreamUntilIdleBodySchema = agentExecutionBodySchema.omit({ messages: true }).extend({
@@ -623,6 +629,8 @@ export const sendToolApprovalBodySchema = z.object({
   toolCallId: z.string(),
   approved: z.boolean(),
   format: z.string().optional(),
+  messages: z.array(coreMessageSchema).optional(),
+  streamOptions: z.any().optional(),
 });
 
 export const abortAgentThreadResponseSchema = z.object({

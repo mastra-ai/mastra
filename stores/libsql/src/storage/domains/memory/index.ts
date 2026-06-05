@@ -135,6 +135,8 @@ export class MemoryLibSQL extends MemoryStorage {
   }
 
   async dangerouslyClearAll(): Promise<void> {
+    await this.init();
+
     await this.#db.deleteData({ tableName: TABLE_MESSAGES });
     await this.#db.deleteData({ tableName: TABLE_THREADS });
     await this.#db.deleteData({ tableName: TABLE_RESOURCES });

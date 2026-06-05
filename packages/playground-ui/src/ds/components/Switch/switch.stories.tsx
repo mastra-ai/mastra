@@ -1,5 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { GlobeIcon, LockKeyhole, ZapIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { Label } from '../Label';
+import type { SwitchProps } from './switch';
 import { Switch } from './switch';
 
 const SURFACES: { token: string; label: string; className: string }[] = [
@@ -9,7 +13,44 @@ const SURFACES: { token: string; label: string; className: string }[] = [
   { token: 'surface4', label: 'surface4 · 22%', className: 'bg-surface4' },
 ];
 
-function SurfaceFrame({ className, label, children }: { className: string; label: string; children: React.ReactNode }) {
+type SwitchIconProps = Pick<SwitchProps, 'checkedIcon' | 'icon' | 'uncheckedIcon'>;
+
+const visibilityIcons: SwitchIconProps = {
+  checkedIcon: <LockKeyhole />,
+  uncheckedIcon: <GlobeIcon />,
+};
+
+const withIconSource = `import { Switch } from '@mastra/playground-ui';
+import { ZapIcon } from 'lucide-react';
+
+<Switch aria-label="Enable boost" icon={<ZapIcon />} />;`;
+
+const withStateIconsSource = `import { Label, Switch } from '@mastra/playground-ui';
+import { GlobeIcon, LockKeyhole } from 'lucide-react';
+import { useState } from 'react';
+
+function RepositoryVisibilitySwitch() {
+  const [isPrivate, setIsPrivate] = useState(true);
+
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <Label htmlFor="repository-visibility">Repository visibility</Label>
+      <span className="inline-flex items-center gap-2">
+        <span>{isPrivate ? 'Private' : 'Public'}</span>
+        <Switch
+          id="repository-visibility"
+          checked={isPrivate}
+          onCheckedChange={setIsPrivate}
+          aria-label="Private repository"
+          checkedIcon={<LockKeyhole />}
+          uncheckedIcon={<GlobeIcon />}
+        />
+      </span>
+    </div>
+  );
+}`;
+
+function SurfaceFrame({ className, label, children }: { className: string; label: string; children: ReactNode }) {
   return (
     <div className={`rounded-2xl border border-border1/70 p-5 ${className}`}>
       <p className="mb-4 text-ui-xs uppercase tracking-wide text-neutral3">{label}</p>
@@ -18,7 +59,7 @@ function SurfaceFrame({ className, label, children }: { className: string; label
   );
 }
 
-function SwitchStateGrid({ idPrefix }: { idPrefix: string }) {
+function SwitchStateGrid({ idPrefix, icons }: { idPrefix: string; icons?: SwitchIconProps }) {
   return (
     <div className="grid grid-cols-[5rem_repeat(4,minmax(0,1fr))] items-center gap-x-4 gap-y-3 text-ui-sm text-neutral3">
       <span />
@@ -28,10 +69,33 @@ function SwitchStateGrid({ idPrefix }: { idPrefix: string }) {
       <span>Disabled on</span>
 
       <span className="text-neutral5">State</span>
-      <Switch aria-label={`${idPrefix} default`} />
-      <Switch aria-label={`${idPrefix} on`} checked onCheckedChange={() => {}} />
-      <Switch aria-label={`${idPrefix} disabled`} disabled />
-      <Switch aria-label={`${idPrefix} disabled on`} checked disabled onCheckedChange={() => {}} />
+      <Switch aria-label={`${idPrefix} default`} {...icons} />
+      <Switch aria-label={`${idPrefix} on`} checked onCheckedChange={() => {}} {...icons} />
+      <Switch aria-label={`${idPrefix} disabled`} disabled {...icons} />
+      <Switch aria-label={`${idPrefix} disabled on`} checked disabled onCheckedChange={() => {}} {...icons} />
+    </div>
+  );
+}
+
+function RepositoryVisibilitySwitch() {
+  const [isPrivate, setIsPrivate] = useState(true);
+
+  return (
+    <div className="grid gap-4 rounded-lg bg-surface2 p-4">
+      <div className="flex items-center justify-between gap-4">
+        <Label htmlFor="repository-visibility-icons">Repository visibility</Label>
+        <span className="inline-flex items-center gap-2">
+          <span className="text-ui-sm font-medium text-neutral7">{isPrivate ? 'Private' : 'Public'}</span>
+          <Switch
+            id="repository-visibility-icons"
+            checked={isPrivate}
+            onCheckedChange={setIsPrivate}
+            aria-label="Private repository"
+            {...visibilityIcons}
+          />
+        </span>
+      </div>
+      <SwitchStateGrid idPrefix="visibility icon" icons={visibilityIcons} />
     </div>
   );
 }
@@ -48,6 +112,18 @@ const meta: Meta<typeof Switch> = {
     },
     checked: {
       control: { type: 'boolean' },
+    },
+    icon: {
+      control: false,
+      description: 'Any React node rendered inside the thumb for both checked and unchecked states.',
+    },
+    checkedIcon: {
+      control: false,
+      description: 'Any React node rendered inside the thumb when the switch is checked.',
+    },
+    uncheckedIcon: {
+      control: false,
+      description: 'Any React node rendered inside the thumb when the switch is unchecked.',
     },
   },
 };
@@ -75,6 +151,30 @@ export const DisabledChecked: Story = {
   args: {
     disabled: true,
     checked: true,
+  },
+};
+
+export const WithIcon: Story = {
+  args: {
+    icon: <ZapIcon />,
+  },
+  parameters: {
+    docs: {
+      source: {
+        code: withIconSource,
+      },
+    },
+  },
+};
+
+export const WithStateIcons: Story = {
+  render: () => <RepositoryVisibilitySwitch />,
+  parameters: {
+    docs: {
+      source: {
+        code: withStateIconsSource,
+      },
+    },
   },
 };
 

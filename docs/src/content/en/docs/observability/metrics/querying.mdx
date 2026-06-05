@@ -88,7 +88,7 @@ The `@mastra/client-js` SDK wraps the same routes as `mastraClient.getMetricAggr
 ```bash
 mastra api metric aggregate \
   '{"name":["mastra_agent_duration_ms"],"aggregation":"avg"}' \
-  --url http://localhost:4111 --pretty
+  --url http://localhost:4111
 ```
 
 By default the CLI targets hosted Mastra observability (`https://observability.mastra.ai`). Pass `--url http://localhost:4111` to query a local `mastra dev` server. See [`mastra api metric aggregate`](/reference/cli/mastra#mastra-api-metric-aggregate) and the surrounding entries for the full command list.

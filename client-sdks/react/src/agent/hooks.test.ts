@@ -35,7 +35,7 @@ const declineToolCallMock = vi.fn(async () => ({
     /* no chunks */
   },
 }));
-const streamUntilIdleMock = vi.fn(async () => ({
+const streamMock = vi.fn(async () => ({
   body: { cancel: vi.fn() },
   processDataStream: async () => {
     /* no chunks */
@@ -104,7 +104,7 @@ vi.mock('@mastra/client-js', () => ({
         approveToolCall: approveToolCallMock,
         sendToolApproval: sendToolApprovalMock,
         declineToolCall: declineToolCallMock,
-        streamUntilIdle: streamUntilIdleMock,
+        stream: streamMock,
         subscribeToThread: subscribeToThreadMock,
         generate: generateMock,
         network: networkMock,
@@ -151,7 +151,7 @@ describe('useChat forwards clientTools', () => {
     sendToolApprovalMock.mockClear();
     declineToolCallMock.mockClear();
     approveToolCallProcessDataStreamMock.mockClear();
-    streamUntilIdleMock.mockClear();
+    streamMock.mockClear();
     subscribeToThreadMock.mockClear();
     threadSubscriptionAbortMock.mockClear();
     threadSubscriptionUnsubscribeMock.mockClear();
@@ -194,7 +194,7 @@ describe('useChat forwards clientTools', () => {
 
     expect(subscribeToThreadMock).not.toHaveBeenCalled();
     expect(sendSignalMock).not.toHaveBeenCalled();
-    expect(streamUntilIdleMock).toHaveBeenCalledTimes(1);
+    expect(streamMock).toHaveBeenCalledTimes(1);
   });
 
   it('marks subscription streams idle while waiting for tool approval', async () => {
@@ -755,7 +755,7 @@ describe('useChat forwards clientTools', () => {
 
     expect(subscribeToThreadMock).not.toHaveBeenCalled();
     expect(sendSignalMock).not.toHaveBeenCalled();
-    expect(streamUntilIdleMock).toHaveBeenCalledTimes(1);
+    expect(streamMock).toHaveBeenCalledTimes(1);
   });
 
   it('keeps hook-prop clientTools on sendMessage when threadId is provided', async () => {
@@ -861,10 +861,10 @@ describe('useChat forwards clientTools', () => {
         clientTools: perSendClientTools,
       }),
     );
-    expect(streamUntilIdleMock).not.toHaveBeenCalled();
+    expect(streamMock).not.toHaveBeenCalled();
   });
 
-  it('forwards hook-prop clientTools through the legacy streamUntilIdle path when no threadId is set', async () => {
+  it('forwards hook-prop clientTools through the legacy stream (untilIdle) path when no threadId is set', async () => {
     const { result } = renderHook(
       () =>
         useChat({
@@ -881,8 +881,8 @@ describe('useChat forwards clientTools', () => {
       });
     });
 
-    expect(streamUntilIdleMock).toHaveBeenCalledTimes(1);
-    const calls = streamUntilIdleMock.mock.calls as unknown as Array<[unknown, { clientTools: unknown }]>;
+    expect(streamMock).toHaveBeenCalledTimes(1);
+    const calls = streamMock.mock.calls as unknown as Array<[unknown, { clientTools: unknown }]>;
     expect(calls[0]?.[1].clientTools).toBe(clientTools);
     expect(sendMessageMock).not.toHaveBeenCalled();
     expect(sendSignalMock).not.toHaveBeenCalled();
