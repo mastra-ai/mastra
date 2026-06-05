@@ -2562,3 +2562,24 @@ Focused evidence read: PR metadata for #17054/#16872/#17071/#17108; current `mas
 Verification:
 
 - `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/wrapping-select-list.test.ts src/tui/__tests__/key-input.test.ts src/tui/components/__tests__/tool-approval-dialog.test.ts --bail=1 --reporter=dot` — 3 files / 86 tests passed.
+
+### PR #17114 / #17138 / #17220 / #17333 feature-map checkpoint
+
+Verified rows 337-340:
+
+- #17114 is a Changesets alpha package-version batch; skipped for feature mapping after current commit stats confirmed only `.changeset/pre.json`, `mastracode/CHANGELOG.md`, and `mastracode/package.json` under Mastra Code scope.
+- #17138 is a Changesets alpha package-version batch; skipped for feature mapping after current commit stats confirmed only `.changeset/pre.json`, `mastracode/CHANGELOG.md`, and `mastracode/package.json` under Mastra Code scope.
+- #17220 adds missing lint-staged configs, including `mastracode/lint-staged.config.js`; skipped as build/developer workflow config rather than user-visible Mastra Code behavior.
+- #17333 wraps long slash/custom/skill autocomplete descriptions in the editor picker. Current source overrides pi-tui autocomplete list creation in `CustomEditor` with `WrappingAutocompleteList`, wraps descriptions under the description column when width permits, keeps narrow terminals single-column, and keeps arrow navigation item-based.
+
+Documentation actions:
+
+- Updated `features/chat/queued-followups.md` for #17333 wrapped autocomplete descriptions and current tests/risks.
+- Updated `features/README.md`, `features/_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #17114 skipped, #17138 skipped, #17220 skipped, #17333 done, #17334 current.
+
+Focused evidence read: PR metadata and commit stats for #17114/#17138/#17220/#17333; current `mastracode/lint-staged.config.js`, `mastracode/src/tui/components/wrapping-autocomplete-list.ts`, `custom-editor.ts`, `wrapping-autocomplete-list.test.ts`, and `custom-editor.test.ts`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/wrapping-autocomplete-list.test.ts --bail=1 --reporter=dot` — 1 file / 11 tests passed.

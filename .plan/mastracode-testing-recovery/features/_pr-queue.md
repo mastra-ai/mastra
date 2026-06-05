@@ -356,10 +356,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 334 | 2026-05-26 | #16872 | `ed376fe8d7` | likely skip | skipped | chore: version packages (alpha) (#16872) | 2 |
 | 335 | 2026-05-27 | #17071 | `029668d5d6` | review | done | fix(mastracode): decode kitty CSI-u keys for tool approval shortcuts (#17071) | 7 |
 | 336 | 2026-05-26 | #17108 | `1d57d5c806` | likely skip | skipped | chore: version packages (alpha) (#17108) | 2 |
-| 337 | 2026-05-26 | #17114 | `ff5858afa2` | likely skip | | chore: version packages (alpha) (#17114) | 2 |
-| 338 | 2026-05-27 | #17138 | `c3baf471a4` | likely skip | | chore: version packages (alpha) (#17138) | 2 |
-| 339 | 2026-05-28 | #17220 | `97b974e292` | likely skip | | chore: add missing lint-staged configs (#17220) | 1 |
-| 340 | 2026-05-30 | #17333 | `0f7f06bc92` | review | | fix(mastracode): wrap long slash-command descriptions in autocomplete picker (#17333) | 3 |
+| 337 | 2026-05-26 | #17114 | `ff5858afa2` | likely skip | skipped | chore: version packages (alpha) (#17114) | 2 |
+| 338 | 2026-05-27 | #17138 | `c3baf471a4` | likely skip | skipped | chore: version packages (alpha) (#17138) | 2 |
+| 339 | 2026-05-28 | #17220 | `97b974e292` | likely skip | skipped | chore: add missing lint-staged configs (#17220) | 1 |
+| 340 | 2026-05-30 | #17333 | `0f7f06bc92` | review | done | fix(mastracode): wrap long slash-command descriptions in autocomplete picker (#17333) | 3 |
 | 341 | 2026-05-30 | #17334 | `27c2376c99` | review | | fix(mastracode): render ask_user multi_select as a multi-select picker (#17334) | 8 |
 | 342 | 2026-05-31 | #17283 | `c5eca07f1d` | review | | feat(mastracode): configure TUI shell passthrough (#17283) | 11 |
 | 343 | 2026-05-31 | #17174 | `4517213d91` | likely skip | | chore: version packages (alpha) (#17174) | 2 |
