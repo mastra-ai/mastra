@@ -182,9 +182,24 @@ export function wrapLocalClient(client: Client): Client {
     };
 
     const finalize = async (sql: 'COMMIT' | 'ROLLBACK'): Promise<void> => {
-      finished = true;
       try {
         await client.execute(sql);
+        finished = true;
+      } catch (err) {
+        // COMMIT/ROLLBACK failed. The underlying transaction may still be open
+        // on the shared connection (e.g. a failed COMMIT that did not end the
+        // transaction). Force a ROLLBACK so the connection is clean before the
+        // next acquirer issues its BEGIN; otherwise it would fail with "cannot
+        // start a transaction within a transaction". Only mark the transaction
+        // closed once the connection is actually released from the transaction.
+        try {
+          await client.execute('ROLLBACK');
+        } catch {
+          // Best effort: if there was no active transaction to roll back, the
+          // connection is already clean.
+        }
+        finished = true;
+        throw err;
       } finally {
         release();
       }
