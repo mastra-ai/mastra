@@ -266,11 +266,11 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 244 | 2026-04-29 | #15924 | `93a7e6f5e3` | review | done | feat(mastracode): show changelog in update prompt (#15924) | 4 |
 | 245 | 2026-04-29 | #15942 | `8f1c0e7c9f` | review | done | fix(mastracode): display user message in TUI before async operations (#15942) | 1 |
 | 246 | 2026-04-30 | #15940 | `3b11cdd283` | likely skip | skipped | chore: version packages (alpha) (#15940) | 2 |
-| 247 | 2026-04-30 | #15993 | `0a6f95b8e6` | review | current | fix(mastracode): fix user message border misalignment when first line is full width (#15993) | 1 |
-| 248 | 2026-04-30 | #15979 | `e19c4e5c81` | likely skip | | chore: version packages (alpha) (#15979) | 2 |
-| 249 | 2026-04-30 | #16006 | `2f53bdc6bc` | review | | feat(mastracode): support piped stdin as initial TUI message (#16006) | 5 |
-| 250 | 2026-04-30 | #16009 | `3c4712b259` | likely skip | | chore: version packages (alpha) (#16009) | 2 |
-| 251 | 2026-04-30 | #16011 | `861f59af84` | likely skip | | chore: version packages (alpha) (#16011) | 2 |
+| 247 | 2026-04-30 | #15993 | `0a6f95b8e6` | review | done | fix(mastracode): fix user message border misalignment when first line is full width (#15993) | 1 |
+| 248 | 2026-04-30 | #15979 | `e19c4e5c81` | likely skip | skipped | chore: version packages (alpha) (#15979) | 2 |
+| 249 | 2026-04-30 | #16006 | `2f53bdc6bc` | review | done | feat(mastracode): support piped stdin as initial TUI message (#16006) | 5 |
+| 250 | 2026-04-30 | #16009 | `3c4712b259` | likely skip | skipped | chore: version packages (alpha) (#16009) | 2 |
+| 251 | 2026-04-30 | #16011 | `861f59af84` | likely skip | current | chore: version packages (alpha) (#16011) | 2 |
 | 252 | 2026-04-30 | #16016 | `a127afaa86` | likely skip | | chore: version packages (alpha) (#16016) | 2 |
 | 253 | 2026-04-30 | #16020 | `7510bcac37` | likely skip | | chore: version packages (alpha) (#16020) | 2 |
 | 254 | 2026-05-01 | #15395 | `7974532bb9` | review | | feat(mastracode): add multiline support to question input box (#15395) | 14 |

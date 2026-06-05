@@ -2015,3 +2015,26 @@ Verification:
 
 - `pnpm --filter ./mastracode exec vitest run src/utils/__tests__/update-check.test.ts -t "parseChangelog" --bail=1 --reporter=dot` — 1 file / 10 tests passed / 3 skipped.
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/mastra-tui-queueing.test.ts -t "optimistic|pending new thread" --bail=1 --reporter=dot` — 1 file / 3 tests passed / 27 skipped.
+
+### PR #15993 / #15979 / #16006 / #16009 feature-map checkpoint
+
+Verified rows 247-250:
+
+- #15993 fixes user-message border alignment when the first line is full width. Current `UserMessageComponent`/`BorderedBox` accounts for border, prompt prefix, indent, and right padding in `maxInnerWidth`, so a first line that fills the width no longer pushes the right border out of alignment.
+- #15979 and #16009 are Changesets alpha package-version batches; skipped for feature mapping.
+- #16006 supports piped stdin as an initial TUI message. Current startup drains non-TTY stdin through `drainPipedStdin()`, sanitizes ANSI/control characters and carriage-return overwrites, reopens `/dev/tty` for interactive keyboard input, sends the pipe as `MastraTUI` `initialMessage`, and falls back to headless with the predrained prompt if no TTY can be reopened.
+
+Documentation actions:
+
+- Updated `features/tui/interactive-chat.md` for full-width user-message border sizing, piped initial-message startup, state ownership, key files, tests, missing tests, and risks.
+- Updated `features/headless/prompt-mode.md` for bare pipe vs `--prompt -` routing, TTY reopen, sanitized stdin utilities, and headless fallback.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #15993 done, #15979 skipped, #16006 done, #16009 skipped, #16011 current.
+
+Focused evidence read: PR metadata for #15993/#15979/#16006/#16009; current `mastracode/src/tui/components/user-message.ts`, `mastracode/src/utils/stdin-pipe.ts`, `mastracode/src/utils/__tests__/stdin-pipe.test.ts`, `mastracode/src/headless.ts`, `mastracode/src/main.ts`, and `mastracode/src/tui/mastra-tui.ts`.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/utils/__tests__/stdin-pipe.test.ts --bail=1 --reporter=dot` — 1 file / 21 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/mastra-tui-queueing.test.ts -t "initialMessage|pending new thread|optimistic" --bail=1 --reporter=dot` — 1 file / 3 tests passed / 27 skipped.
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/render-messages.test.ts -t "UserMessageComponent|pending|interjection|user message" --bail=1 --reporter=dot` — 1 file / 6 tests passed / 18 skipped.

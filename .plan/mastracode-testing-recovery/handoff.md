@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #15940 (row 246) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, #15390, #15403, #15544, #15515, #15601, #15606, #15629, #15653, #15656, #15699, #15710, #15857, #15896, #15770, #15909, #15928, and #15940 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 247 #15993 (user message border alignment), then row 248 #15979 (Changesets alpha skip).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #16009 (row 250) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, #15200, #15390, #15403, #15544, #15515, #15601, #15606, #15629, #15653, #15656, #15699, #15710, #15857, #15896, #15770, #15909, #15928, #15940, #15979, and #16009 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 251 #16011 (Changesets alpha skip), then row 252 #16016 (Changesets alpha skip).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 247: PR #15993 (user message border alignment), then row 248 #15979 (Changesets alpha skip).
+1. Continue at `_pr-queue.md` row 251: PR #16011 (Changesets alpha skip), then row 252 #16016 (Changesets alpha skip).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -44,6 +44,7 @@ None known.
 
 ## Last commands/evidence
 
+- Rows 247-250 verified/documented: #15979/#16009 Changesets alpha skips, #15993 user-message border sizing for full-width first lines, and #16006 piped stdin as an initial TUI message with headless fallback when no TTY can be reopened. Focused verification passed: stdin pipe utility tests (21), MastraTUI initial-message/optimistic queueing tests (3), and render-messages user-message tests (6).
 - Rows 243-246 verified/documented: #15928/#15940 Changesets alpha skips, #15924 changelog summaries in startup/manual update prompts, and #15942 optimistic user-message rendering before async prompt hooks/thread creation/signal dispatch. Focused verification passed: update-check parseChangelog tests (10) and MastraTUI optimistic/pending-thread queueing tests (3).
 - Rows 239-242 verified/documented: #15896/#15909 Changesets alpha skips, #15820 common binary detection in the Environment prompt, and #15770 AI SDK dependency update skip. Focused verification passed: prompt common-binary/model-specific tests (4).
 - Rows 235-238 verified/documented: #15759 OpenAI GPT-5.5 pack/prompt defaults, #15760 StreamErrorRetryProcessor and Mastra Code wiring, #15695 forked subagents inheriting parent thread/cache/toolsets, and #15857 Changesets alpha skip. Focused verification passed: OpenAI pack/prompt tests (11), stream-error retry core tests (11, no type errors), forked subagent core tests (18, no type errors), and MastraCode processor/render wiring target (1).
