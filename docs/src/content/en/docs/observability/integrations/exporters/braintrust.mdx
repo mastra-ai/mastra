@@ -1,0 +1,151 @@
+---
+title: "Braintrust exporter | Integrations | Observability"
+description: "Send traces to Braintrust for evaluation and monitoring"
+packages:
+  - "@mastra/braintrust"
+  - "@mastra/observability"
+---
+
+# Braintrust exporter
+
+[Braintrust](https://www.braintrust.dev/) is an evaluation and monitoring platform that helps you measure and improve LLM application quality. The Braintrust exporter sends your traces to Braintrust, enabling systematic evaluation, scoring, and experimentation.
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/braintrust@latest
+```
+
+## Configuration
+
+### Prerequisites
+
+1. **Braintrust Account**: Sign up at [braintrust.dev](https://www.braintrust.dev/)
+1. **Project**: Create or select a project for your traces
+1. **API Key**: Generate in Braintrust Settings → API Keys
+1. **Environment Variables**: Set your credentials:
+
+```bash title=".env"
+BRAINTRUST_API_KEY=sk-xxxxxxxxxxxxxxxx
+
+# Optional
+BRAINTRUST_ENDPOINT=https://api.braintrust.dev  # Custom endpoint if needed
+```
+
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { BraintrustExporter } from '@mastra/braintrust'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      braintrust: {
+        serviceName: 'my-service',
+        exporters: [new BraintrustExporter()],
+      },
+    },
+  }),
+})
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { BraintrustExporter } from '@mastra/braintrust'
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      braintrust: {
+        serviceName: 'my-service',
+        exporters: [
+          new BraintrustExporter({
+            apiKey: process.env.BRAINTRUST_API_KEY,
+            projectName: 'my-project',
+          }),
+        ],
+      },
+    },
+  }),
+})
+```
+
+### Complete Configuration
+
+```typescript
+new BraintrustExporter({
+  // Required
+  apiKey: process.env.BRAINTRUST_API_KEY!,
+
+  // Optional settings
+  projectName: 'my-project', // Default: 'mastra-tracing'
+  endpoint: 'https://api.braintrust.dev', // Custom endpoint if needed
+  logLevel: 'info', // Diagnostic logging: debug | info | warn | error
+})
+```
+
+## Attach traces to Braintrust evals
+
+When you run Mastra inside Braintrust `Eval()` or `logger.traced()`, pass the Braintrust logger and `currentSpan` resolver to the exporter. Import `currentSpan` from the same `braintrust` package instance that creates the eval or traced span.
+
+This helps Mastra attach its spans under the active Braintrust span when your app and `@mastra/braintrust` resolve different installed copies of the Braintrust SDK.
+
+```typescript title="src/mastra/index.ts"
+import { currentSpan, initLogger } from 'braintrust'
+import { BraintrustExporter } from '@mastra/braintrust'
+
+const logger = initLogger({
+  projectName: 'my-project',
+  apiKey: process.env.BRAINTRUST_API_KEY,
+})
+
+const exporter = new BraintrustExporter({
+  braintrustLogger: logger,
+  currentSpan,
+})
+```
+
+Use the configured Mastra instance inside the Braintrust eval task. The `currentSpan` resolver above reads the active span created by `Eval()`.
+
+```typescript title="src/evals/braintrust.ts"
+import { Eval } from 'braintrust'
+import { mastra } from '../mastra'
+
+await Eval('my-project', {
+  data: () => [{ input: 'Say hello', expected: 'Hello' }],
+  task: async input => {
+    const agent = mastra.getAgent('assistant')
+    return (await agent.generate(input)).text
+  },
+  scores: [],
+})
+```
+
+## Querying Braintrust with returned `spanId`
+
+For Braintrust, use `spanId` as the root span identifier when searching for traces because Braintrust root-span queries are typically faster than trace-id queries.
+
+```typescript title="src/mastra/usage.ts"
+const result = await agent.stream('Summarize this ticket')
+
+console.log('Mastra trace ID:', result.traceId)
+console.log('Braintrust root span ID:', result.spanId)
+
+// Use result.spanId in your Braintrust lookup/query path
+```
+
+The same applies to `agent.generate()` and workflow run results (`run.start()`, `run.stream()` final state, `run.resume()`).
+
+## Related
+
+- [Tracing Overview](/docs/observability/tracing/overview)
+- [Braintrust Documentation](https://www.braintrust.dev/docs)

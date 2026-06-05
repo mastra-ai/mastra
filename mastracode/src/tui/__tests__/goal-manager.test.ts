@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@mastra/core/agent', () => ({
   Agent: mocks.agentConstructor,
+  SignalProvider: class {},
 }));
 
 vi.mock('@mastra/core/processors', () => ({
