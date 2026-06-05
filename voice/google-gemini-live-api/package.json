@@ -34,7 +34,7 @@
   "dependencies": {
     "@google/genai": "^1.45.0",
     "@mastra/schema-compat": "workspace:*",
-    "google-auth-library": "^10.6.1",
+    "google-auth-library": "^10.6.2",
     "ws": "^8.20.0"
   },
   "devDependencies": {

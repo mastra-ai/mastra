@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.41.0-alpha.0",
+  "version": "1.41.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -409,6 +409,16 @@
       "require": {
         "types": "./dist/server/index.d.ts",
         "default": "./dist/server/index.cjs"
+      }
+    },
+    "./signals": {
+      "import": {
+        "types": "./dist/signals/index.d.ts",
+        "default": "./dist/signals/index.js"
+      },
+      "require": {
+        "types": "./dist/signals/index.d.ts",
+        "default": "./dist/signals/index.cjs"
       }
     },
     "./storage": {

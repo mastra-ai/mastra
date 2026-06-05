@@ -93,7 +93,9 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const res = await fetch(`http://localhost:${port}/api/tools`);
       const body = await res.json();
       expect(res.status).toBe(200);
-      expect(Object.keys(body)).toEqual(['calculatorTool', 'lodashTool']);
+      expect(Object.keys(body).sort()).toEqual(
+        ['calculatorTool', 'lodashTool', 'hello-world', 'generate-password', 'compare-password'].sort(),
+      );
     });
   }
 
