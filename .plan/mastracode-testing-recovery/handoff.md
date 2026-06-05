@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #15194 (row 203) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, and #15191 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 204 #15352 (autonomy prompt refinement).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #15200 (row 206) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, #13455, #13523, #13761, #13766, #14062, #13883, #14102, #14146, #14147, #14167, #14201, #14266, #14280, #14343, #14427, #14439, #14518, #14549, #14654, #14656, #14870, #14904, #14911, #14929, #14965, #15034, #15042, #15055, #15059, #15083, #15114, #15117, #15165, #15172, #15174, #15190, #15191, and #15200 recorded as version/dependency skips plus #12532, #14260, #13933, and #14432 recorded as build/CI/dependency-only for the Mastra Code feature map. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: row 207 #15370 (model-pack share/import).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 204: PR #15352 (Mastra Code autonomy prompt refinement), then row 205 #15359 (caveman OM memory compression).
+1. Continue at `_pr-queue.md` row 207: PR #15370 (model-pack share/import), then row 208 #15390 (version-package skip) and row 209 #14909 (`--model` headless option).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
@@ -44,6 +44,7 @@ None known.
 
 ## Last commands/evidence
 
+- Rows 204-206 verified/documented: #15352 autonomy-first/common-sense prompt refinement, #15359 opt-in caveman OM compression with thread/global persistence and base-prompt memory-style guard, and #15200 Changesets alpha skip. Focused verification passed: MastraCode prompt + thread-caveman tests (15) and targeted startup caveman restore tests (2).
 - Rows 201-203 verified/documented: #15014 `/api-keys` provider key management command, #14435 `processAPIError`/`PrefillErrorHandler` retry path for assistant-prefill LLM API rejections, and #15194 browser profile/executablePath support. Focused verification passed: MastraCode command/help/settings tests (51), core prefill-error/runner recovery tests (92, no type errors), and core browser tests (18, no type errors).
 - Rows 197-200 verified/documented: #15190/#15191 Changesets alpha skips, #15192 thread-boundary task/plan/access reset, and #15228 symlinked workspace skill alias resolution. Focused verification passed: MastraCode event-dispatch thread reset tests (11) and core workspace skill/filesystem symlink tests (386, no type errors).
 - Rows 194-196 verified/documented: #15092 collapsible shell passthrough output, #15174 Changesets alpha skip, and #14962 headless thread control flags. Focused verification passed: shell/prune/headless unit tests (54), targeted Ctrl+E shortcut test (1), and targeted headless thread-control integration tests (5). Initial full setup-keyboard-shortcuts run hit the known unrelated GitHub autocomplete ordering assertion.

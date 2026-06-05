@@ -3,13 +3,13 @@
 ## Origin PR / commit
 
 - PR: [#13234](https://github.com/mastra-ai/mastra/pull/13234) — moved prompt building into agent prompt modules and added runtime instruction assembly.
-- Later changes: [#13346](https://github.com/mastra-ai/mastra/pull/13346) — static instruction discovery switched from dead `AGENT.md` to plural `AGENTS.md`; [#13416](https://github.com/mastra-ai/mastra/pull/13416) — split mode-aware tool guidance into `tool-guidance.ts` and made Plan mode explicitly require `submit_plan`; [#13376](https://github.com/mastra-ai/mastra/pull/13376) — passed current model ID into Git Safety commit attribution guidance; [#13456](https://github.com/mastra-ai/mastra/pull/13456) — refreshes current Git branch during dynamic instruction assembly; [#14587](https://github.com/mastra-ai/mastra/pull/14587) — expands base autonomy/common-sense guidance and inserts model-specific prompt sections during assembly; [#14688](https://github.com/mastra-ai/mastra/pull/14688) — moves Tone/Style to the end of the base prompt and tightens response guidance; [#14637](https://github.com/mastra-ai/mastra/pull/14637) — injects nearest nested `AGENTS.md`/`CLAUDE.md`/`CONTEXT.md` files as ephemeral system reminders after path-touching tool calls; [#14790](https://github.com/mastra-ai/mastra/pull/14790) — caps injected instruction reminders at about 1000 estimated tokens and adds truncation markers; [#14961](https://github.com/mastra-ai/mastra/pull/14961) — changes file-access prompt guidance to call `request_access` instead of telling users to run `/sandbox`; [#14435](https://github.com/mastra-ai/mastra/pull/14435) — adds a `processAPIError` processor hook and `PrefillErrorHandler` that appends a hidden continue system-reminder and retries unsupported assistant-prefill errors; task-list injection and goal-mode prompt guidance changed this behavior later.
+- Later changes: [#13346](https://github.com/mastra-ai/mastra/pull/13346) — static instruction discovery switched from dead `AGENT.md` to plural `AGENTS.md`; [#13416](https://github.com/mastra-ai/mastra/pull/13416) — split mode-aware tool guidance into `tool-guidance.ts` and made Plan mode explicitly require `submit_plan`; [#13376](https://github.com/mastra-ai/mastra/pull/13376) — passed current model ID into Git Safety commit attribution guidance; [#13456](https://github.com/mastra-ai/mastra/pull/13456) — refreshes current Git branch during dynamic instruction assembly; [#14587](https://github.com/mastra-ai/mastra/pull/14587) — expands base autonomy/common-sense guidance and inserts model-specific prompt sections during assembly; [#14688](https://github.com/mastra-ai/mastra/pull/14688) — moves Tone/Style to the end of the base prompt and tightens response guidance; [#14637](https://github.com/mastra-ai/mastra/pull/14637) — injects nearest nested `AGENTS.md`/`CLAUDE.md`/`CONTEXT.md` files as ephemeral system reminders after path-touching tool calls; [#14790](https://github.com/mastra-ai/mastra/pull/14790) — caps injected instruction reminders at about 1000 estimated tokens and adds truncation markers; [#14961](https://github.com/mastra-ai/mastra/pull/14961) — changes file-access prompt guidance to call `request_access` instead of telling users to run `/sandbox`; [#14435](https://github.com/mastra-ai/mastra/pull/14435) — adds a `processAPIError` processor hook and `PrefillErrorHandler` that appends a hidden continue system-reminder and retries unsupported assistant-prefill errors; [#15352](https://github.com/mastra-ai/mastra/pull/15352) — refines base/build prompts toward autonomy-first common-sense decisions and clearer ask-vs-proceed rules; [#15359](https://github.com/mastra-ai/mastra/pull/15359) — documents that compressed caveman-style memories are storage-only and must not leak into user-facing style; task-list injection and goal-mode prompt guidance changed this behavior later.
 
 ## User-visible behavior
 
-- What the user can do: influence agent behavior through project/global `AGENTS.md` or `CLAUDE.md` instruction files, nested path-specific instruction files loaded on demand, current runtime state, and selected model.
-- Success looks like: the agent sees the right project, branch, mode, model, model-specific prompt guidance, tools, tasks, plan, static instructions, dynamically relevant nested instructions, and terminal-friendly response style for the current run without a large nested instruction file taking over the context window; provider assistant-prefill rejections recover by adding a hidden continue reminder and retrying once.
-- Must preserve: `AGENTS.md` wins over `CLAUDE.md` at the same location; singular `AGENT.md` is not loaded as a static instruction file; dynamic reminders are ephemeral, capped, and deduped; model-specific sections only apply to matching model IDs; file-access failures route through the `request_access` tool; tone/style stays late in the base prompt so it remains salient.
+- What the user can do: influence agent behavior through project/global `AGENTS.md` or `CLAUDE.md` instruction files, nested path-specific instruction files loaded on demand, current runtime state, selected model, and base/mode prompts that bias toward decisive progress unless clarification is materially required.
+- Success looks like: the agent sees the right project, branch, mode, model, model-specific prompt guidance, tools, tasks, plan, static instructions, dynamically relevant nested instructions, memory-style caveats, and terminal-friendly response style for the current run without a large nested instruction file taking over the context window; provider assistant-prefill rejections recover by adding a hidden continue reminder and retrying once.
+- Must preserve: `AGENTS.md` wins over `CLAUDE.md` at the same location; singular `AGENT.md` is not loaded as a static instruction file; dynamic reminders are ephemeral, capped, and deduped; model-specific sections only apply to matching model IDs; file-access failures route through the `request_access` tool; autonomy guidance should proceed on safe assumptions but ask for material ambiguity; compressed memory style is treated as storage format only; tone/style stays late in the base prompt so it remains salient.
 
 ## Entry points / commands
 
@@ -42,7 +42,7 @@
 | --- | --- | --- |
 | Mode/model | Harness session | Prompt mode/model sections, runtime model selection, commit attribution |
 | Model-specific prompt text | `modelSpecificPrompts` keyed by selected model ID | `buildFullPrompt()` assembled system prompt |
-| Base autonomy/tone/file-access guidance | `buildBasePrompt()`; File Access & Sandbox instructs `request_access`, and Tone and Style intentionally appears near the end after work/git/message-delivery/file-access sections | Shared behavior instructions for all modes/models |
+| Base autonomy/tone/file-access guidance | `buildBasePrompt()`; File Access & Sandbox instructs `request_access`, Autonomy/Common Sense sections define ask-vs-proceed rules, Memory Style keeps caveman compression out of user-facing prose, and Tone and Style intentionally appears near the end after work/git/message-delivery/file-access sections | Shared behavior instructions for all modes/models |
 | Project metadata and branch | Project detection + live git branch refresh | Environment section |
 | Task list | Harness state | `<current-task-list>` prompt section |
 | Active plan | Harness state | Base/mode prompt guidance |
@@ -55,7 +55,8 @@
 
 - `mastracode/src/agents/instructions.ts` — builds prompt context from harness request context and refreshes current Git branch.
 - `mastracode/src/agents/prompts/index.ts` — assembles base, tasks, instructions, model-specific, and mode sections using blank-line-separated non-empty sections.
-- `mastracode/src/agents/prompts/base.ts` — shared environment, file-access/request_access recovery, behavior, autonomy, communication, and late Tone/Style prompt.
+- `mastracode/src/agents/prompts/base.ts` — shared environment, Memory Style, file-access/request_access recovery, autonomy/common-sense decision framework, communication, and late Tone/Style prompt.
+- `mastracode/src/agents/prompts/build.ts` — Build-mode working style, implementation loop, verification burden, and blocker-recovery guidance.
 - `mastracode/src/agents/prompts/model.ts` — model-specific prompt snippets keyed by exact model ID.
 - `mastracode/src/agents/prompts/agent-instructions.ts` — loads `AGENTS.md`/`CLAUDE.md` instruction files from global and project locations.
 - `packages/core/src/processors/tool-result-reminder.ts` — `AgentsMDInjector` scans path-bearing tool calls for nearest instruction files, token-caps/truncates/dedupes, and emits `dynamic-agents-md` system reminders.
@@ -72,11 +73,11 @@
 - [Plan approval and build handoff](../goals/plan-approval.md) — Plan-mode prompt/tool guidance must route plans through `submit_plan`.
 - [Git commit attribution](../git/commit-attribution.md) — commit message guidance uses prompt-time model state.
 - [Git branch context and status](../git/branch-context.md) — prompt branch is refreshed from the working tree.
-- [Observational memory](../memory/observational-memory.md) — task prompt injection protects task state after memory truncation.
+- [Observational memory](../memory/observational-memory.md) — task prompt injection protects task state after memory truncation, and Memory Style guidance keeps compressed OM observations from changing user-facing prose.
 
 ## Existing tests
 
-- `mastracode/src/agents/__tests__/prompts.test.ts` — model-specific prompts (`openai/gpt-5.4`, `openai/gpt-5.5`), autonomy/base prompt guidance, late Tone/Style response guidance, file-access `request_access` wording, goal prompt guidance, common binary context.
+- `mastracode/src/agents/__tests__/prompts.test.ts` — model-specific prompts (`openai/gpt-5.4`, `openai/gpt-5.5`), autonomy/base prompt guidance, late Tone/Style response guidance, file-access `request_access` wording, goal prompt guidance, common binary context, and regression checks for stale removed prompt wording.
 - `mastracode/src/agents/prompts/index.test.ts` — task-list prompt injection and escaping.
 - `mastracode/src/__tests__/index.test.ts` — verifies runtime wiring uses `getDynamicInstructions()` and configures `AgentsMDInjector` with statically loaded instruction paths.
 - `packages/core/src/processors/tool-result-reminder.test.ts` and `mastracode/src/tui/components/__tests__/system-reminder.test.ts` — dynamic instruction reminder injection/rendering coverage, including metadata/path dedupe, ignored static instruction paths, default/custom token caps, truncation marker, and newline-boundary trimming.
@@ -91,11 +92,12 @@
 - Permission-denied tools disappear from prompt guidance in real runs.
 - End-to-end external-path denial flow where the agent chooses `request_access` rather than asking the user to run a command.
 - Provider-history regression for assistant-prefill retries across every supported provider that rejects assistant prefill, not only the mocked Qwen/Anthropic pattern strings.
+- Direct prompt regression that the Memory Style section stays present and tells agents not to imitate caveman-speak in user-facing responses.
 
 ## Known risks / regressions
 
 - Prompt context can drift if harness state, thread metadata, and TUI footer disagree.
-- Moving response-style guidance earlier/later in the prompt is behaviorally meaningful; prompt tests should catch accidental removal or stale old wording.
+- Moving response-style, autonomy, or memory-style guidance earlier/later in the prompt is behaviorally meaningful; prompt tests should catch accidental removal or stale old wording.
 - Model-specific prompt text is exact-ID keyed; model-pack renames can silently drop a model-specific section unless prompt tests cover the new ID.
 - Loaded-from-history runs can silently use current filesystem instructions, not the instructions that existed when history was created.
 - Attachments are user-message content, not instruction context; prompt-audit tests need to inspect both channels separately.

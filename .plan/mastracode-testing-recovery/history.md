@@ -1749,3 +1749,26 @@ Verification:
 - `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/command-dispatch.test.ts src/tui/components/__tests__/help-overlay.test.ts src/onboarding/__tests__/settings.test.ts --bail=1 --reporter=dot` — 3 files / 51 tests passed.
 - `pnpm --filter ./packages/core exec vitest run src/processors/prefill-error-handler.test.ts src/processors/runner.test.ts src/agent/__tests__/prefill-error-recovery.test.ts --bail=1 --reporter=dot` — 3 files / 92 tests passed / no type errors.
 - `pnpm --filter ./packages/core exec vitest run src/browser/browser.test.ts src/agent/__tests__/browser.test.ts --bail=1 --reporter=dot` — 2 files / 18 tests passed / no type errors.
+
+### PR #15352 / #15359 / #15200 feature-map checkpoint
+
+Verified rows 204-206:
+
+- #15352 refines Mastra Code autonomy prompts. Current `base.ts` adds autonomy-first/common-sense guidance, an ask-vs-proceed decision framework, explicit must-ask/should-not-ask lists, and concise terminal response guidance; current `build.ts` asks the agent to stop and clarify only when materially different implementation approaches would change scope/behavior/risk, and to report blockers after reasonable attempts with what was tried plus the next best option.
+- #15359 adds opt-in caveman OM compression. Current `memory.ts` conditionally adds `CAVEMAN_OM_INSTRUCTION` to observer/reflection instructions based on `state.cavemanObservations`; `/om` writes the toggle to harness state, thread metadata, and `settings.models.omCavemanObservations`; `thread-caveman-state.ts` mirrors/seeds per-thread `cavemanObservations` and `observeAttachments`; base prompt Memory Style warns compressed memories are storage-only and should not affect user-facing prose.
+- #15200 is a Changesets alpha package-version batch; skipped for feature mapping.
+
+Documentation actions:
+
+- Updated `features/chat/prompt-context.md` for #15352 autonomy/common-sense prompt behavior and #15359 Memory Style guard.
+- Updated `features/memory/observational-memory.md` for caveman OM compression, state ownership, key files, tests, missing tests, and style-leakage risks.
+- Updated `features/settings/onboarding-and-global-settings.md` for persisted OM caveman defaults and thread/global ownership.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #15352 done, #15359 done, #15200 skipped, #15370 current.
+
+Focused evidence read: PR/current-source metadata for #15352/#15359/#15200; current `mastracode/src/agents/prompts/base.ts`, `build.ts`, `memory.ts`, `thread-caveman-state.ts`, `schema.ts`, `mastracode/src/tui/commands/om.ts`, settings schema, prompt tests, thread-caveman tests, and startup restore tests.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/agents/__tests__/prompts.test.ts src/agents/thread-caveman-state.test.ts --bail=1 --reporter=dot` — 2 files / 15 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/__tests__/index.test.ts -t "caveman observation setting" --bail=1 --reporter=dot` — targeted startup caveman restore tests passed (2 passed / 14 skipped).

@@ -223,10 +223,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 201 | 2026-04-13 | #15014 | `d292618171` | review | done | feat(mastracode): add /api-keys slash command for managing provider API keys (#15014) | 6 |
 | 202 | 2026-04-14 | #14435 | `cbdf3e12b3` | review | done | feat: add processAPIError processor method for handling LLM API rejections (#14435) | 2 |
 | 203 | 2026-04-14 | #15194 | `190f45258b` | review | done | feat(browser): add profile and executablePath options (#15194) | 2 |
-| 204 | 2026-04-14 | #15352 | `c809341c0f` | review | current | refactor: refine Mastra Code autonomy prompts (#15352) | 2 |
-| 205 | 2026-04-14 | #15359 | `274504c739` | review | | feat: compress mastracode OM memory with caveman speak (#15359) | 2 |
-| 206 | 2026-04-14 | #15200 | `74f927608f` | likely skip | | chore: version packages (alpha) (#15200) | 2 |
-| 207 | 2026-04-15 | #15370 | `95b144b2d5` | review | | feat(mastracode): add share and import for model packs (#15370) | 3 |
+| 204 | 2026-04-14 | #15352 | `c809341c0f` | review | done | refactor: refine Mastra Code autonomy prompts (#15352) | 2 |
+| 205 | 2026-04-14 | #15359 | `274504c739` | review | done | feat: compress mastracode OM memory with caveman speak (#15359) | 2 |
+| 206 | 2026-04-14 | #15200 | `74f927608f` | likely skip | skipped | chore: version packages (alpha) (#15200) | 2 |
+| 207 | 2026-04-15 | #15370 | `95b144b2d5` | review | current | feat(mastracode): add share and import for model packs (#15370) | 3 |
 | 208 | 2026-04-15 | #15390 | `1192dffd35` | likely skip | | chore: version packages (alpha) (#15390) | 2 |
 | 209 | 2026-04-15 | #14909 | `b42565acf0` | review | | feat(mastracode): add --model CLI option to headless mode (#14909) | 4 |
 | 210 | 2026-04-15 | #15365 | `9467ea8769` | review | | feat: add activateAfterIdle for observational memory activation when prompt caches expire (#15365) | 6 |
