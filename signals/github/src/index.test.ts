@@ -1197,6 +1197,7 @@ describe('GithubSignals', () => {
     expect(sendNotificationSignal).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: 'pull-request-activity',
+        priority: 'high',
         summary:
           'devin-ai-integration[bot] commented on mastra-ai/mastra#17590: Acknowledged! Fourth test comment received. Rendered GitHub comment notifications with author and excerpt are working.',
         dedupeKey:
@@ -1212,6 +1213,7 @@ describe('GithubSignals', () => {
       lastObservedThreadContentHash: 'same-thread-hash',
       lastObservedHeadSha: 'same-head-sha',
       lastNotificationKind: 'pull-request-activity',
+      lastNotificationPriority: 'high',
       lastNotificationSummary:
         'devin-ai-integration[bot] commented on mastra-ai/mastra#17590: Acknowledged! Fourth test comment received. Rendered GitHub comment notifications with author and excerpt are working.',
     });
@@ -1299,6 +1301,7 @@ describe('GithubSignals', () => {
       2,
       expect.objectContaining({
         kind: 'pull-request-activity',
+        priority: 'high',
         summary:
           'devin-ai-integration[bot] commented on mastra-ai/mastra#17590: Nice follow-up! Thanks for the summary — those are solid improvements.',
         dedupeKey:
@@ -1312,6 +1315,7 @@ describe('GithubSignals', () => {
       lastObservedGithubUpdatedAt: '2026-06-05T22:13:47.000Z',
       lastObservedCiState: 'pending',
       lastNotificationKind: 'pull-request-activity',
+      lastNotificationPriority: 'high',
       lastNotificationSummary:
         'devin-ai-integration[bot] commented on mastra-ai/mastra#17590: Nice follow-up! Thanks for the summary — those are solid improvements.',
     });
@@ -1472,6 +1476,7 @@ describe('GithubSignals', () => {
       expect.objectContaining({
         source: 'github',
         kind: 'pull-request-activity',
+        priority: 'high',
         summary:
           'devin-ai-integration[bot] commented on mastra-ai/mastra#123: Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
         attributes: expect.objectContaining({

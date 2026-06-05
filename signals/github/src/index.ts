@@ -453,7 +453,7 @@ function classifyGithubCommentActivityNotification(input: {
   const pr = `${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}`;
   const summary = getCommentNotificationSummary(pr, input.snapshot);
   if (!summary) return undefined;
-  return { kind: 'pull-request-activity', priority: 'medium', summary };
+  return { kind: 'pull-request-activity', priority: 'high', summary };
 }
 
 function getCheckUpdatedTime(check: { updatedAt?: string }): number {
@@ -629,10 +629,11 @@ function classifyGithubActivityNotification(input: {
   }
   if (input.snapshot.ciState === 'pending' && input.subscription.lastObservedCiState === 'pending') return undefined;
   if (isBotOnlyActivity(input.snapshot)) return undefined;
+  const commentSummary = getCommentNotificationSummary(pr, input.snapshot);
   return {
     kind: 'pull-request-activity',
-    priority: 'medium',
-    summary: getCommentNotificationSummary(pr, input.snapshot) ?? `${pr} has new activity${input.snapshot.title ? `: ${input.snapshot.title}` : ''}`,
+    priority: commentSummary ? 'high' : 'medium',
+    summary: commentSummary ?? `${pr} has new activity${input.snapshot.title ? `: ${input.snapshot.title}` : ''}`,
   };
 }
 
