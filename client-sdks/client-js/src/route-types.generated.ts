@@ -34562,6 +34562,9 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
         | undefined
       )
     | undefined;
+  changeMessage?: string | undefined;
+  userName?: string | undefined;
+  inspectOnly?: boolean | undefined;
 };
 
 export type PostStoredAgentsStoredAgentIdChangeRequest_Response = {

@@ -395,21 +395,41 @@ export const OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Source storage provider cannot open change requests' });
       }
 
-      const { changeMessage, userName, ...exportBody } = body;
-      const response = await buildStoredAgentExport({ mastra, requestContext, storedAgentId, body: exportBody });
-      const message = sourceChangeRequestMessage(storedAgentId, userName, changeMessage);
-      return await provider.openChangeRequest({
-        title: `Update ${storedAgentId} agent override`,
-        body: `Updates ${response.fileName} from Mastra Studio.`,
-        headRef: sourceChangeRequestHeadRef(storedAgentId),
-        files: [
-          {
-            path: response.fileName,
-            content: response.content,
-            message,
-          },
-        ],
-      });
+      const openChangeRequest = provider.openChangeRequest.bind(provider);
+      const { changeMessage, userName, inspectOnly, ...exportBody } = body;
+      const headRef = sourceChangeRequestHeadRef(storedAgentId);
+      const title = `Update ${storedAgentId} agent override`;
+      const result = inspectOnly
+        ? await openChangeRequest({
+            title,
+            headRef,
+            files: [],
+          })
+        : await (async () => {
+            const response = await buildStoredAgentExport({ mastra, requestContext, storedAgentId, body: exportBody });
+            const message = sourceChangeRequestMessage(storedAgentId, userName, changeMessage);
+            return openChangeRequest({
+              title,
+              body: `Updates ${response.fileName} from Mastra Studio.`,
+              headRef,
+              files: [
+                {
+                  path: response.fileName,
+                  content: response.content,
+                  message,
+                },
+              ],
+            });
+          })();
+
+      const storage = mastra.getStorage();
+      const agentsStore = storage ? await storage.getStore('agents') : undefined;
+      await (
+        agentsStore as { useProviderRef?: (agentId: string, ref: string) => Promise<void> } | undefined
+      )?.useProviderRef?.(storedAgentId, result.ref ?? headRef);
+      mastra.getEditor?.()?.agent?.clearCache?.(storedAgentId);
+
+      return result;
     } catch (error) {
       return handleError(error, 'Error opening stored agent change request');
     }

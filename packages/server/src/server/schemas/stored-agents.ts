@@ -377,6 +377,7 @@ export const exportStoredAgentBodySchema = snapshotConfigUpdateSchema.partial();
 export const openStoredAgentChangeRequestBodySchema = exportStoredAgentBodySchema.extend({
   changeMessage: z.string().trim().max(500).optional(),
   userName: z.string().trim().min(1).max(120).optional(),
+  inspectOnly: z.boolean().optional(),
 });
 
 // ============================================================================

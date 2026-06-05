@@ -3291,6 +3291,7 @@ export const API_ROUTE_METADATA = {
       "defaultOptions",
       "description",
       "inputProcessors",
+      "inspectOnly",
       "instructions",
       "integrationTools",
       "mcpClients",

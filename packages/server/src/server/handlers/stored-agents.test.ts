@@ -74,6 +74,7 @@ interface MockAgentsStore {
   getVersion: ReturnType<typeof vi.fn>;
   createVersion: ReturnType<typeof vi.fn>;
   listVersions: ReturnType<typeof vi.fn>;
+  useProviderRef: ReturnType<typeof vi.fn>;
 }
 
 function createMockAgentsStore(agentsData: Map<string, MockStoredAgent> = new Map()): MockAgentsStore {
@@ -204,6 +205,7 @@ function createMockAgentsStore(agentsData: Map<string, MockStoredAgent> = new Ma
     listVersions: vi.fn().mockImplementation(async () => {
       return { versions: [], total: 0 };
     }),
+    useProviderRef: vi.fn(),
   };
 }
 
@@ -682,6 +684,37 @@ describe('Stored Agents Handlers', () => {
           },
         ],
       });
+      expect(mockAgentsStore.useProviderRef).toHaveBeenCalledWith('test-agent-1', 'mastra/source-storage/test');
+      expect(editor.agent.clearCache).toHaveBeenCalledWith('test-agent-1');
+      expect(result).toEqual({
+        id: '123',
+        url: 'https://github.com/acme/repo/pull/123',
+        ref: 'mastra/source-storage/test',
+      });
+    });
+
+    it('should inspect an existing source-provider change request without exporting agent JSON', async () => {
+      const openChangeRequest = vi.fn().mockResolvedValue({
+        id: '123',
+        url: 'https://github.com/acme/repo/pull/123',
+        ref: 'mastra/source-storage/test',
+      });
+      const editor = createMockEditor(mockAgentsStore, { openChangeRequest });
+      mockMastra = createMockMastra({ storage: mockStorage, editor });
+
+      const result = await OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'test-agent-1',
+        inspectOnly: true,
+      });
+
+      expect(openChangeRequest).toHaveBeenCalledWith({
+        title: 'Update test-agent-1 agent override',
+        headRef: 'mastra/test-agent-1',
+        files: [],
+      });
+      expect(mockAgentsStore.useProviderRef).toHaveBeenCalledWith('test-agent-1', 'mastra/source-storage/test');
+      expect(editor.agent.clearCache).toHaveBeenCalledWith('test-agent-1');
       expect(result).toEqual({
         id: '123',
         url: 'https://github.com/acme/repo/pull/123',

@@ -1397,6 +1397,7 @@ export type ExportStoredAgentParams = Partial<
 export type OpenStoredAgentChangeRequestParams = ExportStoredAgentParams & {
   changeMessage?: string;
   userName?: string;
+  inspectOnly?: boolean;
 };
 
 export interface ExportStoredAgentResponse {
