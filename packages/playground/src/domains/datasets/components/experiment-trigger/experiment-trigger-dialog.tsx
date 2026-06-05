@@ -99,7 +99,16 @@ export function ExperimentTriggerDialog({
       return entries.length > 0 ? Object.fromEntries(entries) : undefined;
     }
     if (requestContextRaw.trim()) {
-      return JSON.parse(requestContextRaw) as Record<string, unknown>;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(requestContextRaw);
+      } catch {
+        throw new Error('Request Context must be valid JSON');
+      }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Request Context must be a JSON object');
+      }
+      return parsed as Record<string, unknown>;
     }
     return undefined;
   };
@@ -110,8 +119,9 @@ export function ExperimentTriggerDialog({
     let requestContext: Record<string, unknown> | undefined;
     try {
       requestContext = resolveRequestContext();
-    } catch {
-      toast.error('Request Context must be valid JSON');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Request Context must be valid JSON';
+      toast.error(message);
       return;
     }
 

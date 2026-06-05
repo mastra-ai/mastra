@@ -177,11 +177,11 @@ export const mastra = new Mastra({
       baseUrl: process.env.MASTRA_BASE_URL,
     }),
   },
-  // server: {
-  //   auth: mastraAuth,
-  //   rbac: rbacProvider,
-  //   fga: fgaProvider,
-  // },
+  server: {
+    auth: mastraAuth,
+    rbac: rbacProvider,
+    fga: fgaProvider,
+  },
   backgroundTasks: {
     enabled: true,
     globalConcurrency: 10,

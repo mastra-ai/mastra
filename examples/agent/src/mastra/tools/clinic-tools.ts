@@ -19,7 +19,6 @@ export const clinicLookupTool = createTool({
   }),
   execute: async ({ patientId }, { requestContext }) => {
     const clinicId = requestContext?.get('clinicId') as string | undefined;
-    console.log(`Executing clinicLookupTool for clinicId=${clinicId} and patientId=${patientId}`);
 
     if (!clinicId) {
       throw new Error(

@@ -21,7 +21,7 @@ export const clinicDirectAgent = new Agent({
   instructions: `You are a clinic assistant that looks up patient records.
 Always use the clinic-lookup tool to retrieve patient information.
 Include the clinicId and patientId in your response so the caller can verify tenant isolation.`,
-  model: 'openai/gpt-4.1-mini',
+  model: 'openai/gpt-5.4-mini',
   tools: {
     clinicLookupTool,
   },
@@ -33,7 +33,7 @@ export const clinicSpecialistAgent = new Agent({
   description: 'Specialist sub-agent that looks up patient records. Requires clinicId in requestContext.',
   instructions: `You are a clinical specialist. When asked to look up patient data, use the clinic-lookup tool.
 Always include the clinicId and patientId in your response.`,
-  model: 'openai/gpt-4.1-mini',
+  model: 'openai/gpt-5.4-mini',
   tools: {
     clinicLookupTool,
   },
@@ -46,7 +46,7 @@ export const clinicSupervisorAgent = new Agent({
   instructions: `You are a clinic supervisor. When a user asks you to look up patient data, delegate the task to the clinic-specialist-agent.
 Do not look up records yourself — always hand off to the specialist.
 Report back the specialist's response, including the clinicId they used.`,
-  model: 'openai/gpt-4.1-mini',
+  model: 'openai/gpt-5.4-mini',
   agents: {
     clinicSpecialistAgent,
   },
