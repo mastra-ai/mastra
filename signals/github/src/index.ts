@@ -445,10 +445,27 @@ function getCommentNotificationSummary(pr: string, snapshot: GithubPullRequestSn
   return `${snapshot.latestCommentAuthor} commented on ${pr}: ${getCommentExcerpt(snapshot.latestCommentBody)}`;
 }
 
+type GithubActivityNotificationPlan = { kind: string; priority: 'medium' | 'high'; summary: string };
+
+const githubActivityNotificationPriority: Record<GithubActivityNotificationPlan['priority'], number> = {
+  high: 0,
+  medium: 1,
+};
+
+function compareGithubActivityNotifications(
+  a: GithubActivityNotificationPlan | undefined,
+  b: GithubActivityNotificationPlan | undefined,
+): number {
+  if (!a && !b) return 0;
+  if (!a) return 1;
+  if (!b) return -1;
+  return githubActivityNotificationPriority[a.priority] - githubActivityNotificationPriority[b.priority];
+}
+
 function classifyGithubCommentActivityNotification(input: {
   subscription: GithubPRSubscription;
   snapshot: GithubPullRequestSnapshot;
-}): { kind: string; priority: 'medium' | 'high'; summary: string } | undefined {
+}): GithubActivityNotificationPlan | undefined {
   if (isBotOnlyActivity(input.snapshot)) return undefined;
   const pr = `${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}`;
   const summary = getCommentNotificationSummary(pr, input.snapshot);
@@ -1406,12 +1423,12 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             previousContentHash,
             latestCommentChanged,
           });
-          const lastNotification = notifications.at(-1);
-          if (lastNotification) {
+          const primaryNotification = notifications[0];
+          if (primaryNotification) {
             nextSubscription.lastNotificationAt = now;
-            nextSubscription.lastNotificationKind = lastNotification.kind;
-            nextSubscription.lastNotificationPriority = lastNotification.priority;
-            nextSubscription.lastNotificationSummary = lastNotification.summary;
+            nextSubscription.lastNotificationKind = primaryNotification.kind;
+            nextSubscription.lastNotificationPriority = primaryNotification.priority;
+            nextSubscription.lastNotificationSummary = primaryNotification.summary;
             shouldKeepSubscription = notifications.every(notification => notification.kind !== 'pull-request-merged');
           }
         }
@@ -1613,8 +1630,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       );
     }
 
-    const sent: Array<{ kind: string; priority: 'medium' | 'high'; summary: string }> = [];
-    for (const notification of notifications) {
+    const sent: GithubActivityNotificationPlan[] = [];
+    for (const notification of notifications.sort(compareGithubActivityNotifications)) {
       if (!notification) continue;
       if (AUTHOR_GATED_NOTIFICATION_KINDS.has(notification.kind)) {
         const authorized = await this.#isAuthorizedAuthor(

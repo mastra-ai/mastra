@@ -1292,20 +1292,20 @@ describe('GithubSignals', () => {
     expect(sendNotificationSignal).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        kind: 'pull-request-ci-pending',
-        summary: 'mastra-ai/mastra#17590 has CI still running: Analyze (javascript-typescript)',
-      }),
-      expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
-    );
-    expect(sendNotificationSignal).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
         kind: 'pull-request-activity',
         priority: 'high',
         summary:
           'devin-ai-integration[bot] commented on mastra-ai/mastra#17590: Nice follow-up! Thanks for the summary — those are solid improvements.',
         dedupeKey:
           'github:mastra-ai/mastra#17590:comment:https://github.com/mastra-ai/mastra/pull/17590#issuecomment-4635974623:2026-06-05T22:11:28.000Z',
+      }),
+      expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
+    );
+    expect(sendNotificationSignal).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        kind: 'pull-request-ci-pending',
+        summary: 'mastra-ai/mastra#17590 has CI still running: Analyze (javascript-typescript)',
       }),
       expect.objectContaining({ resourceId: thread.resourceId, threadId: thread.id }),
     );
