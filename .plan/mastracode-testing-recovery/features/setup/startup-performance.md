@@ -3,12 +3,12 @@
 ## Origin PR / commit
 
 - PR: [#16513](https://github.com/mastra-ai/mastra/pull/16513) — speeds up Mastra Code startup and local LibSQL access without changing startup UX.
-- Later changes: none known.
+- Later changes: [#16951](https://github.com/mastra-ai/mastra/pull/16951) — replaces remaining prompt/runtime sync blockers with async alternatives, including git branch refresh and common-binary probing during dynamic instruction assembly.
 
 ## User-visible behavior
 
 - What the user can do: start Mastra Code normally with local LibSQL, remote LibSQL, PostgreSQL, or local tracing settings.
-- Success looks like: the TUI reaches the editor faster, gateway sync no longer blocks startup, local LibSQL reads/writes use safer high-performance PRAGMAs, and regular startup warnings still appear when storage or tracing fallback happens.
+- Success looks like: the TUI reaches the editor faster, gateway sync no longer blocks startup, dynamic prompt assembly avoids sync git/which probes on the event loop, local LibSQL reads/writes use safer high-performance PRAGMAs, and regular startup warnings still appear when storage or tracing fallback happens.
 - Must preserve: storage backend selection, PostgreSQL fallback warnings, local tracing lock warnings, thread/OM restoration, and no unsafe SQLite `synchronous=OFF` mode.
 
 ## Entry points / commands
@@ -41,6 +41,7 @@
 | State | Owner / source of truth | Consumers |
 | --- | --- | --- |
 | Gateway registry sync | `GatewayRegistry.syncGateways(true)` fired in the background plus heartbeat `syncGateways()` | provider/model registry cache and model auth checks |
+| Async prompt probes | `getCurrentGitBranchAsync()` + `detectCommonBinariesAsync()` with in-flight/cache coalescing | Dynamic instruction environment section without blocking interactive render/input |
 | Main storage backend | `createStorage()` result | Harness, memory, thread history, warning output |
 | Local LibSQL PRAGMAs | `LibSQLStore` defaults or Mastra Code local overrides | local thread/history reads, writes, and schema init |
 | LibSQL init cache | `LibSQLStore.hasInitialized` / `shouldCacheInit` | repeated startup/domain initialization and concurrent init callers |

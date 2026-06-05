@@ -2485,3 +2485,29 @@ Verification:
 - `pnpm --filter ./packages/core exec vitest run src/llm/model/provider-registry.test.ts -t "modelSupportsAttachments" --bail=1 --reporter=dot` — 1 file / 1 test passed / 26 skipped / no type errors.
 - `pnpm --filter ./packages/memory exec vitest run src/processors/observational-memory/__tests__/observational-memory.test.ts -t "auto mode" --bail=1 --reporter=dot` — 1 file / 3 tests passed / 447 skipped.
 - `pnpm --filter ./packages/core exec vitest run src/events/__tests__/per-thread-pubsub-multiprocess.test.ts --bail=1 --reporter=dot` — 1 file / 6 tests passed / no type errors.
+
+### PR #16951 / #16987 / #17008 / #17005 feature-map checkpoint
+
+Verified rows 325-328:
+
+- #16951 replaces remaining sync prompt/runtime probes with async alternatives. Current source uses cached/coalesced async common-binary detection and async git branch refresh in dynamic instruction assembly so TUI rendering/input are not blocked by `which`/git probes.
+- #16987 combines idle-timeout and activation information into a single OM activation marker line. Current marker rendering adds inline `(5m idle timeout)` style suffixes for TTL-triggered activation while keeping provider-change and reflection activation output distinct.
+- #17008 fixes mode-switch delay, active-run mode switching, Ctrl+F duplicate handling, and modal/input responsiveness. Current keyboard handling blocks Shift+Tab while an agent or plan approval is active and keeps explicit follow-up queue/render paths responsive.
+- #17005 wraps long `ask_user` option labels in streaming, answered, and cancelled inline prompt states so option boxes stay within terminal width.
+
+Documentation actions:
+
+- Updated `features/chat/prompt-context.md` and `features/setup/startup-performance.md` for #16951 async dynamic prompt probes.
+- Updated `features/memory/observational-memory.md` for #16987 inline idle-timeout activation marker rendering.
+- Updated `features/tui/interactive-chat.md` for #17008 active-run mode-switch/Ctrl+F guards.
+- Updated `features/tui/interactive-prompts.md` for #17005 long option-label wrapping.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry.
+- Queue status: #16951 done, #16987 done, #17008 done, #17005 done, #13751 current.
+
+Focused evidence read: PR metadata for #16951/#16987/#17008/#17005; current `mastracode/src/agents/instructions.ts`, `mastracode/src/utils/binaries.ts`, `mastracode/src/tui/components/om-marker.ts`, `mastracode/src/tui/setup.ts`, `mastracode/src/tui/mastra-tui.ts`, `mastracode/src/tui/components/ask-question-inline.ts`, and related focused tests.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/agents/__tests__/prompts.test.ts src/tui/components/__tests__/om-marker.test.ts src/tui/components/__tests__/ask-question-inline-long-labels.test.ts --bail=1 --reporter=dot` — 3 files / 14 tests passed.
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/setup-keyboard-shortcuts.test.ts -t "queues follow-ups|blocks Ctrl\\+F|toggles system reminder expansion" --bail=1 --reporter=dot` — 1 file / 3 tests passed / 7 skipped.
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/mastra-tui-queueing.test.ts -t "running|slash commands|goal judge|mode switch" --bail=1 --reporter=dot` — 1 file / 8 tests passed / 22 skipped.

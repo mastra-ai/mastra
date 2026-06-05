@@ -344,10 +344,10 @@ Status values are updated as the queue is processed: `done`, `skipped`, `current
 | 322 | 2026-05-21 | #16790 | `c1d64b6306` | review | done | fix(mastracode): run slash commands immediately during active runs & async git branch refresh (#16790) | 15 |
 | 323 | 2026-05-21 | #16939 | `81164363eb` | review | done | feat(core): per-thread socket PubSub to fix OOM from cross-thread serialization (#16939) | 2 |
 | 324 | 2026-05-21 | #16922 | `c27c4b9f13` | review | done | feat: generate provider capabilities file and add auto mode for OM observer attachments (#16922) | 9 |
-| 325 | 2026-05-22 | #16951 | `63fe14cd38` | review | current | perf(mastracode): replace remaining sync blockers with async alternatives (#16951) | 7 |
-| 326 | 2026-05-22 | #16987 | `9a33d81f01` | review | | fix(mastracode): combine idle timeout and activation into single line (#16987) | 4 |
-| 327 | 2026-05-25 | #17008 | `6096445973` | review | | perf(mastracode): fix mode switch delay, modal lag, Ctrl+F duplicate, and block mode switch while active (#17008) | 4 |
-| 328 | 2026-05-25 | #17005 | `0e95e56637` | review | | fix(mastracode): wrap long ask_user option labels to prevent TUI crash (#17005) | 2 |
+| 325 | 2026-05-22 | #16951 | `63fe14cd38` | review | done | perf(mastracode): replace remaining sync blockers with async alternatives (#16951) | 7 |
+| 326 | 2026-05-22 | #16987 | `9a33d81f01` | review | done | fix(mastracode): combine idle timeout and activation into single line (#16987) | 4 |
+| 327 | 2026-05-25 | #17008 | `6096445973` | review | done | perf(mastracode): fix mode switch delay, modal lag, Ctrl+F duplicate, and block mode switch while active (#17008) | 4 |
+| 328 | 2026-05-25 | #17005 | `0e95e56637` | review | done | fix(mastracode): wrap long ask_user option labels to prevent TUI crash (#17005) | 2 |
 | 329 | 2026-05-25 | #13751 | `7462719a30` | review | | feat(mastracode): allow custom config directory via configDir option (#13751) | 19 |
 | 330 | 2026-05-25 | #17032 | `b970a83042` | review | | fix: preserve unresolved slash command references and update pr-triage command (#17032) | 2 |
 | 331 | 2026-05-25 | #16984 | `7f9da22efd` | review | | fix(core): suppress gateway fetch errors and stop retrying on failure (#16984) | 2 |
