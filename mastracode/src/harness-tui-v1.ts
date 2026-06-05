@@ -13,21 +13,26 @@ function hash(input: string): string {
 }
 
 // ─── Modes ────────────────────────────────────────────────────────────────
+const codeAgentId = 'code-agent';
+
 const modes: HarnessModeV1[] = [
   {
     id: 'build',
+    agentId: codeAgentId,
     description: 'Build',
     defaultModelId: 'anthropic/claude-sonnet-4-20250514',
     metadata: { default: true },
   },
   {
     id: 'plan',
+    agentId: codeAgentId,
     description: 'Plan',
     transitionsTo: 'build',
     defaultModelId: 'openai/gpt-4o',
   },
   {
     id: 'fast',
+    agentId: codeAgentId,
     description: 'Fast',
     defaultModelId: 'anthropic/claude-3-5-haiku-20241022',
   },
@@ -37,7 +42,7 @@ const defaultModeId = 'build';
 
 // ─── Create minimal agent ─────────────────────────────────────────────────
 const codeAgent = new Agent({
-  id: 'code-agent',
+  id: codeAgentId,
   name: 'Code Agent',
   instructions: 'You are a helpful coding assistant.',
   model: modes.find(m => m.id === defaultModeId)!.defaultModelId,
@@ -61,7 +66,7 @@ const resourceId = `resource-${hash(cwd)}`;
 // ─── Create HarnessV1 ───────────────────────────────────────────────────────
 const harness = new HarnessV1({
   ownerId,
-  agent: codeAgent,
+  agents: { [codeAgentId]: codeAgent },
   memory,
   modes,
   defaultModeId,
