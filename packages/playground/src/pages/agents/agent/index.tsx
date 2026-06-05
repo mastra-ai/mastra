@@ -168,6 +168,7 @@ function Agent() {
                           agentId={agentId!}
                           agentName={agent?.name}
                           modelVersion={agent?.modelVersion}
+                          supportsMemory={agent?.supportsMemory}
                           threadId={actualThreadId!}
                           memory={hasMemory}
                           refreshThreadList={handleRefreshThreadList}

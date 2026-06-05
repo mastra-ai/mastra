@@ -174,6 +174,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/signal-providers',
+          label: 'Signal Providers',
+          customProps: {
+            tags: ['alpha'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/networks',
           label: 'Networks',
           customProps: {
@@ -609,113 +617,18 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'observability/logging',
-          label: 'Logging',
+          id: 'observability/config',
+          label: 'Config',
         },
         {
-          type: 'category',
-          label: 'Tracing',
-          items: [
-            {
-              type: 'doc',
-              id: 'observability/tracing/overview',
-              key: 'observability.tracing.overview',
-              label: 'Overview',
-            },
-            {
-              type: 'category',
-              label: 'Bridges',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'observability/tracing/bridges/datadog',
-                  label: 'Datadog',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/tracing/bridges/otel',
-                  label: 'OpenTelemetry',
-                },
-              ],
-            },
-            {
-              type: 'category',
-              label: 'Exporters',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'observability/tracing/exporters/mastra-storage',
-                  label: 'Mastra Storage',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/tracing/exporters/mastra-platform',
-                  label: 'Mastra platform',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/tracing/exporters/arize',
-                  label: 'Arize',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/tracing/exporters/arthur',
-                  label: 'Arthur',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/tracing/exporters/braintrust',
-                  label: 'Braintrust',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/tracing/exporters/datadog',
-                  label: 'Datadog',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/tracing/exporters/laminar',
-                  label: 'Laminar',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/tracing/exporters/langfuse',
-                  label: 'Langfuse',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/tracing/exporters/langsmith',
-                  label: 'LangSmith',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/tracing/exporters/otel',
-                  label: 'OpenTelemetry',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/tracing/exporters/posthog',
-                  label: 'PostHog',
-                },
-                {
-                  type: 'doc',
-                  id: 'observability/tracing/exporters/sentry',
-                  label: 'Sentry',
-                },
-              ],
-            },
-            {
-              type: 'category',
-              label: 'Processors',
-              items: [
-                {
-                  type: 'doc',
-                  id: 'observability/tracing/processors/sensitive-data-filter',
-                  label: 'SensitiveDataFilter',
-                },
-              ],
-            },
-          ],
+          type: 'doc',
+          id: 'observability/storage',
+          label: 'Storage',
+        },
+        {
+          type: 'doc',
+          id: 'observability/logging',
+          label: 'Logging',
         },
         {
           type: 'category',
@@ -730,6 +643,122 @@ const sidebars = {
               type: 'doc',
               id: 'observability/metrics/querying',
               label: 'Querying metrics',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Tracing',
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/tracing/overview',
+              key: 'observability.tracing.overview',
+              label: 'Overview',
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Integrations',
+          items: [
+            {
+              type: 'doc',
+              id: 'observability/integrations/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'category',
+              label: 'Bridges',
+              items: [
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/bridges/datadog',
+                  label: 'Datadog',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/bridges/otel',
+                  label: 'OpenTelemetry',
+                },
+              ],
+            },
+            {
+              type: 'category',
+              label: 'Exporters',
+              items: [
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/exporters/mastra-storage',
+                  label: 'Mastra Storage',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/exporters/mastra-platform',
+                  label: 'Mastra platform',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/exporters/arize',
+                  label: 'Arize',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/exporters/arthur',
+                  label: 'Arthur',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/exporters/braintrust',
+                  label: 'Braintrust',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/exporters/datadog',
+                  label: 'Datadog',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/exporters/laminar',
+                  label: 'Laminar',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/exporters/langfuse',
+                  label: 'Langfuse',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/exporters/langsmith',
+                  label: 'LangSmith',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/exporters/otel',
+                  label: 'OpenTelemetry',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/exporters/posthog',
+                  label: 'PostHog',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/exporters/sentry',
+                  label: 'Sentry',
+                },
+              ],
+            },
+            {
+              type: 'category',
+              label: 'Processors',
+              items: [
+                {
+                  type: 'doc',
+                  id: 'observability/integrations/processors/sensitive-data-filter',
+                  label: 'SensitiveDataFilter',
+                },
+              ],
             },
           ],
         },

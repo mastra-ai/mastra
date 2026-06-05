@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { BuilderAvailableModelsResponse } from '@mastra/client-js';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -11,6 +12,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 const {
   getBuilderSettings,
+  getBuilderAvailableModels,
   hasAnyPermission,
   hasPermission,
   useStoredAgentMutations,
@@ -28,6 +30,7 @@ const {
     if (!response.ok) throw new Error('Failed to load builder settings');
     return response.json();
   }),
+  getBuilderAvailableModels: vi.fn(async (): Promise<BuilderAvailableModelsResponse> => ({ providers: [] })),
   hasAnyPermission: vi.fn(),
   hasPermission: vi.fn(),
   useStoredAgentMutations: vi.fn(),
@@ -47,7 +50,7 @@ vi.mock('react-router', async importOriginal => {
 });
 
 vi.mock('@mastra/react', () => ({
-  useMastraClient: () => ({ getBuilderSettings }),
+  useMastraClient: () => ({ getBuilderSettings, getBuilderAvailableModels }),
 }));
 
 vi.mock('@mastra/client-js', async importOriginal => {
@@ -197,6 +200,7 @@ afterAll(() => server.close());
 beforeEach(() => {
   getBuilderSettings.mockClear();
   vi.clearAllMocks();
+  getBuilderAvailableModels.mockResolvedValue({ providers: [] });
   permissionState.rbacEnabled = false;
   hasAnyPermission.mockReturnValue(true);
   hasPermission.mockReturnValue(true);
@@ -212,55 +216,37 @@ beforeEach(() => {
 });
 
 describe('useAgentBuilderAllowedModels', () => {
-  it('filters providers and flat models through the active builder policy', async () => {
-    llmProvidersState.data = {
-      providers: [
-        { id: 'openai', name: 'openai', models: ['gpt-4o', 'gpt-4o-mini'] },
-        { id: 'anthropic', name: 'anthropic', models: ['claude-3-5-sonnet'] },
-      ],
-    };
-    llmProvidersState.isLoading = true;
+  it('returns the providers and flat models from the available-models endpoint', async () => {
+    getBuilderAvailableModels.mockResolvedValue({
+      providers: [{ id: 'openai', name: 'openai', envVar: 'OPENAI_API_KEY', connected: true, models: ['gpt-4o'] }],
+    });
 
     const { result } = renderHook(() => useAgentBuilderAllowedModels(), { wrapper: createWrapper() });
 
     await waitFor(() => expect(result.current.providers).toHaveLength(1));
-    expect(getBuilderSettings).toHaveBeenCalledTimes(1);
-    expect(result.current.isLoading).toBe(true);
+    expect(getBuilderAvailableModels).toHaveBeenCalledTimes(1);
     expect(result.current.providers).toEqual([
       expect.objectContaining({ id: 'openai', name: 'openai', models: ['gpt-4o'] }),
     ]);
     expect(result.current.models).toEqual([{ provider: 'openai', model: 'gpt-4o' }]);
   });
 
-  it('returns empty providers and models before provider data loads', () => {
-    llmProvidersState.data = undefined;
-    llmProvidersState.isLoading = false;
+  it('returns empty providers and models before the endpoint resolves', () => {
+    getBuilderAvailableModels.mockReturnValue(new Promise(() => {}));
 
     const { result } = renderHook(() => useAgentBuilderAllowedModels(), { wrapper: createWrapper() });
 
-    expect(result.current).toEqual({ providers: [], models: [], isLoading: false });
+    expect(result.current.providers).toEqual([]);
+    expect(result.current.models).toEqual([]);
+    expect(result.current.isLoading).toBe(true);
   });
 
-  it('treats allowlist entries without modelId as provider-wide allows', async () => {
-    server.use(
-      http.get('http://localhost/api/builder/settings', () =>
-        HttpResponse.json({
-          ...builderSettings,
-          modelPolicy: {
-            active: true,
-            allowed: [{ provider: 'openai' }],
-            default: { provider: 'openai', modelId: 'gpt-4o' },
-          },
-        }),
-      ),
-    );
-    llmProvidersState.data = {
+  it('exposes every model the endpoint already filtered to (provider-wide allow)', async () => {
+    getBuilderAvailableModels.mockResolvedValue({
       providers: [
-        { id: 'openai', name: 'openai', models: ['gpt-4o', 'gpt-4o-mini'] },
-        { id: 'anthropic', name: 'anthropic', models: ['claude-3-5-sonnet'] },
+        { id: 'openai', name: 'openai', envVar: 'OPENAI_API_KEY', connected: true, models: ['gpt-4o', 'gpt-4o-mini'] },
       ],
-    };
-    llmProvidersState.isLoading = false;
+    });
 
     const { result } = renderHook(() => useAgentBuilderAllowedModels(), { wrapper: createWrapper() });
 

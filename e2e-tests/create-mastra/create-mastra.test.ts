@@ -150,6 +150,7 @@ describe('create mastra', () => {
               "provider": "openai",
               "skills": [],
               "source": "code",
+              "supportsMemory": true,
               "tools": {
                 "weatherTool": {
                   "description": "Get current weather for a location",

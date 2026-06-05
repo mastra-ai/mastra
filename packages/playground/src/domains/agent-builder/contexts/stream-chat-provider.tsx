@@ -92,6 +92,11 @@ export const StreamChatProvider = ({
           // server_error on the next request.
           maxTokens: 5000,
           temperature: 1,
+          providerOptions: {
+            openai: {
+              reasoningEffort: 'low',
+            },
+          },
         },
         requestContext,
       };

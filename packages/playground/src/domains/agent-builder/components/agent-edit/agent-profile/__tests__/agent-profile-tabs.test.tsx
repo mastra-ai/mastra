@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
+import type { BuilderAvailableModelsResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render } from '@testing-library/react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -38,15 +40,18 @@ vi.mock('@/domains/agent-builder/hooks/use-builder-agent-features', () => ({
 
 vi.mock('@/domains/agent-builder', () => ({
   useBuilderModelPolicy: () => modelPolicy,
-  useBuilderFilteredModels: () => [],
-  useBuilderFilteredProviders: () => [],
 }));
 
 vi.mock('@/domains/llm', () => ({
-  useAllModels: () => ({ data: [], isPending: false }),
-  useLLMProviders: () => ({ data: [], isPending: false }),
+  useAllModels: () => [],
   ProviderLogo: () => null,
   cleanProviderId: (id: string) => id,
+}));
+
+vi.mock('@mastra/react', () => ({
+  useMastraClient: () => ({
+    getBuilderAvailableModels: async (): Promise<BuilderAvailableModelsResponse> => ({ providers: [] }),
+  }),
 }));
 
 vi.mock('@/domains/agents/hooks/use-channels', () => ({
@@ -63,12 +68,16 @@ const Wrapper = ({ children }: { children: React.ReactNode }) => {
       skills: {},
     } as AgentBuilderEditFormValues,
   });
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  queryClient.setQueryData(['builder-available-models'], { providers: [] });
   return (
-    <TooltipProvider>
-      <FormProvider {...methods}>
-        <AgentColorProvider agentId="agent_test">{children}</AgentColorProvider>
-      </FormProvider>
-    </TooltipProvider>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <FormProvider {...methods}>
+          <AgentColorProvider agentId="agent_test">{children}</AgentColorProvider>
+        </FormProvider>
+      </TooltipProvider>
+    </QueryClientProvider>
   );
 };
 

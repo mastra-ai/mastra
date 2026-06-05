@@ -7,6 +7,8 @@ packages:
 
 # WebhookSignalProvider
 
+**Added in:** `@mastra/core@1.39.0`
+
 Concrete signal provider for push-based event delivery. Routes incoming webhook payloads to subscribed agent threads by matching the payload against a configurable resource ID extractor.
 
 Extends [`SignalProvider`](/reference/signals/signal-provider) with public subscription management and a built-in `handleWebhook()` implementation.
@@ -162,14 +164,19 @@ Returns `{ status: 200, body: { matched: N } }` where `N` is the number of subsc
     description: 'The incoming webhook request.',
     properties: [
       {
-        name: 'body',
-        type: 'unknown',
-        description: 'The parsed webhook payload.',
-      },
-      {
-        name: 'headers',
-        type: 'Record<string, string>',
-        description: 'HTTP headers from the webhook request.',
+        type: 'object',
+        parameters: [
+          {
+            name: 'body',
+            type: 'unknown',
+            description: 'The parsed webhook payload.',
+          },
+          {
+            name: 'headers',
+            type: 'Record<string, string>',
+            description: 'HTTP headers from the webhook request.',
+          },
+        ],
       },
     ],
   },
