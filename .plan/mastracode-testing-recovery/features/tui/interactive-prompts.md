@@ -1,0 +1,83 @@
+# Interactive prompts and access requests
+
+## Origin PR / commit
+
+- PR: [#13696](https://github.com/mastra-ai/mastra/pull/13696) — queues parallel interactive tool prompts so concurrent `ask_user` / sandbox access requests do not overwrite each other.
+
+## User-visible behavior
+
+- What the user can do: answer multiple interactive tool prompts sequentially when the agent triggers them in parallel.
+- Success looks like: the first prompt stays active, later prompts wait their turn, every tool promise resolves after the user answers, and aborting a run clears both the active prompt and queued prompts.
+- Must preserve: no unreachable prompts, no editor input corruption, no queued prompt activation after Ctrl+C/Escape/SIGINT abort.
+
+## Entry points / commands
+
+- Commands / shortcuts / flags: agent calls to `ask_user` and `request_access`; Ctrl+C/Escape abort handling.
+- Automatic triggers: Harness prompt events handled by `handleAskQuestion()` and `handleSandboxAccessRequest()`.
+
+## TUI states
+
+- Idle: no active prompt.
+- Active / modal / error: one `activeInlineQuestion` receives editor input; additional prompt activations sit in `pendingInlineQuestions` until the active prompt submits/cancels.
+
+## Headless / non-TUI behavior
+
+- Supported: headless uses separate resolver behavior, not the inline TUI queue.
+- Not supported / unknown: this page only verifies TUI inline prompt queueing.
+
+## Streaming / loading / interrupted states
+
+- Streaming / loading: prompt events may arrive fire-and-forget while tools execute in parallel; queueing preserves the first active prompt.
+- Abort / retry / resume: Ctrl+C/Escape and SIGINT clear `activeInlineQuestion` and empty `pendingInlineQuestions` before aborting Harness.
+
+## Streaming vs loaded-from-history behavior
+
+- While actively streaming: queue state is transient TUI state.
+- After reload / history reconstruction: no queued prompt state is restored from history.
+
+## State ownership
+
+| State | Owner / source of truth | Consumers |
+| --- | --- | --- |
+| Active inline prompt | `TUIState.activeInlineQuestion` | Editor input routing, prompt handlers |
+| Queued inline prompts | `TUIState.pendingInlineQuestions` | Prompt handlers, abort cleanup |
+| Prompt resolution | Core Harness pending prompt/question resolver | `ask_user`, `request_access` |
+| Abort cleanup | `tui/setup.ts` Ctrl+C/Escape/SIGINT handlers | Active/queued prompt state |
+
+## Key files
+
+- `mastracode/src/tui/handlers/prompts.ts` — inline prompt activation queue and `processNextInlineQuestion()`.
+- `mastracode/src/tui/state.ts` — `activeInlineQuestion` and `pendingInlineQuestions` state.
+- `mastracode/src/tui/setup.ts` — Ctrl+C/Escape/SIGINT cleanup for active and queued prompts.
+- `mastracode/src/tui/__tests__/parallel-interactive-prompts.test.ts` — regression coverage for parallel prompt queueing and abort cleanup.
+
+## Dependencies / related features
+
+- [Interactive TUI chat](./interactive-chat.md) — editor input routing and active run lifecycle.
+- [Coding tools and approval permissions](../tools/coding-tools-permissions.md) — `request_access` is part of the tool/permission surface.
+- [Plan approval and build handoff](../goals/plan-approval.md) — plan approval has a separate active inline state and should not be conflated with queued questions.
+
+## Existing tests
+
+- `mastracode/src/tui/__tests__/parallel-interactive-prompts.test.ts` — concurrent `ask_user`, concurrent sandbox access, mixed prompt types, and abort-clears-queue behavior.
+
+## Missing tests
+
+- Full TUI/keyboard integration test proving real editor focus routes to the next queued prompt after the first answer.
+- Regression test for queued prompts interleaved with tool approvals or plan approval.
+- Headless parallel prompt behavior, if non-TUI auto-resolution needs similar queueing guarantees.
+
+## Known risks / regressions
+
+- `activeInlineQuestion` remains a single input target; any new prompt-like component must either use the queue or a separate focus state intentionally.
+- Abort cleanup must stay in sync between editor Ctrl+C/Escape and process SIGINT paths.
+- Streaming components reused for `ask_user` must not be overwritten by later parallel tool calls before activation.
+
+## Verification checklist
+
+- [x] Code paths checked.
+- [x] Existing tests identified.
+- [x] Missing tests listed.
+- [x] State ownership verified.
+- [x] TUI/headless behavior considered.
+- [x] Streaming versus loaded-from-history behavior considered.

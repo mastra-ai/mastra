@@ -966,3 +966,24 @@ Verification:
 - Focused tests passed: `env -u OPENAI_API_KEY -u ANTHROPIC_API_KEY -u GOOGLE_GENERATIVE_AI_API_KEY -u DEEPSEEK_API_KEY pnpm --filter ./mastracode exec vitest run src/utils/__tests__/update-check.test.ts src/tui/commands/__tests__/update.test.ts src/index.test.ts src/agents/__tests__/model.test.ts --reporter=dot --bail 1` (3 files / 50 tests). First run without env isolation hit the known local `OPENAI_API_KEY` routing mismatch in `model.test.ts`.
 
 Next queue checkpoint: PR #13696 (queue parallel interactive tool calls), then PR #13724 (workspace gitignore support, lower tree depth, and tool guidance).
+
+### Feature map batch: queued interactive prompts and gitignore-aware workspace tools
+
+Processed PR [#13696](https://github.com/mastra-ai/mastra/pull/13696), `6f2946f240` (`fix(mastracode): queue parallel interactive tool calls to prevent input corruption`). Verified current TUI prompt handling serializes concurrent inline `ask_user` and sandbox access prompts through `TUIState.pendingInlineQuestions`. The first prompt stays active in `activeInlineQuestion`; later activations wait until submit/cancel calls `processNextInlineQuestion()`. Ctrl+C/Escape and process SIGINT cleanup clear both `activeInlineQuestion` and `pendingInlineQuestions` before aborting Harness so queued prompts do not appear after abort.
+
+Processed PR [#13724](https://github.com/mastra-ai/mastra/pull/13724), `77b4a254e5` (`feat(workspace): gitignore support, lower tree depth, fix tool guidance`). Verified current core Workspace tools load workspace-root `.gitignore` via `loadGitignore()`. `find_files` defaults `maxDepth` to 2 and `respectGitignore` to true; `search_content` skips gitignored paths during recursive walks, while still allowing explicitly targeted ignored directories. Tool guidance now tells agents that `find_files` and `search_content` respect `.gitignore` by default.
+
+Documentation actions:
+
+- Created `features/tui/interactive-prompts.md` for queued inline question/access-request behavior and abort cleanup.
+- Updated `features/tui/interactive-chat.md` with #13696 queue ownership and links.
+- Updated `features/tools/workspace-tools.md` with `.gitignore` filtering, default depth, explicit ignored-target bypass, and tests.
+- Updated `features/tools/coding-tools-permissions.md` with prompt queueing and gitignore-aware guidance.
+- Updated `features/README.md`, `_pr-queue.md`, `handoff.md`, and this history entry. Queue status: #13696 done, #13724 done, #13723 current.
+
+Verification:
+
+- Current source checked: `mastracode/src/tui/handlers/prompts.ts`, `mastracode/src/tui/state.ts`, `mastracode/src/tui/setup.ts`, `mastracode/src/tui/__tests__/parallel-interactive-prompts.test.ts`, `packages/core/src/workspace/gitignore.ts`, `packages/core/src/workspace/tools/list-files.ts`, `grep.ts`, `tree-formatter.ts`, related workspace tool tests, and `mastracode/src/agents/prompts/tool-guidance.ts`.
+- Focused tests passed: MC prompt/extra-tools tests (2 files / 27 tests) and core workspace list/search/tree tests (3 files / 99 tests, no type errors).
+
+Next queue checkpoint: PR #13723 (Ctrl+Z suspend), then PR #13523 (likely version-package skip).

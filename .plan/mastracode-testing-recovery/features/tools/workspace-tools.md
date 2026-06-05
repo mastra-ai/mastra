@@ -3,11 +3,11 @@
 ## Origin PR / commit
 
 - PR: [#13437](https://github.com/mastra-ai/mastra/pull/13437) — switched Mastra Code from MC-local file/edit/shell tools to core Workspace tools with TUI streaming support.
-- Later changes: [#13526](https://github.com/mastra-ai/mastra/pull/13526) — aligned edit tool path resolution with project-root command semantics; [#13609](https://github.com/mastra-ai/mastra/pull/13609) — added OpenAI native web-search fallback in the remaining MC dynamic tool map; [#13687](https://github.com/mastra-ai/mastra/pull/13687) — added core Workspace `name` remapping so the exposed tool dictionary and tool IDs use Mastra Code's stable names; [#13693](https://github.com/mastra-ai/mastra/pull/13693) — lets `createMastraCode({ workspace })` provide a custom workspace instead of the default dynamic local workspace; [#13700](https://github.com/mastra-ai/mastra/pull/13700) — forwards request context and skill/sandbox paths into subagent tool runs.
+- Later changes: [#13526](https://github.com/mastra-ai/mastra/pull/13526) — aligned edit tool path resolution with project-root command semantics; [#13609](https://github.com/mastra-ai/mastra/pull/13609) — added OpenAI native web-search fallback in the remaining MC dynamic tool map; [#13687](https://github.com/mastra-ai/mastra/pull/13687) — added core Workspace `name` remapping so the exposed tool dictionary and tool IDs use Mastra Code's stable names; [#13693](https://github.com/mastra-ai/mastra/pull/13693) — lets `createMastraCode({ workspace })` provide a custom workspace instead of the default dynamic local workspace; [#13700](https://github.com/mastra-ai/mastra/pull/13700) — forwards request context and skill/sandbox paths into subagent tool runs; [#13724](https://github.com/mastra-ai/mastra/pull/13724) — adds `.gitignore` filtering, lowers `find_files` default depth to 2, and updates tool guidance.
 
 ## User-visible behavior
 
-- What the user can do: use standard coding tools (`view`, `search_content`, `find_files`, `write_file`, `string_replace_lsp`, `ast_smart_edit`, `execute_command`, process tools, LSP inspect) through the core Workspace abstraction; embedders can pass a custom workspace into `createMastraCode()`.
+- What the user can do: use standard coding tools (`view`, `search_content`, `find_files`, `write_file`, `string_replace_lsp`, `ast_smart_edit`, `execute_command`, process tools, LSP inspect) through the core Workspace abstraction; `find_files` and `search_content` respect workspace `.gitignore` by default; embedders can pass a custom workspace into `createMastraCode()`.
 - Success looks like: workspace tools obey project-root containment, allowed external paths, plan-mode write-tool disabling, LSP diagnostics, write locks, read-before-write policy, TUI streaming/rendering, explicit workspace overrides, and subagent inheritance of approved skill/sandbox paths.
 - Must preserve: user-facing Mastra Code tool names stay stable even though runtime implementations come from `@mastra/core/workspace`, old `mastra_workspace_*` IDs must not remain callable after remapping, the default local workspace remains the fallback when no override is supplied, and subagents must not lose parent-approved filesystem access.
 
@@ -46,6 +46,7 @@
 | Extra allowed paths | skill paths + temp dirs + `sandboxAllowedPaths`; `getAllowedPathsFromContext()` for subagent/file-tool contexts | filesystem containment/access requests, subagent workspace tools |
 | Sandbox process env | `getDynamicWorkspace()` / `LocalSandbox` | `execute_command`, process manager |
 | Tool name mapping | Core `WorkspaceToolsConfig.name` + MC `TOOL_NAME_OVERRIDES` | model-visible tool dictionary keys, tool IDs, permissions, TUI components |
+| Gitignore filtering | Core `loadGitignore()` + `respectGitignore` / explicit ignored-target bypass | `find_files`, `search_content`, prompt guidance |
 | Plan-mode write disable | `getDynamicWorkspace()` tools config | Plan mode tool visibility |
 | LSP config | `settings.json` lsp + detected package runner + MC module search path | `lsp_inspect`, edit diagnostics |
 
@@ -59,6 +60,7 @@
 - `packages/core/src/harness/harness.ts` — workspace resolution/cache and request-context wiring.
 - `packages/core/src/workspace/tools/tools.ts` and `types.ts` — core workspace tool factory and `WorkspaceToolConfig.name` remapping support.
 - `packages/core/src/workspace/tools/*` — core read/list/search/edit/write/LSP/shell/process tool implementations.
+- `packages/core/src/workspace/gitignore.ts` — `.gitignore` loader used by list/search tree walkers.
 - `mastracode/src/tui/components/tool-execution-enhanced.ts` — TUI summaries for workspace tool output, LSP diagnostics, tree summaries, quiet previews.
 
 ## Dependencies / related features
@@ -71,7 +73,7 @@
 ## Existing tests
 
 - `packages/core/src/workspace/tools/__tests__/tool-creation.test.ts` — workspace tool availability plus remapped exposed names/IDs, duplicate-name failures, sandbox tool remapping.
-- `packages/core/src/workspace/tools/__tests__/*.test.ts` — read/list/search/edit/write/LSP/execute/process tool behavior, read tracking, write locks, output helpers.
+- `packages/core/src/workspace/tools/__tests__/*.test.ts` — read/list/search/edit/write/LSP/execute/process tool behavior, `.gitignore` filtering, read tracking, write locks, output helpers.
 - `packages/core/src/harness/workspace-resolution.test.ts` — static/dynamic workspace resolution and caching.
 - `packages/core/src/harness/subagent-workspace-integration.test.ts` — subagent workspace-tool visibility/allowlists.
 - `packages/core/src/harness/subagent-tool.test.ts` — subagent request-context forwarding and workspace allowlist filtering.

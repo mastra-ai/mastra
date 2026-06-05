@@ -18,7 +18,7 @@ Planning/research in progress.
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13603 (row 94) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13696 (`6f2946f240`, queue parallel interactive tool calls), then #13724 (`77b4a254e5`, workspace gitignore/tool guidance).
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #13724 (row 96) have been processed, with #13037, #13251, #13252, #13257, #13260, #13405, and #13455 recorded as version-package skips. `_pr-queue.md` has a Status column for follow-along state. Next checkpoint: #13723 (`52022c842c`, Ctrl+Z suspend), then #13523 (`edfda994ef`, likely version-package skip).
 
 ## Blockers
 
@@ -26,7 +26,7 @@ None known.
 
 ## Next steps
 
-1. Continue at `_pr-queue.md` row 95: PR #13696 (queue parallel interactive tool calls), then row 96: PR #13724 (workspace gitignore/tool guidance).
+1. Continue at `_pr-queue.md` row 97: PR #13723 (Ctrl+Z suspend), then row 98: PR #13523 (likely version-package skip).
 2. For each PR, verify with `gh pr view <number>` and current source/tests before editing pages.
 3. Update existing cards in place when later PRs modify behavior from #13218.
 4. Keep new pages concise and add/update the source-of-truth table in `features/README.md`.
