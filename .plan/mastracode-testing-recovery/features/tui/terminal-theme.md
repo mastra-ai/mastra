@@ -72,11 +72,11 @@
 
 - `mastracode/src/tui/__tests__/theme-contrast.test.ts` — luminance/contrast helpers, brand/surface contrast for dark/light/mid-grey backgrounds, subdued glyph adaptation, terminal glyph minimum contrast.
 - `mastracode/src/tui/__tests__/status-line.test.ts` — responsive footer/status rendering around queued counts, PR badges, model path compaction, and mode-color badge formatting.
-- `mastracode/src/tui/__tests__/command-dispatch.test.ts` — theme handler is mocked in dispatch coverage, but does not prove `/theme` behavior.
+- `mastracode/src/tui/__tests__/command-dispatch.test.ts` — theme handler is mocked in dispatch coverage.
+- `mastracode/src/tui/commands/__tests__/theme.test.ts` — direct `/theme` handler coverage for show-current behavior, explicit dark persistence/live apply/render, auto detection with background propagation, and invalid-value rejection.
 
 ## Missing tests
 
-- `/theme` command persistence and immediate render behavior.
 - Startup precedence: `MASTRA_THEME` > persisted `preferences.theme` > OSC 11 > `COLORFGBG` > dark.
 - OSC 11 stdin cleanup regression, especially not pausing stdin that was already resumed.
 - Snapshot or render regression proving the editor border remains solid/cached and does not reintroduce per-character gradient ANSI churn.

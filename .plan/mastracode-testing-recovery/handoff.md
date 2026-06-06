@@ -368,3 +368,10 @@ Validated `TUI: File autocomplete` with setup-level provider wiring coverage:
 - Added tests for detected `fd`, fallback to `fdfind`, missing-binary graceful fallback, `process.cwd()` propagation, and slash/custom command preservation when file search is unavailable.
 - Break validations proven and reverted: omitted `fdPath` from the provider; removed `fdfind` fallback; rethrew missing-binary detection failures.
 - Verification: focused setup autocomplete tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### Terminal theme recovery checkpoint
+
+Validated `TUI: Terminal theme and contrast` with direct `/theme` command coverage:
+- Added `mastracode/src/tui/commands/__tests__/theme.test.ts` covering current-theme display, explicit dark preference persistence, immediate `applyThemeMode()`, auto terminal detection with detected background propagation, render refresh, and invalid-value rejection.
+- Break validations proven and reverted: skipped `saveSettings()` for changed preference; omitted detected background from auto apply; skipped `requestRender()` after applying a new theme.
+- Verification: focused theme command tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
