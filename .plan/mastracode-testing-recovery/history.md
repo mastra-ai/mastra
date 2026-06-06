@@ -3599,3 +3599,30 @@ Verification:
 Commits:
 
 - `25781529a2` — `test(mastracode): shield streaming tool args` (pushed to `origin/tests/mc`).
+
+### Test recovery: Task tracking restored-state split-brain shield
+
+Selected `Tools: Task tracking tools and TUI progress` as the next High-risk row. Chose the split-brain reload/headless gap because the feature card listed the original failure mode where UI/prompt task state exists but task tools cannot find it.
+
+Changes:
+
+- Extended `packages/core/src/harness/task-tools.test.ts`.
+- Added a compatibility-path regression shield where `harnessCtx.state` is stale/empty, `harnessCtx.getState()` returns restored tasks, and `task_complete` must find, mutate, persist, and emit `task_updated` for the restored task list.
+- Updated the task-tracking feature card and recovery tracker row.
+
+Break-validation evidence:
+
+1. Preferred stale `state` over `getState()` in compatibility reads; the focused task tool test failed.
+2. Skipped compatibility-path `setState`; the focused task tool test failed.
+3. Skipped `task_updated` event emission; the focused task tool test failed.
+
+Verification:
+
+- `pnpm --filter ./packages/core exec vitest run src/harness/task-tools.test.ts --reporter=dot --bail=1` — 1 file / 31 tests passed.
+- `pnpm --filter ./packages/core check` — passed.
+- `pnpm --filter ./packages/core lint` — passed.
+- `pnpm build:core` — 12/12 tasks passed.
+
+Commits:
+
+- `d01fbda0d1` — `test(core): shield restored task tool state` (ready to push).

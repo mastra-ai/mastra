@@ -75,7 +75,7 @@
 ## Missing tests
 
 - End-to-end live TUI test where streamed task input, `task_updated`, pinned progress, final history, and prompt context agree.
-- Reload/headless regression for the original split-brain failure: UI/prompt show tasks but task tools cannot find them.
+- Covered by `packages/core/src/harness/task-tools.test.ts`: compatibility-path task tools read restored tasks from `getState()` when the direct state projection is stale, persist mutations through `setState()`, and emit `task_updated` so UI/progress and tool state stay aligned.
 
 ## Known risks / regressions
 
