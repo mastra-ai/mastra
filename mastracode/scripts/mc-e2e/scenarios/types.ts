@@ -5,6 +5,7 @@ export type ScenarioName =
   | 'visible-commands'
   | 'integration-commands'
   | 'report-issue-command'
+  | 'state-commands'
   | 'workspace-commands';
 
 export type McE2eTerminal = {

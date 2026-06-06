@@ -3,6 +3,7 @@ import { branchContextLongNameScenario } from './branch-context-long-name.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { startupScenario } from './startup.js';
+import { stateCommandsScenario } from './state-commands.js';
 import type { McE2eScenario, ScenarioName } from './types.js';
 import { visibleCommandsScenario } from './visible-commands.js';
 import { workspaceCommandsScenario } from './workspace-commands.js';
@@ -16,6 +17,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,
   'report-issue-command': reportIssueCommandScenario,
+  'state-commands': stateCommandsScenario,
   'workspace-commands': workspaceCommandsScenario,
 };
 
