@@ -77,14 +77,13 @@
 - `mastracode/src/tui/components/__tests__/task-progress.test.ts` — item-aware quiet task summary order, wrapping, wide characters, and expanded/quiet transitions.
 - `mastracode/src/tui/components/__tests__/subagent-execution.test.ts` — subagent collapse/expand options and final-result rendering.
 - `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts` — quiet compact tool summaries, previews, colors, grouping/continuation behavior, code/list previews, path-prefix trimming, and web-search preview rendering.
-- `mastracode/src/tui/handlers/__tests__/message.test.ts` and `chat-spacing` / `chat-boundary-spacer` coverage — spacing around quiet tool previews and grouped compact tools.
+- `mastracode/src/tui/handlers/__tests__/message.test.ts` and `chat-spacing` / `chat-boundary-spacer` coverage — spacing around quiet tool previews and grouped compact tools, plus quiet pending-tool error cleanup when an assistant run fails.
 - `mastracode/src/tui/__tests__/render-messages.test.ts` — loaded-history rendering, including quiet-mode-sensitive paths.
 
 ## Missing tests
 
 - End-to-end `/settings` toggle → restart → live tool + loaded-history parity.
 - Manual TUI smoke covering quiet-mode grouped tools, Ctrl+E expansion, and task summaries in a real terminal width.
-- Error/abort path proving quiet compact tools still surface failed pending tool results.
 
 ## Known risks / regressions
 
