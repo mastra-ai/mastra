@@ -3016,3 +3016,27 @@ Verification:
 - `pnpm --filter ./mastracode check` — passed.
 - `pnpm --filter ./mastracode lint` — passed.
 - `pnpm run build:mastracode` — passed, 24/24 tasks.
+
+### Test recovery: onboarding registry provider API-key access
+
+Selected `Settings: Onboarding and global settings` as the next High-risk row. Chose the non-hardcoded provider access gap because setup/startup must count provider API-key env vars from provider registry metadata, including providers with multiple accepted env var names.
+
+Extended `mastracode/src/__tests__/index.test.ts`:
+
+- Mocked `PROVIDER_REGISTRY` as a mutable registry in the startup test harness.
+- Fixed the existing packs mock path so `index.ts` pack resolution is intercepted by the test.
+- Added startup coverage where a custom registry provider declares `apiKeyEnvVar: ['MC_E2E_PRIMARY_KEY', 'MC_E2E_SECONDARY_KEY']` and only the secondary env var is set.
+- Asserted both mode-pack and OM-pack resolution receive that provider as `apikey` access.
+
+Break-validation evidence:
+
+1. Considered only the first env var from `apiKeyEnvVar`; focused test failed because the secondary key no longer counted. Reverted.
+2. Required every configured env var to be present; focused test failed because any configured key should count. Reverted.
+3. Found the env var but marked provider access as `false`; focused test failed because pack resolution did not receive `apikey`. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest --run src/__tests__/index.test.ts --bail 1 --reporter=dot` — 1 file / 17 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — passed, 24/24 tasks.
