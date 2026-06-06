@@ -3262,3 +3262,28 @@ Verification:
 - `pnpm --filter ./mastracode check` — passed.
 - `pnpm --filter ./mastracode lint` — passed.
 - `pnpm run build:mastracode` — passed, 24/24 cached.
+
+### Test recovery: GitHub signal subscription tool context
+
+Selected `Git: GitHub signal subscriptions` as the next High-risk Partial row. During contract extraction, the feature card still mentioned an agent-end branch auto-subscribe hook that is not present in the current branch. The current deterministic gap was the `@mastra/github-signals` tool boundary: `github_subscribe_pr` and `github_unsubscribe_pr` expose a tool execution context with `agent.threadId` / `agent.resourceId`, but the implementation ignored it and always used the processor request context captured when tools were created. That can mutate the wrong thread when a tool executes with an explicit current thread context.
+
+Changes:
+
+- Updated `signals/github/src/index.ts` so subscription tools prefer explicit tool execution `agent.threadId` / `agent.resourceId`, falling back to the processor request context when execution context is absent.
+- Added `signals/github/src/index.test.ts` coverage proving subscribe and unsubscribe both target the explicit tool execution thread and leave the captured request-context thread untouched.
+- Added `.changeset/soft-signals-thread.md` for `@mastra/github-signals`.
+- Updated `github-signal-subscriptions.md` to reflect the current source layout and remove stale auto-subscribe references.
+
+Break-validation evidence:
+
+1. Forced both tools back to captured request-context thread IDs; the new explicit-context test failed because storage looked up the captured thread instead of the execution thread. Reverted.
+2. Removed fallback to processor context; the existing context-less tool execution test failed with missing thread/resource context. Reverted.
+3. Made unsubscribe ignore explicit execution context while subscribe honored it; the new paired test failed because the explicit thread remained subscribed. Reverted.
+
+Verification:
+
+- `pnpm --filter @mastra/github-signals test -- --run src/index.test.ts --bail 1 --reporter=dot` — 1 file / 33 tests passed.
+- `pnpm --filter @mastra/github-signals lint` — passed.
+- `pnpm --filter @mastra/github-signals build` — passed.
+- `pnpm --filter @mastra/github-signals exec tsc --noEmit` — passed.
+- `pnpm run build:mastracode` — passed, 24/24.
