@@ -3694,3 +3694,11 @@ Validated `Integrations: Observability and eval feedback` with a direct `/feedba
 - Added `mastracode/src/tui/commands/__tests__/feedback.test.ts` proving feedback requires active trace/run/thread context, records rating/comment payloads through observability `addFeedback`, preserves `correlationContext`, includes thread/run metadata, and enforces 0-10 numeric bounds.
 - Break validations proven and reverted: removed the missing-context guard; dropped `correlationContext`; loosened numeric rating bounds.
 - Verification: focused feedback command tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### Plan approval rendering recovery checkpoint
+
+Validated `Goals: Plan approval and build handoff` with inline plan rendering shields, committed as `eab201d3cc`:
+- Extended `mastracode/src/tui/components/__tests__/plan-approval-inline.test.ts` to prove request-changes feedback mode keeps the submitted plan visible while the user types feedback.
+- Added a narrow-terminal width assertion proving long markdown plan lines remain within the rendered component width.
+- Break validations proven and reverted: removed plan content from feedback mode; bypassed inner-width wrapping/truncation; removed plan content from resolved requested-changes cards.
+- Verification: focused plan-approval component tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.

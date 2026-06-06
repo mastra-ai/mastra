@@ -293,3 +293,9 @@ Break validations: removing the model gate fails the direct command test; skippi
 Validated the `/feedback` observability payload boundary, committed and pushed as `5040e7167e`. The direct command test proves missing-context rejection, rating/comment parsing, event-bus `addFeedback` payload shape, correlation context, thread/run metadata, and numeric bounds.
 
 Break validations: removing the missing-context guard records orphan feedback and fails the test; dropping `correlationContext` fails payload assertions; loosening rating bounds records invalid ratings and fails the test. Final verification passed: focused feedback command tests, MastraCode typecheck, lint, and `pnpm run build:mastracode`.
+
+### Goals: Plan approval and build handoff
+
+Validated inline plan rendering during approval, committed and pushed as `eab201d3cc`. The component test now proves request-changes feedback mode keeps the submitted plan visible while feedback is typed, and long plan content remains width-safe on narrow terminals.
+
+Break validations: removing plan content from feedback mode fails the visibility test; bypassing inner-width wrapping/truncation fails the narrow-width test; removing plan content from resolved requested-changes cards fails the resolved-card test. Final verification passed: focused plan component tests, MastraCode typecheck, lint, and `pnpm run build:mastracode`.

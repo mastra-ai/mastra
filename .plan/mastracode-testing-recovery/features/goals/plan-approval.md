@@ -70,7 +70,7 @@
 
 - `mastracode/src/agents/__tests__/prompts.test.ts` — Plan mode prompt includes `submit_plan` and goal-ready plan guidance.
 - `mastracode/src/tui/handlers/__tests__/prompts.test.ts` — regular approval sends one structured build handoff signal without duplicate `addUserMessage`/`fireMessage`; goal option delegates to `/goal`; streamed component activates in place.
-- `mastracode/src/tui/components/__tests__/plan-approval-inline.test.ts` — inline plan card renders, goal option exists, feedback/requested-changes display works, and feedback mode forces a full redraw.
+- `mastracode/src/tui/components/__tests__/plan-approval-inline.test.ts` — inline plan card renders, goal option exists, feedback mode keeps the plan visible while typing requested changes, narrow plan boxes stay width-safe, requested-changes display works, and feedback mode forces a full redraw.
 - `mastracode/src/utils/__tests__/save-plan.test.ts` — approved plan file names/content, resource subdirectories, special-character titles, and timestamp non-overwrite behavior.
 - `packages/core/src/harness/display-state.test.ts` — `pendingPlanApproval` display state is set/cleared by plan approval events.
 - `packages/core/src/harness/mode-model-persistence.test.ts` — `respondToPlanApproval()` resolves plan approvals without aborting the resolver signal prematurely.
@@ -82,8 +82,6 @@
 - Headless/non-TUI behavior for `submit_plan` approval fallback and resolver absence.
 - Regression test that denied `submit_plan` removes Plan-mode tool guidance and prevents accidental text-only plan completion.
 - Mapping test for the later PR that added `Use as /goal` to plan approval UI.
-- Direct assertion that feedback mode itself keeps the full submitted plan visible while typing requested changes, not only after feedback is submitted.
-- Narrow-terminal regression test proving long markdown plan lines are truncated/wrapped inside `PlanContentBox` without exceeding render width.
 
 ## Known risks / regressions
 
