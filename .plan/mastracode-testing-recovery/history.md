@@ -4077,3 +4077,26 @@ Verification:
 - `pnpm --filter ./mastracode check` passed.
 - `pnpm --filter ./mastracode lint` passed.
 - `pnpm run build:mastracode` passed.
+
+## 2026-06-06 — File autocomplete TUI e2e batch
+
+Added `file-autocomplete` checked-in TUI e2e scenario:
+- Seeds an isolated git fixture project with `src/autocomplete-target.ts` and a deterministic fake `fd` binary on PATH.
+- Types `Attach @auto` through the real PTY editor, verifies the fixture file suggestion is visible, presses Tab, and verifies `Attach @src/autocomplete-target.ts` is inserted in the editor.
+- Adds a narrow runner `env` hook so scenarios can safely provide deterministic binaries/env without depending on the host machine.
+
+Rows moved from missing e2e to covered e2e:
+- TUI: File autocomplete — validated for real terminal `@` file suggestion visibility and insertion. Focused setup tests remain supporting coverage for slash/custom/skill command preservation, fdfind fallback, missing-binary fallback, cwd propagation, and fdPath propagation.
+
+Break validation:
+- Dropped `fdPath` from `CombinedAutocompleteProvider` -> `file-autocomplete` failed waiting for `autocomplete-target.ts`.
+- Skipped `editor.setAutocompleteProvider(...)` -> `file-autocomplete` failed waiting for suggestions.
+- Made fd detection miss the available binary -> `file-autocomplete` failed waiting for suggestions.
+- All intentional breaks were reverted before committing.
+
+Verification:
+- `pnpm --filter ./mastracode run e2e:test file-autocomplete` passed.
+- `pnpm --filter ./mastracode run e2e:test -- --jobs 2` passed: 16/16 scenarios.
+- `pnpm --filter ./mastracode check` passed.
+- `pnpm --filter ./mastracode lint` passed.
+- `pnpm run build:mastracode` passed.

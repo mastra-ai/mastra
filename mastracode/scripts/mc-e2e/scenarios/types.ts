@@ -4,6 +4,7 @@ export type ScenarioName =
   | 'api-key-prompt'
   | 'automated-chat'
   | 'clipboard-image-paste'
+  | 'file-autocomplete'
   | 'visible-commands'
   | 'integration-commands'
   | 'modal-and-shell'
@@ -44,6 +45,7 @@ export type McE2eScenario = {
   projectFixture?: 'long-branch';
   useOpenAIModel?: boolean;
   aimockFixture?: string;
+  env?: (context: McE2ePrepareContext) => Record<string, string>;
   prepare?: (context: McE2ePrepareContext) => Promise<void> | void;
   run: (context: { terminal: McE2eTerminal; runtime: McE2eScenarioRuntime }) => Promise<void>;
 };

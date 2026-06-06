@@ -59,11 +59,11 @@
 ## Existing tests
 
 - `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts` — verifies slash/custom/skill command lists, refresh behavior, `fd` detection, `fdfind` fallback, missing-binary fallback, `process.cwd()` root propagation, and `fdPath` propagation into `CombinedAutocompleteProvider`.
+- `mastracode/scripts/mc-e2e/scenarios/file-autocomplete.ts` — real PTY e2e coverage: launches from an isolated git fixture project with a deterministic fake `fd`, types `@auto`, verifies the fixture file suggestion is visible, presses Tab, and verifies the `@src/autocomplete-target.ts` reference is inserted in the editor.
 
 ## Missing tests
 
-- Product-level TUI test for `@` file suggestions/insertion against a small fixture project.
-- Regression test that file autocomplete refresh still preserves skill/custom slash entries.
+- None currently identified for the core file autocomplete contract; future coverage can add queued-follow-up autocomplete if regressions appear.
 
 ## Known risks / regressions
 

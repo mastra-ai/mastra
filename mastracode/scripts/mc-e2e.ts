@@ -257,12 +257,13 @@ async function prepareScenarioRun({
 
   seedSettings(isolatedHome, scenario.useOpenAIModel === true, openAiApiKey);
   await initializeStorage(dbPath);
-  await scenario.prepare?.({
+  const scenarioContext = {
     appDataDir: isolatedAppDataDir,
     dbPath,
     homeDir: isolatedHome,
     projectDir,
-  });
+  };
+  await scenario.prepare?.(scenarioContext);
 
   const branchFixture = scenario.projectFixture === 'long-branch' ? createLongBranchProject(projectDir) : null;
   const launchCwd = branchFixture ? projectDir : mastracodeDir;
@@ -315,6 +316,7 @@ async function prepareScenarioRun({
         TERM: 'xterm-256color',
         LINES: String(options.rows),
         COLUMNS: String(options.columns),
+        ...scenario.env?.(scenarioContext),
       },
     },
   };
