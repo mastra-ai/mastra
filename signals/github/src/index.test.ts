@@ -1288,7 +1288,7 @@ describe('GithubSignals', () => {
                 updatedAt: '2026-06-05T22:06:00.000Z',
               },
               {
-                author: 'devin-ai-integration[bot]',
+                author: 'devin-ai-integration',
                 authorType: 'Bot',
                 isBot: true,
                 body: 'Acknowledged! The authorized comment should still be delivered.',
@@ -1300,7 +1300,13 @@ describe('GithubSignals', () => {
       ),
     };
     const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
-    const processor = new GithubSignals({ threadStore, syncClient });
+    const permissionResolver = { getPermission: vi.fn(async () => 'none' as const) };
+    const processor = new GithubSignals({
+      threadStore,
+      syncClient,
+      permissionResolver,
+      authorizedBots: ['devin-ai-integration'],
+    });
     processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
 
     await processor.pollThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
@@ -1311,17 +1317,17 @@ describe('GithubSignals', () => {
           kind: 'pull-request-activity',
           priority: 'high',
           summary:
-            'devin-ai-integration[bot] commented on mastra-ai/mastra#17590: Acknowledged! The authorized comment should still be delivered.',
+            'devin-ai-integration commented on mastra-ai/mastra#17590: Acknowledged! The authorized comment should still be delivered.',
           dedupeKey:
             'github:mastra-ai/mastra#17590:comment:https://github.com/mastra-ai/mastra/pull/17590#issuecomment-devin:2026-06-05T22:05:00.000Z',
           attributes: expect.objectContaining({
-            latestCommentAuthor: 'devin-ai-integration[bot]',
+            latestCommentAuthor: 'devin-ai-integration',
             latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/17590#issuecomment-devin',
             latestCommentUpdatedAt: '2026-06-05T22:05:00.000Z',
           }),
           metadata: expect.objectContaining({
             github: expect.objectContaining({
-              latestCommentAuthor: 'devin-ai-integration[bot]',
+              latestCommentAuthor: 'devin-ai-integration',
               latestCommentBody: 'Acknowledged! The authorized comment should still be delivered.',
               latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/17590#issuecomment-devin',
               latestCommentUpdatedAt: '2026-06-05T22:05:00.000Z',
@@ -1338,6 +1344,7 @@ describe('GithubSignals', () => {
       lastNotificationKind: 'pull-request-activity',
       lastNotificationPriority: 'high',
     });
+    expect(permissionResolver.getPermission).not.toHaveBeenCalled();
   });
 
   it('emits separate notifications when a new comment and CI state change in the same poll', async () => {

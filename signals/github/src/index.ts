@@ -1606,10 +1606,16 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     });
   }
 
-  async #isAuthorizedAuthor(owner: string, repo: string, user: string | undefined): Promise<boolean> {
+  async #isAuthorizedAuthor(
+    owner: string,
+    repo: string,
+    user: string | undefined,
+    metadata: { authorType?: string; isBot?: boolean } = {},
+  ): Promise<boolean> {
     if (!user) return false;
     const normalizedUser = user.toLowerCase();
-    const isBot = normalizedUser.endsWith('[bot]');
+    const isBot =
+      metadata.isBot === true || metadata.authorType?.toLowerCase() === 'bot' || normalizedUser.endsWith('[bot]');
     if (isBot) {
       const ignoredBots = this.#options.ignoredBots ?? [];
       if (ignoredBots.some(bot => bot.toLowerCase() === normalizedUser)) return false;
@@ -1642,7 +1648,14 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     if (!comments.some(comment => comment.body || comment.url || comment.updatedAt)) return snapshot;
 
     for (const comment of comments) {
-      if (!(await this.#isAuthorizedAuthor(owner, repo, comment.author))) continue;
+      if (
+        !(await this.#isAuthorizedAuthor(owner, repo, comment.author, {
+          authorType: comment.authorType,
+          isBot: comment.isBot,
+        }))
+      ) {
+        continue;
+      }
       return {
         ...snapshot,
         latestCommentAuthor: comment.author,
@@ -1728,6 +1741,10 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           input.subscription.owner,
           input.subscription.repo,
           input.snapshot.latestCommentAuthor,
+          {
+            authorType: input.snapshot.latestCommentAuthorType,
+            isBot: input.snapshot.latestCommentIsBot,
+          },
         );
         if (!authorized) continue;
       }
