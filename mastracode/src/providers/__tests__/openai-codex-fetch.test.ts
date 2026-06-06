@@ -78,4 +78,29 @@ describe('OpenAI Codex OAuth fetch', () => {
     });
     expect(responsesMock).toHaveBeenCalledWith('gpt-5-codex-mini');
   });
+
+  it('injects Codex request provider options and removes topP when temperature is set', async () => {
+    const { createCodexMiddleware } = await import('../openai-codex.js');
+    const middleware = createCodexMiddleware('high');
+    const params = {
+      temperature: 0.2,
+      topP: 0.9,
+      providerOptions: {
+        openai: {
+          existing: 'preserved',
+        },
+      },
+    };
+
+    const transformed = await middleware.transformParams!({ params } as any);
+
+    expect(transformed).toBe(params);
+    expect(transformed.topP).toBeUndefined();
+    expect(transformed.providerOptions?.openai).toMatchObject({
+      existing: 'preserved',
+      instructions: expect.stringContaining('interactive CLI tool'),
+      store: false,
+      reasoningEffort: 'high',
+    });
+  });
 });
