@@ -263,3 +263,9 @@ Break validations: ignoring caller memory fails the startup test; defaulting sta
 Validated the live `/browser on` attach boundary, committed as `a4004fcac4`. The new direct command test proves enabled browser settings create a browser instance, attach it to static and state-derived mode agents, record `activeBrowserSettings`, save settings, and write profile-provider metadata.
 
 Break validations: skipping agent/state attachment fails the command test; skipping `activeBrowserSettings` fails the command test; resolving dynamic mode agents without current Harness state fails the command test. Final verification passed: focused browser command test, typecheck, lint, and `pnpm run build:mastracode`.
+
+### Integrations: Harness display state
+
+Validated the cross-UI display-state subscriber contract, committed as `b6b828aba5`. The new core test proves a non-TUI consumer can render running/task/tool state from `subscribeDisplayState()` snapshots without raw Harness event handling.
+
+Break validations: skipping scheduler notifications fails subscribe tests; dropping `tool_start` display projection fails display-state tests; dropping `task_updated` display projection fails display-state tests. Final verification passed: focused display-state tests, core typecheck, core lint, and `pnpm build:core`.

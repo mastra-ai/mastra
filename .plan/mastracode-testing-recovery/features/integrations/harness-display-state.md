@@ -65,13 +65,12 @@
 
 ## Existing tests
 
-- `packages/core/src/harness/display-state.test.ts` — defaults, lifecycle, tool/tool-input, prompts/plans, subagents, OM, tasks, modified files, `display_state_changed`, and coalesced subscriptions.
+- `packages/core/src/harness/display-state.test.ts` — defaults, lifecycle, tool/tool-input, prompts/plans, subagents, OM, tasks, modified files, `display_state_changed`, coalesced subscriptions, and a non-TUI subscriber rendering contract.
 - `mastracode/src/tui/event-dispatch.test.ts` — task update and display-state event routing.
 - `mastracode/src/tui/render-messages.test.ts` — task display-state restoration during history rendering.
 
 ## Missing tests
 
-- Cross-UI contract test that a minimal non-TUI subscriber can render from `subscribeDisplayState()` without raw events.
 - Integration test covering active stream → reload/history render, proving live display state does not resurrect as active work.
 - Regression test for status-line update count/coalescing under long tool-input streams in the real TUI path.
 

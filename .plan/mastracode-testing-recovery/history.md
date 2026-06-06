@@ -3655,3 +3655,10 @@ Validated `Integrations: Browser automation` with a direct `/browser on` command
 - Added `mastracode/src/tui/commands/__tests__/browser.test.ts` proving enabled settings create a browser instance, attach it to all mode agents (including state-derived agents), persist `activeBrowserSettings`, save settings, and write profile-provider metadata.
 - Break validations proven and reverted: created browser but skipped agent/state attachment; skipped `activeBrowserSettings` state write; resolved dynamic mode agents without current Harness state.
 - Verification: focused browser command test, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### Harness display state recovery checkpoint
+
+Validated `Integrations: Harness display state` with a non-TUI subscriber rendering contract, committed as `b6b828aba5`:
+- Extended `packages/core/src/harness/display-state.test.ts` to prove a UI consumer can render running/task/tool state from `subscribeDisplayState()` snapshots without subscribing to raw Harness events.
+- Break validations proven and reverted: skipped display-state scheduler notifications; stopped tracking `tool_start`; stopped tracking `task_updated`.
+- Verification: focused display-state tests, core typecheck, core lint, and `pnpm build:core` all passed.
