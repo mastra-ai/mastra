@@ -3040,3 +3040,27 @@ Verification:
 - `pnpm --filter ./mastracode check` — passed.
 - `pnpm --filter ./mastracode lint` — passed.
 - `pnpm run build:mastracode` — passed, 24/24 tasks.
+
+### Test recovery: custom config directory startup alignment
+
+Selected `Settings: Custom config directory` as the next High-risk row. Chose the startup alignment gap because `config.configDir` must stay in sync across service initialization and runtime Harness state, and must not be overridden by `initialState.configDir`.
+
+Extended `mastracode/src/__tests__/index.test.ts`:
+
+- Mocked startup path consumers for storage, MCP, hooks, and resource-id override lookup.
+- Added coverage for `createMastraCode({ configDir: '.acme-code', initialState: { configDir: '.wrong-code' } })`.
+- Asserted storage, MCP, hooks, and resource-id override lookup receive `.acme-code`.
+- Asserted Harness `initialState.configDir` is `.acme-code`, not the conflicting initial state value.
+
+Break-validation evidence:
+
+1. Passed `DEFAULT_CONFIG_DIR` to storage config lookup; focused test failed because storage used `.mastracode`. Reverted.
+2. Passed `DEFAULT_CONFIG_DIR` to MCP config loading; focused test failed because MCP used `.mastracode`. Reverted.
+3. Spread `config.initialState` after `configDir`; focused test failed because `.wrong-code` reached Harness state. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest --run src/__tests__/index.test.ts --bail 1 --reporter=dot` — 1 file / 18 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — passed, 24/24 tasks.
