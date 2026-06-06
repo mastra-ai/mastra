@@ -412,10 +412,7 @@ export interface VoyageRerankResponse {
 /**
  * Model metadata for VoyageAI reranker models
  */
-export const RERANKER_MODEL_INFO: Record<
-  VoyageRerankerModel,
-  { contextLength: number; description: string }
-> = {
+export const RERANKER_MODEL_INFO: Record<VoyageRerankerModel, { contextLength: number; description: string }> = {
   'rerank-2.5': {
     contextLength: 32000,
     description: 'Best quality with instruction-following support',
