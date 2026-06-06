@@ -9,4 +9,6 @@ For focused tests, prefer pnpm --filter ./mastracode test -- --run <test-file> b
 Most tests live under mastracode/src/ and are colocated with the code they cover.
 Run focused agent, model, headless, TUI, command, or MCP tests before broader validation when those areas change.
 
+For Mastra Code TUI/e2e scenario tests, use the `testing-mastracode-tui` skill. Add scenarios under `mastracode/scripts/mc-e2e/scenarios/`, keep them checked in, use AIMock fixtures for LLM calls, and verify with `pnpm --filter ./mastracode run e2e:test <scenario>`.
+
 Keep changes here surgical; Mastra Code exercises core harness, storage, memory, tools, MCP, browser, and TUI integration paths.

@@ -1,143 +1,115 @@
 ---
 name: testing-mastracode-tui
-description: Testing mastracode TUI features interactively in Konsole. Covers model configuration, thread lifecycle, task state isolation, and common blockers.
+description: Testing Mastra Code TUI behavior and writing MC e2e scenarios. Use when adding, reviewing, or running Mastra Code terminal UI tests, @microsoft/tui-test scenarios, AIMock-backed LLM smoke tests, live observe runs, or regression shields for TUI-visible behavior.
 ---
 
-# Testing Mastracode TUI
+# Testing Mastra Code TUI
 
-Guide for interactive testing of mastracode's terminal UI in Konsole.
+Use this skill when writing or validating Mastra Code TUI/e2e tests.
 
-## Devin Secrets Needed
+## Test layers
 
-- `OPENROUTER_API_KEY` — for using OpenRouter as a custom provider when Anthropic/OpenAI keys are unavailable
+- Prefer focused colocated unit tests for pure rendering, parsing, model resolution, command handlers, or storage helpers.
+- Use `mastracode/scripts/mc-e2e/` for behavior that is TUI-visible, TUI-triggered, or depends on the real terminal/event loop.
+- For LLM scenarios, use AIMock fixtures. Do not rely on local provider credentials in CI-style tests.
 
-## Prerequisites
+## Commands
 
-1. Build mastracode and its dependencies:
-
-   ```bash
-   cd /home/ubuntu/repos/mastra
-   COREPACK_ENABLE_STRICT=0 pnpm build:mastracode
-   ```
-
-   This may take a few minutes. If `pnpm` has corepack issues, install directly: `npm install -g pnpm@10.11.0`
-
-2. If the build fails due to pre-existing DTS errors in `@mastra/core` or `@mastra/memory`, use `--continue` to let downstream packages (including mastracode) still build:
-
-   ```bash
-   COREPACK_ENABLE_STRICT=0 pnpm turbo build --filter ./mastracode --continue
-   ```
-
-3. If unit tests fail with missing `@mastra/core/workspace`, run `pnpm build:core` first.
-
-## Configuring a Custom Provider (OpenRouter)
-
-If you don't have a direct Anthropic/OpenAI API key, configure OpenRouter as a custom provider:
-
-1. Edit `~/.local/share/mastracode/settings.json`:
-
-   ```json
-   {
-     "customProviders": [
-       {
-         "name": "OpenRouter",
-         "url": "https://openrouter.ai/api/v1",
-         "apiKey": "<OPENROUTER_API_KEY value>",
-         "models": ["minimax/minimax-m2.7"]
-       }
-     ],
-     "models": {
-       "activeModelPackId": "custom:Custom",
-       "modeDefaults": {
-         "build": "openrouter/minimax/minimax-m2.7",
-         "plan": "openrouter/minimax/minimax-m2.7",
-         "fast": "openrouter/minimax/minimax-m2.7"
-       }
-     },
-     "customModelPacks": [
-       {
-         "name": "Custom",
-         "models": {
-           "build": "openrouter/minimax/minimax-m2.7",
-           "plan": "openrouter/minimax/minimax-m2.7",
-           "fast": "openrouter/minimax/minimax-m2.7"
-         },
-         "createdAt": "2026-01-01T00:00:00.000Z"
-       }
-     ]
-   }
-   ```
-
-2. After launching mastracode, you may also need to activate the custom pack via `/models` → select "Custom" → "Activate".
-
-3. Verify the status bar at the bottom shows the correct model (e.g., `build openrouter/minimax/minimax-m2.7`).
-
-## Launching Mastracode
+Run from the repo root:
 
 ```bash
-cd /home/ubuntu/repos/mastra/mastracode
-COREPACK_ENABLE_STRICT=0 pnpm cli
+pnpm run build:mastracode
+pnpm --filter ./mastracode run e2e:list
+pnpm --filter ./mastracode run e2e:test
+pnpm --filter ./mastracode run e2e:test automated-chat
+pnpm --filter ./mastracode run e2e:test -- --jobs 2
+pnpm --filter ./mastracode run e2e:observe startup
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
 ```
 
-On first launch, mastracode may show a setup wizard. Select "Skip" to proceed to the main TUI without configuring models interactively.
+Use `e2e:test` for CI/headless pass/fail. Use `e2e:observe <scenario>` only when you need live visible TUI output.
 
-## Key TUI Commands
+## Adding an e2e scenario
 
-| Command    | Action                                           |
-| ---------- | ------------------------------------------------ |
-| `/new`     | Create a new empty thread                        |
-| `/threads` | Open thread selector (↑↓ navigate, Enter select) |
-| `/clone`   | Clone current thread                             |
-| `/models`  | Switch model pack                                |
-| `/help`    | Show all available commands                      |
+1. Add a scenario file under `mastracode/scripts/mc-e2e/scenarios/`.
+2. Export a `McE2eScenario` object.
+3. Register it in `mastracode/scripts/mc-e2e/scenarios/index.ts`.
+4. If the scenario calls an LLM, add an AIMock fixture under `mastracode/scripts/mc-e2e/fixtures/`.
+5. Verify the single scenario, then all scenarios if the runner or shared helpers changed.
 
-## Programmatic Rendering Tests
+Pattern:
 
-For visual/rendering bugs (e.g., border alignment, padding, wrapping), writing a quick `tsx` script that directly renders the component is more reliable than visual inspection alone:
+```ts
+import type { McE2eScenario } from './types.js';
+
+export const myScenario = {
+  name: 'my-scenario',
+  title: 'describes user-visible behavior',
+  async run({ terminal, runtime }) {
+    await runtime.waitForScreenText(/Mastra Code/);
+    await terminal.submit('Return the configured Mastra Code e2e smoke phrase.');
+    await runtime.waitForScreenText(/MC automated chat smoke response/);
+    await terminal.keyCtrlC();
+  },
+} satisfies McE2eScenario;
+```
+
+## AIMock fixture rules
+
+- Use `openai/gpt-5.4-mini` for MC e2e model fixtures unless the test specifically covers model selection.
+- Match the actual user prompt with `match.userMessage`.
+- Use `endpoint: "chat"` for OpenAI fixtures; AIMock normalizes Responses API requests into chat-style fixture matching.
+- Ensure LLM scenarios assert through the runner's AIMock request count. A passing LLM scenario should show a nonzero AIMock request count.
+- Use `--record-ai` only for explicit fixture authoring/debugging, never as default CI behavior.
+
+Example fixture shape:
+
+```json
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Return the configured Mastra Code e2e smoke phrase."
+      },
+      "response": {
+        "content": "MC automated chat smoke response"
+      }
+    }
+  ]
+}
+```
+
+## Runner invariants
+
+- Do not generate scenario source, wrapper tests, or config files. The wrapper is static: `mastracode/scripts/mc-e2e/tui.test.ts`.
+- Keep scenario logic in checked-in files. The runner passes runtime config through env vars into the static wrapper.
+- Keep per-scenario runtime isolation: app data dir, DB paths, temp project dir, and provider env.
+- Do not spread real user app data into tests. Use `MASTRA_APP_DATA_DIR` for isolated app data.
+- Keep observe mode live and readable; do not switch back to record-then-replay unless explicitly requested.
+- If AIMock appears to receive zero requests, first check whether the runner is blocking the Node event loop. AIMock must stay alive while the `tui-test` child process runs.
+
+## Manual/rendering tests
+
+For narrow rendering bugs, a colocated unit test or tiny render helper can be better than e2e. Render the component at multiple terminal widths and assert semantic output or visible widths after stripping ANSI codes.
+
+Use e2e when the behavior depends on real keyboard input, startup context, terminal sizing, model wiring, thread/session behavior, or visible TUI integration.
+
+## Verification checklist
+
+For a new/changed e2e scenario:
 
 ```bash
-cd /home/ubuntu/repos/mastra/mastracode
-npx tsx test-script.ts
+pnpm --filter ./mastracode run e2e:test <scenario>
+pnpm --filter ./mastracode run e2e:test -- --jobs 2
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
 ```
 
-Key approach:
-
-- Import the component directly (e.g., `UserMessageComponent` from `./src/tui/components/user-message.js`)
-- Render at specific widths and strip ANSI codes to measure visible character widths
-- Assert all lines have identical visible width (for bordered components)
-- Test at multiple terminal widths (40, 60, 80, 100, 120+) to catch edge cases
-- Filter out trailing empty lines from `Spacer` components when measuring
-- For before/after comparisons, simulate the old logic inline to confirm the bug exists
-
-This approach catches bugs that are hard to see visually and provides concrete pass/fail evidence.
-
-## Testing Thread State Isolation
-
-The key scenario for thread state testing:
-
-1. **Generate tasks**: Ask the model to use the `task_write` tool explicitly. Some models (e.g., minimax) may not call it automatically — you may need to say something like: "Please use the task_write tool to create a task list with 3 items: Fix login bug, Add unit tests, Update docs"
-
-2. **Verify tasks visible**: Look for the "Tasks [0/N completed]" section with ○/▶/✓ icons between the status line and the editor input.
-
-3. **Test `/new`**: The task progress component should completely disappear. The screen should show only "Ready for new conversation" and an empty input.
-
-4. **Test `/threads` switch**: Switch back to the original thread — messages and tasks should restore correctly.
-
-5. **Test `/clone`**: Cloned threads should start with empty tasks (tasks are ephemeral, not persisted to clones).
-
-## Common Issues
-
-- **Observational memory errors**: You may see errors about `GOOGLE_GENERATIVE_AI_API_KEY` for the OM model. Fix this by setting the OM model to an OpenRouter model via `/om` or in settings.json (`models.omModelOverride`). Configure the OM model if you expect observation to trigger during testing.
-- **Model not calling tools**: Less capable models may not use mastracode's tool system. Explicitly instruct them to use specific tools by name.
-- **Status bar shows wrong model**: After changing settings.json, you may need to use `/models` in the TUI to activate the custom pack.
-- **Build failures**: If `pnpm cli` fails with module resolution errors, run `pnpm build:mastracode` (or with `--continue`) from the repo root to build all transitive dependencies.
-- **User message rendering without LLM**: The user message box renders immediately on Enter, before any LLM response. You can test rendering bugs without a working LLM connection — just submit a message and inspect the bordered box.
-
-## Running Unit Tests
+If package dependencies or core dist artifacts changed, also run:
 
 ```bash
-cd /home/ubuntu/repos/mastra
-COREPACK_ENABLE_STRICT=0 pnpm --filter mastracode exec vitest run src/tui/__tests__/
+pnpm run build:mastracode
 ```
-
-Some pre-existing test failures may exist in the broader test suite — focus on tests relevant to the feature being verified.
