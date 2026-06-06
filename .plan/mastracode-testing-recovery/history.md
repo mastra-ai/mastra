@@ -3385,3 +3385,30 @@ Verification:
 Commits:
 
 - `418b7a9fda` — `test(core): shield custom model catalog merge` (pushed to `origin/tests/mc`).
+
+### Test recovery: Codex thinking request shape
+
+Selected `Models: Thinking and reasoning effort` as the next High-risk row. Chose the provider request-shape gap because it directly protects the runtime boundary that maps Mastra Code thinking settings into OpenAI Codex requests.
+
+Changes:
+
+- Extended `mastracode/src/providers/__tests__/openai-codex-fetch.test.ts` with a direct `createCodexMiddleware()` request-shape test.
+- The test proves Codex middleware preserves existing OpenAI provider options, injects required instructions, forces `store: false`, emits the selected `reasoningEffort`, and removes `topP` when `temperature` is set.
+- Updated the thinking/reasoning feature card and recovery tracker row.
+
+Break-validation evidence:
+
+1. Removed `reasoningEffort` injection from Codex provider options; the focused provider test failed. Reverted.
+2. Removed `store: false`; the focused provider test failed. Reverted.
+3. Stopped removing `topP` when `temperature` is set; the focused provider test failed. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/providers/__tests__/openai-codex-fetch.test.ts --reporter=dot` — 1 file / 3 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — 24/24 tasks passed.
+
+Commits:
+
+- `e50141efa8` — `test(mastracode): shield codex thinking request shape` (pushed to `origin/tests/mc`).

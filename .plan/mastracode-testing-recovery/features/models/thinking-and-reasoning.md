@@ -62,6 +62,7 @@
 
 - `mastracode/src/__tests__/codex-model-routing.test.ts` — GPT-5 Codex remapping and low-minimum thinking behavior.
 - `mastracode/src/agents/__tests__/model.test.ts` — dynamic model resolution passes `thinkingLevel` into OpenAI Codex provider.
+- `mastracode/src/providers/__tests__/openai-codex-fetch.test.ts` — Codex provider factory/base URL and middleware request-shape coverage for `reasoningEffort`, `instructions`, `store: false`, preserved provider options, and `topP` removal.
 - `mastracode/src/headless.test.ts` — `--thinking-level` parsing.
 - `mastracode/src/onboarding/__tests__/settings.test.ts` — global settings schema includes thinking preference.
 
@@ -70,7 +71,7 @@
 - `/think` selector/direct-argument command test, including invalid arg, non-OpenAI warning behavior, and settings persistence.
 - `/settings` thinking-level persistence test.
 - `/models` OpenAI pack activation test that verifies `off` auto-upgrades to `low` and writes `settings.preferences.thinkingLevel`.
-- Provider request-shape test that asserts `reasoningEffort`, `instructions`, `store: false`, and `topP` removal land in Codex `providerOptions`.
+- Covered: provider request-shape test asserts `reasoningEffort`, `instructions`, `store: false`, preserved existing provider options, and `topP` removal land in Codex `providerOptions` (`mastracode/src/providers/__tests__/openai-codex-fetch.test.ts`).
 
 ## Known risks / regressions
 
