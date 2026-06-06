@@ -58,11 +58,10 @@
 
 ## Existing tests
 
-- `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts` — verifies slash/custom/skill command lists and refresh behavior.
+- `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts` — verifies slash/custom/skill command lists, refresh behavior, `fd` detection, `fdfind` fallback, missing-binary fallback, `process.cwd()` root propagation, and `fdPath` propagation into `CombinedAutocompleteProvider`.
 
 ## Missing tests
 
-- Dedicated test that mocks `execFileSync` and proves `fd`, `fdfind`, and missing-binary cases are passed as the third `CombinedAutocompleteProvider` argument.
 - Product-level TUI test for `@` file suggestions/insertion against a small fixture project.
 - Regression test that file autocomplete refresh still preserves skill/custom slash entries.
 

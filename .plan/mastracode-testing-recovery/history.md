@@ -3762,3 +3762,11 @@ Validated `TUI: Process suspend shortcut` with direct tests for the Ctrl+Z/Alt+Z
 - `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts` now proves the suspend lifecycle (`ui.stop()`, `SIGCONT`, `SIGTSTP`, resume render), Windows guard, failure recovery, and Alt+Z undo-last-clear behavior.
 - Break validations were proven and reverted for wrong Ctrl+Z routing, missing `SIGCONT` registration, and missing Windows guard.
 - Verification passed: focused shortcut/editor tests, `pnpm --filter ./mastracode check`, `pnpm --filter ./mastracode lint`, and `pnpm run build:mastracode`.
+
+### File autocomplete recovery checkpoint
+
+Validated `TUI: File autocomplete` with setup-level provider wiring coverage:
+- Extended `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts` so the `CombinedAutocompleteProvider` mock records commands, cwd, and `fdPath`.
+- Added tests for detected `fd`, fallback to `fdfind`, missing-binary graceful fallback, `process.cwd()` propagation, and slash/custom command preservation when file search is unavailable.
+- Break validations proven and reverted: omitted `fdPath` from the provider; removed `fdfind` fallback; rethrew missing-binary detection failures.
+- Verification: focused setup autocomplete tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
