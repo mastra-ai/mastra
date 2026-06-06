@@ -2,7 +2,7 @@
 
 ## Current status
 
-Test recovery is active. The tracker is initialized from the feature map, and the first recovery row (`Git: Branch context and status`) has been validated locally and committed as `e8e73d6f66`; push evidence should be recorded after pushing.
+Test recovery is active. The tracker is initialized from the feature map, and the first recovery row (`Git: Branch context and status`) has been validated locally and committed as `63c14a7eef`; push evidence should be recorded after pushing.
 
 ## Finished
 
@@ -18,7 +18,7 @@ Test recovery is active. The tracker is initialized from the feature map, and th
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #17538 (row 358, current end of `_pr-queue.md`) have been processed. `_pr-queue.md` is exhausted. The test-recovery tracker is now initialized with 56 unfinished feature rows from `features/README.md`; `Git: Branch context and status` is locally validated and committed as `e8e73d6f66`. Next recovery row: the next unfinished High-risk row by tracker order.
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #17538 (row 358, current end of `_pr-queue.md`) have been processed. `_pr-queue.md` is exhausted. The test-recovery tracker is now initialized with 56 unfinished feature rows from `features/README.md`; `Git: Branch context and status` is locally validated and committed as `63c14a7eef`. Next recovery row: the next unfinished High-risk row by tracker order.
 
 ## Blockers
 
@@ -46,7 +46,7 @@ None known.
 
 ## Last commands/evidence
 
-- Test recovery tracker initialized with 56 rows from the feature map. `Git: Branch context and status` locally validated and committed as `e8e73d6f66`: strengthened `branch-context-long-name` TUI e2e now checks startup branch context plus footer abbreviation; added status-line unit coverage; fixed fallback ordering so full path/full branch candidates do not truncate before abbreviated branch can win. Break validation: path truncation regression failed e2e; wrong abbreviation shape failed unit; disabled abbreviation failed unit. Verification passed: `pnpm run build:mastracode`, focused status-line Vitest (14), `e2e:test branch-context-long-name`, all e2e scenarios with `--jobs 2` (3), `pnpm --filter ./mastracode check`, and `pnpm --filter ./mastracode lint`. Push pending for this chunk.
+- Test recovery tracker initialized with 56 rows from the feature map. `Git: Branch context and status` locally validated and committed as `63c14a7eef`: strengthened `branch-context-long-name` TUI e2e now checks startup branch context plus footer abbreviation; added status-line unit coverage; fixed fallback ordering so full path/full branch candidates do not truncate before abbreviated branch can win. Break validation: path truncation regression failed e2e; wrong abbreviation shape failed unit; disabled abbreviation failed unit. Verification passed: `pnpm run build:mastracode`, focused status-line Vitest (14), `e2e:test branch-context-long-name`, all e2e scenarios with `--jobs 2` (3), `pnpm --filter ./mastracode check`, and `pnpm --filter ./mastracode lint`. Push pending for this chunk.
 - Rows 357-358 verified/documented: #17492 Changesets alpha skip and #17538 GitHub Signals branch-PR auto-subscribe on `agent_end`; current `_pr-queue.md` ends at row 358 and has no blank Status entries. Focused verification passed: GitHub command/auto-subscribe tests (17). Queue-exhaustion check reported `rows=358 first=1 last=358 blank_status=[]`. Source verification covered `tryAutoSubscribeToBranchPR()`, `handleAgentEnd()` once-per-thread guard, `gh pr view --json url` detection, and GitHub command tests.
 - Rows 353-356 verified/documented: #17241 notification inbox signals/tool, #17447 GitHub signal subscriptions, #17411 composed Harness v1 session state, and #17511 legacy switchMode fallback before an active v1 session. Focused verification passed: MC GitHub Signals/commands/tool guidance slice (68), MC HarnessCompat/index state-switch slice (5 passed / 16 skipped), and core notification/signal slice (33 passed / 62 skipped). Source verification covered notifications storage/dispatcher/tool/TUI components, GitHub Signals polling/classification/commands/settings, HarnessCompat state composition, and switchMode fallback.
 - Rows 349-352 verified/documented: #17240 processor state signals, browser state snapshots/deltas, TUI state/reactive signal rows, and #17452/#17476/#17480 Changesets alpha skips. Focused verification passed: core agent state-signal slice (1 passed / 72 skipped), core browser/processor state-signal slice (22 passed / 61 skipped), and MC TUI state/reactive signal rendering/handler slice (6 passed / 34 skipped).
