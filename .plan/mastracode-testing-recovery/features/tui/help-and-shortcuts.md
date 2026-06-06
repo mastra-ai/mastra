@@ -72,13 +72,12 @@
 ## Existing tests
 
 - `mastracode/src/tui/components/__tests__/help-overlay.test.ts` — command list, shell section, shortcuts, mode-gated `/mode`/`⇧+Tab`, and custom `//command` rendering.
+- `mastracode/src/tui/commands/__tests__/help.test.ts` — direct `/help` handler coverage proving `ctx.showInfo()` receives real help text from harness mode count, custom slash commands, shell passthrough settings, current shortcut labels, `/api-keys`, `/observability`, and intentional `/feedback` omission.
+- `mastracode/src/tui/__tests__/setup-layout.test.ts` — startup header hint remains visible and mode-aware with/without multiple modes.
 
 ## Missing tests
 
-- End-to-end command dispatch test proving `/help` renders through `ctx.showInfo()` with real `SlashCommandContext` data.
-- Drift regression proving `/feedback` is intentionally omitted from or added to the compact help/autocomplete surfaces.
-- Startup layout snapshot proving the compact hint remains visible with/without multiple modes.
-- Test for shell passthrough label variations from settings.
+- Broader e2e command dispatch test proving `/help` renders in the live TUI transcript. Deferred because the direct handler now verifies the real `SlashCommandContext` data boundary without model/network dependence.
 
 ## Known risks / regressions
 

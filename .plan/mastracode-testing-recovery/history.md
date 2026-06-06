@@ -3746,3 +3746,11 @@ Validated `TUI: Startup banner` with a layout-level startup header shield:
 - Added `setup-layout.test.ts` for startup banner/frontmatter/hint/container/footer/focus composition in `buildLayout()`.
 - Break validations proven and reverted: missing custom app name in banner rendering, missing worktree frontmatter, and stale mode-cycle hint for single-mode sessions.
 - Verification: `pnpm --filter ./mastracode exec vitest --run src/tui/__tests__/setup-layout.test.ts --bail=1 --reporter=dot`, `pnpm --filter ./mastracode check`, `pnpm --filter ./mastracode lint`, and `pnpm run build:mastracode` all passed.
+
+### Help and shortcuts recovery checkpoint
+
+Validated `TUI: Help and shortcuts` with direct `/help` handler coverage and a product fix:
+- Added `/help` command tests for mode-aware `/mode`/`⇧+Tab`, custom `//commands`, configured shell labels, current shortcut labels, `/api-keys`, `/observability`, and intentional `/feedback` omission.
+- Fixed compact help drift by adding `/api-keys` to the command list and added a `mastracode` patch changeset.
+- Break validations proven and reverted: removed `/api-keys`, forced single-mode help, and hardcoded default shell label.
+- Verification: `pnpm --filter ./mastracode exec vitest --run src/tui/commands/__tests__/help.test.ts src/tui/components/__tests__/help-overlay.test.ts --bail=1 --reporter=dot`, `pnpm --filter ./mastracode check`, `pnpm --filter ./mastracode lint`, and `pnpm run build:mastracode` all passed.

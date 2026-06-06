@@ -343,3 +343,12 @@ Validated `TUI: Startup banner` with a layout-level startup header shield:
 - Added `mastracode/src/tui/__tests__/setup-layout.test.ts` covering `buildLayout()` composition: banner call/version/appName, project/resource/branch/worktree/user frontmatter, mode-aware startup hints, chat/task/editor/footer ordering, quiet-mode task progress initialization, status refresh, model-auth refresh, and editor focus.
 - Break validations proven and reverted: ignored custom `appName` in `renderBanner`; removed worktree frontmatter; always showed `⇧+Tab cycle modes` when only one mode exists.
 - Verification: focused setup-layout tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### Help and shortcuts recovery checkpoint
+
+Validated `TUI: Help and shortcuts` with direct `/help` handler coverage and a small product fix:
+- Added `mastracode/src/tui/commands/__tests__/help.test.ts` proving `/help` renders through `ctx.showInfo()` using harness mode count, custom slash commands, configured shell passthrough label, shortcut labels, `/api-keys`, `/observability`, and intentional `/feedback` omission.
+- Fixed compact help drift by listing `/api-keys` in `help-overlay.ts`.
+- Added `.changeset/hungry-mammals-lead.md` for the user-visible help fix.
+- Break validations proven and reverted: removed `/api-keys` from compact help; forced single-mode help rendering; ignored configured shell passthrough label.
+- Verification: focused help tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
