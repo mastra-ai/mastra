@@ -77,13 +77,12 @@
 - `mastracode/src/tui/__tests__/status-line.test.ts` — queued-count status label from TUI queue + Harness follow-up count.
 - `mastracode/src/utils/__tests__/slash-command-loader.test.ts` — custom slash-command discovery, namespace/name parsing, source priority, and duplicate-name override behavior.
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — `//deploy` active-thread custom command routing, built-in `/new` precedence over a custom collision, and `//new` custom-command override behavior.
-- `mastracode/src/utils/__tests__/slash-command-processor.test.ts` — current file-reference behavior only; no direct coverage for #13493 argument append / `$0` preservation.
+- `mastracode/src/utils/__tests__/slash-command-processor.test.ts` — file-reference behavior plus #13493 custom-argument contracts: no-placeholder templates append `ARGUMENTS`, explicit `$ARGUMENTS`/positional/`$1+` placeholders suppress raw append, `$1+` expands to the rest of the args, and `$0` remains literal shell text.
 
 ## Missing tests
 
 - Real terminal/TUI integration test for Ctrl+F and Enter with an actual autocomplete provider, live active run, image paste state, and long slash/custom/skill descriptions wrapping at real terminal widths.
 - Reload behavior proving transient queues do not resurrect from history.
-- Custom slash-command processor tests for: no placeholders appends `ARGUMENTS`, `$ARGUMENTS` suppresses append, `$1+` suppresses append, and `$0` remains literal.
 
 ## Known risks / regressions
 

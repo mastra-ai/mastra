@@ -3161,3 +3161,31 @@ Verification:
 - `pnpm build:core` — passed, 12/12 tasks.
 
 Committed as `494be0ca3f` (`test(core): shield harness file attachments`).
+
+### Test recovery: queued slash command arguments
+
+Selected `Chat: Queued follow-ups and slash commands` as the next High-risk row. Chose the custom slash-command processor gap from #13493 because queueing/autocomplete/status behavior already has focused coverage, while argument preservation for custom queued slash commands was only documented in the feature map.
+
+Expanded `mastracode/src/utils/__tests__/slash-command-processor.test.ts` to assert:
+
+- Custom commands with no placeholders append unused raw args as an `ARGUMENTS:` block after shell/file expansion.
+- `$ARGUMENTS` and positional placeholders consume args and suppress duplicate raw-arg append.
+- `$1+` expands to the rest of the supplied args and suppresses duplicate raw-arg append.
+- `$0` remains literal shell text instead of being treated as a positional argument.
+
+The new `$1+` test exposed a product bug: `Review $1+` became `Review src/index.ts+`. Fixed `replaceArguments()` to expand `$N+` before single positional replacement and to clear unused range placeholders.
+
+Break-validation evidence:
+
+1. Disabled raw-arg append; focused processor tests failed because no-placeholder commands lost `ARGUMENTS: prod blue`. Reverted.
+2. Removed `$N+` range replacement; focused processor tests failed because `Review $1+` became `Review src/index.ts+`. Reverted.
+3. Treated `$0` as a positional placeholder by broadening the positional detector to `$\d+`; focused processor tests failed because `$0` suppressed raw-arg append. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/utils/__tests__/slash-command-processor.test.ts --bail 1 --reporter=dot` — 1 file / 5 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — passed, 24/24 tasks.
+
+Committed as `833684c417` (`fix(mastracode): preserve slash command range args`).
