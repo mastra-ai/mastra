@@ -299,3 +299,11 @@ Break validations: removing the missing-context guard records orphan feedback an
 Validated inline plan rendering during approval, committed and pushed as `eab201d3cc`. The component test now proves request-changes feedback mode keeps the submitted plan visible while feedback is typed, and long plan content remains width-safe on narrow terminals.
 
 Break validations: removing plan content from feedback mode fails the visibility test; bypassing inner-width wrapping/truncation fails the narrow-width test; removing plan content from resolved requested-changes cards fails the resolved-card test. Final verification passed: focused plan component tests, MastraCode typecheck, lint, and `pnpm run build:mastracode`.
+
+### Persistent goal status-line recovery checkpoint
+
+Validated `Goals: Persistent /goal mode` with a narrow status-line fallback shield, committed as `e3773497de`:
+- Fixed `mastracode/src/tui/status-line.ts` so active goal judging suppresses lower-priority OM progress and active-goal duration labels, keeping the judge badge/model visible when terminal width is tight.
+- Extended `mastracode/src/tui/__tests__/status-line.test.ts` to cover an active judge with OM progress, active goal state, and a long model ID on a narrow terminal.
+- Break validations proven and reverted: allowed OM progress during active judge; allowed goal-duration label during active judge; used normal chat model instead of the active judge model.
+- Verification: focused status-line tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.

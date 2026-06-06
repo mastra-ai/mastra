@@ -3702,3 +3702,11 @@ Validated `Goals: Plan approval and build handoff` with inline plan rendering sh
 - Added a narrow-terminal width assertion proving long markdown plan lines remain within the rendered component width.
 - Break validations proven and reverted: removed plan content from feedback mode; bypassed inner-width wrapping/truncation; removed plan content from resolved requested-changes cards.
 - Verification: focused plan-approval component tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### Persistent goal status-line recovery checkpoint
+
+Validated `Goals: Persistent /goal mode` with a narrow status-line fallback shield, committed as `e3773497de`:
+- Fixed active goal judging status-line priority so OM progress and goal-duration labels do not displace the judge model on narrow terminals.
+- Added a status-line regression test for active judge + active OM progress + active goal state + long model ID at 30 columns.
+- Break validations proven and reverted: OM progress displaced the judge model; goal duration displaced the judge model; normal chat model replaced the judge model.
+- Verification: `pnpm --filter ./mastracode exec vitest --run src/tui/__tests__/status-line.test.ts --reporter=dot`, `pnpm --filter ./mastracode check`, `pnpm --filter ./mastracode lint`, and `pnpm run build:mastracode` all passed.

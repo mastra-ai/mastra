@@ -72,12 +72,13 @@
 - `mastracode/src/tui/__tests__/mastra-tui-queueing.test.ts` — editor lock during judge, queued action precedence, pending signal behavior.
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` and `setup-keyboard-shortcuts.test.ts` — multiline `/goal` raw args, `/goal/<custom>`/skill routing, judge input locks/escape hatches, autocomplete, and abort shortcuts.
 - `mastracode/src/tui/handlers/__tests__/prompts.test.ts` and `parallel-interactive-prompts.test.ts` — ask_user prompts remain user-controlled during active goals, and plan approval goal mode resolves the suspended plan before starting `/goal` without sending a duplicate build reminder.
+- `mastracode/src/tui/__tests__/status-line.test.ts` — active judge status-line priority on narrow terminals when OM progress, active-goal state, and long model IDs compete for space.
 
 ## Missing tests
 
 - End-to-end run that starts a real `/goal`, completes several model turns including a `waiting` checkpoint, reloads, resumes, and verifies persisted status/duration/history.
 - Non-TUI/headless behavior for goal state and continuation when slash-command UI is unavailable.
-- Snapshot coverage for narrow status-line fallback with active goal, judge badge, OM badge interactions, and long model IDs.
+- E2E/snapshot coverage for a full persistent-goal status-line session after reload.
 
 ## Known risks / regressions
 
