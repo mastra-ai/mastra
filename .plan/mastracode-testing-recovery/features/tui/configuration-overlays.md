@@ -62,13 +62,13 @@
 ## Existing tests
 
 - `mastracode/src/tui/__tests__/overlay.test.ts` — modal min-height padding, max-height cap, and top-padding behavior.
+- `mastracode/src/tui/__tests__/modal-question.test.ts` — `askModalQuestion()` shows/focuses the modal, forwards overlay options, hides the overlay on submit/cancel, and resolves submitted answers or `null` on cancel.
 - Command tests that mock `askModalQuestion()` / `showModalOverlay()` (for example `commands/__tests__/github.test.ts`, `goal.test.ts`, `memory-gateway.test.ts`) — prove modal helpers are invoked for focused command flows.
 - `mastracode/src/tui/__tests__/mastra-tui-quiet-mode.test.ts` — quiet-mode rollout prompt uses `askModalQuestion()`.
 
 ## Missing tests
 
 - Full keyboard/PTY regression covering `/setup` → nested model selector → Escape/back navigation inside the overlay.
-- Direct modal-question test for submit/cancel/focus because `modal-question.ts` currently has only indirect command coverage.
 - Snapshot/visual regression for neutral tool pending/success backgrounds across dark/light themes.
 
 ## Known risks / regressions
