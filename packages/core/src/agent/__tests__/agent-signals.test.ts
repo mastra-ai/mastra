@@ -2448,6 +2448,67 @@ describe('Agent signals', () => {
   );
 
   it.runIf(process.platform !== 'win32')(
+    'lets a remote subscriber join an already-active UnixSocketPubSub run',
+    async () => {
+      const tempDir = await mkdtemp(join(tmpdir(), 'mastra-agent-late-subscriber-'));
+      const ownerPubSub = new UnixSocketPubSub(join(tempDir, 'signals.sock'));
+      const followerPubSub = new UnixSocketPubSub(join(tempDir, 'signals.sock'));
+      const ownerRuntime = new AgentThreadStreamRuntime();
+      const followerRuntime = new AgentThreadStreamRuntime();
+      const owner = { id: 'late-subscriber-agent' } as Agent<any, any, any, any>;
+      const follower = { id: 'late-subscriber-agent' } as Agent<any, any, any, any>;
+      const runId = 'late-subscriber-run';
+      let firstPartBroadcasted!: () => void;
+      let continueRun!: () => void;
+      let finishRun!: () => void;
+      const firstPart = new Promise<void>(resolve => (firstPartBroadcasted = resolve));
+      const continuePromise = new Promise<void>(resolve => (continueRun = resolve));
+      const finished = new Promise<void>(resolve => (finishRun = resolve));
+      const output = {
+        runId,
+        status: 'running',
+        fullStream: (async function* () {
+          yield { type: 'text-delta', runId, payload: { text: 'before subscriber' } };
+          firstPartBroadcasted();
+          await continuePromise;
+          yield { type: 'text-delta', runId, payload: { text: 'after subscriber' } };
+          yield { type: 'finish', runId, payload: {} };
+          finishRun();
+        })(),
+        _waitUntilFinished: () => finished,
+      } as any;
+
+      try {
+        ownerRuntime.registerRun(
+          owner,
+          output,
+          { runId, memory: { resource: 'late-subscriber-resource', thread: 'late-subscriber-thread' } } as any,
+          ownerPubSub,
+        );
+        await withTimeout(firstPart, 'Timed out waiting for owner run to start');
+
+        const followerSubscription = await followerRuntime.subscribeToThread(
+          follower,
+          { resourceId: 'late-subscriber-resource', threadId: 'late-subscriber-thread' },
+          followerPubSub,
+        );
+        const followerRun = readNextRun(followerSubscription.stream[Symbol.asyncIterator]());
+
+        continueRun();
+
+        await expect(withTimeout(followerRun, 'Timed out waiting for late subscriber')).resolves.toMatchObject({
+          value: { runId, text: 'after subscriber' },
+          done: false,
+        });
+        followerSubscription.unsubscribe();
+      } finally {
+        await Promise.allSettled([ownerPubSub.close(), followerPubSub.close()]);
+        await rm(tempDir, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.runIf(process.platform !== 'win32')(
     'broadcasts to a remote subscriber without a same-runtime subscriber',
     async () => {
       const tempDir = await mkdtemp(join(tmpdir(), 'mastra-agent-remote-only-'));
