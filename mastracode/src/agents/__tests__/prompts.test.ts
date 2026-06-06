@@ -91,6 +91,28 @@ describe('buildFullPrompt', () => {
     expect(prompt).not.toContain('<coding_behavior>');
   });
 
+  it('does not advertise the removed audit-tests subagent exception', () => {
+    const prompt = buildFullPrompt({
+      projectPath: '/tmp/project',
+      projectName: 'test-project',
+      gitBranch: 'main',
+      platform: 'darwin',
+      date: '2026-03-23',
+      mode: 'build',
+      activePlan: null,
+      modeId: 'build',
+      currentDate: '2026-03-23',
+      workingDir: '/tmp/project',
+      state: {
+        permissionRules: { tools: {} },
+      },
+    });
+
+    expect(prompt).toContain('Only use subagents when you will spawn **multiple subagents in parallel**');
+    expect(prompt).not.toContain('audit-tests');
+    expect(prompt).not.toContain('subagent may be used on its own');
+  });
+
   it('describes goal mode and goal-ready plan expectations in the base prompt', () => {
     const prompt = buildFullPrompt({
       projectPath: '/tmp/project',

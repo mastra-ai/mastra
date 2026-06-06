@@ -2,7 +2,7 @@
 
 ## Current status
 
-Test recovery is active. The tracker is initialized from the feature map, and the first recovery row (`Git: Branch context and status`) has been validated, committed as `63c14a7eef`, and pushed to `origin/tests/mc`.
+Test recovery is active. The tracker is initialized from the feature map. `Git: Branch context and status` has been validated, committed as `63c14a7eef`, and pushed to `origin/tests/mc`. `Subagents: Audit-tests subagent` has been validated locally as a removal chunk and is ready for commit/push.
 
 ## Finished
 
@@ -18,7 +18,7 @@ Test recovery is active. The tracker is initialized from the feature map, and th
 
 ## Active work
 
-Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #17538 (row 358, current end of `_pr-queue.md`) have been processed. `_pr-queue.md` is exhausted. The test-recovery tracker is now initialized with 56 unfinished feature rows from `features/README.md`; `Git: Branch context and status` is locally validated and committed as `63c14a7eef`. Next recovery row: the next unfinished High-risk row by tracker order.
+Feature map structure has been tightened, the first 4 baseline pages have been shrunk to concise cards, and queue rows through #17538 (row 358, current end of `_pr-queue.md`) have been processed. `_pr-queue.md` is exhausted. The test-recovery tracker is now initialized with 56 unfinished feature rows from `features/README.md`; `Git: Branch context and status` is validated/pushed, and `Subagents: Audit-tests subagent` is locally validated for removal. Next recovery row after committing the audit-tests chunk: the next unfinished High-risk row by tracker order.
 
 ## Blockers
 
@@ -46,6 +46,7 @@ None known.
 
 ## Last commands/evidence
 
+- `Subagents: Audit-tests subagent` locally validated as a removal chunk: deleted stale `audit-tests.ts`, removed stale base-prompt exception, added prompt regression test, and added MastraCode changeset. Break validation: stale `audit-tests` prompt exception failed prompt test; recreated production source file failed source-reference guard; generic single-use subagent guidance failed prompt test. Verification passed: focused prompt/subagent Vitest (8), production source-reference guard, `pnpm run build:mastracode`, `pnpm --filter ./mastracode check`, and `pnpm --filter ./mastracode lint`. Commit/push pending for this chunk.
 - Test recovery tracker initialized with 56 rows from the feature map. `Git: Branch context and status` validated, committed as `63c14a7eef`, and pushed to `origin/tests/mc`: strengthened `branch-context-long-name` TUI e2e now checks startup branch context plus footer abbreviation; added status-line unit coverage; fixed fallback ordering so full path/full branch candidates do not truncate before abbreviated branch can win. Break validation: path truncation regression failed e2e; wrong abbreviation shape failed unit; disabled abbreviation failed unit. Verification passed: `pnpm run build:mastracode`, focused status-line Vitest (14), `e2e:test branch-context-long-name`, all e2e scenarios with `--jobs 2` (3), `pnpm --filter ./mastracode check`, and `pnpm --filter ./mastracode lint`.
 - Rows 357-358 verified/documented: #17492 Changesets alpha skip and #17538 GitHub Signals branch-PR auto-subscribe on `agent_end`; current `_pr-queue.md` ends at row 358 and has no blank Status entries. Focused verification passed: GitHub command/auto-subscribe tests (17). Queue-exhaustion check reported `rows=358 first=1 last=358 blank_status=[]`. Source verification covered `tryAutoSubscribeToBranchPR()`, `handleAgentEnd()` once-per-thread guard, `gh pr view --json url` detection, and GitHub command tests.
 - Rows 353-356 verified/documented: #17241 notification inbox signals/tool, #17447 GitHub signal subscriptions, #17411 composed Harness v1 session state, and #17511 legacy switchMode fallback before an active v1 session. Focused verification passed: MC GitHub Signals/commands/tool guidance slice (68), MC HarnessCompat/index state-switch slice (5 passed / 16 skipped), and core notification/signal slice (33 passed / 62 skipped). Source verification covered notifications storage/dispatcher/tool/TUI components, GitHub Signals polling/classification/commands/settings, HarnessCompat state composition, and switchMode fallback.

@@ -61,27 +61,28 @@
 
 ## Existing tests
 
-- No audit-tests-specific test found.
-- `mastracode/src/agents/subagents/execute.test.ts` covers a different subagent.
+- `mastracode/src/agents/__tests__/prompts.test.ts` verifies the base prompt no longer advertises an `audit-tests` single-use subagent exception.
+- `mastracode/src/agents/subagents/execute.test.ts` covers the remaining Execute subagent read-only/task-tool contract.
+- Source-reference guard verified no production `audit-tests`, `auditTestsSubagent`, or `Audit Tests` references remain under `mastracode/src`.
 
 ## Removal plan
 
-1. Delete `mastracode/src/agents/subagents/audit-tests.ts`.
-2. Remove the stale single-use exception from `mastracode/src/agents/prompts/base.ts`.
-3. Add a Mastra Code changeset noting that the unused, unavailable `audit-tests` subagent definition and prompt guidance were removed.
-4. Verify with `rg "audit-tests|auditTestsSubagent|Audit Tests" mastracode/src .plan/mastracode-testing-recovery`, focused prompt/subagent tests, and `pnpm --filter ./mastracode check`.
+1. [x] Delete `mastracode/src/agents/subagents/audit-tests.ts`.
+2. [x] Remove the stale single-use exception from `mastracode/src/agents/prompts/base.ts`.
+3. [x] Add a Mastra Code changeset noting that the unused, unavailable `audit-tests` subagent definition and prompt guidance were removed.
+4. [x] Verify with production-source reference guard, focused prompt/subagent tests, build, typecheck, and lint.
 5. Do not add replacement behavior in the removal PR. If test-audit behavior is wanted later, design it as a skill or slash command in separate work.
 
 ## Missing tests
 
-- No new product tests are needed for the removal beyond prompt/subagent regression coverage; the desired end state is that `audit-tests` is no longer advertised or available.
+- No further product tests are needed for the removal; the desired end state is that `audit-tests` is no longer advertised or available.
 - If reintroduced as a skill or slash command, add tests for input gathering, read-only behavior, and generated audit prompt content.
 
 ## Known risks / regressions
 
-- Until removal lands, the definition exists but is not imported into `createMastraCode()` defaults.
-- Until removal lands, the prompt says `audit-tests` can be used alone, which may mislead the agent if the runtime rejects the agent type.
+- Removal landed locally: the stale definition is deleted and the prompt no longer says `audit-tests` can be used alone.
 - A future replacement should not silently re-add a built-in subagent unless there is a clear user-facing entry point and direct coverage.
+- Break validation covered stale prompt reintroduction, stale production source reintroduction, and generic single-use subagent guidance reintroduction.
 
 ## Verification checklist
 

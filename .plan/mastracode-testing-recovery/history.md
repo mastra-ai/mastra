@@ -2820,3 +2820,32 @@ Verification:
 - `pnpm --filter ./mastracode run e2e:test -- --jobs 2` — 3 TUI e2e scenarios passed; automated-chat AIMock request count 1.
 - `pnpm --filter ./mastracode check` — passed.
 - `pnpm --filter ./mastracode lint` — passed.
+
+### Test recovery: audit-tests subagent removal
+
+Selected `Subagents: Audit-tests subagent` as the next High-risk Missing row. Source verification confirmed the feature card's disposition: `mastracode/src/agents/subagents/audit-tests.ts` existed, but `createMastraCode()` default subagents only include Explore, Plan, and Execute; the base prompt still advertised a stale `audit-tests` single-use exception.
+
+Resolution: remove the unavailable built-in subagent rather than revive it. Future test-audit behavior should be designed as a skill or slash command with separate coverage.
+
+Changes:
+
+- Deleted `mastracode/src/agents/subagents/audit-tests.ts`.
+- Removed the stale single-use `audit-tests` exception from `mastracode/src/agents/prompts/base.ts`.
+- Added prompt regression coverage in `mastracode/src/agents/__tests__/prompts.test.ts` so the base prompt does not advertise `audit-tests` or a single-use subagent exception.
+- Added `.changeset/quiet-ravens-audit.md` for the MastraCode package patch.
+- Updated the audit-tests feature card and test recovery tracker row.
+
+Break-validation evidence:
+
+1. Reintroduced the stale `audit-tests` prompt exception; `pnpm --filter ./mastracode exec vitest run src/agents/__tests__/prompts.test.ts --bail=1 --reporter=dot` failed on the prompt regression assertion. Reverted.
+2. Recreated a production `audit-tests.ts` source file; `test -z "$(rg -n "audit-tests|auditTestsSubagent|Audit Tests" mastracode/src --glob '!**/__tests__/**')"` failed. Reverted.
+3. Reintroduced generic single-use subagent guidance without the `audit-tests` id; the prompt regression test failed on `subagent may be used on its own`. Reverted.
+
+Verification:
+
+- `rg -n "audit-tests|auditTestsSubagent|Audit Tests" mastracode/src` — only the new prompt regression test references remain.
+- `pnpm --filter ./mastracode exec vitest run src/agents/__tests__/prompts.test.ts src/agents/subagents/execute.test.ts --bail=1 --reporter=dot` — 2 files / 8 tests passed.
+- `test -z "$(rg -n "audit-tests|auditTestsSubagent|Audit Tests" mastracode/src --glob '!**/__tests__/**')"` — passed.
+- `pnpm run build:mastracode` — passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
