@@ -8,6 +8,7 @@ export type ScenarioName =
   | 'modal-and-shell'
   | 'report-issue-command'
   | 'state-commands'
+  | 'storage-settings'
   | 'workspace-commands';
 
 export type McE2eTerminal = {

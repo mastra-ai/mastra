@@ -3963,3 +3963,26 @@ Verification:
 - `pnpm --filter ./mastracode check` passed.
 - `pnpm --filter ./mastracode lint` passed.
 - `pnpm run build:mastracode` passed.
+
+## 2026-06-06 — Storage settings TUI e2e partial coverage batch
+
+Added `storage-settings` checked-in TUI e2e scenario:
+- Opens `/settings` through a real PTY and navigates to the Storage backend row.
+- Opens the backend picker, selects PostgreSQL, and verifies the connection-string prompt.
+- Types a fake PostgreSQL connection string, asserts the secret is masked rather than rendered cleartext, submits it, and verifies the restart-required notice.
+
+Rows moved from missing e2e to partial e2e:
+- Settings: Storage backend configuration — partial only; persisted reload, selected-backend-after-restart, real PostgreSQL/PgVector integration, and migration behavior remain missing.
+
+Break validation:
+- Renamed the visible `Storage backend` settings label -> `storage-settings` failed waiting for the real label.
+- Rendered masked input cleartext -> `storage-settings` failed because the serialized terminal exposed the fake connection string instead of mask characters.
+- Skipped the PostgreSQL connection-input transition -> `storage-settings` failed waiting for `PostgreSQL Connection`.
+- All intentional breaks were reverted before committing.
+
+Verification:
+- `pnpm --filter ./mastracode run e2e:test storage-settings` passed.
+- `pnpm --filter ./mastracode run e2e:test -- --jobs 2` passed: 11/11 scenarios.
+- `pnpm --filter ./mastracode check` passed.
+- `pnpm --filter ./mastracode lint` passed.
+- `pnpm run build:mastracode` passed.
