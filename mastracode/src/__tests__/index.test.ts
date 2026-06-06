@@ -380,6 +380,37 @@ describe('createMastraCode', () => {
     expect(typeof harnessConfig?.memory).toBe('function');
   });
 
+  it('uses caller memory while applying configDir to startup services and state', async () => {
+    const projectPath = '/tmp/mastracode-project';
+    const customMemory = { id: 'custom-memory' };
+    detectProjectMock.mockReturnValue({
+      mode: 'none',
+      rootPath: projectPath,
+      resourceId: 'project-resource',
+      packageManager: 'pnpm',
+      hasGit: false,
+      contextFiles: [],
+    });
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({
+      cwd: projectPath,
+      configDir: '.acme-code',
+      memory: customMemory as any,
+      initialState: { configDir: '.wrong-code' },
+    });
+
+    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+      | { memory?: unknown; initialState?: Record<string, unknown> }
+      | undefined;
+    expect(harnessConfig?.memory).toBe(customMemory);
+    expect(harnessConfig?.initialState?.configDir).toBe('.acme-code');
+    expect(getDynamicMemoryMock).not.toHaveBeenCalled();
+    expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
+    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
+    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code');
+  });
+
   it('passes custom workspace config through to Harness without using the default factory', async () => {
     const customWorkspace = { id: 'custom-workspace' };
     const { createMastraCode } = await import('../index.js');
