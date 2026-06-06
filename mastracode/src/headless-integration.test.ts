@@ -528,6 +528,77 @@ describe('headless mode — --output-format contracts', () => {
       expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Streamed JSON response' })]),
     );
   });
+
+  it('keeps state-signal parts visible in stream-json message events', async () => {
+    let listener: ((event: HarnessEvent) => void) | undefined;
+    const stateSignalPart = {
+      type: 'state_signal',
+      id: 'state-signal-browser-1',
+      stateId: 'browser',
+      mode: 'delta',
+      cacheKey: 'browser:v2',
+      version: 2,
+      message: 'Browser state changed',
+    };
+    const harness = {
+      subscribe: vi.fn((next: (event: HarnessEvent) => void) => {
+        listener = next;
+        return () => {};
+      }),
+      sendMessage: vi.fn(async () => {
+        listener?.({ type: 'agent_start', runId: 'run-state' } as HarnessEvent);
+        listener?.({
+          type: 'message_end',
+          message: {
+            id: 'assistant-state-message',
+            role: 'assistant',
+            content: [stateSignalPart, { type: 'text', text: 'Observed browser state.' }],
+            createdAt: new Date(0),
+          },
+        } as HarnessEvent);
+        listener?.({ type: 'agent_end', reason: 'complete' } as HarnessEvent);
+      }),
+      getCurrentThreadId: vi.fn(() => 'thread-state'),
+    } as unknown as Harness<Record<string, unknown>>;
+
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureProcessOutput(() =>
+      runHeadless(harness, {
+        prompt: 'Describe the browser state',
+        format: 'default',
+        outputFormat: 'stream-json',
+        continue_: false,
+        cloneThread: false,
+      }),
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toBe('');
+
+    const events = stdout
+      .trim()
+      .split('\n')
+      .map(line => JSON.parse(line));
+    const assistantEnd = events.find(event => event.type === 'message_end' && event.message?.role === 'assistant');
+    expect(assistantEnd?.message.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'state_signal',
+          stateId: 'browser',
+          mode: 'delta',
+          cacheKey: 'browser:v2',
+          message: 'Browser state changed',
+        }),
+      ]),
+    );
+    expect(assistantEnd?.message.content).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Observed browser state.' })]),
+    );
+    expect(events.find(event => event.type === 'agent_end')).toMatchObject({ reason: 'complete' });
+  });
 });
 
 describe('headless mode — --model flag', () => {
