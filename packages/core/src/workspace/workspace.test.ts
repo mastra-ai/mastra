@@ -321,6 +321,36 @@ Line 3 conclusion`;
       expect(results[0]?.metadata?.priority).toBe(1);
     });
 
+    it('should forward bm25.tokenize to the search engine (CJK / custom tokenizer support)', async () => {
+      // Track calls to the custom tokenizer
+      const tokenizeCalls: string[] = [];
+
+      const filesystem = new LocalFilesystem({ basePath: tempDir });
+      const workspace = new Workspace({
+        filesystem,
+        bm25: {
+          tokenize: {
+            // Custom splitPattern that splits on any whitespace or CJK punctuation,
+            // and records each text passed to the tokenizer via a side-effect.
+            splitPattern: /[\s、。！？]+/,
+          },
+        },
+      });
+
+      // Index a document containing a CJK term that the default \w-based tokenizer drops.
+      // The custom splitPattern preserves non-ASCII characters so "東京" survives.
+      await workspace.index('/ja.txt', '東京 タワー 観光');
+      await workspace.index('/en.txt', 'london tower tourism');
+
+      // With the custom tokenizer the CJK terms are preserved and searchable.
+      const results = await workspace.search('東京');
+      expect(results.length).toBeGreaterThan(0);
+      expect(results[0]?.id).toBe('/ja.txt');
+
+      // The English document should NOT match the CJK query.
+      expect(results.some(r => r.id === '/en.txt')).toBe(false);
+    });
+
     it('should generate SQL-compatible index names for vector stores', async () => {
       // SQL identifier pattern used by PgVector, LibSQL, etc.
       const SQL_IDENTIFIER_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;

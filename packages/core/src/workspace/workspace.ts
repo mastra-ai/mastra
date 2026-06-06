@@ -49,7 +49,7 @@ import type { LSPConfig } from './lsp/types';
 import type { WorkspaceSandbox, OnMountHook } from './sandbox';
 import { LocalSandbox } from './sandbox/local-sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
-import type { BM25Config, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
+import type { BM25Config, TokenizeOptions, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
 import { SearchEngine, splitIntoChunks } from './search';
 import type { WorkspaceSkills, SkillsResolver, SkillSource } from './skills';
 import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
@@ -279,9 +279,12 @@ export interface WorkspaceConfig<
 
   /**
    * Enable BM25 keyword search.
-   * Pass true for defaults, or a BM25Config object for custom parameters.
+   * Pass `true` for defaults, or an object for custom parameters.
+   * The `tokenize` field controls how text is split into tokens —
+   * supply a custom `splitPattern` (e.g. `/[\s\p{P}]+/u`) to handle
+   * CJK or other non-Latin scripts that the default `\w`-based splitter drops.
    */
-  bm25?: boolean | BM25Config;
+  bm25?: boolean | (BM25Config & { tokenize?: TokenizeOptions });
 
   /**
    * Custom index name for the vector store.
@@ -659,7 +662,8 @@ export class Workspace<
       this._searchEngine = new SearchEngine({
         bm25: config.bm25
           ? {
-              bm25: typeof config.bm25 === 'object' ? config.bm25 : undefined,
+              bm25: typeof config.bm25 === 'object' ? { k1: config.bm25.k1, b: config.bm25.b } : undefined,
+              tokenize: typeof config.bm25 === 'object' ? config.bm25.tokenize : undefined,
             }
           : undefined,
         vector:

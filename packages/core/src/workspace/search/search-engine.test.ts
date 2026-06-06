@@ -905,6 +905,46 @@ Third line has learning too`;
   });
 });
 
+describe('SearchEngine – bm25.tokenize forwarding (CJK / non-Latin support)', () => {
+  it('should index and retrieve CJK content when a custom splitPattern is provided', async () => {
+    // The default tokenizer uses \w which strips CJK characters.
+    // Supplying a whitespace-only splitPattern preserves them.
+    const engine = new SearchEngine({
+      bm25: {
+        tokenize: {
+          splitPattern: /\s+/,
+          removePunctuation: false,
+          lowercase: false,
+          minLength: 1,
+        },
+      },
+    });
+
+    await engine.index({ id: 'ja-doc', content: '東京 タワー 観光' });
+    await engine.index({ id: 'en-doc', content: 'london tower tourism' });
+
+    const results = await engine.search('東京');
+
+    expect(results.length).toBeGreaterThan(0);
+    expect(results[0]?.id).toBe('ja-doc');
+    // The English document should not match the CJK query.
+    expect(results.find(r => r.id === 'en-doc')).toBeUndefined();
+  });
+
+  it('should NOT find CJK content when default tokenizer is used (regression guard)', async () => {
+    // This documents the default behaviour: without a custom tokenize config,
+    // the \w-based removePunctuation pass strips CJK glyphs so nothing is indexed.
+    const engine = new SearchEngine({ bm25: {} });
+
+    await engine.index({ id: 'ja-doc', content: '東京 タワー 観光' });
+
+    const results = await engine.search('東京');
+
+    // With the default tokenizer CJK terms are dropped, so the document is unsearchable.
+    expect(results).toHaveLength(0);
+  });
+});
+
 describe('splitIntoChunks', () => {
   it('should return a single chunk for short text', () => {
     const chunks = splitIntoChunks('hello world');
