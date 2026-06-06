@@ -3287,3 +3287,26 @@ Verification:
 - `pnpm --filter @mastra/github-signals build` — passed.
 - `pnpm --filter @mastra/github-signals exec tsc --noEmit` — passed.
 - `pnpm run build:mastracode` — passed, 24/24.
+
+### Test recovery: persistent conversation title resume
+
+Selected `Threads: Persistent conversations / switching` as the next High-risk Partial row. The selected gap was the headless `--thread <title>` path after Harness v1 session prefill. `HarnessCompat.listThreads()` projected v1 session-backed rows with session metadata but did not copy the legacy thread title onto the projected row, so headless title resolution could fail even though the persisted legacy thread still had a title.
+
+Changes:
+
+- Updated `mastracode/src/HarnessCompat.ts` so v1 session-backed thread projections include `title: legacyThread?.title` while preserving session metadata and dedupe.
+- Added `mastracode/src/headless-integration.test.ts` coverage proving headless `--thread prefilled-title` resumes a Harness v1 prefilled session by legacy title, opens the v1 session with the current resource, returns one projected thread row, and retains `sessionId`/`modeId`/`modelId` metadata.
+- Added `.changeset/quiet-threads-resume.md` for `mastracode`.
+
+Break-validation evidence:
+
+1. Removed the v1 title projection; the focused test failed because `runHeadless()` returned exit code 1 with `No thread found matching "prefilled-title"`. Reverted.
+2. Made `HarnessCompat.switchThread()` omit the current resource when opening the v1 session; the focused test failed because `harnessV1.session()` received `resourceId: undefined`. Reverted.
+3. Dropped session metadata from projected thread rows; the focused test failed because `sessionId`/`modeId`/`modelId` were missing from `targeted.metadata`. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/headless-integration.test.ts --bail 1 --reporter=dot` — 1 file / 28 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — passed, 24/24.

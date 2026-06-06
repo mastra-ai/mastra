@@ -86,7 +86,7 @@
 - `mastracode/src/tui/components/__tests__/thread-selector.test.ts` — selector preview-cache seeding, delayed/stale preview loading, navigation debounce, and merged preview callbacks.
 - `mastracode/src/tui/commands/__tests__/thread.test.ts` — direct thread command behavior.
 - `mastracode/src/headless.test.ts` — headless thread flags.
-- `mastracode/src/HarnessCompat.test.ts` — v1 session/thread composition, composed state, and legacy switchMode fallback.
+- `mastracode/src/headless-integration.test.ts` — headless `--thread` title resolution, including Harness v1 prefilled session records retaining legacy thread titles and session metadata.
 - `packages/core/src/harness/v1/session.test.ts` and `packages/core/src/storage/domains/harness/inmemory.test.ts` — owner ID propagation, deterministic session records, clone/load paths, and immutable in-memory session record copies.
 - `packages/core/src/harness/thread-locking.test.ts` — lock acquire/release ordering, create/switch/select, and failure recovery.
 - `mastracode/src/tui/__tests__/event-dispatch.test.ts` — `thread_changed`/`thread_created` cleanup for tasks, active plan, sandbox allowed paths, `taskToolInsertIndex`, task progress, goal metadata, and non-ephemeral state preservation.
@@ -96,7 +96,6 @@
 
 - Restart TUI after streamed messages/tools/tasks and verify reconstructed UI/status.
 - Thread switch resets ephemeral tasks/plan/sandbox but reloads persisted metadata.
-- Headless `--continue` / `--thread title` after Harness v1 session prefill.
 - MC-level test that core thread lock conflicts reach the TUI lock prompt across real process-style locks.
 - Startup auto-resume test for same-resource worktrees: strict `projectPath`, legacy birthtime fallback, and retroactive tagging.
 
