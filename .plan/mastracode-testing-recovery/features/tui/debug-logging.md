@@ -62,12 +62,11 @@
 
 ## Existing tests
 
-- `mastracode/src/utils/__tests__/debug-log.test.ts` — 8 tests covering no-op below cap, truncation above cap, newline-boundary truncation, missing file handling, default/`false` suppression, `true`/`1` file logging, and Error stack formatting.
+- `mastracode/src/utils/__tests__/debug-log.test.ts` — covers no-op below cap, truncation above cap, newline-boundary truncation, missing file handling, default/`false` suppression, `true`/`1` file logging, Error stack formatting, and repeated debug sessions appending after truncation without partial lines.
 
 ## Missing tests
 
 - Startup integration test proving `main.ts` and `headless.ts` both call `setupDebugLogging()` exactly once in representative runs.
-- Test proving repeated debug sessions append to the same file after truncation without corrupting partial lines.
 
 ## Known risks / regressions
 

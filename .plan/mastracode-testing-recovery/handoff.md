@@ -382,3 +382,10 @@ Validated `TUI: Shell passthrough streaming` with component-level output renderi
 - Added `mastracode/src/tui/components/__tests__/shell-output.test.ts` covering incremental output rendering, trailing partial-line flush on finish, non-zero failure footer, 20-line collapsed view, 200-line cap, expanded view, and terminal-width truncation.
 - Break validations proven and reverted: dropped partial-line flush on finish; changed collapsed view from 20 lines; removed non-zero exit-code footer.
 - Verification: focused shell-output tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### Debug logging recovery checkpoint
+
+Validated `TUI: Debug logging` with repeated-session debug-log coverage:
+- Extended `mastracode/src/utils/__tests__/debug-log.test.ts` to prove an oversized existing `debug.log` is truncated on setup, then repeated `setupDebugLogging()` calls append warning/error output without overwriting previous complete lines or starting from partial lines.
+- Break validations proven and reverted: skipped startup truncation before append; opened the debug log with write mode instead of append; stopped redirecting warnings into `debug.log`.
+- Verification: focused debug-log tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
