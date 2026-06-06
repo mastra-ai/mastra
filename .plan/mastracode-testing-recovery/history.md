@@ -3310,3 +3310,24 @@ Verification:
 - `pnpm --filter ./mastracode check` — passed.
 - `pnpm --filter ./mastracode lint` — passed.
 - `pnpm run build:mastracode` — passed, 24/24.
+
+### Test recovery: resource-scoped headless thread selection
+
+Selected `Threads: Resource ID switching` as the next High-risk Partial row. The selected gap was the headless contract combining `--resource-id`, `--thread`, and `--continue` across multiple resource scopes. Existing tests covered parser behavior and TUI command mocks, but not storage-backed headless selection across duplicate thread titles and latest-thread resume semantics.
+
+Changes:
+
+- Added `mastracode/src/headless-integration.test.ts` coverage that creates threads in `resource-a` and `resource-b`, including duplicate `shared-title` threads, then proves `--resource-id resource-b --thread shared-title` resumes the `resource-b` thread and `--resource-id resource-a --continue` resumes the latest `resource-a` thread rather than an older same-resource thread or a recently updated different-resource thread.
+
+Break-validation evidence:
+
+1. Skipped `harness.setResourceId()` for `--resource-id`; the focused test failed because the harness stayed in `resource-a` when `resource-b` was requested. Reverted.
+2. Made `--continue` call `listThreads({ allResources: true })`; the focused test failed because it resumed the recently updated `resource-b` thread while `resource-a` was active. Reverted.
+3. Reversed the `--continue` updatedAt sort; the focused test failed because it resumed the older `resource-a` thread instead of the latest one. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/headless-integration.test.ts --bail 1 --reporter=dot` — 1 file / 29 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — passed, 24/24 cached.

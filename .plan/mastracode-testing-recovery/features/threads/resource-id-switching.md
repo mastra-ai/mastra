@@ -66,11 +66,11 @@
 - `packages/core/src/harness/resource-id.test.ts` — default resource ID behavior and known-resource discovery from stored threads.
 - `mastracode/src/tui/commands/__tests__/resource.test.ts` — `/resource` info display, same-resource no-op, latest-thread resume, no-thread pending-new-thread path, and reset behavior.
 - `mastracode/src/headless.test.ts` — headless thread/resource argument parsing coverage.
+- `mastracode/src/headless-integration.test.ts` — headless `--resource-id` with `--thread` and `--continue` across two resource scopes, including duplicate titles and latest-thread selection within the active resource.
 
 ## Missing tests
 
 - End-to-end TUI test switching resources after a thread has streamed tool/task output, proving all transient projections reset and persisted history reloads correctly.
-- Headless integration test combining `--resource-id`, `--continue`, and `--thread` across two resource scopes.
 - Storage-backed test proving `getKnownResourceIds()` works with real persisted thread/session records after process restart.
 
 ## Known risks / regressions
