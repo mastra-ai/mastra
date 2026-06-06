@@ -3216,3 +3216,26 @@ Verification:
 - `pnpm run build:mastracode` — passed, 24/24 cached.
 
 Committed as `9ac78cd1c3` (`test(mastracode): shield signal reload rendering`).
+
+### Test recovery: processor state signals headless output
+
+Selected `Chat: Processor state signals` as the next High-risk Partial row. Existing core and TUI coverage already protects processor state-signal generation, dedupe, browser snapshot/delta computation, streamed TUI rendering, and loaded-history rendering. The selected missing contract for this chunk was the headless automation boundary: `--output-format stream-json` must expose state-signal content parts outside the TUI.
+
+Changes:
+
+- Added `mastracode/src/headless-integration.test.ts` coverage proving stream-json `message_end` events preserve `state_signal` parts alongside assistant text and still emit the final `agent_end` completion marker.
+- Updated `processor-state-signals.md` to mark the headless output gap covered while leaving live browser reload parity and long-session snapshot/delta pruning as remaining gaps.
+- Marked the tracker row validated with evidence commit `94dd46b221`.
+
+Break-validation evidence:
+
+1. Sanitized stream-json `message_end` content to text-only; the focused test failed because the `state_signal` part disappeared. Reverted.
+2. Removed explicit `stream-json` support from the NDJSON emitter; the focused test failed while parsing missing events. Reverted.
+3. Suppressed the `agent_end` event in stream-json output; the focused test failed on the missing completion marker. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/headless-integration.test.ts --bail 1 --reporter=dot` — 1 file / 27 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — passed, 24/24 cached.

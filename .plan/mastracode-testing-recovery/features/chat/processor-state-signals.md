@@ -73,11 +73,11 @@
 - `packages/core/src/browser/processor.test.ts` — browser snapshot, delta, live refresh, and evicted-snapshot behavior.
 - `mastracode/src/tui/__tests__/render-messages.test.ts` — loaded history renders state/reactive signals and hides GitHub subscription operation signals.
 - `mastracode/src/tui/handlers/__tests__/message.test.ts` — streamed reactive/state signal rendering and inline-boundary ordering.
+- `mastracode/src/headless-integration.test.ts` — `--output-format stream-json` keeps state-signal content parts visible in NDJSON message events and still emits the completion marker.
 
 ## Missing tests
 
 - End-to-end Mastra Code run with a live browser producing state deltas and then reloading the same thread to prove TUI history parity.
-- Headless output regression proving state-signal stream parts are useful/visible outside the TUI.
 - Snapshot/delta pruning regression for very long browser sessions where earlier snapshots fall out of the active message window.
 
 ## Known risks / regressions
