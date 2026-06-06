@@ -2899,3 +2899,26 @@ Verification:
 - `pnpm --filter ./mastracode check` — passed.
 - `pnpm --filter ./mastracode lint` — passed.
 - `pnpm run build:mastracode` — passed, 24/24 tasks.
+
+### Test recovery: headless prompt output-format contracts
+
+Selected `Headless: Prompt mode` as the next High-risk row. Chose the automation output-format gap because scripts depend on stable stdout/stderr behavior: `text` must print only final assistant text, `json` must print one final summary object, and `stream-json` must print newline-delimited runtime Harness events.
+
+Added coverage in `mastracode/src/headless-integration.test.ts`:
+
+- `--output-format text` asserts stdout is exactly the final assistant response plus newline and stderr stays empty for a simple run.
+- `--output-format json` asserts stdout contains one final summary object with assistant text, completion reason, thread id, and empty tool arrays, with no event `type` field.
+- `--output-format stream-json` asserts stdout is parseable NDJSON containing runtime events including `agent_start`, assistant `message_end`, and `agent_end`, without collapsing to the final text summary shape.
+
+Break-validation evidence:
+
+1. Disabled text output buffering; focused output-format tests failed because text mode produced empty stdout. Reverted.
+2. Treated `--output-format json` like stream-json; focused output-format tests failed because JSON mode emitted 16 event lines instead of one summary object. Reverted.
+3. Disabled stream-json event emission; focused output-format tests failed parsing missing NDJSON events. Reverted.
+
+Verification:
+
+- `env -u OPENAI_API_KEY -u OPENAI_BASE_URL pnpm --filter ./mastracode exec vitest --run src/headless-integration.test.ts --bail 1 --reporter=dot` — 1 file / 26 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — passed, 24/24 tasks.
