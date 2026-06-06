@@ -3544,3 +3544,31 @@ Verification:
 Commits:
 
 - `5cdb8f0bf9` — `test(mastracode): shield lsp language ids` (pushed to `origin/tests/mc`).
+
+### Test recovery: Workspace-backed coding tools custom workspace startup
+
+Selected `Tools: Workspace-backed coding tools` as the next High-risk row. Chose the Mastra Code config-boundary gap because the feature card listed missing coverage for `createMastraCode({ workspace })` passing a custom workspace through instead of falling back to the dynamic local workspace.
+
+Changes:
+
+- Extended `mastracode/src/__tests__/index.test.ts`.
+- Added a startup regression shield proving custom `workspace` config is passed into Harness unchanged and does not invoke the default workspace factory.
+- Added a companion fallback assertion proving no-override startup still passes a lazy workspace factory into Harness.
+- Updated the workspace-tools feature card and recovery tracker row.
+
+Break-validation evidence:
+
+1. Ignored `config.workspace` and always passed `getDynamicWorkspace`; the custom-workspace startup test failed.
+2. Dropped the default workspace fallback; the no-override startup test failed because Harness received no workspace factory.
+3. Eagerly invoked `getDynamicWorkspace()` during startup; startup crashed before request context existed.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/__tests__/index.test.ts --reporter=dot --bail=1` — 1 file / 20 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — 24/24 tasks passed.
+
+Commits:
+
+- `7a36716a1f` — `test(mastracode): shield custom workspace startup` (ready to push).
