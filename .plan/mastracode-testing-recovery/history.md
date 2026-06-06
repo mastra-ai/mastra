@@ -3648,3 +3648,10 @@ Validated `Integrations: Core Harness API and reference docs` with a `createMast
 - Extended `mastracode/src/__tests__/index.test.ts` to prove caller-supplied memory is passed through to Harness without invoking the default dynamic-memory factory, while the configured `configDir` still owns storage, MCP, hooks, and runtime state even when `initialState.configDir` conflicts.
 - Break validations proven and reverted: ignored caller memory; defaulted state `configDir` while custom memory was present; allowed `initialState.configDir` to override configured `configDir`.
 - Verification: focused startup tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### Browser automation recovery checkpoint
+
+Validated `Integrations: Browser automation` with a direct `/browser on` command shield, committed as `a4004fcac4`:
+- Added `mastracode/src/tui/commands/__tests__/browser.test.ts` proving enabled settings create a browser instance, attach it to all mode agents (including state-derived agents), persist `activeBrowserSettings`, save settings, and write profile-provider metadata.
+- Break validations proven and reverted: created browser but skipped agent/state attachment; skipped `activeBrowserSettings` state write; resolved dynamic mode agents without current Harness state.
+- Verification: focused browser command test, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.

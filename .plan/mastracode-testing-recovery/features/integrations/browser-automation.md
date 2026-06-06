@@ -70,10 +70,11 @@
 - `packages/core/src/agent/__tests__/browser.test.ts` — browser getter, execution context injection, thread-aware session IDs, and degraded state lookup.
 - `packages/core/src/browser/browser.test.ts` — Chrome lock-file cleanup and process-group kill helper behavior for profile-backed browser launches.
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — `/browser` command dispatch is mocked in command routing coverage.
+- `mastracode/src/tui/commands/__tests__/browser.test.ts` — direct `/browser on` shield proving enabled settings create a browser, attach it to static and state-derived mode agents, record `activeBrowserSettings`, and persist profile provider metadata.
 
 ## Missing tests
 
-- Direct `/browser` command/wizard tests for provider selection, Browserbase requirements, CDP/profile/executable mutual exclusion, clear/export flows, profile provider mismatch warnings, and saved settings.
+- Additional direct `/browser` command/wizard tests for provider selection, Browserbase requirements, CDP/profile/executable mutual exclusion, clear/export flows, profile provider mismatch warnings, and saved settings.
 - Startup regression proving saved browser settings create a browser and set `activeBrowserSettings`.
 - TUI status/config-drift tests for profile provider mismatch warnings.
 - End-to-end agent run proving browser tools/context are available from saved settings in Mastra Code.

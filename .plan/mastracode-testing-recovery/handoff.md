@@ -257,3 +257,9 @@ Break validations: dropping `config.mcpServers` fails the new startup test; igno
 Validated the `createMastraCode({ memory, configDir })` API boundary, committed as `a647f1747f`. The startup test proves caller-supplied memory passes through to Harness without using the default dynamic memory factory, while `configDir` still controls storage, MCP, hooks, and runtime state even when `initialState.configDir` conflicts.
 
 Break validations: ignoring caller memory fails the startup test; defaulting state `configDir` while custom memory is present fails the startup test; allowing `initialState.configDir` to override configured `configDir` fails the startup test. Final verification passed: focused startup tests, typecheck, lint, and `pnpm run build:mastracode`.
+
+### Integrations: Browser automation
+
+Validated the live `/browser on` attach boundary, committed as `a4004fcac4`. The new direct command test proves enabled browser settings create a browser instance, attach it to static and state-derived mode agents, record `activeBrowserSettings`, save settings, and write profile-provider metadata.
+
+Break validations: skipping agent/state attachment fails the command test; skipping `activeBrowserSettings` fails the command test; resolving dynamic mode agents without current Harness state fails the command test. Final verification passed: focused browser command test, typecheck, lint, and `pnpm run build:mastracode`.
