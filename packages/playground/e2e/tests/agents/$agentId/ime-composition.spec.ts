@@ -98,7 +98,7 @@ test('Enter during IME composition does not submit, Enter after composition does
   await page.keyboard.press('Enter');
 
   await expect(page).not.toHaveURL(/\/chat\/new/, { timeout: 20000 });
-  await expect(page.getByTestId('thread-wrapper').getByText('hello')).toBeVisible({ timeout: 20000 });
+  await expect(page.getByTestId('thread-wrapper').getByText('hello').first()).toBeVisible({ timeout: 20000 });
 });
 
 test('Enter after IME switch (no compositionend) still submits — #16464 regression', async () => {
@@ -160,5 +160,5 @@ test('Enter after IME switch (no compositionend) still submits — #16464 regres
   await page.keyboard.press('Enter');
 
   await expect(page).not.toHaveURL(/\/chat\/new/, { timeout: 20000 });
-  await expect(page.getByTestId('thread-wrapper').getByText('hello')).toBeVisible({ timeout: 20000 });
+  await expect(page.getByTestId('thread-wrapper').getByText('hello').first()).toBeVisible({ timeout: 20000 });
 });

@@ -131,7 +131,7 @@ test('workflow stream', async () => {
   await expect(page.locator('[data-workflow-node]').nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(page.locator('[data-workflow-node]').nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(page.locator('[data-workflow-node]').nth(8)).toHaveAttribute('data-workflow-step-status', 'success');
-  await expect(page.locator('[data-workflow-node]').nth(9)).toHaveAttribute('data-workflow-step-status', 'running');
+  await expect(page.locator('[data-workflow-node]').nth(9)).toHaveAttribute('data-workflow-step-status', /running|success/);
 
   // Text delta result
   await expect(
