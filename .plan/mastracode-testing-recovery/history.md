@@ -3359,3 +3359,29 @@ Verification:
 Commits:
 
 - `b2aff24866` — `fix(mastracode): preserve v1 session model on thread switch` (pushed to `origin/tests/mc`).
+
+### Test recovery: custom provider model catalog merge
+
+Selected `Models: Custom OpenAI-compatible providers` as the next High-risk row. Chose the Harness `listAvailableModels()` gap because MastraCode custom OpenAI-compatible providers depend on this core hook to surface provider models in model selectors and OM selectors.
+
+Changes:
+
+- Added `packages/core/src/harness/list-available-models.test.ts`.
+- The test proves custom catalog entries merge into the registry-backed model list, custom entries can override duplicate built-in IDs such as `openai/gpt-4o`, external model use counts are applied to custom entries, and `invalidateAvailableModelsCache()` forces the custom catalog provider to be re-read after provider edits.
+- Updated the custom-provider feature card and recovery tracker row.
+
+Break-validation evidence:
+
+1. Disabled the custom catalog branch in `Harness.listAvailableModels()`; the focused test failed because the built-in OpenAI model was not overridden by the custom provider entry. Reverted.
+2. Changed the model upsert helper to preserve the first duplicate ID instead of overwriting; the focused test failed because the built-in `openai/gpt-4o` entry won over the custom entry. Reverted.
+3. Made `invalidateAvailableModelsCache()` a no-op; the focused test failed because the catalog provider was not called a second time and stale custom models remained cached. Reverted.
+
+Verification:
+
+- `pnpm --filter ./packages/core exec vitest run src/harness/list-available-models.test.ts --reporter=dot` — 1 file / 1 test passed.
+- `pnpm --filter ./packages/core check` — passed.
+- `pnpm build:core` — 12/12 tasks passed.
+
+Commits:
+
+- `418b7a9fda` — `test(core): shield custom model catalog merge` (pushed to `origin/tests/mc`).

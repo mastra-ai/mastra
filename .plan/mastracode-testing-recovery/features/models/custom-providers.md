@@ -71,11 +71,12 @@
 - `mastracode/src/agents/__tests__/model.test.ts` — custom provider routing and harness header forwarding.
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — `/custom-providers` dispatch and analytics tracking.
 - `mastracode/src/tui/commands/__tests__/models-pack.test.ts` — custom provider model availability interactions through model pack flows.
+- `packages/core/src/harness/list-available-models.test.ts` — Harness custom model catalog merge, custom-over-built-in duplicate precedence, use-count merge, and cache invalidation after provider edits.
 
 ## Missing tests
 
 - Full modal flow test for add/edit/delete provider and add/remove model, including invalid URLs and duplicate names.
-- Harness `listAvailableModels()` test covering `customModelCatalogProvider` merge, cache invalidation, use-count merge, and duplicate model IDs.
+- Covered: Harness `listAvailableModels()` custom catalog merge, cache invalidation, use-count merge, and duplicate model IDs (`packages/core/src/harness/list-available-models.test.ts`).
 - `/models` UI test proving custom provider models appear and can be selected/persisted.
 - `/om` selector test proving observer/reflector custom provider choices persist across restart.
 
