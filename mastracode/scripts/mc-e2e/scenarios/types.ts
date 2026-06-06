@@ -1,6 +1,7 @@
 export type ScenarioName =
   | 'startup'
   | 'branch-context-long-name'
+  | 'api-key-prompt'
   | 'automated-chat'
   | 'visible-commands'
   | 'integration-commands'

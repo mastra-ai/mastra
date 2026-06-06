@@ -100,6 +100,7 @@
 - `mastracode/src/tui/commands/__tests__/memory-gateway.test.ts` — Memory Gateway base-URL and stored-key settings flow.
 - `packages/core/src/agent/__tests__/browser.test.ts` and `packages/core/src/browser/browser.test.ts` — core browser context/session and profile cleanup behavior.
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — mocks `/api-keys` slash-command routing.
+- `mastracode/scripts/mc-e2e/scenarios/api-key-prompt.ts` — partial real PTY coverage for `/api-keys`: provider status list, masked add-key dialog, stored-key persistence, and refreshed stored status.
 
 ## Missing tests
 
@@ -107,11 +108,11 @@
 - Reload after `/setup`: footer/runtime model, thread metadata, subagent defaults, and OM defaults all agree.
 - Direct Mastra Code `/om` command regression asserting threshold/caveman changes write both thread settings and `settings.json` global defaults.
 - `/models` activation/import/share/delete/targeted-edit flow through real TUI overlay, not only helper functions.
-- Missing-key model selection flow through real TUI overlay, including storing a key, cancelling, masking the typed value, and preserving env-var precedence.
-- Direct MaskedInput regression for storage connection strings and login/API-key dialogs proving render output is masked while submitted value remains raw.
+- Missing-key model selection flow through real TUI overlay, including storing a key, cancelling, masking the typed value, and preserving env-var precedence; direct `/api-keys` add-key e2e exists but does not cover model-selection-triggered prompts or env precedence.
+- Direct MaskedInput regression for storage connection strings and login dialogs proving render output is masked while submitted value remains raw; `/api-keys` masked input is covered by real PTY e2e.
 - Headless startup with active model pack, custom pack settings, browser settings, and Memory Gateway base URL/env values.
 - Direct `/browser` settings regression for wizard save/clear/export flows, profile/executablePath/CDP mutual exclusion, and startup restore.
-- Direct `/api-keys` settings submenu regression for provider status, key add/delete, and env cleanup.
+- Direct `/api-keys` settings submenu regression for delete and env cleanup; provider status/add/storage is covered by real PTY e2e.
 
 ## Known risks / regressions
 

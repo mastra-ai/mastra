@@ -1,3 +1,4 @@
+import { apiKeyPromptScenario } from './api-key-prompt.js';
 import { automatedChatScenario } from './automated-chat.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
 import { integrationCommandsScenario } from './integration-commands.js';
@@ -14,6 +15,7 @@ export type { McE2eScenario, McE2eScenarioRuntime, ScenarioName } from './types.
 export const scenarios: Record<ScenarioName, McE2eScenario> = {
   startup: startupScenario,
   'branch-context-long-name': branchContextLongNameScenario,
+  'api-key-prompt': apiKeyPromptScenario,
   'automated-chat': automatedChatScenario,
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,

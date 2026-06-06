@@ -3939,3 +3939,27 @@ Verification:
 - `pnpm --filter ./mastracode check` passed.
 - `pnpm --filter ./mastracode lint` passed.
 - `pnpm run build:mastracode` passed.
+
+## 2026-06-06 — API-key masked prompt TUI e2e partial coverage batch
+
+Added `api-key-prompt` checked-in TUI e2e scenario:
+- Opens `/api-keys` through a real PTY and verifies the provider status list.
+- Selects an unset provider, opens the API-key modal dialog, types a fake key, asserts the secret is not rendered, and asserts mask characters are visible.
+- Submits the dialog and verifies the provider status refreshes to stored.
+
+Rows moved from missing e2e to partial e2e:
+- TUI: Interactive prompts and access requests — partial only; ask_user multiline/custom/multi-select queueing and request_access approval flows remain missing.
+- Settings: Onboarding and global settings — partial only; first-run `/setup`, `/models`, OM/global defaults, and reload behavior remain missing.
+
+Break validation:
+- Rendered MaskedInput cleartext -> `api-key-prompt` failed because the serialized terminal contained the fake secret.
+- Skipped opening the API-key dialog on provider select -> `api-key-prompt` failed waiting for `API Key Required`.
+- Skipped stored-key persistence -> `api-key-prompt` failed waiting for the provider to become stored.
+- All intentional breaks were reverted before committing.
+
+Verification:
+- `pnpm --filter ./mastracode run e2e:test api-key-prompt` passed.
+- `pnpm --filter ./mastracode run e2e:test -- --jobs 2` passed: 10/10 scenarios.
+- `pnpm --filter ./mastracode check` passed.
+- `pnpm --filter ./mastracode lint` passed.
+- `pnpm run build:mastracode` passed.
