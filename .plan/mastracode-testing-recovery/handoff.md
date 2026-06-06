@@ -352,3 +352,11 @@ Validated `TUI: Help and shortcuts` with direct `/help` handler coverage and a s
 - Added `.changeset/hungry-mammals-lead.md` for the user-visible help fix.
 - Break validations proven and reverted: removed `/api-keys` from compact help; forced single-mode help rendering; ignored configured shell passthrough label.
 - Verification: focused help tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### Process suspend shortcut recovery checkpoint
+
+Validated `TUI: Process suspend shortcut` with direct editor-routing and setup-lifecycle shields:
+- Added `CustomEditor` coverage proving Ctrl+Z routes to the `suspend` action and Alt+Z routes to `undo` without falling through to the base editor.
+- Extended `setupKeyboardShortcuts` coverage for suspend lifecycle: stop UI, register `SIGCONT`, send `SIGTSTP`, restart/render on continue, guard Windows, recover from `process.kill()` failure, and preserve Alt+Z undo-last-clear semantics.
+- Break validations proven and reverted: routed Ctrl+Z to `undo`; removed `SIGCONT` registration; removed the Windows guard.
+- Verification: focused shortcut/editor tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.

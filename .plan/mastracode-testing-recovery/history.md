@@ -3754,3 +3754,11 @@ Validated `TUI: Help and shortcuts` with direct `/help` handler coverage and a p
 - Fixed compact help drift by adding `/api-keys` to the command list and added a `mastracode` patch changeset.
 - Break validations proven and reverted: removed `/api-keys`, forced single-mode help, and hardcoded default shell label.
 - Verification: `pnpm --filter ./mastracode exec vitest --run src/tui/commands/__tests__/help.test.ts src/tui/components/__tests__/help-overlay.test.ts --bail=1 --reporter=dot`, `pnpm --filter ./mastracode check`, `pnpm --filter ./mastracode lint`, and `pnpm run build:mastracode` all passed.
+
+### Process suspend shortcut recovery checkpoint
+
+Validated `TUI: Process suspend shortcut` with direct tests for the Ctrl+Z/Alt+Z contract:
+- `mastracode/src/tui/components/__tests__/custom-editor.test.ts` now proves Ctrl+Z dispatches `suspend`, Alt+Z dispatches `undo`, and both shortcuts avoid base-editor fallthrough.
+- `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts` now proves the suspend lifecycle (`ui.stop()`, `SIGCONT`, `SIGTSTP`, resume render), Windows guard, failure recovery, and Alt+Z undo-last-clear behavior.
+- Break validations were proven and reverted for wrong Ctrl+Z routing, missing `SIGCONT` registration, and missing Windows guard.
+- Verification passed: focused shortcut/editor tests, `pnpm --filter ./mastracode check`, `pnpm --filter ./mastracode lint`, and `pnpm run build:mastracode`.

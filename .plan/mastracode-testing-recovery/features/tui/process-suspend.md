@@ -60,14 +60,11 @@
 ## Existing tests
 
 - `mastracode/src/tui/components/__tests__/help-overlay.test.ts` — asserts shortcut entries include Ctrl+Z.
-- `mastracode/src/tui/components/__tests__/custom-editor.test.ts` — covers neighboring editor shortcut routing, but no focused Ctrl+Z / Alt+Z assertions were found.
-- `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts` — covers keyboard setup broadly, but no focused suspend/resume assertion was found.
+- `mastracode/src/tui/components/__tests__/custom-editor.test.ts` — covers Ctrl+Z routing to `suspend`, Alt+Z routing to `undo`, and prevents shortcut fallthrough to the base editor.
+- `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts` — covers suspend lifecycle (`ui.stop()`, `SIGCONT` listener, `SIGTSTP`, resume render), Windows guard, `process.kill()` failure recovery, and Alt+Z undo-last-clear behavior.
 
 ## Missing tests
 
-- Unit test that Ctrl+Z invokes the `suspend` action and Alt+Z invokes the `undo` action in `CustomEditor`.
-- Unit test that suspend stops UI, registers one `SIGCONT` listener, sends `SIGTSTP`, and restarts UI on continuation.
-- Unit test for Windows guard and `process.kill()` failure path.
 - Integration test proving active streamed output resumes cleanly after shell `fg`.
 
 ## Known risks / regressions
