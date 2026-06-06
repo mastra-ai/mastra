@@ -4,7 +4,8 @@ export type ScenarioName =
   | 'automated-chat'
   | 'visible-commands'
   | 'integration-commands'
-  | 'report-issue-command';
+  | 'report-issue-command'
+  | 'workspace-commands';
 
 export type McE2eTerminal = {
   getByText: (text: string | RegExp, options?: { full?: boolean; strict?: boolean }) => any;

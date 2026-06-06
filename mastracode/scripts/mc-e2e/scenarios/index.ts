@@ -5,6 +5,7 @@ import { reportIssueCommandScenario } from './report-issue-command.js';
 import { startupScenario } from './startup.js';
 import type { McE2eScenario, ScenarioName } from './types.js';
 import { visibleCommandsScenario } from './visible-commands.js';
+import { workspaceCommandsScenario } from './workspace-commands.js';
 
 export type { McE2eScenario, McE2eScenarioRuntime, ScenarioName } from './types.js';
 
@@ -15,6 +16,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,
   'report-issue-command': reportIssueCommandScenario,
+  'workspace-commands': workspaceCommandsScenario,
 };
 
 export function getScenario(name: ScenarioName): McE2eScenario {

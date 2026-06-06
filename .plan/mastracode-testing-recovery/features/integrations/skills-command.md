@@ -78,10 +78,12 @@
 - `mastracode/src/tools/__tests__/get-allowed-paths.test.ts` — verifies skill paths are returned and merged with sandbox paths for inherited tool contexts.
 - `packages/core/src/workspace/skills/workspace-skills.test.ts` — verifies canonical alias de-duping for list/search/get while preserving distinct same-named local skills as conflicts.
 - `packages/core/src/workspace/skills/skill-versioning.test.ts` — covers versioned and composite skill-source path normalization/routing.
+- `mastracode/scripts/mc-e2e/scenarios/workspace-commands.ts` — real PTY/TUI e2e partial coverage proving `/skills` renders a visible skills/no-skills surface before any message resolves workspace.
 - `packages/core/src/workspace/filesystem/local-filesystem.test.ts`, `workspace.test.ts`, `tools.test.ts`, and `processors/processors/skills.test.ts` — cover symlink allowed roots, workspace skill discovery, tool activation, and prompt-processor de-duping around symlink aliases.
 
 ## Missing tests
 
+- Remaining e2e seeded-skill coverage for `/skills` listing user-invocable skills and `/goal/<skill>` alias activation through real TUI. Baseline `/skills` fallback/list surface is covered by `workspace-commands`.
 - Headless/non-TUI skill activation parity if expected.
 
 ## Known risks / regressions

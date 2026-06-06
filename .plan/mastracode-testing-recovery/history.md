@@ -3857,3 +3857,22 @@ Verification:
 - `pnpm --filter ./mastracode check` passed.
 - `pnpm --filter ./mastracode lint` passed.
 - `pnpm run build:mastracode` passed.
+
+## 2026-06-06 — Workspace/lifecycle TUI e2e batch
+
+Added `workspace-commands` checked-in TUI e2e scenario:
+- Covers real PTY `/skills` visible fallback/list surface before any message has resolved workspace.
+- Covers real PTY `/hooks` visible fallback/status surface with hooks disabled in the hermetic e2e environment.
+
+Tracker state after this batch:
+- 56 total rows.
+- 3 rows validated with covered TUI e2e.
+- 4 rows have partial TUI e2e and remain `needs-follow-up`.
+- 49 rows still have missing TUI e2e.
+
+Verification:
+- `pnpm --filter ./mastracode run e2e:test workspace-commands` passed.
+- `pnpm --filter ./mastracode run e2e:test -- --jobs 2` passed: 7/7 scenarios.
+- `pnpm --filter ./mastracode check` passed.
+- `pnpm --filter ./mastracode lint` passed.
+- `pnpm run build:mastracode` passed.
