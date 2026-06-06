@@ -4,6 +4,7 @@ export type ScenarioName =
   | 'api-key-prompt'
   | 'automated-chat'
   | 'clipboard-image-paste'
+  | 'custom-config-dir'
   | 'file-autocomplete'
   | 'visible-commands'
   | 'integration-commands'
@@ -35,6 +36,7 @@ export type McE2ePrepareContext = {
   appDataDir: string;
   dbPath: string;
   homeDir: string;
+  mastracodeDir: string;
   projectDir: string;
 };
 
@@ -46,6 +48,7 @@ export type McE2eScenario = {
   useOpenAIModel?: boolean;
   aimockFixture?: string;
   env?: (context: McE2ePrepareContext) => Record<string, string>;
+  entrypoint?: (context: McE2ePrepareContext) => string;
   prepare?: (context: McE2ePrepareContext) => Promise<void> | void;
   run: (context: { terminal: McE2eTerminal; runtime: McE2eScenarioRuntime }) => Promise<void>;
 };

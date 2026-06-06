@@ -2,6 +2,7 @@ import { apiKeyPromptScenario } from './api-key-prompt.js';
 import { automatedChatScenario } from './automated-chat.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
 import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
+import { customConfigDirScenario } from './custom-config-dir.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
@@ -24,6 +25,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'api-key-prompt': apiKeyPromptScenario,
   'automated-chat': automatedChatScenario,
   'clipboard-image-paste': clipboardImagePasteScenario,
+  'custom-config-dir': customConfigDirScenario,
   'file-autocomplete': fileAutocompleteScenario,
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,

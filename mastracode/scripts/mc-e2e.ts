@@ -261,17 +261,19 @@ async function prepareScenarioRun({
     appDataDir: isolatedAppDataDir,
     dbPath,
     homeDir: isolatedHome,
+    mastracodeDir,
     projectDir,
   };
   await scenario.prepare?.(scenarioContext);
 
   const branchFixture = scenario.projectFixture === 'long-branch' ? createLongBranchProject(projectDir) : null;
   const launchCwd = branchFixture ? projectDir : mastracodeDir;
+  const scenarioMainFile = scenario.entrypoint?.(scenarioContext) ?? mainFile;
   const usesShellLaunch = launchCwd !== mastracodeDir;
   const programFile = usesShellLaunch ? '/bin/sh' : tsxBin;
   const programArgs = usesShellLaunch
-    ? ['-lc', `cd ${sh(launchCwd)} && exec ${sh(tsxBin)} ${sh(mainFile)}`]
-    : [mainFile];
+    ? ['-lc', `cd ${sh(launchCwd)} && exec ${sh(tsxBin)} ${sh(scenarioMainFile)}`]
+    : [scenarioMainFile];
 
   return {
     ...(aimock
