@@ -397,6 +397,22 @@ describe('CustomEditor image paste handling', () => {
     expect(mocks.superHandleInput).not.toHaveBeenCalled();
   });
 
+  it('wraps Ctrl+V clipboard text in bracketed-paste markers before passing it to the editor', () => {
+    mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'ctrl+v');
+    mocks.getClipboardText.mockReturnValue('pasted text\nsecond line');
+
+    const editor = new CustomEditor({} as any, {} as any);
+    const onImagePaste = vi.fn();
+    editor.onImagePaste = onImagePaste;
+
+    editor.handleInput('ignored');
+
+    expect(mocks.getClipboardImage).toHaveBeenCalledTimes(1);
+    expect(mocks.getClipboardText).toHaveBeenCalledTimes(1);
+    expect(onImagePaste).not.toHaveBeenCalled();
+    expect(mocks.superHandleInput).toHaveBeenCalledWith(`${PASTE_START}pasted text\nsecond line${PASTE_END}`);
+  });
+
   it('supports alt+v as an explicit clipboard paste shortcut', () => {
     mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'alt+v');
     const pastedImage = { data: 'clipboard-image', mimeType: 'image/png' };
