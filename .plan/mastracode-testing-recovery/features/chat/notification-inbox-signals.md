@@ -70,7 +70,7 @@
 
 - `packages/core/src/notifications/notifications.test.ts` — storage filtering, coalescing, signal creation, inbox tool actions, delivery policy, dispatcher, and workflow helper.
 - `packages/core/src/agent/__tests__/agent-signals.test.ts` — `sendNotificationSignal()` idle delivery, rejection persistence, active priority batching, urgent overrides, and summary delivery.
-- `mastracode/src/agents/extra-tools.test.ts` — tool registration, category, and tool-guidance inclusion.
+- `mastracode/src/agents/extra-tools.test.ts` — tool registration, category, tool-guidance inclusion, and Mastra Code wrapper coverage proving `notification_inbox read` reaches the notifications storage domain, delivers unread details, and marks records seen for the current thread.
 - `mastracode/src/tui/__tests__/render-messages.test.ts` — loaded-history notification and summary rendering.
 - `mastracode/src/tui/handlers/__tests__/message.test.ts` — streamed notification and summary rendering.
 

@@ -3239,3 +3239,26 @@ Verification:
 - `pnpm --filter ./mastracode check` — passed.
 - `pnpm --filter ./mastracode lint` — passed.
 - `pnpm run build:mastracode` — passed, 24/24 cached.
+
+### Test recovery: notification inbox read wrapper
+
+Selected `Chat: Notification inbox signals` as the next High-risk Partial row. Existing core coverage already protects the raw notification storage/tool APIs and TUI notification rendering. The selected missing boundary for this chunk was Mastra Code's dynamic-tool wrapper: after a notification summary, `notification_inbox read` must resolve against the current thread, reach the notifications storage domain through the lazy adapter, deliver unread details, and mark the record seen.
+
+Changes:
+
+- Extended `mastracode/src/agents/extra-tools.test.ts` with coverage for `notification_inbox read` through `createDynamicTools()`.
+- The test proves the wrapper calls `getNotification({ threadId, id })`, sends the notification signal to the current thread/resource, and updates the notification record to `seen` with the delivered signal id.
+- Updated `notification-inbox-signals.md` and the recovery tracker with the new evidence while leaving full model-driven e2e and real-storage persistence/reload gaps listed for future work.
+
+Break-validation evidence:
+
+1. Broke the lazy `getNotification` proxy; the focused test failed before delivery because the notification could not be found. Reverted.
+2. Broke the lazy `updateNotification` proxy; the focused test failed because the seen-status update never reached the notifications storage domain. Reverted.
+3. Bypassed the lazy notifications-domain adapter and passed the composite store directly to the inbox tool; the focused test failed because `storage.getNotification` was missing. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/agents/extra-tools.test.ts --bail 1 --reporter=dot` — 1 file / 20 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — passed, 24/24 cached.
