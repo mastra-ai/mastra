@@ -1,0 +1,22 @@
+{
+  "name": "twzrd-agent-intel",
+  "version": "0.0.1",
+  "description": "Trust verification for Mastra agents using TWZRD Agent Intel MCP",
+  "private": true,
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx --watch src/index.ts"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "^1.0.0",
+    "@mastra/core": "^0.1.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "mcp": "^1.0.0",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0",
+    "@types/node": "^22.0.0"
+  }
+}
