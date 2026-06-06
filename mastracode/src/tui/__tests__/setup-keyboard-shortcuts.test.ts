@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('node:child_process', () => ({
@@ -14,6 +16,8 @@ const autocompleteProviders: Array<{
     description: string;
     getArgumentCompletions?: (prefix: string) => Array<{ value: string }>;
   }>;
+  cwd: string;
+  fdPath: string | null | undefined;
 }> = [];
 
 vi.mock('@mariozechner/pi-tui', () => ({
@@ -24,8 +28,10 @@ vi.mock('@mariozechner/pi-tui', () => ({
         description: string;
         getArgumentCompletions?: (prefix: string) => Array<{ value: string }>;
       }>,
+      cwd: string,
+      fdPath?: string,
     ) {
-      autocompleteProviders.push({ commands });
+      autocompleteProviders.push({ commands, cwd, fdPath });
     }
   },
   Container: class {},
@@ -62,6 +68,7 @@ function setPlatform(platform: NodeJS.Platform) {
 
 afterEach(() => {
   Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
+  vi.mocked(execFileSync).mockReset();
   vi.restoreAllMocks();
 });
 
@@ -98,6 +105,9 @@ function createState(isRunning: boolean) {
     userInitiatedAbort: false,
     lastCtrlCTime: 0,
     lastClearedText: '',
+    customSlashCommands: [],
+    skillCommands: [],
+    goalSkillCommands: [],
     hideThinkingBlock: false,
     toolOutputExpanded: false,
     allToolComponents: [],
@@ -168,6 +178,62 @@ describe('setupKeyboardShortcuts', () => {
     expect(commandNames).toContain('goal/deploy');
     expect(commandNames).toContain('goal/review');
     expect(commandNames.slice(-5)).toEqual(['/deploy', 'goal/deploy', '/ship', 'skill/lint-fix', 'goal/review']);
+  });
+
+  it('passes detected fd path and cwd into the autocomplete provider', () => {
+    autocompleteProviders.length = 0;
+    vi.mocked(execFileSync).mockReturnValue('/opt/homebrew/bin/fd\n' as any);
+    const { state, editor } = createState(false);
+
+    setupAutocomplete(state);
+
+    expect(editor.setAutocompleteProvider).toHaveBeenCalledTimes(1);
+    expect(execFileSync).toHaveBeenCalledWith('which', ['fd'], { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+    expect(autocompleteProviders[0]?.cwd).toBe(process.cwd());
+    expect(autocompleteProviders[0]?.fdPath).toBe('/opt/homebrew/bin/fd');
+  });
+
+  it('falls back to fdfind and keeps slash autocomplete when fd is unavailable', () => {
+    autocompleteProviders.length = 0;
+    vi.mocked(execFileSync).mockImplementation((_command, args) => {
+      if (args?.[0] === 'fd') throw new Error('missing fd');
+      return '/usr/bin/fdfind\n' as any;
+    });
+    const { state } = createState(false);
+
+    setupAutocomplete(state);
+
+    const commandNames = autocompleteProviders[0]?.commands.map(command => command.name) ?? [];
+    expect(execFileSync).toHaveBeenNthCalledWith(1, 'which', ['fd'], {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    expect(execFileSync).toHaveBeenNthCalledWith(2, 'which', ['fdfind'], {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    expect(autocompleteProviders[0]?.fdPath).toBe('/usr/bin/fdfind');
+    expect(commandNames[0]).toBe('new');
+    expect(commandNames).toContain('help');
+  });
+
+  it('omits fd path but preserves command autocomplete when no file search binary is found', () => {
+    autocompleteProviders.length = 0;
+    vi.mocked(execFileSync).mockImplementation(() => {
+      throw new Error('missing binary');
+    });
+    const { state, editor } = createState(false);
+    state.customSlashCommands = [{ name: 'ship', description: 'Ship release', template: '', sourcePath: '' }];
+
+    setupAutocomplete(state);
+
+    const commandNames = autocompleteProviders[0]?.commands.map(command => command.name) ?? [];
+    expect(editor.setAutocompleteProvider).toHaveBeenCalledTimes(1);
+    expect(execFileSync).toHaveBeenCalledTimes(2);
+    expect(autocompleteProviders[0]?.cwd).toBe(process.cwd());
+    expect(autocompleteProviders[0]?.fdPath).toBeNull();
+    expect(commandNames).toContain('help');
+    expect(commandNames).toContain('/ship');
   });
 
   it('refreshes autocomplete after workspace skills resolve', async () => {
