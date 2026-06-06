@@ -948,6 +948,116 @@ describe('GithubSignals', () => {
     });
   });
 
+  it('expires cached author permissions and reloads them after the TTL', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+    const thread: StorageThreadType = {
+      id: 'thread-permission-cache-ttl',
+      resourceId: 'resource-permission-cache-ttl',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 123,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    let snapshotIndex = 0;
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => {
+        snapshotIndex += 1;
+        return {
+          title: 'Add GitHub signals',
+          state: 'open',
+          githubUpdatedAt: `2026-01-01T00:0${snapshotIndex}:00.000Z`,
+          contentHash: `cache-ttl-hash-${snapshotIndex}`,
+          latestCommentAuthor: 'contributor',
+        };
+      }),
+    };
+    const permissionResolver = { getPermission: vi.fn(async () => 'write' as const) };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({ threadStore, syncClient, permissionResolver });
+    processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
+
+    await processor.syncThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    await processor.syncThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(permissionResolver.getPermission).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(new Date('2026-01-01T00:05:01.000Z'));
+    await processor.syncThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(permissionResolver.getPermission).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not cache transient author permission lookup failures', async () => {
+    const thread: StorageThreadType = {
+      id: 'thread-permission-cache-failure',
+      resourceId: 'resource-permission-cache-failure',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {
+        mastra: {
+          [GITHUB_SIGNALS_METADATA_KEY]: {
+            subscriptions: [
+              {
+                owner: 'mastra-ai',
+                repo: 'mastra',
+                number: 123,
+                subscribedAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+                lastSubscribeSignalId: 'signal-1',
+              },
+            ],
+          },
+        },
+      },
+    };
+    const threadStore = createThreadStore(thread);
+    let snapshotIndex = 0;
+    const syncClient: GithubSignalsSyncClient = {
+      syncPullRequest: vi.fn(async () => ({ ok: true })),
+      getPullRequestSnapshot: vi.fn(async () => {
+        snapshotIndex += 1;
+        return {
+          title: 'Add GitHub signals',
+          state: 'open',
+          githubUpdatedAt: `2026-01-01T00:0${snapshotIndex}:00.000Z`,
+          contentHash: `cache-failure-hash-${snapshotIndex}`,
+          latestCommentAuthor: 'contributor',
+        };
+      }),
+    };
+    const permissionResolver = {
+      getPermission: vi.fn(async () => {
+        if (permissionResolver.getPermission.mock.calls.length === 1) throw new Error('temporary failure');
+        return 'write' as const;
+      }),
+    };
+    const sendNotificationSignal = vi.fn(async () => ({ accepted: true }));
+    const processor = new GithubSignals({ threadStore, syncClient, permissionResolver });
+    processor.addAgent({ sendSignal: vi.fn(), sendNotificationSignal });
+
+    await processor.syncThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+
+    await processor.syncThreadNow({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(permissionResolver.getPermission).toHaveBeenCalledTimes(2);
+    expect(sendNotificationSignal).toHaveBeenCalledTimes(1);
+  });
+
   it('polls subscribed PRs on the configured interval and updates thread metadata', async () => {
     vi.useFakeTimers();
     const thread: StorageThreadType = {

@@ -42,6 +42,7 @@ export const GITHUB_SIGNALS_METADATA_KEY = 'githubSignals';
 export type GithubPermission = 'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none';
 const DEFAULT_AUTHORIZED_PERMISSIONS: GithubPermission[] = ['admin', 'maintain', 'write'];
 const DEFAULT_AUTHORIZED_BOTS = ['coderabbitai[bot]', 'devin-ai-integration[bot]'];
+const PERMISSION_CACHE_TTL_MS = 5 * 60 * 1000;
 
 /** Notification kinds driven by comment/review activity that should be gated by author permission. */
 const AUTHOR_GATED_NOTIFICATION_KINDS = new Set(['pull-request-activity', 'pull-request-review-activity']);
@@ -997,7 +998,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   readonly #syncClient: GithubSignalsSyncClient;
   readonly #repositoryResolver: GithubRepositoryResolver;
   readonly #polling = new Map<string, GithubPollingState>();
-  readonly #permissionCache = new Map<string, GithubPermission | undefined>();
+  readonly #permissionCache = new Map<string, { permission: GithubPermission; expiresAt: number }>();
   #agent?: GithubSignalAgent;
   #agentOptions: GithubSignalAgentOptions = {};
   #subscriptionsChangedHandler?: GithubSubscriptionsChangedHandler;
@@ -1680,7 +1681,10 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
 
   async #loadAuthorPermission(owner: string, repo: string, user: string): Promise<GithubPermission | undefined> {
     const cacheKey = `${owner}/${repo}:${user.toLowerCase()}`;
-    if (this.#permissionCache.has(cacheKey)) return this.#permissionCache.get(cacheKey);
+    const cached = this.#permissionCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return cached.permission;
+    if (cached) this.#permissionCache.delete(cacheKey);
+
     try {
       let permission: GithubPermission | undefined;
       if (this.#options.permissionResolver) {
@@ -1699,10 +1703,12 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           ? (raw as GithubPermission)
           : undefined;
       }
-      this.#permissionCache.set(cacheKey, permission);
+      if (permission) {
+        this.#permissionCache.set(cacheKey, { permission, expiresAt: Date.now() + PERMISSION_CACHE_TTL_MS });
+      }
       return permission;
     } catch {
-      this.#permissionCache.set(cacheKey, undefined);
+      this.#permissionCache.delete(cacheKey);
       return undefined;
     }
   }
