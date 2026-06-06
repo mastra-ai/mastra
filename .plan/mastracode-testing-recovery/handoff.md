@@ -275,3 +275,9 @@ Break validations: skipping scheduler notifications fails subscribe tests; dropp
 Validated the skill-command workspace-resolution boundary, committed and pushed as `73952ec0ff`. The new `/skills` direct command test proves dynamic workspaces resolve before the first message and still hide `user-invocable: false` skills. The dispatcher test proves `/goal/<skill>` aliases resolve the dynamic workspace before reading goal-enabled skill metadata.
 
 Break validations: removing `/goal/<skill>` eager resolution fails the dispatcher test; disabling `/skills` eager resolution fails the direct command test; leaking non-user-invocable skills into `/skills` fails the list assertion. Final verification passed: focused skills/command-dispatch tests, MastraCode typecheck, lint, and `pnpm run build:mastracode`.
+
+### Integrations: Lifecycle hooks
+
+Validated lifecycle hook config and `/hooks` status behavior, committed and pushed as `d06c80ab3c`. The new config test proves global-before-project merge order, custom `configDir`, invalid config filtering, and `Notification` hook loading. The new `/hooks` command test proves reload/no-config/status output, including `Notification` hooks and configured project/global paths.
+
+Break validations: dropping `Notification` from config loading fails the loader test; dropping `Notification` from status output fails the command test; reversing global/project merge order fails the config test. Final verification passed: focused hook config/command tests, MastraCode typecheck, lint, and `pnpm run build:mastracode`.

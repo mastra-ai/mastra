@@ -3670,3 +3670,12 @@ Validated `Integrations: Skills command and workspace resolution` with direct sl
 - Fixed `/goal/<skill>` aliases to resolve the dynamic workspace before the first message, matching `/skills` behavior, and added dispatcher coverage for that first-message path.
 - Break validations proven and reverted: removed `/goal/<skill>` eager workspace resolution; disabled `/skills` eager workspace resolution; leaked non-user-invocable skills into `/skills`.
 - Verification: focused skills/command-dispatch tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### Lifecycle hooks recovery checkpoint
+
+Validated `Integrations: Lifecycle hooks` with hook config and `/hooks` command shields, committed as `d06c80ab3c`:
+- Added `mastracode/src/hooks/config.test.ts` proving global hooks run before project hooks, custom `configDir` paths are honored, invalid config entries are ignored, and `Notification` hooks load through the same config path as other lifecycle events.
+- Added `mastracode/src/tui/commands/__tests__/hooks.test.ts` proving `/hooks` handles missing managers, reload, no-config guidance, configured paths, and `Notification` status rendering.
+- Fixed config loading and status display to include `Notification` hooks.
+- Break validations proven and reverted: removed `Notification` from config events; removed `Notification` from `/hooks` status events; reversed global/project merge order.
+- Verification: focused hook config/command tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.

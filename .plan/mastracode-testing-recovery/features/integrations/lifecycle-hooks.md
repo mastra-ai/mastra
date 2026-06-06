@@ -65,13 +65,13 @@
 
 - `mastracode/src/tui/__tests__/mastra-tui-hooks.test.ts` — verifies `UserPromptSubmit` allow/block behavior, `Stop` reasons, and caffeinate cleanup interactions.
 - `mastracode/src/agents/tools.test.ts` — verifies `PreToolUse` / `PostToolUse` wrapping, block behavior, and post-hook execution on tool errors.
+- `mastracode/src/hooks/config.test.ts` — verifies hook config loading, invalid config handling, global-before-project merge order, custom `configDir`, and `Notification` hook loading.
+- `mastracode/src/tui/commands/__tests__/hooks.test.ts` — verifies `/hooks` no-manager/no-config guidance, reload, configured paths, and `Notification` status rendering.
 
 ## Missing tests
 
-- Direct hook config/executor tests for global+project merge order, invalid config handling, JSON stdout parsing, timeouts, and exit-code-2 blocking.
-- `/hooks` command tests for status, reload, and no-config guidance.
+- Direct hook executor tests for JSON stdout parsing, timeouts, and exit-code-2 blocking.
 - Headless behavior decision test: either prove TUI-only lifecycle hooks are intentional or add parity.
-- Notification hook loading appears type-supported but was not verified through config loading in this pass.
 
 ## Known risks / regressions
 
