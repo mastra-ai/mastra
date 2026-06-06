@@ -1,5 +1,17 @@
 # @mastra/s3vectors
 
+## 1.0.6-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#17521](https://github.com/mastra-ai/mastra/pull/17521))
+  - Updated dependency [`@aws-sdk/client-s3vectors@^3.1057.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-s3vectors/v/3.1057.0) (from `^3.1040.0`, in `dependencies`)
+
+- dependencies updates: ([#17600](https://github.com/mastra-ai/mastra/pull/17600))
+  - Updated dependency [`@aws-sdk/client-s3vectors@^3.1058.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-s3vectors/v/3.1058.0) (from `^3.1057.0`, in `dependencies`)
+- Updated dependencies [[`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`e9be4e7`](https://github.com/mastra-ai/mastra/commit/e9be4e747ec3d8b65548bff92f9377db06105376), [`d53cfc2`](https://github.com/mastra-ai/mastra/commit/d53cfc2c7f8d78343a4aa84ec4e129ba25f3325e), [`65799d4`](https://github.com/mastra-ai/mastra/commit/65799d4d549e5ebb9c848fbe3f51ac090f64becf), [`c268c89`](https://github.com/mastra-ai/mastra/commit/c268c89f4c63a93ee474d3cffdf3ea60bf00d4f2), [`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`0c72f03`](https://github.com/mastra-ai/mastra/commit/0c72f032abb13254df5a7856d64be2f207b8006d), [`3b45ea9`](https://github.com/mastra-ai/mastra/commit/3b45ea95015557a6cb9d70dc5252af54ab1b78ac), [`f084be1`](https://github.com/mastra-ai/mastra/commit/f084be1fcbe33ad7480913e44d6130c421c0976f)]:
+  - @mastra/core@1.42.0-alpha.0
+
 ## 1.0.5
 
 ### Patch Changes

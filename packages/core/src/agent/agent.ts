@@ -1165,6 +1165,9 @@ export class Agent<
       type: 'processor',
       options: {
         validateInputs: false,
+        // Internal processor workflows are transient and non-resumable, so they must never
+        // write snapshot rows to the user's storage (mirrors the execution-workflow fix in #17344).
+        shouldPersistSnapshot: () => false,
         tracingPolicy: {
           // mark all workflow spans related to processor execution as internal
           internal: InternalSpans.WORKFLOW,
@@ -1200,6 +1203,14 @@ export class Agent<
     }
 
     const committedWorkflow = workflow.commit() as T;
+    // Register the parent Mastra instance on this internal processor workflow so that its
+    // createRun() -> getWorkflowRunById() can read configured storage instead of logging
+    // "Cannot get workflow run. Mastra storage is not initialized" on every run (then falling
+    // back to in-memory). Combined with shouldPersistSnapshot:()=>false above, this does not
+    // write any processor-workflow rows to storage. Mirrors the execution-workflow fix in #17344.
+    if (this.#mastra && isProcessorWorkflow(committedWorkflow)) {
+      committedWorkflow.__registerMastra(this.#mastra);
+    }
     if (stateSignalProcessors.length > 0 && isProcessorWorkflow(committedWorkflow)) {
       committedWorkflow.__stateSignalProcessors = stateSignalProcessors;
     }
@@ -6816,120 +6827,166 @@ export class Agent<
   async sendNotificationSignal<OUTPUT = TOutput>(
     notification: SendNotificationSignalInput,
     target: SendAgentNotificationSignalOptions<OUTPUT>,
-  ): Promise<SendAgentNotificationSignalResult> {
+  ): Promise<SendAgentNotificationSignalResult>;
+  async sendNotificationSignal<OUTPUT = TOutput>(
+    notification: SendNotificationSignalInput[],
+    target: SendAgentNotificationSignalOptions<OUTPUT>,
+  ): Promise<SendAgentNotificationSignalResult[]>;
+  async sendNotificationSignal<OUTPUT = TOutput>(
+    notification: SendNotificationSignalInput | SendNotificationSignalInput[],
+    target: SendAgentNotificationSignalOptions<OUTPUT>,
+  ): Promise<SendAgentNotificationSignalResult | SendAgentNotificationSignalResult[]> {
+    const isBatch = Array.isArray(notification);
+    const inputs = isBatch ? notification : [notification];
+    const results = await this.#sendNotificationSignalBatch(inputs, target);
+    return isBatch ? results : results[0]!;
+  }
+
+  async #sendNotificationSignalBatch<OUTPUT = TOutput>(
+    inputs: SendNotificationSignalInput[],
+    target: SendAgentNotificationSignalOptions<OUTPUT>,
+  ): Promise<SendAgentNotificationSignalResult[]> {
     const notifications = await this.#mastra?.getStorage()?.getStore('notifications');
     if (!notifications) {
       throw new Error('sendNotificationSignal requires a notifications storage domain');
     }
 
-    const record = await notifications.createNotification({
-      ...notification,
-      agentId: this.id,
-      resourceId: target.resourceId,
-      threadId: target.threadId,
-    });
+    const records = [];
+    for (const notification of inputs) {
+      records.push(
+        await notifications.createNotification({
+          ...notification,
+          agentId: this.id,
+          resourceId: target.resourceId,
+          threadId: target.threadId,
+        }),
+      );
+    }
 
     const threadState = agentThreadStreamRuntime.getThreadState(
       { resourceId: target.resourceId, threadId: target.threadId },
       this.getPubSub(),
     );
-    const decision = await resolveNotificationDeliveryDecision({
-      config: this.#notifications?.deliveryPolicy,
-      now: new Date(),
-      record,
-      threadState,
-    });
-
-    if (decision.action === 'discard') {
-      const updated = await notifications.updateNotification({
-        id: record.id,
-        threadId: record.threadId,
-        status: 'discarded',
-        deliveryReason: decision.reason,
+    const now = new Date();
+    const planned = [];
+    for (const record of records) {
+      planned.push({
+        record,
+        decision: await resolveNotificationDeliveryDecision({
+          config: this.#notifications?.deliveryPolicy,
+          now,
+          record,
+          threadState,
+        }),
       });
-      return { accepted: true, record: updated, decision };
     }
 
-    if (decision.action === 'persist') {
-      const updated = await notifications.updateNotification({
-        id: record.id,
-        threadId: record.threadId,
-        deliveryReason: decision.reason,
-      });
-      return { accepted: true, record: updated, decision };
-    }
-
-    if (decision.action === 'defer' || decision.action === 'summarize') {
-      const shouldEmitSummaryNow = decision.action === 'summarize' && record.priority === 'high' && decision.deliverAt;
-      const updated = await notifications.updateNotification({
-        id: record.id,
-        threadId: record.threadId,
-        deliverAt: decision.action === 'defer' ? decision.deliverAt : (decision.deliverAt ?? record.deliverAt),
-        summaryAt: shouldEmitSummaryNow
-          ? null
-          : decision.action === 'summarize'
-            ? decision.summaryAt
-            : (decision.summaryAt ?? record.summaryAt),
-        deliveryReason: decision.reason,
-      });
-
-      if (shouldEmitSummaryNow) {
-        const signal = createNotificationSummarySignal(summarizeNotifications([updated]));
-        const result = agentThreadStreamRuntime.sendSignal(
-          this as Agent<any, any, any, any>,
-          signal,
-          { ...target, ifIdle: { ...target.ifIdle, behavior: 'persist' } },
-          this.getPubSub(),
-        );
-        if (!result.accepted) {
-          const failed = await notifications.updateNotification({
-            id: updated.id,
-            threadId: updated.threadId,
-            deliveryAttempts: (updated.deliveryAttempts ?? 0) + 1,
-            lastDeliveryAttemptAt: new Date(),
-            lastDeliveryError: 'Notification summary signal was rejected',
-          });
-          return { ...result, record: failed, decision };
-        }
-        const summarized = await notifications.updateNotification({
-          id: updated.id,
-          threadId: updated.threadId,
-          summarySignalId: result.signal.id,
+    const results: SendAgentNotificationSignalResult[] = [];
+    for (const { record, decision } of planned) {
+      if (decision.action === 'discard') {
+        const updated = await notifications.updateNotification({
+          id: record.id,
+          threadId: record.threadId,
+          status: 'discarded',
+          deliveryReason: decision.reason,
         });
-        return { ...result, record: summarized, decision };
+        results.push({ accepted: true, record: updated, decision });
+        continue;
       }
 
-      return { accepted: true, record: updated, decision };
-    }
+      if (decision.action === 'persist') {
+        const updated = await notifications.updateNotification({
+          id: record.id,
+          threadId: record.threadId,
+          deliveryReason: decision.reason,
+        });
+        results.push({ accepted: true, record: updated, decision });
+        continue;
+      }
 
-    const signal = createNotificationSignal({ ...record, status: 'delivered' });
-    const result = agentThreadStreamRuntime.sendSignal(
-      this as Agent<any, any, any, any>,
-      signal,
-      target,
-      this.getPubSub(),
-    );
-    if (!result.accepted) {
-      const failed = await notifications.updateNotification({
+      if (decision.action === 'defer' || decision.action === 'summarize') {
+        const shouldEmitSummaryNow = Boolean(
+          decision.action === 'summarize' &&
+          decision.summaryAt &&
+          decision.summaryAt.getTime() <= now.getTime() &&
+          (record.priority === 'medium' || (record.priority === 'high' && decision.deliverAt)),
+        );
+        const updated = await notifications.updateNotification({
+          id: record.id,
+          threadId: record.threadId,
+          deliverAt: decision.action === 'defer' ? decision.deliverAt : (decision.deliverAt ?? record.deliverAt),
+          summaryAt: shouldEmitSummaryNow
+            ? null
+            : decision.action === 'summarize'
+              ? decision.summaryAt
+              : (decision.summaryAt ?? record.summaryAt),
+          deliveryReason: decision.reason,
+        });
+
+        if (shouldEmitSummaryNow) {
+          const signal = createNotificationSummarySignal(summarizeNotifications([updated]));
+          const result = agentThreadStreamRuntime.sendSignal(
+            this as Agent<any, any, any, any>,
+            signal,
+            { ...target, ifIdle: { ...target.ifIdle, behavior: record.priority === 'high' ? 'persist' : 'wake' } },
+            this.getPubSub(),
+          );
+          if (!result.accepted) {
+            const failed = await notifications.updateNotification({
+              id: updated.id,
+              threadId: updated.threadId,
+              deliveryAttempts: (updated.deliveryAttempts ?? 0) + 1,
+              lastDeliveryAttemptAt: new Date(),
+              lastDeliveryError: 'Notification summary signal was rejected',
+            });
+            results.push({ ...result, record: failed, decision });
+            continue;
+          }
+          const summarized = await notifications.updateNotification({
+            id: updated.id,
+            threadId: updated.threadId,
+            summarySignalId: result.signal.id,
+          });
+          results.push({ ...result, record: summarized, decision });
+          continue;
+        }
+
+        results.push({ accepted: true, record: updated, decision });
+        continue;
+      }
+
+      const signal = createNotificationSignal({ ...record, status: 'delivered' });
+      const result = agentThreadStreamRuntime.sendSignal(
+        this as Agent<any, any, any, any>,
+        signal,
+        target,
+        this.getPubSub(),
+      );
+      if (!result.accepted) {
+        const failed = await notifications.updateNotification({
+          id: record.id,
+          threadId: record.threadId,
+          deliveryAttempts: (record.deliveryAttempts ?? 0) + 1,
+          lastDeliveryAttemptAt: new Date(),
+          lastDeliveryError: 'Notification signal was rejected',
+          deliveryReason: decision.reason,
+        });
+        results.push({ ...result, record: failed, decision });
+        continue;
+      }
+
+      const updated = await notifications.updateNotification({
         id: record.id,
         threadId: record.threadId,
-        deliveryAttempts: (record.deliveryAttempts ?? 0) + 1,
-        lastDeliveryAttemptAt: new Date(),
-        lastDeliveryError: 'Notification signal was rejected',
+        status: 'delivered',
+        deliveredSignalId: result.signal.id,
         deliveryReason: decision.reason,
       });
-      return { ...result, record: failed, decision };
+
+      results.push({ ...result, record: updated, decision });
     }
 
-    const updated = await notifications.updateNotification({
-      id: record.id,
-      threadId: record.threadId,
-      status: 'delivered',
-      deliveredSignalId: result.signal.id,
-      deliveryReason: decision.reason,
-    });
-
-    return { ...result, record: updated, decision };
+    return results;
   }
 
   /**
