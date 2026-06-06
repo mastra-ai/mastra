@@ -67,11 +67,12 @@
 
 - `mastracode/src/__tests__/validate-config-dir-name.test.ts` — valid/invalid config directory names.
 - `mastracode/src/agents/__tests__/build-skill-paths.test.ts` — custom configDir skill path substitution and dedupe.
+- `mastracode/src/__tests__/index.test.ts` — `createMastraCode({ configDir })` startup wiring keeps storage, MCP, hooks, resource-id override lookup, and runtime `state.configDir` aligned even when `initialState.configDir` conflicts.
 - MCP/hooks/slash-command loader tests cover default path behavior; custom configDir integration coverage is partial.
 
 ## Missing tests
 
-- End-to-end `createMastraCode({ configDir })` smoke test covering MCP, hooks, commands, instructions, storage, and skills together.
+- End-to-end `createMastraCode({ configDir })` smoke test covering commands, instructions, and skills together.
 - TUI/headless parity test that a non-default configDir survives thread reload and dynamic workspace rebuild.
 
 ## Known risks / regressions

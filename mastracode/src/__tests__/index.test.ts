@@ -43,6 +43,10 @@ const harnessGetCurrentThreadIdMock = vi.fn();
 const harnessListThreadsMock = vi.fn();
 const harnessSetStateMock = vi.fn();
 const harnessSetThreadSettingMock = vi.fn();
+const createMcpManagerMock = vi.fn();
+const hookManagerConstructorMock = vi.fn();
+const getStorageConfigMock = vi.fn(() => ({ type: 'memory' }));
+const getResourceIdOverrideMock = vi.fn(() => undefined);
 let harnessStateMock: Record<string, unknown> = { cavemanObservations: false };
 
 function createMockSettings() {
@@ -186,12 +190,16 @@ vi.mock('./auth/storage.js', () => ({
   },
 }));
 
-vi.mock('./hooks/index.js', () => ({
-  HookManager: class {},
+vi.mock('../hooks/index.js', () => ({
+  HookManager: class {
+    constructor(...args: unknown[]) {
+      hookManagerConstructorMock(...args);
+    }
+  },
 }));
 
-vi.mock('./mcp/index.js', () => ({
-  createMcpManager: vi.fn(),
+vi.mock('../mcp/index.js', () => ({
+  createMcpManager: createMcpManagerMock,
 }));
 
 vi.mock('../onboarding/packs.js', () => ({
@@ -242,16 +250,25 @@ vi.mock('./utils/gateway-sync.js', () => ({
   syncGateways: vi.fn(),
 }));
 
-vi.mock('./utils/project.js', () => ({
+vi.mock('../utils/project.js', () => ({
   detectProject: detectProjectMock,
-  getStorageConfig: vi.fn(() => ({ type: 'memory' })),
-  getResourceIdOverride: vi.fn(() => undefined),
+  getAppDataDir: vi.fn(() => '/tmp/mastracode-app-data'),
+  getDatabasePath: vi.fn(() => '/tmp/mastracode-app-data/mastra.db'),
+  getVectorDatabasePath: vi.fn(() => '/tmp/mastracode-app-data/mastra-vectors.db'),
+  getObservabilityDatabasePath: vi.fn(() => '/tmp/mastracode-app-data/observability.duckdb'),
+  getCurrentGitBranch: vi.fn(() => undefined),
+  getCurrentGitBranchAsync: vi.fn(async () => undefined),
+  getOmScope: vi.fn(() => 'thread'),
+  getUserId: vi.fn(() => 'test-user'),
+  getUserName: vi.fn(() => 'Test User'),
+  getStorageConfig: getStorageConfigMock,
+  getResourceIdOverride: getResourceIdOverrideMock,
 }));
 
 const createStorageMock = vi.fn((): { storage: unknown; backend?: string } => ({ storage: {} }));
 const createVectorStoreMock = vi.fn(() => ({}));
 
-vi.mock('./utils/storage-factory.js', () => ({
+vi.mock('../utils/storage-factory.js', () => ({
   createStorage: createStorageMock,
   createVectorStore: createVectorStoreMock,
 }));
@@ -282,6 +299,12 @@ describe('createMastraCode', () => {
     harnessSetStateMock.mockResolvedValue(undefined);
     harnessSetThreadSettingMock.mockReset();
     harnessSetThreadSettingMock.mockResolvedValue(undefined);
+    createMcpManagerMock.mockReset();
+    hookManagerConstructorMock.mockReset();
+    getStorageConfigMock.mockReset();
+    getStorageConfigMock.mockReturnValue({ type: 'memory' });
+    getResourceIdOverrideMock.mockReset();
+    getResourceIdOverrideMock.mockReturnValue(undefined);
     detectProjectMock.mockReset();
     detectProjectMock.mockReturnValue({
       mode: 'none',
@@ -405,6 +428,34 @@ describe('createMastraCode', () => {
       | { initialState?: Record<string, unknown> }
       | undefined;
     expect(harnessConfig?.initialState?.projectPath).toBe(projectPath);
+  });
+
+  it('uses configured configDir consistently for startup services and runtime state', async () => {
+    const projectPath = '/tmp/mastracode-project';
+    detectProjectMock.mockReturnValue({
+      mode: 'none',
+      rootPath: projectPath,
+      resourceId: 'project-resource',
+      packageManager: 'pnpm',
+      hasGit: false,
+      contextFiles: [],
+    });
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({
+      cwd: projectPath,
+      configDir: '.acme-code',
+      initialState: { configDir: '.wrong-code' },
+    });
+
+    expect(getResourceIdOverrideMock).toHaveBeenCalledWith(projectPath, '.acme-code');
+    expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
+    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
+    expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code');
+    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+      | { initialState?: Record<string, unknown> }
+      | undefined;
+    expect(harnessConfig?.initialState?.configDir).toBe('.acme-code');
   });
 
   it('rejects cross-process PubSub mode without a PubSub instance', async () => {
