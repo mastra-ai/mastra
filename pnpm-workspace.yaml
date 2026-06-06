@@ -133,6 +133,7 @@ allowBuilds:
   koffi: false
   msgpackr-extract: false
   msw: false
+  node-pty: true
   onnxruntime-node: false
   protobufjs: false
   sharp: false

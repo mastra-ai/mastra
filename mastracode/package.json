@@ -51,7 +51,10 @@
     "prepack": "tsx ../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build --watch",
     "test": "vitest",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "e2e:list": "tsx scripts/mc-e2e.ts --list",
+    "e2e:test": "tsx scripts/mc-e2e.ts --run --default-all",
+    "e2e:observe": "tsx scripts/mc-e2e.ts --observe"
   },
   "keywords": [],
   "author": "",
@@ -64,9 +67,9 @@
     "@mariozechner/pi-tui": "^0.73.1",
     "@mastra/agent-browser": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@mastra/github-signals": "workspace:*",
     "@mastra/duckdb": "workspace:*",
     "@mastra/fastembed": "workspace:*",
+    "@mastra/github-signals": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
@@ -90,8 +93,10 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@copilotkit/aimock": "^1.29.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@microsoft/tui-test": "^0.0.4",
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
