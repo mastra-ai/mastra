@@ -4100,3 +4100,31 @@ Verification:
 - `pnpm --filter ./mastracode check` passed.
 - `pnpm --filter ./mastracode lint` passed.
 - `pnpm run build:mastracode` passed.
+
+## 2026-06-06 — Custom configDir embedded TUI e2e batch
+
+Added `custom-config-dir` checked-in TUI e2e scenario:
+- Seeds an isolated project with `.acme-code` command/skill fixtures plus `.mastracode` decoys.
+- Launches a custom embedded TUI entrypoint that calls `createMastraCode({ configDir: '.acme-code' })`, matching the programmatic API surface rather than inventing a CLI flag.
+- Verifies `/help` lists the `.acme-code` custom command and does not list the `.mastracode` decoy.
+- Verifies `/skills` lists the `.acme-code` skill and does not list the `.mastracode` decoy.
+- Adds a narrow e2e runner `entrypoint` hook so scenarios can launch embedded Mastra Code entrypoints when the feature has no CLI/TUI flag.
+
+Rows moved from missing e2e to covered e2e:
+- Settings: Custom config directory — validated for programmatic configDir affecting TUI-visible custom commands and workspace skills. Existing startup shields remain supporting coverage for storage, MCP, hooks, resource-id lookup, and runtime Harness state alignment.
+
+Product fix:
+- `loadCustomSlashCommands()` now reads `state.harness.getState()?.configDir` and passes it to `loadCustomCommands()` for global and project command loading, so TUI custom slash command discovery stays aligned with the configured runtime directory.
+
+Break validation:
+- Ignored `configDir` while loading TUI custom commands -> `custom-config-dir` failed because `/help` showed `//default-only` and missed `//acme`.
+- Ignored `state.configDir` while building workspace skill paths -> `custom-config-dir` failed because `/skills` loaded `default-skill` instead of `acme-skill`.
+- Ignored the scenario embedded entrypoint in the e2e runner -> `custom-config-dir` launched the default CLI and loaded `.mastracode` instead of `.acme-code`.
+- All intentional breaks were reverted before committing.
+
+Verification:
+- `pnpm --filter ./mastracode run e2e:test custom-config-dir` passed.
+- `pnpm --filter ./mastracode run e2e:test -- --jobs 2` passed: 17/17 scenarios.
+- `pnpm --filter ./mastracode check` passed.
+- `pnpm --filter ./mastracode lint` passed.
+- `pnpm run build:mastracode` passed.

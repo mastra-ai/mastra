@@ -72,8 +72,12 @@
 
 ## Missing tests
 
-- End-to-end `createMastraCode({ configDir })` smoke test covering commands, instructions, and skills together.
+- [x] End-to-end `createMastraCode({ configDir })` smoke test covering commands and skills together through a real TUI entrypoint — covered by `mastracode/scripts/mc-e2e/scenarios/custom-config-dir.ts`.
 - TUI/headless parity test that a non-default configDir survives thread reload and dynamic workspace rebuild.
+
+## E2E coverage
+
+- `custom-config-dir` launches an embedded TUI entrypoint that calls `createMastraCode({ configDir: '.acme-code' })`, seeds `.acme-code` and `.mastracode` command/skill fixtures, then verifies `/help` lists only the custom-dir command and `/skills` lists only the custom-dir skill. Break checks proved failures when TUI custom-command loading ignored `configDir`, workspace skill paths ignored `state.configDir`, and the e2e runner ignored the scenario entrypoint.
 
 ## Known risks / regressions
 
