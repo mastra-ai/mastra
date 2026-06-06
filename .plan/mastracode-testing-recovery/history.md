@@ -3731,3 +3731,11 @@ Validated `Setup: Auto-update prompts` with direct `/update` command shields, co
 - Added command-level coverage for non-fatal registry failure, already-latest messaging, changelog insertion, dismissed-version clearing/persistence, and failed auto-update manual command guidance.
 - Break validations proven and reverted: missing changelog text failed; missing persisted clear of `updateDismissedVersion` failed; missing manual install command failed.
 - Verification: `pnpm --filter ./mastracode exec vitest --run src/tui/commands/__tests__/update.test.ts --reporter=dot`, `pnpm --filter ./mastracode check`, `pnpm --filter ./mastracode lint`, and `pnpm run build:mastracode` all passed.
+
+### Commit attribution recovery checkpoint
+
+Validated `Git: Commit attribution` with prompt/dynamic-instructions shields:
+- Added `prompts.test.ts` assertions for exact co-author footer formatting with and without selected model state.
+- Added `instructions.test.ts` coverage that `getDynamicInstructions()` uses restored/current harness `currentModelId` in commit guidance.
+- Break validations proven and reverted: missing model ID in footer, empty-parentheses fallback, and dropped `currentModelId` propagation.
+- Verification: `pnpm --filter ./mastracode exec vitest --run src/agents/__tests__/prompts.test.ts src/agents/__tests__/instructions.test.ts --bail=1 --reporter=dot`, `pnpm --filter ./mastracode check`, `pnpm --filter ./mastracode lint`, and `pnpm run build:mastracode` all passed.

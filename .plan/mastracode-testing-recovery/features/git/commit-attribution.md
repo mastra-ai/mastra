@@ -57,14 +57,13 @@
 
 ## Existing tests
 
-- `mastracode/src/agents/__tests__/prompts.test.ts` — covers model-specific prompt sections and base prompt content, but not the commit attribution line directly.
+- `mastracode/src/agents/__tests__/prompts.test.ts` — covers model-specific prompt sections, base prompt content, and both commit attribution footer formats: selected model ID and model-less fallback.
+- `mastracode/src/agents/__tests__/instructions.test.ts` — covers `getDynamicInstructions()` building commit attribution guidance from restored/current harness `currentModelId` state.
 - `mastracode/src/HarnessCompat.test.ts` — covers `currentModelId` moving through harness/session state.
 
 ## Missing tests
 
-- Direct prompt test for both commit attribution formats: with `currentModelId` and without it.
-- End-to-end commit-message test proving the agent-generated `git commit` body follows the prompt guidance.
-- Reload/thread-switch test proving restored model state appears in commit attribution guidance.
+- End-to-end commit-message test proving the agent-generated `git commit` body follows the prompt guidance. Deferred for now because this behavior is model-output guidance rather than runtime enforcement; the prompt contract is now shielded directly.
 
 ## Known risks / regressions
 

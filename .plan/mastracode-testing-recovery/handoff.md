@@ -328,3 +328,11 @@ Validated `Setup: Auto-update prompts` with direct `/update` command shields, co
 - Added `mastracode/src/tui/commands/__tests__/update.test.ts` covering registry failure, already-latest handling, changelog prompt text, clearing previous dismissed-version state, No dismissed-version persistence, and failed-update manual install guidance.
 - Break validations proven and reverted: dropped changelog text from the prompt; stopped persisting cleared dismissed-version state before a manual prompt; removed the exact manual install command from failed update errors.
 - Verification: focused update command tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### Commit attribution recovery checkpoint
+
+Validated `Git: Commit attribution` with prompt/dynamic-instructions shields:
+- Added direct prompt assertions for `Co-Authored-By: Mastra Code (<model-id>) <noreply@mastra.ai>` when a model is selected and `Co-Authored-By: Mastra Code <noreply@mastra.ai>` when no model ID is available.
+- Added `getDynamicInstructions()` coverage proving restored/current harness `currentModelId` flows into commit attribution guidance.
+- Break validations proven and reverted: dropped selected model ID from the footer; emitted empty parentheses for no-model fallback; stopped passing restored `currentModelId` into dynamic instructions.
+- Verification: focused prompt/instructions tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
