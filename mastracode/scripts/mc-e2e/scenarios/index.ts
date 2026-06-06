@@ -3,6 +3,7 @@ import { automatedChatScenario } from './automated-chat.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
+import { omSettingsScenario } from './om-settings.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { startupScenario } from './startup.js';
 import { stateCommandsScenario } from './state-commands.js';
@@ -22,6 +23,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,
   'modal-and-shell': modalAndShellScenario,
+  'om-settings': omSettingsScenario,
   'report-issue-command': reportIssueCommandScenario,
   'state-commands': stateCommandsScenario,
   'storage-settings': storageSettingsScenario,

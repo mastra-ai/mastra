@@ -4009,3 +4009,25 @@ Verification:
 - `pnpm --filter ./mastracode check` passed.
 - `pnpm --filter ./mastracode lint` passed.
 - `pnpm run build:mastracode` passed.
+
+## 2026-06-06 — OM settings TUI e2e partial coverage batch
+
+Added `om-settings` checked-in TUI e2e scenario:
+- Opens `/om` through a real PTY and verifies the Observational Memory settings overlay rows.
+- Enters the Caveman observations submenu, verifies the On/Off explanations, toggles Caveman observations on, closes and reopens `/om`, and verifies the On value is restored from runtime thread state.
+
+Rows moved from missing e2e to partial e2e:
+- Memory: Observational memory — partial only; this covers the user-visible `/om` settings overlay and Caveman runtime-state restoration, but background observation/reflection, recall/source-message provenance, resource/thread scope isolation, and loaded-history OM markers remain missing.
+
+Break validation:
+- Renamed the OM overlay title -> `om-settings` failed waiting for `Observational Memory Settings`.
+- Skipped Caveman runtime state persistence -> `om-settings` failed after closing/reopening `/om`.
+- Hid the `Observe attachments` row -> `om-settings` failed waiting for that user-visible row.
+- All intentional breaks were reverted before committing.
+
+Verification:
+- `pnpm --filter ./mastracode run e2e:test om-settings` passed.
+- `pnpm --filter ./mastracode run e2e:test -- --jobs 2` passed: 13/13 scenarios.
+- `pnpm --filter ./mastracode check` passed.
+- `pnpm --filter ./mastracode lint` passed.
+- `pnpm run build:mastracode` passed.

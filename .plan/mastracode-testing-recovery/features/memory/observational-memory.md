@@ -107,6 +107,7 @@
 
 - `mastracode/src/tui/commands/__tests__/om.test.ts` — OM role override persistence behavior, including snapshotting the other role when switching one observer/reflector role from a built-in pack to a custom model.
 - `mastracode/src/tui/components/__tests__/om-settings.test.ts` — model picker behavior for OM settings, including custom model string acceptance and Kitty CSI-u printable-key filtering.
+- `mastracode/scripts/mc-e2e/scenarios/om-settings.ts` — partial real PTY `/om` coverage for the settings overlay rows, Caveman observations toggle, and runtime thread-state restoration after closing/reopening the overlay.
 - `mastracode/src/tui/__tests__/key-input.test.ts` — shared printable shortcut decoding for Kitty CSI-u and xterm modifyOtherKeys forms.
 - `mastracode/src/tui/handlers/__tests__/om.test.ts` and `mastracode/src/tui/components/__tests__/om-marker.test.ts` — OM marker rendering/quiet-mode behavior, combined activation counts, provider-change lines, reflection activation, and inline idle-timeout suffix rendering.
 - `packages/memory/src/processors/observational-memory/__tests__/observational-memory.test.ts` — core activation, reflection, overshoot, retention behavior, blockAfter fallback, idle/provider-change activation and non-expiry behavior, normalized model comparison, early reflection overshoot suppression, last-activity fallback, previous-observation truncation (`previousObserverTokens`), buffered-reflection replacement, observation-group/anchor helper coverage, prior metadata prompt hints, continuation-hint/thread-title parsing, most-recent activated chunk hint selection, observer attachment formatting/filtering, auto-mode capability handling, tool-result attachment extraction, image-heavy threshold checks, and buffered/sync thread-title persistence.
@@ -129,7 +130,7 @@
 ## Missing tests
 
 - End-to-end observation/reflection across restart with resource/thread scope, including `currentTask` / `suggestedContinuation` continuity.
-- `/om` modal model/attachment changes propagate to harness state, thread settings, settings file, and next memory factory instance; threshold propagation is covered by core restore/backfill tests but still lacks a direct Mastra Code command-level regression.
+- `/om` modal model/attachment changes propagate to harness state, thread settings, settings file, and next memory factory instance; Caveman overlay/runtime-state restoration is partially covered by `om-settings`, and threshold propagation is covered by core restore/backfill tests but still lacks a direct Mastra Code command-level regression.
 - Full `/om` TUI restart journey for a typed custom observer/reflector model proving the saved custom role overrides are restored into the next memory factory.
 - Direct tests for `getOmScope()` precedence and `createMastraCode({ omScope: 'resource' })` producing a resource-scoped memory config across full startup wiring. Unit-level resource-scope buffering in `getDynamicMemory()` is now covered.
 - Mastra Code `/om` command test asserting observer/reflector model changes call `switchObserverModel()` / `switchReflectorModel()` rather than raw `setState()`, and caveman toggles write harness state, thread metadata, and global settings together.

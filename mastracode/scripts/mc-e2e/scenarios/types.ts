@@ -6,6 +6,7 @@ export type ScenarioName =
   | 'visible-commands'
   | 'integration-commands'
   | 'modal-and-shell'
+  | 'om-settings'
   | 'report-issue-command'
   | 'state-commands'
   | 'storage-settings'
