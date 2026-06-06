@@ -2968,3 +2968,27 @@ Verification:
 - `pnpm --filter ./mastracode check` — passed.
 - `pnpm --filter ./mastracode lint` — passed.
 - `pnpm run build:mastracode` — passed, 24/24 tasks.
+
+### Test recovery: configuration modal question overlay lifecycle
+
+Selected `TUI: Configuration modal overlays` as the next High-risk row. Chose the direct `askModalQuestion()` gap because many configuration commands depend on this shared helper to keep modal focus contained, hide overlays on completion, and return the correct submit/cancel value.
+
+Added `mastracode/src/tui/__tests__/modal-question.test.ts` with mocked dialog and overlay modules:
+
+- `askModalQuestion()` creates and focuses the dialog component.
+- `showModalOverlay()` receives the dialog plus merged default/custom overlay options.
+- Submit hides the overlay and resolves the submitted answer.
+- Cancel hides the overlay and resolves `null`.
+
+Break-validation evidence:
+
+1. Removed `question.focused = true`; focused test failed because the dialog stayed unfocused. Reverted.
+2. Removed `tui.hideOverlay()` from submit; focused test failed because submit did not clear the overlay. Reverted.
+3. Resolved cancel as a non-null string; focused test failed because cancel no longer resolved `null`. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest --run src/tui/__tests__/modal-question.test.ts --bail 1 --reporter=dot` — 1 file / 2 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — passed, 24/24 tasks.
