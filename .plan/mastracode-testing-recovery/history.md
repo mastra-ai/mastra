@@ -2723,3 +2723,54 @@ Summary:
 - AIMock's Mastra docs are useful for capability context but appear stale for current Mastra APIs (`provider: "OPEN_AI"` object-style config), so future MC tests should follow current repo model configuration instead of copying those snippets.
 
 Recommended next spike: one tiny Mastra Code TUI e2e test that starts AIMock, creates a hermetic MC config dir pointed at AIMock, spawns MC under `tui-test`, submits one prompt, asserts the mocked assistant response appears, and verifies AIMock saw exactly one model request.
+
+### TUI/AIMock runner spike
+
+Proved the agreed runner shape with a small planning spike at `.plan/mastracode-testing-recovery/spikes/mc-e2e/`.
+
+The spike uses one shared scenario (`basic-chat`) and two entry points:
+
+- Vitest headless execution generated from scenario discovery.
+- Custom CLI observe execution using the same scenario.
+
+Verified commands:
+
+```sh
+pnpm exec tsx .plan/mastracode-testing-recovery/spikes/mc-e2e/cli.ts --list
+pnpm exec tsx .plan/mastracode-testing-recovery/spikes/mc-e2e/cli.ts basic-chat --observe
+pnpm exec vitest run --config .plan/mastracode-testing-recovery/spikes/mc-e2e/vitest.config.ts --reporter=dot --bail=1
+```
+
+Result: observe mode mirrored the toy TUI transcript live; Vitest ran the same scenario headlessly with 1 passing test. Recorded the agent-terminal limitation: background command tools expose output and kill controls but not direct stdin injection, so future live-control support should be explicit in the runner via foreground stdin, socket, named pipe, or scenario-step commands.
+
+### Control-file observe mode proof
+
+Extended the `mc-e2e` planning spike with a `--control-file <path>` mode. The harness creates/truncates the file, polls appended content, and forwards each appended line to the child process stdin.
+
+Verified agent-control workflow:
+
+```sh
+rm -f /tmp/mc-e2e-control.txt
+pnpm exec tsx .plan/mastracode-testing-recovery/spikes/mc-e2e/cli.ts controlled-chat --observe --control-file /tmp/mc-e2e-control.txt
+# in another command once the file exists:
+printf 'hello\n' >> /tmp/mc-e2e-control.txt
+```
+
+In this environment, the observe runner was started with `execute_command(..., background: true)`, then a separate `execute_command` appended `hello` to the control file. The runner printed `[mc-e2e-control] hello`, forwarded it to the toy TUI stdin, observed `assistant: Hi from AIMock`, and passed. This confirms a regular file inbox is enough for agents to control background observe sessions without direct background-process stdin support.
+
+### Recording-driven scenario proof
+
+Extended the `mc-e2e` spike with `--record <path>` and `record-to-scenario.ts`.
+
+Verified flow:
+
+```sh
+rm -f /tmp/mc-e2e-control.txt /tmp/mc-e2e-recording.json
+pnpm exec tsx .plan/mastracode-testing-recovery/spikes/mc-e2e/cli.ts controlled-chat --observe --control-file /tmp/mc-e2e-control.txt --record /tmp/mc-e2e-recording.json
+# from a second command after the control file exists:
+printf 'hello\n' >> /tmp/mc-e2e-control.txt
+pnpm exec tsx .plan/mastracode-testing-recovery/spikes/mc-e2e/record-to-scenario.ts /tmp/mc-e2e-recording.json .plan/mastracode-testing-recovery/spikes/mc-e2e/generated/recorded-controlled.scenario.ts
+pnpm exec tsx .plan/mastracode-testing-recovery/spikes/mc-e2e/run-scenario-file.ts .plan/mastracode-testing-recovery/spikes/mc-e2e/generated/recorded-controlled.scenario.ts --observe
+```
+
+Result: the observe run wrote `/tmp/mc-e2e-recording.json` with forwarded inputs, transcript, and AIMock request count. The converter generated `generated/recorded-controlled.scenario.ts`, and `run-scenario-file.ts` ran the generated scenario successfully. This proves an agent can drive an observed terminal via control-file writes, record the transcript, and turn that recording into a draft scenario/test skeleton.
