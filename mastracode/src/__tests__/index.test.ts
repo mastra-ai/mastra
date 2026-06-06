@@ -47,6 +47,7 @@ const createMcpManagerMock = vi.fn();
 const hookManagerConstructorMock = vi.fn();
 const getStorageConfigMock = vi.fn(() => ({ type: 'memory' }));
 const getResourceIdOverrideMock = vi.fn(() => undefined);
+const getDynamicWorkspaceMock = vi.fn();
 let harnessStateMock: Record<string, unknown> = { cavemanObservations: false };
 
 function createMockSettings() {
@@ -178,7 +179,7 @@ vi.mock('./agents/tools.js', () => ({
 }));
 
 vi.mock('./agents/workspace.js', () => ({
-  getDynamicWorkspace: vi.fn(),
+  getDynamicWorkspace: getDynamicWorkspaceMock,
 }));
 
 vi.mock('./auth/storage.js', () => ({
@@ -305,6 +306,7 @@ describe('createMastraCode', () => {
     getStorageConfigMock.mockReturnValue({ type: 'memory' });
     getResourceIdOverrideMock.mockReset();
     getResourceIdOverrideMock.mockReturnValue(undefined);
+    getDynamicWorkspaceMock.mockReset();
     detectProjectMock.mockReset();
     detectProjectMock.mockReturnValue({
       mode: 'none',
@@ -376,6 +378,27 @@ describe('createMastraCode', () => {
     expect(harnessConstructorMock).toHaveBeenCalled();
     const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { memory?: unknown } | undefined;
     expect(typeof harnessConfig?.memory).toBe('function');
+  });
+
+  it('passes custom workspace config through to Harness without using the default factory', async () => {
+    const customWorkspace = { id: 'custom-workspace' };
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ workspace: customWorkspace as any });
+
+    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { workspace?: unknown } | undefined;
+    expect(harnessConfig?.workspace).toBe(customWorkspace);
+    expect(getDynamicWorkspaceMock).not.toHaveBeenCalled();
+  });
+
+  it('uses a workspace factory when no custom workspace is configured', async () => {
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { workspace?: unknown } | undefined;
+    expect(typeof harnessConfig?.workspace).toBe('function');
+    expect(harnessConfig?.workspace).not.toEqual({ id: 'custom-workspace' });
   });
 
   it('uses the configured default mode when constructing Harness', async () => {
