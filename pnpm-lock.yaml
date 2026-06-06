@@ -292,7 +292,7 @@ importers:
         specifier: 'catalog:'
         version: 4.1.5(vitest@4.1.5)
       eslint:
-        specifier: ^10.2.1
+        specifier: ^10.4.1
         version: 10.4.1(jiti@2.6.1)
       tsup:
         specifier: ^8.5.1
