@@ -2945,3 +2945,26 @@ Verification:
 - `pnpm --filter ./mastracode check` — passed.
 - `pnpm --filter ./mastracode lint` — passed.
 - `pnpm run build:mastracode` — passed, 24/24 tasks.
+
+### Test recovery: clipboard text paste shortcut
+
+Selected `TUI: Clipboard paste` as the next High-risk row. Chose the explicit Ctrl+V text-paste gap because existing tests already covered image/path paste and Alt+V image paste, but did not prove host clipboard text takes the terminal-native bracketed-paste path.
+
+Extended `mastracode/src/tui/components/__tests__/custom-editor.test.ts`:
+
+- Ctrl+V triggers explicit paste handling.
+- Explicit paste checks clipboard image data first when image paste is wired, preserving image priority.
+- If no clipboard image is available, clipboard text is wrapped in `\x1b[200~` / `\x1b[201~` bracketed-paste markers before passing to the editor.
+
+Break-validation evidence:
+
+1. Removed Ctrl+V from the explicit paste shortcut branch; focused test failed because clipboard helpers were never called. Reverted.
+2. Passed clipboard text directly to the editor without bracketed-paste markers; focused test failed on the `super.handleInput()` payload. Reverted.
+3. Removed image-first clipboard detection from explicit paste; focused test failed because `getClipboardImage()` was not called before text fallback. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest --run src/tui/components/__tests__/custom-editor.test.ts --bail 1 --reporter=dot` — 1 file / 17 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — passed, 24/24 tasks.
