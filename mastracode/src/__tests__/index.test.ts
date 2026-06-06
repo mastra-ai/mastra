@@ -481,6 +481,34 @@ describe('createMastraCode', () => {
     expect(harnessConfig?.initialState?.configDir).toBe('.acme-code');
   });
 
+  it('passes programmatic MCP servers into the startup manager with project and configDir', async () => {
+    const projectPath = '/tmp/mastracode-project';
+    const cwd = `${projectPath}/packages/app`;
+    const mcpServers = {
+      remoteDocs: {
+        url: 'https://mcp.example.com/sse',
+        headers: { Authorization: 'Bearer token' },
+      },
+      localFs: {
+        command: 'npx',
+        args: ['-y', '@modelcontextprotocol/server-filesystem', projectPath],
+      },
+    };
+    detectProjectMock.mockReturnValue({
+      mode: 'none',
+      rootPath: projectPath,
+      resourceId: 'project-resource',
+      packageManager: 'pnpm',
+      hasGit: false,
+      contextFiles: [],
+    });
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ cwd, configDir: '.acme-code', mcpServers });
+
+    expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', mcpServers);
+  });
+
   it('rejects cross-process PubSub mode without a PubSub instance', async () => {
     const { createMastraCode } = await import('../index.js');
 
