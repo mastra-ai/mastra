@@ -214,7 +214,10 @@ type GithubPRSignal = {
 
 type GithubSignalAgent = {
   sendSignal(signal: AgentSignalInput, target: unknown): { accepted: unknown };
-  sendNotificationSignal?(notification: unknown | unknown[], target: unknown): { accepted?: unknown } | Promise<unknown>;
+  sendNotificationSignal?(
+    notification: unknown | unknown[],
+    target: unknown,
+  ): { accepted?: unknown } | Promise<unknown>;
 };
 
 type GithubNotificationStreamOptions = Record<string, unknown>;
@@ -478,7 +481,8 @@ function compareGithubActivityNotifications(
   if (!a && !b) return 0;
   if (!a) return 1;
   if (!b) return -1;
-  const priorityComparison = githubActivityNotificationPriority[a.priority] - githubActivityNotificationPriority[b.priority];
+  const priorityComparison =
+    githubActivityNotificationPriority[a.priority] - githubActivityNotificationPriority[b.priority];
   if (priorityComparison !== 0) return priorityComparison;
   return getGithubActivityNotificationRank(a) - getGithubActivityNotificationRank(b);
 }
@@ -1394,7 +1398,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         };
         const syncResult = await this.#syncClient.syncPullRequest(syncInput);
         let snapshot = syncResult.ok ? await this.#syncClient.getPullRequestSnapshot?.(syncInput) : undefined;
-        if (snapshot) snapshot = await this.#filterUnauthorizedLatestComment(subscription.owner, subscription.repo, snapshot);
+        if (snapshot)
+          snapshot = await this.#filterUnauthorizedLatestComment(subscription.owner, subscription.repo, snapshot);
         const nextSubscription: GithubPRSubscription = {
           ...subscription,
           updatedAt: now,
@@ -1530,7 +1535,9 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         ...(input.snapshot.latestCommentAuthor ? { latestCommentAuthor: input.snapshot.latestCommentAuthor } : {}),
         ...(latestCommentExcerpt ? { latestCommentExcerpt } : {}),
         ...(input.snapshot.latestCommentUrl ? { latestCommentUrl: input.snapshot.latestCommentUrl } : {}),
-        ...(input.snapshot.latestCommentUpdatedAt ? { latestCommentUpdatedAt: input.snapshot.latestCommentUpdatedAt } : {}),
+        ...(input.snapshot.latestCommentUpdatedAt
+          ? { latestCommentUpdatedAt: input.snapshot.latestCommentUpdatedAt }
+          : {}),
         ...(failingChecks.length > 0 ? { failingChecks: failingChecks.map(check => check.name).join(', ') } : {}),
         ...(pendingChecks.length > 0 ? { pendingChecks: pendingChecks.map(check => check.name).join(', ') } : {}),
       },
@@ -1769,7 +1776,10 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     if (notificationInputs.length > 0) {
       const target = { resourceId: input.polling.resourceId, threadId: input.polling.threadId };
       const streamOptions = await this.#agentOptions.getNotificationStreamOptions?.(target);
-      await agent.sendNotificationSignal(notificationInputs, streamOptions ? { ...target, ifIdle: { streamOptions } } : target);
+      await agent.sendNotificationSignal(
+        notificationInputs,
+        streamOptions ? { ...target, ifIdle: { streamOptions } } : target,
+      );
     }
     return sent;
   }

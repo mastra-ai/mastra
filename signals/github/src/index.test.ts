@@ -1296,7 +1296,8 @@ describe('GithubSignals', () => {
             latestCommentAuthor: 'devin-ai-integration[bot]',
             latestCommentAuthorType: 'Bot',
             latestCommentIsBot: true,
-            latestCommentBody: 'Acknowledged! Fourth test comment received. Rendered GitHub comment notifications with author and excerpt are working.',
+            latestCommentBody:
+              'Acknowledged! Fourth test comment received. Rendered GitHub comment notifications with author and excerpt are working.',
             latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/17590#issuecomment-4635660157',
             latestCommentUpdatedAt: '2026-06-05T21:28:12.000Z',
           }) satisfies GithubPullRequestSnapshot,
@@ -1689,7 +1690,8 @@ describe('GithubSignals', () => {
           latestCommentAuthor: 'devin-ai-integration[bot]',
           latestCommentAuthorType: 'Bot',
           latestCommentIsBot: true,
-          latestCommentBody: 'Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
+          latestCommentBody:
+            'Acknowledged! Third test comment received. Bot notification delivery is working after the rebuild/reload.',
           latestCommentUrl: 'https://github.com/mastra-ai/mastra/pull/123#issuecomment-1',
           latestCommentUpdatedAt: '2026-01-01T00:05:00.000Z',
         };
