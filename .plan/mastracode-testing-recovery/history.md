@@ -3437,3 +3437,30 @@ Verification:
 Commits:
 
 - `33665d4a24` — `test(core): shield openai strict schema shape` (pushed to `origin/tests/mc`).
+
+### Test recovery: built-in tool schema compatibility
+
+Selected `Models: Tool schema compatibility` as the next High-risk row. Chose the routed Zod v4 schema-compat boundary because it protects provider-facing serialization for built-in Mastra Code command tool schemas when a Zod v4 schema exposes `_zod` but lacks native `~standard.jsonSchema`.
+
+Changes:
+
+- Extended `packages/schema-compat/src/standard-schema/adapters/zod-v4.test.ts` with routed serialization coverage for `ask_user`, `task_write`, `task_check`, and `submit_plan` schema shapes.
+- The test deletes native `~standard.jsonSchema` from the Zod v4 schema instances to simulate the Zod 3.25 v4 compatibility export shape, then verifies `standardSchemaToJSONSchema(toStandardSchema(schema), { io: 'input' })` still emits object schemas with expected nested properties.
+- Updated the feature card and recovery tracker row.
+
+Break-validation evidence:
+
+1. Disabled routed Zod v4 fallback for schemas missing native `~standard.jsonSchema`; the focused test failed because serialized tool schemas lost properties. Reverted.
+2. Removed the adapter's JSON Schema converter from the wrapper; the focused adapter test failed. Reverted.
+3. Made provider-facing `standardSchemaToJSONSchema()` drop properties after conversion; the new focused test failed on missing tool schema properties. Reverted.
+
+Verification:
+
+- `pnpm --filter @mastra/schema-compat exec vitest run src/standard-schema/adapters/zod-v4.test.ts --reporter=dot --bail=1` — 1 file / 17 tests passed.
+- `pnpm --filter @mastra/schema-compat build` — passed.
+- `pnpm --filter @mastra/schema-compat exec tsc --noEmit` — passed.
+- Attempted `pnpm test:core:zod` and `pnpm --filter ./packages/core typecheck:zod-compat`; both scripts are absent in this branch.
+
+Commits:
+
+- `ea0cf20e0b` — `test(schema-compat): shield builtin tool schemas` (pushed to `origin/tests/mc`).
