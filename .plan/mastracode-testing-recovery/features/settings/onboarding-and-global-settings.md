@@ -92,7 +92,7 @@
 ## Existing tests
 
 - `mastracode/src/onboarding/__tests__/settings.test.ts` — settings parsing, migrations, pack resolution, thread active pack inference, quiet-mode defaults/rollout, signal settings, shell passthrough parsing, and preview-line normalization.
-- `mastracode/src/__tests__/index.test.ts` — startup settings plumbing, stored API-key env loading, caveman startup restore, `observeAttachments` default/restore behavior, and GitHubSignals processor wiring are partially mocked.
+- `mastracode/src/__tests__/index.test.ts` — startup settings plumbing, stored API-key env loading, registry provider API-key access with multi-env `apiKeyEnvVar` entries, caveman startup restore, `observeAttachments` default/restore behavior, and GitHubSignals processor wiring are partially mocked.
 - `mastracode/src/onboarding/__tests__/packs.test.ts` — provider-gated built-in packs, current OpenAI/GitHub defaults, and API-key/OAuth pack visibility inputs.
 - `mastracode/src/tui/commands/__tests__/models-pack.test.ts` — custom pack upsert/remove/rename/edit/share/import helpers.
 - `packages/core/src/harness/om-threshold-persistence.test.ts` — thread-level OM threshold restore/backfill behavior for state seeded from global settings.
@@ -104,7 +104,6 @@
 ## Missing tests
 
 - First-run onboarding wizard end-to-end: cancel, API-key-only provider access, login refresh, custom pack, OM pack, YOLO, persisted settings.
-- Non-hardcoded registry provider API key (including multi-env `apiKeyEnvVar` entries) keeps setup from showing the no-provider warning.
 - Reload after `/setup`: footer/runtime model, thread metadata, subagent defaults, and OM defaults all agree.
 - Direct Mastra Code `/om` command regression asserting threshold/caveman changes write both thread settings and `settings.json` global defaults.
 - `/models` activation/import/share/delete/targeted-edit flow through real TUI overlay, not only helper functions.

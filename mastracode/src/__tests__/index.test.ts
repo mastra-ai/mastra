@@ -6,12 +6,13 @@ const gatewayRegistryGetInstance = vi.fn(() => ({
   syncGateways: gatewayRegistrySyncGateways,
   getProviders: gatewayRegistryGetProviders,
 }));
+const providerRegistryMock: Record<string, unknown> = {};
 
 vi.mock('@mastra/core/llm', () => ({
   GatewayRegistry: {
     getInstance: gatewayRegistryGetInstance,
   },
-  PROVIDER_REGISTRY: {},
+  PROVIDER_REGISTRY: providerRegistryMock,
 }));
 
 vi.mock('@mastra/core/agent', () => ({
@@ -27,6 +28,8 @@ const agentConstructorMock = vi.fn();
 
 const harnessConstructorMock = vi.fn();
 const loadSettingsMock = vi.fn();
+const getAvailableModePacksMock = vi.fn(() => []);
+const getAvailableOmPacksMock = vi.fn(() => []);
 const harnessSubscribeMock = vi.fn();
 const detectProjectMock = vi.fn(() => ({
   mode: 'none',
@@ -191,9 +194,9 @@ vi.mock('./mcp/index.js', () => ({
   createMcpManager: vi.fn(),
 }));
 
-vi.mock('./onboarding/packs.js', () => ({
-  getAvailableModePacks: vi.fn(() => []),
-  getAvailableOmPacks: vi.fn(() => []),
+vi.mock('../onboarding/packs.js', () => ({
+  getAvailableModePacks: getAvailableModePacksMock,
+  getAvailableOmPacks: getAvailableOmPacksMock,
 }));
 
 vi.mock('../onboarding/settings.js', () => ({
@@ -297,6 +300,13 @@ describe('createMastraCode', () => {
       syncGateways: gatewayRegistrySyncGateways,
       getProviders: gatewayRegistryGetProviders,
     }));
+    getAvailableModePacksMock.mockClear();
+    getAvailableOmPacksMock.mockClear();
+    for (const key of Object.keys(providerRegistryMock)) {
+      delete providerRegistryMock[key];
+    }
+    delete process.env.MC_E2E_PRIMARY_KEY;
+    delete process.env.MC_E2E_SECONDARY_KEY;
   });
 
   it('enables dynamic provider registry loading before bootstrapping auth and models', async () => {
@@ -320,6 +330,19 @@ describe('createMastraCode', () => {
 
     expect(gatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
     resolveSync?.();
+  });
+
+  it('treats registry providers with any configured API-key env var as startup provider access', async () => {
+    providerRegistryMock['multi-env-provider'] = {
+      apiKeyEnvVar: ['MC_E2E_PRIMARY_KEY', 'MC_E2E_SECONDARY_KEY'],
+    };
+    process.env.MC_E2E_SECONDARY_KEY = 'configured';
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(getAvailableModePacksMock).toHaveBeenCalledWith(expect.objectContaining({ 'multi-env-provider': 'apikey' }));
+    expect(getAvailableOmPacksMock).toHaveBeenCalledWith(expect.objectContaining({ 'multi-env-provider': 'apikey' }));
   });
 
   it('always configures dynamic local memory at startup', async () => {
