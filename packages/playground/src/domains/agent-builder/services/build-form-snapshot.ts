@@ -30,11 +30,10 @@ export interface BuildFormSnapshotOptions {
 }
 
 /**
- * Hard cap on the generated `instructions` field. Surfaced to the builder LLM
- * via the empty-instructions directive AND enforced by `useSetAgentInstructionsTool`,
- * which **rejects** over-limit `set-agent-instructions` calls without persisting
- * anything — so a single tool call always stays under the stream output cap
- * (`maxTokens` in `stream-chat-provider.tsx`).
+ * Hard cap on the generated `instructions` field. Enforced by
+ * `useSetAgentInstructionsTool`, which rejects over-limit
+ * `set-agent-instructions` calls without persisting anything. The directive
+ * focuses on a concise target rather than exposing this hard limit to the model.
  *
  * The same cap is reused when echoing already-persisted instructions back in
  * the snapshot via the `truncate` helper below: this only trims the display
@@ -160,7 +159,7 @@ export function buildFormSnapshotInstructions(
       renderField(
         'Instructions',
         EMPTY_TEXT,
-        `Call set-agent-instructions ONCE with your final, complete system prompt. HARD limit: ${MAX_GENERATED_INSTRUCTIONS_CHARS.toLocaleString()} characters. Drafting protocol: (1) plan the sections you need (trigger, capabilities, source rules, response format, completion criteria), (2) draft the full text, (3) COUNT characters before calling, (4) if over the limit drop a WHOLE section (worked examples, FAQ, edge-case lists) — do NOT shave words section-by-section, (5) then call the tool. Over-limit calls are REJECTED (not silently clipped) and you must re-submit. Treat ${MAX_GENERATED_INSTRUCTIONS_CHARS.toLocaleString()} as a hard budget from the first draft, not something to discover by bouncing off it.`,
+        'Call set-agent-instructions ONCE with your final, complete system prompt. Keep it concise: target 1,200–2,000 characters, usually 2–4 short paragraphs or compact bullet groups. Include the essentials only: trigger, capabilities, source rules, response format, and completion criteria. Avoid worked examples, FAQs, long edge-case lists, or exhaustive policies unless the user explicitly asks for that depth.',
       ),
     );
   }

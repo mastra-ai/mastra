@@ -157,7 +157,11 @@ describe('HarnessCompat session-derived state', () => {
     expect(session.setMode).toHaveBeenCalledWith(planMode);
     expect(legacySwitchMode).toHaveBeenCalledWith({ modeId: 'plan' });
     expect(session.setState).toHaveBeenCalledWith({ projectPath: '/new-repo' });
-    expect(legacySetState).toHaveBeenCalledWith({ projectPath: '/new-repo' });
+    expect(legacySetState).toHaveBeenCalledWith({
+      projectPath: '/new-repo',
+      currentModelId: 'new-session-model',
+      modeId: 'plan',
+    });
     expect(harness.getState()).toMatchObject({
       projectPath: '/new-repo',
       currentModelId: 'new-session-model',

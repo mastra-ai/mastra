@@ -21,7 +21,7 @@ import {
   buildStreamErrorMessage,
   isMaxStepsFinishChunk,
 } from './stream-error-message';
-import { toAssistantUIMessage } from './to-assistant-ui-message';
+import { toAssistantUIMessages } from './to-assistant-ui-message';
 import { ToolCallProvider } from './tool-call-provider';
 import { useObservationalMemoryContext } from '@/domains/agents/context';
 import { useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
@@ -102,6 +102,7 @@ export function MastraRuntimeProvider({
   requestContext,
   modelVersion,
   agentVersionId,
+  supportsMemory,
 }: Readonly<{
   children: ReactNode;
 }> &
@@ -117,7 +118,9 @@ export function MastraRuntimeProvider({
   const [threadSignalsUnsupported, setThreadSignalsUnsupported] = useState(false);
   const threadSignalsUnsupportedRef = useRef(false);
   const threadSignalsEnabled =
-    window.MASTRA_AGENT_SIGNALS !== 'false' && !settings?.modelSettings?.chatWithLegacyStream;
+    window.MASTRA_AGENT_SIGNALS !== 'false' &&
+    supportsMemory !== false &&
+    !settings?.modelSettings?.chatWithLegacyStream;
 
   const addPendingSignal = useCallback((signalId: string, preview: string) => {
     setPendingSignals(prev => [...prev.filter(signal => signal.id !== signalId), { id: signalId, preview }]);
@@ -550,11 +553,10 @@ export function MastraRuntimeProvider({
   // tracked in `streamErrors` (which survives the post-stream initialMessages
   // refresh). Without filtering here we would briefly render duplicate errors
   // during the streaming window.
-  const vnextmessages = [...messages.filter(msg => msg.content?.metadata?.status !== 'error'), ...streamErrors].map(
-    msg => {
-      const converted = convertOmPartsInMastraMessage(msg, globalOmParts);
-      return toAssistantUIMessage(converted);
-    },
+  const vnextmessages = toAssistantUIMessages(
+    [...messages.filter(msg => msg.content?.metadata?.status !== 'error'), ...streamErrors].map(msg =>
+      convertOmPartsInMastraMessage(msg, globalOmParts),
+    ),
   );
 
   const runtime = useExternalStoreRuntime({

@@ -69,6 +69,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
   const [input, setInput] = useState('{}');
   const [groundTruth, setGroundTruth] = useState('');
   const [expectedTrajectory, setExpectedTrajectory] = useState('');
+  const [requestContext, setRequestContext] = useState('');
   const [validationErrors, setValidationErrors] = useState<SchemaValidationError | null>(null);
   const { addItem } = useDatasetMutations();
 
@@ -105,12 +106,24 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
       }
     }
 
+    // Parse requestContext if provided
+    let parsedRequestContext: Record<string, unknown> | undefined;
+    if (requestContext.trim()) {
+      try {
+        parsedRequestContext = JSON.parse(requestContext);
+      } catch {
+        toast.error('Request Context must be valid JSON');
+        return;
+      }
+    }
+
     try {
       await addItem.mutateAsync({
         datasetId,
         input: parsedInput,
         groundTruth: parsedGroundTruth,
         expectedTrajectory: parsedTrajectory,
+        requestContext: parsedRequestContext,
       });
 
       toast.success('Item added successfully');
@@ -120,6 +133,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
       setInput('{}');
       setGroundTruth('');
       setExpectedTrajectory('');
+      setRequestContext('');
       onOpenChange(false);
 
       onSuccess?.();
@@ -154,6 +168,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
     setInput('{}');
     setGroundTruth('');
     setExpectedTrajectory('');
+    setRequestContext('');
     setValidationErrors(null);
     onOpenChange(false);
   };
@@ -192,6 +207,16 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
               <CodeEditor
                 value={expectedTrajectory}
                 onChange={setExpectedTrajectory}
+                showCopyButton={false}
+                className="min-h-[80px]"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="item-request-context">Request Context (JSON, optional)</Label>
+              <CodeEditor
+                value={requestContext}
+                onChange={setRequestContext}
                 showCopyButton={false}
                 className="min-h-[80px]"
               />

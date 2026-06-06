@@ -72,19 +72,30 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     }
 
     if (session) {
-      if (typeof currentModelId === 'string') {
+      if (typeof currentModelId === 'string' && currentModelId) {
         session.setModelId(currentModelId);
       }
-      if (typeof modeId === 'string' && modeId !== session.getMode().id) {
+      if (typeof modeId === 'string' && modeId && modeId !== session.getMode().id) {
         await this.switchMode({ modeId });
       }
     }
 
-    if (Object.keys(harnessUpdates).length > 0) {
+    // Always pass session-owned fields through to the legacy harness state so
+    // callers that read state before a session exists (e.g. fresh startup with
+    // no thread) still see currentModelId / modeId.
+    const legacyUpdates = { ...harnessUpdates } as Partial<TState> & SessionStateFields;
+    if (typeof currentModelId === 'string') {
+      legacyUpdates.currentModelId = currentModelId;
+    }
+    if (typeof modeId === 'string') {
+      legacyUpdates.modeId = modeId;
+    }
+
+    if (Object.keys(legacyUpdates).length > 0) {
       if (session) {
         await session.setState(harnessUpdates as Partial<TState>);
       }
-      await super.setState(harnessUpdates as Partial<TState>);
+      await super.setState(legacyUpdates as Partial<TState>);
     }
   }
 
@@ -97,7 +108,8 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
   }
 
   async switchThread({ threadId }: { threadId: string }): Promise<void> {
-    const currentModelId = (this.getState() as SessionStateFields).currentModelId;
+    const hadSession = this.#session !== undefined;
+    const currentModelId = hadSession ? (this.getState() as SessionStateFields).currentModelId : undefined;
 
     const session = await this.#harnessV1.session({
       threadId,

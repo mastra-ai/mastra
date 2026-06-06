@@ -277,6 +277,12 @@ Returns `{ accepted: true, runId: string }`.
     description: 'Controls what happens when the target thread is active. Defaults to `deliver`.',
   },
   {
+    name: 'ifActive.attributes',
+    type: 'Record<string, string | number | boolean>',
+    isOptional: true,
+    description: 'Attributes merged into the signal when Mastra accepts it while the target thread is active.',
+  },
+  {
     name: 'ifIdle.behavior',
     type: "'wake' | 'persist' | 'discard'",
     isOptional: true,
@@ -287,6 +293,12 @@ Returns `{ accepted: true, runId: string }`.
     type: "Omit<AgentExecutionOptions, 'messages'>",
     isOptional: true,
     description: 'Options for the stream that starts when `ifIdle.behavior` is `wake`.',
+  },
+  {
+    name: 'ifIdle.attributes',
+    type: 'Record<string, string | number | boolean>',
+    isOptional: true,
+    description: 'Attributes merged into the signal when Mastra accepts it while the target thread is idle.',
   },
 ]}
 />
