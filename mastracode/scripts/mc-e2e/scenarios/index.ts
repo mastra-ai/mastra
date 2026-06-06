@@ -5,6 +5,7 @@ import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
 import { omSettingsScenario } from './om-settings.js';
+import { quietSettingsScenario } from './quiet-settings.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { startupScenario } from './startup.js';
 import { stateCommandsScenario } from './state-commands.js';
@@ -26,6 +27,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'integration-commands': integrationCommandsScenario,
   'modal-and-shell': modalAndShellScenario,
   'om-settings': omSettingsScenario,
+  'quiet-settings': quietSettingsScenario,
   'report-issue-command': reportIssueCommandScenario,
   'state-commands': stateCommandsScenario,
   'storage-settings': storageSettingsScenario,

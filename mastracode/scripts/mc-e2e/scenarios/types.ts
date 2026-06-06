@@ -8,6 +8,7 @@ export type ScenarioName =
   | 'integration-commands'
   | 'modal-and-shell'
   | 'om-settings'
+  | 'quiet-settings'
   | 'report-issue-command'
   | 'state-commands'
   | 'storage-settings'

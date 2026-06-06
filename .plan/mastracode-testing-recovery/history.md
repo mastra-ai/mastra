@@ -4055,3 +4055,25 @@ Verification:
 - `pnpm --filter ./mastracode check` passed.
 - `pnpm --filter ./mastracode lint` passed.
 - `pnpm run build:mastracode` passed.
+
+## 2026-06-06 — Quiet settings TUI e2e partial coverage batch
+
+Added `quiet-settings` checked-in TUI e2e scenario:
+- Seeds isolated settings so Quiet mode starts off with a deterministic 2-line preview cap.
+- Opens `/settings` through a real PTY, toggles Quiet mode on, closes/reopens settings to verify the persisted On value, changes preview lines from 2 to 4, and closes/reopens again to verify preview-line persistence.
+
+Rows moved from missing e2e to partial e2e:
+- TUI: Quiet mode — partial only; this covers the user-visible `/settings` persistence path, but live compact tool/subagent rendering, Ctrl+E expansion, task summaries, and loaded-history parity remain missing.
+
+Break validation:
+- Renamed the Quiet mode settings row -> `quiet-settings` failed waiting for `Quiet mode Off`.
+- Skipped Quiet mode persistence -> `quiet-settings` failed after closing/reopening `/settings`.
+- Skipped preview-line persistence -> `quiet-settings` failed after the final close/reopen check.
+- All intentional breaks were reverted before committing.
+
+Verification:
+- `pnpm --filter ./mastracode run e2e:test quiet-settings` passed.
+- `pnpm --filter ./mastracode run e2e:test -- --jobs 2` passed: 15/15 scenarios.
+- `pnpm --filter ./mastracode check` passed.
+- `pnpm --filter ./mastracode lint` passed.
+- `pnpm run build:mastracode` passed.
