@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('node:child_process', () => ({
   execFileSync: vi.fn(),
@@ -50,9 +50,20 @@ vi.mock('../status-line.js', () => ({
   updateStatusLine: vi.fn(),
 }));
 
-import { showInfo } from '../display.js';
+import { showError, showInfo } from '../display.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
 import { refreshSkillsAutocomplete, setupAutocomplete, setupKeyboardShortcuts } from '../setup.js';
+
+const originalPlatform = process.platform;
+
+function setPlatform(platform: NodeJS.Platform) {
+  Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+}
+
+afterEach(() => {
+  Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
+  vi.restoreAllMocks();
+});
 
 function createState(isRunning: boolean) {
   const actions = new Map<string, () => unknown>();
@@ -337,6 +348,105 @@ describe('setupKeyboardShortcuts', () => {
     expect(state.goalManager.saveToThread).not.toHaveBeenCalled();
     expect(showInfo).not.toHaveBeenCalledWith(state, 'Goal paused (interrupted). Use /goal resume to continue.');
     expect(state.ui.requestRender).toHaveBeenCalled();
+  });
+
+  it('suspends the process with Ctrl+Z and restarts rendering on SIGCONT', () => {
+    setPlatform('darwin');
+    const { state, actions } = createState(false);
+    const onceSpy = vi
+      .spyOn(process, 'once')
+      .mockImplementation((_event: string | symbol, _listener: (...args: any[]) => void) => {
+        return process;
+      });
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('suspend')?.();
+
+    expect(state.ui.stop).toHaveBeenCalledTimes(1);
+    expect(onceSpy).toHaveBeenCalledWith('SIGCONT', expect.any(Function));
+    expect(killSpy).toHaveBeenCalledWith(process.pid, 'SIGTSTP');
+    expect(state.ui.start).not.toHaveBeenCalled();
+
+    const onContinue = onceSpy.mock.calls[0]?.[1] as (() => void) | undefined;
+    onContinue?.();
+
+    expect(state.ui.start).toHaveBeenCalledTimes(1);
+    expect(state.ui.requestRender).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores the TUI and shows an error when process suspension fails', () => {
+    setPlatform('darwin');
+    vi.mocked(showError).mockClear();
+    const { state, actions } = createState(false);
+    const onceSpy = vi.spyOn(process, 'once').mockImplementation(() => process);
+    const offSpy = vi.spyOn(process, 'off').mockImplementation(() => process);
+    vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw new Error('no tty');
+    });
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('suspend')?.();
+
+    const onContinue = onceSpy.mock.calls[0]?.[1];
+    expect(state.ui.stop).toHaveBeenCalledTimes(1);
+    expect(offSpy).toHaveBeenCalledWith('SIGCONT', onContinue);
+    expect(state.ui.start).toHaveBeenCalledTimes(1);
+    expect(state.ui.requestRender).toHaveBeenCalledTimes(1);
+    expect(showError).toHaveBeenCalledWith(state, 'Unable to suspend in the current terminal');
+  });
+
+  it('guards Ctrl+Z process suspension on Windows', () => {
+    setPlatform('win32');
+    vi.mocked(showInfo).mockClear();
+    const { state, actions } = createState(false);
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('suspend')?.();
+
+    expect(showInfo).toHaveBeenCalledWith(state, 'Suspend is not supported on Windows');
+    expect(state.ui.stop).not.toHaveBeenCalled();
+    expect(killSpy).not.toHaveBeenCalled();
+  });
+
+  it('restores last cleared text with Alt+Z only when the editor is empty', () => {
+    const { state, editor, actions } = createState(false);
+    state.lastClearedText = 'restore me';
+    editor.getText.mockReturnValue('');
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('undo')?.();
+
+    expect(editor.setText).toHaveBeenCalledWith('restore me');
+    expect(state.lastClearedText).toBe('');
+    expect(state.ui.requestRender).toHaveBeenCalledTimes(1);
+
+    state.lastClearedText = 'do not restore';
+    editor.getText.mockReturnValue('current input');
+    actions.get('undo')?.();
+
+    expect(editor.setText).toHaveBeenCalledTimes(1);
   });
 
   it('toggles system reminder expansion with Ctrl+E', () => {
