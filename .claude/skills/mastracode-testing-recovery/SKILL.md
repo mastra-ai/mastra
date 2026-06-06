@@ -49,16 +49,15 @@ Treat `handoff.md` as the pickup point, not as truth. It should tell you what is
 - Document active streaming behavior separately from loaded-from-history/reload behavior.
 - Use normal relative Markdown links for related features.
 
-## Branch and PR flow
+## Branch and commit flow
 
-- Treat this branch as the planning base for the testing recovery effort.
-- Planning/doc updates can be committed directly here.
-- For implementation work, create a focused branch from this planning branch.
-- Stack related PRs when useful, but keep each PR independently reviewable.
+- Treat this branch as the planning and implementation base for the testing recovery effort.
+- Do not create separate feature branches or worktrees unless the user explicitly asks.
 - Commit and push in small, coherent chunks so progress is recoverable and reviewable.
-- When an implementation PR is ready to merge, change its base to `main` and rebase/cherry-pick only the implementation commits onto `main`.
-- Do not drag planning-only commits or `.plan/` churn into product/code PRs unless the PR is specifically for planning docs.
-- Record the branch/PR state in `handoff.md` before signing off.
+- Group commits by feature area, or by individual test group when a test is large enough to review independently.
+- Never commit intentional break-validation edits.
+- Goal-judge validation covers feature/test-group gates during a goal run; ask the user for final approval only when the full recovery queue is exhausted or all remaining rows are explicitly deferred.
+- Record branch status, commits, verification evidence, and remaining work in `handoff.md` before signing off.
 
 ## Signing off
 

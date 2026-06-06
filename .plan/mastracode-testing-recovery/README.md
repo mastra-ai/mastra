@@ -4,7 +4,7 @@
 
 Make Mastra Code safe to refactor and release by turning today’s manual validation into reliable tests, CI guardrails, feature documentation, and reusable agent workflows.
 
-This plan should become the coordination base for the testing recovery effort: we plan here, branch from here, and then ship focused implementation PRs from stacked branches.
+This plan should become the coordination base for the testing recovery effort: we plan here, do implementation work on this branch, and ship progress as cleanly grouped commits by feature area or large test group.
 
 ## How to resume this work
 
@@ -29,17 +29,23 @@ Examples:
 
 The command lives at `.mastracode/commands/map-mc-features.md`. It first lists the Mastra Code PR queue from squash-merged commit history, then processes PRs oldest-to-newest. For each PR it reviews the originating PR, verifies current code/tests, creates pages for new user-visible features, and updates existing pages when later PRs modify earlier documented behavior.
 
+For test recovery implementation, start the dedicated goal command:
+
+```text
+/goal/recover-mc-tests
+```
+
+The command lives at `.mastracode/commands/recover-mc-tests.md`. It advances through every unfinished feature in `.plan/mastracode-testing-recovery/test-recovery-tracker.md`, writes missing tests, performs verification gates, records evidence, and commits cleanly grouped chunks on this branch.
+
 ## Overall approach
 
-Use this branch as the planning base. Keep the plan files here so the work stays coherent, but do not ship plan-file churn in every implementation PR.
+Use this branch as the planning and implementation base for the testing recovery effort. Keep work reviewable by committing cleanly grouped chunks on this branch.
 
 For implementation work:
-- Branch off this planning branch for each focused workstream or PR.
-- Make small stacked PRs where possible.
-- Commit and push in small, coherent chunks so progress is recoverable and reviewable.
-- When a PR is ready to merge, change its base to `main` and rebase/cherry-pick only the implementation commits onto `main`.
-- Leave planning-only commits behind on this branch unless the plan docs themselves are the PR.
-- Keep appending progress to [`history.md`](./history.md) so later agents can pick up context quickly.
+- Do not create separate feature branches or worktrees unless the user explicitly asks.
+- Group commits by coherent feature area, or by individual test group when a test is large enough to review independently.
+- Run the verification gates from [`test-recovery-system.md`](./test-recovery-system.md) before committing each group.
+- Keep appending progress to [`history.md`](./history.md), [`handoff.md`](./handoff.md), and [`test-recovery-tracker.md`](./test-recovery-tracker.md) so later agents can pick up context quickly.
 
 ## Workstreams
 

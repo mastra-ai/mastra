@@ -2774,3 +2774,17 @@ pnpm exec tsx .plan/mastracode-testing-recovery/spikes/mc-e2e/run-scenario-file.
 ```
 
 Result: the observe run wrote `/tmp/mc-e2e-recording.json` with forwarded inputs, transcript, and AIMock request count. The converter generated `generated/recorded-controlled.scenario.ts`, and `run-scenario-file.ts` ran the generated scenario successfully. This proves an agent can drive an observed terminal via control-file writes, record the transcript, and turn that recording into a draft scenario/test skeleton.
+
+## 2026-06-06 — Test recovery goal command
+
+Added a dedicated goal-mode command for autonomous Mastra Code test recovery:
+
+```text
+/goal/recover-mc-tests
+```
+
+The command owns the full unfinished test-recovery queue rather than accepting a specific feature. It initializes/updates `.plan/mastracode-testing-recovery/test-recovery-tracker.md` from the feature-map index, picks the next unfinished feature by risk/coverage priority, extracts contracts, adds missing tests, performs verification gates and realistic break-validation where practical, updates evidence, and commits clean grouped chunks on the current branch.
+
+Updated recovery docs to use the current same-branch workflow: no separate feature branches/worktrees by default; commit by feature area or by large test group.
+
+Follow-up: clarified the goal workflow so feature/test-group verification gates are judged by the goal judge during autonomous runs, not by the user. The user should only be asked for final approval after the full unfinished queue is exhausted or remaining rows are explicitly deferred. Also clarified that grouped commits should be pushed after committing so recovery progress is available remotely.

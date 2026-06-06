@@ -28,19 +28,21 @@ None known.
 
 1. Current `_pr-queue.md` is exhausted through row 358. If new Mastra Code PRs land, append them to the queue and resume oldest-to-newest.
 2. Workstream 1/2 status after rebasing onto `origin/main`: `pnpm run build:mastracode` passes; `pnpm test:mastracode -- --run --reporter=dot` passes only with provider env sanitized. Documented follow-up: make `mastracode/src/agents/__tests__/model.test.ts` clear provider `*_API_KEY` env vars in test setup so the suite is hermetic by default. Root Vitest discovery includes `mastracode/vitest.config.ts`, so CI likely covers Mastra Code through generic `unit:*`; explicit workflow/script wiring still needs a final CI audit.
-3. Continue workstream 4 from the checked-in `mastracode/scripts/mc-e2e/` runner: add feature-specific scenarios one at a time, keep scenarios as checked-in source files, and use `pnpm --filter ./mastracode run e2e:test` / `e2e:observe <scenario>` for verification. The current runner uses a static `@microsoft/tui-test` wrapper, isolated per-scenario runtime dirs, and AIMock replay fixtures; do not reintroduce generated test source.
-4. Audit high-risk `Partial`/`Missing` feature cards for remaining test gaps before moving from mapping to implementation work.
-5. Keep future feature-map updates concise and commit/push in reviewable chunks.
+3. Start `/goal/recover-mc-tests` to move from mapping to autonomous test recovery. The command uses `.plan/mastracode-testing-recovery/test-recovery-tracker.md`, writes missing tests for every unfinished mapped feature, applies verification gates, records evidence, and commits grouped chunks on this branch.
+4. Continue workstream 4 from the checked-in `mastracode/scripts/mc-e2e/` runner when adding TUI-visible/TUI-triggered coverage: add checked-in scenarios, use AIMock replay fixtures, and verify with `pnpm --filter ./mastracode run e2e:test` / `e2e:observe <scenario>`. Do not reintroduce generated test source.
+5. Keep future feature-map and test-recovery updates concise and commit/push in reviewable chunks.
 
 ## Files to read first
 
 - `.claude/skills/mastracode-testing-recovery/SKILL.md`
 - `.mastracode/commands/map-mc-features.md`
+- `.mastracode/commands/recover-mc-tests.md`
 - `.plan/mastracode-testing-recovery/README.md`
 - `.plan/mastracode-testing-recovery/history.md`
 - `.plan/mastracode-testing-recovery/handoff.md`
 - `.plan/mastracode-testing-recovery/features/README.md`
 - `.plan/mastracode-testing-recovery/features/_template.md`
+- `.plan/mastracode-testing-recovery/test-recovery-tracker.md`
 
 ## Last commands/evidence
 
