@@ -287,3 +287,9 @@ Break validations: dropping `Notification` from config loading fails the loader 
 Validated the prompt-driven `/report-issue` command, committed and pushed as `bd8725f026`. The direct command test proves model-selected gating, pending-thread creation before prompt send, and preserved duplicate-search / approval / repo-label prompt content. The dispatcher test proves `/report-issue` routes to the handler and removed `/fix-issue` stays absent.
 
 Break validations: removing the model gate fails the direct command test; skipping pending-thread creation fails the direct command test; reintroducing `/fix-issue` fails the dispatcher absence test. Final verification passed: focused report-issue/command-dispatch tests, MastraCode typecheck, lint, and `pnpm run build:mastracode`.
+
+### Integrations: Observability and eval feedback
+
+Validated the `/feedback` observability payload boundary, committed and pushed as `5040e7167e`. The direct command test proves missing-context rejection, rating/comment parsing, event-bus `addFeedback` payload shape, correlation context, thread/run metadata, and numeric bounds.
+
+Break validations: removing the missing-context guard records orphan feedback and fails the test; dropping `correlationContext` fails payload assertions; loosening rating bounds records invalid ratings and fails the test. Final verification passed: focused feedback command tests, MastraCode typecheck, lint, and `pnpm run build:mastracode`.

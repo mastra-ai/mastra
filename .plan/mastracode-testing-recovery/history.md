@@ -3687,3 +3687,10 @@ Validated `Integrations: GitHub issue reporting command` with direct command and
 - Tightened `mastracode/src/tui/__tests__/command-dispatch.test.ts` to prove `/report-issue` routes to the handler and removed `/fix-issue` remains absent.
 - Break validations proven and reverted: removed model-selected gate; skipped pending-thread creation; reintroduced `/fix-issue` as an alias.
 - Verification: focused report-issue/command-dispatch tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### Observability feedback recovery checkpoint
+
+Validated `Integrations: Observability and eval feedback` with a direct `/feedback` command shield, committed as `5040e7167e`:
+- Added `mastracode/src/tui/commands/__tests__/feedback.test.ts` proving feedback requires active trace/run/thread context, records rating/comment payloads through observability `addFeedback`, preserves `correlationContext`, includes thread/run metadata, and enforces 0-10 numeric bounds.
+- Break validations proven and reverted: removed the missing-context guard; dropped `correlationContext`; loosened numeric rating bounds.
+- Verification: focused feedback command tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.

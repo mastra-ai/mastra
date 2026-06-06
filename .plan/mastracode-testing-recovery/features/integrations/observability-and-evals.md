@@ -72,13 +72,13 @@
 - `mastracode/src/evals/scorers/__tests__/efficiency.test.ts` — efficiency scorer coverage for redundancy, turn count, retry chains, and read-before-edit behavior.
 - `mastracode/src/evals/scorers/__tests__/classify-command.test.ts` — command classifier, exit-code, success-result, and file-path matching coverage.
 - `mastracode/src/analytics.test.ts` — telemetry-disabled env parsing, no-op safety, and disabled debug logging.
+- `mastracode/src/tui/commands/__tests__/feedback.test.ts` — verifies `/feedback` missing-context rejection, rating/comment payloads, observability correlation context, thread/run metadata, username source, and numeric bounds.
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — dispatch layer mocks `/feedback` and `/observability` handlers and asserts tracked slash-command analytics.
 - `observability/mastra/src/exporters/mastra-storage.test.ts` and `mastra-platform.test.ts` — storage exporter strategy/batching/drop behavior and platform exporter batching/endpoints/signal publishing/auth failure behavior.
 
 ## Missing tests
 
 - Direct `/observability` command tests for connect/disconnect/status/local toggles, project ID validation, AuthStorage key persistence, and env-var status fallback.
-- Direct `/feedback` tests for ratings, comments, missing trace/run IDs, and observability-event payload/correlation context.
 - Integration test proving scorers are attached to the real agent config and receive reconstructed `buildEvalContext()` data from stored messages/traces.
 - Startup/main-loop test that product analytics session-start, thread/model/command/prompt events, and shutdown remain safe when PostHog throws or telemetry is disabled.
 - Headless/runtime smoke for DuckDB/storage/platform exporter startup and sensitive-data filtering.
