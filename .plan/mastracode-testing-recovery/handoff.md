@@ -307,3 +307,10 @@ Validated `Goals: Persistent /goal mode` with a narrow status-line fallback shie
 - Extended `mastracode/src/tui/__tests__/status-line.test.ts` to cover an active judge with OM progress, active goal state, and a long model ID on a narrow terminal.
 - Break validations proven and reverted: allowed OM progress during active judge; allowed goal-duration label during active judge; used normal chat model instead of the active judge model.
 - Verification: focused status-line tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### Subagent delegation recovery checkpoint
+
+Validated `Subagents: Delegation to Explore / Plan / Execute` with a core harness abort-propagation shield, committed as `b201489b83`:
+- Extended `packages/core/src/harness/subagent-tool.test.ts` to prove parent aborts are passed to active subagent streams, partial text is preserved, `getFullOutput()` is skipped, and `subagent_end` is emitted as a non-error abort result.
+- Break validations proven and reverted: dropped `abortSignal` from subagent stream options; disabled the post-stream abort check; marked parent-aborted subagent completion as an error.
+- Verification: focused subagent-tool tests, core typecheck, core lint, and `pnpm build:core` all passed.

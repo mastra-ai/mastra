@@ -80,14 +80,13 @@
 - `mastracode/src/tui/components/__tests__/subagent-execution.test.ts` — running/completed/error/fork rendering and completion collapse/expand options.
 - `mastracode/src/tui/__tests__/render-messages.test.ts` — persisted subagent rendering cases.
 - `mastracode/src/agents/prompts/index.test.ts` / tool-guidance tests — partial prompt/guidance coverage.
-- `packages/core/src/harness/subagent-tool.test.ts` — request-context copy/retargeting, tracing-context forwarding, forked thread cloning/defaults/errors, parent toolset inheritance with patched `subagent`/task tools, parent workspace propagation, and `allowedWorkspaceTools` filtering.
+- `packages/core/src/harness/subagent-tool.test.ts` — request-context copy/retargeting, tracing-context forwarding, parent abort propagation into active subagent streams, forked thread cloning/defaults/errors, parent toolset inheritance with patched `subagent`/task tools, parent workspace propagation, and `allowedWorkspaceTools` filtering.
 - `packages/core/src/harness/subagent-workspace-integration.test.ts` — real workspace tool execution from non-forked subagents and allowlist filtering.
 - `mastracode/src/tools/__tests__/get-allowed-paths.test.ts` — skill-path plus sandbox-path merging for subagent/file-tool access.
 
 ## Missing tests
 
 - End-to-end parent run spawning each built-in subagent with expected tool allowlist and inherited sandbox access.
-- Abort propagation from parent run to active subagent.
 - `/subagents` thread/global model override persists across restart and thread switch, especially for configured subagent IDs not in the built-in set.
 - Prompt test that subagent guidance consistently includes the audit-tests single-use exception everywhere it is shown.
 

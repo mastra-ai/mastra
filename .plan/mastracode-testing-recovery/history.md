@@ -3710,3 +3710,10 @@ Validated `Goals: Persistent /goal mode` with a narrow status-line fallback shie
 - Added a status-line regression test for active judge + active OM progress + active goal state + long model ID at 30 columns.
 - Break validations proven and reverted: OM progress displaced the judge model; goal duration displaced the judge model; normal chat model replaced the judge model.
 - Verification: `pnpm --filter ./mastracode exec vitest --run src/tui/__tests__/status-line.test.ts --reporter=dot`, `pnpm --filter ./mastracode check`, `pnpm --filter ./mastracode lint`, and `pnpm run build:mastracode` all passed.
+
+### Subagent delegation recovery checkpoint
+
+Validated `Subagents: Delegation to Explore / Plan / Execute` with a core harness abort-propagation shield, committed as `b201489b83`:
+- Added behavior-level coverage for parent abort propagation into an active subagent stream, preserving partial output and ending the subagent as a non-error abort result.
+- Break validations proven and reverted: missing `abortSignal` let the subagent complete with final output; missing post-stream abort check used final output; error-classified abort emitted `isError: true`.
+- Verification: `pnpm --filter ./packages/core exec vitest --run src/harness/subagent-tool.test.ts --reporter=dot`, `pnpm --filter ./packages/core check`, `pnpm --filter ./packages/core lint`, and `pnpm build:core` all passed.
