@@ -3908,3 +3908,11 @@ Verification:
 - `pnpm --filter ./mastracode check` passed.
 - `pnpm --filter ./mastracode lint` passed.
 - `pnpm run build:mastracode` passed.
+
+## 2026-06-06 — Headless prompt TUI deferral
+
+Validated `Headless: Prompt mode` with explicit TUI-e2e not-applicable rationale:
+- The feature is the non-interactive CLI/headless path and bypasses TUI construction by design.
+- Existing headless unit/integration tests cover parsing, stdin pipe handling, output formats, thread/resource controls, and model/mode preflight.
+- Existing break evidence remains: text output buffering, JSON summary, and stream-json NDJSON contracts fail when broken.
+- Adjacent startup/TUI fallback behavior remains covered by checked-in TUI e2e scenarios.
