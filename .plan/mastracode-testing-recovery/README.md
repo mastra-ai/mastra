@@ -35,7 +35,7 @@ For test recovery implementation, start the dedicated goal command:
 /goal/recover-mc-tests
 ```
 
-The command lives at `.mastracode/commands/recover-mc-tests.md`. It advances through every unfinished feature in `.plan/mastracode-testing-recovery/test-recovery-tracker.md`, writes missing tests, performs verification gates, records evidence, and commits cleanly grouped chunks on this branch.
+The command lives at `.mastracode/commands/recover-mc-tests.md`. It advances through every unfinished feature in `.plan/mastracode-testing-recovery/test-recovery-tracker.md`, writes missing tests, performs verification gates, records evidence, and commits cleanly grouped chunks on this branch. For TUI-visible or TUI-triggered behavior, completion requires checked-in TUI e2e scenarios; focused unit/integration/component/headless shields are supporting evidence but not a replacement for the user-perspective e2e gate.
 
 ## Overall approach
 
@@ -97,6 +97,7 @@ Initial scope:
 - Provide mocked model endpoints MC can connect to.
 - Investigate tools like `aimock` only after requirements are clear.
 - Convert the resulting workflow into skills for writing and running MC tests.
+- When realistic AIMock fixtures need real-world conversation or OM shape, read the local Mastra Code Application Support database only via read-only operations, sanitize the data, and commit only deterministic fixture files.
 
 Status: not yet planned.
 

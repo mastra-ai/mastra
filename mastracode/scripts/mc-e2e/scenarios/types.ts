@@ -1,4 +1,10 @@
-export type ScenarioName = 'startup' | 'branch-context-long-name' | 'automated-chat';
+export type ScenarioName =
+  | 'startup'
+  | 'branch-context-long-name'
+  | 'automated-chat'
+  | 'visible-commands'
+  | 'integration-commands'
+  | 'report-issue-command';
 
 export type McE2eTerminal = {
   getByText: (text: string | RegExp, options?: { full?: boolean; strict?: boolean }) => any;

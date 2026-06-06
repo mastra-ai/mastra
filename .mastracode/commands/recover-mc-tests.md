@@ -47,7 +47,7 @@ Then select the next unfinished row using this priority:
 Unfinished statuses are: `pending`, `in-progress`, `needs-follow-up`, `blocked`, and `deferred-needs-review`.
 Finished status is only `validated`.
 
-Continue until every tracker row is `validated` or explicitly deferred with rationale that the goal judge can review.
+Continue until every tracker row is `validated` or explicitly deferred with rationale that the goal judge can review. A TUI-visible, TUI-triggered, or terminal-user-observable row is not `validated` until its TUI e2e status is covered or explicitly deferred.
 
 ## Per-feature work loop
 
@@ -76,11 +76,12 @@ For each selected feature or tightly related feature cluster:
 
 ### Gate 2 — add missing tests
 
-1. Add missing tests at the lowest reliable layer.
-2. If behavior is visible in, triggered from, or affected by the TUI, add TUI e2e coverage under `mastracode/scripts/mc-e2e/scenarios/`.
+1. Add missing tests at the lowest reliable layer for implementation contracts.
+2. If behavior is visible in, triggered from, or affected by the TUI, checked-in TUI e2e coverage under `mastracode/scripts/mc-e2e/scenarios/` is required before the row can be marked `validated`. Unit, integration, component, command, or headless tests are supporting shields; they do not satisfy this gate by themselves.
 3. For LLM behavior, use deterministic AIMock fixtures. Do not rely on local provider credentials.
-4. Keep tests product-realistic. Avoid tests that only assert implementation details unless the feature itself is an implementation boundary.
-5. If a test reveals a real product bug, first prove the test is correct, then fix the product bug.
+4. If realistic fixture data is needed, read it from the local Mastra Code database under the user's Application Support directory only with explicit read-only operations, sanitize it, and transform it into AIMock-compatible fixture files. Never point CI or committed tests at the live local database.
+5. Keep tests product-realistic. Avoid tests that only assert implementation details unless the feature itself is an implementation boundary.
+6. If a test reveals a real product bug, first prove the test is correct, then fix the product bug.
 
 ### Gate 3 — prove tests are meaningful
 

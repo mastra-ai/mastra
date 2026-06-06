@@ -34,10 +34,12 @@ Treat `handoff.md` as the pickup point, not as truth. It should tell you what is
 ## TUI e2e harness work
 
 - Treat checked-in scenario files under `mastracode/scripts/mc-e2e/scenarios/` as the source of truth; do not generate scenario source or duplicate scenario logic in separate wrappers.
+- For any behavior visible in, triggered from, or affected by the terminal UI, TUI e2e coverage is required before a recovery tracker row can be marked `validated`. Unit, integration, component, command, and headless tests are supporting shields, not substitutes for the user-perspective e2e gate.
 - Use `pnpm --filter ./mastracode run e2e:test` for default headless pass/fail execution. It runs all scenarios through the static `@microsoft/tui-test` wrapper; pass a scenario name to run one scenario.
 - Use `pnpm --filter ./mastracode run e2e:observe <scenario>` for live TUI visibility. Observe mode is for debugging and demos, not normal CI.
 - Use `pnpm --filter ./mastracode run e2e:list` to list available scenarios.
 - Keep e2e runs hermetic: per-scenario app data, storage DBs, project directories, provider env sanitization, AIMock replay fixtures, visible mocked response assertions, and AIMock request-count assertions.
+- Real-world conversations and OM data may be read from the local Mastra Code database in the user's Application Support directory only with explicit read-only operations, then sanitized and transformed into AIMock-compatible fixtures. Never write to the local DB and never make committed or CI tests depend on it.
 - Recording-driven test creation should be explicit and should never run in CI by default. Treat recorded interactions as draft tests: review them and replace brittle transcript assertions with semantic helpers before committing.
 
 ## Feature map work

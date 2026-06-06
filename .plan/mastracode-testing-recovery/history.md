@@ -3822,3 +3822,38 @@ Final verification passed:
 - `env -u OPENAI_API_KEY -u OPENAI_BASE_URL -u ANTHROPIC_API_KEY -u ANTHROPIC_BASE_URL -u TAVILY_API_KEY pnpm --filter ./mastracode exec vitest --run --bail=1 --reporter=dot` — 128 files / 1300 tests passed.
 
 All recovery work is committed and pushed on `tests/mc`; the remaining action is user final approval.
+
+## 2026-06-06 — E2E coverage correction
+
+The final recovery approval request was rejected because the completed queue relied almost entirely on focused unit/integration/component/headless shields. Only the original three checked-in TUI e2e scenarios existed (`startup`, `branch-context-long-name`, `automated-chat`), and only `branch-context-long-name` was strengthened during recovery.
+
+Correction:
+- Reopened all 56 tracker rows as `needs-follow-up`.
+- Added a `TUI e2e status` column and marked every row missing checked-in scenario coverage.
+- Updated recovery instructions to require TUI e2e for TUI-visible, TUI-triggered, or terminal-user-observable behavior before a row can be marked `validated`.
+- Preserved existing focused-test evidence as supporting shields, not completion evidence.
+- Added fixture guidance: real-world conversations and observational-memory data may be read from the local Mastra Code Application Support database only with read-only operations, then sanitized and transformed into deterministic AIMock-compatible fixtures. Tests must never mutate or depend on the live local DB.
+
+Next action: begin adding the missing `mastracode/scripts/mc-e2e/scenarios/` coverage, starting with high-value TUI-visible flows and reusing AIMock fixtures where LLM behavior is involved.
+
+## 2026-06-06 — First reopened TUI e2e batch
+
+Added the first missing checked-in TUI e2e scenarios after reopening the tracker:
+- `visible-commands` covers real PTY `/help` and `/theme` command feedback. It validates baseline help command/shortcut text, `/api-keys`, Ctrl+Z guidance, `/theme` status, and invalid theme usage text.
+- `integration-commands` covers real PTY `/browser status` and `/mcp status` visible command surfaces. This is partial coverage only; full browser attach and configured MCP manager/reload flows still need e2e.
+- `report-issue-command` covers real PTY `/report-issue startup hangs` with AIMock-backed model response and request-count proof.
+
+Tracker state after this batch:
+- 56 total rows.
+- 3 rows validated with covered TUI e2e (`Help and shortcuts`, `Terminal theme and contrast`, `GitHub issue reporting command`).
+- 2 rows have partial TUI e2e (`Browser automation`, `MCP status and reload command`) and remain `needs-follow-up`.
+- 51 rows still have missing TUI e2e.
+
+Verification:
+- `pnpm --filter ./mastracode run e2e:test visible-commands` passed.
+- `pnpm --filter ./mastracode run e2e:test integration-commands` passed.
+- `pnpm --filter ./mastracode run e2e:test report-issue-command` passed with AIMock request count 1.
+- `pnpm --filter ./mastracode run e2e:test -- --jobs 2` passed: 6/6 scenarios.
+- `pnpm --filter ./mastracode check` passed.
+- `pnpm --filter ./mastracode lint` passed.
+- `pnpm run build:mastracode` passed.

@@ -10,15 +10,17 @@ Not one happy path. Not only the important stuff. The goal is a regression shiel
 
 ## TUI coverage rule
 
-If a behavior is visible in, triggered from, or affected by the TUI, it gets TUI e2e coverage.
+If a behavior is visible in, triggered from, or affected by the TUI, it gets checked-in TUI e2e coverage under `mastracode/scripts/mc-e2e/scenarios/`.
 
-This is not optional and not merely representative. If users can see or interact with a behavior in Mastra Code, the TUI contract should be locked by an e2e test.
+This is not optional and not merely representative. If users can see or interact with a behavior in Mastra Code, the TUI contract should be locked by an e2e test. Lower-level unit, integration, command, component, and headless tests are valuable supporting shields, but they do not satisfy the user-perspective TUI e2e requirement by themselves.
 
 E2E tests should become cheap enough to use broadly by investing in:
 
 - AIMock-driven deterministic model behavior.
 - A solid Mastra Code TUI test utility.
 - A dedicated testing skill that documents the patterns, fixtures, and verification expectations.
+
+When realistic LLM/OM fixture data is needed, agents may read long real-world conversations and observational-memory data from the local Mastra Code database under the user's Application Support directory, but only with explicit read-only operations. That data must be sanitized and transformed into deterministic AIMock-compatible fixtures; tests must never depend on or mutate the live local database.
 
 ## Contract extraction
 
@@ -73,7 +75,7 @@ Classify each invariant so the required test layer is obvious.
 
 ## Test layers
 
-Use the lowest reliable layer for each invariant, but do not skip TUI e2e for TUI-visible or TUI-triggered contracts.
+Use the lowest reliable layer for each invariant, but do not skip TUI e2e for TUI-visible, TUI-triggered, or terminal-user-observable contracts. A recovery row with such behavior remains unfinished until the TUI e2e gate is covered or explicitly deferred with rationale.
 
 - Unit tests: pure logic, parsing, formatting, reducers, config resolution, rendering helpers, permission decisions.
 - Integration tests: Harness/session/storage/tool/signal/memory composition without a full terminal UI.

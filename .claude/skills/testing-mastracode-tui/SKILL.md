@@ -10,7 +10,8 @@ Use this skill when writing or validating Mastra Code TUI/e2e tests.
 ## Test layers
 
 - Prefer focused colocated unit tests for pure rendering, parsing, model resolution, command handlers, or storage helpers.
-- Use `mastracode/scripts/mc-e2e/` for behavior that is TUI-visible, TUI-triggered, or depends on the real terminal/event loop.
+- Use `mastracode/scripts/mc-e2e/` for behavior that is TUI-visible, TUI-triggered, user-observable in the terminal, or depends on the real terminal/event loop.
+- For Mastra Code recovery work, TUI e2e coverage is required for TUI-visible/TUI-triggered behavior before a tracker row can be marked validated. Lower-level tests are supporting shields, not replacements for the user-perspective e2e gate.
 - For LLM scenarios, use AIMock fixtures. Do not rely on local provider credentials in CI-style tests.
 
 ## Commands
@@ -61,6 +62,7 @@ export const myScenario = {
 - Match the actual user prompt with `match.userMessage`.
 - Use `endpoint: "chat"` for OpenAI fixtures; AIMock normalizes Responses API requests into chat-style fixture matching.
 - Ensure LLM scenarios assert through the runner's AIMock request count. A passing LLM scenario should show a nonzero AIMock request count.
+- If realistic long conversations or observational-memory examples are needed, read from the local Mastra Code database in Application Support only with read-only operations, sanitize user/project/provider data, and commit only deterministic AIMock-compatible fixtures derived from that data.
 - Use `--record-ai` only for explicit fixture authoring/debugging, never as default CI behavior.
 
 Example fixture shape:

@@ -74,6 +74,7 @@
 - `mastracode/src/tui/__tests__/status-line.test.ts` — responsive footer/status rendering around queued counts, PR badges, model path compaction, and mode-color badge formatting.
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — theme handler is mocked in dispatch coverage.
 - `mastracode/src/tui/commands/__tests__/theme.test.ts` — direct `/theme` handler coverage for show-current behavior, explicit dark persistence/live apply/render, auto detection with background propagation, and invalid-value rejection.
+- `mastracode/scripts/mc-e2e/scenarios/visible-commands.ts` — real PTY/TUI e2e coverage proving `/theme` shows current visible state and invalid `/theme neon` renders usage feedback in the transcript.
 
 ## Missing tests
 

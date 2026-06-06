@@ -63,6 +63,7 @@
 - `mastracode/src/tui/commands/__tests__/report-issue.test.ts` — verifies model-selected gating, pending-thread creation before prompt send, guided prompt safety content, duplicate search instructions, approval wording, `mastracode` label, and `mastra-ai/mastra` repo.
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — verifies `/report-issue` routing and that removed `/fix-issue` stays absent.
 - `mastracode/src/tui/components/__tests__/help-overlay.test.ts` covers the hardcoded help command list generally.
+- `mastracode/scripts/mc-e2e/scenarios/report-issue-command.ts` with `fixtures/report-issue-command.json` — real PTY/TUI + AIMock e2e coverage proving `/report-issue startup hangs` creates the prompt handoff and renders the model response without live credentials.
 
 ## Missing tests
 
