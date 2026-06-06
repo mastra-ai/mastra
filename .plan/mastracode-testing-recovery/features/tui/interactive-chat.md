@@ -104,6 +104,7 @@
 ## Existing tests
 
 - `mastracode/src/tui/__tests__/mastra-tui-queueing.test.ts` — active-run queue/signal behavior, optimistic-message remapping before stream echo dedupe, and pending-new-thread signal deferral.
+- `mastracode/src/tui/__tests__/state.test.ts` — `createTUIState()` default maps, queues, flags, dependencies, project info, and mode-color callback shape used by chat handlers.
 - `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts` — shortcut behavior, slash autocomplete ordering, active-run mode-switch blocking, and Ctrl+F explicit queue behavior.
 - `mastracode/src/tui/components/__tests__/custom-editor.test.ts` — slash autocomplete, Ctrl+F queue resolution, prompt animation, and paste behavior.
 - `mastracode/src/tui/__tests__/mastra-tui-hooks.test.ts` — prompt-submit/stop hook wiring.
@@ -128,7 +129,6 @@
 - End-to-end `cat file.txt | mastracode` smoke proving stdin is drained, sanitized, rendered as initial message, and keyboard input still works after TTY reopen.
 - Enter-as-signal vs Ctrl+F queued follow-up after reload.
 - Built-package import smoke for `mastracode/tui` covering ESM, CJS, and generated `.d.ts` paths.
-- Direct `createTUIState()` default-shape test so queue/tool/goal fields do not silently lose defaults during TUI refactors.
 - Regression test for #13609: assistant text before a tool remains visible after a tool-result-only update and final chunk with no trailing text.
 - Full startup layout snapshot covering banner, frontmatter, instructions, chat, task progress, editor, and footer.
 - Component-level shell passthrough test proving incremental output appears before process exit and is not persisted as chat history.

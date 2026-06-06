@@ -3089,3 +3089,24 @@ Verification:
 - `pnpm run build:mastracode` — passed, 24/24 cached.
 
 Committed as `00c35d1721` (`test(mastracode): shield storage settings overlay`).
+
+### Test recovery: interactive chat state defaults
+
+Selected `TUI: Interactive chat` as the next High-risk row. Chose the missing `createTUIState()` default-shape gap because existing queueing, shortcut, render, hook, and shell tests hand-build partial state objects; a missing factory default can therefore break real chat handlers at runtime without failing those tests.
+
+Added `mastracode/src/tui/__tests__/state.test.ts` with focused mocks for the pi-tui shell and editor. The test asserts the shared TUI runtime starts with the maps, sets, queues, flags, dependency references, project info, model auth status, and mode-color callback that chat handlers rely on.
+
+Break-validation evidence:
+
+1. Initialized `pendingSignalMessageComponentsById` as an array instead of a `Map`; `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/state.test.ts --bail 1 --reporter=dot` failed on the map-shape assertion. Reverted.
+2. Defaulted `pendingNewThread` to `true`; the focused test failed because idle chat must not create a new thread unless startup/thread logic requests one. Reverted.
+3. Defaulted `hideThinkingBlock` to `false`; the focused test failed on the chat display default. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/state.test.ts --bail 1 --reporter=dot` — 1 file / 1 test passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — passed, 24/24 cached.
+
+Committed as `0ae15b3c70` (`test(mastracode): shield tui state defaults`).
