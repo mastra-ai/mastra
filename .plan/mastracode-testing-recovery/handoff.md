@@ -269,3 +269,9 @@ Break validations: skipping agent/state attachment fails the command test; skipp
 Validated the cross-UI display-state subscriber contract, committed as `b6b828aba5`. The new core test proves a non-TUI consumer can render running/task/tool state from `subscribeDisplayState()` snapshots without raw Harness event handling.
 
 Break validations: skipping scheduler notifications fails subscribe tests; dropping `tool_start` display projection fails display-state tests; dropping `task_updated` display projection fails display-state tests. Final verification passed: focused display-state tests, core typecheck, core lint, and `pnpm build:core`.
+
+### Integrations: Skills command and workspace resolution
+
+Validated the skill-command workspace-resolution boundary, committed and pushed as `73952ec0ff`. The new `/skills` direct command test proves dynamic workspaces resolve before the first message and still hide `user-invocable: false` skills. The dispatcher test proves `/goal/<skill>` aliases resolve the dynamic workspace before reading goal-enabled skill metadata.
+
+Break validations: removing `/goal/<skill>` eager resolution fails the dispatcher test; disabling `/skills` eager resolution fails the direct command test; leaking non-user-invocable skills into `/skills` fails the list assertion. Final verification passed: focused skills/command-dispatch tests, MastraCode typecheck, lint, and `pnpm run build:mastracode`.

@@ -71,8 +71,8 @@
 ## Existing tests
 
 - `packages/core/src/harness/workspace-resolution.test.ts` — verifies static/dynamic/no-workspace paths and dynamic cache behavior.
-- `mastracode/src/tui/commands/__tests__/skills.test.ts` — explicit `/skill/<name>` activation, argument wrapping, pending-thread creation, missing skill hints, boundary escaping, and `user-invocable: false` filtering.
-- `mastracode/src/tui/__tests__/command-dispatch.test.ts` — dispatch of `/skill/<name>` and `/goal/<skill>` routes.
+- `mastracode/src/tui/commands/__tests__/skills.test.ts` — explicit `/skill/<name>` activation, `/skills` eager workspace resolution before the first message, argument wrapping, pending-thread creation, missing skill hints, boundary escaping, and `user-invocable: false` filtering.
+- `mastracode/src/tui/__tests__/command-dispatch.test.ts` — dispatch of `/skill/<name>` and `/goal/<skill>` routes, including eager workspace resolution for goal-skill aliases before the first message.
 - `mastracode/src/agents/__tests__/build-skill-paths.test.ts` — verifies project/global Mastra Code, Claude, and Agent Skills path construction plus symlink parent handling; current tests do not assert startup logging because the log path has since been removed.
 - `mastracode/src/agents/__tests__/workspace-skill-activation.test.ts` — verifies symlinked local skills activate through the Mastra Code workspace path.
 - `mastracode/src/tools/__tests__/get-allowed-paths.test.ts` — verifies skill paths are returned and merged with sandbox paths for inherited tool contexts.
@@ -82,8 +82,6 @@
 
 ## Missing tests
 
-- Direct `/skills` coverage for eager `resolveWorkspace()` when `getResolvedWorkspace()` is initially undefined.
-- Goal skill aliases should eagerly resolve workspace when no prior message has run.
 - Headless/non-TUI skill activation parity if expected.
 
 ## Known risks / regressions

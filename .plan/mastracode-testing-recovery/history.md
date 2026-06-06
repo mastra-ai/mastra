@@ -3662,3 +3662,11 @@ Validated `Integrations: Harness display state` with a non-TUI subscriber render
 - Extended `packages/core/src/harness/display-state.test.ts` to prove a UI consumer can render running/task/tool state from `subscribeDisplayState()` snapshots without subscribing to raw Harness events.
 - Break validations proven and reverted: skipped display-state scheduler notifications; stopped tracking `tool_start`; stopped tracking `task_updated`.
 - Verification: focused display-state tests, core typecheck, core lint, and `pnpm build:core` all passed.
+
+### Skills command recovery checkpoint
+
+Validated `Integrations: Skills command and workspace resolution` with direct slash-command regression shields, committed as `73952ec0ff`:
+- Added `/skills` command coverage proving it eagerly resolves the dynamic workspace when `getResolvedWorkspace()` is initially undefined, lists only user-invocable skills, and does not leak `user-invocable: false` entries.
+- Fixed `/goal/<skill>` aliases to resolve the dynamic workspace before the first message, matching `/skills` behavior, and added dispatcher coverage for that first-message path.
+- Break validations proven and reverted: removed `/goal/<skill>` eager workspace resolution; disabled `/skills` eager workspace resolution; leaked non-user-invocable skills into `/skills`.
+- Verification: focused skills/command-dispatch tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
