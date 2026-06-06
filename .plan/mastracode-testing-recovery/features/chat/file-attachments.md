@@ -66,6 +66,7 @@
 
 ## Existing tests
 
+- `packages/core/src/harness/signal-messages.test.ts` — direct Harness message input shield for `sendMessage({ content, files })`: text attachments become labeled fenced text, binary file parts preserve `filename`/`mediaType`, and text fences outgrow embedded backtick runs.
 - `packages/core/src/agent/__tests__/agent-signals.test.ts` — file signal contents, filename preservation, DB round-trip, legacy stash recovery.
 - `packages/core/src/agent/message-list/adapters/AIV5Adapter-file-ui-part.test.ts` — URL/data-URI file/image parts and mixed text+file conversion.
 - `packages/core/src/agent/message-list/prompt/attachments-to-parts.test.ts` — raw base64/data URI/URL attachment normalization.
@@ -75,7 +76,6 @@
 
 ## Missing tests
 
-- Direct Harness test for `sendMessage({ content, files })` proving text files become fenced text and binary files retain `filename`/`mediaType` through the signal.
 - TUI attachment submit test proving pending images/files are cleared only after successful send and are preserved in history.
 - End-to-end test from real paste through Harness persistence and OM observation.
 - Loaded-history display test for user messages with attached files/images.

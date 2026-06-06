@@ -3136,3 +3136,28 @@ Verification:
 - `pnpm run build:mastracode` — passed, 24/24 cached.
 
 Committed as `fe89ef9b9f` (`test(mastracode): shield prompt instruction loading`).
+
+### Test recovery: file attachment message input
+
+Selected `Chat: File attachments in chat input` as the next High-risk row. Chose the direct Harness boundary gap because lower layers already covered signal adapters and observational-memory attachment handling, while `sendMessage({ content, files })` conversion itself lacked a precise shield.
+
+Added coverage in `packages/core/src/harness/signal-messages.test.ts` asserting:
+
+- Text attachments are converted into model-visible text parts labeled with `[File: <filename>]`.
+- Base64 data-URI text attachments are decoded before fencing.
+- Binary attachments remain `file` parts and preserve `data`, `mediaType`, and `filename`.
+- Text attachment fences use a longer backtick run than any backtick sequence inside the file content.
+
+Break-validation evidence:
+
+1. Changed text-file detection to no longer treat `text/plain` as text; focused signal-message tests failed because `snippet.ts` became a binary file part. Reverted.
+2. Dropped filename propagation for binary file parts; focused signal-message tests failed because `archive.bin` was missing. Reverted.
+3. Replaced dynamic fence length with a fixed triple-backtick fence; focused signal-message tests failed for markdown containing triple backticks. Reverted.
+
+Verification:
+
+- `pnpm --filter ./packages/core exec vitest run src/harness/signal-messages.test.ts --bail 1 --reporter=dot` — 1 file / 28 tests passed.
+- `pnpm --filter ./packages/core check` — passed.
+- `pnpm build:core` — passed, 12/12 tasks.
+
+Committed as `494be0ca3f` (`test(core): shield harness file attachments`).
