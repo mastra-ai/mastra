@@ -71,6 +71,7 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
         return {
           id: session.threadId,
           resourceId: session.resourceId,
+          title: legacyThread?.title,
           createdAt: session.createdAt,
           updatedAt: session.lastActivityAt,
           metadata: {

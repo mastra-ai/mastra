@@ -13,6 +13,7 @@ import { Memory } from '@mastra/memory';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import z from 'zod';
 
+import { HarnessCompat } from './HarnessCompat.js';
 import { runHeadless } from './headless.js';
 
 vi.setConfig({ testTimeout: 30_000 });
@@ -1131,6 +1132,76 @@ describe('headless mode — thread control', () => {
     const threads = await harness.listThreads();
     const titled = threads.find(t => t.title === 'my-new-title');
     expect(titled).toBeDefined();
+  });
+
+  it('resumes a Harness v1 prefilled thread by title in headless mode', async () => {
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'You are a test agent.',
+      model: new MastraLanguageModelV2Mock({
+        doStream: async () => ({ stream: createTextStream('V1 title resumed!') }),
+      }) as any,
+      tools: {},
+    });
+    const tempDir = mkdtempSync(join(tmpdir(), 'mastracode-headless-v1-title-'));
+    const storePath = join(tempDir, 'test.db');
+    tempStorePaths.push(storePath, tempDir);
+    const storage = new LibSQLStore({ id: 'test-store', url: `file:${storePath}` });
+    const memory = new Memory({ storage });
+    const session = {
+      id: 'sess-prefilled-title',
+      threadId: '',
+      resourceId: '',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      lastActivityAt: new Date('2026-01-02T00:00:00.000Z'),
+      modeId: 'default',
+      modelId: 'mock-model',
+      getMode: vi.fn(() => ({ id: 'default', description: 'Default', agentId: 'test-agent' })),
+      setModelId: vi.fn(),
+    };
+    const harnessV1 = {
+      listSessions: vi.fn(async () => [session]),
+      session: vi.fn(async () => session),
+      getMode: vi.fn(() => ({ id: 'default', description: 'Default', agentId: 'test-agent' })),
+    };
+    const harness = new HarnessCompat(
+      {
+        id: 'test-harness',
+        storage,
+        memory,
+        modes: [{ id: 'default', name: 'Default', default: true, defaultModelId: 'mock-model', agent }],
+        initialState: { yolo: true } as any,
+      },
+      harnessV1 as any,
+    );
+
+    await harness.init();
+    const thread = await harness.createThread({ title: 'prefilled-title' });
+    session.threadId = thread.id;
+    session.resourceId = thread.resourceId!;
+
+    const exitCode = await runHeadless(harness, {
+      prompt: 'Hello',
+      format: 'default',
+      continue_: false,
+      cloneThread: false,
+      thread: 'prefilled-title',
+    });
+
+    expect(exitCode).toBe(0);
+    expect(harness.getCurrentThreadId()).toBe(thread.id);
+    expect(harnessV1.session).toHaveBeenCalledWith({ threadId: thread.id, resourceId: thread.resourceId });
+    const threads = await harness.listThreads();
+    const matchingThreads = threads.filter(t => t.id === thread.id);
+    expect(matchingThreads).toHaveLength(1);
+    const targeted = matchingThreads[0]!;
+    expect(targeted.title).toBe('prefilled-title');
+    expect(targeted.metadata).toMatchObject({
+      sessionId: 'sess-prefilled-title',
+      modeId: 'default',
+      modelId: 'mock-model',
+    });
   });
 
   it('emits thread_cloned event with new thread ID when cloning a named thread', async () => {
