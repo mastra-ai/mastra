@@ -74,11 +74,11 @@
 - `mastracode/src/__tests__/stream-destroyed-error.test.ts` — unit and subprocess tests for non-fatal `ERR_STREAM_DESTROYED` classification.
 - `mastracode/src/tui/__tests__/mastra-tui-hooks.test.ts` — verifies macOS `caffeinate` start, duplicate suppression, stop on all agent endings, `stop()` cleanup, non-Darwin no-op, and env-var disable.
 - `mastracode/src/main.ts` has remaining behavior covered indirectly through TUI/headless tests.
-- No dedicated install/packaged CLI smoke test found.
+- `mastracode/src/__tests__/package-metadata.test.ts` — static package smoke for installed CLI bin path, public exports, publish files, Node engine, and no `latest` dependency ranges.
 
 ## Missing tests
 
-- Built package smoke: install/pack, run `mastracode --help` and `mastracode --prompt`.
+- Built package smoke: pack/install, run `mastracode --help` and `mastracode --prompt` from the packed artifact.
 - Integration test for a real terminal stream closing during active TUI output, not only subprocess detector scripts.
 - Global/npx startup test that catches missing workspace dependency builds, dependency range drift, or bad ESM subpaths.
 - First-run onboarding smoke from a clean config dir.

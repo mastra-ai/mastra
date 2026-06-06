@@ -314,3 +314,10 @@ Validated `Subagents: Delegation to Explore / Plan / Execute` with a core harnes
 - Extended `packages/core/src/harness/subagent-tool.test.ts` to prove parent aborts are passed to active subagent streams, partial text is preserved, `getFullOutput()` is skipped, and `subagent_end` is emitted as a non-error abort result.
 - Break validations proven and reverted: dropped `abortSignal` from subagent stream options; disabled the post-stream abort check; marked parent-aborted subagent completion as an error.
 - Verification: focused subagent-tool tests, core typecheck, core lint, and `pnpm build:core` all passed.
+
+### Installation and launch recovery checkpoint
+
+Validated `Setup: Installation and launch` with a static installed-package metadata shield, committed as `3b057f1ff1`:
+- Added `mastracode/src/__tests__/package-metadata.test.ts` proving the published package keeps the `mastracode` bin on `./dist/cli.js`, exports main and `./tui` dist entrypoints, publishes `dist`/`CHANGELOG.md`, requires Node `>=22.13.0`, and does not use `latest` dependency ranges.
+- Break validations proven and reverted: changed bin path to source file; changed a dependency to `latest` (caught by pnpm frozen lockfile and direct Vitest); pointed `./tui` export at main dist files.
+- Verification: focused package metadata tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.

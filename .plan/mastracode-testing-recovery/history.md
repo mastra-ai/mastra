@@ -3717,3 +3717,10 @@ Validated `Subagents: Delegation to Explore / Plan / Execute` with a core harnes
 - Added behavior-level coverage for parent abort propagation into an active subagent stream, preserving partial output and ending the subagent as a non-error abort result.
 - Break validations proven and reverted: missing `abortSignal` let the subagent complete with final output; missing post-stream abort check used final output; error-classified abort emitted `isError: true`.
 - Verification: `pnpm --filter ./packages/core exec vitest --run src/harness/subagent-tool.test.ts --reporter=dot`, `pnpm --filter ./packages/core check`, `pnpm --filter ./packages/core lint`, and `pnpm build:core` all passed.
+
+### Installation and launch recovery checkpoint
+
+Validated `Setup: Installation and launch` with a static installed-package metadata shield, committed as `3b057f1ff1`:
+- Added package metadata coverage for the installed CLI bin, public exports, package files, Node engine, and no floating `latest` dependency ranges.
+- Break validations proven and reverted: source-file bin path failed; `latest` dependency failed via pnpm lockfile and direct Vitest assertion; bad `./tui` export failed.
+- Verification: `pnpm --filter ./mastracode exec vitest --run src/__tests__/package-metadata.test.ts --reporter=dot`, `pnpm --filter ./mastracode check`, `pnpm --filter ./mastracode lint`, and `pnpm run build:mastracode` all passed.
