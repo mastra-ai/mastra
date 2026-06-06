@@ -89,12 +89,17 @@
 
 ## Missing tests
 
+- [x] Active TUI run injects winning project `AGENTS.md` instructions into the actual model request while excluding same-location `CLAUDE.md` and singular `AGENT.md` — covered by `mastracode/scripts/mc-e2e/scenarios/prompt-context-instructions.ts` with AIMock request-body verification.
 - Final prompt after thread reload preserves model/mode/task/plan state.
 - Packaged/source smoke that verifies model-specific prompt IDs still match model pack IDs after model default changes.
 - Permission-denied tools disappear from prompt guidance in real runs.
 - End-to-end external-path denial flow where the agent chooses `request_access` rather than asking the user to run a command.
 - Provider-history regression for assistant-prefill retries across every supported provider that rejects assistant prefill, not only the mocked Qwen/Anthropic pattern strings.
 - Direct prompt regression that the Memory Style section stays present and tells agents not to imitate caveman-speak in user-facing responses.
+
+## E2E coverage
+
+- `prompt-context-instructions` seeds `AGENTS.md`, `CLAUDE.md`, and singular `AGENT.md` in an isolated git fixture, sends a real TUI prompt through AIMock, and verifies the captured AIMock request body contains the winning `AGENTS.md` phrase but not the fallback or singular-file phrases. Break checks proved failures when `CLAUDE.md` precedence won, project-root instruction lookup was removed, and `formatAgentInstructions()` stopped injecting loaded instruction text.
 
 ## Known risks / regressions
 

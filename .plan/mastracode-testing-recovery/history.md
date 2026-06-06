@@ -4128,3 +4128,27 @@ Verification:
 - `pnpm --filter ./mastracode check` passed.
 - `pnpm --filter ./mastracode lint` passed.
 - `pnpm run build:mastracode` passed.
+
+## 2026-06-06 — Prompt context instructions TUI e2e batch
+
+Added `prompt-context-instructions` checked-in TUI e2e scenario:
+- Seeds an isolated git fixture with `AGENTS.md`, same-location `CLAUDE.md`, and singular `AGENT.md`.
+- Sends `Confirm the active project instruction phrase.` through the real TUI with AIMock.
+- Extends the e2e runner with `verifyAimockRequests()` so scenarios can inspect captured AIMock request bodies, not only visible assistant output.
+- Verifies the actual model request contains the winning `AGENTS.md` instruction phrase and excludes the fallback `CLAUDE.md` and singular `AGENT.md` phrases.
+
+Rows moved from missing e2e to covered e2e:
+- Chat: Prompt context and project instructions — validated for active TUI prompt construction and static project instruction precedence/exclusion in the real model request.
+
+Break validation:
+- Swapped `CLAUDE.md` ahead of `AGENTS.md` -> TUI still showed the mocked response, but AIMock request verification failed because the AGENTS phrase was absent.
+- Removed project-root instruction discovery -> AIMock request verification failed because the AGENTS phrase was absent.
+- Dropped `formatAgentInstructions()` output -> AIMock request verification failed because loaded instructions were not injected into the request.
+- All intentional breaks were reverted before committing.
+
+Verification:
+- `pnpm --filter ./mastracode run e2e:test prompt-context-instructions` passed with 1 AIMock request.
+- `pnpm --filter ./mastracode run e2e:test -- --jobs 2` passed: 18/18 scenarios.
+- `pnpm --filter ./mastracode check` passed.
+- `pnpm --filter ./mastracode lint` passed.
+- `pnpm run build:mastracode` passed.
