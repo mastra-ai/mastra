@@ -2922,3 +2922,26 @@ Verification:
 - `pnpm --filter ./mastracode check` — passed.
 - `pnpm --filter ./mastracode lint` — passed.
 - `pnpm run build:mastracode` — passed, 24/24 tasks.
+
+### Test recovery: interactive prompts sensitive input masking
+
+Selected `TUI: Interactive prompts and access requests` as the next High-risk row. Chose the direct `MaskedInput` gap because it protects sensitive API-key/login/storage prompts without requiring a brittle full PTY flow: render must hide cleartext, but the backing value and submit callback must keep the raw secret.
+
+Added `mastracode/src/tui/components/__tests__/masked-input.test.ts` with a mocked `@mariozechner/pi-tui` `Input`:
+
+- Rendering a secret shows only `*` characters and never includes the cleartext value.
+- Rendering restores the underlying value after the temporary mask swap.
+- Submitting after render forwards the unmasked value.
+
+Break-validation evidence:
+
+1. Rendered the wrapped `Input` directly without masking; focused test failed because cleartext appeared and expected mask characters were missing. Reverted.
+2. Restored an empty value instead of the real value after render; focused test failed because `getValue()` no longer returned the secret. Reverted.
+3. Wrapped `onSubmit` to forward masked characters; focused test failed because submit received stars instead of the storage URL. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest --run src/tui/components/__tests__/masked-input.test.ts --bail 1 --reporter=dot` — 1 file / 2 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — passed, 24/24 tasks.
