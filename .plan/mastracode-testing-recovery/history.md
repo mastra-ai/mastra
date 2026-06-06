@@ -3802,3 +3802,23 @@ Evidence:
 - Added normal-mode TUI renderer coverage for Anthropic web-search arrays (`pageAge`, title/URL rows, encrypted-content stripping), OpenAI `{ action, sources }` result objects (source rows and fallback query extraction), and Tavily markdown passthrough.
 - Proved 3 breaks fail and reverted them: missing `pageAge`, missing OpenAI action-query fallback, and JSON double-formatting Tavily markdown.
 - Verification passed: `pnpm --filter ./mastracode exec vitest --run src/tui/components/__tests__/tool-execution-enhanced.test.ts --bail=1 --reporter=dot`, `pnpm --filter ./mastracode check`, `pnpm --filter ./mastracode lint`, and `pnpm run build:mastracode`.
+
+## 2026-06-06 — Recovery tracker exhausted
+
+The Mastra Code testing recovery queue is exhausted.
+
+Final tracker audit:
+- Feature-map rows requiring recovery: 56.
+- Tracker rows: 56.
+- Missing feature-map rows from tracker: 0.
+- Unfinished tracker rows: 0.
+- Validated tracker rows: 56.
+- Deferred rows: 0.
+
+Final verification passed:
+- `pnpm run build:mastracode` — 24/24 tasks successful.
+- `pnpm --filter ./mastracode check` — clean.
+- `pnpm --filter ./mastracode lint` — clean.
+- `env -u OPENAI_API_KEY -u OPENAI_BASE_URL -u ANTHROPIC_API_KEY -u ANTHROPIC_BASE_URL -u TAVILY_API_KEY pnpm --filter ./mastracode exec vitest --run --bail=1 --reporter=dot` — 128 files / 1300 tests passed.
+
+All recovery work is committed and pushed on `tests/mc`; the remaining action is user final approval.
