@@ -3064,3 +3064,28 @@ Verification:
 - `pnpm --filter ./mastracode check` — passed.
 - `pnpm --filter ./mastracode lint` — passed.
 - `pnpm run build:mastracode` — passed, 24/24 tasks.
+
+### Test recovery: storage backend settings overlay
+
+Selected `Settings: Storage backend configuration` as the next High-risk row. Chose the direct `/settings` storage backend submenu gap because existing coverage already protects storage precedence, PG fallback, vector-store pairing, and settings schema parsing, but not the TUI submenu contract for saving/canceling backend connection input.
+
+Added `mastracode/src/tui/components/__tests__/settings.test.ts` with a focused pi-tui mock. The tests assert:
+
+- Selecting PostgreSQL enters the connection prompt and normalized Enter saves the unmasked connection string through `onStorageBackendChange('pg', connectionUrl)`.
+- Selecting LibSQL with empty input and raw Enter saves default local-file semantics by passing `undefined`, not an empty connection URL.
+- Raw Escape in the connection prompt cancels without calling the storage-save callback or mutating backend state.
+
+Break-validation evidence:
+
+1. Removed normalized Enter handling from `StorageBackendSubmenu.handleInput()`; `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/settings.test.ts --bail 1 --reporter=dot` failed because the PostgreSQL save callback was never called. Reverted.
+2. Changed empty LibSQL input to pass `''` instead of `undefined`; the focused test failed on the default-local callback contract. Reverted.
+3. Removed raw `\x1b` Escape handling; the focused test failed because the submenu did not call the cancel `done()` callback. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/settings.test.ts --bail 1 --reporter=dot` — 1 file / 3 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — passed, 24/24 cached.
+
+Committed as `00c35d1721` (`test(mastracode): shield storage settings overlay`).
