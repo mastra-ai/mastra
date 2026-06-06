@@ -7,6 +7,7 @@ import { reportIssueCommandScenario } from './report-issue-command.js';
 import { startupScenario } from './startup.js';
 import { stateCommandsScenario } from './state-commands.js';
 import { storageSettingsScenario } from './storage-settings.js';
+import { threadHistoryScenario } from './thread-history.js';
 import type { McE2eScenario, ScenarioName } from './types.js';
 import { visibleCommandsScenario } from './visible-commands.js';
 import { workspaceCommandsScenario } from './workspace-commands.js';
@@ -24,6 +25,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'report-issue-command': reportIssueCommandScenario,
   'state-commands': stateCommandsScenario,
   'storage-settings': storageSettingsScenario,
+  'thread-history': threadHistoryScenario,
   'workspace-commands': workspaceCommandsScenario,
 };
 

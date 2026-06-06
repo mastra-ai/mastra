@@ -9,6 +9,7 @@ export type ScenarioName =
   | 'report-issue-command'
   | 'state-commands'
   | 'storage-settings'
+  | 'thread-history'
   | 'workspace-commands';
 
 export type McE2eTerminal = {
@@ -26,6 +27,13 @@ export type McE2eScenarioRuntime = {
   waitForScreenText: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
 };
 
+export type McE2ePrepareContext = {
+  appDataDir: string;
+  dbPath: string;
+  homeDir: string;
+  projectDir: string;
+};
+
 export type McE2eScenario = {
   name: ScenarioName;
   description: string;
@@ -33,5 +41,6 @@ export type McE2eScenario = {
   projectFixture?: 'long-branch';
   useOpenAIModel?: boolean;
   aimockFixture?: string;
+  prepare?: (context: McE2ePrepareContext) => Promise<void> | void;
   run: (context: { terminal: McE2eTerminal; runtime: McE2eScenarioRuntime }) => Promise<void>;
 };

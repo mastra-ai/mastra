@@ -3986,3 +3986,26 @@ Verification:
 - `pnpm --filter ./mastracode check` passed.
 - `pnpm --filter ./mastracode lint` passed.
 - `pnpm run build:mastracode` passed.
+
+## 2026-06-06 — Thread history TUI e2e coverage batch
+
+Added `thread-history` checked-in TUI e2e scenario:
+- Adds a per-scenario `prepare` hook to seed isolated e2e storage before Mastra Code launches.
+- Seeds a scrubbed synthetic thread and user+assistant messages shaped from read-only inspection of the local Mastra Code DB schema.
+- Opens `/threads` through a real PTY, selects the seeded cross-resource thread, and verifies the loaded user and assistant history render after switching.
+
+Rows moved from missing e2e to covered e2e:
+- Threads: Persistent conversations / switching — covered for persisted thread selector visibility, cross-resource thread switch, and loaded history rendering. Deeper restart-after-streamed-tools/tasks and lock-prompt process conflict coverage remain listed as follow-up risks, but the core TUI persistence path now has checked-in e2e coverage.
+
+Break validation:
+- Disabled scenario DB preparation -> `thread-history` failed because no persisted thread was listed.
+- Changed `/threads` to list only the current resource -> `thread-history` failed because the seeded cross-resource thread disappeared.
+- Suppressed assistant text rendering from loaded history -> `thread-history` failed waiting for the recovered assistant message.
+- All intentional breaks were reverted before committing.
+
+Verification:
+- `pnpm --filter ./mastracode run e2e:test thread-history` passed.
+- `pnpm --filter ./mastracode run e2e:test -- --jobs 2` passed: 12/12 scenarios.
+- `pnpm --filter ./mastracode check` passed.
+- `pnpm --filter ./mastracode lint` passed.
+- `pnpm run build:mastracode` passed.

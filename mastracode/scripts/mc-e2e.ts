@@ -257,6 +257,12 @@ async function prepareScenarioRun({
 
   seedSettings(isolatedHome, scenario.useOpenAIModel === true, openAiApiKey);
   await initializeStorage(dbPath);
+  await scenario.prepare?.({
+    appDataDir: isolatedAppDataDir,
+    dbPath,
+    homeDir: isolatedHome,
+    projectDir,
+  });
 
   const branchFixture = scenario.projectFixture === 'long-branch' ? createLongBranchProject(projectDir) : null;
   const launchCwd = branchFixture ? projectDir : mastracodeDir;

@@ -91,11 +91,12 @@
 - `packages/core/src/harness/thread-locking.test.ts` — lock acquire/release ordering, create/switch/select, and failure recovery.
 - `mastracode/src/tui/__tests__/event-dispatch.test.ts` — `thread_changed`/`thread_created` cleanup for tasks, active plan, sandbox allowed paths, `taskToolInsertIndex`, task progress, goal metadata, and non-ephemeral state preservation.
 - `packages/memory/src/processors/observational-memory/__tests__/observational-memory.test.ts` — observer/buffered `threadTitle` persistence into thread metadata/title.
+- `mastracode/scripts/mc-e2e/scenarios/thread-history.ts` — real PTY `/threads` coverage with a scrubbed persisted thread seeded into the isolated e2e DB, cross-resource selection, and loaded user+assistant history rendering.
 
 ## Missing tests
 
 - Restart TUI after streamed messages/tools/tasks and verify reconstructed UI/status.
-- Thread switch resets ephemeral tasks/plan/sandbox but reloads persisted metadata.
+- Thread switch resets ephemeral tasks/plan/sandbox but reloads persisted metadata; basic cross-resource persisted-thread switch and history rendering is covered by `thread-history`.
 - MC-level test that core thread lock conflicts reach the TUI lock prompt across real process-style locks.
 - Startup auto-resume test for same-resource worktrees: strict `projectPath`, legacy birthtime fallback, and retroactive tagging.
 
