@@ -167,6 +167,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
         state.currentThreadTitle = currentThread.title;
         const metadata = currentThread.metadata as Record<string, unknown> | undefined;
         state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
+        state.githubPrPollingActive = false;
+        state.githubPrGradientAnimator?.stop();
         // Load goal state from thread metadata
         state.goalManager?.loadFromThreadMetadata(metadata);
       }
@@ -180,6 +182,8 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(
         event.thread.metadata as Record<string, unknown> | undefined,
       );
+      state.githubPrPollingActive = false;
+      state.githubPrGradientAnimator?.stop();
       // If /goal started without an existing thread, save that pending goal to the
       // newly-created thread. Otherwise load the thread's own goal metadata so goals
       // do not bleed into unrelated new threads.

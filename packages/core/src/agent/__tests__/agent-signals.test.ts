@@ -1171,6 +1171,94 @@ describe('Agent signals', () => {
     subscription.unsubscribe();
   });
 
+  it('delivers batched idle notifications using one initial thread-state decision', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'notification-batch-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'notification-batch-agent',
+      name: 'Notification Batch Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('notification batch response'),
+    });
+    new Mastra({ agents: { notificationBatchAgent: agent }, storage, logger: false });
+
+    const results = await agent.sendNotificationSignal(
+      [
+        { source: 'github', kind: 'pull-request-ci-failure', priority: 'high', summary: 'CI failed' },
+        { source: 'github', kind: 'pull-request-activity', priority: 'high', summary: 'Devin commented' },
+      ],
+      { resourceId: 'notification-batch-user', threadId: 'notification-batch-thread' },
+    );
+
+    expect(results).toHaveLength(2);
+    expect(results[0]).toMatchObject({ accepted: true, decision: { action: 'deliver', reason: 'idle-high' } });
+    expect(results[0]?.signal).toMatchObject({ type: 'notification', tagName: 'notification' });
+    expect(results[0]?.record).toMatchObject({ status: 'delivered', deliveredSignalId: results[0]?.signal?.id });
+    expect(results[1]).toMatchObject({ accepted: true, decision: { action: 'deliver', reason: 'idle-high' } });
+    expect(results[1]?.signal).toMatchObject({ type: 'notification', tagName: 'notification' });
+    expect(results[1]?.record).toMatchObject({ status: 'delivered', deliveredSignalId: results[1]?.signal?.id });
+  });
+
+  it('wakes idle threads for immediate medium-priority notification summaries', async () => {
+    let streamCount = 0;
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'medium-summary-wake-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'medium-summary-wake-agent',
+      name: 'Medium Summary Wake Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => {
+          streamCount += 1;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+          };
+        },
+      }),
+      notifications: {
+        deliveryPolicy: {
+          decide: ({ now }) => ({ action: 'summarize', summaryAt: now, reason: 'test-medium-summary-now' }),
+        },
+      },
+    });
+    new Mastra({ agents: { mediumSummaryWakeAgent: agent }, storage, logger: false });
+    const subscription = await agent.subscribeToThread({
+      threadId: 'medium-summary-wake-thread',
+      resourceId: 'medium-summary-wake-user',
+    });
+    const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+
+    const result = await agent.sendNotificationSignal(
+      { source: 'github', kind: 'pull-request-activity', priority: 'medium', summary: 'Devin commented' },
+      { resourceId: 'medium-summary-wake-user', threadId: 'medium-summary-wake-thread' },
+    );
+    const subscribedRun = await withTimeout(nextRun, 'Timed out waiting for medium notification summary wake');
+    const signalPart = subscribedRun.value.parts.find((part: any) => part.type === 'data-signal');
+
+    expect(result.signal).toMatchObject({ type: 'notification', tagName: 'notification-summary' });
+    expect(result.decision).toMatchObject({ action: 'summarize', reason: 'test-medium-summary-now' });
+    expect(result.record).toMatchObject({
+      status: 'pending',
+      summaryAt: undefined,
+      summarySignalId: result.signal?.id,
+    });
+    expect(signalPart?.data).toMatchObject({
+      id: result.signal?.id,
+      type: 'notification',
+      tagName: 'notification-summary',
+      contents: 'github: 1',
+      attributes: { pending: 1 },
+    });
+    expect(streamCount).toBe(1);
+
+    subscription.unsubscribe();
+  });
+
   it('keeps immediate notification records pending when runtime rejects delivery', async () => {
     const notifications = new InMemoryNotificationsStorage();
     const storage = new MastraCompositeStore({ id: 'rejected-notification-storage', domains: { notifications } });
@@ -1284,18 +1372,22 @@ describe('Agent signals', () => {
     });
     expect(high.record.summaryAt).toBeUndefined();
     expect(high.record.deliverAt).toBeInstanceOf(Date);
-    expect(medium.signal).toBeUndefined();
+    expect(medium.signal).toMatchObject({ type: 'notification', tagName: 'notification-summary' });
     expect(medium.decision).toMatchObject({ action: 'summarize', reason: 'active-batch-summary' });
-    expect(medium.record).toMatchObject({ status: 'pending', deliveryReason: 'active-batch-summary' });
-    expect(medium.record.summaryAt).toBeInstanceOf(Date);
+    expect(medium.record).toMatchObject({
+      status: 'pending',
+      deliveryReason: 'active-batch-summary',
+      summarySignalId: medium.signal?.id,
+    });
+    expect(medium.record.summaryAt).toBeUndefined();
     expect(low.signal).toBeUndefined();
     expect(low.decision).toMatchObject({ action: 'summarize', reason: 'active-batch-summary' });
     expect(low.record).toMatchObject({ status: 'pending', deliveryReason: 'active-batch-summary' });
     expect(low.record.summaryAt).toBeInstanceOf(Date);
 
     releaseFirst();
-    await expect(stream.text).resolves.toBe('active response');
-    expect(streamCount).toBe(1);
+    await expect(stream.text).resolves.toBe('active responseactive response');
+    expect(streamCount).toBe(2);
     subscription.unsubscribe();
   });
 
@@ -1411,6 +1503,94 @@ describe('Agent signals', () => {
     await streamText;
 
     subscription.unsubscribe();
+  });
+
+  it('plans due notifications by thread so medium summaries cannot starve high full delivery', async () => {
+    let releaseRun!: () => void;
+    const runFinished = new Promise<void>(resolve => {
+      releaseRun = resolve;
+    });
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'priority-dispatch-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'priority-dispatch-agent',
+      name: 'Priority Dispatch Agent',
+      instructions: 'Test',
+      model: new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: new ReadableStream({
+            async start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'notification response' });
+              controller.enqueue({ type: 'text-end', id: 'text-1' });
+              await runFinished;
+              controller.enqueue({
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              });
+              controller.close();
+            },
+          }),
+        }),
+      }),
+    });
+    const mastra = new Mastra({ agents: { priorityDispatchAgent: agent }, storage, logger: false });
+    const dueAt = new Date('2026-06-05T22:56:00Z');
+    await notifications.createNotification({
+      id: 'medium-ci-pending',
+      agentId: 'priority-dispatch-agent',
+      resourceId: 'priority-dispatch-user',
+      threadId: 'priority-dispatch-thread',
+      source: 'github',
+      kind: 'pull-request-ci-pending',
+      priority: 'medium',
+      summary: 'CI is still pending',
+      summaryAt: dueAt,
+      createdAt: new Date('2026-06-05T22:55:00Z'),
+    });
+    const high = await notifications.createNotification({
+      id: 'high-comment',
+      agentId: 'priority-dispatch-agent',
+      resourceId: 'priority-dispatch-user',
+      threadId: 'priority-dispatch-thread',
+      source: 'github',
+      kind: 'pull-request-activity',
+      priority: 'high',
+      summary: 'Devin commented',
+      deliverAt: dueAt,
+      deliveryReason: 'active-high-summary-then-full',
+      createdAt: new Date('2026-06-05T22:55:01Z'),
+    });
+    await notifications.updateNotification({
+      id: high.id,
+      threadId: high.threadId,
+      summarySignalId: 'previous-summary-signal',
+    });
+
+    const dispatchResult = await dispatchDueNotifications({ mastra, storage: notifications, now: dueAt });
+
+    expect(dispatchResult.failed).toEqual([]);
+    expect(dispatchResult.signals.map(signal => signal.contents)).toEqual(['Devin commented', 'github: 1']);
+    await expect(
+      notifications.getNotification({ threadId: 'priority-dispatch-thread', id: 'high-comment' }),
+    ).resolves.toMatchObject({
+      status: 'delivered',
+      deliveredSignalId: dispatchResult.signals[0]?.id,
+    });
+    await expect(
+      notifications.getNotification({ threadId: 'priority-dispatch-thread', id: 'medium-ci-pending' }),
+    ).resolves.toMatchObject({
+      status: 'pending',
+      summaryAt: undefined,
+      summarySignalId: dispatchResult.signals[1]?.id,
+    });
+
+    releaseRun();
+    await nextTick();
   });
 
   it('dispatches medium-priority active summaries through agent subscriptions without marking records delivered', async () => {

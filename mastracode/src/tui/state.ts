@@ -235,6 +235,8 @@ export interface TUIState {
   statusLine?: Text;
   memoryStatusLine?: Text;
   modelAuthStatus: { hasAuth: boolean; apiKeyEnvVar?: string };
+  githubPrGradientAnimator?: GradientAnimator;
+  githubPrPollingActive: boolean;
 
   // ── Observational Memory ──────────────────────────────────────────────
   omProgressComponent?: OMProgressComponent;
@@ -357,6 +359,7 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Status line
     projectInfo: detectProject(process.cwd()),
     modelAuthStatus: { hasAuth: true },
+    githubPrPollingActive: false,
 
     // Goal loop
     goalManager: new GoalManager(),
