@@ -49,7 +49,7 @@ import type { LSPConfig } from './lsp/types';
 import type { WorkspaceSandbox, OnMountHook } from './sandbox';
 import { LocalSandbox } from './sandbox/local-sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
-import type { BM25Config, TokenizeOptions, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
+import type { BM25Config, BM25SearchConfig, TokenizeOptions, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
 import { SearchEngine, splitIntoChunks } from './search';
 import type { WorkspaceSkills, SkillsResolver, SkillSource } from './skills';
 import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
@@ -522,6 +522,23 @@ export interface WorkspaceInfo {
  */
 const FS_READ_CONCURRENCY = 8;
 
+/**
+ * Parse the user-facing `bm25` config union into the `BM25SearchConfig` shape
+ * that `SearchEngine` expects.
+ */
+function parseBM25Config(
+  bm25: boolean | BM25Config | { bm25?: BM25Config; tokenize?: TokenizeOptions },
+): BM25SearchConfig {
+  if (typeof bm25 === 'boolean') return {};
+  if ('bm25' in bm25 || 'tokenize' in bm25) {
+    return {
+      bm25: (bm25 as { bm25?: BM25Config }).bm25,
+      tokenize: (bm25 as { tokenize?: TokenizeOptions }).tokenize,
+    };
+  }
+  return { bm25: bm25 as BM25Config };
+}
+
 // =============================================================================
 // Workspace Class
 // =============================================================================
@@ -672,20 +689,7 @@ export class Workspace<
       };
 
       this._searchEngine = new SearchEngine({
-        bm25: config.bm25
-          ? {
-              bm25:
-                typeof config.bm25 === 'object' && 'bm25' in config.bm25
-                  ? (config.bm25 as { bm25?: BM25Config }).bm25
-                  : typeof config.bm25 === 'object'
-                    ? (config.bm25 as BM25Config)
-                    : undefined,
-              tokenize:
-                typeof config.bm25 === 'object' && 'tokenize' in config.bm25
-                  ? (config.bm25 as { tokenize?: TokenizeOptions }).tokenize
-                  : undefined,
-            }
-          : undefined,
+        bm25: config.bm25 ? parseBM25Config(config.bm25) : undefined,
         vector:
           config.vectorStore && config.embedder
             ? {

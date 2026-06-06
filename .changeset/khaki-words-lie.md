@@ -2,9 +2,9 @@
 '@mastra/core': patch
 ---
 
-Fixed BM25 tokenizer dropping CJK/non-Latin characters by replacing ASCII-only `\w` regex with Unicode-aware `\p{L}\p{N}` pattern. Added `tokenizer` function to `TokenizeOptions` for custom tokenization (e.g. n-gram, kuromoji). Workspace now forwards `tokenize` options to SearchEngine, enabling CJK-aware search configuration.
+Improved BM25 tokenization to support CJK (Japanese, Chinese, Korean) and other non-Latin languages. Added `TokenizeOptions.tokenizer` for plugging in custom tokenizers (e.g. n-gram, kuromoji). Workspace `bm25` config now accepts `tokenize` options for full control over how text is split into search tokens.
 
-**Before:** Japanese, Chinese, Korean, Arabic, and other non-Latin text was silently destroyed by the default `removePunctuation` step, producing empty BM25 search results.
+**Before:** BM25 search returned no results for non-English content — CJK characters were silently stripped during tokenization.
 
 **After:** Non-Latin characters are preserved by default. Users can also plug in a custom tokenizer:
 
