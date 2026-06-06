@@ -80,7 +80,7 @@
 
 ## Missing tests
 
-- TUI handler test for `handleToolInputDelta()` parsing partial JSON into `pendingTools`.
+- Covered by `mastracode/src/tui/handlers/__tests__/tool.test.ts`: `handleToolInputDelta()` parses canonical display-state buffered partial JSON into `pendingTools`, refreshes/renders the component, and ignores deltas without a buffer.
 - End-to-end TUI test covering live partial args then final `tool_start` replacement.
 - Regression test for pre-tool assistant text surviving task mutation tool input streaming.
 - History reload test proving partial args are not replayed and final args/results render correctly after circular-result sanitization.

@@ -3572,3 +3572,30 @@ Verification:
 Commits:
 
 - `7a36716a1f` — `test(mastracode): shield custom workspace startup` (pushed to `origin/tests/mc`).
+
+### Test recovery: Streaming tool arguments handler parsing
+
+Selected `Tools: Streaming tool arguments` as the next High-risk row. Chose the direct TUI handler gap because the feature card listed missing coverage for `handleToolInputDelta()` parsing partial JSON into `pendingTools`.
+
+Changes:
+
+- Added `mastracode/src/tui/handlers/__tests__/tool.test.ts`.
+- The test proves `handleToolInputDelta()` reads the canonical Harness display-state buffer, parses partial JSON, updates the pending tool component with `isFinal=false`, refreshes/renders it, and ignores deltas for calls without a buffer.
+- Updated the streaming-tool-arguments feature card and recovery tracker row.
+
+Break-validation evidence:
+
+1. Skipped pending component `updateArgs`; the focused handler test failed.
+2. Parsed the latest delta fragment instead of the canonical display-state buffer; the focused handler test failed.
+3. Accepted deltas without a display-state buffer; the focused handler test failed.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/handlers/__tests__/tool.test.ts --reporter=dot --bail=1` — 1 file / 3 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — 24/24 tasks passed.
+
+Commits:
+
+- `25781529a2` — `test(mastracode): shield streaming tool args` (ready to push).
