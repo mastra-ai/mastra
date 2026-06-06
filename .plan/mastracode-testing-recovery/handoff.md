@@ -321,3 +321,10 @@ Validated `Setup: Installation and launch` with a static installed-package metad
 - Added `mastracode/src/__tests__/package-metadata.test.ts` proving the published package keeps the `mastracode` bin on `./dist/cli.js`, exports main and `./tui` dist entrypoints, publishes `dist`/`CHANGELOG.md`, requires Node `>=22.13.0`, and does not use `latest` dependency ranges.
 - Break validations proven and reverted: changed bin path to source file; changed a dependency to `latest` (caught by pnpm frozen lockfile and direct Vitest); pointed `./tui` export at main dist files.
 - Verification: focused package metadata tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### Auto-update prompts recovery checkpoint
+
+Validated `Setup: Auto-update prompts` with direct `/update` command shields, committed as `267da3f245`:
+- Added `mastracode/src/tui/commands/__tests__/update.test.ts` covering registry failure, already-latest handling, changelog prompt text, clearing previous dismissed-version state, No dismissed-version persistence, and failed-update manual install guidance.
+- Break validations proven and reverted: dropped changelog text from the prompt; stopped persisting cleared dismissed-version state before a manual prompt; removed the exact manual install command from failed update errors.
+- Verification: focused update command tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.

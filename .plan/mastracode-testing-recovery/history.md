@@ -3724,3 +3724,10 @@ Validated `Setup: Installation and launch` with a static installed-package metad
 - Added package metadata coverage for the installed CLI bin, public exports, package files, Node engine, and no floating `latest` dependency ranges.
 - Break validations proven and reverted: source-file bin path failed; `latest` dependency failed via pnpm lockfile and direct Vitest assertion; bad `./tui` export failed.
 - Verification: `pnpm --filter ./mastracode exec vitest --run src/__tests__/package-metadata.test.ts --reporter=dot`, `pnpm --filter ./mastracode check`, `pnpm --filter ./mastracode lint`, and `pnpm run build:mastracode` all passed.
+
+### Auto-update prompts recovery checkpoint
+
+Validated `Setup: Auto-update prompts` with direct `/update` command shields, committed as `267da3f245`:
+- Added command-level coverage for non-fatal registry failure, already-latest messaging, changelog insertion, dismissed-version clearing/persistence, and failed auto-update manual command guidance.
+- Break validations proven and reverted: missing changelog text failed; missing persisted clear of `updateDismissedVersion` failed; missing manual install command failed.
+- Verification: `pnpm --filter ./mastracode exec vitest --run src/tui/commands/__tests__/update.test.ts --reporter=dot`, `pnpm --filter ./mastracode check`, `pnpm --filter ./mastracode lint`, and `pnpm run build:mastracode` all passed.

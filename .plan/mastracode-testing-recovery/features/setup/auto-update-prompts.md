@@ -64,12 +64,13 @@
 
 - `mastracode/src/utils/__tests__/update-check.test.ts` — changelog parsing and live changelog fetch behavior, including dependency-entry filtering, markdown/PR reference stripping, full-entry preservation, and known published-version fetches.
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — `/update` command dispatch is mocked/registered.
+- `mastracode/src/tui/commands/__tests__/update.test.ts` — direct `/update` coverage for registry failure, already-latest path, changelog prompt text, clearing previous dismissed versions, No dismissed-version persistence, and failed-update manual install guidance.
 - Settings tests include `updateDismissedVersion` defaults/loading in the global settings object.
 
 ## Missing tests
 
 - TUI startup integration test for the automatic update prompt, dismissed-version suppression, passive 45-minute recheck banner, and changelog text insertion.
-- Dedicated `/update` command test for registry failure, already-latest path, Yes update success/failure, No dismissed-version persistence, clearing a previously dismissed version, and changelog text insertion.
+- Dedicated `/update` command test for Yes update success without exiting the test process.
 - Package-manager detection tests across npm/pnpm/yarn/bun install contexts.
 - `getCurrentVersion()` tests for build-time define, ESM-safe source fallback, and packaged-build behavior without `package.json`.
 - Auto-update execution failure/success tests that do not actually mutate the developer's global install.
