@@ -81,6 +81,7 @@
 
 - `mastracode/src/agents/__tests__/prompts.test.ts` — model-specific prompts (`openai/gpt-5.4`, `openai/gpt-5.5`), autonomy/base prompt guidance, late Tone/Style response guidance, file-access `request_access` wording, goal prompt guidance, common binary context (`Common binaries: python: not found, python3: ...`), and regression checks for stale removed prompt wording.
 - `mastracode/src/agents/prompts/index.test.ts` — task-list prompt injection and escaping.
+- `mastracode/src/agents/prompts/agent-instructions.test.ts` — static instruction discovery: `AGENTS.md` precedence over `CLAUDE.md`, singular `AGENT.md` exclusion, and custom configDir substitution for project/XDG global paths.
 - `mastracode/src/__tests__/index.test.ts` — verifies runtime wiring uses `getDynamicInstructions()` and configures `AgentsMDInjector` with statically loaded instruction paths.
 - `packages/core/src/processors/tool-result-reminder.test.ts` and `mastracode/src/tui/components/__tests__/system-reminder.test.ts` — dynamic instruction reminder injection/rendering coverage, including metadata/path dedupe, ignored static instruction paths, default/custom token caps, truncation marker, and newline-boundary trimming.
 - `mastracode/src/headless-integration.test.ts` — includes nested `AGENTS.md` dynamic reminder persistence coverage.
@@ -90,7 +91,6 @@
 
 - Final prompt after thread reload preserves model/mode/task/plan state.
 - Packaged/source smoke that verifies model-specific prompt IDs still match model pack IDs after model default changes.
-- Direct unit coverage for static `loadAgentInstructions()` precedence: `AGENTS.md` over `CLAUDE.md`, config-dir variants, global before project, and singular `AGENT.md` ignored.
 - Permission-denied tools disappear from prompt guidance in real runs.
 - End-to-end external-path denial flow where the agent chooses `request_access` rather than asking the user to run a command.
 - Provider-history regression for assistant-prefill retries across every supported provider that rejects assistant prefill, not only the mocked Qwen/Anthropic pattern strings.

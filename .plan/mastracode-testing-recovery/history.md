@@ -3110,3 +3110,29 @@ Verification:
 - `pnpm run build:mastracode` — passed, 24/24 cached.
 
 Committed as `0ae15b3c70` (`test(mastracode): shield tui state defaults`).
+
+### Test recovery: prompt instruction loading
+
+Selected `Chat: Prompt context and project instructions` as the next High-risk row. Chose the static instruction-loader gap because prompt assembly already had model/task/base guidance coverage, while `loadAgentInstructions()` precedence and custom config-dir behavior had no direct regression shield.
+
+Added `mastracode/src/agents/prompts/agent-instructions.test.ts`. The tests assert:
+
+- Project `AGENTS.md` wins over `CLAUDE.md` at the same location.
+- Singular `AGENT.md` is ignored and never loaded as static prompt guidance.
+- A custom config directory is substituted into project-local instruction paths and XDG global `.config/<configDir>` paths.
+- Global static instructions are returned before project instructions.
+
+Break-validation evidence:
+
+1. Added `AGENT.md` to the instruction file list before `AGENTS.md`; `pnpm --filter ./mastracode exec vitest run src/agents/prompts/agent-instructions.test.ts --bail 1 --reporter=dot` failed because the singular file loaded. Reverted.
+2. Reordered file precedence to prefer `CLAUDE.md` over `AGENTS.md`; the focused test failed because the CLAUDE fallback loaded. Reverted.
+3. Removed project custom configDir substitution; the focused test failed because project `.acme-code/CLAUDE.md` was not loaded. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/agents/prompts/agent-instructions.test.ts --bail 1 --reporter=dot` — 1 file / 2 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — passed, 24/24 cached.
+
+Committed as `fe89ef9b9f` (`test(mastracode): shield prompt instruction loading`).
