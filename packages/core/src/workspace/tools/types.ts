@@ -73,8 +73,8 @@ export interface WorkspaceToolBeforeHookResult {
 }
 
 export interface WorkspaceToolAfterHookContext extends WorkspaceToolHookContext {
-  /** Tool output when execution completed. */
-  output: unknown;
+  /** Tool output when execution completed. Undefined when execution failed before producing output. */
+  output?: unknown;
   /** Error thrown by the tool, if execution failed. */
   error?: unknown;
 }
@@ -296,7 +296,10 @@ export type WorkspaceToolsConfig = {
   /** Default: whether all tools require user approval (default: false if not specified) */
   requireApproval?: DynamicToolConfigValue<ToolConfigWithArgsContext>;
 
-  /** Optional hooks run around every enabled workspace tool after name remapping. */
+  /**
+   * Optional hooks run around every enabled workspace tool after name remapping.
+   * If the owning agent also defines hooks, workspace hooks run inside the agent hook wrapper.
+   */
   hooks?: WorkspaceToolHooks;
 } & {
   [K in typeof WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]?: ExecuteCommandToolConfig;

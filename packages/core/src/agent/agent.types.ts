@@ -523,7 +523,7 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   toolsets?: ToolsetsInput;
   /** Client-side tools available during execution */
   clientTools?: ToolsInput;
-  /** Per-execution hooks that run before and after tool calls. */
+  /** Per-execution hooks that run before and after tool calls, overriding matching agent-level hooks. */
   hooks?: ToolHooks;
   /** Tool selection strategy: 'auto', 'none', 'required', or specific tools */
   toolChoice?: ToolChoice<any>;

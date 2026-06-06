@@ -188,6 +188,137 @@ function toolsTest(version: 'v1' | 'v2' | 'v3') {
       expect(message).toBe('Executed successfully');
     });
 
+    it('runs agent hooks through the public generate path', async () => {
+      const calls: Array<{ phase: 'before' | 'after'; toolName: string; input: unknown; output?: unknown }> = [];
+      const testAgent = new Agent({
+        id: 'test-agent',
+        name: 'Test agent',
+        instructions: 'You are an agent that calls testTool',
+        model: mockModel,
+        tools: integration.getStaticTools(),
+        hooks: {
+          beforeToolCall: ({ toolName, input }) => calls.push({ phase: 'before', toolName, input }),
+          afterToolCall: ({ toolName, input, output }) => calls.push({ phase: 'after', toolName, input, output }),
+        },
+      });
+
+      const mastra = new Mastra({
+        agents: {
+          testAgent,
+        },
+        logger: false,
+      });
+      const agentOne = mastra.getAgent('testAgent');
+
+      if (version === 'v1') {
+        await agentOne.generateLegacy('Call testTool', { toolChoice: 'required' });
+      } else {
+        await agentOne.generate('Call testTool');
+      }
+
+      expect(calls.slice(0, 2)).toEqual([
+        { phase: 'before', toolName: 'testTool', input: {} },
+        {
+          phase: 'after',
+          toolName: 'testTool',
+          input: {},
+          output: { message: 'Executed successfully' },
+        },
+      ]);
+    });
+
+    it('uses per-execution hooks through the public generate path', async () => {
+      const configBeforeToolCall = vi.fn();
+      const runBeforeToolCall = vi.fn(() => ({ proceed: false as const, output: { message: 'blocked' } }));
+      const execute = vi.fn(async () => ({ message: 'executed' }));
+      const testTool = createTool({
+        id: 'testTool',
+        description: 'Test tool',
+        inputSchema: z.object({}),
+        execute,
+      });
+      const testAgent = new Agent({
+        id: 'test-agent',
+        name: 'Test agent',
+        instructions: 'You are an agent that calls testTool',
+        model: mockModel,
+        tools: { testTool },
+        hooks: { beforeToolCall: configBeforeToolCall },
+      });
+      const mastra = new Mastra({
+        agents: {
+          testAgent,
+        },
+        logger: false,
+      });
+      const agentOne = mastra.getAgent('testAgent');
+
+      let toolResult;
+      if (version === 'v1') {
+        const response = await agentOne.generateLegacy('Call testTool', {
+          toolChoice: 'required',
+          hooks: {
+            beforeToolCall: runBeforeToolCall,
+          },
+        });
+        toolResult = response.toolResults.find((result: any) => result.toolName === 'testTool');
+      } else {
+        const response = await agentOne.generate('Call testTool', {
+          hooks: {
+            beforeToolCall: runBeforeToolCall,
+          },
+        });
+        toolResult = response.toolResults.find((result: any) => result.payload.toolName === 'testTool')?.payload;
+      }
+
+      expect(toolResult?.result?.message).toBe('blocked');
+      expect(configBeforeToolCall).not.toHaveBeenCalled();
+      expect(runBeforeToolCall).toHaveBeenCalledWith(expect.objectContaining({ toolName: 'testTool', input: {} }));
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it('runs afterToolCall when a tool errors', async () => {
+      const afterToolCall = vi.fn();
+      const testTool = createTool({
+        id: 'testTool',
+        description: 'Test tool',
+        inputSchema: z.object({}),
+        execute: async () => {
+          throw new Error('tool failed');
+        },
+      });
+      const testAgent = new Agent({
+        id: 'test-agent',
+        name: 'Test agent',
+        instructions: 'You are an agent that calls testTool',
+        model: mockModel,
+        tools: { testTool },
+        hooks: { afterToolCall },
+      });
+      const mastra = new Mastra({
+        agents: {
+          testAgent,
+        },
+        logger: false,
+      });
+      const agentOne = mastra.getAgent('testAgent');
+
+      if (version === 'v1') {
+        await agentOne.generateLegacy('Call testTool', { toolChoice: 'required' }).catch(() => undefined);
+      } else {
+        await agentOne.generate('Call testTool').catch(() => undefined);
+      }
+
+      expect(afterToolCall).toHaveBeenCalledWith(
+        expect.objectContaining({
+          toolName: 'testTool',
+          input: {},
+          output: undefined,
+          error: expect.any(Error),
+        }),
+      );
+    });
+
     it('should call findUserTool with parameters', async () => {
       // Create a new mock model for this test that calls findUserTool
       let findUserToolModel: MockLanguageModelV1 | MockLanguageModelV2 | MockLanguageModelV3;

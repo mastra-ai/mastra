@@ -460,6 +460,8 @@ interface AgentConfigBase<
   tools?: DynamicArgument<TTools, TRequestContext>;
   /**
    * Hooks that run before and after any tool call made by this agent.
+   * Per-execution hooks passed to `generate`, `stream`, `generateLegacy`, or `streamLegacy` override matching hooks here.
+   * If a workspace also defines tool hooks, workspace hooks wrap the workspace tool first, then agent hooks wrap the exposed tool call.
    */
   hooks?: ToolHooks;
   /**
@@ -711,6 +713,8 @@ export type AgentGenerateOptions<
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
+  /** Per-execution hooks that run before and after tool calls, overriding matching agent-level hooks. */
+  hooks?: ToolHooks;
   /** Additional context messages to include */
   context?: CoreMessage[];
   /** New memory options (preferred) */
@@ -802,6 +806,8 @@ export type AgentStreamOptions<
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
+  /** Per-execution hooks that run before and after tool calls, overriding matching agent-level hooks. */
+  hooks?: ToolHooks;
   /** Additional context messages to include */
   context?: CoreMessage[];
   /**

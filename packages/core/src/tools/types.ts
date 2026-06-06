@@ -107,8 +107,8 @@ export interface ToolAfterHookContext<
   TContext = unknown,
   TMetadata extends Record<string, unknown> = Record<string, unknown>,
 > extends ToolHookContext<TInput, TContext, TMetadata> {
-  /** Tool output when execution completed. */
-  output: TOutput;
+  /** Tool output when execution completed. Undefined when execution failed before producing output. */
+  output?: TOutput;
   /** Error thrown by the tool, if execution failed. */
   error?: unknown;
 }

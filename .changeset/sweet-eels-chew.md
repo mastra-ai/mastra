@@ -1,8 +1,9 @@
 ---
 '@mastra/core': minor
+'mastracode': patch
 ---
 
-Added agent and workspace tool hooks for applications that need to run logic before and after tool calls execute.
+Added agent and workspace tool hooks for applications that need to run logic before and after tool calls execute. Mastra Code now uses agent hooks so hook handlers run for built-in workspace tools as well as dynamic tools.
 
 **Example**
 
