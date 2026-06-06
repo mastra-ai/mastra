@@ -3189,3 +3189,30 @@ Verification:
 - `pnpm run build:mastracode` — passed, 24/24 tasks.
 
 Committed as `833684c417` (`fix(mastracode): preserve slash command range args`).
+
+### Test recovery: agent signal reload rendering
+
+Selected `Chat: Agent signals and streaming follow-ups` as the next High-risk row. Chose the cross-reload TUI reconstruction gap because core signal persistence and active-run echo behavior already had broad coverage, but `renderExistingMessages()` did not directly prove persisted active signal messages reload without stale pending previews.
+
+Added `renderExistingMessages signals` coverage in `mastracode/src/tui/__tests__/render-messages.test.ts`. The test seeds a stale pending interjection preview, reloads persisted history containing a `delivery="while-active"` user signal, and asserts:
+
+- `renderExistingMessages()` clears stale pending signal preview state.
+- The chat container is rebuilt from persisted history, not appended to stale pending UI.
+- The persisted signal is rendered as a confirmed `UserMessageComponent` and registered in `messageComponentsById`.
+- The `steer` label survives reload from the persisted `delivery="while-active"` attribute.
+- The stale preview text is not rendered.
+
+Break-validation evidence:
+
+1. Removed `state.chatContainer.clear()` from `renderExistingMessages()`; focused render-message tests failed because stale pending UI remained alongside history. Reverted.
+2. Removed `state.pendingSignalMessageComponentsById.clear()` from reload; focused tests failed because stale pending signal state survived. Reverted.
+3. Ignored `delivery="while-active"` in `getUserMessageLabel()`; focused tests failed because persisted active signals lost the `steer` label. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/render-messages.test.ts --bail 1 --reporter=dot` — 1 file / 25 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — passed, 24/24 cached.
+
+Committed as `9ac78cd1c3` (`test(mastracode): shield signal reload rendering`).

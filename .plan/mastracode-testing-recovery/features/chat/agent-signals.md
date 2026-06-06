@@ -83,14 +83,13 @@
 - `packages/core/src/events/unix-socket-pubsub.test.ts`, `packages/core/src/events/__tests__/per-thread-pubsub-multiprocess.test.ts`, and `mastracode/src/utils/__tests__/signals-pubsub.test.ts` — broker election, fan-out, backpressure, duplicate subscribe suppression, stale socket recovery, per-thread socket path routing, same-thread cross-process exchange, and different-thread isolation.
 - `packages/core/src/harness/signal-messages.test.ts` and `signal-history.test.ts` — persisted user/reactive/system-reminder signals, history rendering, idle run completion.
 - `client-sdks/react/src/agent/hooks.test.ts` — signal-enabled `useChat`, subscription lifecycle, unsupported fallback, continuation options/client tools, and subscription-native tool approval.
-- `mastracode/src/tui/__tests__/mastra-tui-queueing.test.ts` and `render-messages.test.ts` — pending signal display, echo dedupe, signal history rendering, slash-command dedupe.
+- `mastracode/src/tui/__tests__/mastra-tui-queueing.test.ts` and `render-messages.test.ts` — pending signal display, echo dedupe, signal history rendering, slash-command dedupe, and reload reconstruction that clears stale pending signal previews while rendering persisted while-active signals with the `steer` label.
 - `packages/playground/src/services/__tests__/mastra-runtime-provider.test.tsx` and `domains/agent-builder/contexts/__tests__/stream-chat-provider.test.tsx` — UI opt-in/opt-out wiring for thread signals.
 
 ## Missing tests
 
 - Full browser/TUI integration where a multimodal follow-up is sent during a real streaming run and echoed through the subscribed thread stream.
 - Playground visual regression for pending signal preview pills and send/cancel button switching while streaming.
-- Cross-reload assertion that persisted signal messages reconstruct correctly without stale pending previews.
 
 ## Known risks / regressions
 
