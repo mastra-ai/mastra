@@ -375,3 +375,10 @@ Validated `TUI: Terminal theme and contrast` with direct `/theme` command covera
 - Added `mastracode/src/tui/commands/__tests__/theme.test.ts` covering current-theme display, explicit dark preference persistence, immediate `applyThemeMode()`, auto terminal detection with detected background propagation, render refresh, and invalid-value rejection.
 - Break validations proven and reverted: skipped `saveSettings()` for changed preference; omitted detected background from auto apply; skipped `requestRender()` after applying a new theme.
 - Verification: focused theme command tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### Shell passthrough recovery checkpoint
+
+Validated `TUI: Shell passthrough streaming` with component-level output rendering coverage:
+- Added `mastracode/src/tui/components/__tests__/shell-output.test.ts` covering incremental output rendering, trailing partial-line flush on finish, non-zero failure footer, 20-line collapsed view, 200-line cap, expanded view, and terminal-width truncation.
+- Break validations proven and reverted: dropped partial-line flush on finish; changed collapsed view from 20 lines; removed non-zero exit-code footer.
+- Verification: focused shell-output tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.

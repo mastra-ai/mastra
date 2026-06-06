@@ -72,10 +72,10 @@
 - `mastracode/src/tui/__tests__/prune-chat.test.ts` — verifies `allShellComponents` are removed when pruned chat children are discarded.
 - `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts` — covers Ctrl+E expansion for tracked components; current assertion is system-reminder focused, while shell components use the same loop.
 - `mastracode/src/tui/components/__tests__/ansi.test.ts` — covers ANSI/OSC truncation plus a pathological no-terminator ReDoS regression case.
+- `mastracode/src/tui/components/__tests__/shell-output.test.ts` — covers `ShellStreamComponent` incremental output rendering, trailing partial flush on finish, failure footer/exit code, 20-line collapsed view, 200-line cap, expanded view, and terminal-width truncation.
 
 ## Missing tests
 
-- Component-level test for `ShellStreamComponent` incremental stdout/stderr rendering, 20-line collapsed view, 200-line cap, partial-line flushing, Ctrl+E expand/collapse text, and failure footer.
 - End-to-end PTY test proving configured `MASTRACODE_SHELL`/settings modes run the same visible `!` command path as default shell mode.
 - End-to-end TUI test proving `!` commands stream before process exit.
 - Loaded-history assertion that local passthrough output is not reconstructed as persisted agent/tool history.
