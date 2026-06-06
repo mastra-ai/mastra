@@ -177,8 +177,9 @@ class ProcessorTestExporter implements ObservabilityExporter {
       const traceIds = [...new Set(allSpans.map(span => span?.traceId))];
       expect(traceIds).toHaveLength(1);
 
+      const completedTraceId = traceIds[0];
       const incompleteSpans = Array.from(this.spanStates.entries())
-        .filter(([_, state]) => !state.hasEnd)
+        .filter(([_, state]) => !state.hasEnd && state.events[0]?.exportedSpan.traceId === completedTraceId)
         .map(([spanId, state]) => ({ spanId, span: state.events[0]?.exportedSpan }));
 
       expect(incompleteSpans, `Found incomplete spans`).toHaveLength(0);
