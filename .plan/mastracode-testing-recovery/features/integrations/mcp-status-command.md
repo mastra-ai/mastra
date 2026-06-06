@@ -65,11 +65,11 @@
 ## Existing tests
 
 - `mastracode/src/mcp/__tests__/manager.test.ts` — `createMcpManager()` status/skipped/background init/reload/reconnect/tool collection/log accessor behavior and MCP client timeout handoff.
-- `mastracode/src/tui/__tests__/command-dispatch.test.ts` — routes `/mcp` to `handleMcpCommand` via command dispatcher.
+- `mastracode/src/tui/__tests__/command-dispatch.test.ts` — routes `/mcp` to `handleMcpCommand` with the slash-command context that owns the manager.
+- `mastracode/src/tui/commands/__tests__/mcp.test.ts` — direct `/mcp` command shield proving a configured manager opens the selector with live status/reload/reconnect/log callbacks instead of falling back to `MCP system not initialized.`
 
 ## Missing tests
 
-- Direct `/mcp` command test proving context includes `mcpManager` and opens the selector instead of falling back to `MCP system not initialized.` when configured.
 - Focused `McpSelectorComponent` tests for navigation, detail views, reload-all, reconnect-one, polling, and stale reconnect results during reload.
 - TUI integration test for `/mcp reload` and selector actions updating status from the live manager.
 - Real long-running MCP tool integration test proving the timeout handoff allows completion beyond the upstream short default.

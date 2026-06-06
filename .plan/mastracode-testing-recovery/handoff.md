@@ -239,3 +239,9 @@ None known.
 - `gh pr view 13613 --json number,title,body,author,mergedAt,url,files,commits`, current MCP config/manager/types, command setup text, and tests verified HTTP MCP server config support. Added `features/integrations/mcp-server-configuration.md`; noted missing real HTTP MCP server integration and OAuth flow tests.
 - Focused verification for #13690/#13613 passed: MC resource/MCP/headless/dispatch tests (5 files / 138 tests) and core resource ID tests (1 file / 6 tests).
 - Rows 143-146 verified/documented: #14423 prompt/editor/history styling (current HEAD consolidated animation into `CustomEditor`/`GradientAnimator`), #14428 `/threads` preview cache/lazy loading, #14472 non-italic tool args, and #14436 OM-generated thread titles. Updated interactive chat, threads, streaming-tool-arguments, OM, index, queue, and history docs. Focused verification passed: MC TUI slice 4 files / 83 tests; memory OM thread-title slice 1 file / 5 tests.
+
+### Integrations: MCP status and reload command
+
+Validated the `/mcp` command-manager boundary, committed as `312dd9cede`. The new direct command test proves a configured `mcpManager` opens `McpSelectorComponent` with live statuses, skipped servers, config paths, reload-all, reconnect-one, and log callbacks instead of falling back to `MCP system not initialized.` The dispatcher test now proves `/mcp status` receives the same slash-command context that owns the manager.
+
+Break validations: dropping `mcpManager` from dispatch fails the route test; treating configured managers as uninitialized fails the direct command test; replacing the default selector with text status fails the selector assertion. Final verification passed: focused MCP command/dispatch tests, typecheck, lint, and `pnpm run build:mastracode`.

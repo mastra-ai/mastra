@@ -3626,3 +3626,11 @@ Verification:
 Commits:
 
 - `d01fbda0d1` — `test(core): shield restored task tool state` (pushed to `origin/tests/mc`).
+
+### MCP status command recovery checkpoint
+
+Validated `Integrations: MCP status and reload command` with command-level regression shields, committed as `312dd9cede`:
+- Added `mastracode/src/tui/commands/__tests__/mcp.test.ts` proving `/mcp` opens the interactive selector when a configured `mcpManager` exists, and passes live status/reload/reconnect/log callbacks from the manager.
+- Tightened `mastracode/src/tui/__tests__/command-dispatch.test.ts` to prove dispatcher passes the slash-command context containing `mcpManager` to `handleMcpCommand`.
+- Break validations proven and reverted: dispatcher dropped `mcpManager`; command treated a configured manager as uninitialized; default `/mcp` bypassed the selector and showed text status.
+- Verification: focused MCP command/dispatch tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
