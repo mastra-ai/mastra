@@ -69,13 +69,12 @@
 
 - `mastracode/src/headless.test.ts` — flag detection, parsing, validation, timeout/model/mode/thinking/output/output-format arg edge cases, `--settings`, `--clone-thread`, and `--continue` + `--thread` conflict handling.
 - `mastracode/src/utils/__tests__/stdin-pipe.test.ts` — ANSI/control-character sanitization, carriage-return overwrite simulation, blank-line collapse, TTY/null cases, async chunk reads, 1MB truncation warning, and buffer zeroing behavior for piped stdin.
-- `mastracode/src/headless-integration.test.ts` — real Harness lifecycle, tool call flow, text streaming, abort handling, prompt-context reminders, `--model`/`--mode` preflight and override warnings, missing-key/unknown-model failures, thread ID/title resume, unknown-thread failure, title rename, and clone event coverage.
+- `mastracode/src/headless-integration.test.ts` — real Harness lifecycle, tool call flow, text streaming, abort handling, prompt-context reminders, `--model`/`--mode` preflight and override warnings, missing-key/unknown-model failures, `--output-format text|json|stream-json` stdout/stderr contracts, final JSON summary aggregation, stream-json event output, thread ID/title resume, unknown-thread failure, title rename, and clone event coverage.
 
 ## Missing tests
 
 - Packaged CLI smoke for `mastracode --prompt` after npm-style build/install.
 - Packaged CLI smoke for model/mode auth preflight through the built binary and real settings/AuthStorage paths.
-- End-to-end `--output-format text|json|stream-json` contract tests that assert stdout/stderr separation, summary aggregation, thread-control status/event output, and no legacy `--format json` behavior drift.
 - Packaged CLI smoke for `cat file.txt | mastracode` proving bare stdin enters TUI mode, reopens the controlling TTY, and preserves keyboard input after the initial message fires.
 
 ## Known risks / regressions

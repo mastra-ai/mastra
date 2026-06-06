@@ -100,6 +100,33 @@ afterEach(() => {
   }
 });
 
+async function captureProcessOutput<T>(fn: () => Promise<T>) {
+  const stdoutChunks: string[] = [];
+  const stderrChunks: string[] = [];
+  const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(((chunk: unknown) => {
+    stdoutChunks.push(String(chunk));
+    return true;
+  }) as typeof process.stdout.write);
+  const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(((chunk: unknown) => {
+    stderrChunks.push(String(chunk));
+    return true;
+  }) as typeof process.stderr.write);
+
+  try {
+    const result = await fn();
+    return {
+      result,
+      stdout: stdoutChunks.join(''),
+      stderr: stderrChunks.join(''),
+      stdoutChunks,
+      stderrChunks,
+    };
+  } finally {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+  }
+}
+
 function createHarnessWithAgent(opts: {
   doStream: () => Promise<{ stream: ReadableStream }>;
   tools?: Record<string, any>;
@@ -394,6 +421,114 @@ function createHarnessWithModels(opts: {
 
   return harness;
 }
+
+describe('headless mode — --output-format contracts', () => {
+  it('prints only final assistant text to stdout for text output', async () => {
+    const harness = createHarnessWithAgent({
+      doStream: async () => ({ stream: createTextStream('Plain text response') }),
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureProcessOutput(() =>
+      runHeadless(harness, {
+        prompt: 'Hello',
+        format: 'default',
+        outputFormat: 'text',
+        continue_: false,
+        cloneThread: false,
+      }),
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toBe('Plain text response\n');
+    expect(stderr).toBe('');
+  });
+
+  it('prints one final summary object to stdout for json output', async () => {
+    const harness = createHarnessWithAgent({
+      doStream: async () => ({ stream: createTextStream('JSON summary response') }),
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+      stdoutChunks,
+    } = await captureProcessOutput(() =>
+      runHeadless(harness, {
+        prompt: 'Hello',
+        format: 'default',
+        outputFormat: 'json',
+        continue_: false,
+        cloneThread: false,
+      }),
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toBe('');
+    expect(stdoutChunks).toHaveLength(1);
+
+    const summary = JSON.parse(stdout.trim());
+    expect(summary).toMatchObject({
+      text: 'JSON summary response',
+      finishReason: 'complete',
+      toolCalls: [],
+      toolResults: [],
+    });
+    expect(summary.threadId).toEqual(expect.any(String));
+    expect(summary.type).toBeUndefined();
+  });
+
+  it('prints newline-delimited runtime events to stdout for stream-json output', async () => {
+    const harness = createHarnessWithAgent({
+      doStream: async () => ({ stream: createTextStream('Streamed JSON response') }),
+    });
+
+    await harness.init();
+    await harness.selectOrCreateThread();
+
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureProcessOutput(() =>
+      runHeadless(harness, {
+        prompt: 'Hello',
+        format: 'default',
+        outputFormat: 'stream-json',
+        continue_: false,
+        cloneThread: false,
+      }),
+    );
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toBe('');
+
+    const events = stdout
+      .trim()
+      .split('\n')
+      .map(line => JSON.parse(line));
+    expect(events.map(event => event.type)).toEqual(
+      expect.arrayContaining(['agent_start', 'message_end', 'agent_end']),
+    );
+    expect(events.find(event => event.type === 'agent_end')).toMatchObject({ reason: 'complete' });
+    expect(events.some(event => event.text === 'Streamed JSON response')).toBe(false);
+
+    const assistantEnd = events.find(event => event.type === 'message_end' && event.message?.role === 'assistant');
+    expect(assistantEnd?.message.content).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'text', text: 'Streamed JSON response' })]),
+    );
+  });
+});
 
 describe('headless mode — --model flag', () => {
   it('switches model when a valid --model is provided', async () => {
