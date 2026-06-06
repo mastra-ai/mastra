@@ -298,6 +298,39 @@ describe('dispatchSlashCommand models routing', () => {
     );
   });
 
+  it('eagerly resolves workspace for /goal skill aliases before the first message', async () => {
+    const state = {
+      customSlashCommands: [],
+      goalSkillCommands: [
+        { name: 'review', path: '/skills/review', description: 'Review code', metadata: { goal: true } },
+      ],
+    } as any;
+    const skill = {
+      name: 'review',
+      instructions: 'Review the code carefully.',
+      metadata: { goal: true },
+    };
+    const workspace = { skills: { get: vi.fn().mockResolvedValue(skill) } };
+    const ctx = {
+      getResolvedWorkspace: vi.fn(() => undefined),
+      harness: {
+        hasWorkspace: vi.fn(() => true),
+        resolveWorkspace: vi.fn().mockResolvedValue(workspace),
+      },
+    } as any;
+
+    const handled = await dispatchSlashCommand('/goal/review focus tests', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(ctx.harness.resolveWorkspace).toHaveBeenCalledTimes(1);
+    expect(workspace.skills.get).toHaveBeenCalledWith('/skills/review');
+    expect(mocks.startGoalWithDefaults).toHaveBeenCalledWith(
+      ctx,
+      '# Skill goal: review\n\nReview the code carefully.\n\nARGUMENTS: focus tests',
+    );
+    expect(mocks.showError).not.toHaveBeenCalled();
+  });
+
   it('blocks custom slash commands while the goal judge is evaluating', async () => {
     const state = {
       customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
