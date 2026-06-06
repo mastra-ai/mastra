@@ -49,7 +49,15 @@ import type { LSPConfig } from './lsp/types';
 import type { WorkspaceSandbox, OnMountHook } from './sandbox';
 import { LocalSandbox } from './sandbox/local-sandbox';
 import { MastraSandbox } from './sandbox/mastra-sandbox';
-import type { BM25Config, BM25SearchConfig, TokenizeOptions, Embedder, SearchOptions, SearchResult, IndexDocument } from './search';
+import type {
+  BM25Config,
+  BM25SearchConfig,
+  TokenizeOptions,
+  Embedder,
+  SearchOptions,
+  SearchResult,
+  IndexDocument,
+} from './search';
 import { SearchEngine, splitIntoChunks } from './search';
 import type { WorkspaceSkills, SkillsResolver, SkillSource } from './skills';
 import { WorkspaceSkillsImpl, LocalSkillSource } from './skills';
