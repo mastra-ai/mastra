@@ -1197,8 +1197,9 @@ describe('headless mode — thread control', () => {
       createdAt: new Date('2026-01-01T00:00:00.000Z'),
       lastActivityAt: new Date('2026-01-02T00:00:00.000Z'),
       modeId: 'default',
-      modelId: 'mock-model',
+      modelId: 'openai/custom-thread-model',
       getMode: vi.fn(() => ({ id: 'default', description: 'Default', agentId: 'test-agent' })),
+      getModelId: vi.fn(() => 'openai/custom-thread-model'),
       setModelId: vi.fn(),
     };
     const harnessV1 = {
@@ -1233,6 +1234,7 @@ describe('headless mode — thread control', () => {
     expect(exitCode).toBe(0);
     expect(harness.getCurrentThreadId()).toBe(thread.id);
     expect(harnessV1.session).toHaveBeenCalledWith({ threadId: thread.id, resourceId: thread.resourceId });
+    expect(session.setModelId).not.toHaveBeenCalled();
     const threads = await harness.listThreads();
     const matchingThreads = threads.filter(t => t.id === thread.id);
     expect(matchingThreads).toHaveLength(1);
@@ -1241,7 +1243,7 @@ describe('headless mode — thread control', () => {
     expect(targeted.metadata).toMatchObject({
       sessionId: 'sess-prefilled-title',
       modeId: 'default',
-      modelId: 'mock-model',
+      modelId: 'openai/custom-thread-model',
     });
   });
 

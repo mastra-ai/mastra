@@ -38,17 +38,10 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
   }
 
   async switchThread({ threadId }: { threadId: string }): Promise<void> {
-    const modes = this.listModes();
-
     this.#session = await this.#harnessV1.session({
       threadId,
       resourceId: this.getResourceId(),
     });
-
-    const defaultModelId = modes.find(mode => mode.id === this.#session.getMode().id)?.defaultModelId;
-    if (defaultModelId) {
-      this.#session.setModelId(defaultModelId);
-    }
 
     await super.switchThread({ threadId });
   }
