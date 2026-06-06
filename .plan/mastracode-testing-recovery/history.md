@@ -2874,3 +2874,28 @@ Verification:
 - `pnpm --filter ./mastracode check` — passed.
 - `pnpm --filter ./mastracode lint` — passed.
 - `pnpm run build:mastracode` — passed, 24/24 tasks.
+
+### Test recovery: startup performance warning/sync contract
+
+Selected `Setup: Startup performance` as the next High-risk row. Chose the missing warning/slow-gateway regression because it protects the core startup optimization contract without relying on brittle wall-clock benchmarks: gateway sync must remain backgrounded, storage warnings must still be returned for TUI rendering, and startup must still request a forced gateway registry refresh.
+
+Added coverage in `mastracode/src/index.test.ts`:
+
+- Mocks a never-resolving `GatewayRegistry.syncGateways(true)` call.
+- Mocks storage initialization returning `warning: 'Storage fallback warning'`.
+- Races `createMastraCode()` against a timeout to prove startup does not await gateway sync.
+- Asserts the returned `storageWarning` survives for `main.ts` warning rendering.
+- Asserts startup still calls `syncGateways(true)`.
+
+Break-validation evidence:
+
+1. Changed background sync to `await Promise.resolve(gatewayRegistry.syncGateways(true))`; focused test timed out with `createMastraCode waited for gateway sync`. Reverted.
+2. Dropped returned `storageWarning`; focused test failed on the warning assertion. Reverted.
+3. Changed startup sync to `syncGateways(false)`; focused test failed on the forced-sync assertion. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/index.test.ts src/__tests__/index.test.ts --bail=1 --reporter=dot` — 2 files / 18 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — passed, 24/24 tasks.

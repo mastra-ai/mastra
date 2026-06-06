@@ -68,11 +68,12 @@
 - `stores/libsql/src/storage/local-performance.test.ts` — local PRAGMAs, safe synchronous mode, custom cache/mmap overrides, message indexes, cached init, in-memory reinit, and concurrent init coalescing.
 - `stores/libsql/src/storage/db/migration-columns.test.ts` — span column migration inspects table columns once while adding missing columns.
 - `mastracode/src/__tests__/index.test.ts` — background gateway sync starts without blocking `createMastraCode()`, plus startup restoration and Harness wiring.
+- `mastracode/src/index.test.ts` — slow background gateway sync does not delay `createMastraCode()` return, storage warnings remain available for TUI rendering, and startup still requests forced gateway sync.
 
 ## Missing tests
 
 - End-to-end startup timing benchmark on a realistic local Mastra Code database.
-- Regression test that startup warnings still render correctly when gateway sync is slow but storage initialization succeeds.
+- Full TUI smoke test that startup warnings render visibly before the editor when storage initialization succeeds and gateway sync is slow. Unit-level warning propagation through `createMastraCode()` is now covered.
 - Integration test for local LibSQL message index impact on large thread-history reads.
 
 ## Known risks / regressions
