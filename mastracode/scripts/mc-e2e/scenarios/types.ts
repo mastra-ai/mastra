@@ -4,6 +4,7 @@ export type ScenarioName =
   | 'automated-chat'
   | 'visible-commands'
   | 'integration-commands'
+  | 'modal-and-shell'
   | 'report-issue-command'
   | 'state-commands'
   | 'workspace-commands';
@@ -13,6 +14,7 @@ export type McE2eTerminal = {
   keyCtrlC: () => void;
   serialize: () => { view: string };
   submit: (text: string) => void;
+  write: (text: string) => void;
 };
 
 export type McE2eScenarioRuntime = {

@@ -3916,3 +3916,26 @@ Validated `Headless: Prompt mode` with explicit TUI-e2e not-applicable rationale
 - Existing headless unit/integration tests cover parsing, stdin pipe handling, output formats, thread/resource controls, and model/mode preflight.
 - Existing break evidence remains: text output buffering, JSON summary, and stream-json NDJSON contracts fail when broken.
 - Adjacent startup/TUI fallback behavior remains covered by checked-in TUI e2e scenarios.
+
+## 2026-06-06 — Modal/shell TUI e2e partial coverage batch
+
+Added `modal-and-shell` checked-in TUI e2e scenario:
+- Opens `/sandbox` through a real PTY, asserts the configuration modal question/action text, cancels with Escape, and verifies the normal editor returns.
+- Submits a real default-shell `!printf` passthrough command, asserts bordered stdout is rendered as shell output, and asserts the completed success footer.
+
+Rows moved from missing e2e to partial e2e:
+- TUI: Configuration modal overlays — partial only; broader `/setup` nested model-selector Escape/back navigation remains missing.
+- TUI: Shell passthrough streaming — partial only; configured shell modes and long-running stream-before-exit coverage remain missing.
+
+Break validation:
+- Changed `/sandbox` modal action label from `Add path` -> `modal-and-shell` failed waiting for the real modal action text.
+- Stopped appending stdout chunks to the shell component -> `modal-and-shell` failed waiting for the bordered stdout line.
+- Removed the shell success `✓` footer -> `modal-and-shell` failed waiting for the completed shell footer.
+- All intentional breaks were reverted before committing.
+
+Verification:
+- `pnpm --filter ./mastracode run e2e:test modal-and-shell` passed.
+- `pnpm --filter ./mastracode run e2e:test -- --jobs 2` passed: 9/9 scenarios.
+- `pnpm --filter ./mastracode check` passed.
+- `pnpm --filter ./mastracode lint` passed.
+- `pnpm run build:mastracode` passed.
