@@ -1,5 +1,40 @@
 # @mastra/server
 
+## 1.42.0-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`f2ab060`](https://github.com/mastra-ai/mastra/commit/f2ab060162bea81505fda553e2cee29c1979fd04), [`5d302c8`](https://github.com/mastra-ai/mastra/commit/5d302c8eda1a6ac74eab5e442c4f64db6cc97a06)]:
+  - @mastra/core@1.42.0-alpha.1
+
+## 1.42.0-alpha.0
+
+### Minor Changes
+
+- Add server endpoints so Studio can resolve agent-builder model availability and auth permission patterns without importing server-only EE code in the browser: ([#17489](https://github.com/mastra-ai/mastra/pull/17489))
+  - `GET /editor/builder/models/available` returns the provider/model list already filtered by the active builder model policy (`requiresAuth: true`, `stored-agents:read`).
+  - `GET /auth/permission-patterns` returns the valid permission-pattern strings. It is gated by `requiresAuth: true` with no finer-grained permission: the response is the non-sensitive route-permission vocabulary that every authenticated user needs to gate their own sidebar/redirects, and there is no narrower permission that fits.
+
+  `@mastra/client-js` gains `getBuilderAvailableModels()` and `getPermissionPatterns()` to consume these endpoints.
+
+  ```ts
+  import { MastraClient } from '@mastra/client-js';
+
+  const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+
+  const { providers } = await client.getBuilderAvailableModels();
+  const { patterns } = await client.getPermissionPatterns();
+  ```
+
+### Patch Changes
+
+- Fixed the tools API endpoint to include dynamically created tools (e.g., MCP tools) alongside bundler-discovered tools. Previously, when the CLI bundler discovered tools, dynamically created tools registered via `new Mastra({ tools })` were silently dropped from the `/api/tools` response. Now both sources are merged, with bundler-discovered tools taking precedence on conflicts. ([#17535](https://github.com/mastra-ai/mastra/pull/17535))
+
+- Added agent memory-support metadata to the agents API and client types. ([#17581](https://github.com/mastra-ai/mastra/pull/17581))
+
+- Updated dependencies [[`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`e9be4e7`](https://github.com/mastra-ai/mastra/commit/e9be4e747ec3d8b65548bff92f9377db06105376), [`d53cfc2`](https://github.com/mastra-ai/mastra/commit/d53cfc2c7f8d78343a4aa84ec4e129ba25f3325e), [`65799d4`](https://github.com/mastra-ai/mastra/commit/65799d4d549e5ebb9c848fbe3f51ac090f64becf), [`c268c89`](https://github.com/mastra-ai/mastra/commit/c268c89f4c63a93ee474d3cffdf3ea60bf00d4f2), [`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`0c72f03`](https://github.com/mastra-ai/mastra/commit/0c72f032abb13254df5a7856d64be2f207b8006d), [`3b45ea9`](https://github.com/mastra-ai/mastra/commit/3b45ea95015557a6cb9d70dc5252af54ab1b78ac), [`f084be1`](https://github.com/mastra-ai/mastra/commit/f084be1fcbe33ad7480913e44d6130c421c0976f)]:
+  - @mastra/core@1.42.0-alpha.0
+
 ## 1.41.0
 
 ### Minor Changes

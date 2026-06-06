@@ -1,5 +1,18 @@
 # @mastra/mcp
 
+## 1.9.2-alpha.0
+
+### Patch Changes
+
+- Fixed `MCPServer` leaking one caller's resources to other callers. The result of the first `resources/list` request was cached on the shared, long-lived server instance and replayed to everyone, so a dynamic resource provider that scopes resources per user or tenant (resolved from `extra.authInfo`) served the first caller's resource index — names and URIs — to subsequent callers. The same stale cache also backed `resources/read` URI resolution and the public `listResources()` method. The `resources/templates/list` handler had the same defect for dynamic resource template providers. ([#17610](https://github.com/mastra-ai/mastra/pull/17610))
+
+  Resource and resource template providers are now invoked on every request with the current caller's context, so each caller only sees their own resources. See https://github.com/mastra-ai/mastra/issues/17609
+
+- Fixed flaky MCP server tests by replacing real weather API calls with deterministic mock tool ([#17572](https://github.com/mastra-ai/mastra/pull/17572))
+
+- Updated dependencies [[`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`e9be4e7`](https://github.com/mastra-ai/mastra/commit/e9be4e747ec3d8b65548bff92f9377db06105376), [`d53cfc2`](https://github.com/mastra-ai/mastra/commit/d53cfc2c7f8d78343a4aa84ec4e129ba25f3325e), [`65799d4`](https://github.com/mastra-ai/mastra/commit/65799d4d549e5ebb9c848fbe3f51ac090f64becf), [`c268c89`](https://github.com/mastra-ai/mastra/commit/c268c89f4c63a93ee474d3cffdf3ea60bf00d4f2), [`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`0c72f03`](https://github.com/mastra-ai/mastra/commit/0c72f032abb13254df5a7856d64be2f207b8006d), [`3b45ea9`](https://github.com/mastra-ai/mastra/commit/3b45ea95015557a6cb9d70dc5252af54ab1b78ac), [`f084be1`](https://github.com/mastra-ai/mastra/commit/f084be1fcbe33ad7480913e44d6130c421c0976f)]:
+  - @mastra/core@1.42.0-alpha.0
+
 ## 1.9.1
 
 ### Patch Changes

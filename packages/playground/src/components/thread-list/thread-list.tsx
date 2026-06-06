@@ -76,9 +76,13 @@ export const ThreadListItem = ({
         href={href}
         to={to}
         variant="ghost"
-        className={cn('w-full justify-start rounded-xl', isActive && 'bg-surface4 text-neutral6')}
+        className={cn(
+          'w-full min-w-0 justify-start rounded-xl text-left',
+          onDelete && 'pr-9',
+          isActive && 'bg-surface4 text-neutral6',
+        )}
       >
-        {children}
+        <span className="min-w-0 flex-1">{children}</span>
       </Button>
 
       {onDelete && (
