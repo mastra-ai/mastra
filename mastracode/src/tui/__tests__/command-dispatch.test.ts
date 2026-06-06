@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   handleSkillCommand: vi.fn().mockResolvedValue(undefined),
   handleJudgeCommand: vi.fn().mockResolvedValue(undefined),
   handleGithubCommand: vi.fn().mockResolvedValue(undefined),
+  handleReportIssueCommand: vi.fn().mockResolvedValue(undefined),
   handleMcpCommand: vi.fn().mockResolvedValue(undefined),
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
   startGoalWithDefaults: vi.fn().mockResolvedValue(undefined),
@@ -44,7 +45,7 @@ vi.mock('../commands/index.js', () => ({
   handleSettingsCommand: vi.fn(),
   handleLoginCommand: vi.fn(),
   handleReviewCommand: vi.fn(),
-  handleReportIssueCommand: vi.fn(),
+  handleReportIssueCommand: mocks.handleReportIssueCommand,
   handleSetupCommand: vi.fn(),
   handleBrowserCommand: vi.fn(),
   handleThemeCommand: vi.fn(),
@@ -82,6 +83,7 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.handleSkillCommand.mockClear();
     mocks.handleJudgeCommand.mockClear();
     mocks.handleGithubCommand.mockClear();
+    mocks.handleReportIssueCommand.mockClear();
     mocks.handleMcpCommand.mockClear();
     mocks.processSlashCommand.mockClear();
     mocks.startGoalWithDefaults.mockClear();
@@ -168,6 +170,27 @@ describe('dispatchSlashCommand models routing', () => {
     expect(handled).toBe(true);
     expect(mocks.handleGithubCommand).toHaveBeenCalledTimes(1);
     expect(mocks.handleGithubCommand).toHaveBeenCalledWith(ctx, ['mastra-ai/mastra#17447']);
+  });
+
+  it('routes /report-issue to handleReportIssueCommand', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+
+    const handled = await dispatchSlashCommand('/report-issue startup hangs', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.handleReportIssueCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.handleReportIssueCommand).toHaveBeenCalledWith(ctx, ['startup', 'hangs']);
+  });
+
+  it('keeps removed /fix-issue command absent from dispatch', async () => {
+    const state = { customSlashCommands: [] } as any;
+
+    const handled = await dispatchSlashCommand('/fix-issue 123', state, () => ({}) as any);
+
+    expect(handled).toBe(true);
+    expect(mocks.handleReportIssueCommand).not.toHaveBeenCalled();
+    expect(mocks.showError).toHaveBeenCalledWith(state, 'Unknown command: fix-issue');
   });
 
   it('routes /mcp with the slash command context that owns the manager', async () => {
