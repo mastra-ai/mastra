@@ -325,25 +325,17 @@ describe('buildFormSnapshotInstructions', () => {
       expect(result).toContain('Already set. Do not call set-agent-description');
     });
 
-    it('tells the LLM to write set-agent-instructions tightly the first time when empty', () => {
+    it('tells the LLM to write set-agent-instructions concisely the first time when empty', () => {
       const result = buildFormSnapshotInstructions(baseValues, buildOptions());
 
       expect(result).toContain('- Instructions: (empty)');
       expect(result).toMatch(/Call set-agent-instructions ONCE/);
-      expect(result).toMatch(/Drafting protocol/i);
-      expect(result).toMatch(/COUNT characters before calling/i);
-      expect(result).toMatch(/drop a WHOLE section/i);
-      expect(result).toMatch(/Over-limit calls are REJECTED/);
-    });
-
-    it('caps the generated instructions length so a single tool call serializes safely', () => {
-      const result = buildFormSnapshotInstructions(baseValues, buildOptions());
-
-      // Hard cap surfaced to the LLM AND enforced server-side in
-      // useSetAgentInstructionsTool, so set-agent-instructions args stay
-      // under the stream output token cap.
-      expect(result).toContain(`HARD limit: ${MAX_GENERATED_INSTRUCTIONS_CHARS.toLocaleString()} characters`);
-      expect(result).toMatch(/Over-limit calls are REJECTED/);
+      expect(result).toMatch(/target 1,200–2,000 characters/i);
+      expect(result).toMatch(/2–4 short paragraphs or compact bullet groups/i);
+      expect(result).toMatch(/Avoid worked examples, FAQs, long edge-case lists, or exhaustive policies/i);
+      expect(result).not.toMatch(/HARD limit/i);
+      expect(result).not.toMatch(/COUNT characters before calling/i);
+      expect(result).not.toMatch(/Over-limit calls are REJECTED/i);
     });
 
     it('tells the LLM not to revise instructions once they are filled', () => {
