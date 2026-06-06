@@ -3412,3 +3412,28 @@ Verification:
 Commits:
 
 - `e50141efa8` — `test(mastracode): shield codex thinking request shape` (pushed to `origin/tests/mc`).
+
+### Test recovery: OpenAI strict structured-output schema shape
+
+Selected `Models: OpenAI strict schema compatibility` as the next High-risk row. Chose the local Agent structured-output boundary because it proves the no-network path that applies OpenAI provider detection, null-to-undefined parsing, and strict response schema serialization before a model request.
+
+Changes:
+
+- Extended `packages/core/src/agent/__tests__/structured-output-openai-compat.test.ts` with a direct model-capture assertion for the generated `responseFormat.schema`.
+- The test now proves provider-only OpenAI models with undefined `modelId` still receive a strict JSON schema containing all required keys and recursive `additionalProperties: false` markers.
+
+Break-validation evidence:
+
+1. Made OpenAI compat depend only on `modelId`; the focused test failed because provider-only OpenAI models lost null-transform handling. Reverted.
+2. Dropped the structured-output schema before model generation; the focused test failed because no structured object was parsed. Reverted.
+3. Passed the raw schema without `wrapSchemaWithNullTransform`; the focused test failed on OpenAI-style `null` for optional fields. Reverted.
+
+Verification:
+
+- `pnpm --filter ./packages/core exec vitest run src/agent/__tests__/structured-output-openai-compat.test.ts --reporter=dot --bail=1` — 1 file / 6 tests passed.
+- `pnpm --filter ./packages/core check` — passed.
+- `pnpm build:core` — 12/12 tasks passed.
+
+Commits:
+
+- `33665d4a24` — `test(core): shield openai strict schema shape` (pushed to `origin/tests/mc`).

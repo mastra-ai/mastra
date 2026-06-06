@@ -64,7 +64,7 @@
 
 ## Existing tests
 
-- `packages/core/src/agent/__tests__/structured-output-openai-compat.test.ts` — exercises real Agent structured-output path with valid, undefined, and empty `modelId` values.
+- `packages/core/src/agent/__tests__/structured-output-openai-compat.test.ts` — exercises real Agent structured-output path with valid, undefined, and empty `modelId` values, null-to-undefined parsing, and the exact OpenAI strict response schema shape handed to the model.
 - `packages/schema-compat/src/zod-to-json.test.ts` — covers `ensureAllPropertiesRequired()` across root, nested, array, union, and non-object schemas.
 - OpenAI workspace/structured-output e2e tests are present but require external credentials.
 
