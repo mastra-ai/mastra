@@ -3,8 +3,8 @@ import type { McE2eScenario } from './types.js';
 
 export const branchContextLongNameScenario: McE2eScenario = {
   name: 'branch-context-long-name',
-  description: 'Start real Mastra Code in a temp git repo and verify startup branch context.',
-  testName: 'shows live git branch in the Mastra Code startup TUI context',
+  description: 'Start real Mastra Code in a temp git repo and verify startup plus footer branch context.',
+  testName: 'shows live git branch in startup context and preserves abbreviated branch in the footer',
   projectFixture: 'long-branch',
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
@@ -18,6 +18,7 @@ export const branchContextLongNameScenario: McE2eScenario = {
         }),
       ) as any
     ).toBeVisible();
+    await runtime.waitForScreenText(/feature\/supe\.\.tra-long/, terminal);
     runtime.printScreen('after branch context assertion', terminal);
 
     terminal.keyCtrlC();

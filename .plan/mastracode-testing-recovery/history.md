@@ -2788,3 +2788,35 @@ The command owns the full unfinished test-recovery queue rather than accepting a
 Updated recovery docs to use the current same-branch workflow: no separate feature branches/worktrees by default; commit by feature area or by large test group.
 
 Follow-up: clarified the goal workflow so feature/test-group verification gates are judged by the goal judge during autonomous runs, not by the user. The user should only be asked for final approval after the full unfinished queue is exhausted or remaining rows are explicitly deferred. Also clarified that grouped commits should be pushed after committing so recovery progress is available remotely.
+
+### Test recovery: Git branch context footer shield
+
+Initialized `.plan/mastracode-testing-recovery/test-recovery-tracker.md` from the feature-map index with 56 unfinished rows. Selected `Git: Branch context and status` first because it is High risk, Missing coverage, and TUI-visible.
+
+Contracts covered in this chunk:
+
+- Real Mastra Code startup in a temp git repo shows the live long branch in startup context.
+- The status footer preserves branch context by falling back to the abbreviated long-branch form `feature/supe..tra-long` before lossy path truncation can win.
+- Status-line fallback ordering rejects truncation for full path+branch and full branch-only candidates so the branch abbreviation candidate can render.
+
+Tests/changes:
+
+- Strengthened `mastracode/scripts/mc-e2e/scenarios/branch-context-long-name.ts` to assert the footer abbreviation, not only startup branch context.
+- Added `mastracode/src/tui/__tests__/status-line.test.ts` coverage for the narrow-width fallback.
+- Fixed `mastracode/src/tui/status-line.ts` fallback ordering by adding `allowDirTruncation: false` to the full path+branch and branch-only attempts.
+- Added a file-local lint disable to `mastracode/scripts/index-messages.ts`, a one-time migration script with intentional console output and legacy import style, so `pnpm --filter ./mastracode lint` can run cleanly.
+
+Break-validation evidence:
+
+1. Re-allowed full path+branch truncation; `pnpm --filter ./mastracode run e2e:test branch-context-long-name` failed waiting for `/feature\/supe\.\.tra-long/` while the footer showed a truncated path. Reverted.
+2. Changed the abbreviation prefix from 12 chars to 10; `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/status-line.test.ts --bail=1 --reporter=dot` failed because the footer rendered `feature/su..tra-long`. Reverted.
+3. Raised the abbreviation threshold so long branches did not abbreviate; the same focused status-line test failed because the footer rendered a truncated full branch. Reverted.
+
+Verification:
+
+- `pnpm run build:mastracode` — passed.
+- `pnpm --filter ./mastracode exec vitest run src/tui/__tests__/status-line.test.ts --bail=1 --reporter=dot` — 1 file / 14 tests passed.
+- `pnpm --filter ./mastracode run e2e:test branch-context-long-name` — 1 TUI e2e passed.
+- `pnpm --filter ./mastracode run e2e:test -- --jobs 2` — 3 TUI e2e scenarios passed; automated-chat AIMock request count 1.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.

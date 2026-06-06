@@ -247,6 +247,18 @@ describe('updateStatusLine', () => {
     expect(chalkRgbMock).toHaveBeenCalledWith(53, 117, 221);
   });
 
+  it('uses abbreviated long branch before truncating path and dropping branch context', () => {
+    const state = createState();
+    state.projectInfo.gitBranch = 'feature/super-long-branch-name-for-status-footer-e2e-regression-shield-extra-long';
+    process.stdout.columns = 80;
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('feature/supe..tra-long');
+    expect(rendered).not.toContain('mastra--feat-mc-queueing-ux…');
+  });
+
   it('shows active goal duration instead of attempt count', () => {
     vi.useFakeTimers();
     const now = new Date('2026-05-15T12:00:00.000Z');

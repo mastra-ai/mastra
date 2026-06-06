@@ -60,20 +60,21 @@
 
 ## Existing tests
 
-- No dedicated branch-refresh test found for prompt context or status footer.
-- Existing TUI handler/status tests indirectly exercise status-line rendering but not live git refresh.
+- `mastracode/src/tui/__tests__/status-line.test.ts` verifies long branches use the stable abbreviated footer form before path truncation can drop branch context.
+- `mastracode/scripts/mc-e2e/scenarios/branch-context-long-name.ts` starts real Mastra Code in a temp git repo and verifies both startup branch context and footer abbreviation.
+- Existing TUI handler/status tests indirectly exercise branch-refresh/render wiring but not every live git refresh trigger.
 
 ## Missing tests
 
 - Thread switch/reload while on a different branch refreshes footer and prompt branch.
 - Tool/shell branch switch during a run updates footer at `agent_end`.
-- Long branch names abbreviate before branch context disappears.
+- Detached HEAD and non-git directories keep explicit graceful behavior coverage.
 
 ## Known risks / regressions
 
 - Async branch refresh can race with status redraws, so the footer may briefly show stale branch text.
 - Prompt and footer can still diverge if git lookup fails in one path and falls back to cached state.
-- Detached HEAD or non-git directories need explicit behavior coverage.
+- Long-branch footer regression is now covered: lossy path truncation, wrong abbreviation shape, and disabled abbreviation were all break-validated.
 
 ## Verification checklist
 

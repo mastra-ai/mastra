@@ -278,6 +278,7 @@ export function updateStatusLine(state: TUIState): void {
     memCompact?: 'percentOnly' | 'noBuffer' | 'full';
     showDir: boolean;
     dir?: string | null;
+    allowDirTruncation?: boolean;
     badge?: 'full' | 'short';
     showQueue?: boolean;
     compactGoal?: boolean;
@@ -346,6 +347,9 @@ export function updateStatusLine(state: TUIState): void {
       const availableForDir = termWidth - nonDirWidth - SEP.length - 1; // -1 buffer for ambiguous-width chars
       const dirWidth = visibleWidth(dirPart.plain);
       const MIN_TRUNCATED_DIR = 10; // don't show a tiny sliver
+      if (dirWidth > availableForDir && opts.allowDirTruncation === false) {
+        return null;
+      }
       if (dirWidth > availableForDir && availableForDir >= MIN_TRUNCATED_DIR) {
         const reservedPrefix = githubPrLabel ? `${githubPrLabel.plain} ` : '';
         const availableForText = availableForDir - visibleWidth(reservedPrefix);
@@ -402,9 +406,23 @@ export function updateStatusLine(state: TUIState): void {
   // Priority: token fractions + buffer > labels > provider > badge > buffer > fractions
   const result =
     // 1. Full badge + full model + long labels + queue count + full dir
-    buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false, dir: dirFull, showQueue: true }) ??
+    buildLine({
+      modelId: fullModelId,
+      memCompact: 'full',
+      showDir: false,
+      dir: dirFull,
+      allowDirTruncation: false,
+      showQueue: true,
+    }) ??
     // 2. Full badge + full model + queue count + branch only (drop path)
-    buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false, dir: dirBranchOnly, showQueue: true }) ??
+    buildLine({
+      modelId: fullModelId,
+      memCompact: 'full',
+      showDir: false,
+      dir: dirBranchOnly,
+      allowDirTruncation: false,
+      showQueue: true,
+    }) ??
     // 3. Full badge + full model + queue count + abbreviated branch
     buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false, dir: dirBranchShort, showQueue: true }) ??
     // 4. Drop directory entirely
