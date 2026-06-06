@@ -281,3 +281,9 @@ Break validations: removing `/goal/<skill>` eager resolution fails the dispatche
 Validated lifecycle hook config and `/hooks` status behavior, committed and pushed as `d06c80ab3c`. The new config test proves global-before-project merge order, custom `configDir`, invalid config filtering, and `Notification` hook loading. The new `/hooks` command test proves reload/no-config/status output, including `Notification` hooks and configured project/global paths.
 
 Break validations: dropping `Notification` from config loading fails the loader test; dropping `Notification` from status output fails the command test; reversing global/project merge order fails the config test. Final verification passed: focused hook config/command tests, MastraCode typecheck, lint, and `pnpm run build:mastracode`.
+
+### Integrations: GitHub issue reporting command
+
+Validated the prompt-driven `/report-issue` command, committed and pushed as `bd8725f026`. The direct command test proves model-selected gating, pending-thread creation before prompt send, and preserved duplicate-search / approval / repo-label prompt content. The dispatcher test proves `/report-issue` routes to the handler and removed `/fix-issue` stays absent.
+
+Break validations: removing the model gate fails the direct command test; skipping pending-thread creation fails the direct command test; reintroducing `/fix-issue` fails the dispatcher absence test. Final verification passed: focused report-issue/command-dispatch tests, MastraCode typecheck, lint, and `pnpm run build:mastracode`.

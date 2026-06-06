@@ -60,14 +60,13 @@
 
 ## Existing tests
 
-- `mastracode/src/tui/__tests__/command-dispatch.test.ts` mocks `handleReportIssueCommand`, but current assertions do not directly prove `/report-issue` routing.
+- `mastracode/src/tui/commands/__tests__/report-issue.test.ts` — verifies model-selected gating, pending-thread creation before prompt send, guided prompt safety content, duplicate search instructions, approval wording, `mastracode` label, and `mastra-ai/mastra` repo.
+- `mastracode/src/tui/__tests__/command-dispatch.test.ts` — verifies `/report-issue` routing and that removed `/fix-issue` stays absent.
 - `mastracode/src/tui/components/__tests__/help-overlay.test.ts` covers the hardcoded help command list generally.
 
 ## Missing tests
 
-- Direct command test for `/report-issue` routing, model-selected gate, pending-thread creation, and `sendSlashCommandMessage()` payload.
-- Prompt-content test proving duplicate search, user approval before issue creation/commenting, `mastracode` label, and `mastra-ai/mastra` repo are preserved.
-- Regression test that `/fix-issue` remains absent or intentionally reintroduced with a separate implementation.
+- Headless/non-TUI issue-reporting parity if expected.
 
 ## Known risks / regressions
 

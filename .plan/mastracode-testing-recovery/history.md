@@ -3679,3 +3679,11 @@ Validated `Integrations: Lifecycle hooks` with hook config and `/hooks` command 
 - Fixed config loading and status display to include `Notification` hooks.
 - Break validations proven and reverted: removed `Notification` from config events; removed `Notification` from `/hooks` status events; reversed global/project merge order.
 - Verification: focused hook config/command tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### GitHub issue reporting recovery checkpoint
+
+Validated `Integrations: GitHub issue reporting command` with direct command and dispatcher shields, committed as `bd8725f026`:
+- Added `mastracode/src/tui/commands/__tests__/report-issue.test.ts` proving `/report-issue` gates on model selection, creates a pending thread before sending, and preserves prompt instructions for duplicate search, user approval, `mastracode` label, and `mastra-ai/mastra` repo.
+- Tightened `mastracode/src/tui/__tests__/command-dispatch.test.ts` to prove `/report-issue` routes to the handler and removed `/fix-issue` remains absent.
+- Break validations proven and reverted: removed model-selected gate; skipped pending-thread creation; reintroduced `/fix-issue` as an alias.
+- Verification: focused report-issue/command-dispatch tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
