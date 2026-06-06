@@ -60,10 +60,10 @@
 ## Existing tests
 
 - `mastracode/src/tui/components/__tests__/banner.test.ts` — wide, medium, narrow, version, and custom app-name rendering.
+- `mastracode/src/tui/__tests__/setup-layout.test.ts` — `buildLayout()` startup header composition, including banner call arguments, project/resource/branch/worktree/user frontmatter, startup hints, container/footer ordering, status refresh, auth refresh, and editor focus.
 
 ## Missing tests
 
-- Full `buildLayout()` snapshot including banner + frontmatter + instructions.
 - Theme/contrast regression test for ANSI gradient colors.
 - User-facing test that headless mode does not emit banner text.
 

@@ -336,3 +336,10 @@ Validated `Git: Commit attribution` with prompt/dynamic-instructions shields:
 - Added `getDynamicInstructions()` coverage proving restored/current harness `currentModelId` flows into commit attribution guidance.
 - Break validations proven and reverted: dropped selected model ID from the footer; emitted empty parentheses for no-model fallback; stopped passing restored `currentModelId` into dynamic instructions.
 - Verification: focused prompt/instructions tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### Startup banner recovery checkpoint
+
+Validated `TUI: Startup banner` with a layout-level startup header shield:
+- Added `mastracode/src/tui/__tests__/setup-layout.test.ts` covering `buildLayout()` composition: banner call/version/appName, project/resource/branch/worktree/user frontmatter, mode-aware startup hints, chat/task/editor/footer ordering, quiet-mode task progress initialization, status refresh, model-auth refresh, and editor focus.
+- Break validations proven and reverted: ignored custom `appName` in `renderBanner`; removed worktree frontmatter; always showed `⇧+Tab cycle modes` when only one mode exists.
+- Verification: focused setup-layout tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.

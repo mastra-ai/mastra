@@ -3739,3 +3739,10 @@ Validated `Git: Commit attribution` with prompt/dynamic-instructions shields:
 - Added `instructions.test.ts` coverage that `getDynamicInstructions()` uses restored/current harness `currentModelId` in commit guidance.
 - Break validations proven and reverted: missing model ID in footer, empty-parentheses fallback, and dropped `currentModelId` propagation.
 - Verification: `pnpm --filter ./mastracode exec vitest --run src/agents/__tests__/prompts.test.ts src/agents/__tests__/instructions.test.ts --bail=1 --reporter=dot`, `pnpm --filter ./mastracode check`, `pnpm --filter ./mastracode lint`, and `pnpm run build:mastracode` all passed.
+
+### Startup banner recovery checkpoint
+
+Validated `TUI: Startup banner` with a layout-level startup header shield:
+- Added `setup-layout.test.ts` for startup banner/frontmatter/hint/container/footer/focus composition in `buildLayout()`.
+- Break validations proven and reverted: missing custom app name in banner rendering, missing worktree frontmatter, and stale mode-cycle hint for single-mode sessions.
+- Verification: `pnpm --filter ./mastracode exec vitest --run src/tui/__tests__/setup-layout.test.ts --bail=1 --reporter=dot`, `pnpm --filter ./mastracode check`, `pnpm --filter ./mastracode lint`, and `pnpm run build:mastracode` all passed.
