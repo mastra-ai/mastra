@@ -1,5 +1,47 @@
 # @mastra/core
 
+## 1.42.0-alpha.1
+
+### Minor Changes
+
+- Added agent and workspace tool hooks for applications that need to run logic before and after tool calls execute. Mastra Code now uses agent hooks so hook handlers run for built-in workspace tools as well as dynamic tools. ([#17637](https://github.com/mastra-ai/mastra/pull/17637))
+
+  **Example**
+
+  ```ts
+  const agent = new Agent({
+    name: 'Support Agent',
+    instructions: 'Help users.',
+    model,
+    hooks: {
+      beforeToolCall: ({ toolName, input }) => {
+        console.log(`Running ${toolName}`, input);
+      },
+      afterToolCall: ({ toolName, output, error }) => {
+        console.log(`Finished ${toolName}`, { output, error });
+      },
+    },
+  });
+
+  const workspace = new Workspace({
+    tools: {
+      hooks: {
+        beforeToolCall: ({ toolName, workspaceToolName, input }) => {
+          console.log(`Running ${toolName} from ${workspaceToolName}`, input);
+        },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Plan due notification dispatches per thread from a single due snapshot so high-priority notifications that already emitted summaries are delivered in full before lower-priority notifications or summaries can wake the same thread. `Agent.sendNotificationSignal` also accepts an array of notification inputs so related notifications can be evaluated against the same initial thread state before any delivery wakes the thread. ([#17590](https://github.com/mastra-ai/mastra/pull/17590))
+
+- Fixed medium-priority notification summaries so they wake idle agent threads when they are ready to deliver. ([#17590](https://github.com/mastra-ai/mastra/pull/17590))
+
+- Fixed browser state signals so they no longer show 'Browser is closed' before the browser is used. Added attribution for browser closes and active URL changes when the agent or user caused them. ([#17631](https://github.com/mastra-ai/mastra/pull/17631))
+
 ## 1.42.0-alpha.0
 
 ### Minor Changes
