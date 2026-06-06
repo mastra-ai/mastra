@@ -2992,3 +2992,27 @@ Verification:
 - `pnpm --filter ./mastracode check` — passed.
 - `pnpm --filter ./mastracode lint` — passed.
 - `pnpm run build:mastracode` — passed, 24/24 tasks.
+
+### Test recovery: quiet-mode pending tool errors
+
+Selected `TUI: Quiet mode` as the next High-risk row. Chose the error/abort missing-test gap because quiet compact tools must still surface failed pending results when an assistant run ends with an error.
+
+Extended `mastracode/src/tui/handlers/__tests__/message.test.ts`:
+
+- Starts a quiet-mode pending tool through `handleMessageUpdate()` so the real compact tool setup path runs.
+- Ends the assistant run with `handleMessageEnd()` and `stopReason: 'error'`.
+- Asserts the compact tool renders the failed badge and real error message without expanding to the classic box UI.
+- Asserts `pendingTools` is cleared so the failed tool does not remain registered as pending.
+
+Break-validation evidence:
+
+1. Changed pending-tool error updates to `isError: false`; focused test failed because the failed badge disappeared. Reverted.
+2. Dropped the assistant run's real `errorMessage`; focused test failed because the specific error text was lost. Reverted.
+3. Removed `pendingTools.clear()` from the error path; focused test failed because the failed tool stayed pending. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest --run src/tui/handlers/__tests__/message.test.ts --bail 1 --reporter=dot` — 1 file / 17 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — passed, 24/24 tasks.
