@@ -3876,3 +3876,35 @@ Verification:
 - `pnpm --filter ./mastracode check` passed.
 - `pnpm --filter ./mastracode lint` passed.
 - `pnpm run build:mastracode` passed.
+
+## 2026-06-06 — Startup/state command TUI e2e batch
+
+Added/strengthened checked-in TUI e2e coverage:
+- Strengthened `startup` to assert real startup frontmatter: project, resource ID, branch, and user.
+- Added `state-commands` to cover `/mode`, `/think status`, `/permissions`, `/yolo`, `/cost`, `/resource` status/switch/reset, `/sandbox add` error, `/observability local`, and `/feedback up` no-session feedback in a real PTY.
+
+Rows revalidated with checked-in e2e coverage:
+- Startup performance
+- Startup banner
+- Interactive chat (existing `automated-chat`)
+- Branch context and status (existing `branch-context-long-name`)
+- Resource ID switching
+- Model auth, selection, modes
+- Thinking and reasoning effort
+- Coding tools and approval permissions
+- Observability and eval feedback
+
+Break validation:
+- Removed `Resource ID` startup frontmatter -> `startup` failed waiting for `/Resource ID:/`.
+- Changed `/permissions` heading -> `state-commands` failed waiting for `Tool Approval Permissions`.
+- Changed `/observability local` status text -> `state-commands` failed waiting for `Local DuckDB tracing is currently`.
+- Changed `/feedback` no-session error -> `state-commands` failed waiting for `No active session to attach feedback to`.
+- All intentional breaks were reverted before committing.
+
+Verification:
+- `pnpm --filter ./mastracode run e2e:test startup` passed.
+- `pnpm --filter ./mastracode run e2e:test state-commands` passed.
+- `pnpm --filter ./mastracode run e2e:test -- --jobs 2` passed: 8/8 scenarios.
+- `pnpm --filter ./mastracode check` passed.
+- `pnpm --filter ./mastracode lint` passed.
+- `pnpm run build:mastracode` passed.

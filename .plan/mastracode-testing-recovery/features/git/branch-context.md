@@ -84,3 +84,8 @@
 - [x] State ownership verified.
 - [x] TUI/headless behavior considered.
 - [x] Streaming versus loaded-from-history behavior considered.
+
+## TUI e2e recovery evidence
+
+- Covered by checked-in `branch-context-long-name` scenario: starts in a temp git repo, asserts startup branch context, and verifies abbreviated footer branch rendering.
+- Verification: full e2e `--jobs 2`, check, lint, and build passed in the state/startup batch.

@@ -99,3 +99,9 @@
 - [x] State ownership verified.
 - [x] TUI/headless behavior considered.
 - [x] Streaming versus loaded-from-history behavior considered.
+
+## TUI e2e recovery evidence
+
+- Covered by `state-commands`, which asserts `/observability local` status/usage and `/feedback up` no-session error through the real TUI.
+- Break validation: changed `/observability local` text and no-session feedback text; `state-commands` failed for each intended missing visible contract; reverted both.
+- Verification: `state-commands`, full e2e `--jobs 2`, check, lint, and build passed.

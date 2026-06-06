@@ -80,3 +80,9 @@
 - [x] State ownership verified.
 - [x] TUI/headless behavior considered.
 - [x] Streaming versus loaded-from-history behavior considered.
+
+## TUI e2e recovery evidence
+
+- Covered by strengthened `startup` scenario, which runs the real TUI and asserts startup banner/frontmatter context.
+- Break validation: removed `Resource ID` frontmatter; startup e2e failed for the intended missing visible text.
+- Verification: `pnpm --filter ./mastracode run e2e:test startup`, full e2e `--jobs 2`, check, lint, and build passed.

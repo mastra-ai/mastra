@@ -90,3 +90,9 @@
 - [x] State ownership verified.
 - [x] TUI/headless behavior considered.
 - [x] Streaming versus loaded-from-history behavior considered.
+
+## TUI e2e recovery evidence
+
+- Covered by `mastracode/scripts/mc-e2e/scenarios/startup.ts`, which now asserts real PTY startup renders project, resource ID, branch, and user frontmatter promptly.
+- Break validation: removed `Resource ID` frontmatter from `setup.ts`; `pnpm --filter ./mastracode run e2e:test startup` failed waiting for `/Resource ID:/`; reverted.
+- Verification: `pnpm --filter ./mastracode run e2e:test startup`, full e2e `--jobs 2`, check, lint, and `pnpm run build:mastracode` passed.

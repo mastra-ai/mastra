@@ -88,3 +88,8 @@
 - [x] State ownership verified.
 - [x] TUI/headless behavior considered.
 - [x] Streaming versus loaded-from-history behavior considered.
+
+## TUI e2e recovery evidence
+
+- Covered by `state-commands`, which asserts `/think status` through the real TUI. Provider request-shape reasoning effort remains covered by focused provider tests.
+- Verification: `state-commands`, full e2e `--jobs 2`, check, lint, and build passed.

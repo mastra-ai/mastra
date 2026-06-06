@@ -88,3 +88,8 @@
 - [x] State ownership verified.
 - [x] TUI/headless behavior considered.
 - [x] Streaming versus loaded-from-history behavior considered.
+
+## TUI e2e recovery evidence
+
+- Covered by `state-commands`: `/resource` status, `/resource mc-e2e-alt-resource`, and `/resource reset` are exercised through the real TUI.
+- Verification: `pnpm --filter ./mastracode run e2e:test state-commands`, full e2e `--jobs 2`, check, lint, and build passed.

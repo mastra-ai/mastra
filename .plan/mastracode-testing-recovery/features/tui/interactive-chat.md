@@ -155,3 +155,8 @@
 - [x] State ownership verified.
 - [x] TUI/headless behavior considered.
 - [x] Streaming versus loaded-from-history behavior considered.
+
+## TUI e2e recovery evidence
+
+- Covered by checked-in `automated-chat` scenario: submits a prompt through the real TUI and asserts the AIMock-backed assistant response appears with nonzero AIMock requests.
+- Verification: full e2e `--jobs 2`, check, lint, and build passed in the state/startup batch.

@@ -145,3 +145,8 @@
 - [x] State ownership verified.
 - [x] TUI/headless behavior considered.
 - [x] Streaming versus loaded-from-history behavior considered.
+
+## TUI e2e recovery evidence
+
+- Covered by `state-commands` for `/mode` list visibility and by `automated-chat` for OpenAI AIMock model/auth settings driving a real chat request.
+- Verification: `state-commands`, full e2e `--jobs 2`, check, lint, and build passed.

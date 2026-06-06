@@ -182,3 +182,9 @@
 - [x] State ownership verified.
 - [x] TUI/headless behavior considered.
 - [x] Streaming versus loaded-from-history behavior considered.
+
+## TUI e2e recovery evidence
+
+- Covered by `state-commands`, which asserts `/permissions` policy output and `/yolo` visible toggle feedback through the real TUI.
+- Break validation: changed `/permissions` heading; `state-commands` failed waiting for `Tool Approval Permissions`; reverted.
+- Verification: `state-commands`, full e2e `--jobs 2`, check, lint, and build passed.
