@@ -104,6 +104,15 @@ export type GithubPullRequestCheckSnapshot = {
   updatedAt?: string;
 };
 
+export type GithubPullRequestCommentSnapshot = {
+  author?: string;
+  authorType?: string;
+  isBot?: boolean;
+  body?: string;
+  url?: string;
+  updatedAt?: string;
+};
+
 type GithubPullRequestCheckInput = GithubPullRequestCheckSnapshot & {
   source: 'check' | 'workflow';
 };
@@ -131,6 +140,8 @@ export type GithubPullRequestSnapshot = {
   latestCommentBody?: string;
   latestCommentUrl?: string;
   latestCommentUpdatedAt?: string;
+  /** Recent comments newest-first, used to fall back when the latest comment is unauthorized noise. */
+  latestComments?: GithubPullRequestCommentSnapshot[];
 };
 
 export type GithubSignalsSyncClient = {
@@ -830,7 +841,7 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
             join threads t on t.id=rt.thread_id
             join repositories r on r.id=t.repo_id
            where r.owner=${owner} and r.name=${repo} and t.number=${number} and rt.is_resolved=0`);
-      const [latestComment] = await queryGitcrawlDb<{
+      const latestComments = await queryGitcrawlDb<{
         author_login?: string;
         author_type?: string;
         is_bot?: number;
@@ -844,7 +855,8 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
             join repositories r on r.id=t.repo_id
            where r.owner=${owner} and r.name=${repo} and t.number=${number}
            order by coalesce(c.updated_at_gh, c.created_at_gh) desc
-           limit 1`);
+           limit 20`);
+      const latestComment = latestComments[0];
 
       const checks = normalizeGithubChecksForSnapshot({
         checkRows: checkRows.map(row => ({
@@ -920,6 +932,14 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
         latestCommentBody: readString(latestComment?.body),
         latestCommentUrl: readString(latestComment?.html_url),
         latestCommentUpdatedAt: readString(latestComment?.updated_at),
+        latestComments: latestComments.map(comment => ({
+          author: readString(comment.author_login),
+          authorType: readString(comment.author_type),
+          isBot: comment.is_bot === 1,
+          body: readString(comment.body),
+          url: readString(comment.html_url),
+          updatedAt: readString(comment.updated_at),
+        })),
       };
     } catch {
       return undefined;
@@ -1606,10 +1626,34 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     repo: string,
     snapshot: GithubPullRequestSnapshot,
   ): Promise<GithubPullRequestSnapshot> {
-    if (!snapshot.latestCommentAuthor) return snapshot;
-    if (!snapshot.latestCommentBody && !snapshot.latestCommentUrl && !snapshot.latestCommentUpdatedAt) return snapshot;
-    const authorized = await this.#isAuthorizedAuthor(owner, repo, snapshot.latestCommentAuthor);
-    if (authorized) return snapshot;
+    const comments = snapshot.latestComments?.length
+      ? snapshot.latestComments
+      : [
+          {
+            author: snapshot.latestCommentAuthor,
+            authorType: snapshot.latestCommentAuthorType,
+            isBot: snapshot.latestCommentIsBot,
+            body: snapshot.latestCommentBody,
+            url: snapshot.latestCommentUrl,
+            updatedAt: snapshot.latestCommentUpdatedAt,
+          },
+        ];
+    if (!comments.some(comment => comment.author)) return snapshot;
+    if (!comments.some(comment => comment.body || comment.url || comment.updatedAt)) return snapshot;
+
+    for (const comment of comments) {
+      if (!(await this.#isAuthorizedAuthor(owner, repo, comment.author))) continue;
+      return {
+        ...snapshot,
+        latestCommentAuthor: comment.author,
+        latestCommentAuthorType: comment.authorType,
+        latestCommentIsBot: comment.isBot,
+        latestCommentBody: comment.body,
+        latestCommentUrl: comment.url,
+        latestCommentUpdatedAt: comment.updatedAt,
+      };
+    }
+
     return {
       ...snapshot,
       latestCommentAuthor: undefined,
