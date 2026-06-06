@@ -1151,6 +1151,9 @@ export class Agent<
       type: 'processor',
       options: {
         validateInputs: false,
+        // Internal processor workflows are transient and non-resumable, so they must never
+        // write snapshot rows to the user's storage (mirrors the execution-workflow fix in #17344).
+        shouldPersistSnapshot: () => false,
         tracingPolicy: {
           // mark all workflow spans related to processor execution as internal
           internal: InternalSpans.WORKFLOW,
@@ -1186,6 +1189,14 @@ export class Agent<
     }
 
     const committedWorkflow = workflow.commit() as T;
+    // Register the parent Mastra instance on this internal processor workflow so that its
+    // createRun() -> getWorkflowRunById() can read configured storage instead of logging
+    // "Cannot get workflow run. Mastra storage is not initialized" on every run (then falling
+    // back to in-memory). Combined with shouldPersistSnapshot:()=>false above, this does not
+    // write any processor-workflow rows to storage. Mirrors the execution-workflow fix in #17344.
+    if (this.#mastra && isProcessorWorkflow(committedWorkflow)) {
+      committedWorkflow.__registerMastra(this.#mastra);
+    }
     if (stateSignalProcessors.length > 0 && isProcessorWorkflow(committedWorkflow)) {
       committedWorkflow.__stateSignalProcessors = stateSignalProcessors;
     }

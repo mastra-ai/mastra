@@ -15,12 +15,13 @@ export function useSetAgentInstructionsTool() {
     () =>
       createTool({
         id: SET_AGENT_INSTRUCTIONS_TOOL_NAME,
-        description: `Set the agent instructions (its system prompt). Use this when the user provides or revises the body of guidance the agent should follow. Prefer a few focused paragraphs or compact bullet groups, target 1,200–2,000 characters, and stay under 2,500 characters unless the user explicitly needs more detail. HARD limit: ${MAX_GENERATED_INSTRUCTIONS_CHARS} characters. Over-limit calls are REJECTED (no persistence) — you must re-submit a tighter version. Plan length BEFORE calling and drop whole sections rather than shaving words when over budget.`,
+        description:
+          'Set the agent instructions (its system prompt). Use this when the user provides or revises the body of guidance the agent should follow. Prefer a few focused paragraphs or compact bullet groups, target 1,200–2,000 characters, and stay under 2,500 characters unless the user explicitly needs more detail.',
         inputSchema: z.object({
           instructions: z
             .string()
             .describe(
-              `The full instructions / system prompt for the agent. Should usually be 2–4 short paragraphs or compact bullet groups, targeting 1,200–2,000 characters and staying under 2,500 characters. Replaces the previous instructions. HARD ${MAX_GENERATED_INSTRUCTIONS_CHARS}-character limit; over-limit calls are rejected without persisting. Count characters before calling.`,
+              'The full instructions / system prompt for the agent. Should usually be 2–4 short paragraphs or compact bullet groups, targeting 1,200–2,000 characters and staying under 2,500 characters. Replaces the previous instructions.',
             ),
         }),
         outputSchema: z.object({
@@ -38,13 +39,13 @@ export function useSetAgentInstructionsTool() {
           const value = inputData.instructions;
           const currentLength = value.length;
           if (currentLength > MAX_GENERATED_INSTRUCTIONS_CHARS) {
-            const over = currentLength - MAX_GENERATED_INSTRUCTIONS_CHARS;
             return {
               success: false,
               rejected: true,
               currentLength,
               limit: MAX_GENERATED_INSTRUCTIONS_CHARS,
-              message: `REJECTED: ${currentLength} chars exceeds the ${MAX_GENERATED_INSTRUCTIONS_CHARS}-char limit by ${over}. Nothing was persisted. Drop a WHOLE section (worked example, FAQ, edge-case list) — do NOT shave words — and call set-agent-instructions ONCE more with the tighter version.`,
+              message:
+                'Rejected because the instructions are too long. Nothing was persisted. Rewrite as 2–4 short paragraphs or compact bullet groups, targeting 1,200–2,000 characters, and call set-agent-instructions once more.',
             };
           }
           formMethods.setValue('instructions', value, { shouldDirty: true });
@@ -52,7 +53,6 @@ export function useSetAgentInstructionsTool() {
             success: true,
             rejected: false,
             currentLength,
-            limit: MAX_GENERATED_INSTRUCTIONS_CHARS,
             finalLength: currentLength,
           };
         },
