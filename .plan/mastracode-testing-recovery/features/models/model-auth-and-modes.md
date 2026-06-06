@@ -97,7 +97,7 @@
 - `mastracode/src/tui/components/__tests__/om-settings.test.ts`, `commands/__tests__/om.test.ts`, `components/__tests__/model-selector.test.ts`, `onboarding/__tests__/settings.test.ts`, and custom-provider/model-pack tests — custom model string acceptance, OM role snapshotting, and persistence behavior.
 - `mastracode/src/tui/__tests__/status-line.test.ts` — status-line model ID rendering, including Fireworks long-path normalization and generic `p` version-separator normalization in both full and compact widths.
 - `mastracode/src/auth/providers/openai-codex.test.ts` — OpenAI Codex OAuth callback port preference/fallback, authorization URL redirect URI, originator/scope, account ID extraction, refresh, device OAuth behavior, advertised browser/device auth modes, env fallback, and explicit auth-mode override precedence.
-- `mastracode/src/HarnessCompat.test.ts`, `headless.test.ts`, and `headless-integration.test.ts` — session/headless coverage, including `--model` parsing, preflight, `--mode` override warnings, JSON error output, and model-changed events.
+- `mastracode/src/HarnessCompat.test.ts`, `headless.test.ts`, and `headless-integration.test.ts` — session/headless coverage, including `--model` parsing, preflight, `--mode` override warnings, JSON error output, model-changed events, and Harness v1 prefilled thread title/model preservation.
 - `packages/core/src/loop/workflows/agentic-execution/llm-execution-step.test.ts` — model config headers, `modelSettings.headers` overrides, and automatic memory header forwarding into execution requests.
 - `packages/core/src/llm/model/registry-generator.test.ts`, `provider-registry.test.ts`, and `mastracode/src/utils/__tests__/gateway-sync.test.ts` — generated provider-key quoting, corrupt cache validation/deletion, refresh-time skip logic, attachment capability lookup/fallback, and the MastraCode gateway-sync wrapper delegation.
 - `mastracode/src/tui/commands/__tests__/memory-gateway.test.ts` — `/memory-gateway` API-key/base-URL persistence, custom URL flow, env update, and gateway sync refresh.
@@ -106,7 +106,7 @@
 ## Missing tests
 
 - Select model pack → restart TUI → footer/runtime/prompt model agree.
-- Thread switch preserves per-thread model without overwriting defaults.
+- Covered: thread switch preserves a Harness v1 prefilled session's per-session model without overwriting it with the mode default (`mastracode/src/headless-integration.test.ts`).
 - Full TUI overlay journey for custom pack action picker, targeted edit, import collision, share, delete, and activation.
 - Packaged CLI smoke that exercises `--model`/`--mode` precedence and auth preflight through the built binary rather than Vitest helpers.
 - OpenAI Codex-specific stale credential regression test after login/auth file update.

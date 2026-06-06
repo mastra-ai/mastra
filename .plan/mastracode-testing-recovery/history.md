@@ -3331,3 +3331,31 @@ Verification:
 - `pnpm --filter ./mastracode check` — passed.
 - `pnpm --filter ./mastracode lint` — passed.
 - `pnpm run build:mastracode` — passed, 24/24 cached.
+
+### Test recovery: model preservation on Harness v1 thread switch
+
+Selected `Models: Model auth, selection, modes` as the next High-risk row. Chose the missing contract for per-thread/per-session model preservation because `HarnessCompat.switchThread()` was resetting prefilled Harness v1 sessions to the mode default during title-based headless resumes.
+
+Changes:
+
+- Fixed `mastracode/src/HarnessCompat.ts` so `switchThread()` loads the v1 session without calling `setModelId(defaultModelId)`.
+- Extended the existing headless v1 prefilled-thread test in `mastracode/src/headless-integration.test.ts` to use a non-default session model (`openai/custom-thread-model`), assert no reset call, and verify projected thread metadata keeps the v1 session model.
+- Added `.changeset/quiet-models-switch.md` for the MastraCode patch.
+- Updated the model-auth feature card and recovery tracker row.
+
+Break-validation evidence:
+
+1. Reintroduced `session.setModelId(defaultModelId)` during v1 thread switch; the focused test failed on an unexpected `setModelId('mock-model')` call. Reverted.
+2. Removed v1 session `modelId` from projected thread metadata; the focused test failed because `modelId` was missing from thread metadata. Reverted.
+3. Projected legacy `currentModelId` instead of the v1 session `modelId`; the focused test failed because metadata reported default `mock-model` instead of `openai/custom-thread-model`. Reverted.
+
+Verification:
+
+- `env -u OPENAI_API_KEY -u OPENAI_BASE_URL pnpm --filter ./mastracode exec vitest run src/headless-integration.test.ts --reporter=dot` — 1 file / 29 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — 24/24 tasks passed.
+
+Commits:
+
+- `b2aff24866` — `fix(mastracode): preserve v1 session model on thread switch` (pushed to `origin/tests/mc`).
