@@ -3793,3 +3793,12 @@ Evidence:
 - Added repeated-session coverage in `mastracode/src/utils/__tests__/debug-log.test.ts` proving oversized logs truncate below the cap and later debug setup calls append warning/error output without partial-line corruption.
 - Proved 3 breaks fail and reverted them: no truncation, write-mode log stream, and missing warning redirection.
 - Verification passed: `pnpm --filter ./mastracode exec vitest --run src/utils/__tests__/debug-log.test.ts --bail=1 --reporter=dot`, `pnpm --filter ./mastracode check`, `pnpm --filter ./mastracode lint`, and `pnpm run build:mastracode`.
+
+## 2026-06-06 — Web search rendering recovery checkpoint
+
+Validated `Tools: Web search tool rendering` with commit `53eae54a9c`.
+
+Evidence:
+- Added normal-mode TUI renderer coverage for Anthropic web-search arrays (`pageAge`, title/URL rows, encrypted-content stripping), OpenAI `{ action, sources }` result objects (source rows and fallback query extraction), and Tavily markdown passthrough.
+- Proved 3 breaks fail and reverted them: missing `pageAge`, missing OpenAI action-query fallback, and JSON double-formatting Tavily markdown.
+- Verification passed: `pnpm --filter ./mastracode exec vitest --run src/tui/components/__tests__/tool-execution-enhanced.test.ts --bail=1 --reporter=dot`, `pnpm --filter ./mastracode check`, `pnpm --filter ./mastracode lint`, and `pnpm run build:mastracode`.

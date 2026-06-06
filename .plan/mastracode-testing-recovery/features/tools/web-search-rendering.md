@@ -65,16 +65,13 @@
 
 ## Existing tests
 
-- `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts` — quiet web-search rendering with query summary and compact result preview.
+- `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts` — quiet web-search rendering with query summary and compact result preview; normal-mode rendering for Anthropic result arrays, OpenAI `{ action, sources }` objects, and Tavily markdown passthrough.
 - `integrations/tavily/src/__tests__/{client,search,extract,crawl,map,tools}.test.ts` — Tavily client env/config resolution, search/extract/crawl/map parameter mapping, response normalization, and `createTavilyTools()` bundle coverage.
 - Existing dynamic-tool tests indirectly cover whether web-search tools are available; they do not assert the TUI format or wrapper-level `@mastra/tavily` delegation.
 
 ## Missing tests
 
-- Normal-mode rendered output for Anthropic provider array results, including `pageAge` and `encryptedContent` stripping.
-- Normal-mode rendered output for OpenAI `{ action, sources }` results and fallback query extraction from result content.
 - Mastra Code wrapper test proving `createWebSearchTool()` / `createWebExtractTool()` delegate to `@mastra/tavily`, filter low relevance scores, preserve failed extract errors, and enforce the 2k token budget.
-- Tavily markdown passthrough stays readable and collapsed without double-formatting.
 - Loaded-history parity for web-search results.
 
 ## Known risks / regressions

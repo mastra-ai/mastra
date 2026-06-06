@@ -389,3 +389,10 @@ Validated `TUI: Debug logging` with repeated-session debug-log coverage:
 - Extended `mastracode/src/utils/__tests__/debug-log.test.ts` to prove an oversized existing `debug.log` is truncated on setup, then repeated `setupDebugLogging()` calls append warning/error output without overwriting previous complete lines or starting from partial lines.
 - Break validations proven and reverted: skipped startup truncation before append; opened the debug log with write mode instead of append; stopped redirecting warnings into `debug.log`.
 - Verification: focused debug-log tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### Web search rendering recovery checkpoint
+
+Validated `Tools: Web search tool rendering` with normal-mode provider result rendering coverage:
+- Extended `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts` to prove Anthropic result arrays render title/URL/page age without leaking `encryptedContent`, OpenAI `{ action, sources }` results render readable sources and recover the footer query from result content, and Tavily markdown passes through without JSON double-formatting.
+- Break validations proven and reverted: dropped Anthropic `pageAge`; removed OpenAI result-content query fallback; double-formatted Tavily markdown as JSON text.
+- Verification: focused tool-execution component tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
