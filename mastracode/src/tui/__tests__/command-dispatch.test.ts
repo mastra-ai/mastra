@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   handleSkillCommand: vi.fn().mockResolvedValue(undefined),
   handleJudgeCommand: vi.fn().mockResolvedValue(undefined),
   handleGithubCommand: vi.fn().mockResolvedValue(undefined),
+  handleMcpCommand: vi.fn().mockResolvedValue(undefined),
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
   startGoalWithDefaults: vi.fn().mockResolvedValue(undefined),
   showError: vi.fn(),
@@ -26,7 +27,7 @@ vi.mock('../commands/index.js', () => ({
   handleNameCommand: vi.fn(),
   handleExitCommand: vi.fn(),
   handleHooksCommand: vi.fn(),
-  handleMcpCommand: vi.fn(),
+  handleMcpCommand: mocks.handleMcpCommand,
   handleModeCommand: vi.fn(),
   handleSkillCommand: mocks.handleSkillCommand,
   handleSkillsCommand: vi.fn(),
@@ -81,6 +82,7 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.handleSkillCommand.mockClear();
     mocks.handleJudgeCommand.mockClear();
     mocks.handleGithubCommand.mockClear();
+    mocks.handleMcpCommand.mockClear();
     mocks.processSlashCommand.mockClear();
     mocks.startGoalWithDefaults.mockClear();
     mocks.showError.mockClear();
@@ -166,6 +168,18 @@ describe('dispatchSlashCommand models routing', () => {
     expect(handled).toBe(true);
     expect(mocks.handleGithubCommand).toHaveBeenCalledTimes(1);
     expect(mocks.handleGithubCommand).toHaveBeenCalledWith(ctx, ['mastra-ai/mastra#17447']);
+  });
+
+  it('routes /mcp with the slash command context that owns the manager', async () => {
+    const mcpManager = { hasServers: vi.fn(() => true) };
+    const state = { customSlashCommands: [] } as any;
+    const ctx = { mcpManager } as any;
+
+    const handled = await dispatchSlashCommand('/mcp status', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.handleMcpCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.handleMcpCommand).toHaveBeenCalledWith(ctx, ['status']);
   });
 
   it('routes /skill/name to handleSkillCommand', async () => {
