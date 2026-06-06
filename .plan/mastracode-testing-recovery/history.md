@@ -3641,3 +3641,10 @@ Validated `Integrations: MCP server configuration` with a startup wiring regress
 - Added `mastracode/src/__tests__/index.test.ts` coverage proving `createMastraCode({ mcpServers })` passes programmatic stdio/HTTP server configs into `createMcpManager()` with the detected project root and configured `configDir`.
 - Break validations proven and reverted: dropping `config.mcpServers`; ignoring custom `configDir`; using invocation cwd instead of detected project root.
 - Verification: focused startup tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### Core Harness API recovery checkpoint
+
+Validated `Integrations: Core Harness API and reference docs` with a `createMastraCode({ memory, configDir })` startup API-boundary shield, committed as `a647f1747f`:
+- Extended `mastracode/src/__tests__/index.test.ts` to prove caller-supplied memory is passed through to Harness without invoking the default dynamic-memory factory, while the configured `configDir` still owns storage, MCP, hooks, and runtime state even when `initialState.configDir` conflicts.
+- Break validations proven and reverted: ignored caller memory; defaulted state `configDir` while custom memory was present; allowed `initialState.configDir` to override configured `configDir`.
+- Verification: focused startup tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.

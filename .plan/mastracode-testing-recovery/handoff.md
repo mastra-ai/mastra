@@ -251,3 +251,9 @@ Break validations: dropping `mcpManager` from dispatch fails the route test; tre
 Validated the programmatic MCP server startup boundary, committed as `cf2b3ec325`. The new startup test proves `createMastraCode({ mcpServers })` passes stdio/HTTP programmatic server configs into `createMcpManager()` with the detected project root and configured `configDir`, rather than losing them or anchoring config to the invocation cwd.
 
 Break validations: dropping `config.mcpServers` fails the new startup test; ignoring custom `configDir` fails the existing configDir startup shield; using `cwd` instead of detected project root fails the new startup test. Final verification passed: focused startup tests, typecheck, lint, and `pnpm run build:mastracode`.
+
+### Integrations: Core Harness API and reference docs
+
+Validated the `createMastraCode({ memory, configDir })` API boundary, committed as `a647f1747f`. The startup test proves caller-supplied memory passes through to Harness without using the default dynamic memory factory, while `configDir` still controls storage, MCP, hooks, and runtime state even when `initialState.configDir` conflicts.
+
+Break validations: ignoring caller memory fails the startup test; defaulting state `configDir` while custom memory is present fails the startup test; allowing `initialState.configDir` to override configured `configDir` fails the startup test. Final verification passed: focused startup tests, typecheck, lint, and `pnpm run build:mastracode`.
