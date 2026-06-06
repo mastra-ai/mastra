@@ -398,6 +398,51 @@ describe('GithubSignals', () => {
     processor.stopAllPolling();
   });
 
+  it('subscribe and unsubscribe tools use the explicit tool execution thread context when present', async () => {
+    let capturedThread: StorageThreadType = {
+      id: 'thread-from-request-context',
+      resourceId: 'resource-from-request-context',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {},
+    };
+    const explicitThread: StorageThreadType = {
+      id: 'thread-from-tool-context',
+      resourceId: 'resource-from-tool-context',
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      metadata: {},
+    };
+    const threadStore: GithubSignalsThreadStore = {
+      getThreadById: vi.fn(async ({ threadId }) => (threadId === explicitThread.id ? explicitThread : capturedThread)),
+      saveThread: vi.fn(async ({ thread: nextThread }) => {
+        if (nextThread.id === explicitThread.id) explicitThread.metadata = nextThread.metadata;
+        if (nextThread.id === capturedThread.id) capturedThread = nextThread;
+        return nextThread;
+      }),
+    };
+    const processor = new GithubSignals({ threadStore, syncOnSubscribe: false });
+
+    const result = await runGithubSignalsProcessor({
+      processor,
+      messageList: new MessageList({ threadId: capturedThread.id, resourceId: capturedThread.resourceId }),
+      requestContext: createRequestContext(capturedThread),
+    });
+    const tools = result.tools as Record<string, { execute: (input: unknown, context?: unknown) => Promise<unknown> }>;
+    const toolContext = { agent: { threadId: explicitThread.id, resourceId: explicitThread.resourceId } };
+
+    await tools.github_subscribe_pr!.execute({ owner: 'mastra-ai', repo: 'mastra', number: 17439 }, toolContext);
+    await tools.github_unsubscribe_pr!.execute({ owner: 'mastra-ai', repo: 'mastra', number: 17439 }, toolContext);
+
+    expect(threadStore.getThreadById).toHaveBeenCalledWith({ threadId: explicitThread.id, resourceId: explicitThread.resourceId });
+    expect(threadStore.saveThread).toHaveBeenCalledWith(
+      expect.objectContaining({ thread: expect.objectContaining({ id: explicitThread.id, resourceId: explicitThread.resourceId }) }),
+    );
+    expect((explicitThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions).toEqual([]);
+    expect((capturedThread.metadata?.mastra as any)?.[GITHUB_SIGNALS_METADATA_KEY]?.subscriptions).toBeUndefined();
+    processor.stopAllPolling();
+  });
+
   it('tool-emitted subscribe signals are handled by the same subscription logic', async () => {
     const thread: StorageThreadType = {
       id: 'thread-tool-shared-path',

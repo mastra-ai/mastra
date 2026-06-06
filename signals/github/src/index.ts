@@ -1136,6 +1136,10 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
 
   #createTools(args: ProcessInputStepArgs): Record<string, unknown> {
     const threadContext = this.#getThreadContext(args);
+    const getExecutionThreadContext = (context?: GithubToolExecuteContext) => ({
+      threadId: context?.agent?.threadId ?? threadContext.threadId,
+      resourceId: context?.agent?.resourceId ?? threadContext.resourceId,
+    });
     return {
       ...args.tools,
       github_subscribe_pr: createGithubTool({
@@ -1147,14 +1151,15 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           owner: z.string().optional(),
           repo: z.string().optional(),
         }),
-        execute: async input => {
+        execute: async (input, context) => {
+          const executionThreadContext = getExecutionThreadContext(context);
           const result = await this.#subscribe({
             id: `github-tool-subscribe-${randomUUID()}`,
             owner: input.owner,
             repo: input.repo,
             number: input.number,
-            threadId: threadContext.threadId,
-            resourceId: threadContext.resourceId,
+            threadId: executionThreadContext.threadId,
+            resourceId: executionThreadContext.resourceId,
           });
           return {
             subscribed: true,
@@ -1177,14 +1182,15 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           owner: z.string().optional(),
           repo: z.string().optional(),
         }),
-        execute: async input => {
+        execute: async (input, context) => {
+          const executionThreadContext = getExecutionThreadContext(context);
           const result = await this.#unsubscribe({
             id: `github-tool-unsubscribe-${randomUUID()}`,
             owner: input.owner,
             repo: input.repo,
             number: input.number,
-            threadId: threadContext.threadId,
-            resourceId: threadContext.resourceId,
+            threadId: executionThreadContext.threadId,
+            resourceId: executionThreadContext.resourceId,
           });
           return {
             unsubscribed: result.removed ?? false,
