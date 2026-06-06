@@ -1134,6 +1134,47 @@ describe('headless mode — thread control', () => {
     expect(titled).toBeDefined();
   });
 
+  it('scopes --thread and --continue to the requested resource ID', async () => {
+    const harness = createHarnessWithAgent({
+      doStream: async () => ({ stream: createTextStream('Scoped resource response') }),
+    });
+
+    await harness.init();
+    harness.setResourceId({ resourceId: 'resource-a' });
+    const alphaOlderThread = await harness.createThread({ title: 'older-alpha' });
+    harness.setResourceId({ resourceId: 'resource-b' });
+    const betaThread = await harness.createThread({ title: 'shared-title' });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    harness.setResourceId({ resourceId: 'resource-a' });
+    const alphaThread = await harness.createThread({ title: 'shared-title' });
+
+    let exitCode = await runHeadless(harness, {
+      prompt: 'Hello beta',
+      format: 'default',
+      continue_: false,
+      cloneThread: false,
+      resourceId: 'resource-b',
+      thread: 'shared-title',
+    });
+
+    expect(exitCode).toBe(0);
+    expect(harness.getResourceId()).toBe('resource-b');
+    expect(harness.getCurrentThreadId()).toBe(betaThread.id);
+
+    exitCode = await runHeadless(harness, {
+      prompt: 'Hello alpha',
+      format: 'default',
+      continue_: true,
+      cloneThread: false,
+      resourceId: 'resource-a',
+    });
+
+    expect(exitCode).toBe(0);
+    expect(harness.getResourceId()).toBe('resource-a');
+    expect(harness.getCurrentThreadId()).toBe(alphaThread.id);
+    expect(harness.getCurrentThreadId()).not.toBe(alphaOlderThread.id);
+  });
+
   it('resumes a Harness v1 prefilled thread by title in headless mode', async () => {
     const agent = new Agent({
       id: 'test-agent',
