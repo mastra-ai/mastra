@@ -3517,3 +3517,30 @@ Verification:
 Commits:
 
 - `e711e21922` — `test(mastracode): shield stream retry processor order` (pushed to `origin/tests/mc`).
+
+### Test recovery: Coding tools LSP language IDs
+
+Selected `Tools: Coding tools and approval permissions` as the next High-risk row. Chose the direct LSP language-ID gap because the feature card explicitly called out stale MC-local LSP mappings, and the current source had no direct tests proving TypeScript/JavaScript React files use real LSP IDs instead of raw extensions.
+
+Changes:
+
+- Added `mastracode/src/lsp/__tests__/language.test.ts`.
+- The test covers `.ts`, `.tsx`, `.js`, and `.jsx`, and asserts each maps to the expected LSP language ID rather than the raw extension.
+- Updated the coding-tools feature card and recovery tracker row.
+
+Break-validation evidence:
+
+1. Regressed `.tsx` to raw `tsx`; the focused LSP language test failed. Reverted.
+2. Regressed `.jsx` to raw `jsx`; the focused LSP language test failed. Reverted.
+3. Regressed `.ts` to raw `ts`; the focused LSP language test failed. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/lsp/__tests__/language.test.ts --reporter=dot --bail=1` — 1 file / 4 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — 24/24 tasks passed.
+
+Commits:
+
+- `5cdb8f0bf9` — `test(mastracode): shield lsp language ids` (ready to push).

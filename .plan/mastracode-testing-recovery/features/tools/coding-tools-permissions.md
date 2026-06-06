@@ -118,6 +118,7 @@
 - `packages/core/src/workspace/tools/__tests__/edit-file.test.ts` — current exact-string edit behavior.
 - `packages/core/src/workspace/filesystem/local-filesystem.test.ts` — absolute-path containment and relative-path hint behavior for project-root resolution.
 - `packages/core/src/workspace/tools/__tests__/lsp-inspect.test.ts` — current LSP inspect wrapper, marker validation, result shaping, path handling, and cleanup.
+- `mastracode/src/lsp/__tests__/language.test.ts` — direct legacy MC-local LSP language-ID mapping coverage for `.ts`, `.tsx`, `.js`, and `.jsx`.
 - `mastracode/src/tools/__tests__/project-root-resolution.test.ts` — original #13526 regression coverage before the later core workspace-tools migration.
 - `mastracode/src/tools/__tests__/file-editor.test.ts` and `mastracode/src/lsp/__tests__/string-replace-lsp.test.ts` — legacy MC-owned paths from before core workspace migration.
 - `mastracode/src/__tests__/tool-approval-libsql.test.ts` — persisted approval flow.
@@ -152,7 +153,6 @@
 - MC web-search/web-extract truncation test proving Tavily results are serialized to bounded text.
 - Direct test that OpenAI models get native `web_search` when Tavily is absent, plus prompt guidance parity for the same condition.
 - Regression test for the old #13355 intent if directory-list pagination is still desired after the move from unified `view` to split `read_file` / `list_files` tools.
-- Direct LSP language-ID tests for `.ts`/`.tsx`/`.js`/`.jsx` so future mapping changes cannot regress to raw file extensions.
 
 ## Known risks / regressions
 
