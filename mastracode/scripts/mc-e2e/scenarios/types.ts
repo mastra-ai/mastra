@@ -6,6 +6,7 @@ export type ScenarioName =
   | 'clipboard-image-paste'
   | 'custom-config-dir'
   | 'file-autocomplete'
+  | 'prompt-context-instructions'
   | 'visible-commands'
   | 'integration-commands'
   | 'modal-and-shell'
@@ -51,4 +52,5 @@ export type McE2eScenario = {
   entrypoint?: (context: McE2ePrepareContext) => string;
   prepare?: (context: McE2ePrepareContext) => Promise<void> | void;
   run: (context: { terminal: McE2eTerminal; runtime: McE2eScenarioRuntime }) => Promise<void>;
+  verifyAimockRequests?: (requests: unknown[]) => void;
 };

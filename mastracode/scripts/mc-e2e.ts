@@ -23,6 +23,8 @@ type AimockHandle = {
   scenarioName: ScenarioName;
   stop: () => Promise<void>;
   requestCount: () => number;
+  requests: () => unknown[];
+  verifyRequests?: (requests: unknown[]) => void;
 };
 
 type TuiRunConfig = {
@@ -182,7 +184,7 @@ async function startAimock({
 }: {
   fixturePath?: string;
   recordAiPath?: string;
-}): Promise<{ url: string; stop: () => Promise<void>; requestCount: () => number }> {
+}): Promise<{ url: string; stop: () => Promise<void>; requestCount: () => number; requests: () => unknown[] }> {
   const { LLMock } = await import('@copilotkit/aimock');
   const mock = new LLMock({ port: 0 });
 
@@ -198,6 +200,7 @@ async function startAimock({
     url: mock.url,
     stop: () => mock.stop(),
     requestCount: () => mock.getRequests().length,
+    requests: () => mock.getRequests() as unknown[],
   };
 }
 
@@ -282,6 +285,8 @@ async function prepareScenarioRun({
             scenarioName: scenario.name,
             stop: () => aimock.stop(),
             requestCount: () => aimock.requestCount(),
+            requests: () => aimock.requests(),
+            verifyRequests: scenario.verifyAimockRequests,
           },
         }
       : {}),
@@ -384,16 +389,28 @@ const status = await new Promise<number | null>((resolve, reject) => {
 });
 
 let missingRequest = false;
+let requestVerificationFailed = false;
 for (const aimock of aimocks) {
   const requestCount = aimock.requestCount();
   process.stdout.write(`[mc-e2e] ${aimock.scenarioName} AIMock request count: ${requestCount}\n`);
-  await aimock.stop();
   if (status === 0 && requestCount === 0) missingRequest = true;
+  if (status === 0 && aimock.verifyRequests) {
+    try {
+      aimock.verifyRequests(aimock.requests());
+    } catch (error) {
+      requestVerificationFailed = true;
+      process.stderr.write(
+        `[mc-e2e] ${aimock.scenarioName} AIMock request verification failed: ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+    }
+  }
+  await aimock.stop();
 }
 
 if (missingRequest) {
   process.stderr.write('[mc-e2e] expected at least one AIMock request for each OpenAI-backed scenario but saw none.\n');
   process.exit(1);
 }
+if (requestVerificationFailed) process.exit(1);
 
 process.exit(status ?? 1);
