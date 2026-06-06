@@ -63,14 +63,13 @@
 
 ## Existing tests
 
-- `packages/core/src/processors/provider-history-compat.test.ts` — invalid Anthropic tool IDs, response-body matching, retryCount guard, no-op valid IDs, Cerebras detection, Anthropic detection, foreign/native reasoning handling, immutable prompt rewrites, and `ProcessorRunner.runProcessLLMRequest()`.
+- `packages/core/src/processors/provider-history-compat.test.ts` — invalid Anthropic tool IDs, response-body matching, retryCount guard, no-op valid IDs, custom reactive rules, custom prompt rules chained after built-ins, Cerebras detection, Anthropic detection, foreign/native reasoning handling, immutable prompt rewrites, and `ProcessorRunner.runProcessLLMRequest()`.
 - `packages/core/src/loop/workflows/agentic-execution/llm-execution-step.test.ts` — `processLLMRequest` runs before the provider, forwards `retryCount`, keeps prompt changes transient, and can combine request-specific and direct input processor lists.
 - `mastracode/src/__tests__/index.test.ts` — asserts the code agent includes `provider-history-compat` in both input and error processors.
 
 ## Missing tests
 
 - End-to-end provider smoke with a real rejected history shape proving user-visible recovery, not only mocked error strings.
-- Regression for additional/custom compat rules supplied by constructor in a downstream app.
 - TUI/headless trace/log assertion identifying when a compatibility rule fired.
 
 ## Known risks / regressions

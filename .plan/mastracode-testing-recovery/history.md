@@ -3464,3 +3464,30 @@ Verification:
 Commits:
 
 - `ea0cf20e0b` — `test(schema-compat): shield builtin tool schemas` (pushed to `origin/tests/mc`).
+
+### Test recovery: ProviderHistoryCompat custom rules
+
+Selected `Models: Provider history compatibility` as the next High-risk row. Chose the downstream custom-rule gap because `ProviderHistoryCompat` is documented as extensible, but existing coverage only protected built-in rules.
+
+Changes:
+
+- Extended `packages/core/src/processors/provider-history-compat.test.ts` with custom reactive and preemptive rule coverage.
+- The reactive test proves constructor-supplied rules can match plain API errors, mutate message history, and request one retry.
+- The prompt test proves constructor-supplied `applyToPrompt` rules run after built-in prompt rewrites, receive the resolved model, and can chain changes onto the already-sanitized outbound prompt.
+- Updated the provider-history feature card and recovery tracker row.
+
+Break-validation evidence:
+
+1. Ignored constructor `additionalRules`; the custom reactive rule did not retry. Reverted.
+2. Stopped prompt rule processing after the first built-in rewrite; the custom prompt rule did not run after Cerebras stripping. Reverted.
+3. Disabled plain-Error matching; the custom reactive rule was skipped. Reverted.
+
+Verification:
+
+- `pnpm --filter ./packages/core exec vitest run src/processors/provider-history-compat.test.ts --reporter=dot --bail=1` — 1 file / 35 tests passed.
+- `pnpm --filter ./packages/core check` — passed.
+- `pnpm build:core` — 12/12 tasks passed.
+
+Commits:
+
+- `2308242c19` — `test(core): shield provider history custom rules` (pushed to `origin/tests/mc`).
