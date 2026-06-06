@@ -2849,3 +2849,28 @@ Verification:
 - `pnpm run build:mastracode` — passed.
 - `pnpm --filter ./mastracode check` — passed.
 - `pnpm --filter ./mastracode lint` — passed.
+
+### Test recovery: observational memory factory defaults
+
+Selected `Memory: Observational memory` as the next High-risk row. Chose the Mastra Code-specific missing gap for `getDynamicMemory()` wiring because it is compact, high-impact, and protects the product boundary between Mastra Code state and core memory configuration.
+
+Added `mastracode/src/agents/memory.test.ts` with a mocked `Memory` constructor. The tests assert:
+
+- OM is enabled with `temporalMarkers: true`, `activateAfterIdle: 'auto'`, `activateOnProviderChange: true`, thread-title observation, prior-observation token window, and default thresholds.
+- `getOmScope(projectPath)` is used only when harness state does not already provide `omScope`.
+- Resource scope disables async observation/reflection buffering (`bufferTokens: false`, buffer activations undefined).
+- Harness state threshold, observer/reflector model, caveman, and attachment-observation overrides flow into the memory config.
+- Observer/reflector model callbacks preserve `requestContext` while resolving models with Codex remapping enabled.
+
+Break-validation evidence:
+
+1. Removed `activateAfterIdle: 'auto'`; `pnpm --filter ./mastracode exec vitest run src/agents/memory.test.ts --bail=1 --reporter=dot` failed on the activation-default assertion. Reverted.
+2. Re-enabled async observation buffering for resource scope; the focused test failed on `bufferTokens: false` / undefined buffer activation expectations. Reverted.
+3. Dropped `requestContext` from observer model resolution; the focused test failed on the `resolveModel()` call shape. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/agents/memory.test.ts --bail=1 --reporter=dot` — 1 file / 2 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — passed, 24/24 tasks.

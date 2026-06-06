@@ -119,6 +119,7 @@
 - `packages/core/src/harness/om-failure-abort.test.ts`, `om-threshold-persistence.test.ts`, `get-om-record.test.ts` — core harness OM failure/abort, threshold restore/backfill persistence, and record behavior.
 - `packages/core/src/llm/model/provider-registry.test.ts` — `modelSupportsAttachments()` direct/nested provider capability lookup and source/dist fallback behavior.
 - `mastracode/src/agents/thread-caveman-state.test.ts` and `mastracode/src/__tests__/index.test.ts` — caveman/observe-attachments thread metadata mirror/seed behavior and startup restore wiring.
+- `mastracode/src/agents/memory.test.ts` — Mastra Code `getDynamicMemory()` wiring for OM activation defaults (`activateAfterIdle: 'auto'`, provider-change activation, temporal markers), threshold/model/requestContext propagation, caveman/attachment settings, and resource-scope async-buffer disabling.
 - `mastracode/src/tui/__tests__/render-messages.test.ts` — persisted canonical and legacy temporal-gap reminders render as `TemporalGapComponent` and anchor before `precedesMessageId` target messages.
 - `packages/memory/src/clone-thread-om.test.ts` — thread-scoped OM clone, resource-scoped sharing/new-resource clone, message-ID remapping, transient-flag reset, malformed fields, current-generation-only clone, and Harness dynamic-memory clone path.
 - `packages/memory/src/processors/observational-memory/__tests__/abort-signal.test.ts` — observer/reflector abort-signal guard behavior.
@@ -130,8 +131,7 @@
 - End-to-end observation/reflection across restart with resource/thread scope, including `currentTask` / `suggestedContinuation` continuity.
 - `/om` modal model/attachment changes propagate to harness state, thread settings, settings file, and next memory factory instance; threshold propagation is covered by core restore/backfill tests but still lacks a direct Mastra Code command-level regression.
 - Full `/om` TUI restart journey for a typed custom observer/reflector model proving the saved custom role overrides are restored into the next memory factory.
-- Mastra Code-specific test that `getDynamicMemory()` wires intended OM activation defaults, including `activateAfterIdle: 'auto'`, `activateOnProviderChange: true`, and `temporalMarkers: true`, into core memory.
-- Direct tests for `getOmScope()` precedence and `createMastraCode({ omScope: 'resource' })` producing a resource-scoped memory config with async buffering disabled.
+- Direct tests for `getOmScope()` precedence and `createMastraCode({ omScope: 'resource' })` producing a resource-scoped memory config across full startup wiring. Unit-level resource-scope buffering in `getDynamicMemory()` is now covered.
 - Mastra Code `/om` command test asserting observer/reflector model changes call `switchObserverModel()` / `switchReflectorModel()` rather than raw `setState()`, and caveman toggles write harness state, thread metadata, and global settings together.
 - Full TUI/Harness test that pasted images are submitted as file parts and then observed according to `observeAttachments`.
 - Agent-level integration test proving `recall` can use an observation-group range from injected OM context to recover exact source messages.
