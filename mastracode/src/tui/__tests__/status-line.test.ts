@@ -61,6 +61,7 @@ vi.mock('../theme.js', () => ({
   getTermWidth: () => process.stdout.columns || 200,
 }));
 
+import { formatObservationStatus, formatReflectionStatus } from '../components/om-progress.js';
 import { updateStatusLine } from '../status-line.js';
 
 function createState() {
@@ -108,6 +109,8 @@ describe('updateStatusLine', () => {
   beforeEach(() => {
     visibleWidthMock.mockClear();
     chalkRgbMock.mockClear();
+    vi.mocked(formatObservationStatus).mockReturnValue('');
+    vi.mocked(formatReflectionStatus).mockReturnValue('');
     process.stdout.columns = 200;
   });
 
@@ -328,5 +331,37 @@ describe('updateStatusLine', () => {
     expect(rendered).toContain('goal (2days3hr)');
     expect(rendered).not.toContain('pursuing goal');
     vi.useRealTimers();
+  });
+
+  it('keeps judge status ahead of OM and long model details on narrow screens', () => {
+    vi.mocked(formatObservationStatus).mockReturnValue('msg 100%');
+    vi.mocked(formatReflectionStatus).mockReturnValue('mem 100%');
+    const state = createState();
+    state.harness.getDisplayState.mockReturnValue({
+      omProgress: { status: 'observing' },
+      bufferingMessages: true,
+      bufferingObservations: true,
+    });
+    state.activeGoalJudge = { modelId: 'openrouter/openai/gpt-5.4-mini' };
+    state.goalManager = {
+      getGoal: vi.fn(() => ({
+        status: 'active',
+        turnsUsed: 3,
+        maxTurns: 20,
+        startedAt: '2026-05-15T10:50:00.000Z',
+        activeDurationMs: 5 * 60_000,
+      })),
+    };
+    process.stdout.columns = 30;
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('j');
+    expect(rendered).toContain('gpt-5.4-mini');
+    expect(rendered).not.toContain('observe');
+    expect(rendered).not.toContain('msg 100%');
+    expect(rendered).not.toContain('mem 100%');
+    expect(rendered).not.toContain('claude-sonnet-4-20250514');
   });
 });

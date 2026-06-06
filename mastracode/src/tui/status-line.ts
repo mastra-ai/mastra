@@ -183,7 +183,7 @@ export function updateStatusLine(state: TUIState): void {
   const queuedCount = state.pendingQueuedActions.length + state.harness.getFollowUpCount();
   const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
   const goalState = state.goalManager?.getGoal();
-  const goalDuration = goalState?.status === 'active' ? formatGoalDuration(goalState) : null;
+  const goalDuration = !isJudging && goalState?.status === 'active' ? formatGoalDuration(goalState) : null;
   const goalLabel = goalDuration ? `pursuing goal (${goalDuration})` : null;
   const shortGoalLabel = goalDuration ? `goal (${goalDuration})` : null;
   const activeGithubPr = state.activeGithubPrSubscriptions?.[0];
@@ -314,8 +314,8 @@ export function updateStatusLine(state: TUIState): void {
             )
         : undefined;
     const omProg = state.harness.getDisplayState().omProgress;
-    const obs = formatObservationStatus(omProg, opts.memCompact, msgLabelStyler);
-    const ref = formatReflectionStatus(omProg, opts.memCompact, obsLabelStyler);
+    const obs = isJudging ? '' : formatObservationStatus(omProg, opts.memCompact, msgLabelStyler);
+    const ref = isJudging ? '' : formatReflectionStatus(omProg, opts.memCompact, obsLabelStyler);
     if (obs) {
       parts.push({ plain: obs, styled: obs });
     }
