@@ -245,3 +245,9 @@ None known.
 Validated the `/mcp` command-manager boundary, committed as `312dd9cede`. The new direct command test proves a configured `mcpManager` opens `McpSelectorComponent` with live statuses, skipped servers, config paths, reload-all, reconnect-one, and log callbacks instead of falling back to `MCP system not initialized.` The dispatcher test now proves `/mcp status` receives the same slash-command context that owns the manager.
 
 Break validations: dropping `mcpManager` from dispatch fails the route test; treating configured managers as uninitialized fails the direct command test; replacing the default selector with text status fails the selector assertion. Final verification passed: focused MCP command/dispatch tests, typecheck, lint, and `pnpm run build:mastracode`.
+
+### Integrations: MCP server configuration
+
+Validated the programmatic MCP server startup boundary, committed as `cf2b3ec325`. The new startup test proves `createMastraCode({ mcpServers })` passes stdio/HTTP programmatic server configs into `createMcpManager()` with the detected project root and configured `configDir`, rather than losing them or anchoring config to the invocation cwd.
+
+Break validations: dropping `config.mcpServers` fails the new startup test; ignoring custom `configDir` fails the existing configDir startup shield; using `cwd` instead of detected project root fails the new startup test. Final verification passed: focused startup tests, typecheck, lint, and `pnpm run build:mastracode`.

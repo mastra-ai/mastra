@@ -74,12 +74,12 @@
 - `mastracode/src/mcp/__tests__/config.test.ts` — stdio/http classification, URL validation, HTTP MCP OAuth validation (loopback/HTTPS redirect URLs, scopes, client credentials), skipped entries, and config validation.
 - `mastracode/src/mcp/__tests__/manager.test.ts` — HTTP server defs with URL/requestInit/OAuth provider, per-project/server OAuth storage fingerprinting, transport statuses, init/reload/reconnect, skipped servers, namespaced tools, failure paths, long MCP timeout handoff, and programmatic `extraServers` merge/override/reload behavior.
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — `/mcp` routing through slash command dispatch.
+- `mastracode/src/__tests__/index.test.ts` — `createMastraCode({ mcpServers })` startup wiring passes programmatic stdio/HTTP servers to `createMcpManager()` with the detected project root and configured `configDir`.
 
 ## Missing tests
 
 - Integration test with a real HTTP/Streamable/SSE MCP test server proving tool calls work end-to-end, not only mocked `MCPClient` definitions.
 - TUI `/mcp status` snapshot/assertion showing `[http]` transport and skipped HTTP validation reasons.
-- `createMastraCode({ mcpServers })` integration test proving programmatic servers become available tools through the Harness, not just mocked manager construction.
 - Headless test proving HTTP MCP tools are initialized and available for a headless run.
 - OAuth flow test covering a real protected HTTP MCP server's token persistence/refresh callback behavior and failure display; current coverage verifies config/provider/storage construction through mocks.
 

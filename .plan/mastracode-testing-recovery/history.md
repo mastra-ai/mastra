@@ -3634,3 +3634,10 @@ Validated `Integrations: MCP status and reload command` with command-level regre
 - Tightened `mastracode/src/tui/__tests__/command-dispatch.test.ts` to prove dispatcher passes the slash-command context containing `mcpManager` to `handleMcpCommand`.
 - Break validations proven and reverted: dispatcher dropped `mcpManager`; command treated a configured manager as uninitialized; default `/mcp` bypassed the selector and showed text status.
 - Verification: focused MCP command/dispatch tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
+
+### MCP server configuration recovery checkpoint
+
+Validated `Integrations: MCP server configuration` with a startup wiring regression shield, committed as `cf2b3ec325`:
+- Added `mastracode/src/__tests__/index.test.ts` coverage proving `createMastraCode({ mcpServers })` passes programmatic stdio/HTTP server configs into `createMcpManager()` with the detected project root and configured `configDir`.
+- Break validations proven and reverted: dropping `config.mcpServers`; ignoring custom `configDir`; using invocation cwd instead of detected project root.
+- Verification: focused startup tests, MastraCode typecheck, lint, and `pnpm run build:mastracode` all passed.
