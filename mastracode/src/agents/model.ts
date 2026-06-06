@@ -131,7 +131,7 @@ function anthropicApiKeyProvider(modelId: string, apiKey: string, headers?: Mode
  * Create an OpenAI model using a direct API key from AuthStorage.
  */
 function openaiApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders) {
-  const openai = createOpenAI({ apiKey, headers });
+  const openai = createOpenAI({ apiKey, baseURL: process.env.OPENAI_BASE_URL, headers });
   return wrapLanguageModel({
     model: openai.responses(modelId),
     middleware: [],
