@@ -3625,4 +3625,4 @@ Verification:
 
 Commits:
 
-- `d01fbda0d1` — `test(core): shield restored task tool state` (ready to push).
+- `d01fbda0d1` — `test(core): shield restored task tool state` (pushed to `origin/tests/mc`).
