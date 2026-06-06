@@ -4031,3 +4031,27 @@ Verification:
 - `pnpm --filter ./mastracode check` passed.
 - `pnpm --filter ./mastracode lint` passed.
 - `pnpm run build:mastracode` passed.
+
+## 2026-06-06 — Clipboard image paste TUI e2e batch
+
+Added `clipboard-image-paste` checked-in TUI e2e scenario:
+- Creates a tiny deterministic PNG under the isolated e2e temp area.
+- Bracketed-pastes the PNG path through the real PTY editor.
+- Verifies `[image]` appears in the editor, submits the prompt, verifies confirmed history renders `[1 image] Please inspect the pasted image`, and receives `MC clipboard image paste response` from AIMock with a nonzero request count.
+
+Rows updated:
+- TUI: Clipboard paste — validated with covered TUI e2e.
+- Chat: File attachments in chat input — moved from missing to partial e2e because the pasted-image path now proves a real TUI attachment submit, but reload/history persistence, text/binary file attachments, and OM observation remain missing.
+
+Break validation:
+- Removed `[image]` placeholder insertion in `MastraTUI.onImagePaste` -> `clipboard-image-paste` failed waiting for `[image]`.
+- Removed confirmed history image-count rendering -> `clipboard-image-paste` failed waiting for `[1 image] Please inspect the pasted image`.
+- Dropped consumed image attachments in `consumePendingImages()` -> `clipboard-image-paste` failed waiting for confirmed `[1 image]` rendering.
+- All intentional breaks were reverted before committing.
+
+Verification:
+- `pnpm --filter ./mastracode run e2e:test clipboard-image-paste` passed with 1 AIMock request.
+- `pnpm --filter ./mastracode run e2e:test -- --jobs 2` passed: 14/14 scenarios.
+- `pnpm --filter ./mastracode check` passed.
+- `pnpm --filter ./mastracode lint` passed.
+- `pnpm run build:mastracode` passed.

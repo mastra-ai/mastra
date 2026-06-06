@@ -66,11 +66,13 @@
 - `mastracode/src/clipboard/__tests__/index.test.ts` — macOS PNG/TIFF clipboard extraction and failure fallback.
 - `mastracode/src/tui/components/__tests__/custom-editor.test.ts` — image path/URL paste handling, Ctrl+V explicit text paste through bracketed-paste markers, and Alt+V explicit image paste.
 - `mastracode/src/tui/__tests__/mastra-tui-images.test.ts` and image cases in `mastra-tui-queueing.test.ts` — pending-image placeholder consumption, stale-image dropping, and image-only submissions.
+- `mastracode/scripts/mc-e2e/scenarios/clipboard-image-paste.ts` — real PTY bracketed paste of a prepared PNG path, `[image]` editor insertion, submitted `[1 image]` confirmed history rendering, and AIMock-backed model response with nonzero request count.
 
 ## Missing tests
 
 - Linux clipboard tests for `xclip` / `wl-paste` text and image fallbacks.
-- End-to-end TUI/Harness test proving a real pasted image goes through `onImagePaste` → pending image → `sendSignal()`/`sendMessage()` → persisted message parts.
+- [x] End-to-end TUI/Harness test proving a real pasted image goes through `onImagePaste` → pending image → submitted image attachment visible in confirmed TUI history: covered by `clipboard-image-paste`.
+- Linux clipboard tests for `xclip` / `wl-paste` are deferred to a future Linux CI lane; the current darwin/local recovery run cannot execute those platform helper binaries hermetically.
 
 ## Known risks / regressions
 

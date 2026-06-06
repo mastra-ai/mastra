@@ -3,6 +3,7 @@ export type ScenarioName =
   | 'branch-context-long-name'
   | 'api-key-prompt'
   | 'automated-chat'
+  | 'clipboard-image-paste'
   | 'visible-commands'
   | 'integration-commands'
   | 'modal-and-shell'

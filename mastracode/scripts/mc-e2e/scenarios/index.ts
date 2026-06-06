@@ -1,6 +1,7 @@
 import { apiKeyPromptScenario } from './api-key-prompt.js';
 import { automatedChatScenario } from './automated-chat.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
+import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
 import { omSettingsScenario } from './om-settings.js';
@@ -20,6 +21,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'branch-context-long-name': branchContextLongNameScenario,
   'api-key-prompt': apiKeyPromptScenario,
   'automated-chat': automatedChatScenario,
+  'clipboard-image-paste': clipboardImagePasteScenario,
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,
   'modal-and-shell': modalAndShellScenario,

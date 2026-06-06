@@ -73,12 +73,14 @@
 - `mastracode/src/tui/__tests__/mastra-tui-images.test.ts` and image cases in `mastra-tui-queueing.test.ts` — pending pasted-image placeholder behavior.
 - `packages/memory/src/processors/observational-memory/__tests__/observational-memory.test.ts` and `token-counter.test.ts` — observer attachment formatting, tool-result attachment hoisting, image-heavy threshold checks, and attachment token estimates.
 - Existing base64/image tests cover `experimental_attachments` compatibility.
+- `mastracode/scripts/mc-e2e/scenarios/clipboard-image-paste.ts` — partial real PTY coverage proving a pasted PNG path becomes a submitted image attachment rendered as `[1 image]` in confirmed TUI history and sent through AIMock-backed chat.
 
 ## Missing tests
 
-- TUI attachment submit test proving pending images/files are cleared only after successful send and are preserved in history.
+- [x] TUI pasted-image submit test proving a pending image reaches confirmed TUI history: partially covered by `clipboard-image-paste`.
+- TUI attachment submit test proving pending images/files are cleared only after successful send and are preserved across reload/history.
 - End-to-end test from real paste through Harness persistence and OM observation.
-- Loaded-history display test for user messages with attached files/images.
+- Loaded-history display test for user messages with attached text/binary files/images.
 
 ## Known risks / regressions
 
