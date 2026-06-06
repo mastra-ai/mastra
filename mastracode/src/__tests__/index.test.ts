@@ -555,7 +555,7 @@ describe('createMastraCode', () => {
     expect(harnessSetStateMock).toHaveBeenCalledWith({ observeAttachments: 'auto' });
   });
 
-  it('enables OpenAI Responses stream error retries by default', async () => {
+  it('runs stream error retries before provider-specific error recovery processors', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
@@ -564,7 +564,11 @@ describe('createMastraCode', () => {
     const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
       | { errorProcessors?: Array<{ id?: string }> }
       | undefined;
-    expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('stream-error-retry-processor');
+    expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toEqual([
+      'stream-error-retry-processor',
+      'prefill-error-handler',
+      'provider-history-compat',
+    ]);
   });
 
   it('configures ProviderHistoryCompat for prompt and API error compatibility', async () => {
