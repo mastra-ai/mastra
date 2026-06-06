@@ -61,13 +61,12 @@
 ## Existing tests
 
 - `packages/core/src/processors/stream-error-retry-processor.test.ts` — retry metadata, cause chains, default/custom matchers, OpenAI retryable/non-retryable chunks, explicit retry guidance, and `maxRetries` behavior.
-- `mastracode/src/__tests__/index.test.ts` — asserts `stream-error-retry-processor` is present in Mastra Code `errorProcessors`.
+- `mastracode/src/__tests__/index.test.ts` — asserts Mastra Code wires `StreamErrorRetryProcessor` before `PrefillErrorHandler` and `ProviderHistoryCompat`, so transient stream errors get first chance to retry before provider-specific fallback processors run.
 
 ## Missing tests
 
 - End-to-end real OpenAI Responses stream failure proving retry recovery through a live or mocked streaming provider.
 - TUI/headless visible indication that a stream error retry happened.
-- Regression for processor ordering interaction with `PrefillErrorHandler` and `ProviderHistoryCompat` on the same failure.
 
 ## Known risks / regressions
 

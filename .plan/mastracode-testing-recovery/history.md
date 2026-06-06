@@ -3491,3 +3491,29 @@ Verification:
 Commits:
 
 - `2308242c19` — `test(core): shield provider history custom rules` (pushed to `origin/tests/mc`).
+
+### Test recovery: Stream error retry processor ordering
+
+Selected `Models: Stream error retry processor` as the next High-risk row. Chose the Mastra Code processor-ordering gap because core already covers retryable stream-error matching, matcher extensibility, cause chains, and retry caps, while Mastra Code only asserted the processor was present.
+
+Changes:
+
+- Tightened `mastracode/src/__tests__/index.test.ts` so `createMastraCode()` must wire error processors in this order: `StreamErrorRetryProcessor`, `PrefillErrorHandler`, `ProviderHistoryCompat`.
+- Updated the stream-error-retry feature card and recovery tracker row.
+
+Break-validation evidence:
+
+1. Moved `PrefillErrorHandler` before stream retry; the focused startup test failed on exact order. Reverted.
+2. Moved `ProviderHistoryCompat` before stream retry; the focused startup test failed on exact order. Reverted.
+3. Removed `StreamErrorRetryProcessor` from Mastra Code wiring; the focused startup test failed on the missing first processor. Reverted.
+
+Verification:
+
+- `pnpm --filter ./mastracode exec vitest run src/__tests__/index.test.ts --reporter=dot --bail=1` — 1 file / 18 tests passed.
+- `pnpm --filter ./mastracode check` — passed.
+- `pnpm --filter ./mastracode lint` — passed.
+- `pnpm run build:mastracode` — 24/24 tasks passed.
+
+Commits:
+
+- `e711e21922` — `test(mastracode): shield stream retry processor order` (ready to push).
