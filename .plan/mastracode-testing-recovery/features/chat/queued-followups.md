@@ -84,6 +84,10 @@
 - Real terminal/TUI integration test for Ctrl+F and Enter with an actual autocomplete provider, live active run, image paste state, and long slash/custom/skill descriptions wrapping at real terminal widths.
 - Reload behavior proving transient queues do not resurrect from history.
 
+## E2E coverage
+
+- `custom-slash-command` seeds checked-in project custom commands, submits `//deploy prod blue` and `//review src/index.ts src/main.ts` through the real TUI, waits for AIMock responses, and verifies captured model requests contain the processed command text (`ARGUMENTS: prod blue` and full `$1+` range args) without duplicate raw-arg append. Break checks proved failures when raw-arg append was disabled, `$1+` consumed only the first arg, and local custom-command loading was skipped. This is partial e2e for the row because active-run Ctrl+F FIFO queue draining still needs a separate scenario.
+
 ## Known risks / regressions
 
 - Queue state is TUI-only; crashes before drain lose queued commands.

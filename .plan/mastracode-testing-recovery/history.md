@@ -4152,3 +4152,26 @@ Verification:
 - `pnpm --filter ./mastracode check` passed.
 - `pnpm --filter ./mastracode lint` passed.
 - `pnpm run build:mastracode` passed.
+
+## 2026-06-06 — Custom slash command TUI e2e batch
+
+Added `custom-slash-command` checked-in TUI e2e scenario:
+- Seeds project `.mastracode/commands/deploy.md` with no arg placeholders and `.mastracode/commands/review.md` with `$1+`.
+- Submits `//deploy prod blue` and `//review src/index.ts src/main.ts` through the real TUI.
+- Uses AIMock fixtures for the processed model-facing messages and verifies captured requests include `ARGUMENTS: prod blue` plus the full `$1+` range args without duplicate raw-arg append.
+
+Rows updated:
+- Chat: Queued follow-ups and slash commands — moved from missing e2e to partial e2e. This covers custom command loading/dispatch and argument preservation, but active-run Ctrl+F explicit queueing, FIFO mixed drain, queued-count status, and autocomplete acceptance remain missing.
+
+Break validation:
+- Forced `shouldAppendRawArgs: false` -> deploy command displayed without `ARGUMENTS` and failed AIMock fixture matching.
+- Made `$1+` consume only the first arg -> review command displayed only `src/index.ts` and failed fixture matching.
+- Skipped local custom-command loading -> real TUI returned `Unknown custom command: deploy` and AIMock saw zero requests.
+- All intentional breaks were reverted before committing.
+
+Verification:
+- `pnpm --filter ./mastracode run e2e:test custom-slash-command` passed with 2 AIMock requests.
+- `pnpm --filter ./mastracode run e2e:test -- --jobs 2` passed: 19/19 scenarios.
+- `pnpm --filter ./mastracode check` passed.
+- `pnpm --filter ./mastracode lint` passed.
+- `pnpm run build:mastracode` passed.
