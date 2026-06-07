@@ -14,6 +14,8 @@ Use [`test-recovery-system.md`](./test-recovery-system.md) as the draft system f
 
 Use [`tui-aimock-discovery.md`](./tui-aimock-discovery.md) for the first-pass findings on `@microsoft/tui-test`, AIMock, AIMock record/replay, and the recommended Mastra Code e2e harness shape.
 
+Use [`remediation-queue.md`](./remediation-queue.md) after all missing rows have at least partial TUI e2e coverage; it prioritizes the remaining partial-row follow-up scenarios and fixture/data needs.
+
 For feature-map documentation, start a goal from the project command:
 
 ```text

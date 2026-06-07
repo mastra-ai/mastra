@@ -4443,3 +4443,9 @@ The row remains partial because direct `main.ts`/`headless.ts` startup-call cove
 - Added `commit-attribution-prompt` TUI e2e scenario with an OpenAI AIMock fixture. The scenario submits a real PTY prompt and verifies the outbound model request contains the selected-model commit guidance: `Co-Authored-By: Mastra Code (openai/gpt-5.4-mini) <noreply@mastra.ai>`.
 - Proved three focused breaks: removed selected model ID from the base prompt, dropped `ctx.modelId` when building the base prompt, and stopped copying `state.currentModelId` into dynamic instructions. All breaks failed the scenario and were reverted.
 - Tracker row `Git: Commit attribution` moved from missing e2e to partial e2e. There are now no tracker rows with missing checked-in TUI e2e coverage; remaining work is partial-row remediation and loaded-history/runtime-parity follow-up.
+
+### 2026-06-07 — Partial-row remediation queue drafted
+
+- Created `remediation-queue.md` now that no tracker rows remain with missing checked-in TUI e2e coverage.
+- Queue prioritizes remaining partial-row follow-up by shared fixture needs: persistent goal judge/reload, tool live-vs-history parity, notification/state signal CRUD and reload, GitHub incremental mock-gitcrawl, MCP/browser integration depth, settings/model UI breadth, and workspace/skills/hooks/shell surfaces.
+- Added README and handoff pointers so future recovery runs start from the queue instead of searching all feature cards from scratch.
