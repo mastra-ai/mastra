@@ -4206,3 +4206,9 @@ Verification:
 Added `state-signal-rendering` as a checked-in PTY scenario. It launches Mastra Code through a custom entrypoint, emits `agent.sendStateSignal()` into the active thread, asserts the TUI renders `State snapshot: browser` plus the state preview, and verifies AIMock captured the state contents in the model request body. Three break checks were proven and reverted: removing inline state-signal rendering, dropping the state preview payload, and changing the visible state-signal title.
 
 This moves `Chat: Processor state signals` from `missing e2e` to `partial e2e`. It does not close the row because live browser-processor snapshot/delta reload/history parity and long-session pruning still need dedicated coverage.
+
+### E2E correction follow-up: notification signal partial coverage
+
+Added `notification-signal-rendering` as a checked-in PTY scenario. It launches Mastra Code through a custom entrypoint, emits `agent.sendNotificationSignal()` into the active thread, asserts the TUI renders a `notification from github` card with priority/kind/status details and alert body, and verifies AIMock captured the notification contents in the model request body. Three break checks were proven and reverted: changing the notification source title, dropping the delivered-status detail, and removing the notification message body.
+
+This moves `Chat: Notification inbox signals` from `missing e2e` to `partial e2e`. It does not close the row because model-driven `notification_inbox read`, summary batching, CRUD status transitions, and persistence/reload coverage still need dedicated scenarios.

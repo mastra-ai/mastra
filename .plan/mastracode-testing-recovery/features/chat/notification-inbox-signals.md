@@ -73,6 +73,7 @@
 - `mastracode/src/agents/extra-tools.test.ts` — tool registration, category, tool-guidance inclusion, and Mastra Code wrapper coverage proving `notification_inbox read` reaches the notifications storage domain, delivers unread details, and marks records seen for the current thread.
 - `mastracode/src/tui/__tests__/render-messages.test.ts` — loaded-history notification and summary rendering.
 - `mastracode/src/tui/handlers/__tests__/message.test.ts` — streamed notification and summary rendering.
+- `mastracode/scripts/mc-e2e/scenarios/notification-signal-rendering.ts` — checked-in PTY e2e coverage for a custom entrypoint that emits `agent.sendNotificationSignal()` into the active TUI thread, renders the `notification from github` card with priority/kind/status and alert body, and verifies the captured AIMock request body includes the notification contents.
 
 ## Missing tests
 
