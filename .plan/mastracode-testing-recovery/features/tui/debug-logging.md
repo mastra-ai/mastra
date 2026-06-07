@@ -66,7 +66,8 @@
 
 ## Missing tests
 
-- Startup integration test proving `main.ts` and `headless.ts` both call `setupDebugLogging()` exactly once in representative runs.
+- Partial e2e coverage exists: `debug-logging` launches a real TUI via a custom entrypoint with `MASTRA_DEBUG=1`, calls `setupDebugLogging()`, emits a sentinel `console.warn`, verifies the sentinel does not leak into the terminal UI, and asserts the isolated app-data `debug.log` contains `[WARN]` plus the sentinel.
+- Startup integration test proving `main.ts` and `headless.ts` both call `setupDebugLogging()` exactly once in representative production runs; the e2e scenario covers the helper behavior through a TUI launch but uses a custom entrypoint seam for deterministic sentinel emission.
 
 ## Known risks / regressions
 

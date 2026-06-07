@@ -4419,3 +4419,14 @@ Verification:
 - `test -z "$(rg -n "audit-tests|auditTestsSubagent|Audit Tests" mastracode/src --glob '!**/__tests__/**')"`
 
 No checked-in TUI e2e is appropriate unless a replacement user-facing skill or slash command is introduced.
+
+### Debug logging TUI e2e partial coverage
+
+Added `debug-logging`, a checked-in TUI e2e scenario that launches a real TUI with `MASTRA_DEBUG=1`, calls `setupDebugLogging()` from a custom entrypoint, emits a sentinel `console.warn`, verifies the sentinel does not leak into the terminal UI, and asserts the isolated app-data `debug.log` contains `[WARN]` plus the sentinel.
+
+Break validations:
+- Removing `MASTRA_DEBUG=1` enablement made `debug.log` missing.
+- Changing the warning prefix from `[WARN]` made the log assertion fail.
+- Changing the app-data filename from `debug.log` made the expected log path missing.
+
+The row remains partial because direct `main.ts`/`headless.ts` startup-call coverage and long-session log growth behavior still need separate coverage.

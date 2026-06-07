@@ -6,6 +6,7 @@ import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
 import { customConfigDirScenario } from './custom-config-dir.js';
 import { customProviderManagementScenario } from './custom-provider-management.js';
 import { customSlashCommandScenario } from './custom-slash-command.js';
+import { debugLoggingScenario } from './debug-logging.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
 import { firstRunOnboardingScenario } from './first-run-onboarding.js';
 import { githubSignalsCommandScenario } from './github-signals-command.js';
@@ -51,6 +52,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'custom-config-dir': customConfigDirScenario,
   'custom-provider-management': customProviderManagementScenario,
   'custom-slash-command': customSlashCommandScenario,
+  'debug-logging': debugLoggingScenario,
   'file-autocomplete': fileAutocompleteScenario,
   'first-run-onboarding': firstRunOnboardingScenario,
   'github-signals-command': githubSignalsCommandScenario,

@@ -8,6 +8,7 @@ export type ScenarioName =
   | 'custom-config-dir'
   | 'custom-provider-management'
   | 'custom-slash-command'
+  | 'debug-logging'
   | 'file-autocomplete'
   | 'first-run-onboarding'
   | 'github-signals-command'
