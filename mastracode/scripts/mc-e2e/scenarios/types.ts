@@ -13,6 +13,7 @@ export type ScenarioName =
   | 'github-signals-command'
   | 'harness-api-config'
   | 'openai-strict-schema'
+  | 'plan-approval-handoff'
   | 'process-shortcuts'
   | 'provider-history-compat'
   | 'prompt-context-instructions'

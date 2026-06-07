@@ -4376,3 +4376,14 @@ pnpm --filter ./mastracode run e2e:test streaming-tool-args
 ```
 
 The row remains partial because active stream → reload/history parity and long-stream coalescing/status-line update counts are still missing.
+
+### Plan approval handoff TUI e2e coverage
+
+Added `plan-approval-handoff`, a checked-in TUI e2e scenario that switches to Plan mode, submits a real prompt through AIMock, returns a `submit_plan` tool call, approves the inline plan card, verifies the visible structured system reminder (`The user has approved the plan, begin executing.`), and verifies the build-mode response.
+
+Break validations:
+- Changing the `Approve — switch to Build mode and implement` option label made the scenario time out before approval.
+- Skipping the inline approval callback left the card locally approved but never started the build handoff.
+- Changing the structured approval reminder text made the visible system-reminder assertion fail.
+
+The row remains partial because persisted history reload as a resolved plan card, plan-file persistence in the same e2e flow, headless fallback, denied-tool guidance, and `Use as /goal` remain missing.

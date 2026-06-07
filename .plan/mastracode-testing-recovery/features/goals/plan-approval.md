@@ -71,6 +71,7 @@
 - `mastracode/src/agents/__tests__/prompts.test.ts` — Plan mode prompt includes `submit_plan` and goal-ready plan guidance.
 - `mastracode/src/tui/handlers/__tests__/prompts.test.ts` — regular approval sends one structured build handoff signal without duplicate `addUserMessage`/`fireMessage`; goal option delegates to `/goal`; streamed component activates in place.
 - `mastracode/src/tui/components/__tests__/plan-approval-inline.test.ts` — inline plan card renders, goal option exists, feedback mode keeps the plan visible while typing requested changes, narrow plan boxes stay width-safe, requested-changes display works, and feedback mode forces a full redraw.
+- `mastracode/scripts/mc-e2e/scenarios/plan-approval-handoff.ts` — switches to Plan mode in a real PTY TUI, uses AIMock `response.toolCalls` for `submit_plan`, approves the inline plan card, verifies the structured build-mode system reminder, and verifies the build handoff response.
 - `mastracode/src/utils/__tests__/save-plan.test.ts` — approved plan file names/content, resource subdirectories, special-character titles, and timestamp non-overwrite behavior.
 - `packages/core/src/harness/display-state.test.ts` — `pendingPlanApproval` display state is set/cleared by plan approval events.
 - `packages/core/src/harness/mode-model-persistence.test.ts` — `respondToPlanApproval()` resolves plan approvals without aborting the resolver signal prematurely.
@@ -78,7 +79,9 @@
 
 ## Missing tests
 
-- Full Plan-mode run where model streams `submit_plan` args, user approves, Build mode starts, plan file is persisted, and persisted history reloads as a resolved plan card.
+- Partial e2e coverage exists: `plan-approval-handoff` covers Plan-mode prompt → AIMock `submit_plan` tool call → inline approval card → user approval → structured build handoff reminder and build-mode model response.
+- Persisted history reload as a resolved plan card after approval.
+- Plan file persistence in the same real TUI approval flow.
 - Headless/non-TUI behavior for `submit_plan` approval fallback and resolver absence.
 - Regression test that denied `submit_plan` removes Plan-mode tool guidance and prevents accidental text-only plan completion.
 - Mapping test for the later PR that added `Use as /goal` to plan approval UI.
