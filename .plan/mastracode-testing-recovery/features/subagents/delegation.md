@@ -86,7 +86,8 @@
 
 ## Missing tests
 
-- End-to-end parent run spawning each built-in subagent with expected tool allowlist and inherited sandbox access.
+- Partial e2e coverage exists: `subagent-delegation` drives a real parent TUI chat turn through AIMock `response.toolCalls`, invokes the `subagent` tool with the built-in Explore subagent, renders the delegated task and completed `subagent explore openai/gpt-5.4-mini ✓` footer in the real TUI, and verifies the subagent result is returned.
+- End-to-end parent run spawning each built-in subagent with expected tool allowlist and inherited sandbox access; `subagent-delegation` currently covers only Explore and does not prove nested workspace-tool activity.
 - `/subagents` thread/global model override persists across restart and thread switch, especially for configured subagent IDs not in the built-in set.
 - Prompt test that subagent guidance consistently includes the audit-tests single-use exception everywhere it is shown.
 

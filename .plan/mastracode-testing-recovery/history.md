@@ -4398,3 +4398,14 @@ Break validations:
 - Changing `/goal clear` feedback from `Goal cleared.` made the scenario fail.
 
 The row remains partial because multi-turn structured judge decisions, waiting/resume behavior, reload persistence/history, and non-TUI goal behavior still need dedicated e2e coverage.
+
+### Subagent delegation TUI e2e partial coverage
+
+Added `subagent-delegation`, a checked-in TUI e2e scenario that submits a real parent chat prompt, uses AIMock `response.toolCalls` to invoke the built-in Explore `subagent` tool, runs the delegated Explore model turn, and verifies the real TUI renders the delegated task, completed `subagent explore openai/gpt-5.4-mini ✓` footer, and returned subagent result.
+
+Break validations:
+- Hiding the delegated task text in `handleSubagentStart()` made the scenario fail.
+- Renaming the `subagent` footer label in `SubagentExecutionComponent` made the scenario fail.
+- Skipping `handleSubagentEnd()` completion made the scenario fail because the footer stayed in-progress instead of showing ✓.
+
+The row remains partial because Plan/Execute subagents, nested workspace-tool activity, forked context, `/subagents` configured model overrides, and reload/history parity still need coverage.

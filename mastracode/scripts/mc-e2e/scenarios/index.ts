@@ -29,6 +29,7 @@ import { stateSignalRenderingScenario } from './state-signal-rendering.js';
 import { storageSettingsScenario } from './storage-settings.js';
 import { streamErrorRetryScenario } from './stream-error-retry.js';
 import { streamingToolArgsScenario } from './streaming-tool-args.js';
+import { subagentDelegationScenario } from './subagent-delegation.js';
 import { taskProgressEventsScenario } from './task-progress-events.js';
 import { threadHistoryScenario } from './thread-history.js';
 import { toolSchemaCompatScenario } from './tool-schema-compat.js';
@@ -73,6 +74,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'storage-settings': storageSettingsScenario,
   'stream-error-retry': streamErrorRetryScenario,
   'streaming-tool-args': streamingToolArgsScenario,
+  'subagent-delegation': subagentDelegationScenario,
   'task-progress-events': taskProgressEventsScenario,
   'thread-history': threadHistoryScenario,
   'tool-schema-compat': toolSchemaCompatScenario,

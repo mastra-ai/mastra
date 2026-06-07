@@ -31,6 +31,7 @@ export type ScenarioName =
   | 'storage-settings'
   | 'stream-error-retry'
   | 'streaming-tool-args'
+  | 'subagent-delegation'
   | 'task-progress-events'
   | 'thread-history'
   | 'tool-schema-compat'
