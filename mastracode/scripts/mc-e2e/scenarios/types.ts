@@ -14,6 +14,7 @@ export type ScenarioName =
   | 'harness-api-config'
   | 'openai-strict-schema'
   | 'plan-approval-handoff'
+  | 'persistent-goal-commands'
   | 'process-shortcuts'
   | 'provider-history-compat'
   | 'prompt-context-instructions'

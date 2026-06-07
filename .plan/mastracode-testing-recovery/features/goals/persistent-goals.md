@@ -73,10 +73,12 @@
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` and `setup-keyboard-shortcuts.test.ts` — multiline `/goal` raw args, `/goal/<custom>`/skill routing, judge input locks/escape hatches, autocomplete, and abort shortcuts.
 - `mastracode/src/tui/handlers/__tests__/prompts.test.ts` and `parallel-interactive-prompts.test.ts` — ask_user prompts remain user-controlled during active goals, and plan approval goal mode resolves the suspended plan before starting `/goal` without sending a duplicate build reminder.
 - `mastracode/src/tui/__tests__/status-line.test.ts` — active judge status-line priority on narrow terminals when OM progress, active-goal state, and long model IDs compete for space.
+- `mastracode/scripts/mc-e2e/scenarios/persistent-goal-commands.ts` — starts a persistent `/goal` through the real PTY TUI with seeded judge defaults, verifies the active-goal status-line label, pauses through `/goal pause`, clears through `/goal clear`, and verifies empty `/goal status` feedback.
 
 ## Missing tests
 
-- End-to-end run that starts a real `/goal`, completes several model turns including a `waiting` checkpoint, reloads, resumes, and verifies persisted status/duration/history. Use AIMock structured-output fixtures for judge decisions: `match.responseFormat: "json_object"` and object-valued `response.content` so AIMock auto-stringifies the judge JSON.
+- Partial e2e coverage exists: `persistent-goal-commands` covers real `/goal <objective>` startup, active status-line projection, `/goal pause`, `/goal clear`, and empty `/goal status` feedback with AIMock-backed model responses.
+- End-to-end run that starts a real `/goal`, completes several model turns including a `waiting` checkpoint, reloads, resumes, and verifies persisted status/duration/history. Use AIMock structured-output fixtures for judge decisions; this path still needs a robust fixture matcher for the judge request shape.
 - Non-TUI/headless behavior for goal state and continuation when slash-command UI is unavailable.
 - E2E/snapshot coverage for a full persistent-goal status-line session after reload.
 

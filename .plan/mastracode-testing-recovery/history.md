@@ -4387,3 +4387,14 @@ Break validations:
 - Changing the structured approval reminder text made the visible system-reminder assertion fail.
 
 The row remains partial because persisted history reload as a resolved plan card, plan-file persistence in the same e2e flow, headless fallback, denied-tool guidance, and `Use as /goal` remain missing.
+
+### Persistent goal command TUI e2e partial coverage
+
+Added `persistent-goal-commands`, a checked-in TUI e2e scenario that seeds judge defaults, starts a persistent `/goal` through the real PTY, verifies the active-goal status-line projection (`pursuing goal`), pauses via `/goal pause`, clears via `/goal clear`, and verifies `/goal status` returns the empty-state message. The scenario uses AIMock for the model responses triggered by goal startup/judge activity but intentionally narrows to command lifecycle rather than full judge-loop validation.
+
+Break validations:
+- Changing the active-goal status-line label from `pursuing goal` made the scenario fail.
+- Changing `/goal pause` feedback from `Goal paused:` made the scenario fail.
+- Changing `/goal clear` feedback from `Goal cleared.` made the scenario fail.
+
+The row remains partial because multi-turn structured judge decisions, waiting/resume behavior, reload persistence/history, and non-TUI goal behavior still need dedicated e2e coverage.
