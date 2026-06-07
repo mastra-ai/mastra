@@ -13,10 +13,9 @@
 - Completed: `tool-history-reload` seeds completed persisted `view`, `task_write`, and `web_search_20250305` messages into an isolated DB, opens `/threads`, and asserts reconstructed render matches live e2e expectations. This validates `Tools: Streaming tool arguments` and `Tools: Web search tool rendering`, and reduces the residual gaps for task tracking, harness display state, and workspace tools.
 - Completed: `task-inline-transitions` uses AIMock tool-call fixtures for `task_write` → `task_complete` → clearing `task_write`, then asserts completed and cleared inline rendering in the live PTY TUI.
 - Completed: `task-patch-tools` uses AIMock tool-call fixtures for `task_write` → `task_update` → `task_check`, then asserts patched pinned task state and rendered check output in the live PTY TUI.
-- Remaining rows: `Tools: Task tracking tools and TUI progress`, `Integrations: Harness display state`, `Tools: Workspace-backed coding tools`.
+- Completed: `task-prompt-context-next-turn` drives a live `task_write`, submits a later user prompt, and only matches the final AIMock fixture when the outbound system prompt contains the updated `<current-task-list>` ID and content.
 - Completed: `workspace-tool-output-rendering` uses AIMock tool-call fixtures for live `execute_command` and `lsp_inspect`, writes a deterministic TypeScript file, and asserts visible shell stdout/footer plus LSP file/line/match rendering in the real PTY TUI.
-- Proposed scenarios:
-  - `task-prompt-context-next-turn`: seed or mutate task state, start a new user turn, and assert AIMock sees the updated `<current-task-list>` prompt context.
+- Remaining rows: `Integrations: Harness display state`, `Tools: Workspace-backed coding tools`.
 - Fixture/data needs: AIMock tool-call fixtures for live path plus any remaining sanitized stored-message fixtures for edit/list and persisted shell breadth.
 
 ### 2. Notification and state signals beyond first render

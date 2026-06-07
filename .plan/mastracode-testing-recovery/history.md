@@ -4522,3 +4522,13 @@ Break validations proved the scenario fails if the `Use as /goal` option label c
   - Changing the shell footer label from `$` to `shell` timed out waiting for the canonical shell footer.
 - Clean focused verification: `pnpm --filter ./mastracode run e2e:test workspace-tool-output-rendering`; `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
 - The workspace-tools row remains `needs-follow-up`: live shell/LSP output rendering is now covered, but plan-mode write disabling, dynamic workspace reuse/allowed paths, subagent inheritance, and loaded-history edit/list/shell breadth still need deterministic coverage or explicit review.
+
+## 2026-06-07 — Task prompt-context next-turn remediation
+
+- Added `task-prompt-context-next-turn` TUI e2e scenario and AIMock fixture. The scenario drives a real `task_write`, waits for the live pinned task UI, then submits a second user prompt whose fixture only matches when the outbound system prompt contains `<current-task-list>`, `{id: prompt-context-e2e}`, and the task content.
+- Break validations proved the scenario catches regressions:
+  - Removing the task section from `buildFullPrompt()` caused the second-turn AIMock fixture to miss and the scenario to time out.
+  - Stripping task IDs from prompt task lines caused the same fixture miss.
+  - Stripping task content from prompt task lines caused the same fixture miss.
+- Clean focused verification: `pnpm --filter ./mastracode run e2e:test task-prompt-context-next-turn`; `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
+- Tracker update: `Tools: Task tracking tools and TUI progress` moved to `validated` because checked-in TUI e2e now covers live progress, loaded-history replay, completed/cleared inline transitions, patch/check rendering, and next-turn prompt-context agreement.

@@ -40,6 +40,7 @@ export type ScenarioName =
   | 'task-inline-transitions'
   | 'task-patch-tools'
   | 'task-progress-events'
+  | 'task-prompt-context-next-turn'
   | 'thread-history'
   | 'tool-history-reload'
   | 'tool-schema-compat'
