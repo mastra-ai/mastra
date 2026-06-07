@@ -5,12 +5,7 @@
  */
 
 import { VoyageAIClient } from 'voyageai';
-import type {
-  VoyageTextModel,
-  VoyageTextEmbeddingConfig,
-  VoyageProviderOptions,
-  VoyageInputType,
-} from './types';
+import type { VoyageTextModel, VoyageTextEmbeddingConfig, VoyageProviderOptions, VoyageInputType } from './types';
 import { TEXT_MODEL_INFO } from './types';
 
 /**
@@ -41,7 +36,10 @@ async function createTokenAwareBatches(
   for (let i = 0; i < texts.length; i++) {
     const tokenCount = tokenResults[i]?.ids.length ?? 0;
 
-    if (currentBatch.length > 0 && (currentTokens + tokenCount > maxTokens || currentBatch.length >= maxInputsPerBatch)) {
+    if (
+      currentBatch.length > 0 &&
+      (currentTokens + tokenCount > maxTokens || currentBatch.length >= maxInputsPerBatch)
+    ) {
       batches.push(currentBatch);
       currentBatch = [];
       currentTokens = 0;
@@ -130,9 +128,8 @@ export class VoyageTextEmbeddingModelV2 {
         truncation: truncation,
       });
 
-      const embeddings = response.data
-        ?.sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
-        .map(item => item.embedding ?? []) ?? [];
+      const embeddings =
+        response.data?.sort((a, b) => (a.index ?? 0) - (b.index ?? 0)).map(item => item.embedding ?? []) ?? [];
 
       allEmbeddings.push(...embeddings);
     }
@@ -197,8 +194,7 @@ export class VoyageTextEmbeddingModelV3 {
 export function createVoyageTextEmbedding(
   config: VoyageTextEmbeddingConfig | VoyageTextModel,
 ): VoyageTextEmbeddingModelV3 {
-  const normalizedConfig: VoyageTextEmbeddingConfig =
-    typeof config === 'string' ? { model: config } : config;
+  const normalizedConfig: VoyageTextEmbeddingConfig = typeof config === 'string' ? { model: config } : config;
   return new VoyageTextEmbeddingModelV3(normalizedConfig);
 }
 
@@ -216,7 +212,6 @@ export function createVoyageTextEmbedding(
 export function createVoyageTextEmbeddingV2(
   config: VoyageTextEmbeddingConfig | VoyageTextModel,
 ): VoyageTextEmbeddingModelV2 {
-  const normalizedConfig: VoyageTextEmbeddingConfig =
-    typeof config === 'string' ? { model: config } : config;
+  const normalizedConfig: VoyageTextEmbeddingConfig = typeof config === 'string' ? { model: config } : config;
   return new VoyageTextEmbeddingModelV2(normalizedConfig);
 }

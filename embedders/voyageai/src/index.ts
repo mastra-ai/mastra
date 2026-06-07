@@ -75,22 +75,11 @@ export {
   createVoyageTextEmbeddingV2,
 } from './text-embedding';
 
-export {
-  VoyageMultimodalEmbeddingModel,
-  createVoyageMultimodalEmbedding,
-} from './multimodal-embedding';
+export { VoyageMultimodalEmbeddingModel, createVoyageMultimodalEmbedding } from './multimodal-embedding';
 
-export {
-  VoyageContextualizedEmbeddingModel,
-  createVoyageContextualizedEmbedding,
-} from './contextualized-embedding';
+export { VoyageContextualizedEmbeddingModel, createVoyageContextualizedEmbedding } from './contextualized-embedding';
 
-export {
-  VoyageRelevanceScorer,
-  createVoyageReranker,
-  voyageReranker,
-  type RelevanceScoreProvider,
-} from './reranker';
+export { VoyageRelevanceScorer, createVoyageReranker, voyageReranker, type RelevanceScoreProvider } from './reranker';
 
 // Import for convenience object
 import {
@@ -99,18 +88,9 @@ import {
   VoyageTextEmbeddingModelV3,
   VoyageTextEmbeddingModelV2,
 } from './text-embedding';
-import {
-  createVoyageMultimodalEmbedding,
-  VoyageMultimodalEmbeddingModel,
-} from './multimodal-embedding';
-import {
-  createVoyageContextualizedEmbedding,
-  VoyageContextualizedEmbeddingModel,
-} from './contextualized-embedding';
-import {
-  createVoyageReranker,
-  VoyageRelevanceScorer,
-} from './reranker';
+import { createVoyageMultimodalEmbedding, VoyageMultimodalEmbeddingModel } from './multimodal-embedding';
+import { createVoyageContextualizedEmbedding, VoyageContextualizedEmbeddingModel } from './contextualized-embedding';
+import { createVoyageReranker, VoyageRelevanceScorer } from './reranker';
 
 // ============================================================================
 // Convenience Factory Functions
@@ -244,11 +224,21 @@ export const voyage: VoyageTextEmbeddingModelV3 & {
 
   // The base object delegates doEmbed to a lazily-created default model
   const base = {
-    get specificationVersion() { return 'v3' as const; },
-    get provider() { return 'voyage' as const; },
-    get modelId() { return 'voyage-3.5'; },
-    get maxEmbeddingsPerCall() { return 1000; },
-    get supportsParallelCalls() { return true; },
+    get specificationVersion() {
+      return 'v3' as const;
+    },
+    get provider() {
+      return 'voyage' as const;
+    },
+    get modelId() {
+      return 'voyage-3.5';
+    },
+    get maxEmbeddingsPerCall() {
+      return 1000;
+    },
+    get supportsParallelCalls() {
+      return true;
+    },
     doEmbed(args: any) {
       return lazy('_default', () => createVoyageTextEmbedding('voyage-3.5')).doEmbed(args);
     },
@@ -282,7 +272,9 @@ export const voyage: VoyageTextEmbeddingModelV3 & {
     multimodal3: { get: () => lazy('multimodal3', () => createVoyageMultimodalEmbedding('voyage-multimodal-3')) },
     multimodal35: { get: () => lazy('multimodal35', () => createVoyageMultimodalEmbedding('voyage-multimodal-3.5')) },
     // Contextualized model
-    contextualized: { get: () => lazy('contextualized', () => createVoyageContextualizedEmbedding('voyage-context-3')) },
+    contextualized: {
+      get: () => lazy('contextualized', () => createVoyageContextualizedEmbedding('voyage-context-3')),
+    },
     context3: { get: () => lazy('context3', () => createVoyageContextualizedEmbedding('voyage-context-3')) },
     // Reranker models
     reranker: { get: () => lazy('reranker', () => createVoyageReranker('rerank-2.5')) },

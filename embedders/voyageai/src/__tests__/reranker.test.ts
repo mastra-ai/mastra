@@ -9,7 +9,9 @@ const mockConstructor = vi.fn();
 vi.mock('voyageai', () => {
   return {
     VoyageAIClient: class MockVoyageAIClient {
-      constructor(opts: any) { mockConstructor(opts); }
+      constructor(opts: any) {
+        mockConstructor(opts);
+      }
       rerank = mockRerank;
     },
   };
@@ -46,9 +48,7 @@ describe('VoyageRelevanceScorer', () => {
   it('should throw error if no API key is available', () => {
     delete process.env.VOYAGE_API_KEY;
 
-    expect(() => new VoyageRelevanceScorer({ model: 'rerank-2.5' })).toThrow(
-      'VoyageAI API key is required',
-    );
+    expect(() => new VoyageRelevanceScorer({ model: 'rerank-2.5' })).toThrow('VoyageAI API key is required');
   });
 
   describe('getRelevanceScore', () => {
@@ -82,9 +82,7 @@ describe('VoyageRelevanceScorer', () => {
 
       const scorer = new VoyageRelevanceScorer({ model: 'rerank-2.5' });
 
-      await expect(scorer.getRelevanceScore('query', 'document')).rejects.toThrow(
-        'No relevance score found',
-      );
+      await expect(scorer.getRelevanceScore('query', 'document')).rejects.toThrow('No relevance score found');
     });
 
     it('should respect truncation config', async () => {
@@ -208,14 +206,7 @@ describe('All reranker models', () => {
     process.env.VOYAGE_API_KEY = 'test-api-key';
   });
 
-  const models = [
-    'rerank-2.5',
-    'rerank-2.5-lite',
-    'rerank-2',
-    'rerank-2-lite',
-    'rerank-1',
-    'rerank-lite-1',
-  ] as const;
+  const models = ['rerank-2.5', 'rerank-2.5-lite', 'rerank-2', 'rerank-2-lite', 'rerank-1', 'rerank-lite-1'] as const;
 
   it.each(models)('should create scorer for %s', model => {
     const scorer = createVoyageReranker(model);

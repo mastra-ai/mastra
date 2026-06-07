@@ -261,9 +261,7 @@ describeWithApiKey('VoyageAI Integration Tests', () => {
       expect(results).toHaveLength(2);
       expect(results[0]!.score).toBeGreaterThan(results[1]!.score);
       // The ML-related documents should rank higher than the weather document
-      expect(
-        results.every(r => r.document !== 'The weather today is sunny with a high of 75 degrees.'),
-      ).toBe(true);
+      expect(results.every(r => r.document !== 'The weather today is sunny with a high of 75 degrees.')).toBe(true);
     });
 
     it('should work with rerank-2.5-lite model', async () => {

@@ -110,8 +110,7 @@ export class VoyageContextualizedEmbeddingModel {
     const inputType = args.inputType ?? providerOptions?.voyage?.inputType ?? this.config.inputType;
     const outputDimension =
       args.outputDimension ?? providerOptions?.voyage?.outputDimension ?? this.config.outputDimension;
-    const outputDtype =
-      args.outputDtype ?? providerOptions?.voyage?.outputDtype ?? this.config.outputDtype;
+    const outputDtype = args.outputDtype ?? providerOptions?.voyage?.outputDtype ?? this.config.outputDtype;
 
     // Use the SDK's contextualizedEmbed method
     const response = await this.client.contextualizedEmbed({
@@ -162,8 +161,7 @@ export class VoyageContextualizedEmbeddingModel {
     const inputType = args.inputType ?? providerOptions?.voyage?.inputType ?? this.config.inputType;
     const outputDimension =
       args.outputDimension ?? providerOptions?.voyage?.outputDimension ?? this.config.outputDimension;
-    const outputDtype =
-      args.outputDtype ?? providerOptions?.voyage?.outputDtype ?? this.config.outputDtype;
+    const outputDtype = args.outputDtype ?? providerOptions?.voyage?.outputDtype ?? this.config.outputDtype;
 
     const response = await this.client.contextualizedEmbed({
       inputs: values,
@@ -243,7 +241,6 @@ export class VoyageContextualizedEmbeddingModel {
 export function createVoyageContextualizedEmbedding(
   config: VoyageContextualizedEmbeddingConfig | VoyageContextModel,
 ): VoyageContextualizedEmbeddingModel {
-  const normalizedConfig: VoyageContextualizedEmbeddingConfig =
-    typeof config === 'string' ? { model: config } : config;
+  const normalizedConfig: VoyageContextualizedEmbeddingConfig = typeof config === 'string' ? { model: config } : config;
   return new VoyageContextualizedEmbeddingModel(normalizedConfig);
 }

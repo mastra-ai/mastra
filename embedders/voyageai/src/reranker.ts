@@ -6,10 +6,7 @@
  */
 
 import { VoyageAIClient } from 'voyageai';
-import type {
-  VoyageRerankerModel,
-  VoyageRerankerConfig,
-} from './types';
+import type { VoyageRerankerModel, VoyageRerankerConfig } from './types';
 
 /**
  * RelevanceScoreProvider interface from @mastra/core
@@ -150,11 +147,8 @@ export class VoyageRelevanceScorer implements RelevanceScoreProvider {
  * });
  * ```
  */
-export function createVoyageReranker(
-  config: VoyageRerankerConfig | VoyageRerankerModel,
-): VoyageRelevanceScorer {
-  const normalizedConfig: VoyageRerankerConfig =
-    typeof config === 'string' ? { model: config } : config;
+export function createVoyageReranker(config: VoyageRerankerConfig | VoyageRerankerModel): VoyageRelevanceScorer {
+  const normalizedConfig: VoyageRerankerConfig = typeof config === 'string' ? { model: config } : config;
   return new VoyageRelevanceScorer(normalizedConfig);
 }
 

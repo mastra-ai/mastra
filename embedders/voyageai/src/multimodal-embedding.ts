@@ -132,9 +132,8 @@ export class VoyageMultimodalEmbeddingModel {
     });
 
     // Extract embeddings from response
-    const embeddings = response.data
-      ?.sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
-      .map(item => item.embedding ?? []) ?? [];
+    const embeddings =
+      response.data?.sort((a, b) => (a.index ?? 0) - (b.index ?? 0)).map(item => item.embedding ?? []) ?? [];
 
     return { embeddings };
   }
@@ -182,7 +181,6 @@ export class VoyageMultimodalEmbeddingModel {
 export function createVoyageMultimodalEmbedding(
   config: VoyageMultimodalEmbeddingConfig | VoyageMultimodalModel,
 ): VoyageMultimodalEmbeddingModel {
-  const normalizedConfig: VoyageMultimodalEmbeddingConfig =
-    typeof config === 'string' ? { model: config } : config;
+  const normalizedConfig: VoyageMultimodalEmbeddingConfig = typeof config === 'string' ? { model: config } : config;
   return new VoyageMultimodalEmbeddingModel(normalizedConfig);
 }
