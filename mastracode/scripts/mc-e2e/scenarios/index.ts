@@ -21,6 +21,7 @@ import { stateCommandsScenario } from './state-commands.js';
 import { stateSignalRenderingScenario } from './state-signal-rendering.js';
 import { storageSettingsScenario } from './storage-settings.js';
 import { threadHistoryScenario } from './thread-history.js';
+import { toolSchemaCompatScenario } from './tool-schema-compat.js';
 import type { McE2eScenario, ScenarioName } from './types.js';
 import { visibleCommandsScenario } from './visible-commands.js';
 import { workspaceCommandsScenario } from './workspace-commands.js';
@@ -52,6 +53,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'state-signal-rendering': stateSignalRenderingScenario,
   'storage-settings': storageSettingsScenario,
   'thread-history': threadHistoryScenario,
+  'tool-schema-compat': toolSchemaCompatScenario,
   'workspace-commands': workspaceCommandsScenario,
 };
 

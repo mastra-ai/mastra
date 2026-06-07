@@ -23,6 +23,7 @@ export type ScenarioName =
   | 'state-signal-rendering'
   | 'storage-settings'
   | 'thread-history'
+  | 'tool-schema-compat'
   | 'workspace-commands';
 
 export type McE2eTerminal = {

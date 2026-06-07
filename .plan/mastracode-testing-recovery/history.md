@@ -4236,3 +4236,15 @@ Break validation proved the scenario fails when `/custom-providers` dispatch is 
 - Final focused verification: `pnpm --filter ./mastracode run e2e:test openai-strict-schema`.
 - Tracker row `Models: OpenAI strict schema compatibility` updated from missing e2e to validated/covered; broader verification and commit are pending in this batch.
 
+
+### 2026-06-07 — Tool schema compatibility TUI e2e coverage
+
+- Added `mastracode/scripts/mc-e2e/scenarios/tool-schema-compat.ts` and `mastracode/scripts/mc-e2e/fixtures/tool-schema-compat.json`.
+- Scenario submits a real PTY Mastra Code prompt through OpenAI AIMock and verifies the provider request includes usable built-in command tool schemas for `ask_user`, `task_write`, and `submit_plan`.
+- Request verification asserts object schemas, `ask_user.question`, `submit_plan.plan`, and nested `task_write.tasks.items.properties` for `content`, `status`, and `activeForm`.
+- Break validations proven after rebuilding core artifacts with `pnpm build:core`:
+  1. Replacing prepared tool schemas with empty object schemas made `tool-schema-compat` fail because `ask_user.question` was absent.
+  2. Renaming prepared built-in tools made `tool-schema-compat` fail because `ask_user` could not be found in the provider request.
+  3. Stripping nested array item properties made `tool-schema-compat` fail because `task_write` task item fields were absent.
+- Final focused verification: `pnpm build:core` and `pnpm --filter ./mastracode run e2e:test tool-schema-compat`.
+- Tracker row `Models: Tool schema compatibility` moved from `needs-follow-up`/missing e2e to `validated`/covered e2e. Packaging-level CLI zod dependency coverage remains listed as a separate missing test in the feature card.

@@ -64,11 +64,11 @@
 
 - `packages/schema-compat/src/standard-schema/adapters/zod-v4.test.ts` — Zod v4 adapter coverage for Standard Schema + JSON Schema conversion, including routed provider serialization for built-in Mastra Code command tool schemas when native `~standard.jsonSchema` is absent.
 - `packages/schema-compat/src/zod-to-json.test.ts` and provider compat tests — adjacent provider/schema compatibility coverage.
+- `mastracode/scripts/mc-e2e/scenarios/tool-schema-compat.ts` + `mastracode/scripts/mc-e2e/fixtures/tool-schema-compat.json` — real PTY Mastra Code prompt through OpenAI AIMock that verifies provider-visible built-in command tool schemas include usable object/nested properties for `ask_user`, `task_write`, and `submit_plan`.
 - PR #14264 test plan targeted `packages/schema-compat/src/standard-schema/adapters/zod-v4.test.ts` and eslint on the adapter; current source has later loader changes, so future follow-up rows should refresh this section.
 
 ## Missing tests
 
-- End-to-end Mastra Code runtime smoke test that drives a model/tool-call loop with the serialized built-in tool schemas.
 - Packaging test proving the published CLI can resolve its bundled `zod` dependency without relying on a project-level install.
 
 ## Known risks / regressions
