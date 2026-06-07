@@ -4364,3 +4364,15 @@ Break validations:
 - Dropping caller `initialState` made `/yolo` toggle the default ON state to OFF instead of toggling configured OFF to ON.
 
 The row remains partial because docs-snippet compile/API package smoke, positional-call negative tests, and docs redirect checks are still missing.
+
+### Harness display-state e2e partial coverage
+
+Marked `Harness display state` partial using existing checked-in, user-realistic TUI e2e coverage instead of adding duplicate Harness-internal tests. `streaming-tool-args` drives a real AIMock-streamed `view` tool call through the PTY TUI and proves live partial tool-input projection before final result replacement. `task-progress-events` drives a real AIMock `task_write` tool call and proves live task progress projection plus follow-up tool-result request handling.
+
+Focused verification run:
+
+```sh
+pnpm --filter ./mastracode run e2e:test streaming-tool-args
+```
+
+The row remains partial because active stream → reload/history parity and long-stream coalescing/status-line update counts are still missing.
