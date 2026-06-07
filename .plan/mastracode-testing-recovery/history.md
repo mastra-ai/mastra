@@ -4289,3 +4289,15 @@ Break validation proved the scenario fails when `/custom-providers` dispatch is 
   3. Suppressing `offset`/`limit` range rendering made the scenario fail waiting for `src/streaming-args.ts:12-18`.
 - Focused verification: `pnpm --filter ./mastracode run e2e:test streaming-tool-args`.
 - Tracker row `Tools: Streaming tool arguments` moved from missing e2e to partial e2e. It remains `needs-follow-up` because task-tool pre-text preservation and loaded-history/circular-result parity still need checked-in e2e coverage.
+
+### 2026-06-07 — Task tracking TUI e2e partial coverage
+
+- Added `mastracode/scripts/mc-e2e/scenarios/task-progress-events.ts`.
+- Scenario launches an embedded Mastra Code TUI and emits real Harness `task_write` input-streaming plus `task_updated` events from a custom entrypoint.
+- The PTY test asserts streamed task input updates pinned progress to `Tasks [0/2 completed]`, a later `task_updated` event moves pinned progress to `Tasks [1/2 completed]`, and final all-completed state renders inline `Tasks [2/2 completed]` history.
+- Break validations proven and reverted:
+  1. Disabling the `task_write` partial-args branch in `handleToolInputDelta()` made the scenario fail waiting for streamed `[0/2]` pinned progress.
+  2. Disabling `task_updated` pinned `TaskProgressComponent.updateTasks()` made the scenario fail waiting for `[1/2]` active progress.
+  3. Skipping completed inline task rendering made the scenario fail waiting for `[2/2]` completed history.
+- Focused verification: `pnpm --filter ./mastracode run e2e:test task-progress-events`.
+- Tracker row `Tools: Task tracking tools and TUI progress` moved from missing e2e to partial e2e. It remains `needs-follow-up` because prompt-context agreement and reload/history reconstruction still need checked-in e2e coverage.

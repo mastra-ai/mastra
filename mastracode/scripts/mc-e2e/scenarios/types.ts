@@ -25,6 +25,7 @@ export type ScenarioName =
   | 'storage-settings'
   | 'stream-error-retry'
   | 'streaming-tool-args'
+  | 'task-progress-events'
   | 'thread-history'
   | 'tool-schema-compat'
   | 'workspace-commands'

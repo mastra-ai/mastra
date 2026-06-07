@@ -74,7 +74,8 @@
 
 ## Missing tests
 
-- End-to-end live TUI test where streamed task input, `task_updated`, pinned progress, final history, and prompt context agree.
+- Partial e2e coverage: `mastracode/scripts/mc-e2e/scenarios/task-progress-events.ts` emits live Harness `task_write` input-streaming and `task_updated` events through a custom real PTY entrypoint, asserts pinned progress renders streamed `[0/2 completed]` tasks, then asserts `task_updated` moves the pinned list to `[1/2 completed]` and final inline history to `[2/2 completed]`.
+- Still missing: end-to-end prompt-context agreement and reload/history reconstruction for task state.
 - Covered by `packages/core/src/harness/task-tools.test.ts`: compatibility-path task tools read restored tasks from `getState()` when the direct state projection is stale, persist mutations through `setState()`, and emit `task_updated` so UI/progress and tool state stay aligned.
 
 ## Known risks / regressions
