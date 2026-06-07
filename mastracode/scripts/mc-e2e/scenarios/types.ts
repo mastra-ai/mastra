@@ -38,6 +38,7 @@ export type ScenarioName =
   | 'streaming-tool-args'
   | 'subagent-delegation'
   | 'task-inline-transitions'
+  | 'task-patch-tools'
   | 'task-progress-events'
   | 'thread-history'
   | 'tool-history-reload'

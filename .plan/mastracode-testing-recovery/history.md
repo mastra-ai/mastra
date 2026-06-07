@@ -4501,3 +4501,14 @@ Break validations proved the scenario fails if the `Use as /goal` option label c
   - Disabling `renderClearedTasksInline()` in `event-dispatch.ts` timed out waiting for `Tasks cleared`.
   - Changing the cleared label in `render-messages.ts` from `cleared` to `removed` timed out waiting for `Tasks cleared`.
 - Clean focused verification: `pnpm --filter ./mastracode run e2e:test task-inline-transitions`; `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
+
+## 2026-06-07 — Task patch/check live TUI remediation
+
+- Added `task-patch-tools` TUI e2e scenario and AIMock fixture. The scenario drives real task tools through the PTY TUI: `task_write` creates a task, `task_update` patches its status/active form, `task_check` reads the current task list, and a final model response completes the turn.
+- Verified live patch/check rendering: the pinned task row updates to `Verifying task patch e2e`, the `task_check` result renders `Task Status: [0/1 completed]` and `All tasks completed: NO`, and the AIMock request flow contains the expected task tool-call IDs.
+- Break validations proved the scenario catches regressions:
+  - Disabling live `TaskProgressComponent.updateTasks()` in `event-dispatch.ts` timed out waiting for the patched active-form row.
+  - Preventing generic tool result rebuild in `ToolExecutionComponentEnhanced.updateResult()` left `task_check` stuck pending and timed out waiting for `Task Status`.
+  - Returning early for `task_check` in `handleToolEnd()` also left the tool pending and timed out waiting for `Task Status`.
+- Clean focused verification: `pnpm --filter ./mastracode run e2e:test task-patch-tools`; `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
+- Follow-up remains: a deterministic TUI/AIMock scenario proving updated task state is included in `<current-task-list>` prompt context on a subsequent user turn.
