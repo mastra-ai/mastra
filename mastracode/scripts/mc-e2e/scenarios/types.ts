@@ -23,6 +23,7 @@ export type ScenarioName =
   | 'state-commands'
   | 'state-signal-rendering'
   | 'storage-settings'
+  | 'stream-error-retry'
   | 'thread-history'
   | 'tool-schema-compat'
   | 'workspace-commands';

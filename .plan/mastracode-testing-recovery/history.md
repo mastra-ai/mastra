@@ -4259,3 +4259,10 @@ Break validation proved the scenario fails when `/custom-providers` dispatch is 
   3. Dropping assistant text accumulation in loaded-history rendering made the scenario fail waiting for the seeded assistant answer.
 - Focused verification: `pnpm --filter ./mastracode run e2e:test provider-history-compat`.
 - Tracker row `Models: Provider history compatibility` moved from missing e2e to partial e2e. It remains `needs-follow-up` because persisted-history loading normalizes the seeded reasoning before the TUI request reaches `ProviderHistoryCompat`; direct proof that the processor strips post-conversion reasoning remains covered by core tests until a TUI/headless provider-rejection fixture can exercise the exact processor rule.
+
+### 2026-06-07 — Stream error retry TUI e2e partial coverage
+
+- Added `mastracode/scripts/mc-e2e/scenarios/stream-error-retry.ts` and `mastracode/scripts/mc-e2e/fixtures/stream-error-retry.json`.
+- Scenario launches an embedded Mastra Code TUI, monkeypatches the first `/chat/completions` fetch to return a retryable stream-event error chunk, then allows the retry to reach AIMock and asserts the real TUI renders `Recovered after retryable stream error.`
+- Focused verification: `pnpm --filter ./mastracode run e2e:test stream-error-retry`.
+- Tracker row `Models: Stream error retry processor` moved from missing e2e to partial e2e. It remains `needs-follow-up` because removing `StreamErrorRetryProcessor` from Mastra Code did not make this scenario fail: the provider SDK also retries the injected stream-event shape internally. The existing focused tests still directly prove processor wiring/order and matcher behavior; a future e2e needs a provider failure shape that bypasses SDK retry and exercises Mastra's processor specifically.
