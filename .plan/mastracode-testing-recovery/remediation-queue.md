@@ -14,10 +14,10 @@
 - Completed: `task-inline-transitions` uses AIMock tool-call fixtures for `task_write` → `task_complete` → clearing `task_write`, then asserts completed and cleared inline rendering in the live PTY TUI.
 - Completed: `task-patch-tools` uses AIMock tool-call fixtures for `task_write` → `task_update` → `task_check`, then asserts patched pinned task state and rendered check output in the live PTY TUI.
 - Remaining rows: `Tools: Task tracking tools and TUI progress`, `Integrations: Harness display state`, `Tools: Workspace-backed coding tools`.
+- Completed: `workspace-tool-output-rendering` uses AIMock tool-call fixtures for live `execute_command` and `lsp_inspect`, writes a deterministic TypeScript file, and asserts visible shell stdout/footer plus LSP file/line/match rendering in the real PTY TUI.
 - Proposed scenarios:
-  - `workspace-tool-output-rendering`: AIMock calls `lsp_inspect`/`execute_command` and asserts visible result cards, not only provider-visible aliases.
   - `task-prompt-context-next-turn`: seed or mutate task state, start a new user turn, and assert AIMock sees the updated `<current-task-list>` prompt context.
-- Fixture/data needs: AIMock tool-call fixtures for live path plus any remaining sanitized stored-message fixtures for shell/LSP/edit breadth.
+- Fixture/data needs: AIMock tool-call fixtures for live path plus any remaining sanitized stored-message fixtures for edit/list and persisted shell breadth.
 
 ### 2. Notification and state signals beyond first render
 

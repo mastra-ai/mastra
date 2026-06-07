@@ -4512,3 +4512,13 @@ Break validations proved the scenario fails if the `Use as /goal` option label c
   - Returning early for `task_check` in `handleToolEnd()` also left the tool pending and timed out waiting for `Task Status`.
 - Clean focused verification: `pnpm --filter ./mastracode run e2e:test task-patch-tools`; `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
 - Follow-up remains: a deterministic TUI/AIMock scenario proving updated task state is included in `<current-task-list>` prompt context on a subsequent user turn.
+
+## 2026-06-07 — Workspace shell/LSP output rendering remediation
+
+- Added `workspace-tool-output-rendering` TUI e2e scenario and AIMock fixture. The scenario writes a deterministic TypeScript file, drives real `execute_command` and `lsp_inspect` tool calls through the PTY TUI, and verifies shell stdout, `$` command footer, LSP file/line/match footer, and the final assistant follow-up response.
+- Break validations proved the scenario catches regressions:
+  - Disabling shell streaming/final result output in `ToolExecutionComponentEnhanced` timed out waiting for rendered stdout (`WORKSPACE_E2E_SHELL_OUTPUT`).
+  - Stripping LSP footer args timed out waiting for `lsp_inspect src/workspace-output-e2e.ts L1`.
+  - Changing the shell footer label from `$` to `shell` timed out waiting for the canonical shell footer.
+- Clean focused verification: `pnpm --filter ./mastracode run e2e:test workspace-tool-output-rendering`; `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
+- The workspace-tools row remains `needs-follow-up`: live shell/LSP output rendering is now covered, but plan-mode write disabling, dynamic workspace reuse/allowed paths, subagent inheritance, and loaded-history edit/list/shell breadth still need deterministic coverage or explicit review.

@@ -46,7 +46,8 @@ export type ScenarioName =
   | 'update-command-prompt'
   | 'web-search-rendering'
   | 'workspace-commands'
-  | 'workspace-tool-names';
+  | 'workspace-tool-names'
+  | 'workspace-tool-output-rendering';
 
 export type McE2eTerminal = {
   getByText: (text: string | RegExp, options?: { full?: boolean; strict?: boolean }) => any;

@@ -95,16 +95,17 @@
 - `packages/core/src/workspace/tools/__tests__/tracing.test.ts` — workspace action trace sanitization redacts env-shaped objects and secret-pattern keys while preserving non-cyclic shared references.
 - `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts` — TUI formatting for workspace tool output including quiet view previews, diagnostics, tree summaries, and edge cases.
 - `mastracode/scripts/mc-e2e/scenarios/workspace-tool-names.ts` — partial TUI e2e: submits a real PTY prompt through OpenAI AIMock and verifies the provider-visible tool dictionary exposes stable Mastra Code aliases (`view`, `find_files`, `search_content`, `execute_command`, `lsp_inspect`) without leaking old `mastra_workspace_*` IDs. Break validations removed `view`, `lsp_inspect`, and `execute_command` overrides and the scenario failed request verification each time.
+- `mastracode/scripts/mc-e2e/scenarios/workspace-tool-output-rendering.ts` — partial TUI e2e: writes a deterministic TypeScript file, drives AIMock `execute_command` and `lsp_inspect` tool calls through the real PTY TUI, and verifies shell stdout, `$` footer label, LSP file/line/match footer, and final assistant follow-up render. Break validations disabled shell streaming/final output, stripped LSP footer args, and changed the shell footer label; the scenario failed each time and all breaks were reverted.
 
 ## Missing tests
 
 - Plan-mode integration test proving workspace write/edit/AST tools are hidden or disabled while read/search tools remain available.
 - Covered by `mastracode/scripts/mc-e2e/scenarios/tool-history-reload.ts`: persisted `view` tool call/result reconstructs after `/threads` reload with representative workspace read output.
-- Still missing: loaded-history breadth for list/edit/shell outputs.
+- Still missing: loaded-history breadth for list/edit outputs (shell live output is covered by `workspace-tool-output-rendering`; persisted shell history remains untested).
 - Direct test that `getDynamicWorkspace()` reuses the registered workspace while updating allowed paths/tool config across mode changes, including default `os.tmpdir()`/`/tmp` inclusion and de-duplication.
 - Covered by `mastracode/src/__tests__/index.test.ts`: config-level startup test proves `createMastraCode({ workspace })` passes a custom workspace through to Harness and keeps the default workspace factory lazy when no override is supplied.
 - Mastra Code integration test proving built-in explore/plan/execute subagents get workspace tools from the parent workspace after tool-name remapping and disabled-tool filtering.
-- End-to-end `lsp_inspect` smoke test against a real TypeScript project proving hover/definition results render through the Mastra Code TUI, not only mocked LSP clients.
+- Covered by `mastracode/scripts/mc-e2e/scenarios/workspace-tool-output-rendering.ts`: end-to-end `lsp_inspect` smoke test against a real TypeScript file proving LSP result/fallback footer renders through the Mastra Code TUI, not only mocked component tests.
 
 ## Known risks / regressions
 

@@ -47,6 +47,7 @@ import { visibleCommandsScenario } from './visible-commands.js';
 import { webSearchRenderingScenario } from './web-search-rendering.js';
 import { workspaceCommandsScenario } from './workspace-commands.js';
 import { workspaceToolNamesScenario } from './workspace-tool-names.js';
+import { workspaceToolOutputRenderingScenario } from './workspace-tool-output-rendering.js';
 
 export type { McE2eScenario, McE2eScenarioRuntime, ScenarioName } from './types.js';
 
@@ -99,6 +100,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'web-search-rendering': webSearchRenderingScenario,
   'workspace-commands': workspaceCommandsScenario,
   'workspace-tool-names': workspaceToolNamesScenario,
+  'workspace-tool-output-rendering': workspaceToolOutputRenderingScenario,
 };
 
 export function getScenario(name: ScenarioName): McE2eScenario {
