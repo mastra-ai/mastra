@@ -6,6 +6,7 @@ import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
 import { customConfigDirScenario } from './custom-config-dir.js';
 import { customSlashCommandScenario } from './custom-slash-command.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
+import { githubSignalsCommandScenario } from './github-signals-command.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
 import { notificationSignalRenderingScenario } from './notification-signal-rendering.js';
@@ -34,6 +35,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'custom-config-dir': customConfigDirScenario,
   'custom-slash-command': customSlashCommandScenario,
   'file-autocomplete': fileAutocompleteScenario,
+  'github-signals-command': githubSignalsCommandScenario,
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,
   'modal-and-shell': modalAndShellScenario,

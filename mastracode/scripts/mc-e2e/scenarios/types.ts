@@ -8,6 +8,7 @@ export type ScenarioName =
   | 'custom-config-dir'
   | 'custom-slash-command'
   | 'file-autocomplete'
+  | 'github-signals-command'
   | 'prompt-context-instructions'
   | 'visible-commands'
   | 'integration-commands'

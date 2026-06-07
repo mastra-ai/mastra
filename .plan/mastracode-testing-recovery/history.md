@@ -4212,3 +4212,9 @@ This moves `Chat: Processor state signals` from `missing e2e` to `partial e2e`. 
 Added `notification-signal-rendering` as a checked-in PTY scenario. It launches Mastra Code through a custom entrypoint, emits `agent.sendNotificationSignal()` into the active thread, asserts the TUI renders a `notification from github` card with priority/kind/status details and alert body, and verifies AIMock captured the notification contents in the model request body. Three break checks were proven and reverted: changing the notification source title, dropping the delivered-status detail, and removing the notification message body.
 
 This moves `Chat: Notification inbox signals` from `missing e2e` to `partial e2e`. It does not close the row because model-driven `notification_inbox read`, summary batching, CRUD status transitions, and persistence/reload coverage still need dedicated scenarios.
+
+### 2026-06-06 — GitHub Signals command e2e partial coverage
+
+Added `mastracode/scripts/mc-e2e/scenarios/github-signals-command.ts` as a deterministic real PTY scenario for the GitHub Signals command surface. The scenario enables `experimentalGithubSignals` in the isolated app-data settings file, launches an embedded Mastra Code TUI with a current thread, runs `/github debug`, and asserts the visible `GitHub Signals debug for ... no subscribed PRs` empty-subscription status.
+
+Break validation proved the scenario fails when `/github debug` routing is changed, when the no-subscriptions debug copy changes, and when the experimental setting guard rejects enabled GitHub Signals. The row remains `needs-follow-up`/partial because it does not yet cover live subscribe/sync/polling against gitcrawl/GitHub data, notification inbox delivery, branch auto-subscribe, or reload parity.
