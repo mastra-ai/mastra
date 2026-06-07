@@ -46,6 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      issues: write
       pull-requests: write
       id-token: write
     steps:
@@ -135,6 +136,19 @@ jobs:
             --endpoint-url "${STUDIO_ENDPOINT_URL}" \
             --delete
 
+      - name: Notify linked issues (alpha available)
+        if: ${{ !inputs.dry_run }}
+        continue-on-error: true
+        run: |
+          pnpm install --ignore-workspace --ignore-scripts
+          npx tsx index.ts
+        working-directory: scripts/release-issue-notification
+        env:
+          MODE: alpha-released
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+
   # ===========================================
   # STABLE RELEASE: Manual trigger only
   # ===========================================
@@ -146,6 +160,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      issues: write
       pull-requests: write
       id-token: write
     steps:
@@ -275,6 +290,19 @@ jobs:
         run: |
           pnpm changeset-cli tag
           git push origin --tags
+
+      - name: Notify linked issues (stable released)
+        if: ${{ !inputs.dry_run }}
+        continue-on-error: true
+        run: |
+          pnpm install --ignore-workspace --ignore-scripts
+          npx tsx index.ts
+        working-directory: scripts/release-issue-notification
+        env:
+          MODE: stable-released
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
 
   enter_prerelease:
     needs: stable

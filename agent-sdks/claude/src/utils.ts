@@ -126,6 +126,7 @@ export function createMastraOutput<OUTPUT>({
   modelId,
   provider,
   stream,
+  responseText = '',
   options,
 }: {
   messages: MessageListInput;
@@ -133,11 +134,12 @@ export function createMastraOutput<OUTPUT>({
   modelId: string;
   provider: string;
   stream: ReadableStream<ChunkType>;
+  responseText?: string;
   options?: Partial<MastraModelOutputOptions<OUTPUT>>;
 }): MastraModelOutput<OUTPUT> {
   const messageList = new MessageList();
   messageList.add(messages, 'input');
-  messageList.add([{ role: 'assistant', content: '' }], 'response');
+  messageList.add([{ role: 'assistant', content: responseText }], 'response');
 
   return new MastraModelOutput<OUTPUT>({
     model: {
@@ -186,6 +188,7 @@ export function toFullOutput<OUTPUT>({
     modelId: result.response.modelId,
     provider,
     stream,
+    responseText: text,
     options,
   }).getFullOutput();
 }

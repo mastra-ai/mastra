@@ -45,6 +45,20 @@ describe('Combobox', () => {
     expect(screen.getByRole('option', { name: 'Google' })).toBeTruthy();
   });
 
+  it('portals the popup into document.body when there is no portal container provider', async () => {
+    const { container } = renderCombobox();
+
+    fireEvent.click(screen.getByRole('combobox'));
+
+    // The regression: outside a SideDialog the portal container resolved to
+    // `null`, which Base UI's FloatingPortal reads as "render nothing", so the
+    // popup never mounted. It must land in document.body, outside the trigger's
+    // own subtree.
+    const option = await screen.findByRole('option', { name: 'OpenAI' });
+    expect(document.body.contains(option)).toBe(true);
+    expect(container.contains(option)).toBe(false);
+  });
+
   it('selects an item and fires onValueChange with the selected value', async () => {
     const onValueChange = vi.fn();
     renderCombobox({ onValueChange });

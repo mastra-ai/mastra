@@ -6,6 +6,9 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts'],
     exclude: ['src/**/*.performance.test.ts', 'src/**/performance-indexes/*.test.ts'],
+    // Run files sequentially to avoid exhausting connections on the shared
+    // dockerized Postgres test database during package-level runs.
+    fileParallelism: false,
     coverage: {
       reporter: ['text', 'json', 'html'],
     },

@@ -35,7 +35,7 @@
     "concurrently": "^9.2.1",
     "dotenv": "^17.2.3",
     "mastra": "latest",
-    "tsx": "^4.21.0",
+    "tsx": "catalog:",
     "typescript": "^5.9.3",
     "zod": "^4.3.6"
   }
