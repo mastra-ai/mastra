@@ -94,10 +94,10 @@
 - `mastracode/src/tools/__tests__/get-allowed-paths.test.ts` — skill/sandbox path merging for subagent tool contexts.
 - `packages/core/src/workspace/tools/__tests__/tracing.test.ts` — workspace action trace sanitization redacts env-shaped objects and secret-pattern keys while preserving non-cyclic shared references.
 - `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts` — TUI formatting for workspace tool output including quiet view previews, diagnostics, tree summaries, and edge cases.
+- `mastracode/scripts/mc-e2e/scenarios/workspace-tool-names.ts` — partial TUI e2e: submits a real PTY prompt through OpenAI AIMock and verifies the provider-visible tool dictionary exposes stable Mastra Code aliases (`view`, `find_files`, `search_content`, `execute_command`, `lsp_inspect`) without leaking old `mastra_workspace_*` IDs. Break validations removed `view`, `lsp_inspect`, and `execute_command` overrides and the scenario failed request verification each time.
 
 ## Missing tests
 
-- End-to-end Mastra Code run proving the model sees renamed workspace tools and cannot call old `mastra_workspace_*` names by fallback ID.
 - Plan-mode integration test proving workspace write/edit/AST tools are hidden or disabled while read/search tools remain available.
 - Loaded-history test proving workspace tool results render identically after reload for representative read/list/edit/shell outputs.
 - Direct test that `getDynamicWorkspace()` reuses the registered workspace while updating allowed paths/tool config across mode changes, including default `os.tmpdir()`/`/tmp` inclusion and de-duplication.

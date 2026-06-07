@@ -26,7 +26,8 @@ export type ScenarioName =
   | 'stream-error-retry'
   | 'thread-history'
   | 'tool-schema-compat'
-  | 'workspace-commands';
+  | 'workspace-commands'
+  | 'workspace-tool-names';
 
 export type McE2eTerminal = {
   getByText: (text: string | RegExp, options?: { full?: boolean; strict?: boolean }) => any;

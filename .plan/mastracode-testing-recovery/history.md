@@ -4266,3 +4266,14 @@ Break validation proved the scenario fails when `/custom-providers` dispatch is 
 - Scenario launches an embedded Mastra Code TUI, monkeypatches the first `/chat/completions` fetch to return a retryable stream-event error chunk, then allows the retry to reach AIMock and asserts the real TUI renders `Recovered after retryable stream error.`
 - Focused verification: `pnpm --filter ./mastracode run e2e:test stream-error-retry`.
 - Tracker row `Models: Stream error retry processor` moved from missing e2e to partial e2e. It remains `needs-follow-up` because removing `StreamErrorRetryProcessor` from Mastra Code did not make this scenario fail: the provider SDK also retries the injected stream-event shape internally. The existing focused tests still directly prove processor wiring/order and matcher behavior; a future e2e needs a provider failure shape that bypasses SDK retry and exercises Mastra's processor specifically.
+
+### 2026-06-07 — Workspace tool aliases TUI e2e partial coverage
+
+- Added `mastracode/scripts/mc-e2e/scenarios/workspace-tool-names.ts` and `mastracode/scripts/mc-e2e/fixtures/workspace-tool-names.json`.
+- Scenario submits a real PTY Mastra Code prompt through OpenAI AIMock and verifies the provider-visible tool dictionary exposes stable Mastra Code workspace aliases (`view`, `find_files`, `search_content`, `execute_command`, `lsp_inspect`) while hiding old `mastra_workspace_*` IDs.
+- Break validations proven and reverted:
+  1. Removing the `view` name override made `mastra_workspace_read_file` leak and request verification failed.
+  2. Removing the `lsp_inspect` name override made `mastra_workspace_lsp_inspect` leak and request verification failed.
+  3. Removing the `execute_command` name override made `mastra_workspace_execute_command` leak and request verification failed.
+- Focused verification: `pnpm --filter ./mastracode run e2e:test workspace-tool-names`.
+- Tracker row `Tools: Workspace-backed coding tools` moved from missing e2e to partial e2e. Broader workspace behavior still needs plan-mode write disabling, loaded-history tool rendering, workspace reuse/allowed-path refresh, subagent inheritance, and real LSP smoke scenarios.
