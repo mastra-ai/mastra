@@ -21,6 +21,7 @@ import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
 import { persistentGoalCommandsScenario } from './persistent-goal-commands.js';
 import { persistentGoalJudgeDecisionScenario } from './persistent-goal-judge-decision.js';
 import { persistentGoalReloadScenario } from './persistent-goal-reload.js';
+import { planApprovalGoalHandoffScenario } from './plan-approval-goal-handoff.js';
 import { planApprovalHandoffScenario } from './plan-approval-handoff.js';
 import { processShortcutsScenario } from './process-shortcuts.js';
 import { promptContextInstructionsScenario } from './prompt-context-instructions.js';
@@ -72,6 +73,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'persistent-goal-commands': persistentGoalCommandsScenario,
   'persistent-goal-judge-decision': persistentGoalJudgeDecisionScenario,
   'persistent-goal-reload': persistentGoalReloadScenario,
+  'plan-approval-goal-handoff': planApprovalGoalHandoffScenario,
   'plan-approval-handoff': planApprovalHandoffScenario,
   'process-shortcuts': processShortcutsScenario,
   'provider-history-compat': providerHistoryCompatScenario,

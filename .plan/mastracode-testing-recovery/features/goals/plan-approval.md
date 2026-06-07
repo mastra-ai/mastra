@@ -72,6 +72,7 @@
 - `mastracode/src/tui/handlers/__tests__/prompts.test.ts` — regular approval sends one structured build handoff signal without duplicate `addUserMessage`/`fireMessage`; goal option delegates to `/goal`; streamed component activates in place.
 - `mastracode/src/tui/components/__tests__/plan-approval-inline.test.ts` — inline plan card renders, goal option exists, feedback mode keeps the plan visible while typing requested changes, narrow plan boxes stay width-safe, requested-changes display works, and feedback mode forces a full redraw.
 - `mastracode/scripts/mc-e2e/scenarios/plan-approval-handoff.ts` — switches to Plan mode in a real PTY TUI, uses AIMock `response.toolCalls` for `submit_plan`, approves the inline plan card, verifies the structured build-mode system reminder, and verifies the build handoff response.
+- `mastracode/scripts/mc-e2e/scenarios/plan-approval-goal-handoff.ts` — switches to Plan mode in a real PTY TUI, uses AIMock `response.toolCalls` for `submit_plan`, selects `Use as /goal`, verifies the canonical goal card/objective and active goal status, and ensures the approve-to-build reminder is not sent on the goal branch.
 - `mastracode/src/utils/__tests__/save-plan.test.ts` — approved plan file names/content, resource subdirectories, special-character titles, and timestamp non-overwrite behavior.
 - `packages/core/src/harness/display-state.test.ts` — `pendingPlanApproval` display state is set/cleared by plan approval events.
 - `packages/core/src/harness/mode-model-persistence.test.ts` — `respondToPlanApproval()` resolves plan approvals without aborting the resolver signal prematurely.
@@ -79,12 +80,8 @@
 
 ## Missing tests
 
-- Partial e2e coverage exists: `plan-approval-handoff` covers Plan-mode prompt → AIMock `submit_plan` tool call → inline approval card → user approval → structured build handoff reminder and build-mode model response.
-- Persisted history reload as a resolved plan card after approval.
-- Plan file persistence in the same real TUI approval flow.
-- Headless/non-TUI behavior for `submit_plan` approval fallback and resolver absence.
-- Regression test that denied `submit_plan` removes Plan-mode tool guidance and prevents accidental text-only plan completion.
-- Mapping test for the later PR that added `Use as /goal` to plan approval UI.
+- Primary TUI approval branches are now covered: `plan-approval-handoff` covers approval → build handoff, and `plan-approval-goal-handoff` covers `Use as /goal` → canonical goal run. Component/unit tests cover request-changes/reject, plan-file persistence, resolver behavior, and prompt/tool guidance.
+- Optional future depth: persisted history reload as a resolved plan card after approval, plus headless/non-TUI approval fallback behavior when slash-command UI is unavailable.
 
 ## Known risks / regressions
 

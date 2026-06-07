@@ -4470,3 +4470,9 @@ Added two deterministic TUI e2e scenarios for the reopened persistent `/goal` ro
 - `persistent-goal-reload` seeds active goal metadata in an isolated sqlite DB, loads it via `/threads`, and verifies the status line and `/goal status` reconstruct the persisted goal.
 
 Break validations proved the scenarios fail if `/goal resume` stops retriggering judge evaluation, if `GoalManager` does not mark `done` decisions as done, or if `loadFromThreadMetadata()` stops restoring persisted goal metadata. The persistent `/goal` tracker row is now validated; the remediation queue's top goal item moves to plan approval `Use as /goal`.
+
+## 2026-06-07 — Plan approval `Use as /goal` remediation
+
+Added `plan-approval-goal-handoff`, a real PTY/AIMock scenario for the second primary plan approval branch. The scenario switches to Plan mode, receives a `submit_plan` tool call, selects `Use as /goal`, verifies the canonical goal card/objective and active goal status, and verifies the approve-to-build reminder is not sent for the goal branch.
+
+Break validations proved the scenario fails if the `Use as /goal` option label changes, if goal selection routes through the approve callback, or if the plan-to-goal objective formatter drops the canonical `# Title` heading. Together with `plan-approval-handoff` and component/unit shields for reject/request-changes/persistence/resolver behavior, the plan approval tracker row is now validated.

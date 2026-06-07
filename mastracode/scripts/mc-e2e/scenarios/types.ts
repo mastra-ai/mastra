@@ -15,6 +15,7 @@ export type ScenarioName =
   | 'github-signals-command'
   | 'harness-api-config'
   | 'openai-strict-schema'
+  | 'plan-approval-goal-handoff'
   | 'plan-approval-handoff'
   | 'persistent-goal-commands'
   | 'persistent-goal-judge-decision'
