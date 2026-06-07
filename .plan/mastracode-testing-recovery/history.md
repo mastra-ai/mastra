@@ -4409,3 +4409,13 @@ Break validations:
 - Skipping `handleSubagentEnd()` completion made the scenario fail because the footer stayed in-progress instead of showing ✓.
 
 The row remains partial because Plan/Execute subagents, nested workspace-tool activity, forked context, `/subagents` configured model overrides, and reload/history parity still need coverage.
+
+### Audit-tests subagent removed/not-applicable correction
+
+Marked the historical `audit-tests` subagent row as removed / not applicable instead of missing TUI e2e. The feature was intentionally removed: no production `audit-tests`, `auditTestsSubagent`, or `Audit Tests` references remain under `mastracode/src`, and prompt tests verify the base prompt no longer advertises an `audit-tests` single-use exception.
+
+Verification:
+- `pnpm --filter ./mastracode exec vitest run src/agents/__tests__/prompts.test.ts src/agents/subagents/execute.test.ts --bail=1 --reporter=dot`
+- `test -z "$(rg -n "audit-tests|auditTestsSubagent|Audit Tests" mastracode/src --glob '!**/__tests__/**')"`
+
+No checked-in TUI e2e is appropriate unless a replacement user-facing skill or slash command is introduced.
