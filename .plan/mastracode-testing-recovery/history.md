@@ -4430,3 +4430,10 @@ Break validations:
 - Changing the app-data filename from `debug.log` made the expected log path missing.
 
 The row remains partial because direct `main.ts`/`headless.ts` startup-call coverage and long-session log growth behavior still need separate coverage.
+
+### 2026-06-07 — Web search rendering TUI e2e
+
+- Added `web-search-rendering` TUI e2e scenario with an AIMock `web_search_20250305` tool-call fixture and deterministic local extra tool, avoiding live Tavily/provider search while exercising the real TUI web-search renderer.
+- Scenario verifies provider-style `sources` output renders as title/URL rows, the footer preserves `web_search "Mastra e2e web search"`, the model follow-up receives the tool result, and `encryptedContent` never appears in the terminal.
+- Proved three focused breaks: corrupted provider source title extraction, removed query text from the footer, and leaked `encryptedContent` into output. All breaks failed the scenario and were reverted.
+- Tracker row `Tools: Web search tool rendering` moved from missing e2e to partial e2e; wrapper-level Tavily delegation/truncation and loaded-history parity remain follow-up.

@@ -37,6 +37,7 @@ import { toolSchemaCompatScenario } from './tool-schema-compat.js';
 import type { McE2eScenario, ScenarioName } from './types.js';
 import { updateCommandPromptScenario } from './update-command-prompt.js';
 import { visibleCommandsScenario } from './visible-commands.js';
+import { webSearchRenderingScenario } from './web-search-rendering.js';
 import { workspaceCommandsScenario } from './workspace-commands.js';
 import { workspaceToolNamesScenario } from './workspace-tool-names.js';
 
@@ -81,6 +82,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'thread-history': threadHistoryScenario,
   'tool-schema-compat': toolSchemaCompatScenario,
   'update-command-prompt': updateCommandPromptScenario,
+  'web-search-rendering': webSearchRenderingScenario,
   'workspace-commands': workspaceCommandsScenario,
   'workspace-tool-names': workspaceToolNamesScenario,
 };

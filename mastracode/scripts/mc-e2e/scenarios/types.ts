@@ -37,6 +37,7 @@ export type ScenarioName =
   | 'thread-history'
   | 'tool-schema-compat'
   | 'update-command-prompt'
+  | 'web-search-rendering'
   | 'workspace-commands'
   | 'workspace-tool-names';
 
