@@ -14,6 +14,7 @@ import { quietSettingsScenario } from './quiet-settings.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { startupScenario } from './startup.js';
 import { stateCommandsScenario } from './state-commands.js';
+import { stateSignalRenderingScenario } from './state-signal-rendering.js';
 import { storageSettingsScenario } from './storage-settings.js';
 import { threadHistoryScenario } from './thread-history.js';
 import type { McE2eScenario, ScenarioName } from './types.js';
@@ -40,6 +41,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'quiet-settings': quietSettingsScenario,
   'report-issue-command': reportIssueCommandScenario,
   'state-commands': stateCommandsScenario,
+  'state-signal-rendering': stateSignalRenderingScenario,
   'storage-settings': storageSettingsScenario,
   'thread-history': threadHistoryScenario,
   'workspace-commands': workspaceCommandsScenario,

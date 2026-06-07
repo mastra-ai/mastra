@@ -16,6 +16,7 @@ export type ScenarioName =
   | 'quiet-settings'
   | 'report-issue-command'
   | 'state-commands'
+  | 'state-signal-rendering'
   | 'storage-settings'
   | 'thread-history'
   | 'workspace-commands';
