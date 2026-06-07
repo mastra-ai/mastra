@@ -22,6 +22,7 @@ import { stateCommandsScenario } from './state-commands.js';
 import { stateSignalRenderingScenario } from './state-signal-rendering.js';
 import { storageSettingsScenario } from './storage-settings.js';
 import { streamErrorRetryScenario } from './stream-error-retry.js';
+import { streamingToolArgsScenario } from './streaming-tool-args.js';
 import { threadHistoryScenario } from './thread-history.js';
 import { toolSchemaCompatScenario } from './tool-schema-compat.js';
 import type { McE2eScenario, ScenarioName } from './types.js';
@@ -57,6 +58,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'state-signal-rendering': stateSignalRenderingScenario,
   'storage-settings': storageSettingsScenario,
   'stream-error-retry': streamErrorRetryScenario,
+  'streaming-tool-args': streamingToolArgsScenario,
   'thread-history': threadHistoryScenario,
   'tool-schema-compat': toolSchemaCompatScenario,
   'workspace-commands': workspaceCommandsScenario,

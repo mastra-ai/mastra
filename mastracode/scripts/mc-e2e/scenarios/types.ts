@@ -24,6 +24,7 @@ export type ScenarioName =
   | 'state-signal-rendering'
   | 'storage-settings'
   | 'stream-error-retry'
+  | 'streaming-tool-args'
   | 'thread-history'
   | 'tool-schema-compat'
   | 'workspace-commands'

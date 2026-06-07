@@ -4277,3 +4277,15 @@ Break validation proved the scenario fails when `/custom-providers` dispatch is 
   3. Removing the `execute_command` name override made `mastra_workspace_execute_command` leak and request verification failed.
 - Focused verification: `pnpm --filter ./mastracode run e2e:test workspace-tool-names`.
 - Tracker row `Tools: Workspace-backed coding tools` moved from missing e2e to partial e2e. Broader workspace behavior still needs plan-mode write disabling, loaded-history tool rendering, workspace reuse/allowed-path refresh, subagent inheritance, and real LSP smoke scenarios.
+
+### 2026-06-07 — Streaming tool arguments TUI e2e partial coverage
+
+- Added `mastracode/scripts/mc-e2e/scenarios/streaming-tool-args.ts`.
+- Scenario launches an embedded Mastra Code TUI and emits real Harness `tool_input_start`, delayed `tool_input_delta`, `tool_input_end`, `tool_start`, and `tool_end` events from a custom entrypoint.
+- The PTY test asserts partial `view src/streaming-args.ts` args render before the final range appears, then asserts final `tool_start`/`tool_end` replacement renders `src/streaming-args.ts:12-18` and the result text.
+- Break validations proven and reverted:
+  1. Skipping `tool_input_delta` dispatch made the scenario fail because partial streamed args never rendered before final args.
+  2. Parsing only the latest delta fragment instead of the canonical Harness display-state buffer made the scenario fail the partial-render assertion.
+  3. Suppressing `offset`/`limit` range rendering made the scenario fail waiting for `src/streaming-args.ts:12-18`.
+- Focused verification: `pnpm --filter ./mastracode run e2e:test streaming-tool-args`.
+- Tracker row `Tools: Streaming tool arguments` moved from missing e2e to partial e2e. It remains `needs-follow-up` because task-tool pre-text preservation and loaded-history/circular-result parity still need checked-in e2e coverage.

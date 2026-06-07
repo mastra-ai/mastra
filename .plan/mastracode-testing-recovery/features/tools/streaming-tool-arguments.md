@@ -81,9 +81,9 @@
 ## Missing tests
 
 - Covered by `mastracode/src/tui/handlers/__tests__/tool.test.ts`: `handleToolInputDelta()` parses canonical display-state buffered partial JSON into `pendingTools`, refreshes/renders the component, and ignores deltas without a buffer.
-- End-to-end TUI test covering live partial args then final `tool_start` replacement.
-- Regression test for pre-tool assistant text surviving task mutation tool input streaming.
-- History reload test proving partial args are not replayed and final args/results render correctly after circular-result sanitization.
+- Partial e2e coverage: `mastracode/scripts/mc-e2e/scenarios/streaming-tool-args.ts` emits live Harness `tool_input_start`/`tool_input_delta`/`tool_input_end`/`tool_start`/`tool_end` events through a custom real PTY entrypoint, asserts partial `view src/streaming-args.ts` args render before the final range, and asserts final `tool_start`/`tool_end` replacement renders `src/streaming-args.ts:12-18` plus the result line.
+- Still missing: regression test for pre-tool assistant text surviving task mutation tool input streaming.
+- Still missing: history reload test proving partial args are not replayed and final args/results render correctly after circular-result sanitization.
 
 ## Known risks / regressions
 
