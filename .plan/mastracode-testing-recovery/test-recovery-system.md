@@ -17,8 +17,13 @@ This is not optional and not merely representative. If users can see or interact
 E2E tests should become cheap enough to use broadly by investing in:
 
 - AIMock-driven deterministic model behavior.
+- AIMock's built-in tool-call fixture shape (`response.toolCalls`) plus `match.hasToolResult: true` follow-ups for model-driven tool behavior.
 - A solid Mastra Code TUI test utility.
 - A dedicated testing skill that documents the patterns, fixtures, and verification expectations.
+
+TUI e2e tests should exercise behavior as close to a real user as possible: terminal input, slash commands, keyboard navigation, AIMock fixtures, and sanitized DB/config seeding before launch. Do not shortcut user-visible behavior by reaching into Harness internals at runtime (`harness.emit()`, direct display-state mutation, or thread APIs like `createThread()`/`getCurrentThreadId()` when `/new`, `/threads`, or normal startup can exercise the flow). Notification/state signal tests are the exception because the visible event originates outside terminal input; those may use the public agent signal APIs (`sendNotificationSignal`, `sendStateSignal`).
+
+Streaming and loaded-from-history/reload behavior are separate contracts. When a feature has different live-streaming and persisted-history projections, e2e coverage should include both paths or keep the tracker row `partial` with the missing projection named explicitly.
 
 When realistic LLM/OM fixture data is needed, agents may read long real-world conversations and observational-memory data from the local Mastra Code database under the user's Application Support directory, but only with explicit read-only operations. That data must be sanitized and transformed into deterministic AIMock-compatible fixtures; tests must never depend on or mutate the live local database.
 

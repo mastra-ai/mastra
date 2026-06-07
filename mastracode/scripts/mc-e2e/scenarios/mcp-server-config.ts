@@ -34,8 +34,6 @@ const result = await createMastraCode({
   },
 });
 
-await result.harness.createThread({ title: 'MCP server config e2e thread' });
-
 const tui = new MastraTUI({
   harness: result.harness,
   hookManager: result.hookManager,

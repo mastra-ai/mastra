@@ -76,7 +76,7 @@
 
 ## Missing tests
 
-- End-to-end run that starts a real `/goal`, completes several model turns including a `waiting` checkpoint, reloads, resumes, and verifies persisted status/duration/history.
+- End-to-end run that starts a real `/goal`, completes several model turns including a `waiting` checkpoint, reloads, resumes, and verifies persisted status/duration/history. Use AIMock structured-output fixtures for judge decisions: `match.responseFormat: "json_object"` and object-valued `response.content` so AIMock auto-stringifies the judge JSON.
 - Non-TUI/headless behavior for goal state and continuation when slash-command UI is unavailable.
 - E2E/snapshot coverage for a full persistent-goal status-line session after reload.
 

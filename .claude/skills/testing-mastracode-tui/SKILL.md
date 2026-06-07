@@ -62,6 +62,9 @@ export const myScenario = {
 - Match the actual user prompt with `match.userMessage`.
 - Use `endpoint: "chat"` for OpenAI fixtures; AIMock normalizes Responses API requests into chat-style fixture matching.
 - Ensure LLM scenarios assert through the runner's AIMock request count. A passing LLM scenario should show a nonzero AIMock request count.
+- Use AIMock's first-class tool-call fixture shape for model-driven tool behavior instead of synthesizing Harness events. A fixture response may include `toolCalls: [{ name, arguments, id? }]`; pair the follow-up fixture with `match.hasToolResult: true` when the model should answer after the real tool executes.
+- Use `streamingProfile` and, when useful, `chunkSize` to make streamed content or streamed tool-call arguments observable in the TUI. For example, `{ "streamingProfile": { "ttft": 200, "tps": 2 } }` slows chunks enough to assert partial UI states.
+- For structured-output paths such as `/goal` judge decisions, use AIMock structured-output matching: `match.responseFormat: "json_object"` and object-valued `response.content`; AIMock auto-stringifies object content in fixture files.
 - If realistic long conversations or observational-memory examples are needed, read from the local Mastra Code database in Application Support only with read-only operations, sanitize user/project/provider data, and commit only deterministic AIMock-compatible fixtures derived from that data.
 - Use `--record-ai` only for explicit fixture authoring/debugging, never as default CI behavior.
 
@@ -88,6 +91,8 @@ Example fixture shape:
 
 - Do not generate scenario source, wrapper tests, or config files. The wrapper is static: `mastracode/scripts/mc-e2e/tui.test.ts`.
 - Keep scenario logic in checked-in files. The runner passes runtime config through env vars into the static wrapper.
+- Runtime behavior should be driven as close to a real user as possible: terminal input, slash commands, keyboard navigation, AIMock model/tool fixtures, and sanitized DB/config seeding before launch.
+- Do not reach into Harness internals at runtime for user-visible behavior. Avoid `harness.emit()`, `getDisplayState()` mutation, or direct thread APIs like `createThread()`/`getCurrentThreadId()` when `/new`, `/threads`, or normal TUI startup can exercise the behavior. The allowed exception is notification/state signal scenarios, where the user-visible event originates outside terminal input and should use the public agent signal APIs (`sendNotificationSignal`, `sendStateSignal`).
 - Keep per-scenario runtime isolation: app data dir, DB paths, temp project dir, and provider env.
 - Do not spread real user app data into tests. Use `MASTRA_APP_DATA_DIR` for isolated app data.
 - Keep observe mode live and readable; do not switch back to record-then-replay unless explicitly requested.
@@ -98,6 +103,8 @@ Example fixture shape:
 For narrow rendering bugs, a colocated unit test or tiny render helper can be better than e2e. Render the component at multiple terminal widths and assert semantic output or visible widths after stripping ANSI codes.
 
 Use e2e when the behavior depends on real keyboard input, startup context, terminal sizing, model wiring, thread/session behavior, or visible TUI integration.
+
+For features with distinct live-streaming and loaded-from-history/reload projections, test both paths when practical. If only the live path is covered, mark the recovery row `partial` and explicitly name the missing persisted-history/reload parity.
 
 ## Verification checklist
 

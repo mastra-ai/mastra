@@ -418,6 +418,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const githubSignals: GithubSignals | undefined = globalSettings.signals?.experimentalGithubSignals
     ? new GithubSignals({
         cwd: project.rootPath,
+        gitcrawlCommand:
+          process.env.MASTRACODE_GITCRAWL_BIN ??
+          process.env.GITCRAWL_BIN ??
+          process.env.MASTRACODE_GITCRAWL_COMMAND ??
+          process.env.GITCRAWL_COMMAND,
         getNotificationStreamOptions: ({ resourceId, threadId }) => {
           const requestContext = new RequestContext();
           const harnessContext: HarnessRequestContext = {

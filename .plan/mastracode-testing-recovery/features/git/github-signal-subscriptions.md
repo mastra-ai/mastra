@@ -70,12 +70,12 @@
 - `mastracode/src/tui/commands/__tests__/github.test.ts` — command parsing/status/sync behavior, disabled setting guard, missing processor guard, no-current-PR no-op, and swallowed subscribe errors.
 - `mastracode/src/__tests__/index.test.ts` — enabling `experimentalGithubSignals` wires the processor and starts polling for existing subscriptions.
 - `mastracode/src/tui/__tests__/render-messages.test.ts` and `handlers/__tests__/message.test.ts` — raw GitHub subscribe/unsubscribe reactive signals are hidden from chat rendering.
-- `mastracode/scripts/mc-e2e/scenarios/github-signals-command.ts` — partial TUI e2e coverage for the experimental setting guard and `/github debug` empty-subscription status in a real PTY with a current thread.
+- `mastracode/scripts/mc-e2e/scenarios/github-signals-command.ts` — partial TUI e2e coverage for `/new` + a real model turn + `/github subscribe mastra-ai/mastra#17637` + baseline notification + `/github debug`, using `MASTRACODE_GITCRAWL_BIN` to point at a temp mock gitcrawl binary and a sanitized sqlite fixture derived from the local `~/.config/gitcrawl/gitcrawl.db` schema/data shape.
 
 ## Missing tests
 
-- Full local integration with a real gitcrawl database and GitHub CLI/git remote configuration.
-- End-to-end TUI run from `/github subscribe` through polling, notification summary, `notification_inbox read`, and thread reload. The `github-signals-command` scenario only covers the deterministic `/github debug` status surface.
+- Full local integration with the real gitcrawl binary, real GitHub CLI/git remote configuration, and non-sanitized live GitHub state remains outside CI.
+- End-to-end TUI run from polling-delivered changes through `notification_inbox read` and thread reload. The `github-signals-command` scenario covers subscribe/sync snapshot ingestion, the immediate baseline notification card, and debug metadata projection, but not later interval polling, inbox read transitions, branch auto-subscribe, or reload parity.
 - Multi-thread/process polling handoff regression for more than one open Mastra Code process.
 - Direct `handleAgentEnd()` lifecycle test proving auto-subscribe runs once per thread and does not run on abort/error cleanup paths unless intentionally added.
 
