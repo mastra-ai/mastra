@@ -9,6 +9,7 @@ import { customSlashCommandScenario } from './custom-slash-command.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
 import { githubSignalsCommandScenario } from './github-signals-command.js';
 import { integrationCommandsScenario } from './integration-commands.js';
+import { mcpServerConfigScenario } from './mcp-server-config.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
 import { notificationSignalRenderingScenario } from './notification-signal-rendering.js';
 import { omSettingsScenario } from './om-settings.js';
@@ -48,6 +49,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,
   'modal-and-shell': modalAndShellScenario,
+  'mcp-server-config': mcpServerConfigScenario,
   'notification-signal-rendering': notificationSignalRenderingScenario,
   'om-settings': omSettingsScenario,
   'openai-strict-schema': openaiStrictSchemaScenario,

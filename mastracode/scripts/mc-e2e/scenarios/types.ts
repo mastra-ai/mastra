@@ -16,6 +16,7 @@ export type ScenarioName =
   | 'visible-commands'
   | 'integration-commands'
   | 'modal-and-shell'
+  | 'mcp-server-config'
   | 'notification-signal-rendering'
   | 'om-settings'
   | 'quiet-settings'

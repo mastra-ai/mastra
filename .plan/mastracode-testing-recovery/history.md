@@ -4301,3 +4301,14 @@ Break validation proved the scenario fails when `/custom-providers` dispatch is 
   3. Skipping completed inline task rendering made the scenario fail waiting for `[2/2]` completed history.
 - Focused verification: `pnpm --filter ./mastracode run e2e:test task-progress-events`.
 - Tracker row `Tools: Task tracking tools and TUI progress` moved from missing e2e to partial e2e. It remains `needs-follow-up` because prompt-context agreement and reload/history reconstruction still need checked-in e2e coverage.
+
+### 2026-06-07 — MCP server configuration TUI e2e partial coverage
+
+- Added `mastracode/scripts/mc-e2e/scenarios/mcp-server-config.ts`.
+- Scenario launches an embedded Mastra Code TUI with programmatic stdio `mcpServers`, lets background MCP initialization run, verifies the configured failing server is reported, then submits `/mcp status` and asserts the configured server renders with `[stdio]` transport and the reload hint.
+- Break validations proven and reverted:
+  1. Dropping `config.mcpServers` from `createMcpManager(project.rootPath, configDir, config?.mcpServers)` made the configured server never appear.
+  2. Removing transport from `/mcp status` made the scenario fail waiting for `e2e_stdio_config [stdio]`.
+  3. Disabling TUI background MCP initialization made the scenario fail waiting for the configured server failure/status.
+- Focused verification: `pnpm --filter ./mastracode run e2e:test mcp-server-config`.
+- Tracker row `Integrations: MCP server configuration` moved from missing e2e to partial e2e. It remains `needs-follow-up` because real HTTP/SSE tool calls, OAuth token persistence/refresh, skipped HTTP validation reasons, and headless MCP tool availability still need checked-in e2e coverage.
