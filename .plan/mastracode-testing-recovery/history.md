@@ -4175,3 +4175,28 @@ Verification:
 - `pnpm --filter ./mastracode check` passed.
 - `pnpm --filter ./mastracode lint` passed.
 - `pnpm run build:mastracode` passed.
+
+## 2026-06-06 — Active signal follow-up TUI e2e batch
+
+Added `active-signal-followup` checked-in TUI e2e scenario:
+- Starts an AIMock-backed streaming run with chunk pacing.
+- Submits `Steer while active.` through the real TUI before the initial response completes.
+- Asserts the pending interjection UI (`↳ Steer while active. pending…`) appears.
+- Waits for both the initial and follow-up AIMock responses.
+- Verifies captured AIMock request bodies include `<user delivery="message">Start a slow active signal run.</user>` and `<user delivery="while-active">Steer while active.</user>`.
+
+Rows moved from missing e2e to covered e2e:
+- Chat: Agent signals and streaming follow-ups — validated for Mastra Code TUI active-run signal follow-ups.
+
+Break validation:
+- Changed active signal delivery from `while-active` to `message` -> TUI still completed, but AIMock request verification failed.
+- Routed active Enter through the old queued follow-up path -> scenario showed normal user boxes plus `2 queued`, no pending signal interjection, and zero AIMock requests.
+- Removed pending interjection projection -> model requests still completed, but `↳ … pending…` never appeared.
+- All intentional breaks were reverted before committing.
+
+Verification:
+- `pnpm --filter ./mastracode run e2e:test active-signal-followup` passed with 2 AIMock requests.
+- `pnpm --filter ./mastracode run e2e:test -- --jobs 2` passed: 20/20 scenarios.
+- `pnpm --filter ./mastracode check` passed.
+- `pnpm --filter ./mastracode lint` passed.
+- `pnpm run build:mastracode` passed.

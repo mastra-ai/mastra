@@ -91,6 +91,10 @@
 - Full browser/TUI integration where a multimodal follow-up is sent during a real streaming run and echoed through the subscribed thread stream.
 - Playground visual regression for pending signal preview pills and send/cancel button switching while streaming.
 
+## E2E coverage
+
+- `active-signal-followup` starts an AIMock-backed streaming run, submits `Steer while active.` through the real TUI before the first response completes, asserts the pending interjection (`↳ … pending…`) appears, waits for both responses, and verifies captured AIMock request bodies include `<user delivery="message">…</user>` for the initial prompt and `<user delivery="while-active">…</user>` for the follow-up. Break checks proved failures when active delivery was downgraded to `message`, active Enter used the old queued follow-up path, and pending interjection projection was removed.
+
 ## Known risks / regressions
 
 - Signal support spans core Agent, Harness, React SDK, Mastra Code TUI, Playground, and server handlers; mismatched option shapes can silently fall back or duplicate messages.
