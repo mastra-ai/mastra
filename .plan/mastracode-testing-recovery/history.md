@@ -4455,3 +4455,18 @@ The row remains partial because direct `main.ts`/`headless.ts` startup-call cove
 - Reviewed the tracker after the final missing-row e2e additions. All 56 rows now have either `validated` or `deferred-needs-review` status.
 - Converted the 34 remaining partial rows from `needs-follow-up` to `deferred-needs-review`. Each row keeps its checked-in TUI e2e evidence, supporting tests, break-validation evidence, and row-specific residual contracts in the TUI status/notes.
 - Added a tracker-level deferral review note and updated `remediation-queue.md` as the explicit follow-up rationale grouped by fixture/data needs. These deferred contracts are review items, not hidden unfinished tracker rows.
+
+### 2026-06-07 — Reopened broad deferrals after user review
+
+- User asked why 34 rows were deferred; goal judge rejected the broad deferral batch because the user had not approved it.
+- Reopened all broad `deferred-needs-review` rows as unfinished `needs-follow-up`.
+- Next queue item: priority 1 from `remediation-queue.md` — persistent goals judge decisions/reload parity and plan approval goal handoff.
+
+## 2026-06-07 — Persistent goal judge/reload remediation
+
+Added two deterministic TUI e2e scenarios for the reopened persistent `/goal` row:
+
+- `persistent-goal-judge-decision` seeds a persisted paused goal with `lastPauseWasJudgeFailure`, loads it through `/threads`, resumes through `/goal resume`, drives AIMock judge `continue` then main continuation then judge `done`, and verifies visible `Goal ● done (2/3)` plus final `/goal status`.
+- `persistent-goal-reload` seeds active goal metadata in an isolated sqlite DB, loads it via `/threads`, and verifies the status line and `/goal status` reconstruct the persisted goal.
+
+Break validations proved the scenarios fail if `/goal resume` stops retriggering judge evaluation, if `GoalManager` does not mark `done` decisions as done, or if `loadFromThreadMetadata()` stops restoring persisted goal metadata. The persistent `/goal` tracker row is now validated; the remediation queue's top goal item moves to plan approval `Use as /goal`.

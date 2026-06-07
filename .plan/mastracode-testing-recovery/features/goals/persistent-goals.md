@@ -74,13 +74,13 @@
 - `mastracode/src/tui/handlers/__tests__/prompts.test.ts` and `parallel-interactive-prompts.test.ts` — ask_user prompts remain user-controlled during active goals, and plan approval goal mode resolves the suspended plan before starting `/goal` without sending a duplicate build reminder.
 - `mastracode/src/tui/__tests__/status-line.test.ts` — active judge status-line priority on narrow terminals when OM progress, active-goal state, and long model IDs compete for space.
 - `mastracode/scripts/mc-e2e/scenarios/persistent-goal-commands.ts` — starts a persistent `/goal` through the real PTY TUI with seeded judge defaults, verifies the active-goal status-line label, pauses through `/goal pause`, clears through `/goal clear`, and verifies empty `/goal status` feedback.
+- `mastracode/scripts/mc-e2e/scenarios/persistent-goal-judge-decision.ts` — loads a persisted paused goal with `lastPauseWasJudgeFailure`, resumes through `/goal resume`, drives AIMock judge `continue` → main continuation → judge `done`, and verifies visible completion plus final `/goal status`.
+- `mastracode/scripts/mc-e2e/scenarios/persistent-goal-reload.ts` — seeds persisted active goal metadata, loads it through `/threads`, and verifies active status-line plus `/goal status` reconstruction.
 
 ## Missing tests
 
-- Partial e2e coverage exists: `persistent-goal-commands` covers real `/goal <objective>` startup, active status-line projection, `/goal pause`, `/goal clear`, and empty `/goal status` feedback with AIMock-backed model responses.
-- End-to-end run that starts a real `/goal`, completes several model turns including a `waiting` checkpoint, reloads, resumes, and verifies persisted status/duration/history. Use AIMock structured-output fixtures for judge decisions; this path still needs a robust fixture matcher for the judge request shape.
-- Non-TUI/headless behavior for goal state and continuation when slash-command UI is unavailable.
-- E2E/snapshot coverage for a full persistent-goal status-line session after reload.
+- Optional broader e2e depth remains for `waiting` checkpoint UX and approved-plan goal return-to-plan behavior; the primary persistent-goal command lifecycle, judge continuation/done path, and loaded-history restoration are now checked in.
+- Non-TUI/headless behavior for goal state and continuation when slash-command UI is unavailable remains covered by focused lower-level tests rather than TUI e2e.
 
 ## Known risks / regressions
 

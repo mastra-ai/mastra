@@ -3,19 +3,18 @@
 ## Current state
 
 - Checked-in TUI e2e coverage is no longer missing for any tracker row.
-- The remaining partial rows are marked `deferred-needs-review` in the tracker. This queue is the explicit rationale/follow-up plan for deferred residual contracts: reload/history parity, broader user flows, and integration-specific fixture depth.
+- 33 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: reload/history parity, broader user flows, and integration-specific fixture depth.
 - Keep the user-realism rule: drive behavior through terminal input, slash commands, AIMock fixtures, deterministic pre-launch config/DB seeds, or approved external signal APIs for notification/state-signal origins. Do not emit Harness internals or mutate runtime display state directly.
 
 ## Priority queue
 
-### 1. Persistent goals: judge decisions and reload parity
+### 1. Plan approval as goal handoff
 
-- Rows: `Goals: Persistent /goal mode`, `Goals: Plan approval and build handoff`.
-- Proposed scenarios:
-  - `persistent-goal-judge-decision`: start `/goal`, use AIMock structured-output judge fixture to return `continue`, then `done`, and assert visible continuation/complete feedback.
-  - `persistent-goal-reload`: seed/drive a goal, restart or launch a new scenario against persisted test DB state, assert `/goal status` and context reminders survive reload.
-  - `plan-approval-goal-handoff`: use existing AIMock `submit_plan` pattern, select `Use as /goal`, assert active goal status and subsequent judge prompt.
-- Fixture/data needs: AIMock JSON/object response fixtures for judge outputs, plus deterministic LibSQL seed data for reload cases.
+- Rows: `Goals: Plan approval and build handoff`.
+- Completed from prior top item: `persistent-goal-judge-decision` and `persistent-goal-reload` validate persistent `/goal` judge decisions and loaded-history restoration; that tracker row is now `validated`.
+- Proposed scenario:
+  - `plan-approval-goal-handoff`: use existing AIMock `submit_plan` pattern, select `Use as /goal`, assert active goal status and subsequent judge prompt/return-to-plan behavior.
+- Fixture/data needs: AIMock `submit_plan` and judge output fixtures, plus deterministic persisted plan/goal metadata if reload is included.
 
 ### 2. Tool rendering live-vs-history parity
 
@@ -77,7 +76,7 @@
 
 ## Suggested execution order
 
-1. Goals judge/reload, because the structured-output AIMock pattern is already identified and high-risk.
+1. Plan approval `Use as /goal`, because persistent-goal judge/reload is now validated and this is the remaining high-risk goal branch.
 2. Tool reload/history parity, because many partial rows share the same DB-seed fixture work.
 3. Notification/state signal state transitions, because public signal APIs are already allowed but CRUD/reload parity is missing.
 4. GitHub incremental mock-gitcrawl, because the binary override and sanitized sqlite fixture already exist.

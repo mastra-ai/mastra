@@ -17,6 +17,8 @@ export type ScenarioName =
   | 'openai-strict-schema'
   | 'plan-approval-handoff'
   | 'persistent-goal-commands'
+  | 'persistent-goal-judge-decision'
+  | 'persistent-goal-reload'
   | 'process-shortcuts'
   | 'provider-history-compat'
   | 'prompt-context-instructions'
