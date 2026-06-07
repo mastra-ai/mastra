@@ -4491,3 +4491,13 @@ Break validations proved the scenario fails if the `Use as /goal` option label c
   - `Tools: Streaming tool arguments` moved to `validated` because live partial-to-final rendering and loaded final reconstruction are both covered.
   - `Tools: Web search tool rendering` moved to `validated` because live provider-style rendering and loaded-history parity are both covered.
   - `Tools: Task tracking tools and TUI progress`, `Tools: Workspace-backed coding tools`, and `Integrations: Harness display state` remain `needs-follow-up` but now include the `tool-history-reload` evidence.
+
+## 2026-06-07 — Task inline live transition remediation
+
+- Added `task-inline-transitions` TUI e2e scenario and AIMock fixture. The scenario drives real task tools through the PTY TUI: `task_write` creates two tasks, `task_complete` completes the active task, a clearing `task_write` empties the list, and a final model response completes the turn.
+- Verified live completed and cleared inline transitions: `Tasks [2/2 completed]`, completed task rows, `Tasks cleared`, and final assistant response all render through the real TUI. The fixture verifies four AIMock requests and the expected task tool-call IDs.
+- Break validations proved the scenario catches regressions:
+  - Disabling `renderCompletedTasksInline()` in `event-dispatch.ts` timed out waiting for `Tasks [2/2 completed]`.
+  - Disabling `renderClearedTasksInline()` in `event-dispatch.ts` timed out waiting for `Tasks cleared`.
+  - Changing the cleared label in `render-messages.ts` from `cleared` to `removed` timed out waiting for `Tasks cleared`.
+- Clean focused verification: `pnpm --filter ./mastracode run e2e:test task-inline-transitions`; `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.

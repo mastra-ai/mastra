@@ -35,6 +35,7 @@ import { storageSettingsScenario } from './storage-settings.js';
 import { streamErrorRetryScenario } from './stream-error-retry.js';
 import { streamingToolArgsScenario } from './streaming-tool-args.js';
 import { subagentDelegationScenario } from './subagent-delegation.js';
+import { taskInlineTransitionsScenario } from './task-inline-transitions.js';
 import { taskProgressEventsScenario } from './task-progress-events.js';
 import { threadHistoryScenario } from './thread-history.js';
 import { toolHistoryReloadScenario } from './tool-history-reload.js';
@@ -87,6 +88,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'stream-error-retry': streamErrorRetryScenario,
   'streaming-tool-args': streamingToolArgsScenario,
   'subagent-delegation': subagentDelegationScenario,
+  'task-inline-transitions': taskInlineTransitionsScenario,
   'task-progress-events': taskProgressEventsScenario,
   'thread-history': threadHistoryScenario,
   'tool-history-reload': toolHistoryReloadScenario,

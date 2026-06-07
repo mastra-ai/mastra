@@ -10,11 +10,12 @@
 
 ### 1. Tool rendering live-vs-history parity
 
-- Completed in this chunk: `tool-history-reload` seeds completed persisted `view`, `task_write`, and `web_search_20250305` messages into an isolated DB, opens `/threads`, and asserts reconstructed render matches live e2e expectations. This validates `Tools: Streaming tool arguments` and `Tools: Web search tool rendering`, and reduces the residual gaps for task tracking, harness display state, and workspace tools.
+- Completed: `tool-history-reload` seeds completed persisted `view`, `task_write`, and `web_search_20250305` messages into an isolated DB, opens `/threads`, and asserts reconstructed render matches live e2e expectations. This validates `Tools: Streaming tool arguments` and `Tools: Web search tool rendering`, and reduces the residual gaps for task tracking, harness display state, and workspace tools.
+- Completed: `task-inline-transitions` uses AIMock tool-call fixtures for `task_write` → `task_complete` → clearing `task_write`, then asserts completed and cleared inline rendering in the live PTY TUI.
 - Remaining rows: `Tools: Task tracking tools and TUI progress`, `Integrations: Harness display state`, `Tools: Workspace-backed coding tools`.
 - Proposed scenarios:
-  - `task-progress-completed-inline`: AIMock `task_write` + follow-up fixture that completes/clears tasks and asserts completed/cleared inline rendering after the model turn.
   - `workspace-tool-output-rendering`: AIMock calls `lsp_inspect`/`execute_command` and asserts visible result cards, not only provider-visible aliases.
+  - `task-patch-prompt-context`: AIMock calls `task_update`/`task_check` and verifies patch-tool output plus follow-up request prompt context includes the updated `<current-task-list>` snapshot.
 - Fixture/data needs: AIMock tool-call fixtures for live path plus any remaining sanitized stored-message fixtures for shell/LSP/edit breadth.
 
 ### 2. Notification and state signals beyond first render
