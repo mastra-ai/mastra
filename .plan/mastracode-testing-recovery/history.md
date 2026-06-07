@@ -4353,3 +4353,14 @@ Break validation proved the scenario fails when `/custom-providers` dispatch is 
 - Break validations: changing the Ctrl+Z help text, remapping undo from Alt+Z to Alt+X, and stopping Ctrl+C from saving `lastClearedText` each failed the real PTY scenario. All breaks were reverted.
 - Focused verification: `pnpm --filter ./mastracode run e2e:test process-shortcuts`.
 - Tracker row moved from missing e2e to partial e2e. Actual Unix job-control coverage (`SIGTSTP` + shell `fg`/`SIGCONT`, including active streamed output after resume) remains missing until the TUI e2e runner exposes a safe suspend/resume primitive.
+
+### Core Harness API TUI e2e partial coverage
+
+Added `harness-api-config`, a checked-in TUI e2e scenario that launches a custom `createMastraCode()` entrypoint through the real PTY. The scenario verifies configured `configDir` loads a custom slash command, a conflicting `initialState.configDir` cannot override the configured directory, and caller `initialState.yolo=false` reaches `/yolo`.
+
+Break validations:
+- Ignoring caller `configDir` made `/help` miss `//harness-api`.
+- Letting `initialState.configDir` override configured `configDir` made the wrong command directory win.
+- Dropping caller `initialState` made `/yolo` toggle the default ON state to OFF instead of toggling configured OFF to ON.
+
+The row remains partial because docs-snippet compile/API package smoke, positional-call negative tests, and docs redirect checks are still missing.

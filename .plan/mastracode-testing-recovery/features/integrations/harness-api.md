@@ -107,12 +107,14 @@
 - `packages/core/src/agent/__tests__/browser.test.ts` — verifies browser propagation into Agent execution context and thread-aware browser sessions.
 - `mastracode/src/HarnessCompat.test.ts` — verifies composed state, session/model/mode delegation, clone/list thread metadata, and legacy `switchMode()` fallback.
 - `mastracode/src/__tests__/index.test.ts` — verifies default dynamic memory is passed into Harness, caller-supplied memory plus `configDir` override wiring, explicit-vs-Unix PubSub selection, cross-process PubSub validation/thread-lock behavior, GitHubSignals processor wiring, and adjacent `createMastraCode()` runtime wiring.
+- `mastracode/scripts/mc-e2e/scenarios/harness-api-config.ts` — launches a custom `createMastraCode()` entrypoint through the real PTY TUI and verifies caller `configDir` loads custom commands, conflicting `initialState.configDir` cannot override the configured directory, and caller `initialState.yolo=false` reaches `/yolo`.
 - `packages/core/src/events/__tests__/unix-socket-pubsub.test.ts` and `mastracode/src/utils/__tests__/signals-pubsub.test.ts` — verify Unix socket broker election, fan-out, backpressure, stale socket recovery, and per-thread socket path routing.
 - `mastracode/src/tui/__tests__/*`, `mastracode/src/tui/handlers/__tests__/*`, and command tests indirectly compile/run the migrated TUI call sites.
 - `mastracode/src/headless.test.ts` indirectly covers migrated non-TUI call sites.
 
 ## Missing tests
 
+- Partial e2e coverage exists: `harness-api-config` covers caller `createMastraCode()` `configDir`/`initialState` state reaching the real TUI, with break validations for ignored `configDir`, `initialState.configDir` override ordering, and dropped `initialState` passthrough.
 - API compatibility/type smoke that imports `@mastra/core/harness` and exercises the documented object-param examples.
 - Docs example compile check for `docs/src/content/en/reference/harness/harness-class.mdx` snippets.
 - Redirect smoke test for removed Mastra Code docs paths, if the docs site does not already cover `docs/vercel.json` redirects.

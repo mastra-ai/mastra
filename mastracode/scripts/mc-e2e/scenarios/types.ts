@@ -11,6 +11,7 @@ export type ScenarioName =
   | 'file-autocomplete'
   | 'first-run-onboarding'
   | 'github-signals-command'
+  | 'harness-api-config'
   | 'openai-strict-schema'
   | 'process-shortcuts'
   | 'provider-history-compat'
