@@ -29,6 +29,7 @@ import { taskProgressEventsScenario } from './task-progress-events.js';
 import { threadHistoryScenario } from './thread-history.js';
 import { toolSchemaCompatScenario } from './tool-schema-compat.js';
 import type { McE2eScenario, ScenarioName } from './types.js';
+import { updateCommandPromptScenario } from './update-command-prompt.js';
 import { visibleCommandsScenario } from './visible-commands.js';
 import { workspaceCommandsScenario } from './workspace-commands.js';
 import { workspaceToolNamesScenario } from './workspace-tool-names.js';
@@ -67,6 +68,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'task-progress-events': taskProgressEventsScenario,
   'thread-history': threadHistoryScenario,
   'tool-schema-compat': toolSchemaCompatScenario,
+  'update-command-prompt': updateCommandPromptScenario,
   'workspace-commands': workspaceCommandsScenario,
   'workspace-tool-names': workspaceToolNamesScenario,
 };

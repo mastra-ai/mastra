@@ -30,6 +30,7 @@ export type ScenarioName =
   | 'task-progress-events'
   | 'thread-history'
   | 'tool-schema-compat'
+  | 'update-command-prompt'
   | 'workspace-commands'
   | 'workspace-tool-names';
 

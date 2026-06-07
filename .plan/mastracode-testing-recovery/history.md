@@ -4337,3 +4337,11 @@ Break validation proved the scenario fails when `/custom-providers` dispatch is 
 - The scenario removes seeded `settings.json`/`auth.json` before launch, verifies the first-run `Welcome to Mastra Code` setup overlay appears, selects `Skip` via real arrow/Enter key input, and asserts the normal Mastra Code TUI prompt returns without onboarding overlay text.
 - Break validations: changing the welcome title, renaming the `Skip` option, and making Skip advance into Authentication instead of dismissing each failed the real PTY scenario. All breaks were reverted.
 - Tracker row moved from missing to partial e2e. Built package pack/install, global/npx startup, and packed `--prompt` smoke remain missing.
+
+## 2026-06-07 — Auto-update `/update` TUI e2e
+
+- Added `MASTRACODE_UPDATE_LATEST_VERSION` and `MASTRACODE_UPDATE_CHANGELOG` env overrides for hermetic update prompt tests, plus `MASTRACODE_DISABLE_UPDATE_CHECK=1` to suppress automatic startup/passive checks while still allowing manual `/update`.
+- Added `update-command-prompt` as the 34th checked-in TUI e2e scenario for `Setup: Auto-update prompts`.
+- The scenario runs `/update` through the real TUI, renders the mocked newer version/changelog inline question, selects `No`, and verifies `Update skipped.` without executing any global package-manager install.
+- Break validations: disabling the latest-version env seam, changing the update prompt headline, and renaming the `No` option each failed the real PTY scenario. All breaks were reverted.
+- Tracker row moved from missing to partial e2e. Startup automatic prompt, passive recheck banner, Yes/install path, and packed-version detection remain follow-up.

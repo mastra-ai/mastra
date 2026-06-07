@@ -591,13 +591,15 @@ export class MastraTUI {
 
     await this.showQuietModePreferencePromptIfNeeded();
 
-    // Check for updates after first render so network latency never blocks startup.
-    void this.checkForUpdate().catch(() => {});
+    if (process.env.MASTRACODE_DISABLE_UPDATE_CHECK !== '1') {
+      // Check for updates after first render so network latency never blocks startup.
+      void this.checkForUpdate().catch(() => {});
 
-    // Periodically recheck for updates during long-running sessions (passive only)
-    this.updateCheckTimer = setInterval(() => {
-      void this.checkForUpdate(/* passive */ true);
-    }, UPDATE_RECHECK_INTERVAL_MS);
+      // Periodically recheck for updates during long-running sessions (passive only)
+      this.updateCheckTimer = setInterval(() => {
+        void this.checkForUpdate(/* passive */ true);
+      }, UPDATE_RECHECK_INTERVAL_MS);
+    }
   }
 
   private async refreshModelAuthStatus(): Promise<void> {
