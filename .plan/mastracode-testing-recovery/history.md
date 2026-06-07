@@ -4449,3 +4449,9 @@ The row remains partial because direct `main.ts`/`headless.ts` startup-call cove
 - Created `remediation-queue.md` now that no tracker rows remain with missing checked-in TUI e2e coverage.
 - Queue prioritizes remaining partial-row follow-up by shared fixture needs: persistent goal judge/reload, tool live-vs-history parity, notification/state signal CRUD and reload, GitHub incremental mock-gitcrawl, MCP/browser integration depth, settings/model UI breadth, and workspace/skills/hooks/shell surfaces.
 - Added README and handoff pointers so future recovery runs start from the queue instead of searching all feature cards from scratch.
+
+### 2026-06-07 — Explicit deferral review state
+
+- Reviewed the tracker after the final missing-row e2e additions. All 56 rows now have either `validated` or `deferred-needs-review` status.
+- Converted the 34 remaining partial rows from `needs-follow-up` to `deferred-needs-review`. Each row keeps its checked-in TUI e2e evidence, supporting tests, break-validation evidence, and row-specific residual contracts in the TUI status/notes.
+- Added a tracker-level deferral review note and updated `remediation-queue.md` as the explicit follow-up rationale grouped by fixture/data needs. These deferred contracts are review items, not hidden unfinished tracker rows.

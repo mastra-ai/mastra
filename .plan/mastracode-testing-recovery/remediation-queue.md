@@ -3,7 +3,7 @@
 ## Current state
 
 - Checked-in TUI e2e coverage is no longer missing for any tracker row.
-- Remaining work is partial-row remediation: reload/history parity, broader user flows, and integration-specific fixture depth.
+- The remaining partial rows are marked `deferred-needs-review` in the tracker. This queue is the explicit rationale/follow-up plan for deferred residual contracts: reload/history parity, broader user flows, and integration-specific fixture depth.
 - Keep the user-realism rule: drive behavior through terminal input, slash commands, AIMock fixtures, deterministic pre-launch config/DB seeds, or approved external signal APIs for notification/state-signal origins. Do not emit Harness internals or mutate runtime display state directly.
 
 ## Priority queue
