@@ -14,6 +14,7 @@ import { notificationSignalRenderingScenario } from './notification-signal-rende
 import { omSettingsScenario } from './om-settings.js';
 import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
 import { promptContextInstructionsScenario } from './prompt-context-instructions.js';
+import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { quietSettingsScenario } from './quiet-settings.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { startupScenario } from './startup.js';
@@ -46,6 +47,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'notification-signal-rendering': notificationSignalRenderingScenario,
   'om-settings': omSettingsScenario,
   'openai-strict-schema': openaiStrictSchemaScenario,
+  'provider-history-compat': providerHistoryCompatScenario,
   'prompt-context-instructions': promptContextInstructionsScenario,
   'quiet-settings': quietSettingsScenario,
   'report-issue-command': reportIssueCommandScenario,

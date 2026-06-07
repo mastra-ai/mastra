@@ -11,6 +11,7 @@ export type ScenarioName =
   | 'file-autocomplete'
   | 'github-signals-command'
   | 'openai-strict-schema'
+  | 'provider-history-compat'
   | 'prompt-context-instructions'
   | 'visible-commands'
   | 'integration-commands'

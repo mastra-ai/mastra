@@ -4248,3 +4248,14 @@ Break validation proved the scenario fails when `/custom-providers` dispatch is 
   3. Stripping nested array item properties made `tool-schema-compat` fail because `task_write` task item fields were absent.
 - Final focused verification: `pnpm build:core` and `pnpm --filter ./mastracode run e2e:test tool-schema-compat`.
 - Tracker row `Models: Tool schema compatibility` moved from `needs-follow-up`/missing e2e to `validated`/covered e2e. Packaging-level CLI zod dependency coverage remains listed as a separate missing test in the feature card.
+
+### 2026-06-07 — Provider history compatibility TUI e2e partial coverage
+
+- Added `mastracode/scripts/mc-e2e/scenarios/provider-history-compat.ts` and `mastracode/scripts/mc-e2e/fixtures/provider-history-compat.json`.
+- Scenario seeds a scrubbed persisted thread on the active Mastra Code resource, switches to it through `/threads`, routes `cerebras/gpt-5.4-mini` through an AIMock-backed OpenAI-compatible custom provider named `cerebras`, submits a real PTY follow-up prompt, and verifies the outbound provider request preserves assistant text history while no seeded reasoning sentinel leaks into the request body.
+- Break validations proven and reverted:
+  1. Disabling custom-provider routing in `mastracode/src/agents/model.ts` made the scenario hit the real Cerebras endpoint and fail auth instead of AIMock.
+  2. Changing `/threads` switch feedback from `Switched to:` to different copy made the scenario fail before the follow-up prompt.
+  3. Dropping assistant text accumulation in loaded-history rendering made the scenario fail waiting for the seeded assistant answer.
+- Focused verification: `pnpm --filter ./mastracode run e2e:test provider-history-compat`.
+- Tracker row `Models: Provider history compatibility` moved from missing e2e to partial e2e. It remains `needs-follow-up` because persisted-history loading normalizes the seeded reasoning before the TUI request reaches `ProviderHistoryCompat`; direct proof that the processor strips post-conversion reasoning remains covered by core tests until a TUI/headless provider-rejection fixture can exercise the exact processor rule.

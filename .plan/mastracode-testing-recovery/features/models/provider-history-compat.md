@@ -66,11 +66,13 @@
 - `packages/core/src/processors/provider-history-compat.test.ts` — invalid Anthropic tool IDs, response-body matching, retryCount guard, no-op valid IDs, custom reactive rules, custom prompt rules chained after built-ins, Cerebras detection, Anthropic detection, foreign/native reasoning handling, immutable prompt rewrites, and `ProcessorRunner.runProcessLLMRequest()`.
 - `packages/core/src/loop/workflows/agentic-execution/llm-execution-step.test.ts` — `processLLMRequest` runs before the provider, forwards `retryCount`, keeps prompt changes transient, and can combine request-specific and direct input processor lists.
 - `mastracode/src/__tests__/index.test.ts` — asserts the code agent includes `provider-history-compat` in both input and error processors.
+- `mastracode/scripts/mc-e2e/scenarios/provider-history-compat.ts` — partial TUI e2e: seeds a persisted multi-turn thread on the active resource, routes `cerebras/gpt-5.4-mini` through an AIMock-backed OpenAI-compatible custom provider, switches to the thread through `/threads`, sends a follow-up prompt, and verifies the outbound request keeps assistant text history while no seeded reasoning sentinel leaks to the provider request. Break validations proved custom-provider routing, thread-switch feedback, and loaded assistant history rendering.
 
 ## Missing tests
 
 - End-to-end provider smoke with a real rejected history shape proving user-visible recovery, not only mocked error strings.
 - TUI/headless trace/log assertion identifying when a compatibility rule fired.
+- Direct TUI-level proof that `ProviderHistoryCompat` itself strips a reasoning part after `MessageList → LanguageModelV2Prompt`; the current e2e covers the routed provider/history contract, while the exact processor strip rule remains covered by core unit/integration tests because persisted-history loading normalizes the seeded reasoning before the TUI request reaches the processor.
 
 ## Known risks / regressions
 
