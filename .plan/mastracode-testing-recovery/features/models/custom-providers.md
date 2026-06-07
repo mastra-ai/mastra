@@ -72,10 +72,11 @@
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — `/custom-providers` dispatch and analytics tracking.
 - `mastracode/src/tui/commands/__tests__/models-pack.test.ts` — custom provider model availability interactions through model pack flows.
 - `packages/core/src/harness/list-available-models.test.ts` — Harness custom model catalog merge, custom-over-built-in duplicate precedence, use-count merge, and cache invalidation after provider edits.
+- `mastracode/scripts/mc-e2e/scenarios/custom-provider-management.ts` — partial TUI e2e coverage for a configured provider appearing in `/custom-providers`, provider management selection, add-model modal entry, and reopened persisted model count.
 
 ## Missing tests
 
-- Full modal flow test for add/edit/delete provider and add/remove model, including invalid URLs and duplicate names.
+- Full modal flow test for add/edit/delete provider and remove model, including invalid URLs and duplicate names. Add-model persistence is covered by `custom-provider-management`.
 - Covered: Harness `listAvailableModels()` custom catalog merge, cache invalidation, use-count merge, and duplicate model IDs (`packages/core/src/harness/list-available-models.test.ts`).
 - `/models` UI test proving custom provider models appear and can be selected/persisted.
 - `/om` selector test proving observer/reflector custom provider choices persist across restart.

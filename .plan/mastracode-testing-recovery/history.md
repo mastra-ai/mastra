@@ -4218,3 +4218,9 @@ This moves `Chat: Notification inbox signals` from `missing e2e` to `partial e2e
 Added `mastracode/scripts/mc-e2e/scenarios/github-signals-command.ts` as a deterministic real PTY scenario for the GitHub Signals command surface. The scenario enables `experimentalGithubSignals` in the isolated app-data settings file, launches an embedded Mastra Code TUI with a current thread, runs `/github debug`, and asserts the visible `GitHub Signals debug for ... no subscribed PRs` empty-subscription status.
 
 Break validation proved the scenario fails when `/github debug` routing is changed, when the no-subscriptions debug copy changes, and when the experimental setting guard rejects enabled GitHub Signals. The row remains `needs-follow-up`/partial because it does not yet cover live subscribe/sync/polling against gitcrawl/GitHub data, notification inbox delivery, branch auto-subscribe, or reload parity.
+
+### 2026-06-06 — Custom provider management e2e partial coverage
+
+Added `mastracode/scripts/mc-e2e/scenarios/custom-provider-management.ts` as a real PTY scenario for `/custom-providers`. The scenario seeds a scrubbed OpenAI-compatible provider in isolated settings, verifies the provider row shows URL/model-count/API-key status, selects the provider, opens the manage-provider modal, adds `__AI_SDK_OPENAI_MODEL_REALTIME__`, and reopens `/custom-providers` to prove the model count persisted.
+
+Break validation proved the scenario fails when `/custom-providers` dispatch is broken, when provider model-count/status copy changes, and when add-model stops saving settings. The row remains `needs-follow-up`/partial because create/edit/delete provider validation, remove-model, `/models` selection, `/om` selector persistence, and live custom-provider request routing still need e2e coverage.

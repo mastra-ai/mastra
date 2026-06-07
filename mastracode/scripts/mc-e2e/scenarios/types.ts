@@ -6,6 +6,7 @@ export type ScenarioName =
   | 'automated-chat'
   | 'clipboard-image-paste'
   | 'custom-config-dir'
+  | 'custom-provider-management'
   | 'custom-slash-command'
   | 'file-autocomplete'
   | 'github-signals-command'
