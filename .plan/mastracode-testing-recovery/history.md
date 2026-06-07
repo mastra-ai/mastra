@@ -4345,3 +4345,11 @@ Break validation proved the scenario fails when `/custom-providers` dispatch is 
 - The scenario runs `/update` through the real TUI, renders the mocked newer version/changelog inline question, selects `No`, and verifies `Update skipped.` without executing any global package-manager install.
 - Break validations: disabling the latest-version env seam, changing the update prompt headline, and renaming the `No` option each failed the real PTY scenario. All breaks were reverted.
 - Tracker row moved from missing to partial e2e. Startup automatic prompt, passive recheck banner, Yes/install path, and packed-version detection remain follow-up.
+
+## 2026-06-07 — Process shortcut TUI e2e partial coverage
+
+- Added `process-shortcuts` as the 35th checked-in TUI e2e scenario for `TUI: Process suspend shortcut`.
+- The scenario runs `/help` through the real PTY, verifies Ctrl+Z suspend and Alt+Z undo shortcut copy, types a draft, clears it with Ctrl+C, and restores it with Alt+Z.
+- Break validations: changing the Ctrl+Z help text, remapping undo from Alt+Z to Alt+X, and stopping Ctrl+C from saving `lastClearedText` each failed the real PTY scenario. All breaks were reverted.
+- Focused verification: `pnpm --filter ./mastracode run e2e:test process-shortcuts`.
+- Tracker row moved from missing e2e to partial e2e. Actual Unix job-control coverage (`SIGTSTP` + shell `fg`/`SIGCONT`, including active streamed output after resume) remains missing until the TUI e2e runner exposes a safe suspend/resume primitive.

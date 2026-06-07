@@ -12,6 +12,7 @@ export type ScenarioName =
   | 'first-run-onboarding'
   | 'github-signals-command'
   | 'openai-strict-schema'
+  | 'process-shortcuts'
   | 'provider-history-compat'
   | 'prompt-context-instructions'
   | 'visible-commands'

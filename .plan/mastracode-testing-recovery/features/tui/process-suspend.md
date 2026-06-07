@@ -62,10 +62,21 @@
 - `mastracode/src/tui/components/__tests__/help-overlay.test.ts` — asserts shortcut entries include Ctrl+Z.
 - `mastracode/src/tui/components/__tests__/custom-editor.test.ts` — covers Ctrl+Z routing to `suspend`, Alt+Z routing to `undo`, and prevents shortcut fallthrough to the base editor.
 - `mastracode/src/tui/__tests__/setup-keyboard-shortcuts.test.ts` — covers suspend lifecycle (`ui.stop()`, `SIGCONT` listener, `SIGTSTP`, resume render), Windows guard, `process.kill()` failure recovery, and Alt+Z undo-last-clear behavior.
+- `mastracode/scripts/mc-e2e/scenarios/process-shortcuts.ts` — real PTY scenario that runs `/help`, verifies Ctrl+Z/Alt+Z shortcut copy, clears a draft with Ctrl+C, and restores it with Alt+Z.
 
 ## Missing tests
 
-- Integration test proving active streamed output resumes cleanly after shell `fg`.
+- Full OS-level suspend/resume e2e proving Ctrl+Z actually stops the process, shell `fg`/`SIGCONT` resumes it, and active streamed output resumes cleanly after foregrounding. This remains intentionally untested in the PTY suite until the runner exposes a safe job-control/resume primitive.
+
+## E2E recovery evidence
+
+- Added `process-shortcuts` as partial TUI e2e coverage for shortcut discoverability and Alt+Z undo behavior through a real PTY.
+- Break validations proven and reverted:
+  1. Changing the Ctrl+Z help description made the scenario fail waiting for `Suspend process (fg to resume)`.
+  2. Remapping undo from Alt+Z to Alt+X made the scenario fail waiting for the restored draft.
+  3. Stopping Ctrl+C from saving `lastClearedText` made Alt+Z fail to restore the cleared draft.
+- Verification: `pnpm --filter ./mastracode run e2e:test process-shortcuts`.
+- Status remains partial because actual Unix job-control suspend/resume (`SIGTSTP` + shell `fg`/`SIGCONT`) still needs a safe runner-level primitive.
 
 ## Known risks / regressions
 

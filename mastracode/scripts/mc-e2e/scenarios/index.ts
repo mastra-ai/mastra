@@ -15,6 +15,7 @@ import { modalAndShellScenario } from './modal-and-shell.js';
 import { notificationSignalRenderingScenario } from './notification-signal-rendering.js';
 import { omSettingsScenario } from './om-settings.js';
 import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
+import { processShortcutsScenario } from './process-shortcuts.js';
 import { promptContextInstructionsScenario } from './prompt-context-instructions.js';
 import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { quietSettingsScenario } from './quiet-settings.js';
@@ -56,6 +57,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'notification-signal-rendering': notificationSignalRenderingScenario,
   'om-settings': omSettingsScenario,
   'openai-strict-schema': openaiStrictSchemaScenario,
+  'process-shortcuts': processShortcutsScenario,
   'provider-history-compat': providerHistoryCompatScenario,
   'prompt-context-instructions': promptContextInstructionsScenario,
   'quiet-settings': quietSettingsScenario,
