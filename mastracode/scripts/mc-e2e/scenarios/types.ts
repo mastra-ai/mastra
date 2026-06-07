@@ -12,6 +12,7 @@ export type ScenarioName =
   | 'visible-commands'
   | 'integration-commands'
   | 'modal-and-shell'
+  | 'notification-signal-rendering'
   | 'om-settings'
   | 'quiet-settings'
   | 'report-issue-command'

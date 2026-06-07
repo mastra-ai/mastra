@@ -8,6 +8,7 @@ import { customSlashCommandScenario } from './custom-slash-command.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
+import { notificationSignalRenderingScenario } from './notification-signal-rendering.js';
 import { omSettingsScenario } from './om-settings.js';
 import { promptContextInstructionsScenario } from './prompt-context-instructions.js';
 import { quietSettingsScenario } from './quiet-settings.js';
@@ -36,6 +37,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,
   'modal-and-shell': modalAndShellScenario,
+  'notification-signal-rendering': notificationSignalRenderingScenario,
   'om-settings': omSettingsScenario,
   'prompt-context-instructions': promptContextInstructionsScenario,
   'quiet-settings': quietSettingsScenario,
