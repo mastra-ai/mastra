@@ -1,0 +1,118 @@
+---
+title: "Mastra CLI | Build with AI"
+description: Use the Mastra CLI to give coding agents a terminal surface for building, testing, debugging, and shipping Mastra projects.
+packages:
+  - "mastra"
+---
+
+# Mastra CLI
+
+The Mastra CLI gives coding agents a terminal surface for running Mastra projects. Use it with a coding agent to invoke agents, run workflows, inspect memory, query observability data, manage environments, and deploy changes from the command line.
+
+Use this page when you want an AI coding agent to move beyond code generation and validate behavior against a running Mastra project.
+
+## Install the CLI
+
+Install the latest Mastra CLI globally:
+
+```bash npm2yarn
+npm install mastra@latest -g
+```
+
+The runtime commands require `mastra@1.9.0` or later.
+
+## Start a local project
+
+Start a local Mastra server before asking your coding agent to inspect runtime behavior:
+
+```bash
+mastra dev
+```
+
+The server exposes Studio and API routes for your agents, tools, workflows, memory, and observability data. The agent can target the local server with `--url` when it runs API commands.
+
+## Give an agent runtime access
+
+Use `mastra api` to call a live Mastra server from the terminal. This lets a coding agent test the behavior it changes without switching to a browser.
+
+The following examples show common runtime checks:
+
+```bash
+mastra api --url http://localhost:4111 agent run weather-agent '{"messages":"What is the weather in London?"}'
+mastra api --url http://localhost:4111 workflow run start weather-workflow '{"inputData":{"city":"London"}}'
+mastra api --url http://localhost:4111 tool execute get-weather '{"location":"London"}'
+mastra api --url http://localhost:4111 mcp list
+```
+
+For deployed projects, point `--url` at the deployed API URL.
+
+## Inspect memory
+
+Memory commands help an agent debug conversation state and working memory. Use them when a response depends on previous messages or user context.
+
+```bash
+mastra api thread create '{"agentId":"weather-agent","resourceId":"user_123","threadId":"thread_abc123","title":"Support conversation"}'
+mastra api memory search '{"agentId":"weather-agent","resourceId":"user_123","searchQuery":"London weather","limit":10}'
+mastra api memory current get '{"threadId":"thread_abc123","agentId":"weather-agent"}'
+```
+
+Ask the coding agent to include the command output in its verification notes so the runtime state is reviewable.
+
+## Query observability data
+
+Observability commands help an agent verify what happened after a run. Use them to inspect traces, logs, scores, and metrics from the terminal.
+
+```bash
+mastra api trace list
+mastra api log list
+mastra api score list
+mastra api metric aggregate '{"name":"latency_ms","aggregation":"avg"}'
+```
+
+For platform observability, set `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` in the environment before running these commands.
+
+## Run evaluation loops
+
+Use dataset and experiment commands when a coding agent needs to compare behavior before and after a change.
+
+```bash
+mastra api dataset create '{"name":"weather-eval"}'
+mastra api experiment run <dataset-id> '{"name":"baseline"}'
+mastra api experiment results <dataset-id> <experiment-id>
+```
+
+This is useful for prompt changes, tool changes, and regressions that require more than one example to verify.
+
+## Ship and manage projects
+
+The CLI also includes commands for deployment and project operations:
+
+```bash
+mastra auth login
+mastra lint --preflight
+mastra studio deploy --yes
+mastra server env pull .env.production
+mastra server restart
+mastra studio deploy suggestions <deploy-id>
+```
+
+Use these commands near the end of an agent workflow to validate the project, deploy it, and inspect deployment diagnostics.
+
+## Suggested agent workflow
+
+1. Ask the coding agent to read the relevant Mastra docs and code.
+1. Start `mastra dev` or point the agent at a deployed API with `--url`.
+1. Have the agent reproduce the issue or target behavior with `mastra api`.
+1. Let the agent make the code change.
+1. Run `mastra lint --preflight` and the narrowest relevant tests.
+1. Query traces, logs, memory, or eval results to confirm the change worked.
+1. Deploy with `mastra studio deploy --yes` when the project is ready.
+
+This closes the loop between code changes and runtime verification.
+
+## Next steps
+
+- [CLI commands reference](/reference/cli/mastra)
+- [Mastra docs server](/docs/build-with-ai/mcp-docs-server)
+- [Mastra skills](/docs/build-with-ai/skills)
+- [Upgraded Mastra CLI blog post](https://mastra.ai/blog/upgraded-mastra-cli)
