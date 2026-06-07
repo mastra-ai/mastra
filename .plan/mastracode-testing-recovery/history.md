@@ -4437,3 +4437,9 @@ The row remains partial because direct `main.ts`/`headless.ts` startup-call cove
 - Scenario verifies provider-style `sources` output renders as title/URL rows, the footer preserves `web_search "Mastra e2e web search"`, the model follow-up receives the tool result, and `encryptedContent` never appears in the terminal.
 - Proved three focused breaks: corrupted provider source title extraction, removed query text from the footer, and leaked `encryptedContent` into output. All breaks failed the scenario and were reverted.
 - Tracker row `Tools: Web search tool rendering` moved from missing e2e to partial e2e; wrapper-level Tavily delegation/truncation and loaded-history parity remain follow-up.
+
+### 2026-06-07 — Commit attribution prompt TUI e2e
+
+- Added `commit-attribution-prompt` TUI e2e scenario with an OpenAI AIMock fixture. The scenario submits a real PTY prompt and verifies the outbound model request contains the selected-model commit guidance: `Co-Authored-By: Mastra Code (openai/gpt-5.4-mini) <noreply@mastra.ai>`.
+- Proved three focused breaks: removed selected model ID from the base prompt, dropped `ctx.modelId` when building the base prompt, and stopped copying `state.currentModelId` into dynamic instructions. All breaks failed the scenario and were reverted.
+- Tracker row `Git: Commit attribution` moved from missing e2e to partial e2e. There are now no tracker rows with missing checked-in TUI e2e coverage; remaining work is partial-row remediation and loaded-history/runtime-parity follow-up.

@@ -63,6 +63,7 @@
 
 ## Missing tests
 
+- Partial e2e covered by `commit-attribution-prompt`: a real PTY prompt reaches OpenAI AIMock and verifies the outbound model request contains `Co-Authored-By: Mastra Code (openai/gpt-5.4-mini) <noreply@mastra.ai>` rather than the model-less fallback.
 - End-to-end commit-message test proving the agent-generated `git commit` body follows the prompt guidance. Deferred for now because this behavior is model-output guidance rather than runtime enforcement; the prompt contract is now shielded directly.
 
 ## Known risks / regressions

@@ -5,6 +5,7 @@ export type ScenarioName =
   | 'api-key-prompt'
   | 'automated-chat'
   | 'clipboard-image-paste'
+  | 'commit-attribution-prompt'
   | 'custom-config-dir'
   | 'custom-provider-management'
   | 'custom-slash-command'
