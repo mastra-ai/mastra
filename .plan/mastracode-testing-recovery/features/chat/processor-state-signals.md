@@ -74,10 +74,11 @@
 - `mastracode/src/tui/__tests__/render-messages.test.ts` — loaded history renders state/reactive signals and hides GitHub subscription operation signals.
 - `mastracode/src/tui/handlers/__tests__/message.test.ts` — streamed reactive/state signal rendering and inline-boundary ordering.
 - `mastracode/src/headless-integration.test.ts` — `--output-format stream-json` keeps state-signal content parts visible in NDJSON message events and still emits the completion marker.
+- `mastracode/scripts/mc-e2e/scenarios/state-signal-rendering.ts` — checked-in PTY e2e coverage for a custom entrypoint that emits `agent.sendStateSignal()` into the active TUI thread, renders `State snapshot: browser` with the state preview, and verifies the captured AIMock request body includes the state contents.
 
 ## Missing tests
 
-- End-to-end Mastra Code run with a live browser producing state deltas and then reloading the same thread to prove TUI history parity.
+- End-to-end Mastra Code run with a live browser processor producing snapshot/delta state and then reloading the same thread to prove loaded-history parity.
 - Snapshot/delta pruning regression for very long browser sessions where earlier snapshots fall out of the active message window.
 
 ## Known risks / regressions

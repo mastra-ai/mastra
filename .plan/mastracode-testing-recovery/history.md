@@ -4200,3 +4200,9 @@ Verification:
 - `pnpm --filter ./mastracode check` passed.
 - `pnpm --filter ./mastracode lint` passed.
 - `pnpm run build:mastracode` passed.
+
+### E2E correction follow-up: processor state signal partial coverage
+
+Added `state-signal-rendering` as a checked-in PTY scenario. It launches Mastra Code through a custom entrypoint, emits `agent.sendStateSignal()` into the active thread, asserts the TUI renders `State snapshot: browser` plus the state preview, and verifies AIMock captured the state contents in the model request body. Three break checks were proven and reverted: removing inline state-signal rendering, dropping the state preview payload, and changing the visible state-signal title.
+
+This moves `Chat: Processor state signals` from `missing e2e` to `partial e2e`. It does not close the row because live browser-processor snapshot/delta reload/history parity and long-session pruning still need dedicated coverage.
