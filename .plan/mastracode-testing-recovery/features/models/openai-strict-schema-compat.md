@@ -66,12 +66,22 @@
 
 - `packages/core/src/agent/__tests__/structured-output-openai-compat.test.ts` — exercises real Agent structured-output path with valid, undefined, and empty `modelId` values, null-to-undefined parsing, and the exact OpenAI strict response schema shape handed to the model.
 - `packages/schema-compat/src/zod-to-json.test.ts` — covers `ensureAllPropertiesRequired()` across root, nested, array, union, and non-object schemas.
+- `mastracode/scripts/mc-e2e/scenarios/openai-strict-schema.ts` — real PTY TUI prompt with AIMock OpenAI request verification. The scenario launches an embedded Mastra Code TUI with an e2e-only `strict_schema_probe` tool containing optional top-level and nested Zod fields, then asserts the provider-visible OpenAI tool schema requires every property and has `additionalProperties: false` recursively.
 - OpenAI workspace/structured-output e2e tests are present but require external credentials.
 
 ## Missing tests
 
-- Narrow Mastra Code headless/TUI regression that uses an OpenAI model plus workspace tool schemas through the MC runtime.
-- Local no-network test for OpenAI Responses + workspace tools that asserts the exact final tool schema sent to the provider.
+- Live OpenAI workspace/structured-output coverage still depends on external credentials and remains outside deterministic local CI.
+
+## E2E recovery evidence
+
+- New scenario: `openai-strict-schema`.
+- Contracts covered: real TUI prompt reaches the OpenAI-compatible provider path through AIMock; optional top-level tool fields become required in the final request; nested optional object fields become required recursively; top-level and nested object schemas retain `additionalProperties: false`.
+- Break validation:
+  1. Dropped prepared tool parameters in `packages/core/src/stream/aisdk/v5/compat/prepare-tools.ts`; after `pnpm build:core`, `openai-strict-schema` failed request verification because the schema no longer had required properties.
+  2. Forced top-level prepared tool `additionalProperties: true`; after `pnpm build:core`, `openai-strict-schema` failed with `Expected strict_schema_probe additionalProperties false`.
+  3. Forced nested prepared tool `additionalProperties: true`; after `pnpm build:core`, `openai-strict-schema` failed with `Expected nested additionalProperties false`.
+- Final focused verification: `pnpm --filter ./mastracode run e2e:test openai-strict-schema`.
 
 ## Known risks / regressions
 

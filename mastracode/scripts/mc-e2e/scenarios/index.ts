@@ -12,6 +12,7 @@ import { integrationCommandsScenario } from './integration-commands.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
 import { notificationSignalRenderingScenario } from './notification-signal-rendering.js';
 import { omSettingsScenario } from './om-settings.js';
+import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
 import { promptContextInstructionsScenario } from './prompt-context-instructions.js';
 import { quietSettingsScenario } from './quiet-settings.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
@@ -43,6 +44,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'modal-and-shell': modalAndShellScenario,
   'notification-signal-rendering': notificationSignalRenderingScenario,
   'om-settings': omSettingsScenario,
+  'openai-strict-schema': openaiStrictSchemaScenario,
   'prompt-context-instructions': promptContextInstructionsScenario,
   'quiet-settings': quietSettingsScenario,
   'report-issue-command': reportIssueCommandScenario,

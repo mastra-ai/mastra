@@ -4224,3 +4224,15 @@ Break validation proved the scenario fails when `/github debug` routing is chang
 Added `mastracode/scripts/mc-e2e/scenarios/custom-provider-management.ts` as a real PTY scenario for `/custom-providers`. The scenario seeds a scrubbed OpenAI-compatible provider in isolated settings, verifies the provider row shows URL/model-count/API-key status, selects the provider, opens the manage-provider modal, adds `__AI_SDK_OPENAI_MODEL_REALTIME__`, and reopens `/custom-providers` to prove the model count persisted.
 
 Break validation proved the scenario fails when `/custom-providers` dispatch is broken, when provider model-count/status copy changes, and when add-model stops saving settings. The row remains `needs-follow-up`/partial because create/edit/delete provider validation, remove-model, `/models` selection, `/om` selector persistence, and live custom-provider request routing still need e2e coverage.
+
+### 2026-06-07 — OpenAI strict schema TUI e2e coverage
+
+- Added `mastracode/scripts/mc-e2e/scenarios/openai-strict-schema.ts` and `mastracode/scripts/mc-e2e/fixtures/openai-strict-schema.json`.
+- Scenario launches an embedded Mastra Code TUI with an e2e-only `strict_schema_probe` tool containing optional top-level and nested Zod fields, submits a real PTY prompt through OpenAI AIMock, and verifies the final provider request requires every tool-schema property and sets `additionalProperties: false` recursively.
+- Break validations proven after rebuilding core artifacts with `pnpm build:core`:
+  1. Dropping prepared tool parameters in `packages/core/src/stream/aisdk/v5/compat/prepare-tools.ts` made `openai-strict-schema` fail request verification because required properties were absent.
+  2. Forcing top-level prepared tool `additionalProperties: true` made the scenario fail with expected strict top-level `additionalProperties: false`.
+  3. Forcing nested prepared tool `additionalProperties: true` made the scenario fail with expected nested `additionalProperties: false`.
+- Final focused verification: `pnpm --filter ./mastracode run e2e:test openai-strict-schema`.
+- Tracker row `Models: OpenAI strict schema compatibility` updated from missing e2e to validated/covered; broader verification and commit are pending in this batch.
+

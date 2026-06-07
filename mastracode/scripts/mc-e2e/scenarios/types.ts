@@ -10,6 +10,7 @@ export type ScenarioName =
   | 'custom-slash-command'
   | 'file-autocomplete'
   | 'github-signals-command'
+  | 'openai-strict-schema'
   | 'prompt-context-instructions'
   | 'visible-commands'
   | 'integration-commands'
