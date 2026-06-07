@@ -197,11 +197,13 @@ export function applyCompatLayer({
       if (compat.shouldApply()) {
         const compatSchema = compat.processToCompatSchema(standardSchema);
 
-        return standardSchemaToJSONSchema(compatSchema);
+        // Use the 'input' projection so fields with `.default()` are optional
+        // (matches the schema the model is expected to produce).
+        return standardSchemaToJSONSchema(compatSchema, { io: 'input' });
       }
     }
 
-    return standardSchemaToJSONSchema(standardSchema);
+    return standardSchemaToJSONSchema(standardSchema, { io: 'input' });
   } else {
     let zodSchema: ZodSchema;
 
