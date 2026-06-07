@@ -226,12 +226,22 @@ function createReminderComponent(reminder: StreamedSystemReminderPart): SystemRe
 }
 
 function addInlineStateSignal(ctx: EventHandlerContext, stateSignal: StreamedStateSignalPart): void {
+  const { state } = ctx;
   const component = new StateSignalComponent({
     stateId: stateSignal.stateId,
     mode: stateSignal.mode,
     version: stateSignal.version,
     message: stateSignal.message,
   });
+
+  if (state.streamingComponent) {
+    const idx = state.chatContainer.children.indexOf(state.streamingComponent as never);
+    if (idx >= 0) {
+      insertChatComponentWithBoundarySpacing(state.chatContainer, component, idx);
+      return;
+    }
+  }
+
   ctx.addChildBeforeFollowUps(component);
 }
 

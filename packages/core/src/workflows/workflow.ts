@@ -1279,16 +1279,17 @@ function createStepFromProcessor<TProcessorId extends string>(
                 if (part && (part as ChunkType).type === 'finish') {
                   // Output just totalChunks (workflow processors don't track accumulated text yet)
                   processorSpan?.end({ output: { totalChunks: (streamParts ?? []).length } });
-                  delete mutableState[spanKey];
+                  // Keep the ended span reference in mutableState so that
+                  // post-finish chunks (e.g. step-finish) don't trigger a
+                  // new span creation at the guard above.
                 }
               } catch (error) {
-                // End span with error and clean up state
+                // End span with error (keep reference to prevent re-creation)
                 if (error instanceof TripWire) {
                   processorSpan?.end({ output: { tripwire: error.message } });
                 } else {
                   processorSpan?.error({ error: error as Error, endSpan: true });
                 }
-                delete mutableState[spanKey];
                 throw error;
               }
 
