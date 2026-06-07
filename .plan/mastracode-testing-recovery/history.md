@@ -4330,3 +4330,10 @@ Break validation proved the scenario fails when `/custom-providers` dispatch is 
 - Upgraded `github-signals-command` from debug-only coverage to a real-user flow: `/new`, AIMock-backed model turn to create the current thread, `/github subscribe mastra-ai/mastra#17637`, mocked gitcrawl `sync` + `threads` calls, baseline GitHub notification card, and `/github debug` metadata projection.
 - Added `github-signals-command.json` AIMock fixtures for the initial model turn and notification-context follow-up so the scenario no longer passes with a hidden `No fixture matched` error.
 - Break validations: setting an invalid gitcrawl command in `createMastraCode()` made the scenario fail before notification rendering; changing `/github subscribe` success text made the scenario fail waiting for `Subscribed to`; changing debug CI projection from `ci=` to `checks=` made the scenario fail waiting for `ci=failure`. All breaks were reverted.
+
+## 2026-06-07 — First-run onboarding TUI e2e
+
+- Added `first-run-onboarding` as the 33rd checked-in TUI e2e scenario for `Setup: Installation and launch`.
+- The scenario removes seeded `settings.json`/`auth.json` before launch, verifies the first-run `Welcome to Mastra Code` setup overlay appears, selects `Skip` via real arrow/Enter key input, and asserts the normal Mastra Code TUI prompt returns without onboarding overlay text.
+- Break validations: changing the welcome title, renaming the `Skip` option, and making Skip advance into Authentication instead of dismissing each failed the real PTY scenario. All breaks were reverted.
+- Tracker row moved from missing to partial e2e. Built package pack/install, global/npx startup, and packed `--prompt` smoke remain missing.

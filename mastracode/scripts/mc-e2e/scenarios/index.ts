@@ -7,6 +7,7 @@ import { customConfigDirScenario } from './custom-config-dir.js';
 import { customProviderManagementScenario } from './custom-provider-management.js';
 import { customSlashCommandScenario } from './custom-slash-command.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
+import { firstRunOnboardingScenario } from './first-run-onboarding.js';
 import { githubSignalsCommandScenario } from './github-signals-command.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { mcpServerConfigScenario } from './mcp-server-config.js';
@@ -45,6 +46,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'custom-provider-management': customProviderManagementScenario,
   'custom-slash-command': customSlashCommandScenario,
   'file-autocomplete': fileAutocompleteScenario,
+  'first-run-onboarding': firstRunOnboardingScenario,
   'github-signals-command': githubSignalsCommandScenario,
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,

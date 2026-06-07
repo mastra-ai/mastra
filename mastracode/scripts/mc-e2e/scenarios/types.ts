@@ -9,6 +9,7 @@ export type ScenarioName =
   | 'custom-provider-management'
   | 'custom-slash-command'
   | 'file-autocomplete'
+  | 'first-run-onboarding'
   | 'github-signals-command'
   | 'openai-strict-schema'
   | 'provider-history-compat'

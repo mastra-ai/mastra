@@ -75,13 +75,13 @@
 - `mastracode/src/tui/__tests__/mastra-tui-hooks.test.ts` — verifies macOS `caffeinate` start, duplicate suppression, stop on all agent endings, `stop()` cleanup, non-Darwin no-op, and env-var disable.
 - `mastracode/src/main.ts` has remaining behavior covered indirectly through TUI/headless tests.
 - `mastracode/src/__tests__/package-metadata.test.ts` — static package smoke for installed CLI bin path, public exports, publish files, Node engine, and no `latest` dependency ranges.
+- `mastracode/scripts/mc-e2e/scenarios/first-run-onboarding.ts` — partial TUI e2e coverage for clean-config first launch: removes seeded settings/auth before startup, verifies the first-run welcome overlay appears, selects Skip through real key input, and asserts the normal TUI prompt returns.
 
 ## Missing tests
 
 - Built package smoke: pack/install, run `mastracode --help` and `mastracode --prompt` from the packed artifact.
 - Integration test for a real terminal stream closing during active TUI output, not only subprocess detector scripts.
 - Global/npx startup test that catches missing workspace dependency builds, dependency range drift, or bad ESM subpaths.
-- First-run onboarding smoke from a clean config dir.
 
 ## Known risks / regressions
 
