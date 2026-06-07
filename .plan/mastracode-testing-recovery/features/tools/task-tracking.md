@@ -75,7 +75,8 @@
 ## Missing tests
 
 - Partial e2e coverage: `mastracode/scripts/mc-e2e/scenarios/task-progress-events.ts` submits a real TUI prompt, uses AIMock's built-in `response.toolCalls` fixture shape to make the model call the real `task_write` tool, asserts the pinned TUI task list renders `Tasks [1/2 completed]` with the expected completed/in-progress rows, and verifies the AIMock follow-up request contains the real tool result (`match.hasToolResult: true`).
-- Still missing: completed/cleared inline transition coverage, end-to-end prompt-context agreement, and reload/history reconstruction for task state.
+- Covered by `mastracode/scripts/mc-e2e/scenarios/tool-history-reload.ts`: seeds a persisted completed `task_write` call/result, opens it through `/threads`, and proves loaded history renders `Tasks [2/2 completed]` plus completed task rows.
+- Still missing: cleared inline transition coverage, patch-tool e2e, and end-to-end prompt-context agreement for current task snapshots.
 - Covered by `packages/core/src/harness/task-tools.test.ts`: compatibility-path task tools read restored tasks from `getState()` when the direct state projection is stale, persist mutations through `setState()`, and emit `task_updated` so UI/progress and tool state stay aligned.
 
 ## Known risks / regressions

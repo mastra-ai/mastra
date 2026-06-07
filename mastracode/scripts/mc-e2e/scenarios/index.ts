@@ -37,6 +37,7 @@ import { streamingToolArgsScenario } from './streaming-tool-args.js';
 import { subagentDelegationScenario } from './subagent-delegation.js';
 import { taskProgressEventsScenario } from './task-progress-events.js';
 import { threadHistoryScenario } from './thread-history.js';
+import { toolHistoryReloadScenario } from './tool-history-reload.js';
 import { toolSchemaCompatScenario } from './tool-schema-compat.js';
 import type { McE2eScenario, ScenarioName } from './types.js';
 import { updateCommandPromptScenario } from './update-command-prompt.js';
@@ -88,6 +89,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'subagent-delegation': subagentDelegationScenario,
   'task-progress-events': taskProgressEventsScenario,
   'thread-history': threadHistoryScenario,
+  'tool-history-reload': toolHistoryReloadScenario,
   'tool-schema-compat': toolSchemaCompatScenario,
   'update-command-prompt': updateCommandPromptScenario,
   'web-search-rendering': webSearchRenderingScenario,

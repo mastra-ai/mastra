@@ -71,9 +71,9 @@
 
 ## Missing tests
 
-- Partial e2e covered by `web-search-rendering`: a real PTY prompt uses an AIMock `web_search_20250305` tool-call fixture with a deterministic local extra tool, then verifies the TUI renders OpenAI/provider-style `sources` as title/URL rows, keeps `web_search "query"` in the footer, follows up after the tool result, and does not leak `encryptedContent` into the terminal.
-- Mastra Code wrapper test proving `createWebSearchTool()` / `createWebExtractTool()` delegate to `@mastra/tavily`, filter low relevance scores, preserve failed extract errors, and enforce the 2k token budget.
-- Loaded-history parity for web-search results.
+- Covered by `web-search-rendering`: a real PTY prompt uses an AIMock `web_search_20250305` tool-call fixture with a deterministic local extra tool, then verifies the TUI renders OpenAI/provider-style `sources` as title/URL rows, keeps `web_search "query"` in the footer, follows up after the tool result, and does not leak `encryptedContent` into the terminal.
+- Covered by `tool-history-reload`: a persisted provider-style `web_search_20250305` result reconstructs after `/threads` reload with the same title/URL/footer rendering and without leaking `encryptedContent`.
+- Supporting non-e2e gap: Mastra Code wrapper test proving `createWebSearchTool()` / `createWebExtractTool()` delegate to `@mastra/tavily`, filter low relevance scores, preserve failed extract errors, and enforce the 2k token budget.
 
 ## Known risks / regressions
 

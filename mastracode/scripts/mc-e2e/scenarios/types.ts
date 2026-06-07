@@ -39,6 +39,7 @@ export type ScenarioName =
   | 'subagent-delegation'
   | 'task-progress-events'
   | 'thread-history'
+  | 'tool-history-reload'
   | 'tool-schema-compat'
   | 'update-command-prompt'
   | 'web-search-rendering'

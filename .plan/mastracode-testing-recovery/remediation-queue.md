@@ -3,19 +3,19 @@
 ## Current state
 
 - Checked-in TUI e2e coverage is no longer missing for any tracker row.
-- 32 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: reload/history parity, broader user flows, and integration-specific fixture depth.
+- 30 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
 - Keep the user-realism rule: drive behavior through terminal input, slash commands, AIMock fixtures, deterministic pre-launch config/DB seeds, or approved external signal APIs for notification/state-signal origins. Do not emit Harness internals or mutate runtime display state directly.
 
 ## Priority queue
 
 ### 1. Tool rendering live-vs-history parity
 
-- Rows: `Tools: Streaming tool arguments`, `Tools: Task tracking tools and TUI progress`, `Integrations: Harness display state`, `Tools: Web search tool rendering`, `Tools: Workspace-backed coding tools`.
+- Completed in this chunk: `tool-history-reload` seeds completed persisted `view`, `task_write`, and `web_search_20250305` messages into an isolated DB, opens `/threads`, and asserts reconstructed render matches live e2e expectations. This validates `Tools: Streaming tool arguments` and `Tools: Web search tool rendering`, and reduces the residual gaps for task tracking, harness display state, and workspace tools.
+- Remaining rows: `Tools: Task tracking tools and TUI progress`, `Integrations: Harness display state`, `Tools: Workspace-backed coding tools`.
 - Proposed scenarios:
-  - `tool-history-reload`: seed completed `view`, `task_write`, `web_search_20250305`, and subagent tool messages into an isolated DB; open `/threads`; assert reconstructed render matches live e2e expectations.
-  - `task-progress-completed-inline`: AIMock `task_write` + follow-up fixture that completes/clears tasks and asserts completed inline rendering after the model turn.
-  - `workspace-tool-output-rendering`: AIMock calls `view`/`lsp_inspect`/`execute_command` and asserts visible result cards, not only provider-visible aliases.
-- Fixture/data needs: sanitized stored-message fixtures shaped from local Mastra Code DB, plus AIMock tool-call fixtures for live path.
+  - `task-progress-completed-inline`: AIMock `task_write` + follow-up fixture that completes/clears tasks and asserts completed/cleared inline rendering after the model turn.
+  - `workspace-tool-output-rendering`: AIMock calls `lsp_inspect`/`execute_command` and asserts visible result cards, not only provider-visible aliases.
+- Fixture/data needs: AIMock tool-call fixtures for live path plus any remaining sanitized stored-message fixtures for shell/LSP/edit breadth.
 
 ### 2. Notification and state signals beyond first render
 

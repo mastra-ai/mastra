@@ -74,8 +74,8 @@
 ## Missing tests
 
 - Partial e2e coverage exists: `streaming-tool-args` covers a live AIMock-streamed tool-input projection through the real TUI, and `task-progress-events` covers live task progress projection through a real `task_write` tool call.
-- Integration test covering active stream → reload/history render, proving live display state does not resurrect as active work.
-- Regression test for status-line update count/coalescing under long tool-input streams in the real TUI path.
+- Covered by `tool-history-reload`: loaded history reconstructs completed tool/task boxes from persisted messages after `/threads` reload, proving completed transcript state does not resurrect as active display-state work.
+- Still missing: regression test for status-line update count/coalescing under long tool-input streams in the real TUI path.
 
 ## Known risks / regressions
 

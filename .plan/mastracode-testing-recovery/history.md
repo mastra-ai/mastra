@@ -4476,3 +4476,18 @@ Break validations proved the scenarios fail if `/goal resume` stops retriggering
 Added `plan-approval-goal-handoff`, a real PTY/AIMock scenario for the second primary plan approval branch. The scenario switches to Plan mode, receives a `submit_plan` tool call, selects `Use as /goal`, verifies the canonical goal card/objective and active goal status, and verifies the approve-to-build reminder is not sent for the goal branch.
 
 Break validations proved the scenario fails if the `Use as /goal` option label changes, if goal selection routes through the approve callback, or if the plan-to-goal objective formatter drops the canonical `# Title` heading. Together with `plan-approval-handoff` and component/unit shields for reject/request-changes/persistence/resolver behavior, the plan approval tracker row is now validated.
+
+## 2026-06-07 — Tool history reload parity
+
+- Added `tool-history-reload` TUI e2e scenario.
+  - Seeds an isolated SQLite history thread with persisted AI SDK v2 `tool-call` / `tool-result` parts for `view`, `web_search_20250305`, and `task_write`.
+  - Opens the seeded thread through `/threads` in the real PTY TUI.
+  - Verifies loaded history reconstructs the `view` result card, provider-style web-search title/URL/footer without leaking `encryptedContent`, and completed task inline summary (`Tasks [2/2 completed]`).
+- Break validations proved and reverted:
+  1. Replaced core persisted `tool-call` mapping in `packages/core/src/harness/harness.ts` with text-only output; `tool-history-reload` failed waiting for the `view` tool card.
+  2. Replaced `renderExistingMessages()` loaded tool result formatting in `mastracode/src/tui/render-messages.ts`; scenario failed waiting for the `view` result content.
+  3. Disabled loaded task mutation replay in `renderExistingMessages()`; scenario failed waiting for completed inline task history.
+- Tracker updates:
+  - `Tools: Streaming tool arguments` moved to `validated` because live partial-to-final rendering and loaded final reconstruction are both covered.
+  - `Tools: Web search tool rendering` moved to `validated` because live provider-style rendering and loaded-history parity are both covered.
+  - `Tools: Task tracking tools and TUI progress`, `Tools: Workspace-backed coding tools`, and `Integrations: Harness display state` remain `needs-follow-up` but now include the `tool-history-reload` evidence.

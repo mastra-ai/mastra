@@ -99,7 +99,8 @@
 ## Missing tests
 
 - Plan-mode integration test proving workspace write/edit/AST tools are hidden or disabled while read/search tools remain available.
-- Loaded-history test proving workspace tool results render identically after reload for representative read/list/edit/shell outputs.
+- Covered by `mastracode/scripts/mc-e2e/scenarios/tool-history-reload.ts`: persisted `view` tool call/result reconstructs after `/threads` reload with representative workspace read output.
+- Still missing: loaded-history breadth for list/edit/shell outputs.
 - Direct test that `getDynamicWorkspace()` reuses the registered workspace while updating allowed paths/tool config across mode changes, including default `os.tmpdir()`/`/tmp` inclusion and de-duplication.
 - Covered by `mastracode/src/__tests__/index.test.ts`: config-level startup test proves `createMastraCode({ workspace })` passes a custom workspace through to Harness and keeps the default workspace factory lazy when no override is supplied.
 - Mastra Code integration test proving built-in explore/plan/execute subagents get workspace tools from the parent workspace after tool-name remapping and disabled-tool filtering.
