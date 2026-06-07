@@ -3,6 +3,7 @@ import { automatedChatScenario } from './automated-chat.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
 import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
 import { customConfigDirScenario } from './custom-config-dir.js';
+import { customSlashCommandScenario } from './custom-slash-command.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
@@ -27,6 +28,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'automated-chat': automatedChatScenario,
   'clipboard-image-paste': clipboardImagePasteScenario,
   'custom-config-dir': customConfigDirScenario,
+  'custom-slash-command': customSlashCommandScenario,
   'file-autocomplete': fileAutocompleteScenario,
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,

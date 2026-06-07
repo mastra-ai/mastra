@@ -5,6 +5,7 @@ export type ScenarioName =
   | 'automated-chat'
   | 'clipboard-image-paste'
   | 'custom-config-dir'
+  | 'custom-slash-command'
   | 'file-autocomplete'
   | 'prompt-context-instructions'
   | 'visible-commands'
