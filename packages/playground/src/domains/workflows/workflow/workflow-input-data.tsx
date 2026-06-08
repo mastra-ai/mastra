@@ -219,8 +219,21 @@ const PROCESSOR_PHASES = [
   { value: 'outputStep', label: 'Output Step - Process after each LLM response' },
 ];
 
+const DEFAULT_PROCESSOR_MESSAGE = 'Hello, this is a test message.';
+const DEFAULT_PROCESSOR_PHASE = 'input';
+
+function getDefaultProcessorMessage(defaultValues: any) {
+  const textPart = defaultValues?.messages?.[0]?.content?.parts?.find((part: any) => part?.type === 'text');
+  return typeof textPart?.text === 'string' ? textPart.text : DEFAULT_PROCESSOR_MESSAGE;
+}
+
+function getDefaultProcessorPhase(defaultValues: any) {
+  return typeof defaultValues?.phase === 'string' ? defaultValues.phase : DEFAULT_PROCESSOR_PHASE;
+}
+
 const SimpleProcessorInput = ({
   schema,
+  defaultValues,
   isSubmitLoading,
   submitButtonLabel,
   onSubmit,
@@ -230,9 +243,14 @@ const SimpleProcessorInput = ({
   submitActions,
   leftActions,
 }: WorkflowInputDataProps) => {
-  const [message, setMessage] = useState('Hello, this is a test message.');
-  const [phase, setPhase] = useState('input');
+  const [message, setMessage] = useState(() => getDefaultProcessorMessage(defaultValues));
+  const [phase, setPhase] = useState(() => getDefaultProcessorPhase(defaultValues));
   const [errors, setErrors] = useState<string[]>([]);
+
+  useEffect(() => {
+    setMessage(getDefaultProcessorMessage(defaultValues));
+    setPhase(getDefaultProcessorPhase(defaultValues));
+  }, [defaultValues]);
 
   const handleSubmit = () => {
     setErrors([]);
