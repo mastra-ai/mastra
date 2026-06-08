@@ -420,9 +420,9 @@ export const OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, requestContext, storedAgentId, ...body }) => {
     try {
-      const provider = mastra.getEditor?.()?.getSourceStorageProvider?.();
+      const provider = mastra.getEditor?.()?.getSourceControlProvider?.();
       if (!provider?.openChangeRequest) {
-        throw new HTTPException(400, { message: 'Source storage provider cannot open change requests' });
+        throw new HTTPException(400, { message: 'Source control provider cannot open change requests' });
       }
 
       const openChangeRequest = provider.openChangeRequest.bind(provider);

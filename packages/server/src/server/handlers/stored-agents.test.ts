@@ -232,12 +232,12 @@ interface MockEditor {
   prompt: {
     preview: ReturnType<typeof vi.fn>;
   };
-  getSourceStorageProvider?: ReturnType<typeof vi.fn>;
+  getSourceControlProvider?: ReturnType<typeof vi.fn>;
 }
 
-function createMockEditor(agentsStore?: MockAgentsStore, sourceStorageProvider?: unknown): MockEditor {
+function createMockEditor(agentsStore?: MockAgentsStore, sourceControlProvider?: unknown): MockEditor {
   return {
-    getSourceStorageProvider: sourceStorageProvider ? vi.fn().mockReturnValue(sourceStorageProvider) : undefined,
+    getSourceControlProvider: sourceControlProvider ? vi.fn().mockReturnValue(sourceControlProvider) : undefined,
     agent: {
       clearCache: vi.fn(),
       // Delegate to storage so existing assertions work
@@ -739,7 +739,7 @@ describe('Stored Agents Handlers', () => {
       } catch (error) {
         expect(error).toBeInstanceOf(HTTPException);
         expect((error as HTTPException).status).toBe(400);
-        expect((error as HTTPException).message).toBe('Source storage provider cannot open change requests');
+        expect((error as HTTPException).message).toBe('Source control provider cannot open change requests');
       }
     });
   });

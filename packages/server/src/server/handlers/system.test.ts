@@ -16,7 +16,7 @@ type MockStorage = {
 
 type MockEditor = {
   getSource?: () => 'code' | 'db' | undefined;
-  getSourceStorageProvider?: () =>
+  getSourceControlProvider?: () =>
     | {
         id: string;
         displayName: string;
@@ -221,7 +221,7 @@ describe('System Handlers', () => {
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
         mastra: createMockMastra({
           getSource: () => 'code',
-          getSourceStorageProvider: () => ({
+          getSourceControlProvider: () => ({
             id: 'mock-source',
             displayName: 'Mock Source',
             getCapabilities: async () => ({ canWrite: true, canOpenChangeRequest: true }),
@@ -246,7 +246,7 @@ describe('System Handlers', () => {
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
         mastra: createMockMastra({
           getSource: () => 'code',
-          getSourceStorageProvider: () => ({
+          getSourceControlProvider: () => ({
             id: 'mock-source',
             displayName: 'Mock Source',
             getCapabilities: async () => {
@@ -274,7 +274,7 @@ describe('System Handlers', () => {
       const resultPromise = GET_SYSTEM_PACKAGES_ROUTE.handler({
         mastra: createMockMastra({
           getSource: () => 'code',
-          getSourceStorageProvider: () => ({
+          getSourceControlProvider: () => ({
             id: 'mock-source',
             displayName: 'Mock Source',
             getCapabilities: () => new Promise<never>(() => {}),
@@ -301,7 +301,7 @@ describe('System Handlers', () => {
       const result = await GET_SYSTEM_PACKAGES_ROUTE.handler({
         mastra: createMockMastra({
           getSource: () => 'code',
-          getSourceStorageProvider: () => ({
+          getSourceControlProvider: () => ({
             id: 'mock-source',
             displayName: 'Mock Source',
             getCapabilities: async () => ({

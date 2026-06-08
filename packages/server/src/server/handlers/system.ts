@@ -32,7 +32,7 @@ async function getSourceProviderCapabilities(
 
 async function getEditorSourceCapabilities(editor: {
   getSource?: () => 'code' | 'db' | undefined;
-  getSourceStorageProvider?: () =>
+  getSourceControlProvider?: () =>
     | {
         id: string;
         displayName: string;
@@ -56,7 +56,7 @@ async function getEditorSourceCapabilities(editor: {
     };
   }
 
-  const configuredProvider = editor.getSourceStorageProvider?.();
+  const configuredProvider = editor.getSourceControlProvider?.();
   if (configuredProvider) {
     const provider = {
       id: configuredProvider.id,
