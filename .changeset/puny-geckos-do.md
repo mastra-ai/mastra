@@ -2,18 +2,20 @@
 '@mastra/playground-ui': minor
 ---
 
-Added a new `@mastra/playground-ui/theme.css` export — the design system's raw token layer (the `:root` / `html.light` custom properties and the Tailwind `@theme` block) — and made the Mastra brand green a first-class design-system color.
+Added a new `@mastra/playground-ui/theme.css` export and made the Mastra brand green a built-in color.
 
-**New raw theme export**
+**New theme.css export**
 
-Apps that consume the prebuilt `@mastra/playground-ui/style.css` had to redeclare every design token in their own `@theme` block so their Tailwind build would generate the design-system utility classes (`bg-surface1`, `text-neutral4`, …) for their own markup. The compiled stylesheet only carries the utilities playground-ui itself uses, so consumers couldn't rely on it. Importing the raw token layer instead lets the consumer's own Tailwind compiler read `@theme` once and generate every DS utility — no duplication, single source of truth (the same pattern as `tailwindcss/theme.css`).
+You can now import the design tokens as raw CSS:
 
 ```css
 @import 'tailwindcss';
-@import '@mastra/playground-ui/theme.css'; /* tokens + @theme → DS utilities */
+@import '@mastra/playground-ui/theme.css'; /* design tokens */
 @import '@mastra/playground-ui/style.css'; /* component styles */
 ```
 
-**Brand green + chart tokens**
+Before, apps had to copy every token into their own `@theme` block so Tailwind would generate the matching utility classes (like `bg-surface1` or `text-neutral4`). Now your app's Tailwind reads the tokens from this file directly. This is the same pattern as `tailwindcss/theme.css`, and it keeps the tokens defined in one place.
 
-The `green-*` utility palette now resolves to the Mastra brand green (centered on the `notice-success` token) in both light and dark mode, instead of Tailwind's default green. New `--chart-1…5` tokens are available for data-viz. If you previously relied on Tailwind's stock green in a Studio surface, expect a slightly more vivid, brand-aligned green.
+**Brand green and chart colors**
+
+The `green-*` classes now use the Mastra brand green (in both light and dark mode) instead of Tailwind's default green. New `--chart-1` through `--chart-5` colors are also available for charts. If you used the stock Tailwind green before, the new green looks a bit more vivid.
