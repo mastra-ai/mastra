@@ -289,7 +289,9 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
   }): Promise<Record<string, Tool<any, any>>> {
     if (args?.stepArgs) {
       const loadedNames = await this.store.getLoadedNames(this.makeStoreContext(args.stepArgs));
-      return this.getLoadedTools(loadedNames, args.requestContext);
+      // Fall back to the step's own request context so active-phase filtering still
+      // runs when the caller only supplies stepArgs.
+      return this.getLoadedTools(loadedNames, args.requestContext ?? args.stepArgs.requestContext);
     }
 
     const threadId = (args?.requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined) || undefined;
