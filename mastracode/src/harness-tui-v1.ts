@@ -158,6 +158,56 @@ async function main() {
 
   const ask = (question: string): Promise<string> => new Promise(resolve => rl.question(question, resolve));
 
+  // ─── Stream a subscription to stdout (buffered, flushed on newline) ──────
+  async function streamToStdout(stream: AsyncIterable<unknown>) {
+    let buffer = '';
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const flush = () => {
+      if (buffer) {
+        process.stdout.write(buffer);
+        buffer = '';
+      }
+      if (flushTimer) {
+        clearTimeout(flushTimer);
+        flushTimer = null;
+      }
+    };
+    try {
+      for await (const chunk of stream) {
+        if (typeof chunk === 'string') {
+          buffer += chunk;
+        } else if (chunk && typeof chunk === 'object') {
+          const c = chunk as unknown as Record<string, unknown>;
+          if (c.type === 'text-delta') {
+            if (c.textDelta) {
+              buffer += String(c.textDelta);
+            } else if (c.delta) {
+              buffer += String(c.delta);
+            } else if (c.payload && typeof c.payload === 'object') {
+              const payload = c.payload as Record<string, unknown>;
+              if (payload.text) {
+                buffer += String(payload.text);
+              }
+            }
+          } else if (c.text) {
+            buffer += String(c.text);
+          }
+        }
+        if (buffer.includes('\n')) {
+          flush();
+        } else if (!flushTimer) {
+          flushTimer = setTimeout(flush, 100);
+        }
+      }
+    } catch (err) {
+      if ((err as Error).message !== 'AbortError') {
+        console.error('Stream error:', err);
+      }
+    } finally {
+      flush();
+    }
+  }
+
   // ─── Prompt ─────────────────────────────────────────────────────────────
   async function handlePrompt() {
     const promptText = await ask('Enter prompt: ');
@@ -165,17 +215,13 @@ async function main() {
 
     console.info('Sending prompt...');
 
-    let isRunning = false;
-
     try {
       // ─── Subscribe to the session thread for streamed output ────────────
       const subscription = await session.subscribeToThread();
 
       // ─── Start the run via queueMessage ─────────────────────────────────
       const result = await session.queueMessage({ messages: promptText });
-      if (result.accepted) {
-        isRunning = true;
-      }
+      let isRunning: boolean = result.accepted;
 
       // ─── Poll activeRunId to detect when the run finishes ───────────────
       const pollPromise = (async () => {
@@ -192,61 +238,46 @@ async function main() {
         isRunning = false;
       })();
 
-      // ─── Read streamed chunks ───────────────────────────────────────────
-      const streamPromise = (async () => {
-        try {
-          for await (const chunk of subscription.stream) {
-            // Skip terminal / non-text chunks
-            if (typeof chunk === 'string') {
-              process.stdout.write(chunk);
-              continue;
-            }
-            if (!chunk || typeof chunk !== 'object') continue;
-
-            // Handle Mastra stream chunk shapes
-            const c = chunk as unknown as Record<string, unknown>;
-            if (c.type === 'text-delta') {
-              // Callback-style: { type: 'text-delta', textDelta: '...' }
-              if (c.textDelta) {
-                process.stdout.write(String(c.textDelta));
-                continue;
-              }
-              // Agent-signal-style: { type: 'text-delta', id, delta: '...' }
-              if (c.delta) {
-                process.stdout.write(String(c.delta));
-                continue;
-              }
-              // Payload-style: { type: 'text-delta', payload: { text: '...' } }
-              if (c.payload && typeof c.payload === 'object') {
-                const payload = c.payload as Record<string, unknown>;
-                if (payload.text) {
-                  process.stdout.write(String(payload.text));
-                  continue;
-                }
-              }
-            }
-            // Fallback: any object with a .text property
-            if (c.text) {
-              process.stdout.write(String(c.text));
-            }
-          }
-        } catch (err) {
-          if ((err as Error).message !== 'AbortError') {
-            console.error('Stream error:', err);
-          }
-        }
-      })();
+      // ─── Read streamed chunks ────────────────────────────────────────────
+      const streamPromise = streamToStdout(subscription.stream);
 
       // ─── Wait for run completion, then unsubscribe to end the stream ─────
       await pollPromise;
       subscription.unsubscribe();
       await streamPromise;
 
-      // ─── After the run finishes, allow a follow-up prompt ───────────────
-      const steerText = await ask('\n  steer: ');
-      if (steerText.trim()) {
+      // ─── Steering loop: stream each follow-up response ──────────────────
+      while (true) {
+        const steerText = await ask('\n  steer: ');
+        const trimmed = steerText.trim();
+        if (!trimmed) break; // Exit on empty input
+        if (trimmed.toLowerCase() === 'exit') break; // Exit on 'exit'
+
         try {
-          await session.sendMessage({ messages: steerText });
+          // Re-subscribe and stream the steer response
+          const steerSub = await session.subscribeToThread();
+          const steerResult = await session.sendMessage({ messages: trimmed });
+          if (!steerResult.accepted) {
+            console.info('  → message not accepted');
+            steerSub.unsubscribe();
+            continue;
+          }
+
+          let steerRunning: boolean = true;
+          const steerPoll = (async () => {
+            await new Promise<void>(resolve => setTimeout(resolve, 50));
+            while (steerRunning) {
+              if (!steerSub.activeRunId()) break;
+              await new Promise<void>(resolve => setTimeout(resolve, 100));
+            }
+            steerRunning = false;
+          })();
+
+          const steerStream = streamToStdout(steerSub.stream);
+
+          await steerPoll;
+          steerSub.unsubscribe();
+          await steerStream;
         } catch (err) {
           console.error('Steer error:', err);
         }
