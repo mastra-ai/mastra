@@ -900,8 +900,16 @@ export class AgentThreadStreamRuntime {
       }
       if (data.type === 'stream-part') {
         if (data.sourceId === this.#id) return;
-        const remoteRun = remoteRuns.get(data.runId);
-        if (!remoteRun) return;
+        let remoteRun = remoteRuns.get(data.runId);
+        if (!remoteRun) {
+          // A subscriber can attach after another runtime already broadcast run-registered.
+          // Treat the first stream-part on this thread topic as proof of the remote run and
+          // create the local proxy stream from that point forward.
+          state.activeThreadRunIds.set(key, data.runId);
+          enqueueRun(createRemoteRun(data.runId));
+          remoteRun = remoteRuns.get(data.runId);
+          if (!remoteRun) return;
+        }
         remoteRun.parts.push(data.part);
         while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
         return;

@@ -5,7 +5,7 @@ import type { PubSub } from '../events';
 import type { Mastra } from '../mastra';
 import { createNotificationSignal, createNotificationSummarySignal, summarizeNotifications } from './signals';
 import type { NotificationsStorage } from './storage';
-import type { NotificationRecord } from './types';
+import type { NotificationDeliveryThreadState, NotificationRecord } from './types';
 
 type NotificationDispatchAgent = {
   id?: string;
@@ -39,6 +39,41 @@ const errorMessage = (error: unknown): string => (error instanceof Error ? error
 const isSummaryDue = (record: NotificationRecord, now: Date): boolean =>
   Boolean(record.summaryAt && record.summaryAt.getTime() <= now.getTime());
 
+const deliveryPriority: Record<NotificationRecord['priority'], number> = {
+  urgent: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+};
+
+type DueDispatchGroup = {
+  key: string;
+  agentId: string;
+  resourceId: string;
+  threadId: string;
+  summaryRecords: NotificationRecord[];
+  individualRecords: NotificationRecord[];
+};
+
+type DueDispatchItem =
+  | { type: 'summary'; records: NotificationRecord[]; priority: NotificationRecord['priority']; createdAt: Date }
+  | { type: 'individual'; record: NotificationRecord; priority: NotificationRecord['priority']; createdAt: Date };
+
+const compareDueDispatchItems = (a: DueDispatchItem, b: DueDispatchItem): number =>
+  deliveryPriority[a.priority] - deliveryPriority[b.priority] || a.createdAt.getTime() - b.createdAt.getTime();
+
+const getHighestPriority = (records: NotificationRecord[]): NotificationRecord['priority'] =>
+  records.reduce<NotificationRecord['priority']>(
+    (highest, record) => (deliveryPriority[record.priority] < deliveryPriority[highest] ? record.priority : highest),
+    'low',
+  );
+
+const getEarliestCreatedAt = (records: NotificationRecord[]): Date =>
+  records.reduce(
+    (earliest, record) => (record.createdAt.getTime() < earliest.getTime() ? record.createdAt : earliest),
+    records[0]!.createdAt,
+  );
+
 const groupKey = (record: NotificationRecord): string | undefined => {
   if (!record.agentId || !record.resourceId || !record.threadId) return undefined;
   return [record.agentId, record.resourceId, record.threadId].join('\0');
@@ -69,11 +104,13 @@ async function sendNotificationRecord({
   storage,
   record,
   now,
+  batchThreadState,
 }: {
   mastra: Mastra;
   storage: NotificationsStorage;
   record: NotificationRecord;
   now: Date;
+  batchThreadState?: NotificationDeliveryThreadState;
 }): Promise<{ record: NotificationRecord; signal: CreatedAgentSignal } | null> {
   const current = await storage.getNotification({ threadId: record.threadId, id: record.id });
   if (!current || current.status !== 'pending' || current.deliveredSignalId) return null;
@@ -82,10 +119,12 @@ async function sendNotificationRecord({
 
   const agent = (await mastra.getAgentById(current.agentId as never)) as NotificationDispatchAgent;
   if (current.priority === 'high' && current.summarySignalId) {
-    const threadState = agentThreadStreamRuntime.getThreadState(
-      { resourceId: current.resourceId, threadId: current.threadId },
-      agent.getPubSub?.(),
-    );
+    const threadState =
+      batchThreadState ??
+      agentThreadStreamRuntime.getThreadState(
+        { resourceId: current.resourceId, threadId: current.threadId },
+        agent.getPubSub?.(),
+      );
     if (threadState === 'active') return null;
   }
 
@@ -153,6 +192,20 @@ async function sendNotificationSummary({
   return { records: updatedRecords, signal: result.signal };
 }
 
+async function getBatchThreadState({
+  mastra,
+  group,
+}: {
+  mastra: Mastra;
+  group: DueDispatchGroup;
+}): Promise<NotificationDeliveryThreadState> {
+  const agent = (await mastra.getAgentById(group.agentId as never)) as NotificationDispatchAgent;
+  return agentThreadStreamRuntime.getThreadState(
+    { resourceId: group.resourceId, threadId: group.threadId },
+    agent.getPubSub?.(),
+  );
+}
+
 export async function dispatchDueNotifications({
   mastra,
   storage,
@@ -163,42 +216,103 @@ export async function dispatchDueNotifications({
   const delivered: NotificationRecord[] = [];
   const failed: Array<{ record: NotificationRecord; error: string }> = [];
   const signals: CreatedAgentSignal[] = [];
-  const summaryGroups = new Map<string, NotificationRecord[]>();
-  const individual: NotificationRecord[] = [];
+  const groups = new Map<string, DueDispatchGroup>();
+  const ungroupedIndividual: NotificationRecord[] = [];
 
   for (const record of due) {
-    if (isSummaryDue(record, now)) {
-      const key = groupKey(record);
-      if (!key) {
+    const key = groupKey(record);
+    if (!key) {
+      if (isSummaryDue(record, now)) {
         const error = new Error(
           `Notification ${record.id} cannot be summarized without agentId, resourceId, and threadId`,
         );
         await recordDeliveryFailure({ storage, record, now, error });
         failed.push({ record, error: error.message });
-        continue;
+      } else {
+        ungroupedIndividual.push(record);
       }
-      const group = summaryGroups.get(key) ?? [];
-      group.push(record);
-      summaryGroups.set(key, group);
-    } else {
-      individual.push(record);
+      continue;
     }
+
+    const group = groups.get(key) ?? {
+      key,
+      agentId: record.agentId!,
+      resourceId: record.resourceId!,
+      threadId: record.threadId,
+      summaryRecords: [],
+      individualRecords: [],
+    };
+    if (isSummaryDue(record, now)) {
+      group.summaryRecords.push(record);
+    } else {
+      group.individualRecords.push(record);
+    }
+    groups.set(key, group);
   }
 
-  for (const records of summaryGroups.values()) {
+  for (const group of groups.values()) {
+    const records = [...group.summaryRecords, ...group.individualRecords];
+    let batchThreadState: NotificationDeliveryThreadState;
     try {
-      const result = await sendNotificationSummary({ mastra, storage, records, now });
-      delivered.push(...result.records);
-      signals.push(result.signal);
+      batchThreadState = await getBatchThreadState({ mastra, group });
     } catch (error) {
       for (const record of records) {
         await recordDeliveryFailure({ storage, record, now, error });
         failed.push({ record, error: errorMessage(error) });
       }
+      continue;
+    }
+
+    const items: DueDispatchItem[] = group.individualRecords.map(record => ({
+      type: 'individual',
+      record,
+      priority: record.priority,
+      createdAt: record.createdAt,
+    }));
+    if (group.summaryRecords.length > 0) {
+      items.push({
+        type: 'summary',
+        records: group.summaryRecords,
+        priority: getHighestPriority(group.summaryRecords),
+        createdAt: getEarliestCreatedAt(group.summaryRecords),
+      });
+    }
+    items.sort(compareDueDispatchItems);
+
+    for (const item of items) {
+      if (item.type === 'summary') {
+        try {
+          const result = await sendNotificationSummary({ mastra, storage, records: item.records, now });
+          delivered.push(...result.records);
+          signals.push(result.signal);
+        } catch (error) {
+          for (const record of item.records) {
+            await recordDeliveryFailure({ storage, record, now, error });
+            failed.push({ record, error: errorMessage(error) });
+          }
+        }
+        continue;
+      }
+
+      try {
+        const result = await sendNotificationRecord({ mastra, storage, record: item.record, now, batchThreadState });
+        if (!result) continue;
+        delivered.push(result.record);
+        signals.push(result.signal);
+      } catch (error) {
+        await recordDeliveryFailure({ storage, record: item.record, now, error });
+        failed.push({ record: item.record, error: errorMessage(error) });
+      }
     }
   }
 
-  for (const record of individual) {
+  ungroupedIndividual.sort((a, b) =>
+    compareDueDispatchItems(
+      { type: 'individual', record: a, priority: a.priority, createdAt: a.createdAt },
+      { type: 'individual', record: b, priority: b.priority, createdAt: b.createdAt },
+    ),
+  );
+  for (const record of ungroupedIndividual) {
     try {
       const result = await sendNotificationRecord({ mastra, storage, record, now });
       if (!result) continue;

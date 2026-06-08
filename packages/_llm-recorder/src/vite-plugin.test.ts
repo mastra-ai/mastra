@@ -51,6 +51,14 @@ describe('defaultNameGenerator', () => {
       'memory-integration-tests-src-shared-agent-memory',
     );
   });
+
+  it('does not match directory suffixes like -auth in worktree paths', () => {
+    expect(
+      defaultNameGenerator(
+        '/Users/yo/mastra-oss/wardpeet-gateway-resolve-auth/packages/core/src/agent/__tests__/workspace-tools-openai.e2e.test.ts',
+      ),
+    ).toBe('core-src-agent-__tests__-workspace-tools-openai.e2e');
+  });
 });
 
 describe('llmRecorderPlugin', () => {

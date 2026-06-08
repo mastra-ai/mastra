@@ -165,6 +165,39 @@ describe('handleMessageUpdate system reminders', () => {
     expect(state.chatContainer.children).toHaveLength(4);
   });
 
+  it('anchors a streamed state signal before pending assistant text', () => {
+    addUserMessage(state, {
+      id: 'user-1',
+      role: 'user',
+      content: [{ type: 'text', text: 'open the browser' }],
+    } as HarnessMessage);
+    state.streamingComponent = new AssistantMessageComponent(undefined, false);
+    state.chatContainer.addChild(state.streamingComponent);
+
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        {
+          type: 'state_signal',
+          stateId: 'browser',
+          mode: 'delta',
+          cacheKey: 'browser:v1',
+          message: 'changed: browser opened',
+        } as never,
+        { type: 'text', text: 'Done.' },
+      ]),
+    );
+
+    const stateSignal = state.chatContainer.children.find(child => child instanceof StateSignalComponent);
+    expect(visibleChildren(state)).toEqual([
+      state.messageComponentsById.get('user-1'),
+      stateSignal,
+      state.streamingComponent,
+    ]);
+    expect(isChatBoundarySpacer(state.chatContainer.children[1]!)).toBe(true);
+    expect(stripAnsi(state.streamingComponent!.render(80).join('\n'))).toContain('Done.');
+  });
+
   it('renders a streamed notification summary as an inline component', () => {
     handleMessageUpdate(
       ctx,

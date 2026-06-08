@@ -5,7 +5,7 @@ description: "Create custom model gateways for private or specialized LLM deploy
 
 # Custom model gateways
 
-Custom model gateways allow you to implement private or specialized LLM provider integrations by extending the `MastraModelGateway` base class.
+Custom model gateways allow you to implement private or specialized LLM provider integrations with the `MastraModelGatewayInterface` interface or the `MastraModelGateway` base class.
 
 ## Overview
 
@@ -25,7 +25,43 @@ Create custom gateways to support:
 
 ## Creating a Custom Gateway
 
-Extend the `MastraModelGateway` class and implement the required methods:
+Implement `MastraModelGatewayInterface` for a plain object gateway, or extend `MastraModelGateway` when you want base class defaults.
+
+```typescript
+import { type MastraModelGatewayInterface, type ProviderConfig } from '@mastra/core/llm';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
+
+const myPrivateGateway: MastraModelGatewayInterface = {
+  id: 'private',
+  name: 'My Private Gateway',
+  async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+    return {
+      'my-provider': {
+        name: 'My Provider',
+        models: ['__GATEWAY_OPENAI_MODEL__'],
+        apiKeyEnvVar: 'MY_API_KEY',
+        gateway: 'private',
+        url: 'https://api.myprovider.com/v1',
+      },
+    };
+  },
+  buildUrl() {
+    return 'https://api.myprovider.com/v1';
+  },
+  async getApiKey() {
+    return process.env.MY_API_KEY ?? '';
+  },
+  async resolveLanguageModel({ modelId, providerId, apiKey }) {
+    return createOpenAICompatible({
+      name: providerId,
+      apiKey,
+      baseURL: 'https://api.myprovider.com/v1',
+    }).chatModel(modelId);
+  },
+};
+```
+
+The following example extends the `MastraModelGateway` class:
 
 ```typescript
 import { MastraModelGateway, type ProviderConfig } from '@mastra/core/llm';
@@ -48,7 +84,7 @@ class MyPrivateGateway extends MastraModelGateway {
     return {
       'my-provider': {
         name: 'My Provider',
-        models: ['model-1', 'model-2', 'model-3'],
+        models: ['__GATEWAY_OPENAI_MODEL__', '__GATEWAY_ANTHROPIC_MODEL_SONNET__'],
         apiKeyEnvVar: 'MY_API_KEY',
         gateway: this.id,
         url: 'https://api.myprovider.com/v1',
@@ -102,6 +138,20 @@ class MyPrivateGateway extends MastraModelGateway {
 }
 ```
 
+### Gateway-owned authentication
+
+Add `resolveAuth` when the gateway owns credential lookup. Mastra uses this hook before falling back to `getApiKey()`.
+
+```typescript
+const myPrivateGateway: MastraModelGatewayInterface = {
+  // ...gateway fields and methods
+  async resolveAuth() {
+    const apiKey = process.env.MY_API_KEY;
+    return apiKey ? { apiKey, source: 'gateway' } : undefined;
+  },
+};
+```
+
 ## Registering Custom Gateways
 
 ### During Initialization
@@ -145,7 +195,7 @@ const agent = new Agent({
   id: 'my-agent',
   name: 'My Agent',
   instructions: 'You are a helpful assistant',
-  model: 'private/my-provider/model-1', // Uses MyPrivateGateway
+  model: 'private/my-provider/__GATEWAY_OPENAI_MODEL__', // Uses MyPrivateGateway
 });
 
 mastra.addAgent(agent, 'myAgent');
@@ -155,16 +205,16 @@ When you create an agent or use a model, Mastra's model router automatically sel
 
 ### TypeScript Autocomplete
 
-**Automatic Type Generation in Development**
+#### Automatic type generation in development
 
-When running in development mode (`MASTRA_DEV=true`), Mastra automatically generates TypeScript types for your custom gateways!
+When running in development mode (`MASTRA_DEV=true`), Mastra automatically generates TypeScript types for your custom gateways.
 
 1. **Set the environment variable**:
    ```bash
    export MASTRA_DEV=true
    ```
 
-2. **Register your gateways**:
+1. **Register your gateways**:
    ```typescript
    const mastra = new Mastra({
      gateways: {
@@ -173,20 +223,20 @@ When running in development mode (`MASTRA_DEV=true`), Mastra automatically gener
    });
    ```
 
-3. **Types are generated automatically**:
+1. **Types are generated automatically**:
    - When you add a gateway, Mastra syncs with the GatewayRegistry
    - The registry fetches providers from your custom gateway
    - TypeScript types are regenerated in `~/.cache/mastra/`
    - Your IDE picks up the new types within seconds
 
-4. **Autocomplete now works**:
+1. **Autocomplete now works**:
    ```typescript
    const agent = new Agent({
      model: 'my-gateway-id/my-provider/model-1', // Full autocomplete!
    });
    ```
 
-**How It Works**
+#### How it works
 
 The GatewayRegistry runs an hourly sync that:
 - Calls `fetchProviders()` on all registered gateways
@@ -517,19 +567,19 @@ describe('MyPrivateGateway', () => {
    readonly id = 'my-gateway-v1';
    ```
 
-2. **Implement proper error handling**: Throw descriptive errors with actionable messages
+1. **Implement proper error handling**: Throw descriptive errors with actionable messages
 
-3. **Cache expensive operations**: Cache tokens, URLs, or provider configurations when appropriate
+1. **Cache expensive operations**: Cache tokens, URLs, or provider configurations when appropriate
 
-4. **Validate environment variables**: Check for required environment variables in `getApiKey` and `buildUrl`
+1. **Validate environment variables**: Check for required environment variables in `getApiKey` and `buildUrl`
 
-5. **Document your gateway**: Add JSDoc comments explaining the gateway's purpose and configuration
+1. **Document your gateway**: Add JSDoc comments explaining the gateway's purpose and configuration
 
-6. **Follow naming conventions**: Use clear, consistent naming for providers and models
+1. **Follow naming conventions**: Use clear, consistent naming for providers and models
 
-7. **Handle async operations**: Use `async/await` for network requests and I/O operations
+1. **Handle async operations**: Use `async/await` for network requests and I/O operations
 
-8. **Test thoroughly**: Write unit tests for all gateway methods
+1. **Test thoroughly**: Write unit tests for all gateway methods
 
 ## Built-in Gateways
 
