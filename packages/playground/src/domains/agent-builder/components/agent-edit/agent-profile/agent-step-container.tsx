@@ -1,4 +1,5 @@
-import { Button, cn } from '@mastra/playground-ui';
+import { Button, Icon, cn } from '@mastra/playground-ui';
+import { ArrowLeftIcon } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useAgentColor } from '@/domains/agent-builder/contexts/agent-color-context';
@@ -16,7 +17,7 @@ export interface AgentStepContainerProps {
 export const AgentStepContainer = ({ children, cta, title, description }: AgentStepContainerProps) => {
   const agentColor = useAgentColor();
   const isStreaming = useStreamRunning();
-  const { isLast, next } = useWizard();
+  const { isLast, next, prev, step, steps } = useWizard();
   const navigate = useNavigate();
   const { id: agentId } = useParams<{ id: string }>();
 
@@ -25,6 +26,21 @@ export const AgentStepContainer = ({ children, cta, title, description }: AgentS
   };
 
   const showLastStepCtas = isLast && agentId;
+  const canGoBack = steps.indexOf(step) > 0;
+
+  const backButton = canGoBack ? (
+    <Button
+      variant="ghost"
+      onClick={() => startViewTransition(() => prev())}
+      disabled={isStreaming}
+      data-testid="agent-builder-step-back"
+    >
+      <Icon>
+        <ArrowLeftIcon />
+      </Icon>{' '}
+      Back
+    </Button>
+  ) : null;
 
   return (
     <div className="relative w-full h-full min-h-0 border border-border1 rounded-3xl overflow-hidden p-4">
@@ -48,6 +64,7 @@ export const AgentStepContainer = ({ children, cta, title, description }: AgentS
         <div className="min-h-0 overflow-y-auto">{children}</div>
         {showLastStepCtas ? (
           <div className="flex justify-center items-center gap-2 shrink-0 pb-6">
+            {backButton}
             <Button variant="outline" onClick={() => startViewTransition(() => next())} disabled={isStreaming}>
               See agent configuration
             </Button>
@@ -60,7 +77,10 @@ export const AgentStepContainer = ({ children, cta, title, description }: AgentS
             </Button>
           </div>
         ) : (
-          <div className="flex justify-center items-center shrink-0 pb-6">{cta}</div>
+          <div className="flex justify-center items-center gap-2 shrink-0 pb-6">
+            {backButton}
+            {cta}
+          </div>
         )}
       </div>
     </div>
