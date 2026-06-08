@@ -28,7 +28,8 @@ function AgentPlayground() {
   const { data: memory } = useMemory(agentId!);
   const editorSource = useEditorSource();
   const editorSourceCapabilities = useEditorSourceCapabilities();
-  const { isMastraPlatform, mastraPlatformApiEndpoint, mastraPlatformProjectId } = useMastraPlatform();
+  const { isMastraPlatform, mastraPlatformApiEndpoint, mastraPlatformProjectId, mastraPlatformUserName } =
+    useMastraPlatform();
 
   // Fetch versions first — this endpoint returns an empty array for code-only agents
   const { data: versionsData } = useAgentVersions({
@@ -65,7 +66,7 @@ function AgentPlayground() {
     isMastraPlatform &&
     !!mastraPlatformApiEndpoint &&
     !!mastraPlatformProjectId;
-  const openPrTitle = canOpenPr ? 'Open a pull request for these JSON changes' : undefined;
+  const openPrTitle = canOpenPr ? 'Propose these JSON changes in source control' : undefined;
   const isLoading = isLoadingCodeAgent || (hasVersions && isLoadingStoredAgent);
   const hasMemory = Boolean(memory?.result);
 
@@ -97,6 +98,7 @@ function AgentPlayground() {
     handleSaveDraft,
     handleDownloadJson,
     handleOpenPr,
+    handleInspectPr,
     isSubmitting,
     isSavingDraft,
     isDirty,
@@ -119,13 +121,20 @@ function AgentPlayground() {
     }
   }, [handlePublish, isViewingPreviousVersion, selectedVersionId]);
 
-  const handleOpenPrClick = useCallback(async () => {
-    if (!mastraPlatformApiEndpoint || !mastraPlatformProjectId) return;
-    await handleOpenPr({
-      platformApiEndpoint: mastraPlatformApiEndpoint,
-      projectId: mastraPlatformProjectId,
-    });
-  }, [handleOpenPr, mastraPlatformApiEndpoint, mastraPlatformProjectId]);
+  const handleOpenPrClick = useCallback(
+    async (changeMessage?: string) => {
+      if (!mastraPlatformApiEndpoint || !mastraPlatformProjectId) return;
+      return handleOpenPr(
+        {
+          platformApiEndpoint: mastraPlatformApiEndpoint,
+          projectId: mastraPlatformProjectId,
+          userName: mastraPlatformUserName,
+        },
+        changeMessage,
+      );
+    },
+    [handleOpenPr, mastraPlatformApiEndpoint, mastraPlatformProjectId, mastraPlatformUserName],
+  );
 
   const handleVersionSelect = useCallback(
     (versionId: string) => {
@@ -207,6 +216,7 @@ function AgentPlayground() {
         onPublish={handlePublishVersion}
         onDownloadJson={handleDownloadJson}
         onOpenPr={handleOpenPrClick}
+        onInspectPr={handleInspectPr}
         isViewingPreviousVersion={isViewingPreviousVersion}
       />
     </AgentEditFormProvider>

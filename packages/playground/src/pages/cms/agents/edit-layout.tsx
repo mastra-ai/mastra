@@ -1,6 +1,23 @@
-import { Notice, Badge, Button, MainContentLayout, Spinner } from '@mastra/playground-ui';
-import { Check, Download, GitPullRequest, Save } from 'lucide-react';
-import { useCallback, useEffect, useMemo } from 'react';
+import {
+  Notice,
+  Badge,
+  Button,
+  ButtonsGroup,
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DropdownMenu,
+  Input,
+  Label,
+  MainContentLayout,
+  Spinner,
+} from '@mastra/playground-ui';
+import { Check, ChevronDown, Download, ExternalLink, GitPullRequest, Save } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Outlet, useLocation, useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-shell';
 import { getCodeAgentOverrideSections } from '@/domains/agents/components/agent-cms-sidebar/agent-cms-sections';
@@ -127,7 +144,8 @@ function EditLayoutWrapper() {
   const { hash, pathname, search } = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedVersionId = searchParams.get('versionId');
-  const { isMastraPlatform, mastraPlatformApiEndpoint, mastraPlatformProjectId } = useMastraPlatform();
+  const { isMastraPlatform, mastraPlatformApiEndpoint, mastraPlatformProjectId, mastraPlatformUserName } =
+    useMastraPlatform();
 
   // Fetch the code/merged agent (GET /agents/:id) to determine source
   const { data: codeAgent, isLoading: isLoadingCodeAgent } = useAgent(agentId);
@@ -201,6 +219,7 @@ function EditLayoutWrapper() {
     handleSaveDraft,
     handleDownloadJson,
     handleOpenPr,
+    handleInspectPr,
     isSubmitting,
     isSavingDraft,
     isDirty,
@@ -248,8 +267,57 @@ function EditLayoutWrapper() {
     !!mastraPlatformApiEndpoint &&
     !!mastraPlatformProjectId;
   const openPrTitle = canOpenPr
-    ? 'Open this agent override JSON as a source change pull request'
-    : 'Source change pull requests are available on Mastra-hosted projects with source provider support';
+    ? 'Propose this agent override JSON as a source change'
+    : 'Source change proposals are available on Mastra-hosted projects with source provider support';
+  const [showProposeDialog, setShowProposeDialog] = useState(false);
+  const [proposeMessage, setProposeMessage] = useState('');
+  const [isProposingChange, setIsProposingChange] = useState(false);
+  const [proposedChangeUrl, setProposedChangeUrl] = useState<string | undefined>();
+
+  const handleProposeChange = useCallback(async () => {
+    if (!mastraPlatformApiEndpoint || !mastraPlatformProjectId || isProposingChange) return;
+    setIsProposingChange(true);
+    try {
+      const result = await handleOpenPr(
+        {
+          platformApiEndpoint: mastraPlatformApiEndpoint,
+          projectId: mastraPlatformProjectId,
+          userName: mastraPlatformUserName,
+        },
+        proposeMessage.trim() || undefined,
+      );
+      if (result?.url) setProposedChangeUrl(result.url);
+      setShowProposeDialog(false);
+      setProposeMessage('');
+    } finally {
+      setIsProposingChange(false);
+    }
+  }, [
+    handleOpenPr,
+    isProposingChange,
+    mastraPlatformApiEndpoint,
+    mastraPlatformProjectId,
+    mastraPlatformUserName,
+    proposeMessage,
+  ]);
+
+  useEffect(() => {
+    if (!canOpenPr || proposedChangeUrl) return;
+
+    let cancelled = false;
+    void (async () => {
+      const result = await handleInspectPr();
+      if (!cancelled && result?.url) setProposedChangeUrl(result.url);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canOpenPr, handleInspectPr, proposedChangeUrl]);
+
+  const handleInspectChange = useCallback(() => {
+    if (proposedChangeUrl) window.open(proposedChangeUrl, '_blank', 'noopener,noreferrer');
+  }, [proposedChangeUrl]);
 
   return (
     <MainContentLayout>
@@ -264,21 +332,43 @@ function EditLayoutWrapper() {
                     <Download />
                     Download JSON
                   </Button>
-                  <Button
-                    variant="primary"
-                    disabled={!canOpenPr || isSavingDraft || isSubmitting}
-                    title={openPrTitle}
-                    onClick={() => {
-                      if (!mastraPlatformApiEndpoint || !mastraPlatformProjectId) return;
-                      void handleOpenPr({
-                        platformApiEndpoint: mastraPlatformApiEndpoint,
-                        projectId: mastraPlatformProjectId,
-                      });
-                    }}
-                  >
-                    <GitPullRequest />
-                    Open PR
-                  </Button>
+                  <ButtonsGroup spacing="close">
+                    <Button
+                      variant="primary"
+                      disabled={!canOpenPr || isSavingDraft || isSubmitting || isProposingChange}
+                      title={openPrTitle}
+                      onClick={() => setShowProposeDialog(true)}
+                    >
+                      {isProposingChange ? (
+                        <>
+                          <Spinner className="h-4 w-4" />
+                          Proposing...
+                        </>
+                      ) : (
+                        <>
+                          <GitPullRequest />
+                          Propose change
+                        </>
+                      )}
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenu.Trigger asChild>
+                        <Button
+                          variant="primary"
+                          disabled={!canOpenPr || isSavingDraft || isSubmitting || isProposingChange}
+                          aria-label="More source change options"
+                        >
+                          <ChevronDown />
+                        </Button>
+                      </DropdownMenu.Trigger>
+                      <DropdownMenu.Content align="end">
+                        <DropdownMenu.Item disabled={!proposedChangeUrl} onSelect={handleInspectChange}>
+                          <ExternalLink />
+                          Inspect change
+                        </DropdownMenu.Item>
+                      </DropdownMenu.Content>
+                    </DropdownMenu>
+                  </ButtonsGroup>
                 </>
               ) : null
             ) : !isCodeAgentEditable ? null : (
@@ -364,6 +454,51 @@ function EditLayoutWrapper() {
           editorConfig={codeAgent?.editor}
         />
       )}
+      <Dialog open={showProposeDialog} onOpenChange={setShowProposeDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Propose Change</DialogTitle>
+            <DialogDescription>Add an optional commit message for the source change proposal.</DialogDescription>
+          </DialogHeader>
+          <DialogBody className="py-1">
+            <div className="grid gap-2">
+              <Label htmlFor="cms-propose-message">Commit message</Label>
+              <Input
+                id="cms-propose-message"
+                placeholder="Describe what changed..."
+                value={proposeMessage}
+                className="focus:ring-white/50"
+                onChange={e => setProposeMessage(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') {
+                    void handleProposeChange();
+                  }
+                }}
+                disabled={isProposingChange}
+                autoFocus
+              />
+            </div>
+          </DialogBody>
+          <DialogFooter className="px-6">
+            <Button variant="default" size="sm" onClick={() => setShowProposeDialog(false)}>
+              Cancel
+            </Button>
+            <Button variant="primary" size="sm" onClick={handleProposeChange} disabled={isProposingChange}>
+              {isProposingChange ? (
+                <>
+                  <Spinner className="h-4 w-4" />
+                  Proposing...
+                </>
+              ) : (
+                <>
+                  <GitPullRequest />
+                  Propose Change
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainContentLayout>
   );
 }

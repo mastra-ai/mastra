@@ -114,6 +114,7 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
     .replaceAll('%%MASTRA_TEMPLATES%%', templatesEnabled)
     .replaceAll('%%MASTRA_CLOUD_API_ENDPOINT%%', process.env.MASTRA_CLOUD_API_ENDPOINT ?? '')
     .replaceAll('%%MASTRA_PLATFORM_PROJECT_ID%%', process.env.MASTRA_PLATFORM_PROJECT_ID ?? '')
+    .replaceAll('%%MASTRA_PLATFORM_USER_NAME%%', escapeJsonForHtml(process.env.MASTRA_PLATFORM_USER_NAME ?? ''))
     .replaceAll('%%MASTRA_HIDE_CLOUD_CTA%%', '')
     .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', process.env.MASTRA_TELEMETRY_DISABLED ?? '')
     .replaceAll('%%MASTRA_REQUEST_CONTEXT_PRESETS%%', escapeJsonForHtml(requestContextPresetsJson))

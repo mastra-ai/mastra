@@ -106,6 +106,7 @@ export const HEAD = handle(app);
       templates: `'false'`,
       cloudApiEndpoint: `''`,
       platformProjectId: `''`,
+      platformUserName: `''`,
       experimentalFeatures: `'false'`,
       telemetryDisabled: `''`,
       requestContextPresets: `''`,

@@ -515,7 +515,10 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
   }, [getAgentExport]);
 
   const handleOpenPr = useCallback(
-    async (_platformOptions: { platformApiEndpoint: string; projectId: string }) => {
+    async (
+      platformOptions: { platformApiEndpoint: string; projectId: string; userName?: string },
+      changeMessage?: string,
+    ) => {
       if (!agentId) return;
 
       try {
@@ -531,15 +534,34 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         }
 
         const sharedParams = await buildSharedParams(values);
-        const result = await client.getStoredAgent(agentId).openChangeRequest(sharedParams);
-        window.open(result.url, '_blank', 'noopener,noreferrer');
-        toast.success('Pull request opened');
+        const result = await client
+          .getStoredAgent(agentId)
+          .openChangeRequest({ ...sharedParams, userName: platformOptions.userName, changeMessage });
+        void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+        void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
+        toast.success('Change proposed');
+        return result;
       } catch (error) {
-        toast.error(`Failed to open PR: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        toast.error(`Failed to propose change: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     },
-    [agentId, buildSharedParams, client, form, validateOwnedInstructions],
+    [agentId, buildSharedParams, client, form, queryClient, validateOwnedInstructions],
   );
+
+  const handleInspectPr = useCallback(async () => {
+    if (!agentId) return;
+
+    try {
+      const result = await client.getStoredAgent(agentId).openChangeRequest({ inspectOnly: true });
+      void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+      void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
+      return result;
+    } catch {
+      return;
+    }
+  }, [agentId, client, queryClient]);
 
   const watched = useWatch({ control: form.control });
 
@@ -567,6 +589,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     handleSaveDraft,
     handleDownloadJson,
     handleOpenPr,
+    handleInspectPr,
     isSubmitting,
     isSavingDraft,
     canPublish,

@@ -2,6 +2,7 @@ declare global {
   interface Window {
     MASTRA_CLOUD_API_ENDPOINT: string;
     MASTRA_PLATFORM_PROJECT_ID?: string;
+    MASTRA_PLATFORM_USER_NAME?: string;
   }
 }
 
@@ -16,6 +17,7 @@ const sanitize = (value?: string) => {
 export const useMastraPlatform = () => {
   const mastraPlatformEndpoint = sanitize(window.MASTRA_CLOUD_API_ENDPOINT);
   const mastraPlatformProjectId = sanitize(window.MASTRA_PLATFORM_PROJECT_ID);
+  const mastraPlatformUserName = sanitize(window.MASTRA_PLATFORM_USER_NAME);
   const isMastraPlatform = Boolean(mastraPlatformEndpoint);
 
   return {
@@ -23,5 +25,6 @@ export const useMastraPlatform = () => {
     mastraPlatformEndpoint,
     mastraPlatformApiEndpoint: mastraPlatformEndpoint,
     mastraPlatformProjectId,
+    mastraPlatformUserName,
   };
 };

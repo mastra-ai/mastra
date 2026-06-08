@@ -198,6 +198,23 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/threads/abort": {
+    "method": "POST",
+    "path": "/agents/:agentId/threads/abort",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "resourceId",
+      "threadId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/tools/:toolId/execute": {
     "method": "POST",
     "path": "/agents/:agentId/tools/:toolId/execute",
@@ -3288,6 +3305,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "agents",
       "browser",
+      "changeMessage",
       "defaultOptions",
       "description",
       "inputProcessors",
@@ -3304,6 +3322,7 @@ export const API_ROUTE_METADATA = {
       "skills",
       "toolProviders",
       "tools",
+      "userName",
       "workflows",
       "workspace"
     ],
