@@ -14,6 +14,7 @@ interface DynamicFormProps {
   defaultValues?: any;
   isSubmitLoading?: boolean;
   submitButtonLabel?: string;
+  submitButtonClassName?: string;
   className?: string;
   readOnly?: boolean;
   children?: React.ReactNode;
@@ -46,6 +47,7 @@ export function DynamicForm({
   defaultValues,
   isSubmitLoading,
   submitButtonLabel,
+  submitButtonClassName,
   className,
   readOnly,
   children,
@@ -120,14 +122,14 @@ export function DynamicForm({
             {leftActions ?? <div />}
             <div className="flex items-center gap-1">
               {submitActions}
-              <Button disabled={isSubmitLoading}>
+              <Button disabled={isSubmitLoading} className={submitButtonClassName}>
                 {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel || buttonChildren}
               </Button>
             </div>
           </div>
         ) : null,
     }),
-    [onSubmit, isSubmitLoading, submitButtonLabel, submitActions, leftActions],
+    [onSubmit, isSubmitLoading, submitButtonLabel, submitButtonClassName, submitActions, leftActions],
   );
 
   // Memoize form components to prevent unnecessary re-renders

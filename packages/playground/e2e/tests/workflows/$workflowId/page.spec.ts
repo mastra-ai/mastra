@@ -123,14 +123,20 @@ test('resuming a workflow', async ({ page }) => {
   await expect(nodes.nth(13)).toHaveAttribute('data-workflow-step-status', 'success');
 });
 
+async function checkSuspensionPayload(page: Page) {
+  await page.getByRole('button', { name: 'Suspension payload' }).click();
+  await expect(page.locator('[data-testid="suspended-payload"]').locator('[role="textbox"]')).toContainText(
+    `"reason": "Please provide user input to continue"`,
+  );
+  await page.getByRole('button', { name: 'Close' }).click();
+}
+
 async function checkShortPath(page: Page) {
   const nodes = await page.locator('[data-workflow-node]');
 
   await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'idle');
-  await expect(page.locator('[data-testid="suspended-payload"]').locator('[role="textbox"]')).toContainText(
-    `"reason": "Please provide user input to continue"`,
-  );
+  await checkSuspensionPayload(page);
 }
 
 async function checkLongPath(page: Page) {
@@ -138,9 +144,7 @@ async function checkLongPath(page: Page) {
 
   await expect(nodes.nth(5)).toHaveAttribute('data-workflow-step-status', 'idle');
   await expect(nodes.nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
-  await expect(page.locator('[data-testid="suspended-payload"]').locator('[role="textbox"]')).toContainText(
-    `"reason": "Please provide user input to continue"`,
-  );
+  await checkSuspensionPayload(page);
 }
 
 async function runWorkflow(page: Page) {

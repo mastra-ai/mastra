@@ -30,6 +30,8 @@ export interface WorkflowInputDataProps {
   submitActions?: React.ReactNode;
   leftActions?: React.ReactNode;
   heading?: string;
+  headingClassName?: string;
+  submitButtonClassName?: string;
 }
 
 export const WorkflowInputData = ({
@@ -45,6 +47,8 @@ export const WorkflowInputData = ({
   submitActions,
   leftActions,
   heading,
+  headingClassName,
+  submitButtonClassName,
 }: WorkflowInputDataProps) => {
   const [type, setType] = useState<InputType>(isProcessorWorkflow ? 'simple' : 'form');
   const [mounted, setMounted] = useState(false);
@@ -59,7 +63,7 @@ export const WorkflowInputData = ({
 
   return (
     <div>
-      <Txt as="p" variant="ui-md" className="text-neutral3 pb-4">
+      <Txt as="p" variant="ui-md" className={cn('text-neutral3 pb-4', headingClassName)}>
         {heading ?? (withoutSubmit ? 'Run input' : 'Trigger a run')}
       </Txt>
       <div className="pb-4">
@@ -96,6 +100,7 @@ export const WorkflowInputData = ({
             defaultValues={defaultValues}
             isSubmitLoading={isSubmitLoading}
             submitButtonLabel={submitButtonLabel}
+            submitButtonClassName={submitButtonClassName}
             onSubmit={onSubmit}
             withoutSubmit={withoutSubmit}
             isReadOnly={isReadOnly}
@@ -110,6 +115,7 @@ export const WorkflowInputData = ({
             defaultValues={defaultValues}
             isSubmitLoading={isSubmitLoading}
             submitButtonLabel={submitButtonLabel}
+            submitButtonClassName={submitButtonClassName}
             onSubmit={withoutSubmit ? undefined : onSubmit}
             readOnly={isReadOnly}
             submitActions={submitActions}
@@ -123,6 +129,7 @@ export const WorkflowInputData = ({
             defaultValues={defaultValues}
             isSubmitLoading={isSubmitLoading}
             submitButtonLabel={submitButtonLabel}
+            submitButtonClassName={submitButtonClassName}
             onSubmit={onSubmit}
             withoutSubmit={withoutSubmit}
             isReadOnly={isReadOnly}
@@ -148,6 +155,7 @@ const JSONInput = ({
   children,
   submitActions,
   leftActions,
+  submitButtonClassName,
 }: WorkflowInputDataProps) => {
   const [errors, setErrors] = useState<string[]>([]);
   const [inputData, setInputData] = useState<string>(() => JSON.stringify(defaultValues ?? {}, null, 2));
@@ -201,7 +209,7 @@ const JSONInput = ({
           {leftActions ?? <div />}
           <div className="flex items-center gap-1">
             {submitActions}
-            <Button variant="default" onClick={handleSubmit} size="lg">
+            <Button variant="default" onClick={handleSubmit} size="lg" className={submitButtonClassName}>
               {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
             </Button>
           </div>
@@ -242,6 +250,7 @@ const SimpleProcessorInput = ({
   children,
   submitActions,
   leftActions,
+  submitButtonClassName,
 }: WorkflowInputDataProps) => {
   const [message, setMessage] = useState(() => getDefaultProcessorMessage(defaultValues));
   const [phase, setPhase] = useState(() => getDefaultProcessorPhase(defaultValues));
@@ -346,7 +355,7 @@ const SimpleProcessorInput = ({
           {leftActions ?? <div />}
           <div className="flex items-center gap-1">
             {submitActions}
-            <Button variant="default" onClick={handleSubmit} size="lg">
+            <Button variant="default" onClick={handleSubmit} size="lg" className={submitButtonClassName}>
               {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
             </Button>
           </div>
