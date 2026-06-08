@@ -6,6 +6,7 @@ import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
 import { NoOpObservability } from '../../observability';
 import { RequestContext } from '../../request-context';
+import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { createWorkflow, createStep } from '../../workflows';
 import { createScorer } from '../base';
@@ -574,37 +575,21 @@ describe('runEvals', () => {
         model: dummyModel,
       });
 
-      // Create mock scores storage
-      const saveScoreSpy = vi.fn().mockResolvedValue({ score: {} });
-      const mockScoresStore = {
-        saveScore: saveScoreSpy,
-      };
-
-      // Mock workflows store with methods needed for scorer workflow runs
-      const mockWorkflowsStore = {
-        getWorkflowRunById: vi.fn().mockResolvedValue(null),
-        deleteWorkflowRunById: vi.fn().mockResolvedValue(undefined),
-        persistWorkflowSnapshot: vi.fn().mockResolvedValue(undefined),
-        listWorkflowRuns: vi.fn().mockResolvedValue({ runs: [] }),
-      };
-
-      const mockStorage = {
-        init: vi.fn().mockResolvedValue(undefined),
-        getStore: vi.fn().mockImplementation(async (domain: string) => {
-          if (domain === 'workflows') return mockWorkflowsStore;
-          if (domain === 'scores') return mockScoresStore;
-          return null;
-        }),
-        __setLogger: vi.fn(),
-      };
+      // The agent loop runs on the evented workflow engine, which needs a
+      // functioning `workflows` store — a partial mock cannot satisfy it. Use a
+      // real in-memory store and spy on the real `scores` store's saveScore.
+      const storage = new InMemoryStore();
 
       const mastra = new Mastra({
         agents: {
           testAgent: agent,
         },
         logger: false,
-        storage: mockStorage as any,
+        storage,
       });
+
+      const scoresStore = (await mastra.getStorage()!.getStore('scores'))!;
+      const saveScoreSpy = vi.spyOn(scoresStore, 'saveScore');
 
       const scorer = createScorer({
         id: 'testScorer',
