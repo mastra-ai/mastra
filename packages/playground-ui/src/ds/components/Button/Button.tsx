@@ -132,6 +132,10 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         disabled={disabled}
         aria-label={ariaLabel}
+        // Expose the variant so a parent ButtonsGroup can detect FILLED segments in CSS
+        // (filled buttons have an opaque background that hides a border seam, so the group
+        // paints their divider as an inset box-shadow instead — see buttons-group.tsx).
+        data-variant={variant}
         className={cn(buttonVariants({ variant, size: resolvedSize }), isLabelless && '[&>svg]:opacity-75', className)}
         {...props}
       >

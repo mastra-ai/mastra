@@ -12,6 +12,7 @@ import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { UserMessage } from './messages/user-messages';
 import { useThreadRuntimeState } from './thread-runtime-state';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
+import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
@@ -297,8 +298,11 @@ const ComposerActionRow = ({ canExecute = true, agentId, threadId, showModelSwit
       {/* Keep action buttons above the switcher when this row wraps. */}
       <div className="flex flex-wrap-reverse justify-between items-center gap-2 px-1.5 pb-1.5">
         {showModelSwitcher && agentId && (
-          <div className="shrink-0 max-w-full rounded-full bg-surface3 border border-border1 transition-colors duration-normal focus-within:border-border2">
-            <ComposerModelSwitcher agentId={agentId} />
+          <div className="flex items-center gap-1.5 shrink-0 max-w-full">
+            <div className="rounded-full bg-surface3 border border-border1 transition-colors duration-normal focus-within:border-border2">
+              <ComposerModelSwitcher agentId={agentId} />
+            </div>
+            <ComposerModelSettings agentId={agentId} />
           </div>
         )}
 

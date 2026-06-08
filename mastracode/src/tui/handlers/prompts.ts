@@ -2,6 +2,7 @@
  * Event handlers for interactive prompt events:
  * ask_question, sandbox_access_request, plan_approval_required.
  */
+import type { HarnessQuestionSelectionMode } from '@mastra/core/harness';
 import { savePlanToDisk } from '../../utils/plans.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
@@ -35,6 +36,7 @@ export async function handleAskQuestion(
   questionId: string,
   question: string,
   options?: Array<{ label: string; description?: string }>,
+  selectionMode?: HarnessQuestionSelectionMode,
 ): Promise<void> {
   const { state } = ctx;
 
@@ -55,11 +57,18 @@ export async function handleAskQuestion(
             askUserComponent.activate({
               question,
               options,
+              selectionMode,
               multiline: true,
               tui: state.ui,
               onSubmit: answer => {
                 state.activeInlineQuestion = undefined;
                 state.harness.respondToQuestion({ questionId, answer });
+                resolve();
+                processNextInlineQuestion(state);
+              },
+              onSubmitMulti: answers => {
+                state.activeInlineQuestion = undefined;
+                state.harness.respondToQuestion({ questionId, answer: answers });
                 resolve();
                 processNextInlineQuestion(state);
               },
@@ -78,10 +87,17 @@ export async function handleAskQuestion(
               {
                 question,
                 options,
+                selectionMode,
                 multiline: true,
                 onSubmit: answer => {
                   state.activeInlineQuestion = undefined;
                   state.harness.respondToQuestion({ questionId, answer });
+                  resolve();
+                  processNextInlineQuestion(state);
+                },
+                onSubmitMulti: answers => {
+                  state.activeInlineQuestion = undefined;
+                  state.harness.respondToQuestion({ questionId, answer: answers });
                   resolve();
                   processNextInlineQuestion(state);
                 },
@@ -127,11 +143,17 @@ export async function handleAskQuestion(
       const dialog = new AskQuestionDialogComponent({
         question,
         options,
+        selectionMode,
         multiline: true,
         tui: state.ui,
         onSubmit: answer => {
           state.ui.hideOverlay();
           state.harness.respondToQuestion({ questionId, answer });
+          resolve();
+        },
+        onSubmitMulti: answers => {
+          state.ui.hideOverlay();
+          state.harness.respondToQuestion({ questionId, answer: answers });
           resolve();
         },
         onCancel: () => {

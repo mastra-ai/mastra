@@ -6,8 +6,8 @@ import { visibleWidth } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';
-import type { TUIState } from './state.js';
-import { theme, mastra, tintHex, getTermWidth } from './theme.js';
+import type { GithubPrSubscriptionBadge, TUIState } from './state.js';
+import { theme, mastra, tintHex, getTermWidth, extendedColors } from './theme.js';
 
 // Colors for OM modes — read from proxy at render time so they pick up contrast adaptation
 const getObserverColor = () => mastra.orange;
@@ -22,6 +22,27 @@ function isGenericTitle(title: string): boolean {
     lower.startsWith('clone of') ||
     lower.startsWith('untitled')
   );
+}
+
+function formatGithubPrLabel(
+  state: TUIState,
+  subscription: GithubPrSubscriptionBadge,
+): { plain: string; styled: string } {
+  const plain = `PR#${subscription.prNumber}`;
+  const label = plain;
+  const color = subscription.lastNotificationPriority === 'high' ? mastra.orange : extendedColors.skyBlue;
+  if (state.githubPrPollingActive && state.githubPrGradientAnimator?.isRunning()) {
+    return {
+      plain: label,
+      styled: applyGradientSweep(
+        label,
+        state.githubPrGradientAnimator.getOffset(),
+        color,
+        state.githubPrGradientAnimator.getFadeProgress(),
+      ),
+    };
+  }
+  return { plain: label, styled: chalk.hex(color)(label) };
 }
 
 function formatGoalDuration(goal: { startedAt: string; activeStartedAt?: string; activeDurationMs?: number }): string {
@@ -162,6 +183,15 @@ export function updateStatusLine(state: TUIState): void {
   const goalDuration = goalState?.status === 'active' ? formatGoalDuration(goalState) : null;
   const goalLabel = goalDuration ? `pursuing goal (${goalDuration})` : null;
   const shortGoalLabel = goalDuration ? `goal (${goalDuration})` : null;
+  const activeGithubPr = state.activeGithubPrSubscriptions?.[0];
+  const githubPrLabel = activeGithubPr ? formatGithubPrLabel(state, activeGithubPr) : null;
+  const formatDirPart = (value: string) => {
+    if (!githubPrLabel) return { plain: value, styled: theme.fg('dim', value) };
+    return {
+      plain: `${githubPrLabel.plain} ${value}`,
+      styled: `${githubPrLabel.styled} ${theme.fg('dim', value)}`,
+    };
+  };
   // Build progressively shorter directory strings for layout fallback
   // Only show branch when not showing thread title (thread title takes priority)
   const dirFull = !threadTitle && branch ? `${displayPath} (${branch})` : displayPath;
@@ -309,12 +339,14 @@ export function updateStatusLine(state: TUIState): void {
       useBadgeWidth + parts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? SEP.length : 0), 0);
 
     if (dirText) {
+      const dirPart = formatDirPart(dirText);
       const availableForDir = termWidth - nonDirWidth - SEP.length - 1; // -1 buffer for ambiguous-width chars
-      const dirWidth = visibleWidth(dirText);
+      const dirWidth = visibleWidth(dirPart.plain);
       const MIN_TRUNCATED_DIR = 10; // don't show a tiny sliver
       if (dirWidth > availableForDir && availableForDir >= MIN_TRUNCATED_DIR) {
-        // Truncate to fit the remaining space
-        dirText = dirText.slice(0, availableForDir - 1) + '…';
+        const reservedPrefix = githubPrLabel ? `${githubPrLabel.plain} ` : '';
+        const availableForText = availableForDir - visibleWidth(reservedPrefix);
+        dirText = availableForText > 1 ? dirText.slice(0, availableForText - 1) + '…' : null;
       } else if (dirWidth > availableForDir) {
         // Not enough room even for a truncated version — drop it
         dirText = null;
@@ -322,10 +354,7 @@ export function updateStatusLine(state: TUIState): void {
     }
 
     if (dirText) {
-      parts.push({
-        plain: dirText,
-        styled: theme.fg('dim', dirText),
-      });
+      parts.push(formatDirPart(dirText));
     }
     const totalPlain =
       useBadgeWidth + parts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? SEP.length : 0), 0);

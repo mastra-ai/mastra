@@ -1,6 +1,7 @@
 import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
 import * as React from 'react';
 
+import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
 const Popover = PopoverPrimitive.Root;
@@ -23,14 +24,20 @@ const PopoverTrigger = React.forwardRef<HTMLButtonElement, PopoverTriggerProps>(
 PopoverTrigger.displayName = 'PopoverTrigger';
 
 type PopoverContentProps = PopoverPrimitive.Popup.Props &
-  Pick<PopoverPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'>;
+  Pick<PopoverPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'> & {
+    /** Optional portal container, forwarded to `Popover.Portal`. */
+    container?: HTMLElement | null;
+  };
 
 const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
-  ({ className, align = 'center', alignOffset = 0, side = 'bottom', sideOffset = 4, ...props }, ref) => {
+  ({ className, container, align = 'center', alignOffset = 0, side = 'bottom', sideOffset = 4, ...props }, ref) => {
     const classNameString = typeof className === 'string' ? className : undefined;
+    // Default to the nearest SideDialog/Drawer popup so the content stays
+    // interactive inside a modal drawer; an explicit `container` still wins.
+    const resolvedContainer = usePortalContainer(container);
 
     return (
-      <PopoverPrimitive.Portal>
+      <PopoverPrimitive.Portal container={resolvedContainer}>
         <PopoverPrimitive.Positioner
           align={align}
           alignOffset={alignOffset}

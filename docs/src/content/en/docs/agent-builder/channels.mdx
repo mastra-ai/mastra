@@ -1,0 +1,67 @@
+---
+title: "Channels | Agent Builder"
+description: Connect Builder-created agents to Slack and other channel providers without writing code.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+  - "@mastra/slack"
+---
+
+# Channels
+
+:::note
+The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
+:::
+
+Channels let Builder-created agents reach users outside the Mastra server. Register a channel provider on `Mastra.channels` and the Builder exposes the channel as an integration option for every agent.
+
+Slack is currently the only supported channel.
+
+## Quickstart
+
+Install the Slack provider:
+
+```bash npm2yarn
+npm install @mastra/slack
+```
+
+Register `SlackProvider` on `Mastra.channels`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { MastraEditor } from '@mastra/editor'
+import { createBuilderAgent } from '@mastra/editor/ee'
+import { SlackProvider } from '@mastra/slack'
+
+export const mastra = new Mastra({
+  storage,
+  channels: {
+    slack: new SlackProvider({
+      refreshToken: process.env.SLACK_APP_CONFIG_REFRESH_TOKEN,
+      baseUrl: process.env.SLACK_BASE_URL,
+    }),
+  },
+  agents: { builderAgent: createBuilderAgent() },
+  editor: new MastraEditor({
+    builder: { enabled: true },
+  }),
+})
+```
+
+The Slack provider handles app creation, OAuth, slash commands, and message routing for every Builder-created agent that opts in.
+
+## Configuration
+
+`SlackProvider` requires one environment variable and accepts one optional override:
+
+- `SLACK_APP_CONFIG_REFRESH_TOKEN` (required): the refresh token from your Slack app configuration tokens, available under **Your App Configuration Tokens** on [api.slack.com/apps](https://api.slack.com/apps). The refresh token does not expire, but the access tokens it issues rotate every 12 hours and are auto-persisted to `Mastra.storage`.
+- `baseUrl` (optional): the public URL Slack should send events and OAuth callbacks to. Defaults to the running Mastra server's host and port (for example, `http://localhost:4111` in local development). Pass `baseUrl` explicitly when the public URL differs from the server's resolved address — typically a tunnel for local development (`cloudflared tunnel --url http://localhost:4111`) or a deployed URL in production.
+
+## Storage requirement
+
+`SlackProvider` requires a persistent storage backend on the `Mastra` instance. Without storage, rotated tokens and app installations are lost on restart.
+
+## Related
+
+- [Deploying](/docs/agent-builder/deploying) — set a public `baseUrl` for production deployments.
+- [Configuration](/docs/agent-builder/configuration) — wire channel toggles into the Builder UI.

@@ -845,6 +845,29 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5-FP8',
     'zai-org/GLM-5.1-FP8',
   ];
+  readonly crof: readonly [
+    'deepseek-v3.2',
+    'deepseek-v4-flash',
+    'deepseek-v4-pro',
+    'deepseek-v4-pro-precision',
+    'gemma-4-31b-it',
+    'glm-4.7',
+    'glm-4.7-flash',
+    'glm-5',
+    'glm-5.1',
+    'glm-5.1-precision',
+    'greg',
+    'kimi-k2.5',
+    'kimi-k2.5-lightning',
+    'kimi-k2.6',
+    'kimi-k2.6-precision',
+    'mimo-v2.5-pro',
+    'mimo-v2.5-pro-precision',
+    'minimax-m2.5',
+    'qwen3.5-397b-a17b',
+    'qwen3.5-9b',
+    'qwen3.6-27b',
+  ];
   readonly ambient: readonly ['moonshotai/kimi-k2.6', 'zai-org/GLM-5.1-FP8'];
   readonly 'routing-run': readonly [
     'route/deepseek-v3.2',
@@ -1928,7 +1951,6 @@ export type ProviderModelsMap = {
     'arcee-ai/coder-large',
     'arcee-ai/maestro-reasoning',
     'arcee-ai/spotlight',
-    'arcee-ai/trinity-large-preview',
     'arcee-ai/trinity-large-thinking',
     'arcee-ai/trinity-large-thinking:free',
     'arcee-ai/trinity-mini',
@@ -2206,6 +2228,7 @@ export type ProviderModelsMap = {
     'qwen/qwen3.6-flash',
     'qwen/qwen3.6-max-preview',
     'qwen/qwen3.6-plus',
+    'qwen/qwen3.7-max',
     'rekaai/reka-edge',
     'rekaai/reka-flash-3',
     'relace/relace-apply-3',
@@ -2229,6 +2252,7 @@ export type ProviderModelsMap = {
     'x-ai/grok-4.20',
     'x-ai/grok-4.20-multi-agent',
     'x-ai/grok-4.3',
+    'x-ai/grok-build-0.1',
     'xiaomi/mimo-v2-flash',
     'xiaomi/mimo-v2-omni',
     'xiaomi/mimo-v2-pro',
@@ -2404,6 +2428,7 @@ export type ProviderModelsMap = {
     'gemini-3.1-flash-lite',
     'gemini-3.1-flash-lite-preview',
     'gemini-3.1-pro-preview',
+    'gemini-3.5-flash',
     'gemini-pro-latest',
     'gemma-2-27b-it-together',
     'gemma-3-1b-it',
@@ -2460,6 +2485,8 @@ export type ProviderModelsMap = {
     'grok-4-1-fast-reasoning',
     'grok-4-20-beta-0309-non-reasoning',
     'grok-4-20-beta-0309-reasoning',
+    'grok-4-20-non-reasoning',
+    'grok-4-20-reasoning',
     'grok-4-3',
     'grok-4-fast-reasoning',
     'hermes-2-pro-llama-3-8b',
@@ -2545,6 +2572,7 @@ export type ProviderModelsMap = {
     'qwen3.6-max-preview',
     'qwen3.6-plus',
     'qwen35-397b-a17b',
+    'qwen37-max',
     'qwq-plus',
     'seed-1-6-250615',
     'seed-1-6-250915',
@@ -3383,7 +3411,6 @@ export type ProviderModelsMap = {
     'nemotron-3-super-free',
     'qwen3.5-plus',
     'qwen3.6-plus',
-    'qwen3.6-plus-free',
   ];
   readonly mixlayer: readonly [
     'qwen/qwen3.5-122b-a10b',
@@ -3577,6 +3604,12 @@ export type ProviderModelsMap = {
     'hf:zai-org/GLM-5',
     'hf:zai-org/GLM-5.1',
   ];
+  readonly inceptron: readonly [
+    'MiniMaxAI/MiniMax-M2.5',
+    'moonshotai/Kimi-K2.6',
+    'nvidia/llama-3.3-70b-instruct-fp8',
+    'zai-org/GLM-5.1-FP8',
+  ];
   readonly 'minimax-coding-plan': readonly [
     'MiniMax-M2',
     'MiniMax-M2.1',
@@ -3612,6 +3645,7 @@ export type ProviderModelsMap = {
     'alibaba/qwen3.5-plus',
     'alibaba/qwen3.6-27b',
     'alibaba/qwen3.6-plus',
+    'alibaba/qwen3.7-max',
     'amazon/nova-2-lite',
     'amazon/nova-lite',
     'amazon/nova-micro',
@@ -3669,6 +3703,7 @@ export type ProviderModelsMap = {
     'google/gemini-3.1-flash-lite',
     'google/gemini-3.1-flash-lite-preview',
     'google/gemini-3.1-pro-preview',
+    'google/gemini-3.5-flash',
     'google/gemini-embedding-001',
     'google/gemini-embedding-2',
     'google/gemma-4-26b-a4b-it',
@@ -3716,6 +3751,7 @@ export type ProviderModelsMap = {
     'mistral/mistral-embed',
     'mistral/mistral-large-3',
     'mistral/mistral-medium',
+    'mistral/mistral-medium-3.5',
     'mistral/mistral-nemo',
     'mistral/mistral-small',
     'mistral/mixtral-8x22b-instruct',
@@ -3807,6 +3843,7 @@ export type ProviderModelsMap = {
     'xai/grok-4.20-reasoning',
     'xai/grok-4.20-reasoning-beta',
     'xai/grok-4.3',
+    'xai/grok-build-0.1',
     'xai/grok-imagine-image',
     'xai/grok-imagine-image-pro',
     'xiaomi/mimo-v2-flash',
@@ -3943,6 +3980,7 @@ export type ProviderModelsMap = {
     'qwen3.6-35b-a3b',
     'qwen3.6-max-preview',
     'qwen3.6-plus',
+    'qwen3.7-max',
     'qwq-plus',
   ];
   readonly '302ai': readonly [
@@ -4261,6 +4299,7 @@ export type ProviderModelsMap = {
     'openai/gpt-oss-120b',
     'zai-org/GLM-5.1',
   ];
+  readonly 'stepfun-ai': readonly ['step-3.5-flash', 'step-3.5-flash-2603'];
   readonly inference: readonly [
     'google/gemma-3',
     'meta/llama-3.1-8b-instruct',

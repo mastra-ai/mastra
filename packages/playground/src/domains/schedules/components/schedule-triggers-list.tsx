@@ -1,13 +1,5 @@
 import type { ScheduleTriggerResponse } from '@mastra/client-js';
-import {
-  EntityList,
-  EntityListSkeleton,
-  Spinner,
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-  Txt,
-} from '@mastra/playground-ui';
+import { DataList, DataListSkeleton, Tooltip, TooltipContent, TooltipTrigger, Txt } from '@mastra/playground-ui';
 import { AlertTriangleIcon } from 'lucide-react';
 import { formatScheduleTimestamp, formatRelativeTime } from '../utils/format';
 import { WorkflowRunStatusInline } from './workflow-run-status-inline';
@@ -58,7 +50,7 @@ export function ScheduleTriggersList({
   const { Link, paths } = useLinkComponent();
 
   if (isLoading) {
-    return <EntityListSkeleton columns={COLUMNS} />;
+    return <DataListSkeleton columns={COLUMNS} />;
   }
 
   if (triggers.length === 0) {
@@ -70,14 +62,14 @@ export function ScheduleTriggersList({
   }
 
   return (
-    <EntityList columns={COLUMNS}>
-      <EntityList.Top>
-        <EntityList.TopCell>Run</EntityList.TopCell>
-        <EntityList.TopCell>Status</EntityList.TopCell>
-        <EntityList.TopCell>Started</EntityList.TopCell>
-        <EntityList.TopCell>Duration</EntityList.TopCell>
-        <EntityList.TopCell> </EntityList.TopCell>
-      </EntityList.Top>
+    <DataList columns={COLUMNS} className="min-w-0">
+      <DataList.Top>
+        <DataList.TopCell>Run</DataList.TopCell>
+        <DataList.TopCell>Status</DataList.TopCell>
+        <DataList.TopCell>Started</DataList.TopCell>
+        <DataList.TopCell>Duration</DataList.TopCell>
+        <DataList.TopCell> </DataList.TopCell>
+      </DataList.Top>
 
       {triggers.map(t => {
         const driftMs = t.actualFireAt - t.scheduledFireAt;
@@ -89,10 +81,11 @@ export function ScheduleTriggersList({
         const showDriftWarning = !isPublishFailure && absDrift > DRIFT_WARN_MIN_MS && absDrift <= DRIFT_WARN_MAX_MS;
 
         const rowKey = `${t.scheduleId}-${t.runId}-${t.actualFireAt}`;
+        const isLinked = Boolean(workflowId && t.runId && !isPublishFailure);
         const runIdLabel = (
           <span
             className={
-              workflowId && !isPublishFailure
+              isLinked
                 ? 'text-accent1 font-mono text-ui-sm whitespace-nowrap'
                 : 'text-neutral3 font-mono text-ui-sm whitespace-nowrap'
             }
@@ -103,9 +96,9 @@ export function ScheduleTriggersList({
 
         const cells = (
           <>
-            <EntityList.NameCell>{runIdLabel}</EntityList.NameCell>
+            <DataList.Cell height="compact">{runIdLabel}</DataList.Cell>
 
-            <EntityList.TextCell>
+            <DataList.Cell height="compact">
               <span className="inline-flex items-center gap-2">
                 {isPublishFailure ? (
                   <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm text-accent2">
@@ -130,9 +123,9 @@ export function ScheduleTriggersList({
                   </Tooltip>
                 ) : null}
               </span>
-            </EntityList.TextCell>
+            </DataList.Cell>
 
-            <EntityList.TextCell>
+            <DataList.Cell height="compact">
               <span className="inline-flex items-center gap-2 whitespace-nowrap">
                 <span title={startedTooltip}>{formatRelativeTime(t.actualFireAt)}</span>
                 {showDriftWarning ? (
@@ -146,37 +139,28 @@ export function ScheduleTriggersList({
                   </Tooltip>
                 ) : null}
               </span>
-            </EntityList.TextCell>
+            </DataList.Cell>
 
-            <EntityList.TextCell>
+            <DataList.Cell height="compact">
               {t.run ? <span>{formatDuration(t.run.durationMs)}</span> : <span className="text-neutral4">—</span>}
-            </EntityList.TextCell>
-            <EntityList.TextCell> </EntityList.TextCell>
+            </DataList.Cell>
+            <DataList.Cell height="compact"> </DataList.Cell>
           </>
         );
 
-        return workflowId && t.run && t.runId && !isPublishFailure ? (
-          <EntityList.RowLink key={rowKey} to={paths.workflowRunLink(workflowId, t.runId)} LinkComponent={Link}>
+        return isLinked ? (
+          <DataList.RowLink key={rowKey} to={paths.workflowRunLink(workflowId!, t.runId!)} LinkComponent={Link}>
             {cells}
-          </EntityList.RowLink>
+          </DataList.RowLink>
         ) : (
-          <EntityList.Row key={rowKey}>{cells}</EntityList.Row>
+          <DataList.RowStatic key={rowKey}>{cells}</DataList.RowStatic>
         );
       })}
-      {setEndOfListElement ? (
-        <div ref={setEndOfListElement} className="h-1 col-span-full">
-          {isFetchingNextPage ? (
-            <div className="flex justify-center py-4">
-              <Spinner />
-            </div>
-          ) : null}
-          {!hasNextPage && triggers.length > 0 ? (
-            <Txt variant="ui-xs" className="text-neutral4 text-center py-4 block">
-              All triggers loaded
-            </Txt>
-          ) : null}
-        </div>
-      ) : null}
-    </EntityList>
+      <DataList.NextPageLoading
+        isLoading={isFetchingNextPage}
+        hasMore={hasNextPage}
+        setEndOfListElement={setEndOfListElement}
+      />
+    </DataList>
   );
 }

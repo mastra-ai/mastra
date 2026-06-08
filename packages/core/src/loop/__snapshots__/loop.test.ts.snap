@@ -5628,7 +5628,7 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
               },
             ],
           },
-          "createdAt": 2024-01-01T00:00:00.000Z,
+          "createdAt": 2024-01-01T00:00:00.001Z,
           "id": "msg-0",
           "role": "assistant",
         },
@@ -5686,7 +5686,7 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
         {
           "id": "msg-0",
           "metadata": {
-            "createdAt": 2024-01-01T00:00:00.000Z,
+            "createdAt": 2024-01-01T00:00:00.001Z,
             "modelId": "mock-model-id",
             "provider": "mock-provider",
           },
@@ -12729,7 +12729,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
               },
             ],
           },
-          "createdAt": 2024-01-01T00:00:00.000Z,
+          "createdAt": 2024-01-01T00:00:00.001Z,
           "id": "msg-0",
           "role": "assistant",
         },
@@ -12787,7 +12787,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
         {
           "id": "msg-0",
           "metadata": {
-            "createdAt": 2024-01-01T00:00:00.000Z,
+            "createdAt": 2024-01-01T00:00:00.001Z,
             "modelId": "mock-model-id",
             "provider": "mock-provider",
           },

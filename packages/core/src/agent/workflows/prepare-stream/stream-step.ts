@@ -8,7 +8,7 @@ import type { MemoryConfigInternal } from '../../../memory/types';
 import { resolveObservabilityContext } from '../../../observability';
 import { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
-import type { ToolPayloadTransformPolicy } from '../../../tools';
+import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../../../tools';
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { SaveQueueManager } from '../../save-queue';
@@ -20,7 +20,7 @@ interface StreamStepOptions {
   capabilities: AgentCapabilities;
   runId: string;
   returnScorerData?: boolean;
-  requireToolApproval?: boolean;
+  requireToolApproval?: RequireToolApproval;
   toolCallConcurrency?: number;
   resumeContext?: {
     resumeData: any;

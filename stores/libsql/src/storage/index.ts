@@ -13,12 +13,14 @@ import { FavoritesLibSQL } from './domains/favorites';
 import { MCPClientsLibSQL } from './domains/mcp-clients';
 import { MCPServersLibSQL } from './domains/mcp-servers';
 import { MemoryLibSQL } from './domains/memory';
+import { NotificationsLibSQL } from './domains/notifications';
 import { ObservabilityLibSQL } from './domains/observability';
 import { PromptBlocksLibSQL } from './domains/prompt-blocks';
 import { SchedulesLibSQL } from './domains/schedules';
 import { ScorerDefinitionsLibSQL } from './domains/scorer-definitions';
 import { ScoresLibSQL } from './domains/scores';
 import { SkillsLibSQL } from './domains/skills';
+import { ToolProviderConnectionsLibSQL } from './domains/tool-provider-connections';
 import { WorkflowsLibSQL } from './domains/workflows';
 import { WorkspacesLibSQL } from './domains/workspaces';
 
@@ -33,6 +35,7 @@ export {
   MCPClientsLibSQL,
   MCPServersLibSQL,
   MemoryLibSQL,
+  NotificationsLibSQL,
   ObservabilityLibSQL,
   PromptBlocksLibSQL,
   SchedulesLibSQL,
@@ -40,6 +43,7 @@ export {
   ScoresLibSQL,
   SkillsLibSQL,
   FavoritesLibSQL,
+  ToolProviderConnectionsLibSQL,
   WorkflowsLibSQL,
   WorkspacesLibSQL,
 };
@@ -200,6 +204,8 @@ export class LibSQLStore extends MastraCompositeStore {
     const blobs = new BlobsLibSQL(domainConfig);
     const backgroundTasks = new BackgroundTasksLibSQL(domainConfig);
     const schedules = new SchedulesLibSQL(domainConfig);
+    const toolProviderConnections = new ToolProviderConnectionsLibSQL(domainConfig);
+    const notifications = new NotificationsLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -220,6 +226,8 @@ export class LibSQLStore extends MastraCompositeStore {
       blobs,
       backgroundTasks,
       schedules,
+      toolProviderConnections,
+      notifications,
     };
   }
 
@@ -291,6 +299,41 @@ export class LibSQLStore extends MastraCompositeStore {
     }
 
     await this.initDomainsSequentially();
+  }
+
+  /**
+   * Closes the underlying libsql client, releasing all OS file handles.
+   *
+   * For local file databases, first runs PRAGMA wal_checkpoint(TRUNCATE) and
+   * switches back to journal_mode=DELETE so that Windows releases the -wal
+   * and -shm sidecar files promptly. Without this, the handles stay open
+   * until process exit, causing EBUSY errors when callers try to fs.rm the
+   * storage directory after Mastra.shutdown().
+   *
+   * Remote (Turso) databases skip the WAL pragmas and just close the client.
+   *
+   * Safe to call more than once; subsequent calls are no-ops.
+   */
+  async close(): Promise<void> {
+    if (this.client.closed) {
+      return;
+    }
+
+    // A store built from an injected client may still point at a local file even
+    // though `isLocalDb` (derived from the url config) is false, so also trust the
+    // client's own protocol to decide whether WAL cleanup is needed.
+    const isLocalFileDb = this.isLocalDb || this.client.protocol === 'file';
+
+    if (isLocalFileDb) {
+      try {
+        await this.client.execute('PRAGMA wal_checkpoint(TRUNCATE);');
+        await this.client.execute('PRAGMA journal_mode=DELETE;');
+      } catch (err) {
+        this.logger.warn('LibSQLStore: Failed to checkpoint WAL before close.', err);
+      }
+    }
+
+    this.client.close();
   }
 }
 

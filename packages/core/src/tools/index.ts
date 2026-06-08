@@ -5,3 +5,4 @@ export { getTransformedToolPayload, hasTransformedToolPayload } from './payload-
 export { isProviderDefinedTool, isProviderTool, isVercelTool } from './toolchecks';
 export { ToolStream } from './stream';
 export { type ValidationError, isValidationError } from './validation';
+export * from './code-mode';

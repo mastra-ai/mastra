@@ -60,6 +60,8 @@ export const initProject = async (args: InitArgs) => {
           versionTag,
           observability: result?.observability,
           observabilityToken: result?.observabilityToken,
+          observabilityOrgId: result?.observabilityOrgId,
+          observabilityOrgName: result?.observabilityOrgName,
         });
         return;
       }

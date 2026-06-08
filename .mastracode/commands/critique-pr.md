@@ -1,37 +1,47 @@
+---
+name: critique-pr
+description: Analyze, critique, summarize, and draft an optional review comment for the current pull request
+goal: true
+---
+
 # Review Pull Request
 
 Use the GH CLI to analyze and summarize a pull request for the current repository.
 The current branch should be checked out in the same branch as the PR but you will need to verify that first.
 
-RUN gh pr view --json title,body,commits,files,labels,assignees,reviews,comments,checksStatus
+RUN gh pr view --json title,body,commits,files,labels,assignees,reviews,comments,statusCheckRollup
 
 ## Review Process
 
 ### Stage 1: Understand the Context
 
-1. Read the PR title and description carefully
-2. Check linked issues (if any) using `gh issue view`
-3. Review the commit history to understand the progression of changes
-4. Note any labels, assignees, and check status
+1. Verify the checked-out branch matches the PR head branch before reviewing
+2. Read the PR title and description carefully
+3. Check linked issues (if any) using `gh issue view`
+4. Review the commit history to understand the progression of changes
+5. Note any labels, assignees, and check status
 
 ### Stage 2: Analyze the Code
 
 1. List all changed files using `gh pr diff`
-2. Create a PR_SUMMARY.md file in the project root with sections for:
+2. Create a .pr-review/PR_SUMMARY.md file with sections for:
    - **Overview**: What this PR accomplishes
    - **How It Works**: Technical explanation of the implementation
    - **Key Changes**: File-by-file breakdown with links (use format: `path/to/file.ts:line`)
    - **Architecture Impact**: How this fits into the overall system
    - **Dependencies**: Any new dependencies or APIs introduced
-   - **Testing**: What tests cover these changes
-   - **Potential Concerns**: Any risks or areas that need attention
+   - **Testing**: What tests cover these changes, what validation you ran, and whether dependencies were installed and affected packages were built first
+   - **Potential Concerns**: Confirmed issues, speculative risks, or areas that need attention
 
-3. For each significant file change:
+3. Before running tests, check whether dependencies are installed. If dependencies are missing, stale, or package manifests / lockfiles changed, run the project install command first. For this repo, prefer `pnpm i` unless local instructions say otherwise.
+4. Build affected packages before relying on tests that consume their compiled outputs. Prefer narrow package/workspace build commands over repo-wide builds.
+5. Do not claim a test, build, or check passed unless you ran it or verified the matching CI check.
+6. For each significant file change:
    - Understand the context and purpose
    - Explain the logic flow and implementation details
    - Note how it connects to other parts of the codebase
    - Identify any patterns or conventions used
-   - Link to specific lines for important code sections
+   - Link to specific lines for important code sections only after confirming the line numbers
 
 ### Stage 3: Deep Dive
 
@@ -39,15 +49,18 @@ RUN gh pr view --json title,body,commits,files,labels,assignees,reviews,comments
 2. Understand the data flow and transformations
 3. Check how edge cases are handled
 4. Verify integration points with existing code
-5. Document your understanding in the summary file
+5. After reviewing the code, verify the PR title and description match the actual diff; call out mismatches
+6. Check whether the changes require a changeset, docs updates, package-local AGENTS.md instructions, or other repository PR requirements, and call out any missing required items
+7. Document your understanding in the summary file
 
 ### Stage 4: Present to User
 
-1. Complete the PR_SUMMARY.md with a comprehensive explanation
+1. Complete .pr-review/PR_SUMMARY.md with a comprehensive explanation
 2. Use clear, technical language to explain how the code works
 3. Include helpful diagrams or examples if complex logic is involved
 4. Link to specific files and line numbers for easy navigation
 5. Highlight any interesting design decisions or trade-offs
+6. Draft a PR review comment for the user, ask what changes they want, and make clear that posting it is optional. Do not post it unless the user explicitly asks you to post the current draft.
 
 ## Summary Structure Example
 
@@ -85,21 +98,25 @@ How these changes fit into and affect the overall system architecture.
 
 ## Testing
 
+- Ran `pnpm i` because the lockfile changed
+- Built affected package with `pnpm --filter ./packages/auth build`
 - Unit tests in `tests/auth.test.ts`
 - Integration tests in `tests/integration/auth.spec.ts`
 - All existing tests still pass
 
 ## Potential Concerns
 
-- Performance impact of additional middleware
-- Migration needed for existing tokens
+- Confirmed issue: old tokens fail immediately after deploy
+- Speculative risk: performance impact of additional middleware
 ```
 
 After you've finished and written the .md file, give the user a TLDR containing the most important points. After the TLDR explain concisely your main concerns, and just note that you don't have any concerns if you don't.
 
 ## Posting a PR Review Comment (Optional)
 
-Offer to post a PR review comment if the user wants one. First align on the contents of the review comment, then follow this guidance for posting:
+Draft a PR review comment proactively, but the user decides whether it gets posted. Ask what changes the user wants to the draft, whether they want to post it, or whether they do not want to post anything. If the user asks for changes, re-draft the full comment and ask again. Do not post unless the user explicitly asks you to post the current draft.
+
+If the user decides to post the review comment, first align on the contents of the review comment, then follow this guidance for posting:
 
 GitHub has separate rate-limit buckets for GraphQL and REST. Some `gh pr` commands use GraphQL, so they can fail with a GraphQL rate-limit error even when REST API calls still have quota. When that happens, use the REST issues comments API instead:
 

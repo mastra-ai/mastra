@@ -492,16 +492,16 @@ export const getThreadByIdResponseSchema = threadSchema;
  */
 export const listMessagesResponseSchema = z.object({
   messages: z.array(messageSchema),
-  uiMessages: z.unknown(), // Converted messages in UI format
+  uiMessages: z.array(z.any()).nullable(), // Converted messages in UI format
 });
 
 /**
  * Response for GET /memory/threads/:threadId/working-memory
  */
 export const getWorkingMemoryResponseSchema = z.object({
-  workingMemory: z.unknown(), // Can be string or structured object depending on template
+  workingMemory: z.unknown().nullable(), // Can be string or structured object depending on template
   source: z.enum(['thread', 'resource']),
-  workingMemoryTemplate: z.unknown(), // Template structure varies
+  workingMemoryTemplate: z.unknown().nullable(), // Template structure varies
   threadExists: z.boolean(),
 });
 

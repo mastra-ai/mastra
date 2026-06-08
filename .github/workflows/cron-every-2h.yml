@@ -1,0 +1,44 @@
+name: Scheduled (Every 2 Hours)
+permissions:
+  contents: none
+
+on:
+  schedule:
+    # Run every 2 hours
+    - cron: '0 */2 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: scheduled-every-2h
+  cancel-in-progress: false
+
+jobs:
+  discord-github-sync:
+    name: Discord to GitHub Sync
+    uses: ./.github/workflows/call-external-mastra-workflow.yml
+    with:
+      workflow_name: discordSyncWorkflow
+      input_data: '{"inputData":{"owner":"mastra-ai","repo":"mastra"},"requestContext":{}}'
+      base_url: ${{ vars.MASTRA_CLOUD_BASE_URL }}
+    secrets:
+      MASTRA_TRIAGE_JWT_KEY: ${{ secrets.MASTRA_TRIAGE_JWT_KEY }}
+
+  discord-triage:
+    name: Discord Triage
+    uses: ./.github/workflows/call-external-mastra-workflow.yml
+    with:
+      workflow_name: discordToGithubWorkflow
+      input_data: '{"inputData":{"forumChannelId":"1349006916902191125","fetchLimit":1},"requestContext":{}}'
+      base_url: ${{ vars.MASTRA_CLOUD_BASE_URL }}
+    secrets:
+      MASTRA_TRIAGE_JWT_KEY: ${{ secrets.MASTRA_TRIAGE_JWT_KEY }}
+
+  github-issues-follow-up:
+    name: GitHub Issues Follow-Up
+    uses: ./.github/workflows/call-external-mastra-workflow.yml
+    with:
+      workflow_name: githubIssueManagerWorkflow
+      input_data: '{"inputData":{"owner":"mastra-ai","repo":"mastra","batchSize":100},"requestContext":{}}'
+      base_url: ${{ vars.MASTRA_CLOUD_BASE_URL }}
+    secrets:
+      MASTRA_TRIAGE_JWT_KEY: ${{ secrets.MASTRA_TRIAGE_JWT_KEY }}

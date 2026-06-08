@@ -94,7 +94,8 @@ export const createStoredWorkspaceBodySchema = z
 
 export const updateStoredWorkspaceBodySchema = z
   .object({
-    authorId: z.string().optional(),
+    // Note: authorId is intentionally not accepted. Ownership cannot be
+    // transferred via PATCH.
     metadata: z.record(z.string(), z.unknown()).optional(),
   })
   .partial()

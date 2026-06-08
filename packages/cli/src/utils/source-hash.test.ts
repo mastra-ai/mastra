@@ -1,6 +1,6 @@
-import { mkdir, open, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, open, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, afterAll } from 'vitest';
 import { computeSourceHash, writeBuildManifest, readBuildManifest, checkBuildStaleness } from './source-hash';
 
 // Use a local .test-tmp dir instead of os.tmpdir() — some CI runners
@@ -23,13 +23,14 @@ async function writeFileSynced(path: string, content: string): Promise<void> {
   }
 }
 
-describe('source-hash', () => {
+describe.sequential('source-hash', () => {
   let testDir: string;
   let mastraDir: string;
   let outputDir: string;
 
   beforeEach(async () => {
-    testDir = join(TEST_TMP_ROOT, `source-hash-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+    await mkdir(TEST_TMP_ROOT, { recursive: true });
+    testDir = await mkdtemp(join(TEST_TMP_ROOT, 'source-hash-test-'));
     mastraDir = join(testDir, 'src', 'mastra');
     outputDir = join(testDir, '.mastra');
 
@@ -39,6 +40,10 @@ describe('source-hash', () => {
 
   afterEach(async () => {
     await rm(testDir, { recursive: true, force: true });
+  });
+
+  afterAll(async () => {
+    await rm(TEST_TMP_ROOT, { recursive: true, force: true });
   });
 
   describe('computeSourceHash', () => {
@@ -93,10 +98,7 @@ describe('source-hash', () => {
     });
 
     it('should include workspace root lockfile in hash for monorepos', async () => {
-      const workspaceRoot = join(
-        TEST_TMP_ROOT,
-        `workspace-root-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      );
+      const workspaceRoot = await mkdtemp(join(TEST_TMP_ROOT, 'workspace-root-test-'));
       const projectDir = join(workspaceRoot, 'packages', 'my-app');
       const projectMastraDir = join(projectDir, 'src', 'mastra');
 

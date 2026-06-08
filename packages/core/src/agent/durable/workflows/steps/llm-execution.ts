@@ -258,6 +258,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 steps: (inputData as any).accumulatedSteps ?? [],
                 tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                 requestContext,
+                memory: registryEntry.memory,
+                resourceId: typedInput.state?.resourceId,
+                threadId: typedInput.state?.threadId,
                 model: currentModel,
                 messageId: currentMessageId,
                 rotateResponseMessageId: () => {

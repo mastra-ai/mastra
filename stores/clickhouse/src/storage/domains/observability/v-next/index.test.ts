@@ -1735,53 +1735,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
   });
 
   // ==========================================================================
-  // Logs
-  // ==========================================================================
-
-  describe('logs', () => {
-    it('creates and lists logs', async () => {
-      await storage.batchCreateLogs({
-        logs: [
-          {
-            logId: 'log-test-1',
-            timestamp: new Date(),
-            level: 'info',
-            message: 'Test log message',
-            data: { key: 'value' },
-            traceId: 'trace-1',
-            spanId: 'span-1',
-            tags: ['test'],
-            entityType: EntityType.AGENT,
-            entityId: 'agent-1',
-            entityName: 'myAgent',
-            metadata: null,
-          },
-          {
-            logId: 'log-test-2',
-            timestamp: new Date(),
-            level: 'error',
-            message: 'Error occurred',
-            data: null,
-            traceId: 'trace-1',
-            spanId: null,
-            tags: null,
-            metadata: null,
-          },
-        ],
-      });
-
-      const result = await storage.listLogs({});
-      expect(result.logs).toHaveLength(2);
-
-      const filtered = await storage.listLogs({
-        filters: { level: 'error' },
-      });
-      expect(filtered.logs).toHaveLength(1);
-      expect(filtered.logs[0]!.message).toBe('Error occurred');
-    });
-  });
-
-  // ==========================================================================
   // Metrics + OLAP
   // ==========================================================================
 
@@ -1845,74 +1798,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       });
     });
 
-    it('getMetricAggregate returns sum', async () => {
-      const result = await storage.getMetricAggregate({
-        name: ['mastra_agent_duration_ms'],
-        aggregation: 'sum',
-      });
-      expect(result.value).toBe(800); // 100 + 200 + 500
-      expect(result.estimatedCost).toBeCloseTo(0.8);
-      expect(result.costUnit).toBe('usd');
-    });
-
-    it('listMetrics returns paginated metric records with shared filters', async () => {
-      const result = await storage.listMetrics({
-        filters: {
-          provider: 'openai',
-          model: 'gpt-4o-mini',
-          tags: ['prod'],
-        },
-        pagination: { page: 0, perPage: 1 },
-        orderBy: { field: 'timestamp', direction: 'ASC' },
-      });
-
-      expect(result.pagination.total).toBe(2);
-      expect(result.pagination.hasMore).toBe(true);
-      expect(result.metrics).toHaveLength(1);
-      expect(result.metrics[0]!.provider).toBe('openai');
-      expect(result.metrics[0]!.model).toBe('gpt-4o-mini');
-      expect(result.metrics[0]!.estimatedCost).toBeCloseTo(0.1);
-      expect(result.metrics[0]!.costUnit).toBe('usd');
-      expect(result.metrics[0]!.tags).toEqual(['prod']);
-      expect(result.metrics[0]!.labels).toEqual({ status: 'ok' });
-    });
-
-    it('getMetricBreakdown groups by entityName', async () => {
-      const result = await storage.getMetricBreakdown({
-        name: ['mastra_agent_duration_ms'],
-        groupBy: ['entityName'],
-        aggregation: 'avg',
-      });
-      expect(result.groups).toHaveLength(2);
-      const weather = result.groups.find(g => g.dimensions.entityName === 'weatherAgent');
-      const code = result.groups.find(g => g.dimensions.entityName === 'codeAgent');
-      expect(weather).toBeDefined();
-      expect(weather!.value).toBe(150); // (100+200)/2
-      expect(weather!.estimatedCost).toBeCloseTo(0.3);
-      expect(weather!.costUnit).toBe('usd');
-      expect(code).toBeDefined();
-      expect(code!.value).toBe(500);
-      expect(code!.estimatedCost).toBeCloseTo(0.5);
-      expect(code!.costUnit).toBe('usd');
-    });
-
-    it('getMetricBreakdown groups by label keys', async () => {
-      const result = await storage.getMetricBreakdown({
-        name: ['mastra_agent_duration_ms'],
-        groupBy: ['status'],
-        aggregation: 'count',
-      });
-
-      expect(result.groups).toHaveLength(2);
-      const ok = result.groups.find(g => g.dimensions.status === 'ok');
-      const error = result.groups.find(g => g.dimensions.status === 'error');
-
-      expect(ok?.value).toBe(2);
-      expect(ok?.estimatedCost).toBeCloseTo(0.3);
-      expect(error?.value).toBe(1);
-      expect(error?.estimatedCost).toBeCloseTo(0.5);
-    });
-
     it('getMetricBreakdown excludes rows missing label keys (v-next design)', async () => {
       // The beforeEach inserts 3 mastra_agent_duration_ms rows with 'status' label.
       // Insert 2 more rows with a different label key ('foo-bar'), but NOT 'status'.
@@ -1955,19 +1840,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       expect(beta?.value).toBe(1);
       // v-next design: rows missing the requested label key are excluded
       expect(missing).toBeUndefined();
-    });
-
-    it('getMetricTimeSeries returns bucketed data', async () => {
-      const result = await storage.getMetricTimeSeries({
-        name: ['mastra_agent_duration_ms'],
-        interval: '1h',
-        aggregation: 'sum',
-      });
-      expect(result.series.length).toBeGreaterThanOrEqual(1);
-      const mainSeries = result.series[0]!;
-      expect(mainSeries.points.length).toBeGreaterThanOrEqual(1);
-      expect(mainSeries.costUnit).toBe('usd');
-      expect(mainSeries.points[0]!.estimatedCost).toBeCloseTo(0.8);
     });
 
     it('getMetricTimeSeries keeps colliding display names as separate grouped series', async () => {
@@ -2842,45 +2714,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
   // ==========================================================================
 
   describe('scores', () => {
-    it('creates and lists scores', async () => {
-      await storage.createScore({
-        score: {
-          scoreId: 'score-test-1',
-          timestamp: new Date(),
-          traceId: 'trace-1',
-          spanId: null,
-          scorerId: 'relevance',
-          score: 0.85,
-          reason: 'Good answer',
-          experimentId: 'exp-1',
-          metadata: { entityType: 'agent' },
-        },
-      });
-
-      await storage.createScore({
-        score: {
-          scoreId: 'score-test-2',
-          timestamp: new Date(),
-          traceId: 'trace-1',
-          spanId: 'span-1',
-          scorerId: 'factuality',
-          score: 0.9,
-          reason: null,
-          experimentId: null,
-          metadata: null,
-        },
-      });
-
-      const result = await storage.listScores({});
-      expect(result.scores).toHaveLength(2);
-
-      const filtered = await storage.listScores({
-        filters: { scorerId: 'relevance' },
-      });
-      expect(filtered.scores).toHaveLength(1);
-      expect(filtered.scores[0]!.score).toBe(0.85);
-    });
-
     it('scoreSource round-trips through CH scoreSource column', async () => {
       await storage.createScore({
         score: {
@@ -2901,28 +2734,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       const match = result.scores.find(s => s.traceId === 'trace-score-src');
       expect(match).toBeDefined();
       expect(match!.scoreSource).toBe('automated');
-    });
-
-    it('supports nullable traceId for scores at the storage boundary', async () => {
-      await storage.createScore({
-        score: {
-          scoreId: 'score-test-1',
-          timestamp: new Date(),
-          traceId: null,
-          spanId: null,
-          scorerId: 'quality',
-          score: 0.9,
-          reason: null,
-          experimentId: null,
-          scoreSource: 'automated',
-          metadata: null,
-        } as any,
-      });
-
-      const result = await storage.listScores({});
-      expect(result.scores).toHaveLength(1);
-      expect(result.scores[0]!.traceId).toBeNull();
-      expect(result.scores[0]!.scoreSource).toBe('automated');
     });
 
     it('filters scores by scoreSource', async () => {
@@ -2968,53 +2779,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
   // ==========================================================================
 
   describe('feedback', () => {
-    it('creates and lists feedback', async () => {
-      await storage.createFeedback({
-        feedback: {
-          feedbackId: 'feedback-test-1',
-          timestamp: new Date(),
-          traceId: 'trace-1',
-          spanId: null,
-          feedbackSource: 'user',
-          feedbackType: 'thumbs',
-          value: 1,
-          comment: 'Great!',
-          experimentId: null,
-          userId: 'user-1',
-          sourceId: 'source-1',
-          metadata: null,
-        },
-      });
-
-      await storage.createFeedback({
-        feedback: {
-          feedbackId: 'feedback-test-2',
-          timestamp: new Date(),
-          traceId: 'trace-2',
-          spanId: null,
-          feedbackSource: 'reviewer',
-          feedbackType: 'rating',
-          value: 4,
-          comment: null,
-          experimentId: 'exp-1',
-          userId: 'user-2',
-          sourceId: 'source-2',
-          metadata: null,
-        },
-      });
-
-      const result = await storage.listFeedback({});
-      expect(result.feedback).toHaveLength(2);
-
-      const filtered = await storage.listFeedback({
-        filters: { feedbackSource: 'user' },
-      });
-      expect(filtered.feedback).toHaveLength(1);
-      expect(filtered.feedback[0]!.value).toBe(1);
-      expect(filtered.feedback[0]!.userId).toBe('user-1');
-      expect(filtered.feedback[0]!.sourceId).toBe('source-1');
-    });
-
     it('feedbackUserId round-trips through CH userId column', async () => {
       await storage.createFeedback({
         feedback: {
@@ -3102,54 +2866,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       const match = result.feedback.find(f => f.traceId === 'trace-fbs');
       expect(match).toBeDefined();
       expect(match!.feedbackSource).toBe('manual');
-    });
-
-    it('supports nullable traceId for feedback at the storage boundary', async () => {
-      await storage.createFeedback({
-        feedback: {
-          feedbackId: 'feedback-test-1',
-          timestamp: new Date(),
-          traceId: null,
-          spanId: null,
-          feedbackSource: 'manual',
-          feedbackType: 'rating',
-          value: 5,
-          comment: null,
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        } as any,
-      });
-
-      const result = await storage.listFeedback({});
-      expect(result.feedback).toHaveLength(1);
-      expect(result.feedback[0]!.traceId).toBeNull();
-      expect(result.feedback[0]!.feedbackSource).toBe('manual');
-    });
-
-    it('deprecated feedback source alias still writes to feedbackSource column', async () => {
-      await storage.createFeedback({
-        feedback: {
-          feedbackId: 'feedback-test-1',
-          timestamp: new Date(),
-          traceId: 'trace-fbs-compat',
-          spanId: null,
-          source: 'legacy-user',
-          feedbackType: 'thumbs',
-          value: 1,
-          comment: null,
-          experimentId: null,
-          userId: null,
-          sourceId: null,
-          metadata: null,
-        },
-      });
-
-      const result = await storage.listFeedback({});
-      const match = result.feedback.find(f => f.traceId === 'trace-fbs-compat');
-      expect(match).toBeDefined();
-      expect(match!.feedbackSource).toBe('legacy-user');
     });
 
     it('filters feedback by feedbackSource', async () => {
@@ -4370,102 +4086,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       });
     });
 
-    it('getScoreAggregate returns avg', async () => {
-      const result = await storage.getScoreAggregate({
-        scorerId: 'quality',
-        aggregation: 'avg',
-      });
-      expect(result.value).toBeCloseTo(0.7667, 2); // (0.8 + 0.6 + 0.9) / 3
-    });
-
-    it('getScoreAggregate returns sum', async () => {
-      const result = await storage.getScoreAggregate({
-        scorerId: 'quality',
-        aggregation: 'sum',
-      });
-      expect(result.value).toBeCloseTo(2.3); // 0.8 + 0.6 + 0.9
-    });
-
-    it('getScoreAggregate returns count', async () => {
-      const result = await storage.getScoreAggregate({
-        scorerId: 'quality',
-        aggregation: 'count',
-      });
-      expect(result.value).toBe(3);
-    });
-
-    it('getScoreAggregate filters by scoreSource', async () => {
-      const result = await storage.getScoreAggregate({
-        scorerId: 'quality',
-        scoreSource: 'automated',
-        aggregation: 'count',
-      });
-      expect(result.value).toBe(3);
-
-      const manualResult = await storage.getScoreAggregate({
-        scorerId: 'factuality',
-        scoreSource: 'manual',
-        aggregation: 'count',
-      });
-      expect(manualResult.value).toBe(1);
-    });
-
-    it('getScoreAggregate supports signal filters', async () => {
-      const result = await storage.getScoreAggregate({
-        scorerId: 'quality',
-        aggregation: 'count',
-        filters: { environment: 'production' },
-      });
-      expect(result.value).toBe(2);
-    });
-
-    it('getScoreBreakdown groups by entityName', async () => {
-      const result = await storage.getScoreBreakdown({
-        scorerId: 'quality',
-        groupBy: ['entityName'],
-        aggregation: 'avg',
-      });
-      expect(result.groups).toHaveLength(2);
-      const weather = result.groups.find(g => g.dimensions.entityName === 'weatherAgent');
-      const code = result.groups.find(g => g.dimensions.entityName === 'codeAgent');
-      expect(weather).toBeDefined();
-      expect(weather!.value).toBeCloseTo(0.7); // (0.8 + 0.6) / 2
-      expect(code).toBeDefined();
-      expect(code!.value).toBeCloseTo(0.9);
-    });
-
-    it('getScoreTimeSeries returns bucketed data', async () => {
-      const result = await storage.getScoreTimeSeries({
-        scorerId: 'quality',
-        interval: '1h',
-        aggregation: 'avg',
-      });
-      expect(result.series.length).toBeGreaterThanOrEqual(1);
-      expect(result.series[0]!.points.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('getScoreTimeSeries with groupBy returns multi-series', async () => {
-      const result = await storage.getScoreTimeSeries({
-        scorerId: 'quality',
-        interval: '1h',
-        aggregation: 'avg',
-        groupBy: ['entityName'],
-      });
-      expect(result.series.length).toBeGreaterThanOrEqual(2);
-    });
-
-    it('getScorePercentiles returns percentile series', async () => {
-      const result = await storage.getScorePercentiles({
-        scorerId: 'quality',
-        percentiles: [0.5, 0.99],
-        interval: '1h',
-      });
-      expect(result.series).toHaveLength(2);
-      const p50 = result.series.find(s => s.percentile === 0.5);
-      expect(p50).toBeDefined();
-      expect(p50!.points.length).toBeGreaterThanOrEqual(1);
-    });
-
     it('getScorePercentiles rejects out-of-range values', async () => {
       await expect(
         storage.getScorePercentiles({
@@ -4553,48 +4173,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       });
     });
 
-    it('getFeedbackAggregate returns sum of numeric values', async () => {
-      const result = await storage.getFeedbackAggregate({
-        feedbackType: 'thumbs',
-        aggregation: 'sum',
-      });
-      expect(result.value).toBe(2); // 1 + 0 + 1
-    });
-
-    it('getFeedbackAggregate returns count', async () => {
-      const result = await storage.getFeedbackAggregate({
-        feedbackType: 'thumbs',
-        aggregation: 'count',
-      });
-      expect(result.value).toBe(3);
-    });
-
-    it('getFeedbackAggregate returns avg', async () => {
-      const result = await storage.getFeedbackAggregate({
-        feedbackType: 'thumbs',
-        aggregation: 'avg',
-      });
-      expect(result.value).toBeCloseTo(0.6667, 2); // (1 + 0 + 1) / 3
-    });
-
-    it('getFeedbackAggregate filters by feedbackSource', async () => {
-      const result = await storage.getFeedbackAggregate({
-        feedbackType: 'rating',
-        feedbackSource: 'reviewer',
-        aggregation: 'count',
-      });
-      expect(result.value).toBe(1);
-    });
-
-    it('getFeedbackAggregate supports signal filters', async () => {
-      const result = await storage.getFeedbackAggregate({
-        feedbackType: 'thumbs',
-        aggregation: 'count',
-        filters: { environment: 'production' },
-      });
-      expect(result.value).toBe(2);
-    });
-
     it('getFeedbackAggregate excludes string-valued feedback from aggregation', async () => {
       // The 'flag' feedback with value 'needs-review' should not appear in numeric aggregation
       const result = await storage.getFeedbackAggregate({
@@ -4603,53 +4181,6 @@ describe('ObservabilityStorageClickhouseVNext', () => {
       });
       // String-valued feedback has valueNumber = NULL, so it's excluded by the identity filter
       expect(result.value).toBe(0);
-    });
-
-    it('getFeedbackBreakdown groups by entityName', async () => {
-      const result = await storage.getFeedbackBreakdown({
-        feedbackType: 'thumbs',
-        groupBy: ['entityName'],
-        aggregation: 'avg',
-      });
-      expect(result.groups.length).toBeGreaterThanOrEqual(2);
-      const weather = result.groups.find(g => g.dimensions.entityName === 'weatherAgent');
-      const code = result.groups.find(g => g.dimensions.entityName === 'codeAgent');
-      expect(weather).toBeDefined();
-      expect(weather!.value).toBeCloseTo(0.5); // (1 + 0) / 2
-      expect(code).toBeDefined();
-      expect(code!.value).toBeCloseTo(1.0);
-    });
-
-    it('getFeedbackTimeSeries returns bucketed data', async () => {
-      const result = await storage.getFeedbackTimeSeries({
-        feedbackType: 'thumbs',
-        interval: '1h',
-        aggregation: 'sum',
-      });
-      expect(result.series.length).toBeGreaterThanOrEqual(1);
-      expect(result.series[0]!.points.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('getFeedbackTimeSeries with groupBy returns multi-series', async () => {
-      const result = await storage.getFeedbackTimeSeries({
-        feedbackType: 'thumbs',
-        interval: '1h',
-        aggregation: 'avg',
-        groupBy: ['entityName'],
-      });
-      expect(result.series.length).toBeGreaterThanOrEqual(2);
-    });
-
-    it('getFeedbackPercentiles returns percentile series', async () => {
-      const result = await storage.getFeedbackPercentiles({
-        feedbackType: 'thumbs',
-        percentiles: [0.5, 0.99],
-        interval: '1h',
-      });
-      expect(result.series).toHaveLength(2);
-      const p50 = result.series.find(s => s.percentile === 0.5);
-      expect(p50).toBeDefined();
-      expect(p50!.points.length).toBeGreaterThanOrEqual(1);
     });
 
     it('getFeedbackPercentiles rejects out-of-range values', async () => {

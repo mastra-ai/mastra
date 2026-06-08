@@ -10,12 +10,72 @@
   "exports": {
     "./storage": {
       "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.js"
+        "types": "./dist/storage/index.d.ts",
+        "default": "./dist/storage/index.js"
       },
       "require": {
-        "types": "./dist/index.d.cts",
-        "default": "./dist/index.cjs"
+        "types": "./dist/storage/index.d.cts",
+        "default": "./dist/storage/index.cjs"
+      }
+    },
+    "./base": {
+      "import": {
+        "types": "./dist/base/index.d.ts",
+        "default": "./dist/base/index.js"
+      },
+      "require": {
+        "types": "./dist/base/index.d.cts",
+        "default": "./dist/base/index.cjs"
+      }
+    },
+    "./error": {
+      "import": {
+        "types": "./dist/error/index.d.ts",
+        "default": "./dist/error/index.js"
+      },
+      "require": {
+        "types": "./dist/error/index.d.cts",
+        "default": "./dist/error/index.cjs"
+      }
+    },
+    "./logger": {
+      "import": {
+        "types": "./dist/logger/index.d.ts",
+        "default": "./dist/logger/index.js"
+      },
+      "require": {
+        "types": "./dist/logger/index.d.cts",
+        "default": "./dist/logger/index.cjs"
+      }
+    },
+    "./types": {
+      "import": {
+        "types": "./dist/types/index.d.ts",
+        "default": "./dist/types/index.js"
+      },
+      "require": {
+        "types": "./dist/types/index.d.cts",
+        "default": "./dist/types/index.cjs"
+      }
+    },
+    "./request-context": {
+      "import": {
+        "types": "./dist/request-context/index.d.ts",
+        "default": "./dist/request-context/index.js"
+      },
+      "require": {
+        "types": "./dist/request-context/index.d.cts",
+        "default": "./dist/request-context/index.cjs"
+      }
+    },
+    "./routes": {
+      "import": {
+        "types": "./dist/routes/index.d.ts",
+        "default": "./dist/routes/index.js"
+      },
+      "require": {
+        "types": "./dist/routes/index.d.cts",
+        "default": "./dist/routes/index.cjs"
       }
     },
     "./package.json": "./package.json"
@@ -32,7 +92,7 @@
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@types/node": "22.19.15",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "zod": "catalog:"

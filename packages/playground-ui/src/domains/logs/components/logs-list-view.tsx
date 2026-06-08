@@ -2,7 +2,6 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useRef } from 'react';
 import type { LogRecord } from '../types';
 import { LogsDataList, LogsDataListSkeleton } from '@/ds/components/LogsDataList';
-import { cn } from '@/lib/utils';
 
 // Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
 const COLUMNS = '6rem 9rem 5rem 10rem minmax(8rem,1fr) minmax(8rem,1fr)';
@@ -109,7 +108,7 @@ export function LogsListView({
                 ref={virtualizer.measureElement}
                 data-index={vi.index}
                 onClick={() => onLogClick(log)}
-                className={cn(isFeatured && 'bg-surface4')}
+                featured={isFeatured}
               >
                 <LogsDataList.DateCell timestamp={log.timestamp} />
                 <LogsDataList.TimeCell timestamp={log.timestamp} />

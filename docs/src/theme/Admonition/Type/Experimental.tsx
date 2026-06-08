@@ -3,7 +3,7 @@ import AdmonitionLayout from '@theme/Admonition/Layout'
 
 const defaultProps = {
   icon: true,
-  title: 'experimental',
+  title: 'alpha',
 }
 
 export default function AdmonitionTypeExperimental(props: React.ComponentProps<typeof AdmonitionLayout>) {

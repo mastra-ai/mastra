@@ -31,6 +31,8 @@ async function flushAsyncInit(): Promise<void> {
   for (let i = 0; i < 5; i++) await new Promise(resolve => setImmediate(resolve));
 }
 
+const withoutNotificationDispatch = { notifications: { dispatch: { enabled: false } } } as const;
+
 describe('Mastra — workflow scheduler integration', () => {
   it('auto-instantiates the scheduler when a workflow declares a schedule', async () => {
     const wf = createEventedWorkflow({
@@ -50,6 +52,7 @@ describe('Mastra — workflow scheduler integration', () => {
 
     const mastra = new Mastra({
       logger: false,
+      ...withoutNotificationDispatch,
       storage: new MockStore(),
       workflows: { wf } as any,
     });
@@ -76,6 +79,7 @@ describe('Mastra — workflow scheduler integration', () => {
 
     const mastra = new Mastra({
       logger: false,
+      ...withoutNotificationDispatch,
       storage,
     });
 
@@ -109,6 +113,7 @@ describe('Mastra — workflow scheduler integration', () => {
 
     const mastra = new Mastra({
       logger: false,
+      ...withoutNotificationDispatch,
       storage,
       workflows: { wf } as any,
     });
@@ -125,6 +130,7 @@ describe('Mastra — workflow scheduler integration', () => {
   it('instantiates the scheduler when explicitly enabled even without declarative schedules', async () => {
     const mastra = new Mastra({
       logger: false,
+      ...withoutNotificationDispatch,
       storage: new MockStore(),
       scheduler: { enabled: true },
     });
@@ -150,6 +156,7 @@ describe('Mastra — workflow scheduler integration', () => {
 
     const mastra = new Mastra({
       logger: false,
+      ...withoutNotificationDispatch,
       storage: new MockStore(),
       workflows: { wf: wf as any },
     });
@@ -167,6 +174,7 @@ describe('Mastra — workflow scheduler integration', () => {
   it('starts the scheduler when scheduler.enabled is true even with no scheduled workflows', async () => {
     const mastra = new Mastra({
       logger: false,
+      ...withoutNotificationDispatch,
       storage: new MockStore(),
       scheduler: { enabled: true },
     });
@@ -207,6 +215,7 @@ describe('Mastra — workflow scheduler integration', () => {
     const boot = async (storage: InstanceType<typeof MockStore>, wf: ReturnType<typeof buildScheduledWorkflow>) => {
       const mastra = new Mastra({
         logger: false,
+        ...withoutNotificationDispatch,
         storage,
         workflows: { wf } as any,
       });
@@ -308,6 +317,7 @@ describe('Mastra — workflow scheduler integration', () => {
     ) => {
       const mastra = new Mastra({
         logger: false,
+        ...withoutNotificationDispatch,
         storage,
         workflows: { wf } as any,
       });
@@ -380,7 +390,12 @@ describe('Mastra — workflow scheduler integration', () => {
           }) as any,
         )
         .commit();
-      const first = new Mastra({ logger: false, storage, workflows: { wfSingle } as any });
+      const first = new Mastra({
+        logger: false,
+        ...withoutNotificationDispatch,
+        storage,
+        workflows: { wfSingle } as any,
+      });
       await first.startWorkers();
       await waitForScheduler(first);
       const schedulesStore = (await storage.getStore('schedules'))!;
@@ -466,6 +481,7 @@ describe('Mastra — workflow scheduler integration', () => {
       // → mastra.getWorkflowById.
       const mastra = new Mastra({
         logger: false,
+        ...withoutNotificationDispatch,
         storage,
         scheduler: { enabled: true, tickIntervalMs: 600_000, missesBeforeDelete: 2 },
       });
@@ -504,6 +520,7 @@ describe('Mastra — workflow scheduler integration', () => {
 
       const mastra = new Mastra({
         logger: false,
+        ...withoutNotificationDispatch,
         storage,
         scheduler: { enabled: true, tickIntervalMs: 600_000, missesBeforeDelete: 1 },
       });

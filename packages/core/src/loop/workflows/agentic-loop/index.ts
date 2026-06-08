@@ -257,12 +257,10 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       const shouldEmitStepFinish = typedInputData.stepResult?.reason !== 'tripwire' || hasSteps;
 
       if (shouldEmitStepFinish) {
-        // Only enqueue if controller is still open
-        safeEnqueue(controller, {
+        await outputWriter({
           type: 'step-finish',
           runId,
           from: ChunkFrom.AGENT,
-          // @ts-expect-error TODO: Look into the proper types for this
           payload: typedInputData,
         });
       }

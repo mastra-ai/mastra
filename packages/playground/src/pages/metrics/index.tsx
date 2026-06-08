@@ -52,6 +52,7 @@ const ANALYTICS_OBSERVABILITY_TYPES = new Set([
   'ObservabilityStorageClickhouseVNext',
   'ObservabilityStorageDuckDB',
   'ObservabilityInMemory',
+  'ObservabilitySpanner',
 ]);
 
 const PERIOD_PARAM = 'period';
@@ -316,7 +317,7 @@ function MetricsContent() {
           <EmptyState
             iconSlot={<CircleSlashIcon />}
             titleSlot="Metrics are not available with your current storage"
-            descriptionSlot="Metrics require ClickHouse, DuckDB, or in-memory storage for observability. Relational databases (PostgreSQL, LibSQL) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
+            descriptionSlot="Metrics require ClickHouse, DuckDB, Spanner, or in-memory storage for observability. Relational databases (PostgreSQL, LibSQL) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
             actionSlot={
               <Button
                 variant="ghost"
@@ -336,7 +337,7 @@ function MetricsContent() {
             <Notice variant="info" title="Metrics are not persisted">
               <Notice.Message>
                 This project uses in-memory storage for observability. Metrics will be lost on every server restart. For
-                persistent metrics, switch the observability storage to ClickHouse or DuckDB.
+                persistent metrics, switch the observability storage to ClickHouse, DuckDB, or Spanner.
               </Notice.Message>
             </Notice>
           )}

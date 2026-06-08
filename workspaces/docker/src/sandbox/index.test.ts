@@ -26,7 +26,7 @@ import { DockerSandbox } from './index';
 // Mock Setup
 // =============================================================================
 
-const { mockContainer, mockExec, mockDocker, resetMockDefaults } = vi.hoisted(() => {
+const { mockContainer, mockExec, mockStream, mockDocker, resetMockDefaults } = vi.hoisted(() => {
   const mockStream = {
     on: vi.fn(),
     write: vi.fn(),
@@ -360,6 +360,38 @@ describe('DockerSandbox', () => {
         'mastra.sandbox.id': 'test-sandbox',
         team: 'platform',
       });
+    });
+
+    it('should pass the sandbox id as the container name by default', async () => {
+      const sandbox = new DockerSandbox({ id: 'test-sandbox' });
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.name).toBe('test-sandbox');
+    });
+
+    it('should prefer an explicit name over the id', async () => {
+      const sandbox = new DockerSandbox({ id: 'test-sandbox', name: 'custom-name' });
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.name).toBe('custom-name');
+    });
+
+    it('should sanitize a name with characters Docker disallows', async () => {
+      const sandbox = new DockerSandbox({ name: 'user/1001:dev' });
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.name).toBe('user-1001-dev');
+    });
+
+    it('should prefix the name when it does not start with an alphanumeric', async () => {
+      const sandbox = new DockerSandbox({ name: '-leading-dash' });
+      await sandbox._start();
+
+      const createCall = mockDocker.createContainer.mock.calls[0]?.[0];
+      expect(createCall.name).toBe('s--leading-dash');
     });
 
     it('should pull image if not available locally', async () => {
@@ -870,6 +902,24 @@ describe('DockerSandbox', () => {
       );
     });
 
+    it('should leave kill and timeout flags unset for natural exits', async () => {
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('echo hello');
+      const waitPromise = handle.wait();
+
+      const endHandler = mockStream.on.mock.calls.find(([event]) => event === 'end')?.[1] as () => Promise<void>;
+      await endHandler();
+
+      const result = await waitPromise;
+
+      expect(result.success).toBe(true);
+      expect(result.exitCode).toBe(0);
+      expect(result.killed).toBeUndefined();
+      expect(result.timedOut).toBeUndefined();
+    });
+
     it('should use process group kill (negative PID)', async () => {
       mockExec.inspect.mockResolvedValue({
         Running: true,
@@ -893,6 +943,56 @@ describe('DockerSandbox', () => {
       // The second exec call should be the kill command with negative PID
       const killCall = mockContainer.exec.mock.calls[1]?.[0];
       expect(killCall.Cmd).toEqual(['sh', '-c', 'kill -9 -42 2>/dev/null || kill -9 42']);
+    });
+
+    it('should mark explicit kill results as killed without timeout', async () => {
+      mockExec.inspect.mockResolvedValue({
+        Running: true,
+        ExitCode: null,
+        Pid: 42,
+      });
+
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+      const waitPromise = handle.wait();
+      await handle.kill();
+
+      const closeHandler = mockStream.on.mock.calls.find(([event]) => event === 'close')?.[1] as () => void;
+      closeHandler();
+
+      const result = await waitPromise;
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(137);
+      expect(result.killed).toBe(true);
+      expect(result.timedOut).toBe(false);
+    });
+
+    it('should mark timeout results as killed and timed out', async () => {
+      vi.useFakeTimers();
+      try {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const handle = await sandbox.processes!.spawn('sleep 100', { timeout: 50 });
+        const waitPromise = handle.wait();
+
+        vi.advanceTimersByTime(50);
+
+        const closeHandler = mockStream.on.mock.calls.find(([event]) => event === 'close')?.[1] as () => void;
+        closeHandler();
+
+        const result = await waitPromise;
+
+        expect(result.success).toBe(false);
+        expect(result.exitCode).toBe(137);
+        expect(result.killed).toBe(true);
+        expect(result.timedOut).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should track spawned processes in list()', async () => {

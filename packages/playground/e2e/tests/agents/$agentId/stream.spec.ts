@@ -37,8 +37,9 @@ test('text stream', async () => {
 
   await selectFixture(page, 'text-stream');
   await page.goto(`/agents/weather-agent/chat/new`);
-  await page.click('text=Model settings');
+  await page.getByTestId('composer-model-settings-trigger').click();
   await page.click('text=Stream');
+  await page.keyboard.press('Escape');
 
   await fillAndSend(page, 'Give me the Lorem Ipsum thing');
 
@@ -68,8 +69,9 @@ test('text stream', async () => {
 test('tool stream', async () => {
   await selectFixture(page, 'tool-stream');
   await page.goto(`/agents/weather-agent/chat/new`);
-  await page.click('text=Model settings');
+  await page.getByTestId('composer-model-settings-trigger').click();
   await page.click('text=Stream');
+  await page.keyboard.press('Escape');
 
   await fillAndSend(page, 'Give me the weather in Paris');
 
@@ -107,8 +109,9 @@ async function assertToolStream(page: Page) {
 test('workflow stream', async () => {
   await selectFixture(page, 'workflow-stream');
   await page.goto(`/agents/weather-agent/chat/new`);
-  await page.click('text=Model settings');
+  await page.getByTestId('composer-model-settings-trigger').click();
   await page.click('text=Stream');
+  await page.keyboard.press('Escape');
 
   await fillAndSend(page, 'Give me the weather in Paris');
 
@@ -116,6 +119,12 @@ test('workflow stream', async () => {
   await expect(page.getByTestId('thread-wrapper').getByRole('button', { name: `lessComplexWorkflow` })).toBeVisible({
     timeout: 20000,
   });
+
+  // Check the streaming node first — node 9 is the last step and should still
+  // be running while earlier nodes have completed. Asserting it before the
+  // sequential checks on nodes 0–8 maximises the window to observe the
+  // transient "running" state before it transitions to "success".
+  await expect(page.locator('[data-workflow-node]').nth(9)).toHaveAttribute('data-workflow-step-status', 'running');
 
   // Workflow checks
   await expect(page.locator('[data-workflow-node]').nth(0)).toHaveAttribute('data-workflow-step-status', 'success');
@@ -128,7 +137,6 @@ test('workflow stream', async () => {
   await expect(page.locator('[data-workflow-node]').nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(page.locator('[data-workflow-node]').nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(page.locator('[data-workflow-node]').nth(8)).toHaveAttribute('data-workflow-step-status', 'success');
-  await expect(page.locator('[data-workflow-node]').nth(9)).toHaveAttribute('data-workflow-step-status', 'running');
 
   // Text delta result
   await expect(

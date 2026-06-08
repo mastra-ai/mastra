@@ -324,7 +324,7 @@ export const dsqlAgent = new Agent({
   name: 'DSQL Agent',
   instructions:
     'You are an AI agent with the ability to automatically recall memories from previous interactions.',
-  model: 'openai/gpt-5.1',
+  model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     storage: new DSQLStore({
       id: 'dsql-agent-storage',

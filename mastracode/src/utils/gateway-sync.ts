@@ -40,8 +40,9 @@ export async function syncGateways(force = false): Promise<void> {
   isSyncing = true;
   try {
     await getRegistry().syncGateways(true);
-  } catch (error) {
-    console.error('[GatewaySync] Sync failed:', error);
+  } catch {
+    // Silently ignore — the bundled registry already contains all model
+    // data so a failed network fetch is non-critical.
   } finally {
     isSyncing = false;
   }
@@ -57,15 +58,11 @@ export function startGatewaySync(intervalMs = DEFAULT_SYNC_INTERVAL_MS): void {
   }
 
   // Do an initial sync (will skip if recently synced)
-  syncGateways().catch(error => {
-    console.error('[GatewaySync] Initial sync failed:', error);
-  });
+  syncGateways().catch(() => {});
 
   // Set up periodic sync
   syncInterval = setInterval(() => {
-    syncGateways().catch(error => {
-      console.error('[GatewaySync] Periodic sync failed:', error);
-    });
+    syncGateways().catch(() => {});
   }, intervalMs);
 
   // Don't prevent process exit

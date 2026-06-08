@@ -36,3 +36,5 @@ packages/core/**/*.d.ts
 !packages/core/src/**/*.d.ts
 packages/server/**/*.d.ts
 stores/clickhouse/docker/keeper.test.xml
+
+**/coverage/**

@@ -623,13 +623,19 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
 
   setupDebugLogging();
   await harness.init();
+  await harness.getMastra()?.startWorkers();
 
   const exitCode = await runHeadless(harness, { ...args, prompt }, effectiveDefaults);
 
   // Cleanup
   releaseAllThreadLocks();
   const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
-  await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats(), closeSignalsPubSub?.()]);
+  await Promise.allSettled([
+    mcpManager?.disconnect(),
+    harness.getMastra()?.stopWorkers(),
+    harness?.stopHeartbeats(),
+    closeSignalsPubSub?.(),
+  ]);
 
   process.exit(exitCode);
 }

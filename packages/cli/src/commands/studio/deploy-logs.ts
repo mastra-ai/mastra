@@ -1,3 +1,4 @@
+import { writeBarLine } from '../../utils/clack-bar.js';
 import { authHeaders, createApiClient, MASTRA_PLATFORM_API_URL, platformFetch } from '../auth/client.js';
 import { getToken, getCurrentOrgId, validateOrgAccess } from '../auth/credentials.js';
 
@@ -15,7 +16,9 @@ async function getLogs(deployId: string, tail: string | undefined, token: string
   }
 
   if (data.logs) {
-    process.stdout.write(data.logs);
+    for (const line of data.logs.split('\n')) {
+      if (line) await writeBarLine(line);
+    }
   } else {
     console.info('(no logs available)');
   }
@@ -61,7 +64,7 @@ async function streamLogs(deployId: string, token: string, orgId: string) {
     for (const line of lines) {
       if (line.startsWith('data:')) {
         const data = line.slice(5).trimStart();
-        process.stdout.write(data + '\n');
+        await writeBarLine(data);
       }
     }
   }

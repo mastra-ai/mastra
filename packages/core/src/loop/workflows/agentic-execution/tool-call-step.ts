@@ -18,7 +18,9 @@ import {
   withToolPayloadTransformProviderMetadata,
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
-import type { MastraToolInvocationOptions } from '../../../tools/types';
+import { getNeedsApprovalFn } from '../../../tools/toolchecks';
+import type { MastraToolInvocationOptions, ToolApprovalContext } from '../../../tools/types';
+import { noopObserve } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
@@ -364,20 +366,51 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         const isResumeToolCall = !!resumeDataFromArgs;
 
-        // Check if approval is required
-        // requireApproval can be:
-        // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
-        // - undefined (no approval needed)
-        // If needsApprovalFn exists, evaluate it with the tool args and context
-        let toolRequiresApproval = requireToolApproval || (tool as any).requireApproval;
-        if ((tool as any).needsApprovalFn) {
-          // Evaluate the function with parsed args and available context
+        // Check if approval is required.
+        //
+        // The global `requireToolApproval` option (boolean, or — new — a function evaluated per
+        // call so policies can inspect the tool name and args, e.g. regex allowlists) and the
+        // tool's own boolean `requireApproval` flag seed the decision: the call requires approval
+        // if either is truthy.
+        //
+        // A per-tool `needsApprovalFn` (from `createTool({ requireApproval: fn })` or an
+        // MCP-derived tool) is authoritative when present and OVERRIDES the seed — it may return
+        // `false` to allow a call the global policy/flag would otherwise gate. This preserves the
+        // long-standing precedence; the only new behavior is that the global may now be a function.
+        // Any policy that throws defaults to requiring approval, to be safe.
+        const buildApprovalContext = (): ToolApprovalContext => ({
+          toolName: inputData.toolName,
+          args,
+          // Exclude the internal approval hook so policies only see public request-context entries.
+          requestContext: requestContext
+            ? Object.fromEntries(
+                [...requestContext.entries()].filter(([key]) => key !== '__mastra_requireToolApproval'),
+              )
+            : {},
+          workspace: _internal?.stepWorkspace,
+        });
+
+        let globalRequiresApproval: boolean;
+        if (typeof requireToolApproval === 'function') {
           try {
-            const needsApprovalResult = await (tool as any).needsApprovalFn(args, {
-              requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
-              workspace: _internal?.stepWorkspace,
-            });
-            toolRequiresApproval = needsApprovalResult;
+            globalRequiresApproval = !!(await requireToolApproval(buildApprovalContext()));
+          } catch (error) {
+            logger?.error(`Error evaluating global requireToolApproval for tool ${inputData.toolName}:`, error);
+            // On error, default to requiring approval to be safe.
+            globalRequiresApproval = true;
+          }
+        } else {
+          globalRequiresApproval = !!requireToolApproval;
+        }
+
+        let toolRequiresApproval: boolean = globalRequiresApproval || !!(tool as any).requireApproval;
+
+        const needsApprovalFn = getNeedsApprovalFn(tool);
+        if (needsApprovalFn) {
+          // Per-tool needsApprovalFn overrides the seed (matches prior behavior).
+          try {
+            const { toolName: _toolName, ...needsApprovalCtx } = buildApprovalContext();
+            toolRequiresApproval = !!(await needsApprovalFn(args, needsApprovalCtx));
           } catch (error) {
             // Log error to help developers debug faulty needsApprovalFn implementations
             logger?.error(`Error evaluating needsApprovalFn for tool ${inputData.toolName}:`, error);
@@ -472,6 +505,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           // uses a fresh unique thread, so storing this context in that thread is scoped and safe.
           messages: isAgentTool ? messageList.get.all.aiV5.model() : messageList.get.input.aiV5.model(),
           outputWriter,
+          observe: noopObserve,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
           // Pass workspace from _internal (set by llmExecutionStep via prepareStep/processInputStep)

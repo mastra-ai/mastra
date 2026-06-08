@@ -46,7 +46,7 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const registry = inject('registry');
 
       fixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-test-${pkgManager}-`));
-      process.env.npm_config_registry = registry;
+      process.env.pnpm_config_registry = registry;
       await setupMonorepo(fixturePath, pkgManager);
 
       // fix temporary 0.x patch for copilotkit
@@ -93,7 +93,9 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       const res = await fetch(`http://localhost:${port}/api/tools`);
       const body = await res.json();
       expect(res.status).toBe(200);
-      expect(Object.keys(body)).toEqual(['calculatorTool', 'lodashTool']);
+      expect(Object.keys(body).sort()).toEqual(
+        ['calculatorTool', 'lodashTool', 'hello-world', 'generate-password', 'compare-password'].sort(),
+      );
     });
   }
 

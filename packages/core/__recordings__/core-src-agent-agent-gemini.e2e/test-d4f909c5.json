@@ -1,0 +1,273 @@
+{
+  "meta": {
+    "name": "test-d4f909c5",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
+    "testName": "Gemini Model Compatibility Tests > Agent network() method > should handle messages with only assistant role in network",
+    "createdAt": "2026-05-18T10:51:25.243Z",
+    "updatedAt": "2026-05-28T17:34:29.565Z"
+  },
+  "recordings": [
+    {
+      "hash": "eb04f1d5c2261a08",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+              "required": ["primitiveId", "primitiveType", "prompt", "selectionReason"],
+              "type": "object",
+              "properties": {
+                "primitiveId": {
+                  "description": "The id of the primitive to be called",
+                  "type": "string"
+                },
+                "primitiveType": {
+                  "description": "The type of the primitive to be called",
+                  "type": "string",
+                  "enum": ["agent", "workflow", "none", "tool"]
+                },
+                "prompt": {
+                  "description": "The json string or text value to be sent to the primitive",
+                  "type": "string"
+                },
+                "selectionReason": {
+                  "description": "The reason you picked the primitive",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "."
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "text": "This is a system message"
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "text": "You will be calling just *one* primitive at a time to accomplish the user task, every call to you is one decision in the process of accomplishing the user task. Make sure to pick primitives that are the best suited to accomplish the whole task. Completeness is the highest priority.\n\n                    The user has given you the following task:\n                    This is a system message\n\n                    # Rules:\n\n                    ## Agent:\n                    - prompt should be a text value, like you would call an LLM in a chat interface.\n                    - If you are calling the same agent again, make sure to adjust the prompt to be more specific.\n\n                    ## Workflow/Tool:\n                    - prompt should be a JSON value that corresponds to the input schema of the workflow or tool. The JSON value is stringified.\n                    - Make sure to use inputs corresponding to the input schema when calling a workflow or tool.\n\n                    DO NOT CALL THE PRIMITIVE YOURSELF. Make sure to not call the same primitive twice, unless you call it with different arguments and believe it adds something to the task completion criteria. Take into account previous decision making history and results in your decision making and final result. These are messages whose text is a JSON structure with \"isNetwork\" true.\n\n                    Please select the most appropriate primitive to handle this task and the prompt to be sent to the primitive. If no primitive is appropriate, return \"none\" for the primitiveId and \"none\" for the primitiveType.\n\n                    {\n                        \"primitiveId\": string,\n                        \"primitiveType\": \"agent\" | \"workflow\" | \"tool\",\n                        \"prompt\": string,\n                        \"selectionReason\": string\n                    }\n\n                    The 'selectionReason' property should explain why you picked the primitive, as well as why the other primitives were not picked."
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "\n          You are a router in a network of specialized AI agents.\n          Your job is to decide which agent should handle each step of a task.\n          If asking for completion of a task, make sure to follow system instructions closely.\n\n          Every step will result in a prompt message. It will be a JSON object with a \"selectionReason\" and \"finalResult\" property. Make your decision based on previous decision history, as well as the overall task criteria. If you already called a primitive, you shouldn't need to call it again, unless you strongly believe it adds something to the task completion criteria. Make sure to call enough primitives to complete the task.\n\n          ## System Instructions\n          You coordinate tasks\n          You can only pick agents and workflows that are available in the lists below. Never call any agents or workflows that are not available in the lists below.\n          ## Available Agents in Network\n           - **helperAgent**: \n          ## Available Workflows in Network (make sure to use inputs corresponding to the input schema when calling a workflow)\n          \n          ## Available Tools in Network (make sure to use inputs corresponding to the input schema when calling a tool)\n          \n          If you have multiple entries that need to be called with a workflow or agent, call them separately with each input.\n          When calling a workflow, the prompt should be a JSON value that corresponds to the input schema of the workflow. The JSON value is stringified.\n          When calling a tool, the prompt should be a JSON value that corresponds to the input schema of the tool. The JSON value is stringified.\n          When calling an agent, the prompt should be a text value, like you would call an LLM in a chat interface.\n          Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.\n          \n        "
+              }
+            ]
+          }
+        },
+        "timestamp": 1779989664979
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-type": "application/json; charset=UTF-8",
+          "date": "Thu, 28 May 2026 17:34:26 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=1231",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-gemini-service-tier": "standard",
+          "x-xss-protection": "0"
+        },
+        "body": {
+          "candidates": [
+            {
+              "content": {
+                "parts": [
+                  {
+                    "text": "{\n  \"primitiveId\": \"helperAgent\",\n  \"primitiveType\": \"agent\",\n  \"prompt\": \"Hello! How can I assist you today?\",\n  \"selectionReason\": \"Since the user provided an empty input, I will start by engaging the helperAgent to understand the user's needs and goals for this interaction. This will help me determine the appropriate next steps and select the most suitable primitive to address their request.\"\n}"
+                  }
+                ],
+                "role": "model"
+              },
+              "finishReason": "STOP",
+              "avgLogprobs": -0.2613334450670468
+            }
+          ],
+          "usageMetadata": {
+            "promptTokenCount": 834,
+            "candidatesTokenCount": 93,
+            "totalTokenCount": 927,
+            "promptTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 834
+              }
+            ],
+            "candidatesTokensDetails": [
+              {
+                "modality": "TEXT",
+                "tokenCount": 93
+              }
+            ],
+            "serviceTier": "standard"
+          },
+          "modelVersion": "gemini-2.0-flash",
+          "responseId": "oXwYapPtEdCcjMcPlOe3kAU"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "67d01240a46d00b7",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "method": "POST",
+        "body": {
+          "generationConfig": {},
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "."
+                }
+              ]
+            },
+            {
+              "role": "model",
+              "parts": [
+                {
+                  "text": "This is a system message"
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "Hello! How can I assist you today?"
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "You help with tasks"
+              }
+            ]
+          }
+        },
+        "timestamp": 1779989666337
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-disposition": "attachment",
+          "content-type": "text/event-stream",
+          "date": "Thu, 28 May 2026 17:34:27 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=619",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "chunks": [
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"How\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 22,\"totalTokenCount\": 22,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 22}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"onwYavHALcWqjMoP49-ywAI\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" can you help me with writing?\\n\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 19,\"candidatesTokenCount\": 9,\"totalTokenCount\": 28,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 19}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 9}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"onwYavHALcWqjMoP49-ywAI\"}\r\n\r\n"
+        ],
+        "chunkTimings": [0, 69],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "32c0adfd77678e29",
+      "request": {
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
+        "method": "POST",
+        "body": {
+          "generationConfig": {
+            "responseMimeType": "application/json",
+            "responseSchema": {
+              "required": ["isComplete", "completionReason"],
+              "type": "object",
+              "properties": {
+                "isComplete": {
+                  "description": "Whether the task is complete",
+                  "type": "boolean"
+                },
+                "completionReason": {
+                  "description": "Explanation of why the task is or is not complete",
+                  "type": "string"
+                },
+                "finalResult": {
+                  "description": "The final result text to return to the user. omit if primitive result is sufficient",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "contents": [
+            {
+              "role": "user",
+              "parts": [
+                {
+                  "text": "\n    The agent helperAgent has contributed to the task.\n    This is the result: \"How can you help me with writing?\\n\"\n    \n    \n\nPrimitives already executed: agent \"helperAgent\"\n\n    You need to evaluate if the task is complete. Pay very close attention to the SYSTEM INSTRUCTIONS for when the task is considered complete. \n    Only return true if the task is complete according to the system instructions.\n    Original task: This is a system message\n\n    If no primitive (type = 'none'), the task is complete because we can't run any primitive to further task completion.\n\n    Also, if the agent helperAgent has declined the tool call in its response, then the task is complete as the primitive tool-call was declined by the user.\n\n    IMPORTANT: If the above result is from an AGENT PRIMITIVE and it is a suitable final result itself considering the original task, then finalResult should be an empty string or undefined.\n    \n    If the task is complete and the result is not from an AGENT PRIMITIVE, always generate a finalResult.\n    IF the task is complete and the result is from an AGENT PRIMITIVE, but the AGENT PRIMITIVE response is not comprehensive enough to accomplish the user's original task, then generate a finalResult.\n\n    IMPORTANT: The generated finalResult should not be the exact primitive result. You should craft a comprehensive response based on the message history.\n    The finalResult field should be written in natural language.\n\n    You must return this JSON shape:\n    {\n      \"isComplete\": boolean,\n      \"completionReason\": string,\n      \"finalResult\": string,\n    }\n  "
+                }
+              ]
+            }
+          ],
+          "systemInstruction": {
+            "parts": [
+              {
+                "text": "\n          You are a router in a network of specialized AI agents.\n          Your job is to decide which agent should handle each step of a task.\n          If asking for completion of a task, make sure to follow system instructions closely.\n\n          Every step will result in a prompt message. It will be a JSON object with a \"selectionReason\" and \"finalResult\" property. Make your decision based on previous decision history, as well as the overall task criteria. If you already called a primitive, you shouldn't need to call it again, unless you strongly believe it adds something to the task completion criteria. Make sure to call enough primitives to complete the task.\n\n          ## System Instructions\n          You coordinate tasks\n          You can only pick agents and workflows that are available in the lists below. Never call any agents or workflows that are not available in the lists below.\n          ## Available Agents in Network\n           - **helperAgent**: \n          ## Available Workflows in Network (make sure to use inputs corresponding to the input schema when calling a workflow)\n          \n          ## Available Tools in Network (make sure to use inputs corresponding to the input schema when calling a tool)\n          \n          If you have multiple entries that need to be called with a workflow or agent, call them separately with each input.\n          When calling a workflow, the prompt should be a JSON value that corresponds to the input schema of the workflow. The JSON value is stringified.\n          When calling a tool, the prompt should be a JSON value that corresponds to the input schema of the tool. The JSON value is stringified.\n          When calling an agent, the prompt should be a text value, like you would call an LLM in a chat interface.\n          Keep in mind that the user only sees the final result of the task. When reviewing completion, you should know that the user will not see the intermediate results.\n          \n        "
+              }
+            ]
+          }
+        },
+        "timestamp": 1779989667233
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
+          "content-disposition": "attachment",
+          "content-type": "text/event-stream",
+          "date": "Thu, 28 May 2026 17:34:27 GMT",
+          "server": "scaffolding on HTTPServer2",
+          "server-timing": "gfet4t7; dur=504",
+          "vary": "Origin, X-Origin, Referer",
+          "x-content-type-options": "nosniff",
+          "x-frame-options": "SAMEORIGIN",
+          "x-xss-protection": "0"
+        },
+        "chunks": [
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"o3wYaqSWIc-V1dkPydbdWQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\n  \\\"\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"o3wYaqSWIc-V1dkPydbdWQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The agent has provided an initial\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"o3wYaqSWIc-V1dkPydbdWQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" response, but the task is a system message and does not require further action or\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"o3wYaqSWIc-V1dkPydbdWQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" a specific final result.\\\",\\n  \\\"finalResult\\\": \\\"The agent acknowledged your request for help with writing. Please provide more details on what you need assistance with,\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 753,\"totalTokenCount\": 753,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 753}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"o3wYaqSWIc-V1dkPydbdWQ\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" such as the type of writing (e.g., essay, email, story), the topic, and any specific requirements or challenges you are facing.\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 797,\"candidatesTokenCount\": 103,\"totalTokenCount\": 900,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 797}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 103}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"o3wYaqSWIc-V1dkPydbdWQ\"}\r\n\r\n"
+        ],
+        "chunkTimings": [0, 0, 84, 169, 333, 237],
+        "isStreaming": true
+      }
+    }
+  ]
+}

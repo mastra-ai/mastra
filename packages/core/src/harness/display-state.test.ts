@@ -32,6 +32,7 @@ describe('defaultDisplayState', () => {
     const ds = defaultDisplayState();
     expect(ds.isRunning).toBe(false);
     expect(ds.currentMessage).toBeNull();
+    expect(ds.queuedFollowUps).toBe(0);
     expect(ds.tokenUsage).toEqual(createEmptyTokenUsage());
     expect(ds.activeTools).toBeInstanceOf(Map);
     expect(ds.activeTools.size).toBe(0);

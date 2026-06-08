@@ -18,26 +18,31 @@ inputs:
     description: 'Path to pnpm-lock.yaml for cache key (useful when checkout is not at workspace root)'
     required: false
     default: ''
+  version:
+    description: 'Explicit pnpm version (overrides packageManager detection)'
+    required: false
+    default: ''
 
 runs:
   using: composite
   steps:
-    # Let pnpm/action-setup handle store caching instead of actions/setup-node.
-    # setup-node's cache: 'pnpm' runs `pnpm store path --silent` which returns
-    # a bogus path on self-hosted runners where pnpm is installed into
-    # ~/setup-pnpm/node_modules/.bin/.
-    - uses: pnpm/action-setup@v4
-      name: Install pnpm
-      with:
-        run_install: false
-        package_json_file: ${{ inputs.package-json-file || 'package.json' }}
-        cache: ${{ inputs.package-manager-cache == 'true' }}
-        cache_dependency_path: ${{ inputs.cache-dependency-path || 'pnpm-lock.yaml' }}
-
     - name: Setup Node.js 22.x
       uses: actions/setup-node@v6
       with:
         node-version: 22.13.0
+
+    # Let pnpm/action-setup handle store caching instead of actions/setup-node.
+    # setup-node's cache: 'pnpm' runs `pnpm store path --silent` which returns
+    # a bogus path on self-hosted runners where pnpm is installed into
+    # ~/setup-pnpm/node_modules/.bin/.
+    - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
+      name: Install pnpm
+      with:
+        version: ${{ inputs.version || '' }}
+        run_install: false
+        package_json_file: ${{ inputs.package-json-file || 'package.json' }}
+        cache: ${{ inputs.package-manager-cache == 'true' }}
+        cache_dependency_path: ${{ inputs.cache-dependency-path || 'pnpm-lock.yaml' }}
 
     - name: Install dependencies
       if: ${{ inputs.install-dependencies == 'true' }}

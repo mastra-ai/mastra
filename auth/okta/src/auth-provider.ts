@@ -14,8 +14,23 @@ import type {
 } from '@mastra/core/auth';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
 import { MastraAuthProvider } from '@mastra/core/server';
-import type { HonoRequest } from 'hono';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
+
+type HonoRequestLike = {
+  raw?: Request;
+  headers?: Headers;
+  header(name: string): string | undefined;
+};
+
+type MastraAuthRequest = Request | HonoRequestLike;
+
+function getRequestHeader(request: MastraAuthRequest, name: string): string | null {
+  if (request instanceof Request) {
+    return request.headers.get(name);
+  }
+
+  return request.raw?.headers.get(name) ?? request.headers?.get(name) ?? request.header(name) ?? null;
+}
 
 import type { OktaUser, MastraAuthOktaOptions } from './types.js';
 import { mapOktaClaimsToUser } from './types.js';
@@ -206,7 +221,7 @@ export class MastraAuthOkta
    * Authenticate a token from the request.
    * First tries to read from session cookie, then falls back to Authorization header.
    */
-  async authenticateToken(token: string, request: HonoRequest | Request): Promise<OktaUser | null> {
+  async authenticateToken(token: string, request: MastraAuthRequest): Promise<OktaUser | null> {
     // Try session cookie first
     const sessionUser = await this.getUserFromSession(request);
     if (sessionUser) {
@@ -234,7 +249,7 @@ export class MastraAuthOkta
   /**
    * Authorize a user.
    */
-  authorizeUser(user: OktaUser, _request: HonoRequest): boolean {
+  authorizeUser(user: OktaUser, _request: MastraAuthRequest): boolean {
     if (!user || !user.oktaId) return false;
     return true;
   }
@@ -296,10 +311,9 @@ export class MastraAuthOkta
   /**
    * Get user from session cookie.
    */
-  private async getUserFromSession(request: HonoRequest | Request): Promise<OktaUser | null> {
+  private async getUserFromSession(request: MastraAuthRequest): Promise<OktaUser | null> {
     try {
-      // Handle both HonoRequest and standard Request
-      const cookieHeader = 'header' in request ? request.header('cookie') : request.headers.get('cookie');
+      const cookieHeader = getRequestHeader(request, 'cookie');
       if (!cookieHeader) return null;
 
       const cookies = cookieHeader.split(';').map((c: string) => c.trim());
@@ -330,10 +344,9 @@ export class MastraAuthOkta
    * Extract the raw ID token from the encrypted session cookie.
    * Used to provide id_token_hint for Okta logout.
    */
-  private async getIdTokenFromSession(request: Request): Promise<string | null> {
+  private async getIdTokenFromSession(request: MastraAuthRequest): Promise<string | null> {
     try {
-      const cookieHeader =
-        'header' in request ? (request as unknown as HonoRequest).header('cookie') : request.headers.get('cookie');
+      const cookieHeader = getRequestHeader(request, 'cookie');
       if (!cookieHeader) return null;
 
       const cookies = cookieHeader.split(';').map((c: string) => c.trim());

@@ -397,6 +397,62 @@ describe('MCP Tool Tracing', () => {
       expect(builtTool.requireApproval).toBe(true);
       expect((builtTool as any).needsApprovalFn).toBeUndefined();
     });
+
+    it('should preserve a needsApprovalFn attached directly to the tool instance (MCP shape)', () => {
+      // MCP tools wrap a server-level requireToolApproval function and attach it as
+      // `needsApprovalFn` on the tool while keeping `requireApproval` as a boolean.
+      const needsApprovalFn = (args: any) => args.value === 'secret';
+      const testTool = {
+        id: 'mcp-test-tool',
+        description: 'An MCP-style test tool',
+        inputSchema: z.object({ value: z.string() }),
+        execute: async (input: any) => input,
+        requireApproval: true,
+        needsApprovalFn,
+      };
+
+      const builder = new CoreToolBuilder({
+        originalTool: testTool as any,
+        options: {
+          name: 'mcp-test-tool',
+          // Mirrors the agent passing the tool's boolean requireApproval into options.
+          requireApproval: true,
+        },
+      });
+
+      const builtTool = builder.build();
+
+      // requireApproval stays true so tool-call-step evaluates the function.
+      expect(builtTool.requireApproval).toBe(true);
+      // The directly-attached function must survive conversion.
+      expect((builtTool as any).needsApprovalFn).toBe(needsApprovalFn);
+    });
+
+    it('should not override an options-derived needsApprovalFn with the instance one', () => {
+      const optionsFn = (input: any) => input.value === 'fromOptions';
+      const instanceFn = (input: any) => input.value === 'fromInstance';
+      const testTool = {
+        id: 'precedence-tool',
+        description: 'A tool with both function sources',
+        inputSchema: z.object({ value: z.string() }),
+        execute: async (input: any) => input,
+        needsApprovalFn: instanceFn,
+      };
+
+      const builder = new CoreToolBuilder({
+        originalTool: testTool as any,
+        options: {
+          name: 'precedence-tool',
+          requireApproval: optionsFn,
+        },
+      });
+
+      const builtTool = builder.build();
+
+      expect(builtTool.requireApproval).toBe(true);
+      // Options-derived function wins; the instance fallback only fills gaps.
+      expect((builtTool as any).needsApprovalFn).toBe(optionsFn);
+    });
   });
 });
 
@@ -509,5 +565,32 @@ describe('CoreToolBuilder strict', () => {
 
     expect((builtTool as any).name).toBe('web_search');
     expect((builtTool as any).id).toBe('anthropic.web_search_20250305');
+  });
+});
+
+describe('CoreToolBuilder background task schema injection', () => {
+  it('does not crash re-building a tool whose inputSchema has a refinement (zod v4)', () => {
+    const refinedTool = createTool({
+      id: 'refined_tool',
+      description: 'tool whose input schema carries a .refine()',
+      inputSchema: z
+        .object({ a: z.string().optional(), b: z.string().optional() })
+        .refine(d => !!d.a || !!d.b, { message: 'pass a or b' }),
+      execute: async () => ({ ok: true }),
+    });
+
+    const build = () =>
+      new CoreToolBuilder({
+        originalTool: refinedTool,
+        options: { name: 'refined_tool', requestContext: new RequestContext() },
+        backgroundTaskEnabled: true,
+      }).build();
+
+    // The builder mutates originalTool.inputSchema, so the second build re-injects
+    // `_background` onto the already-refined schema. With `.extend()` Zod v4 threw
+    // "Cannot overwrite keys on object schemas containing refinements"; safeExtend fixes it.
+    expect(() => build()).not.toThrow();
+    expect(() => build()).not.toThrow();
+    expect((refinedTool.inputSchema as z.ZodTypeAny).safeParse({}).success).toBe(false);
   });
 });

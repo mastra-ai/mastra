@@ -1,10 +1,10 @@
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
 import { useAui } from '@assistant-ui/react';
 
-import type { MastraUIMessage } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
+import { CodeModeBadge, getCodeModeCall } from './badges/code-mode-badge';
 import { FileTreeBadge } from './badges/file-tree-badge';
 import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
@@ -21,9 +21,10 @@ import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result'
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
+import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
-  metadata?: MastraUIMessage['metadata'];
+  metadata?: MessageMetadata;
 }
 
 export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackProps) => {
@@ -143,6 +144,11 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const isBackgroundTaskResult =
     result && typeof result === 'string' && (result as string)?.toLowerCase()?.includes('background task');
 
+  if (toolName === 'updateWorkingMemory') {
+    // We want to hide the updateWorkingMemory tool call in the UI
+    return null;
+  }
+
   if (isBackgroundTaskResult) {
     return (
       <ToolBadge
@@ -227,6 +233,25 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         toolName={toolName}
         args={args}
         result={result}
+        metadata={metadata}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
+        isNetwork={isNetwork}
+        toolCalled={toolCalled}
+      />
+    );
+  }
+
+  // Code Mode (`execute_typescript`) calls carry a `code` string arg and a
+  // `CodeModeResult` shape. Detect by shape since the tool id is configurable.
+  const codeModeCall = getCodeModeCall(args, result);
+
+  if (codeModeCall) {
+    return (
+      <CodeModeBadge
+        toolName={toolName}
+        code={codeModeCall.code}
+        result={codeModeCall.result}
         metadata={metadata}
         toolCallId={toolCallId}
         toolApprovalMetadata={toolApprovalMetadata}

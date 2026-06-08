@@ -6,7 +6,8 @@ import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypev4 } from 'zod/v4';
 import type { AgentBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser';
-import type { AgentChannels, ChannelConfig } from '../channels/agent-channels';
+import type { AgentChannels } from '../channels/agent-channels';
+import type { ChannelConfig } from '../channels/types';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { PubSub } from '../events/pubsub';
 import type {
@@ -32,6 +33,12 @@ import type { Mastra } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../memory/types';
+import type { NotificationDeliveryPolicyConfig } from '../notifications/delivery-policy';
+import type {
+  NotificationDeliveryDecision,
+  NotificationRecord,
+  SendNotificationSignalInput,
+} from '../notifications/types';
 import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
 import type {
   ErrorProcessorOrWorkflow,
@@ -40,9 +47,10 @@ import type {
 } from '../processors/index';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
+import type { SignalProvider } from '../signals/signal-provider';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { AgentChunkType, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
-import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
+import type { ToolAction, ToolHooks, VercelTool, VercelToolV5 } from '../tools';
 import type { ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
@@ -52,7 +60,7 @@ import type { SkillFormat } from '../workspace/skills';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { MessageList } from './message-list/index';
-import type { CreatedAgentSignal } from './signals';
+import type { AgentSignalAttributes, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
 export type {
   MastraDBMessage,
@@ -62,6 +70,23 @@ export type {
   MessageList,
 } from './message-list/index';
 export type { Message as AiMessageType } from '@internal/ai-sdk-v4';
+export type {
+  NotificationDeliveryPolicyConfig,
+  NotificationDeliveryPolicyDecider,
+  NotificationDeliveryPolicyDecision,
+  NotificationDeliveryPolicyInput,
+} from '../notifications/delivery-policy';
+export type {
+  NotificationDeliveryAction,
+  NotificationDeliveryDecision,
+  NotificationDeliveryThreadState,
+  NotificationPriority,
+  NotificationRecord,
+  NotificationSignalAttributes,
+  NotificationStatus,
+  NotificationSummary,
+  SendNotificationSignalInput,
+} from '../notifications/types';
 export type { LLMStepResult } from '../stream/types';
 export type { MastraBrowser } from '../browser/browser';
 // Screencast types now on MastraBrowser directly
@@ -81,9 +106,13 @@ export type ToolsInput = Record<
 export type AgentInstructions = SystemMessage;
 
 export type {
+  AgentMessageInput,
+  AgentSignalAttributes,
   AgentSignalInput as AgentSignal,
   AgentSignalType,
   AgentSignalDataPart,
+  AgentStateSignalInput,
+  AgentStateSignalMode,
   CreatedAgentSignal,
 } from './signals';
 
@@ -105,15 +134,19 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       runId: string;
       resourceId?: string;
       threadId?: string;
-      ifActive?: { behavior?: AgentSignalActiveBehavior };
+      ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
       ifIdle?: never;
     }
   | {
       runId?: string;
       resourceId: string;
       threadId: string;
-      ifActive?: { behavior?: AgentSignalActiveBehavior };
-      ifIdle?: { behavior?: AgentSignalIdleBehavior; streamOptions?: AgentExecutionOptions<OUTPUT> };
+      ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
+      ifIdle?: {
+        behavior?: AgentSignalIdleBehavior;
+        streamOptions?: AgentExecutionOptions<OUTPUT>;
+        attributes?: AgentSignalAttributes;
+      };
     };
 
 /**
@@ -126,6 +159,70 @@ export interface SendAgentSignalResult {
   /** Resolves when a `persist` behavior finishes writing the signal to memory. */
   persisted?: Promise<void>;
 }
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type SendAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT>;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type SendAgentMessageResult = SendAgentSignalResult;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT>;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type QueueAgentMessageResult = SendAgentSignalResult;
+
+/**
+ * @experimental Agent state signal APIs are experimental and may change in a future release.
+ */
+export type SendAgentStateSignalOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT>;
+
+/**
+ * @experimental Agent state signal APIs are experimental and may change in a future release.
+ */
+export type SendAgentStateSignalResult =
+  | (SendAgentSignalResult & { skipped?: false })
+  | { accepted: true; skipped: true; reason: 'unchanged'; runId?: string; signal?: undefined };
+
+/**
+ * @experimental Agent notification signal APIs are experimental and may change in a future release.
+ */
+export type AgentNotificationSignal = SendNotificationSignalInput;
+
+/**
+ * @experimental Agent notification signal APIs are experimental and may change in a future release.
+ */
+export type SendAgentNotificationSignalOptions<OUTPUT = unknown> = Extract<
+  SendAgentSignalOptions<OUTPUT>,
+  { resourceId: string; threadId: string }
+>;
+
+/**
+ * @experimental Agent notification signal APIs are experimental and may change in a future release.
+ */
+export type AgentNotificationConfig = {
+  deliveryPolicy?: NotificationDeliveryPolicyConfig;
+};
+
+/**
+ * @experimental Agent notification signal APIs are experimental and may change in a future release.
+ */
+export type SendAgentNotificationSignalResult = {
+  accepted: boolean;
+  record: NotificationRecord;
+  decision: NotificationDeliveryDecision;
+  runId?: string;
+  signal?: CreatedAgentSignal;
+  persisted?: Promise<void>;
+};
 
 export interface AgentThreadRun<OUTPUT = unknown> {
   output: MastraModelOutput<OUTPUT>;
@@ -234,7 +331,14 @@ export type ModelWithRetries = {
   headers?: DynamicArgument<Record<string, string>>;
 };
 
-export interface AgentConfig<
+export type AgentEditorConfig =
+  | false
+  | {
+      instructions?: boolean;
+      tools?: boolean | { description?: boolean };
+    };
+
+interface AgentConfigBase<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
   TOutput = undefined,
@@ -355,6 +459,12 @@ export interface AgentConfig<
    */
   tools?: DynamicArgument<TTools, TRequestContext>;
   /**
+   * Hooks that run before and after any tool call made by this agent.
+   * Per-execution hooks passed to `generate`, `stream`, `generateLegacy`, or `streamLegacy` override matching hooks here.
+   * If a workspace also defines tool hooks, workspace hooks wrap the workspace tool first, then agent hooks wrap the exposed tool call.
+   */
+  hooks?: ToolHooks;
+  /**
    * Workflows that the agent can execute. Can be static or dynamically resolved.
    */
   workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any, any>>, TRequestContext>;
@@ -429,9 +539,16 @@ export interface AgentConfig<
    */
   browser?: MastraBrowser;
   /**
-   * Voice settings for speech input and output.
+   * Voice settings for speech input and output. Can be provided statically or resolved dynamically per request.
+   *
+   * Provide a resolver (`({ requestContext }) => new SomeVoice(...)`) to give each request/session its own
+   * voice instance. This is required for realtime / speech-to-speech providers, where concurrent live sessions
+   * must not share a single mutable instance (ws, tools, instructions, request context). The caller owns the
+   * lifecycle (e.g. `disconnect()`) of a resolver-produced instance.
+   *
+   * A static `MastraVoice` remains shared across requests, which is appropriate for one-shot TTS.
    */
-  voice?: MastraVoice;
+  voice?: DynamicArgument<MastraVoice, TRequestContext>;
   /**
    * Messaging channels the agent communicates over (e.g. Slack, Discord).
    *
@@ -508,11 +625,73 @@ export interface AgentConfig<
    */
   backgroundTasks?: AgentBackgroundConfig;
   /**
+   * Notification delivery configuration for record-first notification signals.
+   */
+  notifications?: AgentNotificationConfig;
+  /**
+   * Signal providers that monitor external sources and push
+   * notification signals into agent threads.
+   *
+   * Each provider is automatically registered as both an input and
+   * output processor, and connected to this agent instance.
+   *
+   * @example
+   * ```ts
+   * const agent = new Agent({
+   *   signals: [new GithubSignals({ cwd: project.rootPath })],
+   * });
+   * ```
+   *
+   * @experimental Agent signals are experimental and may change in a future release.
+   */
+  signals?: SignalProvider[];
+  /**
    * Optional agent-level transform policy for tool payloads before they are
    * serialized into display streams or user-visible transcripts.
    */
   transform?: ToolPayloadTransformPolicy;
 }
+
+/**
+ * Whether a given `editor` config hands a field to Studio (`true`) so that
+ * field becomes owned by Studio and must NOT be provided in code.
+ *
+ * To add a new editable field, add an `Owns*` helper here and a corresponding
+ * clause to {@link AgentEditableFieldConfig} — no combinatorial union needed.
+ */
+type EditorOwnsInstructions<TEditor> = TEditor extends { instructions: true } ? true : false;
+type EditorOwnsToolMembership<TEditor> = TEditor extends { tools: true } ? true : false;
+
+/**
+ * Resolves the `instructions`/`tools` portion of an agent config from the
+ * `editor` config inferred at `new Agent({...})`.
+ *
+ * `instructions` and `tools` are owned by *either* code or Studio, never both.
+ * When `editor` hands a field to Studio (`instructions: true` / `tools: true`),
+ * that field is forbidden in code (`?: never`); otherwise it keeps its normal
+ * code-owned shape. Tool *descriptions* (`tools: { description: true }`) keep
+ * tool membership in code, so they fall under the code-owned case.
+ */
+type AgentEditableFieldConfig<
+  TTools extends ToolsInput,
+  TRequestContext extends Record<string, any> | unknown,
+  TEditor extends AgentEditorConfig | undefined,
+> = (EditorOwnsInstructions<TEditor> extends true
+  ? { instructions?: never }
+  : { instructions: DynamicArgument<AgentInstructions, TRequestContext> }) &
+  (EditorOwnsToolMembership<TEditor> extends true
+    ? { tools?: never }
+    : { tools?: DynamicArgument<TTools, TRequestContext> });
+
+export type AgentConfig<
+  TAgentId extends string = string,
+  TTools extends ToolsInput = ToolsInput,
+  TOutput = undefined,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+  TEditor extends AgentEditorConfig | undefined = AgentEditorConfig | undefined,
+> = Omit<AgentConfigBase<TAgentId, TTools, TOutput, TRequestContext>, 'instructions' | 'tools' | 'editor'> & {
+  editor?: TEditor;
+} & AgentEditableFieldConfig<TTools, TRequestContext, TEditor>;
 
 export type AgentMemoryOption = {
   thread: string | (Partial<StorageThreadType> & { id: string });
@@ -534,6 +713,8 @@ export type AgentGenerateOptions<
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
+  /** Per-execution hooks that run before and after tool calls, overriding matching agent-level hooks. */
+  hooks?: ToolHooks;
   /** Additional context messages to include */
   context?: CoreMessage[];
   /** New memory options (preferred) */
@@ -625,6 +806,8 @@ export type AgentStreamOptions<
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
+  /** Per-execution hooks that run before and after tool calls, overriding matching agent-level hooks. */
+  hooks?: ToolHooks;
   /** Additional context messages to include */
   context?: CoreMessage[];
   /**

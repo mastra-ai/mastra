@@ -4,9 +4,14 @@ description: "Add resource-level authorization to your Mastra application with F
 packages:
   - "@mastra/auth-workos"
   - "@mastra/core"
+  - "@mastra/mcp"
 ---
 
 # Fine-Grained Authorization (FGA)
+
+:::note
+Fine-Grained Authorization is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
+:::
 
 Fine-Grained Authorization (FGA) adds resource-level permission checks to your Mastra application. While RBAC answers "can this role do this action?", FGA answers **"can this user do this action on this specific resource?"**
 
@@ -218,6 +223,8 @@ When an FGA provider is configured, Mastra automatically checks authorization at
 | Thread and memory access | `memory:read`, `memory:write`, `memory:delete` | `thread` | `threadId` |
 | Stored resource routes | Stored resource permission for the route action | Stored resource type | Route record ID, or the stored-resource scope for collection routes |
 | HTTP resource routes | Configured per route | Configured per route | Configured per route |
+
+For OAuth-protected MCP servers, HTTP MCP transports pass authenticated data as `extra.authInfo`. If an `MCPServer` is registered on an FGA-enabled Mastra instance, configure `mapAuthInfoToUser` so Mastra can set `requestContext.get('user')` before checking `tools/list` and `tools/call`. See [MCPServer authentication context](/reference/tools/mcp-server#map-auth-data-for-fga).
 
 Direct SDK calls to `createRun().start()`, `resume()`, or `restart()` are not independently checked by core FGA in this release. Make those calls from a protected route or guard them in application code. Pass a `requestContext` with an authenticated user when invoking protected entry points directly.
 

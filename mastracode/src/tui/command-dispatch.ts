@@ -40,9 +40,11 @@ import {
   handleApiKeysCommand,
   handleFeedbackCommand,
   handleObservabilityCommand,
+  handleGithubCommand,
   handleGoalCommand,
   handleJudgeCommand,
 } from './commands/index.js';
+import { isCurrentThreadActive, sendSlashCommandMessage } from './commands/send-slash-command-message.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { SlashCommandComponent } from './components/slash-command.js';
 import { showError, showInfo } from './display.js';
@@ -93,7 +95,13 @@ export async function dispatchSlashCommand(
     const cmdArgs = parsedArgs;
     const customCommand = state.customSlashCommands.find(cmd => cmd.name === cmdName);
     if (customCommand) {
-      await handleCustomSlashCommand(state, customCommand, cmdArgs);
+      await handleCustomSlashCommand(
+        state,
+        customCommand,
+        cmdArgs,
+        buildCtx(),
+        `//${cmdName}${rawArgsText ? ` ${rawArgsText}` : ''}`,
+      );
       return true;
     }
 
@@ -238,6 +246,9 @@ export async function dispatchSlashCommand(
     case 'observability':
       await handleObservabilityCommand(buildCtx(), args);
       return true;
+    case 'github':
+      await handleGithubCommand(buildCtx(), args);
+      return true;
     case 'goal':
       await handleGoalCommand(buildCtx(), args);
       return true;
@@ -247,7 +258,13 @@ export async function dispatchSlashCommand(
     default: {
       const customCommand = state.customSlashCommands.find(cmd => cmd.name === command);
       if (customCommand) {
-        await handleCustomSlashCommand(state, customCommand, args);
+        await handleCustomSlashCommand(
+          state,
+          customCommand,
+          args,
+          ctx,
+          `/${command}${rawArgsText ? ` ${rawArgsText}` : ''}`,
+        );
         return true;
       }
       showError(state, `Unknown command: ${command}`);
@@ -314,27 +331,26 @@ async function handleCustomSlashCommand(
   state: TUIState,
   command: { name: string; template: string; description?: string },
   args: string[],
+  ctx: SlashCommandContext,
+  displayText: string,
 ): Promise<void> {
   try {
     // Process the command template
     const processedContent = await processSlashCommand(command as any, args, process.cwd());
     // Add the processed content as a system message / context
     if (processedContent.trim()) {
-      // Show bordered indicator immediately with content
-      const slashComp = new SlashCommandComponent(command.name, processedContent.trim());
-      state.allSlashCommandComponents.push(slashComp);
-      state.chatContainer.addChild(slashComp);
-      state.ui.requestRender();
-
-      if (state.pendingNewThread) {
-        await state.harness.createThread();
-        state.pendingNewThread = false;
+      const commandCtx = { ...ctx, state, harness: ctx.harness ?? state.harness } as SlashCommandContext;
+      if (!isCurrentThreadActive(commandCtx)) {
+        const slashComp = new SlashCommandComponent(command.name, processedContent.trim());
+        state.allSlashCommandComponents.push(slashComp);
+        state.chatContainer.addChild(slashComp);
+        state.ui.requestRender();
       }
 
       // Wrap in <slash-command> tags so the assistant sees the full
       // content but addUserMessage won't double-render it.
       const wrapped = `<slash-command name="${command.name}">\n${processedContent.trim()}\n</slash-command>`;
-      await state.harness.sendMessage({ content: wrapped });
+      await sendSlashCommandMessage(commandCtx, displayText, wrapped, { renderIdleUserMessage: false });
     } else {
       showInfo(state, `Executed //${command.name} (no output)`);
     }

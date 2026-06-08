@@ -74,26 +74,50 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         streamWriter,
       );
 
-      if (blocked) {
-        // Emit a tripwire chunk so downstream knows about the abort
+      const enqueueTripwire = (r?: string, opts?: { retry?: boolean; metadata?: unknown }, pid?: string) => {
         rest.controller.enqueue({
           type: 'tripwire',
           payload: {
-            reason: reason || 'Output processor blocked content',
-            retry: tripwireOptions?.retry,
-            metadata: tripwireOptions?.metadata,
-            processorId,
+            reason: r || 'Output processor blocked content',
+            retry: opts?.retry,
+            metadata: opts?.metadata,
+            processorId: pid,
           },
         } as ChunkType<OUTPUT>);
+      };
+
+      if (blocked) {
+        // Emit a tripwire chunk so downstream knows about the abort
+        enqueueTripwire(reason, tripwireOptions, processorId);
         return null;
       }
 
       if (processed) {
         rest.controller.enqueue(processed as ChunkType<OUTPUT>);
-        return processed as ChunkType<OUTPUT>;
       }
 
-      return null;
+      // Emit any parts a processor stashed for reprocessing (e.g. the non-text
+      // part that triggered a BatchPartsProcessor flush), pushing each back
+      // through the whole chain so it gets downstream processing.
+      const reprocessed = await processorRunner.drainReprocessParts(
+        rest.processorStates as Map<string, ProcessorState<OUTPUT>>,
+        observabilityContext,
+        rest.requestContext,
+        rest.messageList,
+        0,
+        streamWriter,
+      );
+      for (const r of reprocessed) {
+        if (r.blocked) {
+          enqueueTripwire(r.reason, r.tripwireOptions, r.processorId);
+          return processed ? (processed as ChunkType<OUTPUT>) : null;
+        }
+        if (r.part != null) {
+          rest.controller.enqueue(r.part as ChunkType<OUTPUT>);
+        }
+      }
+
+      return processed ? (processed as ChunkType<OUTPUT>) : null;
     } else {
       // No processor runner, just enqueue the chunk directly
       rest.controller.enqueue(chunk);

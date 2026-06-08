@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { z } from 'zod/v4';
+import { Agent } from '../agent';
 import { SpanType } from '../observability';
+import { createMockModel } from '../test-utils/llm-mock';
 import { createScorer } from './base';
 import {
   AsyncFunctionBasedScorerBuilders,
@@ -190,6 +193,70 @@ describe('createScorer', () => {
 
       expect(runId).toBeDefined();
       expect(result).toMatchSnapshot();
+    });
+
+    it('forwards judge.jsonPromptInjection to agent.generate', async () => {
+      const generateSpy = vi.spyOn(Agent.prototype, 'generate');
+      try {
+        const model = createMockModel({ mockText: { score: 1 }, version: 'v2' });
+
+        const scorer = createScorer({
+          id: 'json-prompt-injection-scorer',
+          name: 'json-prompt-injection-scorer',
+          description: 'Verifies jsonPromptInjection plumbing',
+          judge: {
+            model,
+            instructions: 'Test instructions',
+            jsonPromptInjection: true,
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        });
+
+        await scorer.run(testData.scoringInput);
+
+        const [, options] = (generateSpy.mock.calls[0] ?? []) as any[];
+        expect(options?.structuredOutput?.jsonPromptInjection).toBe(true);
+      } finally {
+        generateSpy.mockRestore();
+      }
+    });
+
+    it('lets the per-step judge override the scorer-level jsonPromptInjection', async () => {
+      const generateSpy = vi.spyOn(Agent.prototype, 'generate');
+      try {
+        const model = createMockModel({ mockText: { value: 1 }, version: 'v2' });
+
+        const scorer = createScorer({
+          id: 'json-prompt-injection-override-scorer',
+          name: 'json-prompt-injection-override-scorer',
+          description: 'Per-step override of jsonPromptInjection',
+          judge: {
+            model,
+            instructions: 'Top-level instructions',
+            jsonPromptInjection: true,
+          },
+        })
+          .analyze({
+            description: 'analyze',
+            outputSchema: z.object({ value: z.number() }),
+            createPrompt: () => 'analyze this',
+            judge: {
+              model,
+              instructions: 'Step instructions',
+              jsonPromptInjection: false,
+            },
+          })
+          .generateScore(({ results }) => results.analyzeStepResult?.value ?? 0);
+
+        await scorer.run(testData.scoringInput);
+
+        const [, options] = (generateSpy.mock.calls[0] ?? []) as any[];
+        expect(options?.structuredOutput?.jsonPromptInjection).toBe(false);
+      } finally {
+        generateSpy.mockRestore();
+      }
     });
   });
 

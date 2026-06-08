@@ -38,7 +38,7 @@ import type {
   StreamChunkType,
   StreamTransportRef,
 } from '../stream/types';
-import type { ToolPayloadTransformPolicy } from '../tools';
+import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../tools';
 import type { MastraIdGenerator } from '../types';
 import type { OutputWriter } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
@@ -148,7 +148,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   downloadRetries?: number;
   downloadConcurrency?: number;
   modelSpanTracker?: IModelSpanTracker;
-  requireToolApproval?: boolean;
+  requireToolApproval?: RequireToolApproval;
   autoResumeSuspendedTools?: boolean;
   agentId: string;
   toolCallConcurrency?: number;

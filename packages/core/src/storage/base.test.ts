@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { MastraCompositeStore } from './base';
+import type { StorageMastraRef } from './base';
 import { InMemoryStore } from './mock';
 
 /**
@@ -102,5 +103,44 @@ describe('MastraCompositeStore — default delegation (issue #16782)', () => {
     });
 
     await expect(composite.init()).rejects.toThrow('inner init failed');
+  });
+});
+
+describe('MastraCompositeStore.__registerMastra', () => {
+  const mastra: StorageMastraRef = { getAgentById: () => undefined };
+
+  const getMastra = (store: MastraCompositeStore) => (store as unknown as { mastra?: StorageMastraRef }).mastra;
+  const setParent = (store: MastraCompositeStore, parent: MastraCompositeStore) =>
+    ((store as unknown as { parentDefault?: MastraCompositeStore }).parentDefault = parent);
+
+  it('cascades the reference to a parent composite', () => {
+    const parent = new MastraCompositeStore({ id: 'parent', default: new InMemoryStore({ id: 'parent-inner' }) });
+    const child = new MastraCompositeStore({ id: 'child', default: new InMemoryStore({ id: 'child-inner' }) });
+    setParent(child, parent);
+
+    child.__registerMastra(mastra);
+
+    expect(getMastra(child)).toBe(mastra);
+    expect(getMastra(parent)).toBe(mastra);
+  });
+
+  it('terminates on a parent cycle (A -> B -> A) without stack overflow', () => {
+    const a = new MastraCompositeStore({ id: 'a', default: new InMemoryStore({ id: 'a-inner' }) });
+    const b = new MastraCompositeStore({ id: 'b', default: new InMemoryStore({ id: 'b-inner' }) });
+    setParent(a, b);
+    setParent(b, a);
+
+    // Would recurse forever if `seen` were not shared across the cascade.
+    expect(() => a.__registerMastra(mastra)).not.toThrow();
+    expect(getMastra(a)).toBe(mastra);
+    expect(getMastra(b)).toBe(mastra);
+  });
+
+  it('terminates on a self-cycle', () => {
+    const a = new MastraCompositeStore({ id: 'a', default: new InMemoryStore({ id: 'a-inner' }) });
+    setParent(a, a);
+
+    expect(() => a.__registerMastra(mastra)).not.toThrow();
+    expect(getMastra(a)).toBe(mastra);
   });
 });

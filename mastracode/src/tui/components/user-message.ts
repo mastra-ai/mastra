@@ -2,7 +2,7 @@
  * Component that renders a user message with a thin border that fits the content.
  */
 
-import { Container, Markdown, Spacer, Text, visibleWidth } from '@mariozechner/pi-tui';
+import { Container, Markdown, Spacer, Text, truncateToWidth, visibleWidth } from '@mariozechner/pi-tui';
 import type { MarkdownTheme } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import { BOX_INDENT_STR, getMarkdownTheme, mastra, tintHex, theme } from '../theme.js';
@@ -22,14 +22,16 @@ class BorderedBox {
   private child: { render(width: number): string[]; invalidate?(): void };
   private pending: boolean;
   private borderColor?: string;
+  private label?: string;
 
   constructor(
     child: { render(width: number): string[]; invalidate?(): void },
-    options: { pending?: boolean; borderColor?: string } = {},
+    options: { pending?: boolean; borderColor?: string; label?: string } = {},
   ) {
     this.child = child;
     this.pending = options.pending ?? false;
     this.borderColor = options.borderColor;
+    this.label = options.label;
   }
 
   invalidate() {
@@ -66,8 +68,19 @@ class BorderedBox {
       if (w > maxContentWidth) maxContentWidth = w;
     }
 
+    // Cap content width so the box never exceeds the render width
+    const maxAllowedContent = maxInnerWidth;
+    maxContentWidth = Math.min(maxContentWidth, maxAllowedContent);
+
     // Box inner width = content width + prompt prefix (the "│ " and " │" add the padding)
-    const boxInner = maxContentWidth + 2;
+    let boxInner = maxContentWidth + 2;
+    // When a label is present, ensure the box is wide enough so the top border
+    // (╭ label ──...──╮) doesn't exceed the content/bottom border width.
+    if (this.label) {
+      const labelOverhead = ` ${this.label} `.length + 2; // ╭ + label + ╮
+      const neededBoxWidth = Math.max(boxInner + 4, labelOverhead);
+      boxInner = neededBoxWidth - 4;
+    }
     // Total box width: "│" + " " + content + " " + "│" = boxInner + 4
     const boxWidth = boxInner + 4;
 
@@ -76,13 +89,28 @@ class BorderedBox {
     const promptPrefix = chalk.hex(tintHex(mastra.green, 1))('»') + ' ';
     const promptWidth = 2;
 
-    // Top border: ╭──...──╮
-    lines.push(borderColor(`╭${'─'.repeat(boxWidth - 2)}╮`));
+    // Top border: ╭──...──╮ or ╭ label ──...──╮
+    if (this.label) {
+      const labelText = ` ${this.label} `;
+      const labelLen = labelText.length;
+      const remaining = Math.max(0, boxWidth - 2 - labelLen);
+      lines.push(
+        borderColor('╭') + chalk.hex(theme.getTheme().dim)(labelText) + borderColor(`${'─'.repeat(remaining)}╮`),
+      );
+    } else {
+      lines.push(borderColor(`╭${'─'.repeat(boxWidth - 2)}╮`));
+    }
 
     // Content lines with side borders, first line gets "> " prefix
     for (let i = 0; i < trimmedLines.length; i++) {
-      const trimmed = trimmedLines[i]!;
-      const vis = visibleWidth(stripAnsi(trimmed));
+      let trimmed = trimmedLines[i]!;
+      let vis = visibleWidth(stripAnsi(trimmed));
+      // Truncate content that exceeds the available inner width
+      const lineMaxWidth = i === 0 ? boxInner - promptWidth : boxInner;
+      if (vis > lineMaxWidth) {
+        trimmed = truncateToWidth(trimmed, lineMaxWidth);
+        vis = visibleWidth(stripAnsi(trimmed));
+      }
       if (i === 0) {
         const padNeeded = Math.max(0, boxInner - vis - promptWidth);
         lines.push(borderColor('│') + ' ' + promptPrefix + trimmed + ' '.repeat(padNeeded) + ' ' + borderColor('│'));
@@ -103,7 +131,7 @@ export class UserMessageComponent extends Container {
   constructor(
     text: string,
     markdownTheme: MarkdownTheme = getMarkdownTheme(),
-    options: { pending?: boolean; borderColor?: string } = {},
+    options: { pending?: boolean; borderColor?: string; label?: string } = {},
   ) {
     super();
 
@@ -112,7 +140,9 @@ export class UserMessageComponent extends Container {
       italic: false,
     });
 
-    this.addChild(new BorderedBox(md, { pending: options.pending, borderColor: options.borderColor }));
+    this.addChild(
+      new BorderedBox(md, { pending: options.pending, borderColor: options.borderColor, label: options.label }),
+    );
   }
 
   getChatSpacingKind(): ChatSpacingKind {

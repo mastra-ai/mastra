@@ -14,7 +14,7 @@ test('has overall information', async ({ page }) => {
   await expectRouteDocsLink(page, 'Agents documentation', 'https://mastra.ai/en/docs/agents/overview');
 
   // Verify agent list renders with at least one agent
-  await expect(page.locator('.entity-list-row').first()).toBeVisible();
+  await expect(page.locator('.data-list-row').first()).toBeVisible();
 });
 
 test('clicking on the agent row redirects', async ({ page }) => {

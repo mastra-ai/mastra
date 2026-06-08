@@ -19,12 +19,15 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
-import type { MastraModelGateway } from '../llm/model/gateways';
+import type { MastraModelGatewayInterface } from '../llm/model/gateways';
+import { getGatewayId } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/router';
 import { LogLevel, noopLogger, ConsoleLogger, DualLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
+import type { NotificationDispatchConfig } from '../notifications/workflow';
+import { createNotificationDispatchWorkflow } from '../notifications/workflow';
 import type {
   DefinitionSource,
   ObservabilityEntrypoint,
@@ -370,7 +373,7 @@ export interface Config<
    * Custom model router gateways for accessing LLM providers.
    * Gateways handle provider-specific authentication, URL construction, and model resolution.
    */
-  gateways?: Record<string, MastraModelGateway>;
+  gateways?: Record<string, MastraModelGatewayInterface>;
 
   /**
    * Event handlers for custom application events.
@@ -423,6 +426,13 @@ export interface Config<
    * storage adapter implementing the `schedules` domain (e.g. `@mastra/libsql`).
    */
   scheduler?: WorkflowSchedulerConfig;
+
+  /**
+   * Notification runtime configuration. Notification dispatch is scheduled automatically by default.
+   */
+  notifications?: {
+    dispatch?: NotificationDispatchConfig;
+  };
 
   /**
    * Platform channels for messaging integrations (Slack, Discord, etc.).
@@ -532,6 +542,7 @@ export class Mastra<
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
+  #hiddenWorkflowKeys = new Set<string>();
   #observability: ObservabilityEntrypoint;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
@@ -558,13 +569,14 @@ export class Mastra<
   #backgroundTaskConfig?: BackgroundTaskManagerConfig;
   #backgroundTaskManager?: BackgroundTaskManager;
   #schedulerConfig?: WorkflowSchedulerConfig;
+  #notificationDispatchConfig?: NotificationDispatchConfig;
   /**
    * Tracks whether any registered workflow has declared a `schedule` config.
    * Used as a fast short-circuit so users without scheduled workflows pay
    * zero cost beyond a boolean check.
    */
   #hasScheduledWorkflow = false;
-  #gateways?: Record<string, MastraModelGateway>;
+  #gateways?: Record<string, MastraModelGatewayInterface>;
   #channels?: TChannels;
   #environment?: string;
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
@@ -908,11 +920,7 @@ export class Mastra<
     // Server cache for temporary persistence and durable agent resumable streams
     this.#serverCache = config?.cache ?? new InMemoryServerCache();
 
-    // Set the editor if provided and register this Mastra instance with it
     this.#editor = config?.editor;
-    if (this.#editor && typeof this.#editor.registerWithMastra === 'function') {
-      this.#editor.registerWithMastra(this);
-    }
 
     // Store global version overrides
     this.#versions = config?.versions;
@@ -1046,6 +1054,17 @@ export class Mastra<
 
     this.#storage = storage;
 
+    // Give storage adapters a back-pointer to this Mastra instance so they
+    // can look up code-defined agents, editor config, etc. when needed
+    // (e.g. filesystem code-mode snapshot filtering).
+    storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
+
+    // Register the editor after storage is assigned so code mode can overlay
+    // filesystem-backed editor storage while preserving app storage domains.
+    if (this.#editor && typeof this.#editor.registerWithMastra === 'function') {
+      this.#editor.registerWithMastra(this);
+    }
+
     this.#backgroundTaskConfig = config?.backgroundTasks;
     // Auto-create the background-task manager only when this Mastra is
     // running workers. When `workers: false`, the consumer of the
@@ -1059,6 +1078,7 @@ export class Mastra<
     }
 
     this.#schedulerConfig = config?.scheduler;
+    this.#notificationDispatchConfig = config?.notifications?.dispatch;
 
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;
@@ -1070,7 +1090,7 @@ export class Mastra<
     this.#processors = {} as TProcessors;
     this.#memory = {} as TMemory;
     this.#workflows = {} as TWorkflows;
-    this.#gateways = {} as Record<string, MastraModelGateway>;
+    this.#gateways = {} as Record<string, MastraModelGatewayInterface>;
 
     // Now add primitives - order matters for auto-registration
     // Tools and processors should be added before agents and MCP servers that might use them
@@ -1122,6 +1142,12 @@ export class Mastra<
       });
     }
 
+    if (this.#notificationDispatchConfig?.enabled !== false) {
+      const workflow = createNotificationDispatchWorkflow(this.#notificationDispatchConfig);
+      this.addWorkflow(workflow, workflow.id);
+      this.#hiddenWorkflowKeys.add(workflow.id);
+    }
+
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
         if (workflow != null) {
@@ -1143,9 +1169,15 @@ export class Mastra<
     // Skip duplicates so user-provided gateways above take precedence.
     // Added directly to #gateways to avoid triggering #syncGatewayRegistry for built-ins.
     for (const gateway of defaultGateways) {
-      const key = gateway.getId();
-      if (!(this.#gateways as Record<string, MastraModelGateway>)[key]) {
-        (this.#gateways as Record<string, MastraModelGateway>)[key] = gateway;
+      const key = getGatewayId(gateway);
+      // Check by logical ID to avoid duplicates when a user-registered gateway
+      // exists under a different registry key but has the same gateway ID.
+      const existingGateways = Object.values(this.#gateways as Record<string, MastraModelGatewayInterface>);
+      const alreadyRegistered = existingGateways.some(
+        existingGateway => existingGateway != null && getGatewayId(existingGateway) === key,
+      );
+      if (!alreadyRegistered) {
+        (this.#gateways as Record<string, MastraModelGatewayInterface>)[key] = gateway;
       }
     }
 
@@ -2338,17 +2370,12 @@ export class Mastra<
     // Get all workflows with default engine type
     const defaultEngineWorkflows = Object.values(this.#workflows).filter(workflow => workflow.engineType === 'default');
 
-    // Collect all active runs for workflows with default engine type
-    const allRuns: WorkflowRuns['runs'] = [];
-    let allTotal = 0;
+    const activeRunsByWorkflow = await Promise.all(
+      defaultEngineWorkflows.map(workflow => workflow.listActiveWorkflowRuns()),
+    );
 
-    for (const workflow of defaultEngineWorkflows) {
-      const runningRuns = await workflow.listWorkflowRuns({ status: 'running' });
-      const waitingRuns = await workflow.listWorkflowRuns({ status: 'waiting' });
-
-      allRuns.push(...runningRuns.runs, ...waitingRuns.runs);
-      allTotal += runningRuns.total + waitingRuns.total;
-    }
+    const allRuns = activeRunsByWorkflow.flatMap(activeRuns => activeRuns.runs);
+    const allTotal = activeRunsByWorkflow.reduce((total, activeRuns) => total + activeRuns.total, 0);
 
     return {
       runs: allRuns,
@@ -3185,15 +3212,19 @@ export class Mastra<
    * ```
    */
   public listWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
+    const workflows = Object.fromEntries(
+      Object.entries(this.#workflows).filter(([key]) => !this.#hiddenWorkflowKeys.has(key)),
+    ) as Record<string, Workflow>;
+
     if (props.serialized) {
-      return Object.entries(this.#workflows).reduce((acc, [k, v]) => {
+      return Object.entries(workflows).reduce((acc, [k, v]) => {
         return {
           ...acc,
           [k]: { name: v.name },
         };
       }, {});
     }
-    return this.#workflows;
+    return workflows;
   }
 
   /**
@@ -3306,6 +3337,7 @@ export class Mastra<
    */
   public setStorage(storage: MastraCompositeStore) {
     this.#storage = augmentWithInit(storage);
+    this.#storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
     this.#ensureBackgroundTaskManager();
     // If storage was attached after construction, the SchedulerWorker
     // will pick it up when startWorkers() is called.
@@ -4059,7 +4091,7 @@ export class Mastra<
    * const gateway = mastra.getGateway('myGateway');
    * ```
    */
-  public getGateway(key: string): MastraModelGateway {
+  public getGateway(key: string): MastraModelGatewayInterface {
     const gateway = this.#gateways?.[key];
     if (!gateway) {
       const error = new MastraError({
@@ -4104,10 +4136,10 @@ export class Mastra<
    * const gateway = mastra.getGatewayById('custom-gateway-v1');
    * ```
    */
-  public getGatewayById(id: string): MastraModelGateway {
+  public getGatewayById(id: string): MastraModelGatewayInterface {
     const gateways = this.#gateways ?? {};
     for (const gateway of Object.values(gateways)) {
-      if (gateway.getId() === id) {
+      if (getGatewayId(gateway) === id) {
         return gateway;
       }
     }
@@ -4121,7 +4153,7 @@ export class Mastra<
         status: 404,
         gatewayId: id,
         availableIds: Object.values(gateways)
-          .map(g => g.getId())
+          .map(g => getGatewayId(g))
           .join(', '),
       },
     });
@@ -4130,22 +4162,43 @@ export class Mastra<
   }
 
   /**
-   * Returns all registered gateways as a record keyed by their names.
+   * Returns all registered gateways as a record keyed by their registration keys.
+   *
+   * Gateways can be plain objects that satisfy `MastraModelGatewayInterface` or
+   * classes that extend `MastraModelGateway`.
    *
    * @example
    * ```typescript
+   * import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
+   * import { MastraModelGateway, type MastraModelGatewayInterface } from '@mastra/core/llm';
+   *
+   * const plainGateway: MastraModelGatewayInterface = {
+   *   id: 'plain-gateway',
+   *   name: 'Plain Gateway',
+   *   async fetchProviders() { return {}; },
+   *   buildUrl() { return undefined; },
+   *   async getApiKey() { return ''; },
+   *   resolveLanguageModel(args) { return createOpenAICompatible({ name: args.providerId, apiKey: args.apiKey }).chatModel(args.modelId); },
+   * };
+   *
+   * class ClassGateway extends MastraModelGateway {
+   *   readonly id = 'class-gateway';
+   *   readonly name = 'Class Gateway';
+   *   // Implement fetchProviders, buildUrl, getApiKey, and resolveLanguageModel.
+   * }
+   *
    * const mastra = new Mastra({
    *   gateways: {
-   *     netlify: new NetlifyGateway(),
-   *     custom: new CustomGateway()
-   *   }
+   *     plain: plainGateway,
+   *     class: new ClassGateway(),
+   *   },
    * });
    *
    * const allGateways = mastra.listGateways();
-   * console.log(Object.keys(allGateways)); // ['netlify', 'custom']
+   * console.log(Object.keys(allGateways ?? {})); // ['plain', 'class']
    * ```
    */
-  public listGateways(): Record<string, MastraModelGateway> | undefined {
+  public listGateways(): Record<string, MastraModelGatewayInterface> | undefined {
     return this.#gateways;
   }
 
@@ -4156,60 +4209,66 @@ export class Mastra<
    * has been created. Gateways enable access to LLM providers through custom
    * authentication and routing logic.
    *
-   * If no key is provided, the gateway's ID (or name if no ID is set) will be used as the key.
+   * If no key is provided, the gateway's ID will be used as the key.
    *
-   * @example
+   * @example Plain object gateway
    * ```typescript
-   * import { MastraModelGateway } from '@mastra/core';
+   * import type { MastraModelGatewayInterface } from '@mastra/core/llm';
    *
-   * class CustomGateway extends MastraModelGateway {
-   *   readonly id = 'custom-gateway-v1';  // Optional, defaults to name
-   *   readonly name = 'custom';
-   *   readonly prefix = 'custom';
-   *
+   * const customGateway: MastraModelGatewayInterface = {
+   *   id: 'custom-gateway-v1',
+   *   name: 'Custom Gateway',
    *   async fetchProviders() {
    *     return {
    *       myProvider: {
    *         name: 'My Provider',
    *         models: ['model-1', 'model-2'],
    *         apiKeyEnvVar: 'MY_API_KEY',
-   *         gateway: 'custom'
-   *       }
+   *         gateway: 'custom-gateway-v1',
+   *       },
    *     };
-   *   }
-   *
-   *   buildUrl(modelId: string) {
+   *   },
+   *   buildUrl() {
    *     return 'https://api.myprovider.com/v1';
-   *   }
-   *
-   *   async getApiKey(modelId: string) {
+   *   },
+   *   async getApiKey() {
    *     return process.env.MY_API_KEY || '';
-   *   }
-   *
+   *   },
    *   async resolveLanguageModel({ modelId, providerId, apiKey }) {
-   *     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
-   *     return createOpenAICompatible({
+   *     const provider = createOpenAICompatible({
    *       name: providerId,
    *       apiKey,
-   *       baseURL,
+   *       baseURL: this.buildUrl(),
    *       supportsStructuredOutputs: true,
-   *     }).chatModel(modelId);
-   *   }
-   * }
+   *     });
+   *     return provider.chatModel(modelId);
+   *   },
+   * };
    *
    * const mastra = new Mastra();
-   * const newGateway = new CustomGateway();
-   * mastra.addGateway(newGateway); // Uses gateway.getId() as key (gateway.id)
-   * // or
-   * mastra.addGateway(newGateway, 'customKey'); // Uses custom key
+   * mastra.addGateway(customGateway);
+   * ```
+   *
+   * @example Convenience base class
+   * ```typescript
+   * import { MastraModelGateway } from '@mastra/core/llm';
+   *
+   * class CustomGateway extends MastraModelGateway {
+   *   readonly id = 'custom-gateway-v1';
+   *   readonly name = 'Custom Gateway';
+   *
+   *   // Implement fetchProviders, buildUrl, getApiKey, and resolveLanguageModel.
+   * }
+   *
+   * mastra.addGateway(new CustomGateway(), 'customKey');
    * ```
    */
-  public addGateway(gateway: MastraModelGateway, key?: string): void {
+  public addGateway(gateway: MastraModelGatewayInterface, key?: string): void {
     if (!gateway) {
       throw createUndefinedPrimitiveError('gateway', gateway, key);
     }
-    const gatewayKey = key || gateway.getId();
-    const gateways = this.#gateways as Record<string, MastraModelGateway>;
+    const gatewayKey = key || getGatewayId(gateway);
+    const gateways = this.#gateways as Record<string, MastraModelGatewayInterface>;
     if (gateways[gatewayKey]) {
       return;
     }
@@ -4286,6 +4345,11 @@ export class Mastra<
   async shutdown(): Promise<void> {
     // SchedulerWorker is stopped as part of stopWorkers().
     await this.stopWorkers();
+    // Close storage to release OS file handles (critical on Windows: open WAL/shm
+    // handles cause EBUSY when callers try to fs.rm the storage dir after shutdown).
+    if (this.#storage?.close) {
+      await this.#storage.close();
+    }
     // Shutdown observability registry, exporters, etc...
     await this.#observability.shutdown();
 

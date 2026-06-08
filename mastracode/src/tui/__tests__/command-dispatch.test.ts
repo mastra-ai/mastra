@@ -1,3 +1,4 @@
+import { Container } from '@mariozechner/pi-tui';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.hoisted(() => vi.resetModules());
@@ -8,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   handleGoalCommand: vi.fn().mockResolvedValue(undefined),
   handleSkillCommand: vi.fn().mockResolvedValue(undefined),
   handleJudgeCommand: vi.fn().mockResolvedValue(undefined),
+  handleGithubCommand: vi.fn().mockResolvedValue(undefined),
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
   startGoalWithDefaults: vi.fn().mockResolvedValue(undefined),
   showError: vi.fn(),
@@ -50,6 +52,7 @@ vi.mock('../commands/index.js', () => ({
   handleApiKeysCommand: vi.fn(),
   handleFeedbackCommand: vi.fn(),
   handleObservabilityCommand: vi.fn(),
+  handleGithubCommand: mocks.handleGithubCommand,
   handleGoalCommand: mocks.handleGoalCommand,
   handleJudgeCommand: mocks.handleJudgeCommand,
 }));
@@ -77,6 +80,7 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.handleGoalCommand.mockClear();
     mocks.handleSkillCommand.mockClear();
     mocks.handleJudgeCommand.mockClear();
+    mocks.handleGithubCommand.mockClear();
     mocks.processSlashCommand.mockClear();
     mocks.startGoalWithDefaults.mockClear();
     mocks.showError.mockClear();
@@ -151,6 +155,17 @@ describe('dispatchSlashCommand models routing', () => {
     expect(handled).toBe(true);
     expect(mocks.handleJudgeCommand).toHaveBeenCalledTimes(1);
     expect(mocks.handleJudgeCommand).toHaveBeenCalledWith(ctx);
+  });
+
+  it('routes /github to handleGithubCommand', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+
+    const handled = await dispatchSlashCommand('/github mastra-ai/mastra#17447', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.handleGithubCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.handleGithubCommand).toHaveBeenCalledWith(ctx, ['mastra-ai/mastra#17447']);
   });
 
   it('routes /skill/name to handleSkillCommand', async () => {
@@ -307,6 +322,68 @@ describe('dispatchSlashCommand models routing', () => {
       content: '<slash-command name="deploy">\ncustom output\n</slash-command>',
     });
     expect(mocks.showError).not.toHaveBeenCalled();
+  });
+
+  it('renders a pending message when a custom slash command signals an active run', async () => {
+    const sendSignal = vi
+      .fn()
+      .mockReturnValue({ id: 'signal-custom-1', accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) });
+    const state = {
+      customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
+      pendingNewThread: false,
+      allSlashCommandComponents: [],
+      messageComponentsById: new Map(),
+      pendingSignalMessageComponentsById: new Map(),
+      followUpComponents: [],
+      chatContainer: new Container(),
+      ui: { requestRender: vi.fn() },
+      harness: {
+        isCurrentThreadStreamActive: vi.fn(() => true),
+        getDisplayState: vi.fn(() => ({ isRunning: true })),
+        sendSignal,
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+      },
+    } as any;
+
+    const handled = await dispatchSlashCommand('//deploy staging', state, () => ({}) as any);
+
+    expect(handled).toBe(true);
+    expect(sendSignal).toHaveBeenCalledWith({
+      content: '<slash-command name="deploy">\ncustom output\n</slash-command>',
+    });
+    expect(state.harness.sendMessage).not.toHaveBeenCalled();
+    expect(state.pendingSignalMessageComponentsById.get('signal-custom-1')?.text).toBe('//deploy staging');
+    expect(state.allSlashCommandComponents).toHaveLength(0);
+    expect(state.chatContainer.children.length).toBe(1);
+  });
+
+  it('removes the pending message when custom slash command signal delivery fails', async () => {
+    const sendSignal = vi
+      .fn()
+      .mockReturnValue({ id: 'signal-custom-1', accepted: Promise.reject(new Error('rejected')) });
+    const state = {
+      customSlashCommands: [{ name: 'deploy', description: 'Deploy to prod', template: 'deploy now', sourcePath: '' }],
+      pendingNewThread: false,
+      allSlashCommandComponents: [],
+      messageComponentsById: new Map(),
+      pendingSignalMessageComponentsById: new Map(),
+      followUpComponents: [],
+      chatContainer: new Container(),
+      ui: { requestRender: vi.fn() },
+      harness: {
+        isCurrentThreadStreamActive: vi.fn(() => true),
+        getDisplayState: vi.fn(() => ({ isRunning: true })),
+        sendSignal,
+        sendMessage: vi.fn().mockResolvedValue(undefined),
+      },
+    } as any;
+
+    const handled = await dispatchSlashCommand('//deploy staging', state, () => ({}) as any);
+
+    expect(handled).toBe(true);
+    expect(state.pendingSignalMessageComponentsById.has('signal-custom-1')).toBe(false);
+    expect(state.chatContainer.children.length).toBe(0);
+    expect(mocks.showError).toHaveBeenCalledWith(state, 'Error executing //deploy: rejected');
   });
 
   it('creates the pending new thread before sending a custom slash command', async () => {

@@ -1,0 +1,465 @@
+{
+  "meta": {
+    "name": "test-7ca4aab8",
+    "testFile": "packages/core/src/agent/__tests__/tool-approval.e2e.test.ts",
+    "testName": "tool approval and suspension > suspension > should call findUserWorkflow with suspend and resume via generate",
+    "model": "gpt-4o-mini",
+    "createdAt": "2026-05-18T10:52:19.772Z",
+    "updatedAt": "2026-05-18T11:57:56.007Z"
+  },
+  "recordings": [
+    {
+      "hash": "9a672e337270b6da",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are an agent that can get list of users using findUserWorkflow."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Find the user with name - Dero Israel"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "workflow-findUserWorkflow",
+              "description": "This is a test tool that returns the name and email",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "inputData": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["name"],
+                    "additionalProperties": false
+                  },
+                  "suspendedToolRunId": {
+                    "description": "The runId of the suspended tool",
+                    "anyOf": [
+                      {
+                        "description": "The runId of the suspended tool",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["inputData", "suspendedToolRunId", "resumeData"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "x-optional": ["suspendedToolRunId", "resumeData"]
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1779105473004
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fdaafd66b68b753-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 18 May 2026 11:57:54 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "1346",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "200000",
+          "x-ratelimit-remaining-requests": "9969",
+          "x-ratelimit-remaining-tokens": "199653",
+          "x-ratelimit-reset-requests": "4m19.909s",
+          "x-ratelimit-reset-tokens": "104ms",
+          "x-request-id": "req_93d946c90b314c278b8b8eff88c6109f"
+        },
+        "body": {
+          "id": "resp_0b5bbe3aa86a3810006a0afec1262c81939d0d40457ac1510a",
+          "object": "response",
+          "created_at": 1779105473,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1779105474,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "fc_0b5bbe3aa86a3810006a0afec1bbf881938ead96355593f6ff",
+              "type": "function_call",
+              "status": "completed",
+              "arguments": "{\"inputData\":{\"name\":\"Dero Israel\"},\"suspendedToolRunId\":null,\"resumeData\":null}",
+              "call_id": "call_qPKAzcPkg1cJfGO0IQcl4xLs",
+              "name": "workflow-findUserWorkflow"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "This is a test tool that returns the name and email",
+              "name": "workflow-findUserWorkflow",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "inputData": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["name"],
+                    "additionalProperties": false
+                  },
+                  "suspendedToolRunId": {
+                    "description": "The runId of the suspended tool",
+                    "anyOf": [
+                      {
+                        "description": "The runId of the suspended tool",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["inputData", "suspendedToolRunId", "resumeData"],
+                "additionalProperties": false,
+                "x-optional": ["suspendedToolRunId", "resumeData"]
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 130,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 36,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 166
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "f98411814c3b81f6",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are an agent that can get list of users using findUserWorkflow."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Find the user with name - Dero Israel"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0b5bbe3aa86a3810006a0afec1bbf881938ead96355593f6ff"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_qPKAzcPkg1cJfGO0IQcl4xLs",
+              "output": "{\"result\":{\"name\":\"Dero Israel\",\"email\":\"test@test.com\"},\"runId\":\"00000000-0000-4000-8000-000000000053\"}"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "workflow-findUserWorkflow",
+              "description": "This is a test tool that returns the name and email",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "inputData": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["name"],
+                    "additionalProperties": false
+                  },
+                  "suspendedToolRunId": {
+                    "description": "The runId of the suspended tool",
+                    "anyOf": [
+                      {
+                        "description": "The runId of the suspended tool",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["inputData", "suspendedToolRunId", "resumeData"],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "x-optional": ["suspendedToolRunId", "resumeData"]
+              },
+              "strict": false
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1779105474560
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fdaafe01869b753-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 18 May 2026 11:57:55 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "1236",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "200000",
+          "x-ratelimit-remaining-requests": "9969",
+          "x-ratelimit-remaining-tokens": "199570",
+          "x-ratelimit-reset-requests": "4m26.891s",
+          "x-ratelimit-reset-tokens": "129ms",
+          "x-request-id": "req_8c5312ae4ec24915a06cc62d6d1d766b"
+        },
+        "body": {
+          "id": "resp_0b5bbe3aa86a3810006a0afec2b2ec819393ef6d1e72449237",
+          "object": "response",
+          "created_at": 1779105474,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1779105475,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "gpt-4o-mini-2024-07-18",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_0b5bbe3aa86a3810006a0afec364448193bd65aea60ca1e5f0",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "The user **Dero Israel** can be reached at the email: **test@test.com**."
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "effort": null,
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tools": [
+            {
+              "type": "function",
+              "description": "This is a test tool that returns the name and email",
+              "name": "workflow-findUserWorkflow",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "inputData": {
+                    "$schema": "http://json-schema.org/draft-07/schema#",
+                    "type": "object",
+                    "properties": {
+                      "name": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["name"],
+                    "additionalProperties": false
+                  },
+                  "suspendedToolRunId": {
+                    "description": "The runId of the suspended tool",
+                    "anyOf": [
+                      {
+                        "description": "The runId of the suspended tool",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "resumeData": {
+                    "anyOf": [
+                      {
+                        "description": "The resumeData object created from the resumeSchema of suspended tool"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": ["inputData", "suspendedToolRunId", "resumeData"],
+                "additionalProperties": false,
+                "x-optional": ["suspendedToolRunId", "resumeData"]
+              },
+              "strict": false
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 213,
+            "input_tokens_details": {
+              "cached_tokens": 0
+            },
+            "output_tokens": 22,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
+            },
+            "total_tokens": 235
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

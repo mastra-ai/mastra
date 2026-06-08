@@ -51,6 +51,8 @@ interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   requestContext: RequestContext;
   methodType: AgentMethodType;
   instructions: SystemMessage;
+  /** MCP server guidance to include as a separate system message. */
+  mcpServerGuidance?: string;
   memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
   isResume?: boolean;
@@ -64,6 +66,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
   runId: _runId,
   requestContext,
   instructions,
+  mcpServerGuidance,
   memoryConfig,
   memory,
   isResume,
@@ -91,6 +94,10 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
 
       // Add instructions as system message(s)
       addSystemMessage(messageList, instructions);
+
+      // Add MCP server guidance as a separate system message so the base
+      // instructions remain a stable prefix for prompt caching.
+      addSystemMessage(messageList, mcpServerGuidance, 'mcp-guidance');
 
       messageList.add(options.context || [], 'context');
 

@@ -291,6 +291,7 @@ export const triggerExperimentBodySchema = z.object({
           z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
         )
         .optional(),
+      defaultStatus: z.enum(['draft', 'published']).optional(),
     })
     .optional()
     .describe('Version overrides for sub-agent delegation during experiment execution'),

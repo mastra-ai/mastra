@@ -139,6 +139,29 @@ describe('createDynamicTools – extraTools', () => {
     expect(tools).toHaveProperty('request_access');
     expect(tools).not.toHaveProperty('my_custom_tool');
   });
+
+  it('should include the notification inbox tool when storage is provided', async () => {
+    const notificationStore = {
+      listNotifications: vi.fn(async () => [{ id: 'n1', threadId: 'thread-1', summary: 'CI failed' }]),
+    };
+    const storage = {
+      getStore: vi.fn(async (name: string) => (name === 'notifications' ? notificationStore : undefined)),
+    };
+    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, storage as any);
+    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+
+    expect(tools).toHaveProperty(MC_TOOLS.NOTIFICATION_INBOX);
+    await expect(
+      tools[MC_TOOLS.NOTIFICATION_INBOX]?.execute?.({ action: 'list' }, { agent: { threadId: 'thread-1' } }),
+    ).resolves.toMatchObject({ notifications: [{ id: 'n1' }] });
+    expect(notificationStore.listNotifications).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      status: undefined,
+      priority: undefined,
+      source: undefined,
+      limit: undefined,
+    });
+  });
 });
 
 describe('getToolCategory – extra tools', () => {
@@ -153,6 +176,7 @@ describe('getToolCategory – extra tools', () => {
     expect(getToolCategory(MC_TOOLS.SEARCH_CONTENT)).toBe('read');
     expect(getToolCategory(MC_TOOLS.FIND_FILES)).toBe('read');
     expect(getToolCategory(MC_TOOLS.LSP_INSPECT)).toBe('read');
+    expect(getToolCategory(MC_TOOLS.NOTIFICATION_INBOX)).toBe('edit');
     expect(getToolCategory(MC_TOOLS.STRING_REPLACE_LSP)).toBe('edit');
     expect(getToolCategory(MC_TOOLS.EXECUTE_COMMAND)).toBe('execute');
   });
@@ -238,7 +262,7 @@ describe('createDynamicTools – disabledTools filtering', () => {
     const unfilteredTools = createDynamicTools()({ requestContext: makeRequestContext() });
     expect(unfilteredTools).toHaveProperty('request_access');
 
-    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, ['request_access']);
+    const getDynamicTools = createDynamicTools(undefined, undefined, ['request_access']);
 
     const tools = getDynamicTools({ requestContext: makeRequestContext() });
     expect(tools).not.toHaveProperty('request_access');
@@ -254,7 +278,7 @@ describe('createDynamicTools – disabledTools filtering', () => {
       execute: async () => ({ result: 'custom' }),
     });
 
-    const getDynamicTools = createDynamicTools(undefined, { my_tool: myTool }, undefined, ['my_tool']);
+    const getDynamicTools = createDynamicTools(undefined, { my_tool: myTool }, ['my_tool']);
     const tools = getDynamicTools({ requestContext: makeRequestContext() });
     expect(tools).not.toHaveProperty('my_tool');
   });
@@ -269,6 +293,7 @@ describe('buildToolGuidance – denied tool filtering', () => {
     expect(guidance).not.toContain(`**${MC_TOOLS.EXECUTE_COMMAND}**`);
     expect(guidance).toContain(`**${MC_TOOLS.VIEW}**`);
     expect(guidance).toContain(`**${MC_TOOLS.SEARCH_CONTENT}**`);
+    expect(guidance).toContain(`**${MC_TOOLS.NOTIFICATION_INBOX}**`);
   });
 
   it('should omit multiple denied tools from guidance', () => {
@@ -279,6 +304,7 @@ describe('buildToolGuidance – denied tool filtering', () => {
     expect(guidance).not.toContain(`**${MC_TOOLS.EXECUTE_COMMAND}**`);
     expect(guidance).not.toContain(`**${MC_TOOLS.WRITE_FILE}**`);
     expect(guidance).not.toContain('**subagent**');
+    expect(guidance).toContain(`**${MC_TOOLS.NOTIFICATION_INBOX}**`);
     expect(guidance).toContain(`**${MC_TOOLS.VIEW}**`);
     expect(guidance).toContain(`**${MC_TOOLS.STRING_REPLACE_LSP}**`);
   });
@@ -289,6 +315,7 @@ describe('buildToolGuidance – denied tool filtering', () => {
     expect(guidance).toContain(`**${MC_TOOLS.EXECUTE_COMMAND}**`);
     expect(guidance).toContain(`**${MC_TOOLS.VIEW}**`);
     expect(guidance).toContain(`**${MC_TOOLS.STRING_REPLACE_LSP}**`);
+    expect(guidance).toContain(`**${MC_TOOLS.NOTIFICATION_INBOX}**`);
     expect(guidance).toContain('**task_update**');
     expect(guidance).toContain('**task_complete**');
     expect(guidance).toContain('**subagent**');
