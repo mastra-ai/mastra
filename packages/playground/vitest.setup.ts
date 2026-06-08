@@ -25,6 +25,12 @@ if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
 }
 
+// jsdom does not implement Element.prototype.getAnimations, used by Radix UI
+// primitives (e.g. Switch) when reconciling presence/animation state
+if (typeof globalThis.Element !== 'undefined' && !Element.prototype.getAnimations) {
+  Element.prototype.getAnimations = () => [];
+}
+
 // jsdom does not implement IntersectionObserver, used by useInView (e.g. infinite lists)
 if (typeof globalThis.IntersectionObserver === 'undefined') {
   class IntersectionObserverStub {
@@ -39,6 +45,16 @@ if (typeof globalThis.IntersectionObserver === 'undefined') {
     thresholds = [];
   }
   globalThis.IntersectionObserver = IntersectionObserverStub as unknown as typeof IntersectionObserver;
+}
+
+// jsdom does not implement ResizeObserver, used by @xyflow/react when rendering the workflow graph
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  class ResizeObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
 }
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));

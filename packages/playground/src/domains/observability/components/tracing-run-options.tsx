@@ -1,10 +1,10 @@
 import { jsonLanguage } from '@codemirror/lang-json';
-import { useCodemirrorTheme, Txt } from '@mastra/playground-ui';
+import { cn, useCodemirrorTheme, Txt } from '@mastra/playground-ui';
 import CodeMirror from '@uiw/react-codemirror';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { WorkflowRunOptions } from '@/domains/workflows/workflow/workflow-run-options';
 
-export const TracingRunOptions = () => {
+export const TracingRunOptions = ({ editorClassName = 'h-[400px]' }: { editorClassName?: string }) => {
   const theme = useCodemirrorTheme();
   const { settings, setSettings, entityType } = useTracingSettings();
 
@@ -39,7 +39,7 @@ export const TracingRunOptions = () => {
         onChange={handleChange}
         theme={theme}
         extensions={[jsonLanguage]}
-        className="h-[400px] overflow-y-scroll bg-surface3 rounded-lg overflow-hidden p-3"
+        className={cn('overflow-y-scroll bg-surface3 rounded-lg overflow-hidden p-3', editorClassName)}
       />
 
       {entityType === 'workflow' && <WorkflowRunOptions />}

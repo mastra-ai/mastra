@@ -17,6 +17,8 @@ interface DynamicFormProps {
   className?: string;
   readOnly?: boolean;
   children?: React.ReactNode;
+  submitActions?: React.ReactNode;
+  leftActions?: React.ReactNode;
 }
 
 function isEmptyZodObject(schema: unknown): boolean {
@@ -47,6 +49,8 @@ export function DynamicForm({
   className,
   readOnly,
   children,
+  submitActions,
+  leftActions,
 }: DynamicFormProps) {
   const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null);
   const isNotZodObject = !isZodObjectLike(schema);
@@ -112,12 +116,18 @@ export function DynamicForm({
     () => ({
       SubmitButton: ({ children: buttonChildren }: { children: React.ReactNode }) =>
         onSubmit ? (
-          <Button className="w-full" disabled={isSubmitLoading}>
-            {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel || buttonChildren}
-          </Button>
+          <div className="flex items-center justify-between gap-1">
+            {leftActions ?? <div />}
+            <div className="flex items-center gap-1">
+              {submitActions}
+              <Button disabled={isSubmitLoading}>
+                {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel || buttonChildren}
+              </Button>
+            </div>
+          </div>
         ) : null,
     }),
-    [onSubmit, isSubmitLoading, submitButtonLabel],
+    [onSubmit, isSubmitLoading, submitButtonLabel, submitActions, leftActions],
   );
 
   // Memoize form components to prevent unnecessary re-renders

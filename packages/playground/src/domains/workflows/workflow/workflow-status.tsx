@@ -1,16 +1,6 @@
-import { CodeEditor, Txt, CheckIcon, CrossIcon, Icon } from '@mastra/playground-ui';
-import {
-  CirclePause,
-  HourglassIcon,
-  Loader2,
-  ShieldAlert,
-  ChevronDown,
-  ChevronRight,
-  RefreshCw,
-  Tag,
-} from 'lucide-react';
+import { CodeEditor } from '@mastra/playground-ui';
+import { ChevronDown, ChevronRight, RefreshCw, Tag, ShieldAlert } from 'lucide-react';
 import { useState } from 'react';
-import { WorkflowCard } from './workflow-card';
 
 export interface TripwireInfo {
   reason?: string;
@@ -19,14 +9,13 @@ export interface TripwireInfo {
   processorId?: string;
 }
 
-export interface WorkflowStatusProps {
-  stepId: string;
+export interface StepDetailProps {
   status: string;
   result: Record<string, unknown>;
   tripwire?: TripwireInfo;
 }
 
-export const WorkflowStatus = ({ stepId, status, result, tripwire }: WorkflowStatusProps) => {
+export const StepDetail = ({ status, result, tripwire }: StepDetailProps) => {
   const [isTripwireExpanded, setIsTripwireExpanded] = useState(false);
 
   const isTripwire = status === 'tripwire';
@@ -34,36 +23,18 @@ export const WorkflowStatus = ({ stepId, status, result, tripwire }: WorkflowSta
     tripwire && (tripwire.retry !== undefined || tripwire.metadata !== undefined || tripwire.processorId !== undefined),
   );
 
-  return (
-    <WorkflowCard
-      header={
-        <div className="flex items-center gap-3">
-          <Icon>
-            {status === 'success' && <CheckIcon className="text-accent1" />}
-            {status === 'failed' && <CrossIcon className="text-accent2" />}
-            {status === 'tripwire' && <ShieldAlert className="text-amber-400" />}
-            {status === 'suspended' && <CirclePause className="text-accent3" />}
-            {status === 'waiting' && <HourglassIcon className="text-accent5" />}
-            {status === 'running' && <Loader2 className="text-accent6 animate-spin" />}
-          </Icon>
-          <Txt as="span" variant="ui-lg" className="text-neutral6 font-medium">
-            {stepId.charAt(0).toUpperCase() + stepId.slice(1)}
-          </Txt>
-        </div>
-      }
-    >
-      {isTripwire && tripwire ? (
-        <TripwireDetails
-          tripwire={tripwire}
-          isExpanded={isTripwireExpanded}
-          onToggleExpand={() => setIsTripwireExpanded(!isTripwireExpanded)}
-          hasMetadata={hasTripwireMetadata}
-        />
-      ) : (
-        <CodeEditor data={result} />
-      )}
-    </WorkflowCard>
-  );
+  if (isTripwire && tripwire) {
+    return (
+      <TripwireDetails
+        tripwire={tripwire}
+        isExpanded={isTripwireExpanded}
+        onToggleExpand={() => setIsTripwireExpanded(!isTripwireExpanded)}
+        hasMetadata={hasTripwireMetadata}
+      />
+    );
+  }
+
+  return <CodeEditor data={result} />;
 };
 
 interface TripwireDetailsProps {
@@ -89,6 +60,7 @@ const TripwireDetails = ({ tripwire, isExpanded, onToggleExpand, hasMetadata }: 
       {hasMetadata && (
         <>
           <button
+            type="button"
             onClick={onToggleExpand}
             className="w-full flex items-center gap-2 px-4 py-2 text-xs text-amber-400/70 hover:text-amber-400 hover:bg-amber-900/20 transition-colors border-t border-amber-500/20"
           >

@@ -38,6 +38,7 @@ export function WorkflowStepDetailContent() {
           </div>
         </div>
         <button
+          type="button"
           onClick={closeStepDetail}
           className="p-1 hover:bg-surface3 rounded transition-colors"
           aria-label="Close"

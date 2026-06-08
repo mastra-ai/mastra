@@ -1,9 +1,6 @@
 import {
   Button,
   CodeEditor,
-  Label,
-  RadioGroup,
-  RadioGroupItem,
   Select,
   SelectContent,
   SelectItem,
@@ -12,7 +9,7 @@ import {
   Txt,
   cn,
 } from '@mastra/playground-ui';
-import { Loader2 } from 'lucide-react';
+import { Braces, FormInput, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { ZodSchema } from 'zod';
 
@@ -27,19 +24,27 @@ export interface WorkflowInputDataProps {
   submitButtonLabel: string;
   onSubmit: (data: any) => void;
   withoutSubmit?: boolean;
+  isReadOnly?: boolean;
   children?: React.ReactNode;
   isProcessorWorkflow?: boolean;
+  submitActions?: React.ReactNode;
+  leftActions?: React.ReactNode;
+  heading?: string;
 }
 
 export const WorkflowInputData = ({
   schema,
   defaultValues,
   withoutSubmit,
+  isReadOnly,
   isSubmitLoading,
   submitButtonLabel,
   onSubmit,
   children,
   isProcessorWorkflow,
+  submitActions,
+  leftActions,
+  heading,
 }: WorkflowInputDataProps) => {
   const [type, setType] = useState<InputType>(isProcessorWorkflow ? 'simple' : 'form');
   const [mounted, setMounted] = useState(false);
@@ -54,35 +59,31 @@ export const WorkflowInputData = ({
 
   return (
     <div>
-      <RadioGroup
-        disabled={isSubmitLoading}
-        value={type}
-        onValueChange={value => setType(value as InputType)}
-        className="pb-4"
-      >
-        <div className="flex flex-row gap-4">
-          {isProcessorWorkflow && (
-            <div className="flex items-center gap-3">
-              <RadioGroupItem value="simple" id="simple" />
-              <Label htmlFor="simple" className="text-neutral3! text-ui-sm">
-                Simple
-              </Label>
-            </div>
-          )}
-          <div className="flex items-center gap-3">
-            <RadioGroupItem value="form" id="form" />
-            <Label htmlFor="form" className="text-neutral3! text-ui-sm">
-              Form
-            </Label>
-          </div>
-          <div className="flex items-center gap-3">
-            <RadioGroupItem value="json" id="json" />
-            <Label htmlFor="json" className="text-neutral3! text-ui-sm">
-              JSON
-            </Label>
-          </div>
-        </div>
-      </RadioGroup>
+      <Txt as="p" variant="ui-md" className="text-neutral3 pb-4">
+        {heading ?? (withoutSubmit ? 'Run input' : 'Trigger a run')}
+      </Txt>
+      <div className="pb-4">
+        <Select disabled={isSubmitLoading} value={type} onValueChange={value => setType(value as InputType)}>
+          <SelectTrigger className="w-full" aria-label="Input type">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {isProcessorWorkflow && <SelectItem value="simple">Simple</SelectItem>}
+            <SelectItem value="form">
+              <span className="flex items-center gap-2">
+                <FormInput className="h-4 w-4" />
+                Form
+              </span>
+            </SelectItem>
+            <SelectItem value="json">
+              <span className="flex items-center gap-2">
+                <Braces className="h-4 w-4" />
+                JSON
+              </span>
+            </SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
       <div
         className={cn({
@@ -97,6 +98,9 @@ export const WorkflowInputData = ({
             submitButtonLabel={submitButtonLabel}
             onSubmit={onSubmit}
             withoutSubmit={withoutSubmit}
+            isReadOnly={isReadOnly}
+            submitActions={submitActions}
+            leftActions={leftActions}
           >
             {children}
           </SimpleProcessorInput>
@@ -107,6 +111,9 @@ export const WorkflowInputData = ({
             isSubmitLoading={isSubmitLoading}
             submitButtonLabel={submitButtonLabel}
             onSubmit={withoutSubmit ? undefined : onSubmit}
+            readOnly={isReadOnly}
+            submitActions={submitActions}
+            leftActions={leftActions}
           >
             {children}
           </DynamicForm>
@@ -118,6 +125,9 @@ export const WorkflowInputData = ({
             submitButtonLabel={submitButtonLabel}
             onSubmit={onSubmit}
             withoutSubmit={withoutSubmit}
+            isReadOnly={isReadOnly}
+            submitActions={submitActions}
+            leftActions={leftActions}
           >
             {children}
           </JSONInput>
@@ -134,7 +144,10 @@ const JSONInput = ({
   submitButtonLabel,
   onSubmit,
   withoutSubmit,
+  isReadOnly,
   children,
+  submitActions,
+  leftActions,
 }: WorkflowInputDataProps) => {
   const [errors, setErrors] = useState<string[]>([]);
   const [inputData, setInputData] = useState<string>(() => JSON.stringify(defaultValues ?? {}, null, 2));
@@ -179,14 +192,20 @@ const JSONInput = ({
         </div>
       )}
 
-      <CodeEditor data={data} onChange={setInputData} />
+      <CodeEditor data={data} onChange={setInputData} editable={!isReadOnly} />
 
       {children}
 
       {withoutSubmit ? null : (
-        <Button variant="default" onClick={handleSubmit} className="w-full" size="lg">
-          {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
-        </Button>
+        <div className="flex items-center justify-between gap-1">
+          {leftActions ?? <div />}
+          <div className="flex items-center gap-1">
+            {submitActions}
+            <Button variant="default" onClick={handleSubmit} size="lg">
+              {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -206,7 +225,10 @@ const SimpleProcessorInput = ({
   submitButtonLabel,
   onSubmit,
   withoutSubmit,
+  isReadOnly,
   children,
+  submitActions,
+  leftActions,
 }: WorkflowInputDataProps) => {
   const [message, setMessage] = useState('Hello, this is a test message.');
   const [phase, setPhase] = useState('input');
@@ -268,7 +290,7 @@ const SimpleProcessorInput = ({
         <Txt as="label" variant="ui-sm" className="text-neutral3">
           Phase
         </Txt>
-        <Select value={phase} onValueChange={setPhase}>
+        <Select value={phase} onValueChange={setPhase} disabled={isReadOnly}>
           <SelectTrigger className="w-full">
             <SelectValue placeholder="Select phase" />
           </SelectTrigger>
@@ -294,16 +316,23 @@ const SimpleProcessorInput = ({
           onChange={e => setMessage(e.target.value)}
           placeholder="Enter a test message..."
           rows={4}
-          className="w-full bg-transparent border border-border1 rounded-md p-3 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:outline-hidden focus:ring-2 focus:ring-accent1"
+          disabled={isReadOnly}
+          className="w-full bg-transparent border border-border1 rounded-md p-3 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:outline-hidden focus:ring-2 focus:ring-accent1 disabled:opacity-50"
         />
       </div>
 
       {children}
 
       {withoutSubmit ? null : (
-        <Button variant="default" onClick={handleSubmit} className="w-full" size="lg">
-          {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
-        </Button>
+        <div className="flex items-center justify-between gap-1">
+          {leftActions ?? <div />}
+          <div className="flex items-center gap-1">
+            {submitActions}
+            <Button variant="default" onClick={handleSubmit} size="lg">
+              {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );

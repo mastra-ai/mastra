@@ -35,11 +35,18 @@ export function WorkflowGraph({ workflowId, workflow, isLoading }: WorkflowGraph
     );
   }
 
+  const graphSource = snapshot?.serializedStepGraph ? { stepGraph: snapshot.serializedStepGraph } : workflow;
+
   return (
     <ReactFlowProvider>
-      <WorkflowGraphInner
-        workflow={snapshot?.serializedStepGraph ? { stepGraph: snapshot?.serializedStepGraph } : workflow}
-      />
+      {/*
+        React Flow's useNodesState/useEdgesState only seed from their initial value on mount, so
+        switching runs of the same workflow (identical stepGraph) would otherwise keep the previous
+        run's nodes/edges. `snapshot` is built in WorkflowLayout straight from the route param, so
+        `snapshot.runId` is the synchronous, route-accurate signal: keying on it forces a fresh
+        mount per selected run (and resets to the un-run graph on /graph).
+      */}
+      <WorkflowGraphInner key={snapshot?.runId ?? 'no-run'} workflow={graphSource} />
     </ReactFlowProvider>
   );
 }

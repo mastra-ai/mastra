@@ -1,0 +1,47 @@
+import {
+  Button,
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  Icon,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@mastra/playground-ui';
+import { SlidersHorizontal } from 'lucide-react';
+import { useState } from 'react';
+import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
+
+export const WorkflowRunOptionsDialog = () => {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button type="button" variant="ghost" size="icon-md" aria-label="Run Options" onClick={() => setOpen(true)}>
+            <Icon>
+              <SlidersHorizontal />
+            </Icon>
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>Run Options</TooltipContent>
+      </Tooltip>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Run Options</DialogTitle>
+            <DialogDescription>Configure tracing and debug options for this workflow run</DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            <TracingRunOptions editorClassName="h-[240px] max-h-[40vh]" />
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+};

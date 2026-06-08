@@ -9,7 +9,7 @@ import { forwardRef } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { WorkflowRunList } from '../workflow-run-list';
-import { emptyWorkflowRuns, oneSuccessfulRun } from './fixtures/workflow-runs';
+import { oneSuccessfulRun } from './fixtures/workflow-runs';
 import { readOnlyAuthCapabilities } from '@/domains/agents/components/__tests__/fixtures/auth';
 import { LinkComponentProvider } from '@/lib/framework';
 import type { LinkComponentProviderProps } from '@/lib/framework';
@@ -83,9 +83,7 @@ function renderRunList(runId?: string) {
 }
 
 function stubCapabilities() {
-  server.use(
-    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(readOnlyAuthCapabilities)),
-  );
+  server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(readOnlyAuthCapabilities)));
 }
 
 function stubRuns(response: ListWorkflowRunsResponse) {
@@ -95,34 +93,14 @@ function stubRuns(response: ListWorkflowRunsResponse) {
 afterEach(cleanup);
 
 describe('WorkflowRunList', () => {
-  it('hides the "New workflow run" button when there are no runs and no active runId', async () => {
-    stubCapabilities();
-    stubRuns(emptyWorkflowRuns);
-
-    renderRunList();
-
-    expect(
-      await screen.findByText('Your run history will appear here once you run the workflow'),
-    ).not.toBeNull();
-    expect(screen.queryByText('New workflow run')).toBeNull();
-  });
-
-  it('shows the "New workflow run" button when runs exist even without an active runId', async () => {
+  it('never renders the "New workflow run" button (it lives in the left panel now)', async () => {
     stubCapabilities();
     stubRuns(oneSuccessfulRun);
 
-    renderRunList();
-
-    expect(await screen.findByText('New workflow run')).not.toBeNull();
-  });
-
-  it('shows the "New workflow run" button when an active runId is present', async () => {
-    stubCapabilities();
-    stubRuns(emptyWorkflowRuns);
-
     renderRunList('run-success-1');
 
-    expect(await screen.findByText('New workflow run')).not.toBeNull();
+    expect(await screen.findByText('run-success-1')).not.toBeNull();
+    expect(screen.queryByText('New workflow run')).toBeNull();
   });
 
   it('renders the status as an icon with the status exposed via aria-label/tooltip', async () => {
@@ -136,6 +114,15 @@ describe('WorkflowRunList', () => {
     expect(screen.getByLabelText('success')).not.toBeNull();
     // ...and the textual badge is gone.
     expect(screen.queryByText('SUCCESS')).toBeNull();
+  });
+
+  it('renders the "Workflow run history" panel title', async () => {
+    stubCapabilities();
+    stubRuns(oneSuccessfulRun);
+
+    renderRunList();
+
+    expect(await screen.findByText('Workflow run history')).not.toBeNull();
   });
 
   it('links each run row to its run detail path', async () => {

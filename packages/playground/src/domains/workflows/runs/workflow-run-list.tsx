@@ -1,16 +1,8 @@
-import { AlertDialog, Icon, Skeleton, Spinner } from '@mastra/playground-ui';
+import { AlertDialog, Icon, Skeleton, Spinner, Txt } from '@mastra/playground-ui';
 import { formatDate } from 'date-fns';
-import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
-import {
-  ThreadList,
-  ThreadListEmpty,
-  ThreadListItem,
-  ThreadListItems,
-  ThreadListNewItem,
-  ThreadListSeparator,
-} from '@/components/thread-list';
+import { ThreadList, ThreadListEmpty, ThreadListItem, ThreadListItems } from '@/components/thread-list';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useDeleteWorkflowRun, useWorkflowRuns } from '@/hooks/use-workflow-runs';
 import { useLinkComponent } from '@/lib/framework';
@@ -54,18 +46,9 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
     <>
       <div className="h-full pt-2">
         <ThreadList aria-label="Workflow runs">
-          {(runId || actualRuns.length > 0) && (
-            <>
-              <ThreadListNewItem as={Link} to={paths.workflowLink(workflowId)}>
-                <Icon>
-                  <Plus />
-                </Icon>
-                New workflow run
-              </ThreadListNewItem>
-              <ThreadListSeparator />
-            </>
-          )}
-
+          <Txt as="p" variant="ui-sm" className="text-neutral3 px-3 pb-2 pt-1">
+            Workflow run history
+          </Txt>
           {actualRuns.length === 0 ? (
             <ThreadListEmpty>Your run history will appear here once you run the workflow</ThreadListEmpty>
           ) : (

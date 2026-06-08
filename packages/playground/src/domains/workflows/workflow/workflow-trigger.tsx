@@ -14,9 +14,12 @@ import {
   DialogHeader,
   DialogDescription,
   DialogBody,
+  Switch,
 } from '@mastra/playground-ui';
 import { Braces, Loader2 } from 'lucide-react';
 import { useState, useEffect, useContext } from 'react';
+import { WorkflowRequestContextDialog } from '../components/workflow-request-context-dialog';
+import { WorkflowRunOptionsDialog } from '../components/workflow-run-options-dialog';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useSuspendedSteps, useWorkflowSchemas } from './use-workflow-trigger';
@@ -76,6 +79,18 @@ export interface WorkflowTriggerProps {
   }>;
 }
 
+function DebugModeSwitch() {
+  const { debugMode, setDebugMode } = useContext(WorkflowRunContext);
+  return (
+    <label className="flex shrink-0 items-center gap-2 cursor-pointer">
+      <Switch checked={debugMode} onCheckedChange={setDebugMode} aria-label="Toggle debug" />
+      <Txt variant="ui-xs" className="text-neutral3 whitespace-nowrap">
+        Toggle debug
+      </Txt>
+    </label>
+  );
+}
+
 export function WorkflowTrigger({
   workflowId,
   paramsRunId,
@@ -105,6 +120,8 @@ export function WorkflowTrigger({
   const streamResultToUse = result ?? streamResult;
   const suspendedSteps = useSuspendedSteps(streamResultToUse, innerRunId);
   const { zodSchemaToUse, hasStateSchema } = useWorkflowSchemas(workflow);
+
+  const hasFinished = ['success', 'failed', 'canceled', 'bailed'].includes(streamResultToUse?.status ?? '');
 
   const handleExecuteWorkflow = async (data: any) => {
     try {
@@ -156,12 +173,15 @@ export function WorkflowTrigger({
       setInnerRunId(paramsRunId);
       setContextRunId(paramsRunId);
     }
+    // Only react to the run id from params changing; the stream/setters are stable for this effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramsRunId]);
 
   useEffect(() => {
     if (streamResult) {
       setResult(streamResult);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streamResult]);
 
   if (isLoading) {
@@ -203,7 +223,18 @@ export function WorkflowTrigger({
               void handleExecuteWorkflow(data);
             }}
             isViewingRun={!!paramsRunId}
+            isReadOnly={!!paramsRunId || hasFinished}
             isProcessorWorkflow={workflow?.isProcessorWorkflow}
+            heading={!paramsRunId && hasFinished ? 'Run input' : undefined}
+            leftActions={!paramsRunId ? <DebugModeSwitch /> : undefined}
+            submitActions={
+              <>
+                {workflow?.requestContextSchema && (
+                  <WorkflowRequestContextDialog requestContextSchema={workflow.requestContextSchema} />
+                )}
+                <WorkflowRunOptionsDialog />
+              </>
+            }
           />
         )}
 
@@ -246,9 +277,9 @@ const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => 
 
   return (
     <>
-      <Button variant="default" onClick={() => setOpen(true)} className="w-full">
+      <Button type="button" variant="default" onClick={() => setOpen(true)} className="w-full">
         <Braces className="text-neutral3" />
-        Open Workflow Execution (JSON)
+        Workflow Execution
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>

@@ -17,6 +17,7 @@ export function WorkflowCancelButton({ status, cancelMessage, isCancelling, onCa
 
   return (
     <Button
+      type="button"
       variant="default"
       className="w-full"
       onClick={onCancel}
