@@ -9,6 +9,7 @@ export interface AgentSettingsStateProps {
 export const defaultSettings: AgentSettings = {
   modelSettings: {
     maxRetries: 2,
+    maxSteps: 5,
     chatWithGenerateLegacy: false,
     chatWithGenerate: false,
     chatWithLegacyStream: false,
