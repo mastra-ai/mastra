@@ -11,6 +11,14 @@ import {
   getDefaultValue,
 } from '@mastra/core/storage';
 import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import {
+  addOnClusterToDDL,
+  applyReplicationToDDL,
+  buildLocalTableReplicationError,
+  isReplicationConfigured,
+  isReplicatedOrSharedEngine,
+  validateReplicationConfig,
+} from './replication';
 import type { ClickhouseConfig } from './utils';
 import { TABLE_ENGINES, transformRow } from './utils';
 
@@ -28,6 +36,7 @@ export type ClickhouseDomainConfig = ClickhouseDomainClientConfig | ClickhouseDo
 export interface ClickhouseDomainClientConfig {
   client: ClickHouseClient;
   ttl?: ClickhouseConfig['ttl'];
+  replication?: ClickhouseConfig['replication'];
 }
 
 /**
@@ -38,6 +47,7 @@ export interface ClickhouseDomainRestConfig {
   username: string;
   password: string;
   ttl?: ClickhouseConfig['ttl'];
+  replication?: ClickhouseConfig['replication'];
 }
 
 /**
@@ -47,10 +57,13 @@ export interface ClickhouseDomainRestConfig {
 export function resolveClickhouseConfig(config: ClickhouseDomainConfig): {
   client: ClickHouseClient;
   ttl?: ClickhouseConfig['ttl'];
+  replication?: ClickhouseConfig['replication'];
 } {
+  validateReplicationConfig(config.replication);
+
   // Existing client
   if ('client' in config) {
-    return { client: config.client, ttl: config.ttl };
+    return { client: config.client, ttl: config.ttl, replication: config.replication };
   }
 
   // Config to create new client
@@ -66,21 +79,32 @@ export function resolveClickhouseConfig(config: ClickhouseDomainConfig): {
     },
   });
 
-  return { client, ttl: config.ttl };
+  return { client, ttl: config.ttl, replication: config.replication };
 }
 
 export class ClickhouseDB extends MastraBase {
   protected ttl: ClickhouseConfig['ttl'];
+  protected replication: ClickhouseConfig['replication'];
   protected client: ClickHouseClient;
 
   /** Cache of actual table columns: tableName -> Promise<Set<columnName>> (stores in-flight promise to coalesce concurrent calls) */
   private tableColumnsCache = new Map<string, Promise<Set<string>>>();
 
-  constructor({ client, ttl }: { client: ClickHouseClient; ttl: ClickhouseConfig['ttl'] }) {
+  constructor({
+    client,
+    ttl,
+    replication,
+  }: {
+    client: ClickHouseClient;
+    ttl: ClickhouseConfig['ttl'];
+    replication?: ClickhouseConfig['replication'];
+  }) {
     super({
       name: 'CLICKHOUSE_DB',
     });
+    validateReplicationConfig(replication);
     this.ttl = ttl;
+    this.replication = replication;
     this.client = client;
   }
 
@@ -158,6 +182,21 @@ export class ClickhouseDB extends MastraBase {
       return rows[0]?.result === 1;
     } catch {
       return false;
+    }
+  }
+
+  private async assertExistingTableCompatibleWithReplication(tableName: string): Promise<void> {
+    if (!isReplicationConfigured(this.replication)) return;
+
+    const result = await this.client.query({
+      query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name = {tableName:String}`,
+      query_params: { tableName },
+      format: 'JSONEachRow',
+    });
+    const rows = (await result.json()) as Array<{ name: string; engine: string }>;
+    const localTables = rows.filter(row => row.engine && !isReplicatedOrSharedEngine(row.engine));
+    if (localTables.length > 0) {
+      throw buildLocalTableReplicationError(localTables);
     }
   }
 
@@ -291,6 +330,17 @@ export class ClickhouseDB extends MastraBase {
     if (!needsMigration) {
       this.logger?.debug?.(`Spans table already has correct sorting key: ${currentSortingKey}`);
       return false;
+    }
+
+    if (isReplicationConfigured(this.replication)) {
+      throw new MastraError({
+        id: createStorageErrorId('CLICKHOUSE', 'REPLICATION', 'SPANS_SORTING_KEY_MIGRATION_UNSUPPORTED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text:
+          'ClickHouse replication is enabled, so Mastra will not run copy-and-swap spans table migrations automatically. ' +
+          'Migrate the existing spans table manually before enabling replication.',
+      });
     }
 
     this.logger?.info?.(`Migrating spans table from sorting key "${currentSortingKey}" to "(traceId, spanId)"`);
@@ -450,6 +500,8 @@ export class ClickhouseDB extends MastraBase {
     schema: Record<string, StorageColumn>;
   }): Promise<void> {
     try {
+      await this.assertExistingTableCompatibleWithReplication(tableName);
+
       const columns = Object.entries(schema)
         .map(([name, def]) => {
           let sqlType = this.getSqlType(def.type);
@@ -522,7 +574,7 @@ export class ClickhouseDB extends MastraBase {
       }
 
       await this.client.query({
-        query: sql,
+        query: applyReplicationToDDL(sql, this.replication),
         clickhouse_settings: {
           // Allows to insert serialized JS Dates (such as '2023-12-06T10:54:48.000Z')
           date_time_input_format: 'best_effort',
@@ -578,7 +630,7 @@ export class ClickhouseDB extends MastraBase {
             `ALTER TABLE ${tableName} ADD COLUMN IF NOT EXISTS "${columnName}" ${sqlType} ${defaultValue}`.trim();
 
           await this.client.query({
-            query: alterSql,
+            query: addOnClusterToDDL(alterSql, this.replication),
           });
           this.logger?.debug?.(`Added column ${columnName} to table ${tableName}`);
         }
@@ -625,7 +677,7 @@ export class ClickhouseDB extends MastraBase {
   async dropTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       await this.client.query({
-        query: `DROP TABLE IF EXISTS ${tableName}`,
+        query: addOnClusterToDDL(`DROP TABLE IF EXISTS ${tableName}`, this.replication),
       });
     } catch (error: any) {
       throw new MastraError(
