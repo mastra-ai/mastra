@@ -4378,13 +4378,18 @@ export class Mastra<
     // SchedulerWorker is stopped as part of stopWorkers().
     await this.stopWorkers();
 
-    for (const id of Object.keys(this.#workspaces)) {
-      try {
-        await this.removeWorkspace(id, { destroy: true });
-      } catch (error) {
-        this.#logger?.error('Failed to destroy workspace during shutdown', { workspaceId: id, error });
+    const workspaceIds = Object.keys(this.#workspaces);
+    const teardownResults = await Promise.allSettled(
+      workspaceIds.map(id => this.removeWorkspace(id, { destroy: true })),
+    );
+    teardownResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.#logger?.error('Failed to destroy workspace during shutdown', {
+          workspaceId: workspaceIds[index],
+          error: result.reason,
+        });
       }
-    }
+    });
 
     // Close storage to release OS file handles (critical on Windows: open WAL/shm
     // handles cause EBUSY when callers try to fs.rm the storage dir after shutdown).

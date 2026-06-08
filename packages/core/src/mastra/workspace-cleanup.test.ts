@@ -104,5 +104,70 @@ describe('Workspace cleanup', () => {
       expect(mastra.listWorkspaces()['failing-workspace']?.workspace).toBe(failingWorkspace);
       expect(mastra.listWorkspaces()).not.toHaveProperty('successful-workspace');
     });
+
+    it('destroys registered workspaces before closing storage', async () => {
+      const callOrder: string[] = [];
+      const storage = {
+        name: 'order-test-storage',
+        init: vi.fn(async () => {}),
+        close: vi.fn(async () => {
+          callOrder.push('storage.close');
+        }),
+        __setLogger: vi.fn(),
+      } as any;
+
+      const mastra = new Mastra({ logger: false, storage });
+      const workspace = createWorkspace('order-workspace');
+      vi.spyOn(workspace, 'destroy').mockImplementation(async () => {
+        callOrder.push('workspace.destroy');
+      });
+      mastra.addWorkspace(workspace);
+
+      await mastra.shutdown();
+
+      expect(callOrder).toEqual(['workspace.destroy', 'storage.close']);
+      expect(storage.close).toHaveBeenCalledTimes(1);
+    });
+
+    it('destroys multiple workspaces concurrently (parallel teardown)', async () => {
+      const mastra = new Mastra({ logger: false });
+      const workspaceA = createWorkspace('parallel-a');
+      const workspaceB = createWorkspace('parallel-b');
+      const workspaceC = createWorkspace('parallel-c');
+      let started = 0;
+      let active = 0;
+      let maxActive = 0;
+      let releaseDestroys!: () => void;
+      const release = new Promise<void>(resolve => {
+        releaseDestroys = resolve;
+      });
+
+      const slowDestroy = async () => {
+        started += 1;
+        active += 1;
+        maxActive = Math.max(maxActive, active);
+        await release;
+        active -= 1;
+      };
+      vi.spyOn(workspaceA, 'destroy').mockImplementation(slowDestroy);
+      vi.spyOn(workspaceB, 'destroy').mockImplementation(slowDestroy);
+      vi.spyOn(workspaceC, 'destroy').mockImplementation(slowDestroy);
+
+      mastra.addWorkspace(workspaceA);
+      mastra.addWorkspace(workspaceB);
+      mastra.addWorkspace(workspaceC);
+
+      const shutdownPromise = mastra.shutdown();
+
+      try {
+        await vi.waitFor(() => expect(started).toBe(3), { timeout: 500, interval: 5 });
+        expect(maxActive).toBe(3);
+      } finally {
+        releaseDestroys();
+      }
+      await shutdownPromise;
+
+      expect(mastra.listWorkspaces()).toEqual({});
+    });
   });
 });
