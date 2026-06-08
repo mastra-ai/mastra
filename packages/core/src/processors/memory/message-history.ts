@@ -1,11 +1,14 @@
-import type { Processor } from '..';
+import type { ProcessInputArgs, Processor } from '..';
 import type { MastraDBMessage, MessageList } from '../../agent';
-import { parseMemoryRequestContext } from '../../memory';
+import { getMemoryTokenLimiterBoundary, parseMemoryRequestContext } from '../../memory';
 import { removeWorkingMemoryTags } from '../../memory/working-memory-utils';
 import { SpanType, EntityType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
+import { CoreTokenCounter } from '../../utils/token-counter';
+
+import { DEFAULT_TOKEN_COUNTER_SOURCE, getDefaultAtMaxRemoveTokens } from './memory-token-limiter';
 
 /**
  * Options for the MessageHistory processor
@@ -13,7 +16,14 @@ import type { MemoryStorage } from '../../storage';
 export interface MessageHistoryOptions {
   storage: MemoryStorage;
   lastMessages?: number;
+  tokenLimit?: {
+    maxTokens: number;
+    atMaxRemoveTokens?: number;
+    tokenCounterSource?: string;
+  };
 }
+
+const TOKEN_LIMITED_FETCH_BATCH_SIZE = 20;
 
 /**
  * Hybrid processor that handles both retrieval and persistence of message history.
@@ -28,10 +38,54 @@ export class MessageHistory implements Processor {
   readonly name = 'MessageHistory';
   private storage: MemoryStorage;
   private lastMessages?: number;
+  private tokenLimit?: MessageHistoryOptions['tokenLimit'];
+  private counter: CoreTokenCounter | undefined;
 
   constructor(options: MessageHistoryOptions) {
     this.storage = options.storage;
     this.lastMessages = options.lastMessages;
+    this.tokenLimit = options.tokenLimit;
+  }
+
+  private getCounter(): CoreTokenCounter {
+    if (!this.counter) {
+      this.counter = new CoreTokenCounter();
+    }
+
+    return this.counter;
+  }
+
+  private getCurrentBoundaryConfig():
+    | { maxTokens: number; atMaxRemoveTokens: number; tokenCounterSource: string }
+    | undefined {
+    if (!this.tokenLimit) {
+      return undefined;
+    }
+
+    return {
+      maxTokens: this.tokenLimit.maxTokens,
+      atMaxRemoveTokens: this.tokenLimit.atMaxRemoveTokens ?? getDefaultAtMaxRemoveTokens(this.tokenLimit.maxTokens),
+      tokenCounterSource: this.tokenLimit.tokenCounterSource ?? DEFAULT_TOKEN_COUNTER_SOURCE,
+    };
+  }
+
+  private countSystemMessageTokens(
+    message: ProcessInputArgs['systemMessages'][number],
+    counter: CoreTokenCounter,
+  ): number {
+    const content = message.content;
+    const dbContent = Array.isArray(content)
+      ? { format: 2 as const, parts: content as MastraDBMessage['content']['parts'] }
+      : content && typeof content === 'object'
+        ? { format: 2 as const, ...(content as Record<string, unknown>) }
+        : { format: 2 as const, parts: [{ type: 'text' as const, text: String(content ?? '') }] };
+
+    return counter.countMessage({
+      id: 'system',
+      role: 'system',
+      content: dbContent as MastraDBMessage['content'],
+      createdAt: new Date(),
+    });
   }
 
   /**
@@ -80,14 +134,78 @@ export class MessageHistory implements Processor {
     });
   }
 
-  async processInput(
-    args: {
-      messages: MastraDBMessage[];
-      messageList: MessageList;
-      abort: (reason?: string) => never;
-      requestContext?: RequestContext;
-    } & Partial<ObservabilityContext>,
-  ): Promise<MessageList | MastraDBMessage[]> {
+  private getBaseTokenCount(args: ProcessInputArgs): number {
+    const counter = this.getCounter();
+    let totalTokens = 0;
+
+    for (const msg of args.systemMessages ?? []) {
+      totalTokens += this.countSystemMessageTokens(msg, counter);
+    }
+
+    for (const message of args.messageList.get.all.db()) {
+      totalTokens += counter.countMessage(message);
+    }
+
+    return totalTokens;
+  }
+
+  private async listMessages(options: Parameters<MemoryStorage['listMessages']>[0]): Promise<MastraDBMessage[]> {
+    const result = await this.storage.listMessages(options);
+    return result.messages;
+  }
+
+  private async listTokenLimitedMessages(
+    options: Parameters<MemoryStorage['listMessages']>[0],
+    args: ProcessInputArgs,
+  ): Promise<MastraDBMessage[]> {
+    if (!this.tokenLimit || this.lastMessages !== Number.MAX_SAFE_INTEGER) {
+      return this.listMessages(options);
+    }
+
+    const counter = this.getCounter();
+    let totalTokens = this.getBaseTokenCount(args);
+
+    if (totalTokens > this.tokenLimit.maxTokens) {
+      return [];
+    }
+
+    const messages: MastraDBMessage[] = [];
+    let hasMore = true;
+    let endCursor: Date | undefined;
+
+    while (hasMore && totalTokens <= this.tokenLimit.maxTokens) {
+      const dateRange = {
+        ...options.filter?.dateRange,
+        ...(endCursor ? { end: endCursor, endExclusive: true } : {}),
+      };
+
+      const result = await this.storage.listMessages({
+        ...options,
+        page: 0,
+        perPage: TOKEN_LIMITED_FETCH_BATCH_SIZE,
+        filter: {
+          ...options.filter,
+          dateRange,
+        },
+      });
+
+      for (const message of result.messages) {
+        messages.push(message);
+
+        if (message.role !== 'system') {
+          totalTokens += counter.countMessage(message);
+        }
+      }
+
+      const oldestFetchedMessage = result.messages.at(-1);
+      endCursor = oldestFetchedMessage?.createdAt ? new Date(oldestFetchedMessage.createdAt) : undefined;
+      hasMore = result.hasMore && result.messages.length > 0 && endCursor !== undefined;
+    }
+
+    return messages;
+  }
+
+  async processInput(args: ProcessInputArgs): Promise<MessageList | MastraDBMessage[]> {
     const { messageList, requestContext, ...observabilityContext } = args;
 
     // Get memory context from RequestContext or MessageList
@@ -109,25 +227,67 @@ export class MessageHistory implements Processor {
     );
 
     try {
+      // Check for memory token limiter boundary in thread metadata.
+      // If a valid boundary exists, only fetch messages after that point.
+      const memoryContext = parseMemoryRequestContext(requestContext);
+      const thread = memoryContext?.thread;
+      const boundary = thread?.metadata
+        ? getMemoryTokenLimiterBoundary(thread.metadata as Record<string, unknown>, this.getCurrentBoundaryConfig())
+        : undefined;
+      let boundaryFilter: { start: Date; startExclusive: boolean } | undefined;
+
+      if (boundary) {
+        boundaryFilter = {
+          start: new Date(boundary.createdAt),
+          startExclusive: true,
+        };
+      }
+
       // 1. Fetch historical messages from storage (as DB format)
-      const result = await this.storage.listMessages({
+      const listMessagesOptions: Parameters<MemoryStorage['listMessages']>[0] = {
         threadId,
         resourceId,
         page: 0,
         perPage: this.lastMessages,
         orderBy: { field: 'createdAt', direction: 'DESC' },
-      });
+      };
+
+      // Apply boundary filter if we have one.
+      if (boundaryFilter) {
+        listMessagesOptions.filter = {
+          ...listMessagesOptions.filter,
+          dateRange: {
+            ...listMessagesOptions.filter?.dateRange,
+            start: boundaryFilter.start,
+            startExclusive: boundaryFilter.startExclusive,
+          },
+        };
+      }
+
+      const messages = await this.listTokenLimitedMessages(listMessagesOptions, args);
 
       // 2. Filter out system messages (they should never be stored in DB)
-      const filteredMessages = result.messages.filter((msg: MastraDBMessage) => {
+      const filteredMessages = messages.filter((msg: MastraDBMessage) => {
         return msg.role !== 'system';
       });
 
-      // 3. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
+      // 3. If boundary exists, defensively remove the boundary message.
+      // This handles timestamp collision edge cases where startExclusive may not be supported.
+      const boundaryMessageId = boundary?.messageId;
+
+      const boundarySafeMessages = boundaryMessageId
+        ? filteredMessages.filter((msg: MastraDBMessage) => {
+            return msg.id !== boundaryMessageId;
+          })
+        : filteredMessages;
+
+      // 4. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
       // This includes messages added by previous processors like SemanticRecall
       const existingMessages = messageList.get.all.db();
       const messageIds = new Set(existingMessages.map((m: MastraDBMessage) => m.id).filter(Boolean));
-      const uniqueHistoricalMessages = filteredMessages.filter((m: MastraDBMessage) => !m.id || !messageIds.has(m.id));
+      const uniqueHistoricalMessages = boundarySafeMessages.filter(
+        (m: MastraDBMessage) => !m.id || !messageIds.has(m.id),
+      );
 
       // Reverse to chronological order (oldest first) since we fetched DESC
       const chronologicalMessages = uniqueHistoricalMessages.reverse();

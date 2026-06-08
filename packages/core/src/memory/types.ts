@@ -68,8 +68,32 @@ export type ThreadOMMetadata = {
  * Structure for Mastra-specific thread metadata.
  * Stored on thread.metadata.mastra
  */
+export type MemoryTokenLimiterBoundary = {
+  /** The message ID of the newest removed message */
+  messageId: string;
+  /** ISO timestamp of the boundary message (used as query cursor) */
+  createdAt: string;
+  /** Total tokens before the drop */
+  droppedFromTokens: number;
+  /** Target token count after the drop */
+  targetTokens: number;
+  /** The maxTokens config that triggered this boundary */
+  maxTokens: number;
+  /** The atMaxRemoveTokens config that determined the drop distance */
+  atMaxRemoveTokens: number;
+  /** Source identifier for the token counter used (to detect source changes) */
+  tokenCounterSource: string;
+  /** When this boundary was established */
+  updatedAt: string;
+};
+
 export type ThreadMastraMetadata = {
   om?: ThreadOMMetadata;
+  /** Persistent token limiter state for stateful history trimming */
+  memoryTokenLimiter?: {
+    /** The current trim boundary — messages at or before this point are excluded from history */
+    boundary: MemoryTokenLimiterBoundary;
+  };
 };
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -90,11 +114,62 @@ export function getThreadOMMetadata(threadMetadata?: Record<string, unknown>): T
 }
 
 /**
- * Helper to set OM metadata on a thread's metadata object.
+ * Helper to get memory token limiter boundary from a thread's metadata object.
+ * Returns undefined if not present or if config has changed.
+ */
+export function getMemoryTokenLimiterBoundary(
+  threadMetadata: Record<string, unknown> | undefined,
+  currentConfig?: { maxTokens?: number; atMaxRemoveTokens?: number; tokenCounterSource?: string },
+): MemoryTokenLimiterBoundary | undefined {
+  if (!threadMetadata) return undefined;
+  const mastra = threadMetadata.mastra;
+  if (!isPlainObject(mastra)) return undefined;
+  const limiter = mastra.memoryTokenLimiter;
+  if (!isPlainObject(limiter)) return undefined;
+  const boundary = limiter.boundary;
+  if (!boundary || !isPlainObject(boundary)) return undefined;
+
+  // If current config is provided, validate the boundary is still fresh
+  if (currentConfig) {
+    const b = boundary as Record<string, unknown>;
+    if (currentConfig.maxTokens !== undefined && b.maxTokens !== currentConfig.maxTokens) return undefined;
+    if (currentConfig.atMaxRemoveTokens !== undefined && b.atMaxRemoveTokens !== currentConfig.atMaxRemoveTokens)
+      return undefined;
+    if (currentConfig.tokenCounterSource !== undefined && b.tokenCounterSource !== currentConfig.tokenCounterSource)
+      return undefined;
+  }
+
+  return boundary as unknown as MemoryTokenLimiterBoundary;
+}
+
+/**
+ * Helper to set memory token limiter boundary on a thread's metadata object.
  * Creates the nested structure if it doesn't exist.
  * Returns a new metadata object (does not mutate the original).
- * Safely handles cases where existing mastra/om values are not objects.
  */
+export function setMemoryTokenLimiterBoundary(
+  threadMetadata: Record<string, unknown> | undefined,
+  boundary: MemoryTokenLimiterBoundary,
+): Record<string, unknown> {
+  const existing = threadMetadata ?? {};
+  const existingMastra = isPlainObject(existing.mastra) ? existing.mastra : {};
+  const existingLimiter = isPlainObject(existingMastra.memoryTokenLimiter) ? existingMastra.memoryTokenLimiter : {};
+
+  return {
+    ...existing,
+    mastra: {
+      ...existingMastra,
+      memoryTokenLimiter: {
+        ...existingLimiter,
+        boundary: {
+          ...boundary,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    },
+  };
+}
+
 export function setThreadOMMetadata(
   threadMetadata: Record<string, unknown> | undefined,
   omMetadata: ThreadOMMetadata,
@@ -914,15 +989,44 @@ type BaseMemoryConfig = {
    * Number of recent messages from the current thread to include in context.
    * Provides short-term conversational continuity.
    * Set to false to disable conversation history entirely.
+   * Can be a number, false, or an object with maxMessages, maxTokens, and atMaxRemoveTokens.
+   *
+   * When using the object form with maxTokens, the limiter monitors total token count of
+   * messages (memory history + new input + system messages). When it exceeds maxTokens,
+   * the oldest remembered history messages are removed until total is at or below
+   * `maxTokens - atMaxRemoveTokens`. The trim boundary is persisted on thread metadata,
+   * so subsequent fetches start from the last trim point instead of recounting all history.
+   * Active input/system messages are never removed.
+   *
+   * Token counting uses tokenx, with per-message token estimates cached on
+   * message metadata.
    *
    * @default 10
    * @example
    * ```typescript
    * lastMessages: 5 // Include last 5 messages
    * lastMessages: false // Disable conversation history
+   * lastMessages: {
+   *   maxTokens: 50_000,     // Trim when total exceeds 50K tokens
+   *   atMaxRemoveTokens: 20_000, // Drop to 30K when trimming
+   * }
    * ```
    */
-  lastMessages?: number | false;
+  lastMessages?:
+    | number
+    | false
+    | {
+        /** Max number of messages to fetch. Omit or set false for no count cap. */
+        maxMessages?: number | false;
+        /** Max token budget for remembered history (triggers trimming when exceeded) */
+        maxTokens?: number;
+        /**
+         * When trimming at maxTokens, drop this many tokens from the total.
+         * Defaults to a reasonable fraction of maxTokens if not specified.
+         * The resulting target window is maxTokens - atMaxRemoveTokens.
+         */
+        atMaxRemoveTokens?: number;
+      };
 
   /**
    * Semantic recall configuration for RAG-based retrieval of relevant past messages.
@@ -1244,8 +1348,18 @@ export type SerializedMemoryConfig = {
     /** Treat memory as read-only (no new messages stored) */
     readOnly?: boolean;
 
-    /** Number of recent messages to include, or false to disable */
-    lastMessages?: number | false;
+    /** Number of recent messages to include, false to disable, or object with maxMessages/maxTokens */
+    lastMessages?:
+      | number
+      | false
+      | {
+          maxMessages?: number | false;
+          maxTokens?: number;
+          atMaxRemoveTokens?: number;
+        };
+
+    /** @deprecated Use lastMessages.maxTokens instead */
+    maxTokens?: number;
 
     /** Semantic recall configuration */
     semanticRecall?: boolean | SemanticRecall;

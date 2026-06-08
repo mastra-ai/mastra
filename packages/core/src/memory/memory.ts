@@ -15,7 +15,7 @@ import type {
   OutputProcessorOrWorkflow,
 } from '../processors';
 import { isProcessorWorkflow } from '../processors';
-import { MessageHistory, WorkingMemory, SemanticRecall } from '../processors/memory';
+import { MessageHistory, WorkingMemory, SemanticRecall, MemoryTokenLimiter } from '../processors/memory';
 import type { RequestContext } from '../request-context';
 import type {
   MastraCompositeStore,
@@ -57,6 +57,54 @@ function extractModelIdString(model: unknown): string | undefined {
     return (model as { id: string }).id;
   }
   return undefined;
+}
+
+/**
+ * Normalized form of lastMessages configuration.
+ * Extracted from either the legacy number/false form or the new object form.
+ */
+export type NormalizedLastMessages = {
+  /** Number of messages to fetch; false means no count cap */
+  maxMessages?: number | false;
+  /** Max token budget for remembered history, or undefined to disable token limiting */
+  maxTokens?: number;
+  /** Tokens to drop when maxTokens is exceeded, or undefined to use default fraction */
+  atMaxRemoveTokens?: number;
+};
+
+/**
+ * Normalize the lastMessages config into a consistent form.
+ * Handles legacy `number | false` and new `{ maxMessages?, maxTokens?, atMaxRemoveTokens? }` forms.
+ */
+export function normalizeLastMessages(
+  lastMessages:
+    | number
+    | false
+    | { maxMessages?: number | false; maxTokens?: number; atMaxRemoveTokens?: number }
+    | undefined,
+): NormalizedLastMessages | undefined {
+  if (lastMessages === undefined || lastMessages === false) {
+    return undefined;
+  }
+
+  if (typeof lastMessages === 'number') {
+    // Legacy form: just a message count
+    return { maxMessages: lastMessages };
+  }
+
+  // Object form: omitting maxMessages means there is no count cap.
+  const result: NormalizedLastMessages = { maxMessages: false };
+
+  if (lastMessages.maxMessages !== undefined) {
+    result.maxMessages = lastMessages.maxMessages;
+  }
+
+  if (lastMessages.maxTokens !== undefined) {
+    result.maxTokens = lastMessages.maxTokens;
+    result.atMaxRemoveTokens = lastMessages.atMaxRemoveTokens;
+  }
+
+  return result;
 }
 
 export type MemoryProcessorOpts = {
@@ -755,7 +803,9 @@ https://mastra.ai/en/docs/memory/overview`,
     }
 
     const lastMessages = effectiveConfig.lastMessages;
-    if (lastMessages) {
+    const normalizedLM = normalizeLastMessages(lastMessages);
+
+    if (normalizedLM) {
       if (!memoryStore)
         throw new MastraError({
           category: 'USER',
@@ -777,7 +827,19 @@ https://mastra.ai/en/docs/memory/overview`,
         processors.push(
           new MessageHistory({
             storage: memoryStore,
-            lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
+            lastMessages:
+              normalizedLM.maxMessages !== undefined
+                ? normalizedLM.maxMessages === false
+                  ? Number.MAX_SAFE_INTEGER
+                  : normalizedLM.maxMessages
+                : undefined,
+            tokenLimit:
+              normalizedLM.maxTokens !== undefined
+                ? {
+                    maxTokens: normalizedLM.maxTokens,
+                    atMaxRemoveTokens: normalizedLM.atMaxRemoveTokens,
+                  }
+                : undefined,
           }),
         );
       }
@@ -828,6 +890,22 @@ https://mastra.ai/en/docs/memory/overview`,
             embedderOptions: this.embedderOptions,
             indexName,
             ...semanticConfig,
+          }),
+        );
+      }
+    }
+
+    // Add memory token limiter AFTER semantic recall so it caps the final context
+    if (normalizedLM?.maxTokens !== undefined) {
+      const hasTokenLimiter = configuredProcessors.some(
+        p => !isProcessorWorkflow(p) && p.id === 'memory-token-limiter',
+      );
+
+      if (!hasTokenLimiter) {
+        processors.push(
+          new MemoryTokenLimiter({
+            maxTokens: normalizedLM.maxTokens,
+            atMaxRemoveTokens: normalizedLM.atMaxRemoveTokens,
           }),
         );
       }

@@ -108,6 +108,81 @@ You can use this history in two ways:
 - **Automatic inclusion**: Mastra automatically fetches and includes recent messages in the context window. By default, it includes the last 10 messages, keeping agents grounded in the conversation. You can adjust this number with `lastMessages`, but in most cases you don't need to think about it.
 - [**Manual querying**](#querying): For more control, use the `recall()` function to query threads and messages directly. This lets you choose exactly which memories are included in the context window, or fetch messages to render conversation history in your UI.
 
+## Token-based memory limiting
+
+For models with large context windows, count-based limiting (`lastMessages`) may not be sufficient. The nested `lastMessages` API lets you add token-based limits:
+
+```typescript title="src/mastra/agents/your-agent.ts"
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
+
+export const agent = new Agent({
+  id: 'long-context-agent',
+  memory: new Memory({
+    options: {
+      lastMessages: {
+        maxTokens: 800_000, // Trim to 800K tokens
+        atMaxRemoveTokens: 200_000, // When over budget, drop by 200K tokens
+      },
+    },
+  }),
+})
+```
+
+You can also use the legacy count-based form and the object form together:
+
+```typescript
+const countBasedOptions = {
+  // Count-based only (legacy)
+  lastMessages: 40,
+}
+
+const objectOptions = {
+  // Object form with only maxMessages
+  lastMessages: { maxMessages: 50 },
+}
+
+const tokenLimitedOptions = {
+  // Object form with token limiting
+  lastMessages: { maxTokens: 100_000 },
+}
+
+const fullOptions = {
+  // Full form with both count and token limits
+  lastMessages: { maxMessages: 50, maxTokens: 100_000, atMaxRemoveTokens: 25_000 },
+}
+```
+
+### How it works
+
+When `maxTokens` is set, Mastra automatically adds a `MemoryTokenLimiter` processor that:
+
+1. Counts the total tokens of all messages (system messages + memory history + new input) using tiktoken (o200k\_base encoding)
+1. If the total exceeds `maxTokens`, removes the oldest memory history messages first
+1. Never removes system messages, context messages, or input messages from the current turn
+
+### Stateful boundary behavior
+
+When a trim happens, Mastra persists a **boundary cursor** on the thread metadata (`thread.metadata.mastra.memoryTokenLimiter`). This boundary marks the newest message that was removed. On subsequent turns, MessageHistory skips fetching messages at or before this boundary, so the limiter starts counting from the existing context rather than recounting the entire history.
+
+This creates a **sawtooth pattern**: context grows to `maxTokens`, drops to `maxTokens - atMaxRemoveTokens`, then grows again from that persisted point. If `atMaxRemoveTokens` is not specified, it defaults to 25% of `maxTokens`.
+
+For example, with `maxTokens: 100_000` and `atMaxRemoveTokens: 20_000`:
+
+- Context slowly grows across turns until it reaches \~100K tokens
+- The oldest remembered messages are dropped until the total is \~80K
+- A boundary is stored on the thread
+- Future turns start fetching from that persisted boundary
+- The cycle repeats
+
+### Token estimate caching
+
+Token estimates are cached on `message.content.metadata.mastra.tokenEstimate` using the same format as [Observational Memory](/docs/memory/observational-memory). This means estimates are reused across turns without recounting. The cache includes a version number, content hash (SHA-1), and source identifier for validation.
+
+Since system messages (like agent `instructions`) are included in the token count, you can set `maxTokens` to your model's context window size and the processor will automatically reserve space for the system prompt.
+
+You can use `maxTokens` alongside `maxMessages` to apply both count-based and token-based limits. This is useful for preventing context window overflow while keeping a reasonable number of recent messages.
+
 :::tip
 
 When memory is enabled, [Studio](/docs/studio/overview) uses message history to display past conversations in the chat sidebar.

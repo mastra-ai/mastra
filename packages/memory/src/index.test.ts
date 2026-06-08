@@ -2198,6 +2198,44 @@ describe('Memory', () => {
     });
   });
 
+  describe('lastMessages object without maxMessages', () => {
+    it('recall() should fetch all messages when maxMessages is omitted', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          lastMessages: { maxTokens: 100_000 },
+        },
+      });
+      const resourceId = 'test-resource';
+      const threadId = 'test-thread-lm-object-no-max-messages';
+
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          title: 'Test Thread',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+
+      await memory.saveMessages({
+        messages: Array.from({ length: 12 }, (_, index) => ({
+          id: `msg-${index + 1}`,
+          threadId,
+          resourceId,
+          role: index % 2 === 0 ? ('user' as const) : ('assistant' as const),
+          content: { format: 2 as const, parts: [{ type: 'text' as const, text: `Message ${index + 1}` }] },
+          createdAt: new Date(`2024-01-01T10:${String(index + 1).padStart(2, '0')}:00Z`),
+        })),
+      });
+
+      const result = await memory.recall({ threadId, resourceId });
+
+      expect(result.messages).toHaveLength(12);
+    });
+  });
+
   describe('Vector Deletion', () => {
     function createMemoryWithMockVector(indexSeparator = '_') {
       const mockVector = {

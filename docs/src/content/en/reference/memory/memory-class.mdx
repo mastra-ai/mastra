@@ -71,11 +71,25 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
         parameters: [
           {
             name: 'lastMessages',
-            type: 'number | false',
+            type: 'number | false | { maxMessages?: number | false; maxTokens?: number; atMaxRemoveTokens?: number }',
             description:
-              'Number of most recent messages to include in context. Set to `false` to disable loading conversation history into context. Use `Number.MAX_SAFE_INTEGER` to retrieve all messages with no limit. To prevent saving new messages, use the `readOnly` option instead.',
+              'Controls how many messages to load into context. For count-based limiting, use a number (e.g. `10`) or `false` to disable history entirely. For token-based limiting, use object form with `maxTokens`. In object form, omit `maxMessages` or set it to `false` to load messages with no count cap.',
             isOptional: true,
             defaultValue: '10',
+          },
+          {
+            name: 'lastMessages.maxTokens',
+            type: 'number',
+            description:
+              'Maximum token budget for conversation history. When the total token count of all messages (system messages + memory history + new input) exceeds this limit, the oldest memory history messages are automatically removed. Token counting uses tiktoken (o200k_base encoding) with caching on message metadata. Can be used alongside `maxMessages` for both count-based and token-based limits.',
+            isOptional: true,
+          },
+          {
+            name: 'lastMessages.atMaxRemoveTokens',
+            type: 'number',
+            description:
+              'When the token budget is exceeded, drop by this many tokens instead of trimming to zero. Defaults to 25% of `maxTokens`. The resulting target window (`maxTokens - atMaxRemoveTokens`) is stored as a thread boundary so future turns start from that point instead of recounting all history.',
+            isOptional: true,
           },
           {
             name: 'readOnly',

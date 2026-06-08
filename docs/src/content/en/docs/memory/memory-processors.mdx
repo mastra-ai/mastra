@@ -170,6 +170,61 @@ const agent = new Agent({
 })
 ```
 
+### MemoryTokenLimiter
+
+Limits memory history messages by token count to prevent context window overflow.
+
+**When you configure:**
+
+```typescript
+memory: new Memory({
+  options: {
+    lastMessages: {
+      maxTokens: 800_000,
+      atMaxRemoveTokens: 200_000, // optional, defaults to 25% of maxTokens
+    },
+  },
+})
+```
+
+**Mastra internally:**
+
+1. Creates a `MemoryTokenLimiter` processor with the configured token limit
+1. Adds it to the agent's input processors (runs after `MessageHistory` and before `SemanticRecall`)
+
+**What it does:**
+
+- **Input**: Counts the total tokens of all messages (system messages + memory history + new input) using tiktoken (o200k\_base encoding). If the total exceeds `maxTokens`, removes the oldest memory history messages until the total is within budget (`maxTokens - atMaxRemoveTokens`). Input, context, and system messages are never removed.
+- **Boundary persistence**: When trimming, saves the newest removed message as a boundary cursor on `thread.metadata.mastra.memoryTokenLimiter`. Future turns start fetching messages after this boundary, avoiding recounting the full history.
+- **Token caching**: Estimates are cached on `message.content.metadata.mastra.tokenEstimate` for reuse across turns. Works with Observational Memory's cache format.
+
+**Example:**
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
+
+const agent = new Agent({
+  id: 'long-context-agent',
+  name: 'Long Context Agent',
+  instructions: 'You are a helpful assistant',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: 'memory-store',
+      url: 'file:memory.db',
+    }),
+    options: {
+      lastMessages: {
+        maxTokens: 800_000, // Trim to fit 800K tokens
+        atMaxRemoveTokens: 200_000, // Drop by 200K when over budget
+      },
+    },
+  }),
+})
+```
+
 ## Manual control and deduplication
 
 If you manually add a memory processor to `inputProcessors` or `outputProcessors`, Mastra **won't** automatically add it. This gives you full control over processor ordering:
@@ -213,7 +268,7 @@ Understanding the execution order is important when combining guardrails with me
 [Memory Processors] → [Your inputProcessors]
 ```
 
-1. **Memory processors run FIRST**: `WorkingMemory`, `MessageHistory`, `SemanticRecall`
+1. **Memory processors run FIRST**: `WorkingMemory`, `MessageHistory`, `MemoryTokenLimiter` (if configured), `SemanticRecall`
 1. **Your input processors run AFTER**: guardrails, filters, validators
 
 This means memory loads message history before your processors can validate or filter the input.
