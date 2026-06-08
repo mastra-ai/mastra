@@ -18,6 +18,7 @@
       }
     },
     "./style.css": "./dist/index.css",
+    "./theme.css": "./dist/theme.css",
     "./tokens": {
       "import": {
         "types": "./dist/tokens.d.ts",
