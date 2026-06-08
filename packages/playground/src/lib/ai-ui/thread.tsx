@@ -16,7 +16,8 @@ import { ComposerModelSettings } from '@/domains/agents/components/composer-mode
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
-import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
+import { useSpeechRecognition } from '@mastra/react';
+import { usePlaygroundStore } from '@/store/playground-store';
 import { Link } from '@/lib/link';
 // import { useBackgroundTaskStream } from '@/hooks';
 
@@ -259,7 +260,8 @@ const ComposerSendingGradient = ({ pulseKey }: { pulseKey: number }) => {
 
 const SpeechInput = ({ agentId }: { agentId?: string }) => {
   const composerRuntime = useComposerRuntime();
-  const { start, stop, isListening, transcript } = useSpeechRecognition({ agentId });
+  const { requestContext } = usePlaygroundStore();
+  const { start, stop, isListening, transcript } = useSpeechRecognition({ agentId, requestContext });
 
   useEffect(() => {
     if (!transcript) return;

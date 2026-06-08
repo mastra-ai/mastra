@@ -1,5 +1,6 @@
 import type { SpeechSynthesisAdapter } from '@assistant-ui/react';
 import type { Agent } from '@mastra/core/agent';
+import { playStreamWithWebAudio } from '@mastra/react';
 
 export class VoiceAttachmentAdapter implements SpeechSynthesisAdapter {
   constructor(private readonly agent: Agent) {}
@@ -48,40 +49,4 @@ export class VoiceAttachmentAdapter implements SpeechSynthesisAdapter {
     };
     return res;
   }
-}
-
-async function playStreamWithWebAudio(stream: ReadableStream) {
-  const audioContext = new window.AudioContext();
-
-  const reader = stream.getReader();
-  const chunks = [];
-
-  // Read all chunks
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-  }
-
-  // Combine chunks into single ArrayBuffer
-  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-  const combinedBuffer = new Uint8Array(totalLength);
-  let offset = 0;
-
-  for (const chunk of chunks) {
-    combinedBuffer.set(chunk, offset);
-    offset += chunk.length;
-  }
-
-  // Decode and play
-  const audioBuffer = await audioContext.decodeAudioData(combinedBuffer.buffer);
-  const source = audioContext.createBufferSource();
-  source.buffer = audioBuffer;
-  source.connect(audioContext.destination);
-  source.start();
-
-  return () => {
-    source.stop();
-    void audioContext.close();
-  };
 }

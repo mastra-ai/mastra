@@ -1,8 +1,10 @@
-import type { Agent } from '@mastra/core/agent';
-import { useMastraClient } from '@mastra/react';
+import type { MastraClient } from '@mastra/client-js';
 import { useEffect, useRef, useState } from 'react';
-import { recordMicrophoneToFile } from '../utils/record-mic-to-file';
-import { usePlaygroundStore } from '@/store/playground-store';
+import { useMastraClient } from '../mastra-client-context';
+import { recordMicrophoneToFile } from './record-mic-to-file';
+
+type Agent = ReturnType<MastraClient['getAgent']>;
+type VoiceRequestContext = Parameters<Agent['voice']['getSpeakers']>[0];
 
 export interface SpeechRecognitionState {
   isListening: boolean;
@@ -13,6 +15,7 @@ export interface SpeechRecognitionState {
 export interface UseSpeechRecognitionArgs {
   language?: string;
   agentId?: string;
+  requestContext?: VoiceRequestContext;
 }
 
 type BrowserSpeechRecognition = {
@@ -25,10 +28,10 @@ type BrowserSpeechRecognition = {
 export const useSpeechRecognition = ({
   language = 'en-US',
   agentId,
+  requestContext,
 }: UseSpeechRecognitionArgs): BrowserSpeechRecognition => {
   const client = useMastraClient();
   const [agent, setAgent] = useState<Agent | null>(null);
-  const { requestContext } = usePlaygroundStore();
 
   useEffect(() => {
     if (!agentId) return;
@@ -39,7 +42,7 @@ export const useSpeechRecognition = ({
       try {
         const speakers = await agent.voice.getSpeakers(requestContext);
         if (speakers.length > 0) {
-          setAgent(agent as unknown as Agent);
+          setAgent(agent);
         } else {
           setAgent(null);
         }
@@ -49,7 +52,7 @@ export const useSpeechRecognition = ({
     };
 
     void check();
-  }, [agentId]);
+  }, [agentId, requestContext]);
 
   const {
     start: startBrowser,
@@ -155,8 +158,8 @@ const useMastraSpeechToText = ({ agent }: { agent: Agent | null }) => {
   }
 
   const handleFinish = (file: File) => {
-    void agent.voice.listen(file as any).then(res => {
-      setTranscript((res as unknown as { text: string }).text);
+    void agent.voice.listen(file).then(res => {
+      setTranscript(res.text);
     });
   };
 
