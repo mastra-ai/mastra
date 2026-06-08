@@ -31,10 +31,10 @@ describe('ClickHouse replication helpers', () => {
     expect(buildReplicatedTableEngine('Null()', {})).toBe('Null()');
   });
 
-  it('uses custom replica path and replica name', () => {
+  it('uses custom zookeeper path and replica name', () => {
     expect(
       buildReplicatedTableEngine('MergeTree()', {
-        replicaPath: '/custom/{database}/{table}',
+        zookeeperPath: '/custom/{database}/{table}',
         replicaName: '{replica}-a',
       }),
     ).toBe("ReplicatedMergeTree('/custom/{database}/{table}', '{replica}-a')");
@@ -72,8 +72,8 @@ ORDER BY id`;
 
   it('validates configured string values', () => {
     expect(() => validateReplicationConfig({ cluster: '   ' })).toThrow('replication.cluster must be a non-empty string');
-    expect(() => validateReplicationConfig({ replicaPath: '' })).toThrow(
-      'replication.replicaPath must be a non-empty string',
+    expect(() => validateReplicationConfig({ zookeeperPath: '' })).toThrow(
+      'replication.zookeeperPath must be a non-empty string',
     );
     expect(() => validateReplicationConfig({ replicaName: '' })).toThrow(
       'replication.replicaName must be a non-empty string',

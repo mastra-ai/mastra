@@ -5,12 +5,12 @@ export interface ClickhouseReplicationConfig {
   /** Optional cluster name. When set, Mastra-owned DDL is emitted with ON CLUSTER. */
   cluster?: string;
   /** Keeper path for replicated tables. Supports ClickHouse macros like {shard}, {database}, and {table}. */
-  replicaPath?: string;
+  zookeeperPath?: string;
   /** Replica name. Supports ClickHouse macros like {replica}. */
   replicaName?: string;
 }
 
-const DEFAULT_REPLICA_PATH = '/clickhouse/tables/{shard}/{database}/{table}';
+const DEFAULT_ZOOKEEPER_PATH = '/clickhouse/tables/{shard}/{database}/{table}';
 const DEFAULT_REPLICA_NAME = '{replica}';
 
 const REPLICATED_ENGINE_NAMES = new Set(['ReplicatedMergeTree', 'ReplicatedReplacingMergeTree']);
@@ -38,12 +38,12 @@ export function validateReplicationConfig(replication?: ClickhouseReplicationCon
     });
   }
 
-  if (replication.replicaPath !== undefined && replication.replicaPath.trim() === '') {
+  if (replication.zookeeperPath !== undefined && replication.zookeeperPath.trim() === '') {
     throw new MastraError({
-      id: createStorageErrorId('CLICKHOUSE', 'REPLICATION_CONFIG', 'INVALID_REPLICA_PATH'),
+      id: createStorageErrorId('CLICKHOUSE', 'REPLICATION_CONFIG', 'INVALID_ZOOKEEPER_PATH'),
       domain: ErrorDomain.STORAGE,
       category: ErrorCategory.USER,
-      text: 'ClickHouse replication.replicaPath must be a non-empty string when provided.',
+      text: 'ClickHouse replication.zookeeperPath must be a non-empty string when provided.',
     });
   }
 
@@ -77,10 +77,10 @@ export function buildReplicatedTableEngine(engine: string, replication?: Clickho
   if (!parsed || !SUPPORTED_ENGINE_NAMES.has(parsed.name)) return engine;
   if (REPLICATED_ENGINE_NAMES.has(parsed.name) || SHARED_ENGINE_NAMES.has(parsed.name)) return engine;
 
-  const replicaPath = quoteClickhouseString(replication.replicaPath ?? DEFAULT_REPLICA_PATH);
+  const zookeeperPath = quoteClickhouseString(replication.zookeeperPath ?? DEFAULT_ZOOKEEPER_PATH);
   const replicaName = quoteClickhouseString(replication.replicaName ?? DEFAULT_REPLICA_NAME);
   const replicatedName = parsed.name === 'ReplacingMergeTree' ? 'ReplicatedReplacingMergeTree' : 'ReplicatedMergeTree';
-  const args = [replicaPath, replicaName, parsed.args].filter(Boolean).join(', ');
+  const args = [zookeeperPath, replicaName, parsed.args].filter(Boolean).join(', ');
   return `${replicatedName}(${args})`;
 }
 

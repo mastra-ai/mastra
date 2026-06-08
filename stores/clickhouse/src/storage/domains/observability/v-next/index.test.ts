@@ -27,6 +27,7 @@ import {
   parseTtlExpression,
   TABLE_DISCOVERY_PAIRS,
   TABLE_DISCOVERY_VALUES,
+  TABLE_SPAN_EVENTS,
 } from './ddl';
 import { isReplacingMergeTreeEngine } from './migration';
 import { ObservabilityStorageClickhouseVNext } from '.';
@@ -2701,6 +2702,48 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         } finally {
           await migratedStorage.dangerouslyClearAll();
         }
+      } finally {
+        await scopedClient.close();
+        await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database} SYNC` });
+        await adminClient.close();
+      }
+    });
+
+    it('fails before creating vNext tables when replication is enabled with existing local tables', async () => {
+      const adminClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const database = `replication_guard_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      await adminClient.command({ query: `CREATE DATABASE ${database}` });
+
+      const scopedClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        database,
+      });
+
+      try {
+        await scopedClient.command({
+          query: `CREATE TABLE ${TABLE_SPAN_EVENTS} (id String) ENGINE = MergeTree ORDER BY id`,
+        });
+
+        const replicatedStorage = new ObservabilityStorageClickhouseVNext({
+          client: scopedClient,
+          replication: { cluster: 'company_cluster' },
+        });
+
+        await expect(replicatedStorage.init()).rejects.toThrow(/existing Mastra tables use non-replicated local engines/);
+
+        const tables = (await (
+          await scopedClient.query({
+            query: `SELECT name FROM system.tables WHERE database = currentDatabase() ORDER BY name`,
+            format: 'JSONEachRow',
+          })
+        ).json()) as Array<{ name: string }>;
+        expect(tables.map(table => table.name)).toEqual([TABLE_SPAN_EVENTS]);
       } finally {
         await scopedClient.close();
         await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database} SYNC` });

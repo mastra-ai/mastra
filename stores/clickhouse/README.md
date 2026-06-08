@@ -70,7 +70,7 @@ type ClickhouseConfig = {
   password: string; // Database password
   replication?: {
     cluster?: string; // Adds ON CLUSTER to Mastra-owned DDL when set
-    replicaPath?: string; // Defaults to '/clickhouse/tables/{shard}/{database}/{table}'
+    zookeeperPath?: string; // Defaults to '/clickhouse/tables/{shard}/{database}/{table}'
     replicaName?: string; // Defaults to '{replica}'
   };
 };

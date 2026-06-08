@@ -201,6 +201,13 @@ The same `client` form is accepted by `ObservabilityStorageClickhouse` and `Obse
     isOptional: true,
   },
   {
+    name: 'replication',
+    type: '{ cluster?: string; zookeeperPath?: string; replicaName?: string }',
+    description:
+      'Opt-in replicated table configuration for multi-replica ClickHouse clusters. When set, Mastra creates replicated MergeTree tables. When `cluster` is set, Mastra also adds `ON CLUSTER` to Mastra-owned data definition language (DDL).',
+    isOptional: true,
+  },
+  {
     name: 'disableInit',
     type: 'boolean',
     description:
@@ -212,6 +219,31 @@ The same `client` form is accepted by `ObservabilityStorageClickhouse` and `Obse
 />
 
 `ClickhouseStore` also accepts every option from `ClickHouseClientConfigOptions` (such as `database`, `request_timeout`, `compression`, `keep_alive`, and `max_open_connections`).
+
+### Replicated clusters
+
+Use `replication` when Mastra writes to a multi-replica ClickHouse cluster through a load balancer.
+
+```typescript
+const storage = new ClickhouseStoreVNext({
+  id: 'clickhouse-storage',
+  url: process.env.CLICKHOUSE_URL!,
+  username: process.env.CLICKHOUSE_USERNAME!,
+  password: process.env.CLICKHOUSE_PASSWORD!,
+  replication: {
+    cluster: 'company_cluster',
+  },
+})
+```
+
+When `replication` is set, Mastra rewrites its `MergeTree` and `ReplacingMergeTree` table engines to `ReplicatedMergeTree` and `ReplicatedReplacingMergeTree`. The default engine arguments are:
+
+- `zookeeperPath`: `'/clickhouse/tables/{shard}/{database}/{table}'`
+- `replicaName`: `'{replica}'`
+
+Set `cluster` to add `ON CLUSTER` to Mastra-owned DDL such as table creation, materialized view creation, column migrations, TTL changes, and table drops.
+
+If existing Mastra tables use local `MergeTree` or `ReplacingMergeTree` engines, initialization fails while `replication` is enabled. Migrate or recreate those tables manually before enabling replication.
 
 ### Observability domain options
 
