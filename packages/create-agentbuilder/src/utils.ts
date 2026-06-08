@@ -3,7 +3,7 @@ import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { x } from 'tinyexec';
 
-export async function getPackageVersion() {
+export async function getPackageVersion(): Promise<string> {
   const __filename = fileURLToPath(import.meta.url);
   const __dirname = dirname(__filename);
   const pkgJsonPath = path.join(__dirname, '..', 'package.json');

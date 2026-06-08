@@ -13,7 +13,7 @@
       ],
       "inputs": [
         "src/**",
-        "tsup.config.ts",
+        "rollup.config.js",
         "tsconfig.json",
         "package.json",
         "!**/*.md",

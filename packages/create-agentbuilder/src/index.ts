@@ -19,21 +19,8 @@ setAnalytics(analytics);
 const program = new Command();
 
 program
-  .version(`${version}`, '-v, --version')
-  .description(`create-agentbuilder ${version}`)
-  .action(async () => {
-    try {
-      analytics.trackCommand({
-        command: 'version',
-      });
-      console.info(`create-agentbuilder ${version}`);
-    } catch {
-      // ignore
-    }
-  });
-
-program
   .name('create-agentbuilder')
+  .version(`${version}`, '-v, --version')
   .description('Create a new Mastra project with Agent Builder pre-configured')
   .argument('[project-name]', 'Directory name of the project')
   .option(

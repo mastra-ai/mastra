@@ -100,7 +100,7 @@ export const init = async ({
 
     if (agentBuilder) {
       const depService = new DepsService();
-      const agentBuilderDeps = ['@mastra/editor', '@mastra/libsql', '@mastra/duckdb', '@mastra/observability'];
+      const agentBuilderDeps = ['@mastra/core', '@mastra/editor', '@mastra/libsql', '@mastra/duckdb', '@mastra/observability'];
       const missing = (
         await Promise.all(
           agentBuilderDeps.map(async dep => {
