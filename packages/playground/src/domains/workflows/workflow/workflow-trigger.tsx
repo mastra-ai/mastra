@@ -265,9 +265,7 @@ export function WorkflowTrigger({
         )}
 
         {hasWorkflowActivePaths && (
-          <div className="px-5">
-            <WorkflowStepsStatus steps={workflowActivePaths} workflowResult={streamResultToUse} />
-          </div>
+          <WorkflowStepsStatus steps={workflowActivePaths} workflowResult={streamResultToUse} />
         )}
       </div>
 

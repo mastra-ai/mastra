@@ -63,10 +63,10 @@ export function WorkflowStepsStatus({ steps, workflowResult }: WorkflowStepsStat
 
   return (
     <div className="flex flex-col gap-4 pt-5 border-t border-border1">
-      <Txt as="p" variant="ui-md" className="text-neutral3">
+      <Txt as="p" variant="ui-md" className="text-neutral3 px-5">
         Status
       </Txt>
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col">
         {filteredSteps.map(([stepId, step]) => {
           const { status } = step;
           let output = undefined;
@@ -106,7 +106,7 @@ export function WorkflowStepsStatus({ steps, workflowResult }: WorkflowStepsStat
               key={stepId}
               type="button"
               onClick={() => setSelectedStep({ stepId, status: displayStatus, result, tripwire: tripwireInfo })}
-              className="flex items-center gap-3 rounded-lg border border-border1 bg-surface4 px-3 py-2 text-left transition-colors hover:bg-surface5"
+              className="flex w-full items-center gap-3 px-5 py-1.5 text-left transition-colors hover:bg-surface4 active:bg-surface5"
             >
               <StepStatusIcon status={displayStatus} />
               <Txt as="span" variant="ui-md" className="min-w-0 flex-1 truncate text-neutral6">
