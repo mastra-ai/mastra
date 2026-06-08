@@ -18,9 +18,22 @@ export interface AgentStepContainerProps {
    * affecting the shared card chrome.
    */
   panelClassName?: string;
+  /**
+   * Rendered as a direct child of the surface panel, before the content rows,
+   * so it spans the whole panel (not clipped by the scrollable content row).
+   * Used for full-panel decorations like the "ready" step's light sweep.
+   */
+  panelOverlay?: ReactNode;
 }
 
-export const AgentStepContainer = ({ children, cta, title, description, panelClassName }: AgentStepContainerProps) => {
+export const AgentStepContainer = ({
+  children,
+  cta,
+  title,
+  description,
+  panelClassName,
+  panelOverlay,
+}: AgentStepContainerProps) => {
   const agentColor = useAgentColor();
   const isStreaming = useStreamRunning();
   const { isLast, next, prev, step, steps } = useWizard();
@@ -62,6 +75,7 @@ export const AgentStepContainer = ({ children, cta, title, description, panelCla
           panelClassName,
         )}
       >
+        {panelOverlay}
         {title && (
           <div className="px-6 pt-6 pb-4">
             <h2 className="text-3xl font-semibold text-neutral6 pb-1">{title}</h2>

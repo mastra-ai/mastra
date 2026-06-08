@@ -181,9 +181,13 @@ th:has(header) {
     will-change: transform;
   }
 
-  /* Specular sweep — a single bright pass on mount, then gone. */
-  .ready-stage::after {
-    content: '';
+  /*
+   * Specular sweep — a single bright diagonal pass. The animation itself is
+   * driven once via the Web Animations API in AgentProfileReadyStep so that a
+   * layout/view-transition repaint can never replay it; this rule only defines
+   * the gradient surface and its resting (faded-out) state.
+   */
+  .ready-stage-sweep {
     position: absolute;
     inset: 0;
     background: linear-gradient(
@@ -195,10 +199,10 @@ th:has(header) {
       transparent 70%
     );
     background-size: 250% 100%;
-    background-position: 180% 0;
+    background-position: -80% 0;
     mix-blend-mode: screen;
     filter: blur(6px);
-    animation: ready-sweep 2400ms cubic-bezier(0.22, 0.61, 0.36, 1) 120ms 1 both;
+    opacity: 0;
     pointer-events: none;
     z-index: 1;
     will-change: background-position, opacity;
@@ -214,23 +218,6 @@ th:has(header) {
     }
   }
 
-  @keyframes ready-sweep {
-    0% {
-      background-position: 180% 0;
-      opacity: 0;
-    }
-    12% {
-      opacity: 1;
-    }
-    88% {
-      opacity: 1;
-    }
-    100% {
-      background-position: -80% 0;
-      opacity: 0;
-    }
-  }
-
   .ready-stage-content {
     position: relative;
     z-index: 2;
@@ -243,11 +230,10 @@ th:has(header) {
     .starter-prompt,
     .starter-chip,
     .ready-stage::before,
-    .ready-stage::after,
     .ready-stage-content {
       animation: none;
     }
-    .ready-stage::after {
+    .ready-stage-sweep {
       opacity: 0;
     }
   }

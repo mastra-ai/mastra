@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui';
+import { useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { AgentStepContainer } from './agent-step-container';
 import { useWizard } from '@/domains/agent-builder/contexts/wizard-context';
@@ -8,6 +9,26 @@ export const AgentProfileReadyStep = () => {
   const { next } = useWizard();
   const navigate = useNavigate();
   const { id: agentId } = useParams<{ id: string }>();
+  const sweepRef = useRef<HTMLSpanElement | null>(null);
+
+  // Play the specular sweep exactly once via the Web Animations API. A CSS
+  // animation would replay whenever the layout flips into split mode and the
+  // view transition repaints this subtree, causing a visible double sweep.
+  useEffect(() => {
+    const el = sweepRef.current;
+    if (!el || typeof el.animate !== 'function') return;
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+
+    el.animate(
+      [
+        { backgroundPosition: '180% 0', opacity: 0 },
+        { opacity: 1, offset: 0.12 },
+        { opacity: 1, offset: 0.88 },
+        { backgroundPosition: '-80% 0', opacity: 0 },
+      ],
+      { duration: 2400, delay: 120, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)', fill: 'both' },
+    );
+  }, []);
 
   const handleReview = () => {
     startViewTransition(() => {
@@ -22,6 +43,7 @@ export const AgentProfileReadyStep = () => {
   return (
     <AgentStepContainer
       panelClassName="ready-stage"
+      panelOverlay={<span ref={sweepRef} className="ready-stage-sweep" aria-hidden="true" />}
       cta={
         <div className="relative z-[2] flex items-center justify-center gap-3">
           <Button variant="outline" onClick={handleReview} data-testid="agent-builder-ready-review">
