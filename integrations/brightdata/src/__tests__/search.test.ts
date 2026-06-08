@@ -127,9 +127,7 @@ describe('createBrightDataSearchTool', () => {
     const tool = createBrightDataSearchTool({ apiKey: 'test-key' });
     const result = (await tool.execute!({ query: 'test' }, {} as any)) as any;
 
-    expect(result.results).toEqual([
-      { link: 'https://ok.example', title: 'Has both', description: 'ok' },
-    ]);
+    expect(result.results).toEqual([{ link: 'https://ok.example', title: 'Has both', description: 'ok' }]);
   });
 
   it('should let errors propagate', async () => {
@@ -137,17 +135,13 @@ describe('createBrightDataSearchTool', () => {
 
     const tool = createBrightDataSearchTool({ apiKey: 'test-key' });
 
-    await expect(tool.execute!({ query: 'test' }, {} as any)).rejects.toThrow(
-      'API rate limit exceeded',
-    );
+    await expect(tool.execute!({ query: 'test' }, {} as any)).rejects.toThrow('API rate limit exceeded');
   });
 
   it('should parse string responses (SDK returns JSON-encoded text)', async () => {
     fetchMock.mockResolvedValue(
       Response.json({
-        organic: [
-          { link: 'https://from.string', title: 'Stringified', description: 'ok' },
-        ],
+        organic: [{ link: 'https://from.string', title: 'Stringified', description: 'ok' }],
         current_page: 3,
       }),
     );
@@ -155,9 +149,7 @@ describe('createBrightDataSearchTool', () => {
     const tool = createBrightDataSearchTool({ apiKey: 'test-key' });
     const result = (await tool.execute!({ query: 'test' }, {} as any)) as any;
 
-    expect(result.results).toEqual([
-      { link: 'https://from.string', title: 'Stringified', description: 'ok' },
-    ]);
+    expect(result.results).toEqual([{ link: 'https://from.string', title: 'Stringified', description: 'ok' }]);
     expect(result.currentPage).toBe(3);
   });
 
