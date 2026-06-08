@@ -157,11 +157,12 @@ function Agent() {
                               threadId={actualThreadId!}
                               threads={sidebarThreads}
                               isLoading={isThreadsLoading}
+                              memoryType={memory?.memoryType}
                             />
                           )
                         }
                         browserOverlay={<BrowserViewPanel />}
-                        rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
+                        rightSlot={<AgentInformation agentId={agentId!} />}
                       >
                         <AgentChat
                           key={actualThreadId!}
