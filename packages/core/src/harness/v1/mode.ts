@@ -13,6 +13,9 @@ export interface HarnessMode {
   /** Unique within `HarnessConfig.modes`. Validated at construction. */
   id: string;
 
+  /** Backing agent id for sessions in this mode. */
+  agentId?: string;
+
   /** bootstrap model default when a session enters this mode. */
   defaultModelId: string;
 
