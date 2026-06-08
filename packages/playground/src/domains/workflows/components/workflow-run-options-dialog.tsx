@@ -13,7 +13,7 @@ import {
 } from '@mastra/playground-ui';
 import { SlidersHorizontal } from 'lucide-react';
 import { useState } from 'react';
-import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
+import { WorkflowTracingRunOptions } from './workflow-tracing-run-options';
 
 export const WorkflowRunOptionsDialog = () => {
   const [open, setOpen] = useState(false);
@@ -38,7 +38,7 @@ export const WorkflowRunOptionsDialog = () => {
             <DialogDescription>Configure tracing and debug options for this workflow run</DialogDescription>
           </DialogHeader>
           <DialogBody>
-            <TracingRunOptions editorClassName="h-[240px] max-h-[40vh]" />
+            <WorkflowTracingRunOptions onSaved={() => setOpen(false)} />
           </DialogBody>
         </DialogContent>
       </Dialog>
