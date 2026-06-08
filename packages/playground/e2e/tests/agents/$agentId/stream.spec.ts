@@ -120,6 +120,12 @@ test('workflow stream', async () => {
     timeout: 20000,
   });
 
+  // Check the streaming node first — node 9 is the last step and should still
+  // be running while earlier nodes have completed. Asserting it before the
+  // sequential checks on nodes 0–8 maximises the window to observe the
+  // transient "running" state before it transitions to "success".
+  await expect(page.locator('[data-workflow-node]').nth(9)).toHaveAttribute('data-workflow-step-status', 'running');
+
   // Workflow checks
   await expect(page.locator('[data-workflow-node]').nth(0)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(page.locator('[data-workflow-node]').nth(1)).toHaveAttribute('data-workflow-step-status', 'success');
@@ -131,7 +137,6 @@ test('workflow stream', async () => {
   await expect(page.locator('[data-workflow-node]').nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(page.locator('[data-workflow-node]').nth(7)).toHaveAttribute('data-workflow-step-status', 'success');
   await expect(page.locator('[data-workflow-node]').nth(8)).toHaveAttribute('data-workflow-step-status', 'success');
-  await expect(page.locator('[data-workflow-node]').nth(9)).toHaveAttribute('data-workflow-step-status', 'running');
 
   // Text delta result
   await expect(

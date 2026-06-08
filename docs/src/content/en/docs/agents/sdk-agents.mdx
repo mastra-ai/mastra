@@ -1,9 +1,10 @@
 ---
 title: "SDK agents | Agents"
-description: "Use Claude Agent SDK and Cursor Agent SDK agents from Mastra."
+description: "Use Claude Agent SDK, Cursor Agent SDK, and OpenAI Agents SDK agents from Mastra."
 packages:
   - "@mastra/claude"
   - "@mastra/cursor"
+  - "@mastra/openai"
   - "@mastra/core"
 ---
 
@@ -22,6 +23,7 @@ SDK agents let you use other agent SDK frameworks inside Mastra. Use them to reg
 
 - [Claude Agent SDK](#claude-agent-sdk): Use `@mastra/claude` to register a Claude SDK agent and call it with Mastra `generate()` and `stream()`.
 - [Cursor Agent SDK](#cursor-agent-sdk): Use `@mastra/cursor` to register a Cursor SDK agent and call it with Mastra `generate()` and `stream()`.
+- [OpenAI Agents SDK](#openai-agents-sdk): Use `@mastra/openai` to register an OpenAI SDK agent and call it with Mastra `generate()` and `stream()`.
 
 ## Claude Agent SDK
 
@@ -185,6 +187,97 @@ export const cursorSDKAgent = new CursorSDKAgent({
 })
 ```
 
+## OpenAI Agents SDK
+
+Use `@mastra/openai` to register an OpenAI Agents SDK agent in Mastra while keeping OpenAI-specific agent settings in OpenAI SDK options.
+
+### Install OpenAI packages
+
+Install the Mastra package and the OpenAI Agents SDK peer dependency:
+
+```bash npm2yarn
+npm install @mastra/openai @openai/agents zod
+```
+
+Set the OpenAI SDK credential:
+
+```bash
+export OPENAI_API_KEY="..."
+```
+
+### Create an OpenAI SDK agent
+
+Configure OpenAI Agents SDK through `sdkOptions`. `OpenAISDKAgent` creates the OpenAI SDK agent on first use.
+
+```typescript title="src/mastra/agents/openai-sdk-agent.ts"
+import { OpenAISDKAgent } from '@mastra/openai'
+
+export const openaiSDKAgent = new OpenAISDKAgent({
+  id: 'openai-sdk-agent',
+  name: 'OpenAI SDK Agent',
+  description: 'Use OpenAI Agents SDK through Mastra.',
+  sdkOptions: {
+    name: 'Repository assistant',
+    instructions: 'Answer clearly and cite the relevant files.',
+    model: '__AI_SDK_OPENAI_MODEL_BASE__',
+  },
+})
+```
+
+### Use an existing OpenAI SDK agent
+
+If your app already creates an OpenAI SDK agent, pass that agent to `OpenAISDKAgent` instead:
+
+```typescript title="src/mastra/agents/openai-sdk-agent.ts"
+import { Agent as OpenAIAgent } from '@openai/agents'
+import { OpenAISDKAgent } from '@mastra/openai'
+
+const sdkAgent = new OpenAIAgent({
+  name: 'Repository assistant',
+  instructions: 'Answer clearly and cite the relevant files.',
+  model: '__AI_SDK_OPENAI_MODEL_BASE__',
+})
+
+export const openaiSDKAgent = new OpenAISDKAgent({
+  id: 'openai-sdk-agent',
+  name: 'OpenAI SDK Agent',
+  description: 'Use OpenAI Agents SDK through Mastra.',
+  agent: sdkAgent,
+})
+```
+
+### Add OpenAI SDK tools
+
+OpenAI Agents SDK tools are configured with OpenAI SDK options. Create tools with the OpenAI SDK, then pass them through `sdkOptions.tools`.
+
+```typescript title="src/mastra/agents/openai-sdk-agent.ts"
+import { tool } from '@openai/agents'
+import { OpenAISDKAgent } from '@mastra/openai'
+import { z } from 'zod'
+
+const getTemperature = tool({
+  name: 'get_temperature',
+  description: 'Get the current temperature for a city.',
+  parameters: z.object({
+    city: z.string(),
+  }),
+  execute: async ({ city }) => {
+    return `${city}: 27 C`
+  },
+})
+
+export const openaiSDKAgent = new OpenAISDKAgent({
+  id: 'openai-sdk-agent',
+  name: 'OpenAI SDK Agent',
+  description: 'Use OpenAI Agents SDK through Mastra.',
+  sdkOptions: {
+    name: 'Weather assistant',
+    model: '__AI_SDK_OPENAI_MODEL_BASE__',
+    tools: [getTemperature],
+  },
+})
+```
+
 ## Register SDK agents
 
 Register SDK agents in the Mastra instance like other agents:
@@ -193,11 +286,13 @@ Register SDK agents in the Mastra instance like other agents:
 import { Mastra } from '@mastra/core'
 import { claudeSDKAgent } from './agents/claude-sdk-agent'
 import { cursorSDKAgent } from './agents/cursor-sdk-agent'
+import { openaiSDKAgent } from './agents/openai-sdk-agent'
 
 export const mastra = new Mastra({
   agents: {
     claudeSDKAgent,
     cursorSDKAgent,
+    openaiSDKAgent,
   },
 })
 ```
@@ -215,11 +310,61 @@ for await (const chunk of stream.textStream) {
 }
 ```
 
+## Resume SDK runs
+
+SDK agents support Mastra `resumeGenerate()` and `resumeStream()` with provider-native resume data. Pass the message to continue with and the resume identifier used by the underlying SDK.
+
+Claude SDK agents can resume a known session with `sessionId`:
+
+```typescript title="src/mastra/resume-claude.ts"
+const result = await claudeSDKAgent.resumeGenerate({
+  message: 'Continue the previous task.',
+  sessionId: 'claude-session-id',
+})
+
+console.log(result.text)
+```
+
+OpenAI SDK agents can resume with a previous response, conversation, or session:
+
+```typescript title="src/mastra/resume-openai.ts"
+const stream = await openaiSDKAgent.resumeStream({
+  message: 'Continue the previous task.',
+  previousResponseId: 'resp_123',
+})
+
+for await (const chunk of stream.textStream) {
+  process.stdout.write(chunk)
+}
+```
+
+Cursor SDK agents can continue with the wrapped SDK agent. If you need to resume a stored Cursor SDK agent by ID, pass `agentId` in `resumeData`.
+
+## Structured output
+
+Claude and OpenAI SDK agents support Mastra `structuredOutput` through their provider-native structured output APIs. The validated value is available on `result.object`.
+
+```typescript title="src/mastra/run-openai-structured-output.ts"
+import { z } from 'zod'
+
+const result = await openaiSDKAgent.generate<{ summary: string }>('Summarize this project.', {
+  structuredOutput: {
+    schema: z.object({
+      summary: z.string(),
+    }),
+  },
+})
+
+console.log(result.object.summary)
+```
+
+Cursor SDK agents throw a clear error when `structuredOutput` is requested because the Cursor TypeScript SDK does not expose a schema-constrained output API.
+
 ## Observability
 
 SDK agents create Mastra agent and model spans for `generate()` and `stream()` calls. Mastra records SDK-provided usage, tool activity, and provider metadata when the vendor SDK exposes those events.
 
-Claude SDK runs can include SDK-estimated cost from the Claude result message. Cursor SDK runs include token usage from Cursor interaction updates.
+Claude SDK runs can include SDK-estimated cost from the Claude result message. Cursor SDK runs include token usage from Cursor interaction updates. OpenAI SDK runs include token usage from OpenAI run state.
 
 For storage and dashboard setup, see [Observability](/docs/observability/overview).
 
