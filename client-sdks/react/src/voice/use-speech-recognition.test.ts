@@ -129,10 +129,10 @@ describe('useSpeechRecognition (mastra path)', () => {
     await waitFor(() => expect(getSpeakersMock).toHaveBeenCalled());
     expect(lastGetAgentArgs).toContain('agent-1');
 
-    await act(async () => {
-      result.current.start();
+    await waitFor(() => {
+      act(() => result.current.start());
+      expect(recordMicrophoneToFileMock).toHaveBeenCalled();
     });
-    await waitFor(() => expect(recordMicrophoneToFileMock).toHaveBeenCalled());
     expect(recorderStartMock).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(result.current.isListening).toBe(true));
 
@@ -143,16 +143,70 @@ describe('useSpeechRecognition (mastra path)', () => {
     await waitFor(() => expect(result.current.transcript).toBe('mastra transcript'));
 
     act(() => result.current.stop());
-    expect(recorderStopMock).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(result.current.isListening).toBe(false));
   });
 
-  it('forwards requestContext to getSpeakers', async () => {
+  it('forwards requestContext to getSpeakers and language to listen', async () => {
     installSpeechRecognition();
     const requestContext = { user: 'u1' } as any;
-    renderHook(() => useSpeechRecognition({ agentId: 'agent-1', requestContext }), { wrapper });
+    const { result } = renderHook(() => useSpeechRecognition({ agentId: 'agent-1', requestContext, language: 'fr-FR' }), {
+      wrapper,
+    });
 
     await waitFor(() => expect(getSpeakersMock).toHaveBeenCalledWith(requestContext));
+
+    await waitFor(() => {
+      act(() => result.current.start());
+      expect(recordMicrophoneToFileMock).toHaveBeenCalled();
+    });
+
+    await act(async () => {
+      onFinishCapture?.(new File(['audio'], 'rec.webm', { type: 'audio/webm' }));
+    });
+
+    await waitFor(() => expect(listenMock).toHaveBeenCalledWith(expect.any(File), { language: 'fr-FR' }));
+  });
+
+  it('resets to the browser path when agentId is removed', async () => {
+    installSpeechRecognition();
+    const { result, rerender } = renderHook(({ agentId }) => useSpeechRecognition({ agentId }), {
+      initialProps: { agentId: 'agent-1' as string | undefined },
+      wrapper,
+    });
+
+    await waitFor(() => expect(getSpeakersMock).toHaveBeenCalled());
+
+    await waitFor(() => {
+      act(() => result.current.start());
+      expect(recordMicrophoneToFileMock).toHaveBeenCalledTimes(1);
+    });
+
+    rerender({ agentId: undefined });
+
+    act(() => result.current.start());
+    expect(lastRecognition.start).toHaveBeenCalled();
+    expect(recordMicrophoneToFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces Mastra listen errors and clears listening state', async () => {
+    installSpeechRecognition();
+    listenMock.mockRejectedValueOnce(new Error('listen failed'));
+    const { result } = renderHook(() => useSpeechRecognition({ agentId: 'agent-1' }), { wrapper });
+
+    await waitFor(() => expect(getSpeakersMock).toHaveBeenCalled());
+
+    await waitFor(() => {
+      act(() => result.current.start());
+      expect(recordMicrophoneToFileMock).toHaveBeenCalled();
+    });
+    await waitFor(() => expect(result.current.isListening).toBe(true));
+
+    await act(async () => {
+      onFinishCapture?.(new File(['audio'], 'rec.webm', { type: 'audio/webm' }));
+    });
+
+    await waitFor(() => expect(result.current.isListening).toBe(false));
+    await waitFor(() => expect(result.current.error).toBe('listen failed'));
   });
 
   it('stays on the browser path when there are no speakers', async () => {

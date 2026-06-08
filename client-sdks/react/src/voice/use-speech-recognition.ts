@@ -18,69 +18,62 @@ export interface UseSpeechRecognitionArgs {
   requestContext?: VoiceRequestContext;
 }
 
-type BrowserSpeechRecognition = {
+type SpeechRecognitionResult = SpeechRecognitionState & {
   start: () => void;
   stop: () => void;
-  isListening: boolean;
-  transcript: string;
 };
 
 export const useSpeechRecognition = ({
   language = 'en-US',
   agentId,
   requestContext,
-}: UseSpeechRecognitionArgs): BrowserSpeechRecognition => {
+}: UseSpeechRecognitionArgs): SpeechRecognitionResult => {
   const client = useMastraClient();
   const [agent, setAgent] = useState<Agent | null>(null);
 
   useEffect(() => {
-    if (!agentId) return;
+    let cancelled = false;
+
+    if (!agentId) {
+      setAgent(null);
+      return () => {
+        cancelled = true;
+      };
+    }
 
     const agent = client.getAgent(agentId);
 
     const check = async () => {
       try {
         const speakers = await agent.voice.getSpeakers(requestContext);
-        if (speakers.length > 0) {
-          setAgent(agent);
-        } else {
-          setAgent(null);
+        if (!cancelled) {
+          setAgent(speakers.length > 0 ? agent : null);
         }
       } catch {
-        setAgent(null);
+        if (!cancelled) {
+          setAgent(null);
+        }
       }
     };
 
     void check();
-  }, [agentId, requestContext]);
 
-  const {
-    start: startBrowser,
-    stop: stopBrowser,
-    isListening: isListeningBrowser,
-    transcript: transcriptBrowser,
-  } = useBrowserSpeechRecognition({ language });
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId, client, requestContext]);
 
-  const {
-    start: startMastra,
-    stop: stopMastra,
-    isListening: isListeningMastra,
-    transcript: transcriptMastra,
-  } = useMastraSpeechToText({ agent });
+  const browserSpeechRecognition = useBrowserSpeechRecognition({ language });
+  const mastraSpeechRecognition = useMastraSpeechToText({ agent, language });
 
   if (!agent) {
-    return {
-      start: startBrowser,
-      stop: stopBrowser,
-      isListening: isListeningBrowser,
-      transcript: transcriptBrowser,
-    };
+    return browserSpeechRecognition;
   }
 
-  return { start: startMastra, stop: stopMastra, isListening: isListeningMastra, transcript: transcriptMastra };
+  return mastraSpeechRecognition;
 };
 
-const useBrowserSpeechRecognition = ({ language = 'en-US' }: { language?: string }) => {
+const useBrowserSpeechRecognition = ({ language = 'en-US' }: { language?: string }): SpeechRecognitionResult => {
   const speechRecognitionRef = useRef<any>(null);
   const [state, setState] = useState<SpeechRecognitionState>({
     isListening: false,
@@ -108,13 +101,11 @@ const useBrowserSpeechRecognition = ({ language = 'en-US' }: { language?: string
     const recognition = new SpeechRecognition();
     speechRecognitionRef.current = recognition;
 
-    // Configuration
-    recognition.continuous = true; // Keep listening
-    recognition.lang = language; // Language
+    recognition.continuous = true;
+    recognition.lang = language;
 
-    // Event handlers
     recognition.onstart = () => {
-      setState(prev => ({ ...prev, isListening: true }));
+      setState(prev => ({ ...prev, isListening: true, error: null }));
     };
 
     recognition.onresult = (event: any) => {
@@ -135,6 +126,10 @@ const useBrowserSpeechRecognition = ({ language = 'en-US' }: { language?: string
     };
 
     recognition.onend = () => setState(prev => ({ ...prev, isListening: false }));
+
+    return () => {
+      speechRecognitionRef.current = null;
+    };
   }, [language]);
 
   return {
@@ -144,41 +139,62 @@ const useBrowserSpeechRecognition = ({ language = 'en-US' }: { language?: string
   };
 };
 
-const useMastraSpeechToText = ({ agent }: { agent: Agent | null }) => {
-  const [transcript, setTranscript] = useState('');
-  const [recorder, setRecorder] = useState<MediaRecorder | null>(null);
+const useMastraSpeechToText = ({ agent, language }: { agent: Agent | null; language: string }): SpeechRecognitionResult => {
+  const [state, setState] = useState<SpeechRecognitionState>({
+    isListening: false,
+    transcript: '',
+    error: null,
+  });
+  const recorderRef = useRef<MediaRecorder | null>(null);
 
-  if (!agent) {
-    return {
-      start: () => {},
-      stop: () => {},
-      isListening: false,
-      transcript: '',
+  useEffect(() => {
+    return () => {
+      recorderRef.current?.stop();
+      recorderRef.current = null;
     };
-  }
+  }, [agent]);
 
   const handleFinish = (file: File) => {
-    void agent.voice.listen(file).then(res => {
-      setTranscript(res.text);
-    });
+    if (!agent) return;
+
+    recorderRef.current = null;
+    setState(prev => ({ ...prev, isListening: false }));
+
+    void agent.voice
+      .listen(file, { language })
+      .then(res => {
+        setState(prev => ({ ...prev, transcript: res.text, error: null }));
+      })
+      .catch(error => {
+        const message = error instanceof Error ? error.message : 'Failed to transcribe speech';
+        setState(prev => ({ ...prev, error: message }));
+      });
   };
 
   const start = () => {
-    void recordMicrophoneToFile(handleFinish).then(recorder => {
-      setRecorder(recorder);
-      recorder.start();
-    });
+    if (!agent) return;
+
+    void recordMicrophoneToFile(handleFinish)
+      .then(recorder => {
+        recorderRef.current = recorder;
+        setState(prev => ({ ...prev, isListening: true, error: null }));
+        recorder.start();
+      })
+      .catch(error => {
+        const message = error instanceof Error ? error.message : 'Failed to start speech recording';
+        setState(prev => ({ ...prev, isListening: false, error: message }));
+      });
   };
 
   const stop = () => {
-    recorder?.stop();
-    setRecorder(null);
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    setState(prev => ({ ...prev, isListening: false }));
   };
 
   return {
+    ...state,
     start,
     stop,
-    isListening: Boolean(recorder),
-    transcript,
   };
 };

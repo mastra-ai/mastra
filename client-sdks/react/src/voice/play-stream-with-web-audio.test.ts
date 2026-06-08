@@ -9,7 +9,13 @@ let startMock: ReturnType<typeof vi.fn>;
 let stopMock: ReturnType<typeof vi.fn>;
 let closeMock: ReturnType<typeof vi.fn>;
 let decodedBuffer: object;
-let lastSource: { buffer: unknown; connect: typeof connectMock; start: typeof startMock; stop: typeof stopMock };
+let lastSource: {
+  buffer: unknown;
+  onended: (() => void) | null;
+  connect: typeof connectMock;
+  start: typeof startMock;
+  stop: typeof stopMock;
+};
 
 beforeEach(() => {
   decodedBuffer = { decoded: true };
@@ -20,7 +26,7 @@ beforeEach(() => {
   closeMock = vi.fn(async () => {});
 
   createBufferSourceMock = vi.fn(() => {
-    lastSource = { buffer: null, connect: connectMock, start: startMock, stop: stopMock };
+    lastSource = { buffer: null, onended: null, connect: connectMock, start: startMock, stop: stopMock };
     return lastSource;
   });
 
@@ -77,6 +83,16 @@ describe('playStreamWithWebAudio', () => {
     expect(startMock).toHaveBeenCalledTimes(1);
   });
 
+  it('calls onEnded when the source ends', async () => {
+    const onEnded = vi.fn();
+    const stream = streamFromChunks([new Uint8Array([1])]);
+    await playStreamWithWebAudio(stream, onEnded);
+
+    lastSource.onended?.();
+
+    expect(onEnded).toHaveBeenCalledTimes(1);
+  });
+
   it('returns a cleanup that stops the source and closes the context', async () => {
     const stream = streamFromChunks([new Uint8Array([1])]);
     const cleanup = await playStreamWithWebAudio(stream);
@@ -86,6 +102,7 @@ describe('playStreamWithWebAudio', () => {
 
     cleanup();
 
+    expect(lastSource.onended).toBeNull();
     expect(stopMock).toHaveBeenCalledTimes(1);
     expect(closeMock).toHaveBeenCalledTimes(1);
   });

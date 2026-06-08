@@ -4,15 +4,53 @@ import { playStreamWithWebAudio } from '@mastra/react';
 
 export class VoiceAttachmentAdapter implements SpeechSynthesisAdapter {
   constructor(private readonly agent: Agent) {}
+
   speak(text: string): SpeechSynthesisAdapter.Utterance {
-    let _cleanup = () => {};
+    const subscribers = new Set<() => void>();
+    let cleanup = () => {};
+    let started = false;
+
+    const notify = () => {
+      subscribers.forEach(callback => callback());
+    };
 
     const handleEnd = (reason: 'finished' | 'error' | 'cancelled', error?: unknown) => {
       if (res.status.type === 'ended') return;
 
       res.status = { type: 'ended', reason, error };
+      cleanup();
+      notify();
+    };
 
-      _cleanup();
+    const start = () => {
+      if (started) return;
+
+      started = true;
+      notify();
+
+      this.agent.voice
+        .speak(text)
+        .then(response => {
+          if (res.status.type === 'ended') return undefined;
+          return (response as unknown as { body?: ReadableStream }).body;
+        })
+        .then(readableStream => {
+          if (res.status.type === 'ended' || !readableStream) return undefined;
+          return playStreamWithWebAudio(readableStream, () => handleEnd('finished'));
+        })
+        .then(nextCleanup => {
+          if (res.status.type === 'ended') {
+            nextCleanup?.();
+            return;
+          }
+
+          if (nextCleanup) {
+            cleanup = nextCleanup;
+          }
+        })
+        .catch(error => {
+          handleEnd('error', error);
+        });
     };
 
     const res: SpeechSynthesisAdapter.Utterance = {
@@ -21,32 +59,16 @@ export class VoiceAttachmentAdapter implements SpeechSynthesisAdapter {
         handleEnd('cancelled');
       },
       subscribe: callback => {
-        this.agent.voice
-          .speak(text)
-          .then(res => {
-            if (res) {
-              return (res as unknown as { body: ReadableStream }).body;
-            }
-          })
-          .then(readableStream => {
-            if (readableStream) {
-              return playStreamWithWebAudio(readableStream);
-            }
-          })
-          .then(cleanup => {
-            if (cleanup) {
-              _cleanup = cleanup;
-            }
+        subscribers.add(callback);
+        start();
+        callback();
 
-            callback();
-          })
-          .catch(error => {
-            handleEnd('error', error);
-          });
-
-        return () => {};
+        return () => {
+          subscribers.delete(callback);
+        };
       },
     };
+
     return res;
   }
 }

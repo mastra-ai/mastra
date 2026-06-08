@@ -1,4 +1,4 @@
-export async function playStreamWithWebAudio(stream: ReadableStream) {
+export async function playStreamWithWebAudio(stream: ReadableStream, onEnded?: () => void) {
   const audioContext = new window.AudioContext();
 
   const reader = stream.getReader();
@@ -25,10 +25,12 @@ export async function playStreamWithWebAudio(stream: ReadableStream) {
   const audioBuffer = await audioContext.decodeAudioData(combinedBuffer.buffer);
   const source = audioContext.createBufferSource();
   source.buffer = audioBuffer;
+  source.onended = onEnded ?? null;
   source.connect(audioContext.destination);
   source.start();
 
   return () => {
+    source.onended = null;
     source.stop();
     void audioContext.close();
   };
