@@ -8,9 +8,9 @@ Added role-based semantic font tokens so consumers can swap fonts in one declara
 
 ```css
 :root {
-  --font-display: 'Greed', ui-serif, Georgia, serif;
-  --font-body: 'Geist', system-ui, sans-serif;
-  --font-mono: 'GeistMono', ui-monospace, monospace;
+  --font-display: 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+  --font-mono: 'Commit Mono', ui-monospace, monospace;
 }
 ```
 
