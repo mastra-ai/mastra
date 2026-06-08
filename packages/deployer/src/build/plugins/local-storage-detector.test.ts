@@ -37,38 +37,6 @@ describe('localStorageDetector', () => {
     expect(detections[0].module).toBe('/project/src/mastra/index.ts');
   });
 
-  it('ignores intermediate bundle artifacts under .mastra/.build', () => {
-    const plugin = getPlugin();
-    // These are dependency-optimization shims that re-export library
-    // code (e.g. @mastra/core) and may contain JSDoc example strings.
-    plugin.transform(
-      `// example: storage: new LibSQLStore({ url: 'file:./data.db' })`,
-      '/project/.mastra/.build/@mastra__core.mjs',
-    );
-
-    const emitted: Array<{ fileName: string; source: string }> = [];
-    const ctx = {
-      emitFile(file: { fileName: string; source: string }) {
-        emitted.push(file);
-      },
-    };
-    plugin.generateBundle.call(
-      ctx,
-      {},
-      {
-        'index.mjs': {
-          type: 'chunk',
-          modules: {
-            '/project/.mastra/.build/@mastra__core.mjs': { renderedLength: 500 },
-          },
-        },
-      },
-    );
-
-    const detections = JSON.parse(emitted[0]!.source);
-    expect(detections).toHaveLength(0);
-  });
-
   it('ignores modules from node_modules', () => {
     const plugin = getPlugin();
     plugin.transform(`const url = 'file:./mastra.db';`, '/project/node_modules/@mastra/agent-builder/dist/defaults.js');

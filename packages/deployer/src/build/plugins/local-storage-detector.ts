@@ -45,12 +45,6 @@ export function localStorageDetector(): Plugin {
 
     transform(_code, id) {
       if (id.includes('node_modules')) return null;
-      // Skip intermediate bundle artifacts produced by the dependency
-      // optimization step. These files are pre-bundled copies of library
-      // modules (e.g. @mastra/core) and may contain JSDoc example strings
-      // like `file:./data.db` that look like real connection URLs but are
-      // just documentation.
-      if (id.includes('/.mastra/.build/') || id.includes('\\.mastra\\.build\\')) return null;
 
       const matches: Array<{ value: string; hint: string }> = [];
       for (const { pattern, hint } of LOCAL_HOST_PATTERNS) {
