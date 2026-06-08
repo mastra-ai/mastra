@@ -65,9 +65,35 @@ async function resolveBrowserField(browser: unknown, mastra: { getEditor?: () =>
   return browser;
 }
 
-const AGENT_SNAPSHOT_CONFIG_FIELDS = ['name', 'description', 'instructions', 'tools', 'requestContextSchema'] as const;
+const AGENT_SNAPSHOT_CONFIG_FIELDS = [
+  'name',
+  'description',
+  'instructions',
+  'model',
+  'tools',
+  'defaultOptions',
+  'workflows',
+  'agents',
+  'integrationTools',
+  'toolProviders',
+  'inputProcessors',
+  'outputProcessors',
+  'memory',
+  'scorers',
+  'requestContextSchema',
+  'mcpClients',
+  'skills',
+  'workspace',
+  'browser',
+] as const;
 
-const CODE_AGENT_OVERRIDE_FIELDS = ['instructions', 'tools', 'requestContextSchema'] as const;
+const CODE_AGENT_OVERRIDE_FIELDS = [
+  'instructions',
+  'tools',
+  'integrationTools',
+  'mcpClients',
+  'requestContextSchema',
+] as const;
 
 /**
  * Derive ownership flags from a code agent's editor config.
@@ -159,7 +185,11 @@ function buildExportConfig(
     if (input[field] === undefined) continue;
     if (ownership) {
       if (field === 'instructions' && !ownership.ownsInstructions) continue;
-      if (field === 'tools' && !ownership.ownsTools && !ownership.ownsToolDescriptionsOnly) {
+      if (
+        (field === 'tools' || field === 'integrationTools' || field === 'mcpClients') &&
+        !ownership.ownsTools &&
+        !ownership.ownsToolDescriptionsOnly
+      ) {
         continue;
       }
     }

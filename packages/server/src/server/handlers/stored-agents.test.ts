@@ -576,11 +576,13 @@ describe('Stored Agents Handlers', () => {
         agentId: 'code-agent',
         fileName: 'agents/code-agent.json',
         config: {
+          integrationTools: { composio: { type: 'composio' } },
           instructions: 'Stored instructions',
+          mcpClients: { local: { type: 'mcp' } },
           tools: { weatherTool: { description: 'Check weather' } },
         },
         content:
-          '{\n  "instructions": "Stored instructions",\n  "tools": {\n    "weatherTool": {\n      "description": "Check weather"\n    }\n  }\n}\n',
+          '{\n  "instructions": "Stored instructions",\n  "integrationTools": {\n    "composio": {\n      "type": "composio"\n    }\n  },\n  "mcpClients": {\n    "local": {\n      "type": "mcp"\n    }\n  },\n  "tools": {\n    "weatherTool": {\n      "description": "Check weather"\n    }\n  }\n}\n',
       });
     });
 
@@ -616,7 +618,7 @@ describe('Stored Agents Handlers', () => {
       });
     });
 
-    it('should omit non-editable fields from storage-only agent exports', async () => {
+    it('should export supported storage-only agent config fields', async () => {
       mockAgentsData.set('storage-only-agent', {
         id: 'storage-only-agent',
         name: 'Storage Only Agent',
@@ -638,11 +640,14 @@ describe('Stored Agents Handlers', () => {
         fileName: 'agents/storage-only-agent.json',
         config: {
           instructions: 'Stored instructions',
+          model: { name: 'gpt-4o', provider: 'openai' },
           name: 'Storage Only Agent',
+          scorers: { quality: { description: 'Quality scorer' } },
+          skills: { coding: { description: 'Coding skill' } },
           tools: { weatherTool: { description: 'Check weather' } },
         },
         content:
-          '{\n  "instructions": "Stored instructions",\n  "name": "Storage Only Agent",\n  "tools": {\n    "weatherTool": {\n      "description": "Check weather"\n    }\n  }\n}\n',
+          '{\n  "instructions": "Stored instructions",\n  "model": {\n    "name": "gpt-4o",\n    "provider": "openai"\n  },\n  "name": "Storage Only Agent",\n  "scorers": {\n    "quality": {\n      "description": "Quality scorer"\n    }\n  },\n  "skills": {\n    "coding": {\n      "description": "Coding skill"\n    }\n  },\n  "tools": {\n    "weatherTool": {\n      "description": "Check weather"\n    }\n  }\n}\n',
       });
     });
   });
@@ -679,7 +684,8 @@ describe('Stored Agents Handlers', () => {
         files: [
           {
             path: 'agents/test-agent-1.json',
-            content: '{\n  "instructions": "Updated instructions",\n  "name": "Test Agent"\n}\n',
+            content:
+              '{\n  "instructions": "Updated instructions",\n  "model": {\n    "name": "gpt-4o",\n    "provider": "openai"\n  },\n  "name": "Test Agent"\n}\n',
             message: 'Tune weather instructions by Ada Lovelace',
           },
         ],
