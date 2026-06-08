@@ -45,13 +45,7 @@ export function AppSidebar() {
   const { isMastraPlatform } = useMastraPlatform();
   const { data: authCapabilities } = useAuthCapabilities();
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
-  const {
-    hasPermission,
-    hasAnyPermission,
-    rbacEnabled,
-    isAuthenticated: isPermissionsAuthenticated,
-    isLoading: isPermissionsLoading,
-  } = usePermissions();
+  const { hasPermission, hasAnyPermission, isLoading: isPermissionsLoading } = usePermissions();
 
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
   const cmsOnlyLinks = new Set(['/prompts']);
@@ -61,7 +55,18 @@ export function AppSidebar() {
   const filterItem = (item: NavItem) => {
     if (cmsOnlyLinks.has(item.url) && !isCmsAvailable && !isCmsLoading) return false;
     if (isMastraPlatform && !item.isOnMastraPlatform) return false;
-    if (rbacEnabled && isPermissionsAuthenticated && isPermissionsLoading) return true;
+    // While the user's permissions are still loading, hide permission-gated
+    // links. Being permissive here would briefly flash links the user may not
+    // be allowed to see. We can't yet know rbacEnabled/isAuthenticated during
+    // this window (auth capabilities are still resolving), so we gate purely on
+    // the loading state and only reveal a link once permissions have resolved.
+    // The authoritative permission patterns are already loaded and validated by
+    // RoutePermissionsGate before the sidebar renders.
+    if (isPermissionsLoading) {
+      const pending = getPermissionForRoute(item.url);
+      // Public/unknown routes have no permission requirement — keep showing them.
+      if (pending && pending !== 'public') return false;
+    }
     const requiredPermission = getPermissionForRoute(item.url);
     if (!hasRoutePermission(requiredPermission, hasPermission, hasAnyPermission)) {
       return false;
@@ -95,7 +100,9 @@ export function AppSidebar() {
           <span className="flex items-center justify-between pl-3 pr-2">
             <span className="flex items-center gap-2 flex-1 min-w-0">
               <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-              <span className="font-serif text-sm whitespace-nowrap truncate">Mastra Studio</span>
+              <span className="font-display text-sm font-semibold tracking-tight whitespace-nowrap truncate">
+                Mastra Studio
+              </span>
               {!isMobile && <MainSidebar.Trigger />}
             </span>
             <AuthStatus />
@@ -103,7 +110,9 @@ export function AppSidebar() {
         ) : (
           <span className="flex items-center gap-2 pl-3 pr-2">
             <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-            <span className="font-serif text-sm whitespace-nowrap truncate">Mastra Studio</span>
+            <span className="font-display text-sm font-semibold tracking-tight whitespace-nowrap truncate">
+              Mastra Studio
+            </span>
             {!isMobile && <MainSidebar.Trigger />}
           </span>
         )}

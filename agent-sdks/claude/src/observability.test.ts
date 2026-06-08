@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ClaudeSDKAgent } from './index';
 
 const queryMock = vi.hoisted(() => vi.fn());
+const TEST_CLAUDE_MODEL = 'claude-sonnet-4-6';
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   query: queryMock,
@@ -107,7 +108,7 @@ function createClaudeToolUseMessage(): ClaudeSDKMessage {
           },
         },
       ],
-      model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+      model: TEST_CLAUDE_MODEL,
       stop_reason: null,
       stop_sequence: null,
       usage: {
@@ -157,7 +158,7 @@ describe('ClaudeSDKAgent observability', () => {
       id: 'claude-agent',
       description: 'Claude',
       sdkOptions: {
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
       },
     });
 
@@ -172,7 +173,7 @@ describe('ClaudeSDKAgent observability', () => {
     expect(result.providerMetadata).toMatchObject({
       claude: {
         totalCostUsd: 0.0123,
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
       },
     });
     expect(modelSpan.end).toHaveBeenCalledWith(
@@ -180,10 +181,10 @@ describe('ClaudeSDKAgent observability', () => {
         output: { text: 'generated text' },
         attributes: expect.objectContaining({
           finishReason: 'stop',
-          responseModel: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+          responseModel: TEST_CLAUDE_MODEL,
           costContext: expect.objectContaining({
             provider: 'anthropic',
-            model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+            model: TEST_CLAUDE_MODEL,
             estimatedCost: 0.0123,
             costUnit: 'USD',
           }),
@@ -210,7 +211,7 @@ describe('ClaudeSDKAgent observability', () => {
       id: 'claude-agent',
       description: 'Claude',
       sdkOptions: {
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
       },
     });
 

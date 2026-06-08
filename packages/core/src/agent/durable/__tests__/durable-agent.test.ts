@@ -3,7 +3,9 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { RequestContext } from '../../../request-context';
 import { createTool } from '../../../tools';
+import { LocalSandbox, Workspace } from '../../../workspace';
 import { Agent } from '../../agent';
 import { MessageList } from '../../message-list';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
@@ -222,6 +224,40 @@ describe('DurableAgent', () => {
 
       expect(result.workflowInput.messageListState).toBeDefined();
       expect(durableAgent.runRegistry.has(result.runId)).toBe(true);
+    });
+
+    it('should add dynamic workspace instructions once during durable preparation', async () => {
+      const mockModel = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'text-delta', textDelta: 'Hello' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5 } },
+          ]),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        }),
+      });
+      const workspace = new Workspace({
+        sandbox: ({ requestContext }) =>
+          new LocalSandbox({
+            workingDirectory: '/tmp',
+            instructions: () => `workspace marker ${requestContext.get('tenant')}`,
+          }),
+        instructions: { dynamicSandbox: 'resolve' },
+      });
+      const baseAgent = new Agent({
+        id: 'workspace-instructions-agent',
+        instructions: 'You are a test assistant',
+        model: mockModel as LanguageModelV2,
+        workspace,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.prepare('Hello!', {
+        requestContext: new RequestContext([['tenant', 'alpha']]),
+      });
+      const serializedMessages = JSON.stringify(result.workflowInput.messageListState);
+
+      expect(serializedMessages.match(/workspace marker alpha/g) ?? []).toHaveLength(1);
     });
   });
 

@@ -17,6 +17,7 @@ import type { MastraPackageInfo } from '../../utils/mastra-packages.js';
 import { getMastraPackages } from '../../utils/mastra-packages.js';
 import { loadAndValidatePresets } from '../../utils/validate-presets.js';
 
+import { acquireDevLock, releaseDevLock, updateDevLock } from './dev-lock';
 import { DevBundler } from './DevBundler';
 
 let currentServerProcess: ChildProcess | undefined;
@@ -429,6 +430,9 @@ export async function dev({
   const mastraDir = dir ? (dir.startsWith('/') ? dir : join(process.cwd(), dir)) : join(process.cwd(), 'src', 'mastra');
   const dotMastraPath = join(rootDir, '.mastra');
 
+  await mkdir(dotMastraPath, { recursive: true });
+  await acquireDevLock(dotMastraPath);
+
   const fileService = new FileService();
   const entryFile = fileService.getFirstExistingFile([join(mastraDir, 'index.ts'), join(mastraDir, 'index.js')]);
 
@@ -476,6 +480,8 @@ export async function dev({
       }),
     );
   }
+
+  await updateDevLock(dotMastraPath, hostToUse, Number(portToUse));
 
   let httpsOptions: HTTPSOptions | undefined = undefined;
 
@@ -584,6 +590,7 @@ export async function dev({
       .close()
       .catch(() => {})
       .finally(() => {
+        releaseDevLock(dotMastraPath);
         clearTimeout(forceExit);
         process.exit(0);
       });

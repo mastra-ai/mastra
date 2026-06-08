@@ -132,6 +132,82 @@ describe('createACPTool', () => {
     });
     expect(result).toEqual({ output: '' });
   });
+
+  it('reuses one ACP session across executions by default', async () => {
+    const { createACPTool } = await import('../tool');
+
+    const tool = createACPTool({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude-agent-acp',
+      args: [],
+    });
+
+    await tool.execute?.({ task: 'write tests' } as any, {} as any);
+    await tool.execute?.({ task: 'fix lint' } as any, {} as any);
+
+    expect(mocks.connectionInstances).toHaveLength(1);
+    expect(mocks.spawn).toHaveBeenCalledTimes(1);
+    expect(mocks.connectionInstances[0]?.newSession).toHaveBeenCalledTimes(1);
+    expect(mocks.connectionInstances[0]?.prompt).toHaveBeenNthCalledWith(1, {
+      sessionId: 'session-1',
+      prompt: [{ type: 'text', text: 'write tests' }],
+    });
+    expect(mocks.connectionInstances[0]?.prompt).toHaveBeenNthCalledWith(2, {
+      sessionId: 'session-1',
+      prompt: [{ type: 'text', text: 'fix lint' }],
+    });
+  });
+
+  it('creates and disconnects a fresh ACP connection when persistSession is false', async () => {
+    const { createACPTool } = await import('../tool');
+
+    const tool = createACPTool({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude-agent-acp',
+      args: [],
+      persistSession: false,
+    });
+
+    await tool.execute?.({ task: 'write tests' } as any, {} as any);
+    await tool.execute?.({ task: 'fix lint' } as any, {} as any);
+
+    expect(mocks.connectionInstances).toHaveLength(2);
+    expect(mocks.spawn).toHaveBeenCalledTimes(2);
+    expect(mocks.connectionInstances[0]?.prompt).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      prompt: [{ type: 'text', text: 'write tests' }],
+    });
+    expect(mocks.connectionInstances[1]?.prompt).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      prompt: [{ type: 'text', text: 'fix lint' }],
+    });
+    expect((mocks.spawn.mock.results[0]?.value as ReturnType<typeof createProcess>).kill).toHaveBeenCalledTimes(1);
+    expect((mocks.spawn.mock.results[1]?.value as ReturnType<typeof createProcess>).kill).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the runtime Mastra workspace for ACP file access', async () => {
+    const { createACPTool } = await import('../tool');
+    const readFile = vi.fn().mockResolvedValue('from workspace');
+    const workspace = { filesystem: { readFile } };
+    const mastra = { getWorkspace: vi.fn().mockResolvedValue(workspace) };
+
+    const tool = createACPTool({
+      id: 'claude-code',
+      description: 'Build anything with Claude Code',
+      command: 'claude-agent-acp',
+      args: [],
+    });
+
+    await tool.execute?.({ task: 'read file' } as any, { mastra } as any);
+
+    await expect(mocks.connectionInstances[0]?.client.readTextFile({ path: 'src/index.ts' })).resolves.toEqual({
+      content: 'from workspace',
+    });
+    expect(mastra.getWorkspace).toHaveBeenCalledTimes(1);
+    expect(readFile).toHaveBeenCalledWith('src/index.ts');
+  });
 });
 
 describe('ACPConnection', () => {

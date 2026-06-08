@@ -136,7 +136,7 @@ const agent = new Agent({
 })
 ```
 
-Each request resolves its own filesystem at tool execution time:
+Each request resolves its own filesystem for workspace tools and workspace instructions:
 
 ```typescript
 import { RequestContext } from '@mastra/core/request-context'
@@ -149,6 +149,8 @@ await agent.generate('Write report.txt with Q4 results', { requestContext: admin
 const viewerCtx = new RequestContext([['agent-role', 'viewer']])
 await agent.generate('Read info.txt', { requestContext: viewerCtx })
 ```
+
+Workspace instructions use the same `requestContext`, so the agent sees the filesystem context for the resolved provider.
 
 The resolver can also be asynchronous, for example to look up configuration from a database:
 

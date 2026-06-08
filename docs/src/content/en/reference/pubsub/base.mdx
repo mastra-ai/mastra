@@ -82,6 +82,8 @@ await pubsub.publish('my-topic', {
 
 Registers a callback to receive events published to a topic. When `options.group` is set, subscribers in the same group compete for messages and each event is delivered to one member. Without a group, every subscriber receives every event.
 
+Pass `options.batch` to opt in to batched delivery. The callback signature is unchanged: a batch of N events is delivered as N consecutive `cb(event, ack, nack)` calls in publish order. Batching is honored only when the backend's [`supportsNativeBatching`](#properties) is `true`; other backends ignore the option and deliver events one at a time.
+
 ```typescript
 await pubsub.subscribe('my-topic', (event, ack, nack) => {
   console.log(event)
@@ -147,6 +149,12 @@ await pubsub.subscribeFromOffset('my-topic', 42, event => {
     type: 'ReadonlyArray<"pull" | "push">',
     description: 'Delivery modes the implementation supports. Defaults to `["pull"]`.',
   },
+  {
+    name: 'supportsNativeBatching',
+    type: 'boolean',
+    description:
+      'Whether the implementation honors `options.batch` on `subscribe()`. Defaults to `false`. Backends that integrate batching internally override this and return `true`.',
+  },
 ]}
 />
 
@@ -207,6 +215,72 @@ await pubsub.subscribeFromOffset('my-topic', 42, event => {
     description:
       'When set, subscribers with the same group compete for messages and each event is delivered to one member. When omitted, every subscriber receives every event.',
     isOptional: true,
+  },
+  {
+    name: 'batch',
+    type: 'SubscribeBatchOptions',
+    description:
+      'Opt in to batched delivery for this subscription. When omitted, events are delivered one at a time. Honored only by backends where `supportsNativeBatching` is `true`.',
+    isOptional: true,
+  },
+]}
+/>
+
+### `SubscribeBatchOptions`
+
+Per-subscription batching policy. The callback signature does not change; a batch of N events becomes N consecutive callback invocations in publish order.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'maxSize',
+    type: 'number',
+    description: 'Maximum events held before forcing a flush.',
+    isOptional: true,
+  },
+  {
+    name: 'maxWaitMs',
+    type: 'number',
+    description:
+      'Maximum time in milliseconds the oldest event may sit in the buffer. The timer starts when the buffer transitions from empty to non-empty.',
+    isOptional: true,
+  },
+  {
+    name: 'minIntervalMs',
+    type: 'number',
+    description:
+      'Minimum time in milliseconds between consecutive batch deliveries. Even when `maxSize` or `maxWaitMs` would fire, the buffer holds until this interval has elapsed since the last delivery.',
+    isOptional: true,
+  },
+  {
+    name: 'isImmediate',
+    type: '(event: Event) => boolean',
+    description:
+      'When it returns `true` for an event, the buffer flushes immediately on publish, subject to `minIntervalMs`. A per-event escape hatch.',
+    isOptional: true,
+  },
+  {
+    name: 'coalesce',
+    type: '(events: Event[]) => Event[]',
+    description:
+      'Applied to the queued batch before delivery to drop superseded events. Must return a subset of its input by reference identity; returning freshly constructed `Event` objects is a contract violation and discards the whole batch. Ordering of kept events is preserved.',
+    isOptional: true,
+  },
+  {
+    name: 'maxBufferSize',
+    type: 'number',
+    description:
+      'Maximum events the buffer may hold before overflow handling kicks in. Events flagged immediate are never dropped on overflow.',
+    isOptional: true,
+    defaultValue: '256',
+  },
+  {
+    name: 'overflow',
+    type: '"drop-oldest" | "drop-newest" | "coalesce-or-drop-oldest"',
+    description:
+      'Overflow strategy when the buffer exceeds `maxBufferSize`. `coalesce-or-drop-oldest` runs `coalesce` first, then drops oldest if still over budget.',
+    isOptional: true,
+    defaultValue: 'coalesce-or-drop-oldest',
   },
 ]}
 />

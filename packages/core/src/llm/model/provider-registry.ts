@@ -7,7 +7,8 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import type { ProviderConfig, MastraModelGateway } from './gateways/base.js';
+import type { ProviderConfig, MastraModelGatewayInterface } from './gateways/base.js';
+import { getGatewayId, shouldEnableGateway } from './gateways/index.js';
 import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
@@ -33,13 +34,13 @@ export function isOfflineMode(): boolean {
   return value === 'true' || value === '1';
 }
 
-function getEnabledGatewayIds(gateways: MastraModelGateway[]): Set<string> {
+function getEnabledGatewayIds(gateways: MastraModelGatewayInterface[]): Set<string> {
   const enabledGatewayIds = new Set<string>();
 
   for (const gateway of gateways) {
-    const enabled = gateway.shouldEnable();
+    const enabled = shouldEnableGateway(gateway);
     if (enabled) {
-      enabledGatewayIds.add(gateway.id);
+      enabledGatewayIds.add(getGatewayId(gateway));
     }
   }
 
@@ -235,7 +236,7 @@ function getPackageRoot(): string {
   }
 }
 
-function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGateway[] = []): RegistryData {
+function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGatewayInterface[] = []): RegistryData {
   const enabledGatewayIds = getEnabledGatewayIds([
     new ModelsDevGateway({}),
     new NetlifyGateway(),
@@ -563,7 +564,7 @@ export class GatewayRegistry {
   private refreshInterval: NodeJS.Timeout | null = null;
   private isRefreshing = false;
   private useDynamicLoading: boolean;
-  private customGateways: MastraModelGateway[] = [];
+  private customGateways: MastraModelGatewayInterface[] = [];
 
   private constructor(options: GatewayRegistryOptions = {}) {
     const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
@@ -590,14 +591,14 @@ export class GatewayRegistry {
    * Register custom gateways for type generation
    * @param gateways - Array of custom gateway instances
    */
-  registerCustomGateways(gateways: MastraModelGateway[]): void {
+  registerCustomGateways(gateways: MastraModelGatewayInterface[]): void {
     this.customGateways = gateways;
   }
 
   /**
    * Get all registered custom gateways
    */
-  getCustomGateways(): MastraModelGateway[] {
+  getCustomGateways(): MastraModelGatewayInterface[] {
     return this.customGateways;
   }
 

@@ -63,6 +63,7 @@ export type GetAgents_Response = {
     provider?: string | undefined;
     modelId?: string | undefined;
     modelVersion?: string | undefined;
+    supportsMemory?: boolean | undefined;
     modelList?:
       | {
           model: {
@@ -269,6 +270,7 @@ export type GetAgentsAgentId_Response = {
   provider?: string | undefined;
   modelId?: string | undefined;
   modelVersion?: string | undefined;
+  supportsMemory?: boolean | undefined;
   modelList?:
     | {
         model: {
@@ -407,6 +409,15 @@ export type PostAgentsAgentIdClone_Response = {
   status: string;
   activeVersionId?: string | undefined;
   authorId?: string | undefined;
+  /** Resolved author identity (when an auth provider is configured) */
+  author?:
+    | {
+        id: string;
+        name?: string | undefined;
+        email?: string | undefined;
+        avatarUrl?: string | undefined;
+      }
+    | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -4964,6 +4975,14 @@ export type PostAgentsAgentIdGenerate_Body = {
         fallbackValue?: any | undefined;
       }
     | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
+    | undefined;
   [x: string]: unknown;
 };
 
@@ -5130,6 +5149,14 @@ export type PostAgentsAgentIdGenerateVnext_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   [x: string]: unknown;
 };
@@ -5300,6 +5327,14 @@ export type PostAgentsAgentIdStream_Body = {
         fallbackValue?: any | undefined;
       }
     | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
+    | undefined;
   [x: string]: unknown;
 };
 
@@ -5466,6 +5501,14 @@ export type PostAgentsAgentIdStreamUntilIdle_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   maxIdleMs?: number | undefined;
   [x: string]: unknown;
@@ -5638,6 +5681,14 @@ export type PostAgentsAgentIdStreamVnext_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   [x: string]: unknown;
 };
@@ -5965,6 +6016,14 @@ export type PostAgentsAgentIdSendMessage_Body =
                         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
                         fallbackValue?: any | undefined;
                       }
+                    | undefined;
+                  untilIdle?:
+                    | (
+                        | boolean
+                        | {
+                            maxIdleMs?: number | undefined;
+                          }
+                      )
                     | undefined;
                   [x: string]: unknown;
                 }
@@ -6344,6 +6403,14 @@ export type PostAgentsAgentIdQueueMessage_Body =
                         fallbackValue?: any | undefined;
                       }
                     | undefined;
+                  untilIdle?:
+                    | (
+                        | boolean
+                        | {
+                            maxIdleMs?: number | undefined;
+                          }
+                      )
+                    | undefined;
                   [x: string]: unknown;
                 }
               | undefined;
@@ -6695,6 +6762,14 @@ export type PostAgentsAgentIdSignals_Body =
                         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
                         fallbackValue?: any | undefined;
                       }
+                    | undefined;
+                  untilIdle?:
+                    | (
+                        | boolean
+                        | {
+                            maxIdleMs?: number | undefined;
+                          }
+                      )
                     | undefined;
                   [x: string]: unknown;
                 }
@@ -7178,6 +7253,14 @@ export type PostAgentsAgentIdResumeStream_Body = {
         fallbackValue?: any | undefined;
       }
     | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
+    | undefined;
   resumeData: unknown;
   toolCallId?: string | undefined;
   [x: string]: unknown;
@@ -7512,6 +7595,14 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Body = {
         fallbackValue?: any | undefined;
       }
     | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
+    | undefined;
   resumeData: unknown;
   toolCallId?: string | undefined;
   maxIdleMs?: number | undefined;
@@ -7683,6 +7774,14 @@ export type PostAgentsAgentIdNetwork_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   [x: string]: unknown;
 };
@@ -8327,6 +8426,14 @@ export type PostAgentsAgentIdStreamVNext_Body = {
         fallbackValue?: any | undefined;
       }
     | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
+    | undefined;
   [x: string]: unknown;
 };
 
@@ -8498,6 +8605,14 @@ export type PostAgentsAgentIdStreamVnextUi_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   [x: string]: unknown;
 };
@@ -8672,6 +8787,14 @@ export type PostAgentsAgentIdStreamUi_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   [x: string]: unknown;
 };
@@ -8970,6 +9093,28 @@ export interface GetAuthRolesRoleIdPermissions_RouteContract {
   body: never;
   request: GetAuthRolesRoleIdPermissions_Request;
   response: GetAuthRolesRoleIdPermissions_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /auth/permission-patterns
+// ============================================================================
+export type GetAuthPermissionPatterns_Response = {
+  patterns: string[];
+};
+
+export type GetAuthPermissionPatterns_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAuthPermissionPatterns_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetAuthPermissionPatterns_Request;
+  response: GetAuthPermissionPatterns_Response;
   responseType: 'json';
 }
 
@@ -20486,6 +20631,14 @@ export type PostAgentsAgentIdGenerateLegacy_Body = {
         fallbackValue?: any | undefined;
       }
     | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
+    | undefined;
   resourceId?: string | undefined;
   resourceid?: string | undefined;
   threadId?: string | undefined;
@@ -20657,6 +20810,14 @@ export type PostAgentsAgentIdStreamLegacy_Body = {
         errorStrategy?: ('strict' | 'warn' | 'fallback') | undefined;
         fallbackValue?: any | undefined;
       }
+    | undefined;
+  untilIdle?:
+    | (
+        | boolean
+        | {
+            maxIdleMs?: number | undefined;
+          }
+      )
     | undefined;
   resourceId?: string | undefined;
   resourceid?: string | undefined;
@@ -21179,6 +21340,15 @@ export type GetStoredAgents_Response = {
     status: string;
     activeVersionId?: string | undefined;
     authorId?: string | undefined;
+    /** Resolved author identity (when an auth provider is configured) */
+    author?:
+      | {
+          id: string;
+          name?: string | undefined;
+          email?: string | undefined;
+          avatarUrl?: string | undefined;
+        }
+      | undefined;
     metadata?:
       | {
           [key: string]: unknown;
@@ -30100,6 +30270,15 @@ export type GetStoredAgentsStoredAgentId_Response = {
   status: string;
   activeVersionId?: string | undefined;
   authorId?: string | undefined;
+  /** Resolved author identity (when an auth provider is configured) */
+  author?:
+    | {
+        id: string;
+        name?: string | undefined;
+        email?: string | undefined;
+        avatarUrl?: string | undefined;
+      }
+    | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -38802,6 +38981,15 @@ export type PostStoredAgents_Response = {
   status: string;
   activeVersionId?: string | undefined;
   authorId?: string | undefined;
+  /** Resolved author identity (when an auth provider is configured) */
+  author?:
+    | {
+        id: string;
+        name?: string | undefined;
+        email?: string | undefined;
+        avatarUrl?: string | undefined;
+      }
+    | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -47556,6 +47744,15 @@ export type PatchStoredAgentsStoredAgentId_Response =
       status: string;
       activeVersionId?: string | undefined;
       authorId?: string | undefined;
+      /** Resolved author identity (when an auth provider is configured) */
+      author?:
+        | {
+            id: string;
+            name?: string | undefined;
+            email?: string | undefined;
+            avatarUrl?: string | undefined;
+          }
+        | undefined;
       metadata?:
         | {
             [key: string]: unknown;
@@ -82952,6 +83149,37 @@ export interface GetEditorBuilderSettings_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /editor/builder/models/available
+// ============================================================================
+export type GetEditorBuilderModelsAvailable_Response = {
+  providers: {
+    id: string;
+    name: string;
+    label?: string | undefined;
+    description?: string | undefined;
+    envVar: string | string[];
+    connected: boolean;
+    docUrl?: string | undefined;
+    models: string[];
+  }[];
+};
+
+export type GetEditorBuilderModelsAvailable_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetEditorBuilderModelsAvailable_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetEditorBuilderModelsAvailable_Request;
+  response: GetEditorBuilderModelsAvailable_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /editor/builder/infrastructure
 // ============================================================================
 export type GetEditorBuilderInfrastructure_Response = {
@@ -84870,6 +85098,7 @@ export interface RouteTypes {
   'POST /auth/credentials/sign-in': PostAuthCredentialsSignIn_RouteContract;
   'POST /auth/credentials/sign-up': PostAuthCredentialsSignUp_RouteContract;
   'GET /auth/roles/:roleId/permissions': GetAuthRolesRoleIdPermissions_RouteContract;
+  'GET /auth/permission-patterns': GetAuthPermissionPatterns_RouteContract;
   'GET /workflows': GetWorkflows_RouteContract;
   'GET /workflows/:workflowId': GetWorkflowsWorkflowId_RouteContract;
   'GET /workflows/:workflowId/runs': GetWorkflowsWorkflowIdRuns_RouteContract;
@@ -85135,6 +85364,7 @@ export interface RouteTypes {
   'GET /background-tasks': GetBackgroundTasks_RouteContract;
   'GET /background-tasks/:backgroundTaskId': GetBackgroundTasksBackgroundTaskId_RouteContract;
   'GET /editor/builder/settings': GetEditorBuilderSettings_RouteContract;
+  'GET /editor/builder/models/available': GetEditorBuilderModelsAvailable_RouteContract;
   'GET /editor/builder/infrastructure': GetEditorBuilderInfrastructure_RouteContract;
   'GET /editor/builder/registries': GetEditorBuilderRegistries_RouteContract;
   'GET /editor/builder/registries/:registryId/search': GetEditorBuilderRegistriesRegistryIdSearch_RouteContract;
@@ -85384,6 +85614,9 @@ export interface Client {
   '/auth/me': {
     GET: GetAuthMe_RouteContract;
   };
+  '/auth/permission-patterns': {
+    GET: GetAuthPermissionPatterns_RouteContract;
+  };
   '/auth/refresh': {
     POST: PostAuthRefresh_RouteContract;
   };
@@ -85472,6 +85705,9 @@ export interface Client {
   };
   '/editor/builder/infrastructure': {
     GET: GetEditorBuilderInfrastructure_RouteContract;
+  };
+  '/editor/builder/models/available': {
+    GET: GetEditorBuilderModelsAvailable_RouteContract;
   };
   '/editor/builder/registries': {
     GET: GetEditorBuilderRegistries_RouteContract;
