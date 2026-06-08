@@ -139,7 +139,13 @@ const useBrowserSpeechRecognition = ({ language = 'en-US' }: { language?: string
   };
 };
 
-const useMastraSpeechToText = ({ agent, language }: { agent: Agent | null; language: string }): SpeechRecognitionResult => {
+const useMastraSpeechToText = ({
+  agent,
+  language,
+}: {
+  agent: Agent | null;
+  language: string;
+}): SpeechRecognitionResult => {
   const [state, setState] = useState<SpeechRecognitionState>({
     isListening: false,
     transcript: '',

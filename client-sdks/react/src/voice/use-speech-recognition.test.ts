@@ -149,9 +149,12 @@ describe('useSpeechRecognition (mastra path)', () => {
   it('forwards requestContext to getSpeakers and language to listen', async () => {
     installSpeechRecognition();
     const requestContext = { user: 'u1' } as any;
-    const { result } = renderHook(() => useSpeechRecognition({ agentId: 'agent-1', requestContext, language: 'fr-FR' }), {
-      wrapper,
-    });
+    const { result } = renderHook(
+      () => useSpeechRecognition({ agentId: 'agent-1', requestContext, language: 'fr-FR' }),
+      {
+        wrapper,
+      },
+    );
 
     await waitFor(() => expect(getSpeakersMock).toHaveBeenCalledWith(requestContext));
 
