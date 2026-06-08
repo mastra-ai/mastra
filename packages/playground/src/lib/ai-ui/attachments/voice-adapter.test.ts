@@ -1,13 +1,25 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { playStreamWithWebAudio } from '@mastra/react';
+import { toast } from 'sonner';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { VoiceAttachmentAdapter } from './voice-adapter';
+
 
 vi.mock('@mastra/react', () => ({
   playStreamWithWebAudio: vi.fn(),
 }));
 
+vi.mock('sonner', () => ({
+  toast: { error: vi.fn() },
+}));
+
 const playStreamWithWebAudioMock = vi.mocked(playStreamWithWebAudio);
+const toastErrorMock = vi.mocked(toast.error);
+
+// Lets every pending promise chain in the adapter settle (speak() -> body ->
+// playback -> cleanup) so "did not toast" assertions can't pass simply by
+// running before a regression would have fired the toast.
+const flushAsync = () => new Promise(resolve => setTimeout(resolve, 0));
 
 const createAgent = () => {
   const speak = vi.fn(async () => new Response(new ReadableStream()));
@@ -20,6 +32,7 @@ const createAgent = () => {
 beforeEach(() => {
   playStreamWithWebAudioMock.mockReset();
   playStreamWithWebAudioMock.mockResolvedValue(vi.fn());
+  toastErrorMock.mockReset();
 });
 
 describe('VoiceAttachmentAdapter', () => {
@@ -84,6 +97,72 @@ describe('VoiceAttachmentAdapter', () => {
     await vi.waitFor(() => expect(utterance.status).toEqual({ type: 'ended', reason: 'error', error }));
     // One initial notification on subscribe + one on the terminal transition.
     expect(subscriber).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows a quota-specific toast when the provider returns 429', async () => {
+    const error = Object.assign(new Error('Too Many Requests'), {
+      status: 429,
+      body: { error: '429 You exceeded your current quota' },
+    });
+    const speak = vi.fn(async () => {
+      throw error;
+    });
+    const adapter = new VoiceAttachmentAdapter({ voice: { speak } } as never);
+
+    adapter.speak('hello').subscribe(vi.fn());
+
+    await vi.waitFor(() => expect(toastErrorMock).toHaveBeenCalledTimes(1));
+    expect(toastErrorMock).toHaveBeenCalledWith(expect.stringContaining('quota'));
+  });
+
+  it('surfaces the provider error message in a toast for non-429 failures', async () => {
+    const error = Object.assign(new Error('boom'), { body: { error: 'Agent does not have voice capabilities' } });
+    const speak = vi.fn(async () => {
+      throw error;
+    });
+    const adapter = new VoiceAttachmentAdapter({ voice: { speak } } as never);
+
+    adapter.speak('hello').subscribe(vi.fn());
+
+    await vi.waitFor(() => expect(toastErrorMock).toHaveBeenCalledTimes(1));
+    expect(toastErrorMock).toHaveBeenCalledWith('Voice generation failed: Agent does not have voice capabilities');
+  });
+
+  it('does not toast when playback finishes successfully', async () => {
+    const cleanup = vi.fn();
+    playStreamWithWebAudioMock.mockResolvedValueOnce(cleanup);
+    const { agent } = createAgent();
+    const adapter = new VoiceAttachmentAdapter(agent as never);
+    const utterance = adapter.speak('hello');
+
+    utterance.subscribe(vi.fn());
+    await vi.waitFor(() => expect(playStreamWithWebAudioMock).toHaveBeenCalled());
+    playStreamWithWebAudioMock.mock.calls[0]![1]!();
+
+    await vi.waitFor(() => expect(utterance.status).toMatchObject({ type: 'ended', reason: 'finished' }));
+    await flushAsync();
+    expect(toastErrorMock).not.toHaveBeenCalled();
+  });
+
+  it('does not toast when speech is cancelled', async () => {
+    let resolveSpeak: (value: Response) => void = () => {};
+    const speak = vi.fn(
+      () =>
+        new Promise<Response>(resolve => {
+          resolveSpeak = resolve;
+        }),
+    );
+    const adapter = new VoiceAttachmentAdapter({ voice: { speak } } as never);
+    const utterance = adapter.speak('hello');
+
+    utterance.subscribe(vi.fn());
+    utterance.cancel();
+    resolveSpeak(new Response(new ReadableStream()));
+
+    await vi.waitFor(() => expect(speak).toHaveBeenCalledTimes(1));
+    await flushAsync();
+    expect(utterance.status).toMatchObject({ type: 'ended', reason: 'cancelled' });
+    expect(toastErrorMock).not.toHaveBeenCalled();
   });
 
   it('notifies a single subscriber exactly once before any transition', async () => {

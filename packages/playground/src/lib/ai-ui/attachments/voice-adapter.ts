@@ -1,6 +1,29 @@
 import type { SpeechSynthesisAdapter } from '@assistant-ui/react';
 import type { Agent } from '@mastra/core/agent';
 import { playStreamWithWebAudio } from '@mastra/react';
+import { toast } from 'sonner';
+
+/**
+ * Turns a failed `voice.speak()` call into a message that points the user at the
+ * likely cause. Voice generation runs against the agent's configured provider
+ * (e.g. OpenAI), so the common failures are auth/quota/missing-provider issues
+ * that the user can only fix in their own setup.
+ */
+function describeSpeakError(error: unknown): string {
+  const status = (error as { status?: number } | null)?.status;
+  const body = (error as { body?: { error?: string } } | null)?.body;
+  const detail = body?.error ?? (error instanceof Error ? error.message : undefined);
+
+  if (status === 429) {
+    return 'Voice provider quota exceeded. Check your voice provider plan and billing, or use an API key with available credits.';
+  }
+
+  if (detail) {
+    return `Voice generation failed: ${detail}`;
+  }
+
+  return 'Voice generation failed.';
+}
 
 export class VoiceAttachmentAdapter implements SpeechSynthesisAdapter {
   constructor(private readonly agent: Agent) {}
@@ -18,6 +41,12 @@ export class VoiceAttachmentAdapter implements SpeechSynthesisAdapter {
       if (res.status.type === 'ended') return;
 
       res.status = { type: 'ended', reason, error };
+
+      if (reason === 'error') {
+        console.error('Voice playback failed', error);
+        toast.error(describeSpeakError(error));
+      }
+
       cleanup();
       notify();
     };
