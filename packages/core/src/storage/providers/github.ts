@@ -7,13 +7,13 @@ import type {
   SourceFileListEntry,
   SourceFileListInput,
   SourceFileRef,
-  SourceStorageCapabilities,
-  SourceStorageProvider,
+  SourceControlCapabilities,
+  SourceControlProvider,
   SourceWriteFileInput,
   SourceWriteResult,
-} from '../source-storage';
+} from '../source-control';
 
-export type GitHubSourceStorageProviderConfig = {
+export type GitHubSourceControlProviderConfig = {
   endpoint: string;
   token: string;
   pathPrefix?: string;
@@ -25,7 +25,7 @@ type BrokerErrorResponse = {
   detail?: string;
 };
 
-export class GitHubSourceStorageProvider implements SourceStorageProvider {
+export class GitHubSourceControlProvider implements SourceControlProvider {
   readonly id = 'github';
   readonly displayName = 'GitHub';
 
@@ -34,15 +34,15 @@ export class GitHubSourceStorageProvider implements SourceStorageProvider {
   private readonly pathPrefix: string;
   private readonly fetch: typeof fetch;
 
-  constructor(config: GitHubSourceStorageProviderConfig) {
+  constructor(config: GitHubSourceControlProviderConfig) {
     this.endpoint = normalizeApiEndpoint(config.endpoint);
     this.token = config.token;
     this.pathPrefix = normalizePathPrefix(config.pathPrefix ?? 'mastra/editor');
     this.fetch = config.fetch ?? fetch;
   }
 
-  async getCapabilities(): Promise<SourceStorageCapabilities> {
-    return this.request<SourceStorageCapabilities>('/capabilities');
+  async getCapabilities(): Promise<SourceControlCapabilities> {
+    return this.request<SourceControlCapabilities>('/capabilities');
   }
 
   async readFile(input: SourceFileRef): Promise<SourceFile | null> {
@@ -112,7 +112,7 @@ export class GitHubSourceStorageProvider implements SourceStorageProvider {
     });
 
     if (!res.ok) {
-      let detail = `GitHub source storage request failed: ${res.status}`;
+      let detail = `GitHub source control request failed: ${res.status}`;
       try {
         const body = (await res.json()) as BrokerErrorResponse;
         detail = body.detail ?? detail;
@@ -126,10 +126,10 @@ export class GitHubSourceStorageProvider implements SourceStorageProvider {
   }
 }
 
-export function createGitHubSourceStorageProviderFromEnv(
+export function createGitHubSourceControlProviderFromEnv(
   env: Record<string, string | undefined> = process.env,
   defaults?: { pathPrefix?: string },
-): GitHubSourceStorageProvider | undefined {
+): GitHubSourceControlProvider | undefined {
   if (env.MASTRA_SOURCE_PROVIDER !== 'github') return undefined;
 
   const endpoint = env.MASTRA_SOURCE_PROVIDER_ENDPOINT ?? env.MASTRA_SHARED_API_URL ?? env.MASTRA_CLOUD_API_ENDPOINT;
@@ -137,7 +137,7 @@ export function createGitHubSourceStorageProviderFromEnv(
 
   if (!endpoint || !token) return undefined;
 
-  return new GitHubSourceStorageProvider({
+  return new GitHubSourceControlProvider({
     endpoint: normalizeApiEndpoint(endpoint),
     token,
     pathPrefix: env.MASTRA_SOURCE_STORAGE_PATH_PREFIX ?? defaults?.pathPrefix,

@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { GitHubSourceStorageProvider, createGitHubSourceStorageProviderFromEnv } from './github';
+import { GitHubSourceControlProvider, createGitHubSourceControlProviderFromEnv } from './github';
 
-describe('GitHubSourceStorageProvider', () => {
-  it('routes source storage operations through the Platform broker', async () => {
+describe('GitHubSourceControlProvider', () => {
+  it('routes source control operations through the Platform broker', async () => {
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       expect(init?.headers).toMatchObject({ Authorization: 'Bearer token-1' });
 
@@ -44,7 +44,7 @@ describe('GitHubSourceStorageProvider', () => {
       throw new Error(`Unexpected request: ${url}`);
     });
 
-    const provider = new GitHubSourceStorageProvider({
+    const provider = new GitHubSourceControlProvider({
       endpoint: 'https://api.mastra.ai/v1/',
       token: 'token-1',
       pathPrefix: 'custom',
@@ -72,14 +72,14 @@ describe('GitHubSourceStorageProvider', () => {
     ).resolves.toMatchObject({ id: 12 });
   });
 
-  it('creates a provider from hosted source storage environment variables', () => {
-    const provider = createGitHubSourceStorageProviderFromEnv({
+  it('creates a provider from hosted source control environment variables', () => {
+    const provider = createGitHubSourceControlProviderFromEnv({
       MASTRA_SOURCE_PROVIDER: 'github',
       MASTRA_SHARED_API_URL: 'https://api.mastra.ai/v1',
       MASTRA_PLATFORM_ACCESS_TOKEN: 'token-1',
     });
 
-    expect(provider).toBeInstanceOf(GitHubSourceStorageProvider);
+    expect(provider).toBeInstanceOf(GitHubSourceControlProvider);
   });
 });
 

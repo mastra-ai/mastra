@@ -4,7 +4,7 @@ import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { createScorer } from '@mastra/core/evals';
 import { RequestContext } from '@mastra/core/request-context';
-import { InMemoryStore, type SourceStorageProvider } from '@mastra/core/storage';
+import { InMemoryStore, type SourceControlProvider } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { MastraEditor } from './index';
@@ -37,7 +37,7 @@ const sampleStoredAgent2 = {
   model: { provider: 'anthropic', name: 'claude-3' },
 };
 
-function createMockSourceProvider(): SourceStorageProvider & { writes: Array<{ path: string; content: string }> } {
+function createMockSourceProvider(): SourceControlProvider & { writes: Array<{ path: string; content: string }> } {
   const writes: Array<{ path: string; content: string }> = [];
   const files = new Map<string, string>();
 
@@ -63,10 +63,10 @@ function createMockSourceProvider(): SourceStorageProvider & { writes: Array<{ p
   };
 }
 
-describe('code source storage', () => {
+describe('code source control', () => {
   it('routes code-source agent storage through the configured source provider', async () => {
     const provider = createMockSourceProvider();
-    const editor = new MastraEditor({ source: 'code', sourceStorageProvider: provider });
+    const editor = new MastraEditor({ source: 'code', sourceControlProvider: provider });
     const codeAgent = new Agent({
       id: 'source-backed-agent',
       name: 'Source Backed Agent',
@@ -85,7 +85,7 @@ describe('code source storage', () => {
       changeMessage: 'Update instructions',
     });
 
-    expect(editor.getSourceStorageProvider()).toBe(provider);
+    expect(editor.getSourceControlProvider()).toBe(provider);
     expect(provider.writes).toEqual([
       {
         path: 'agents/source-backed-agent.json',
@@ -96,7 +96,7 @@ describe('code source storage', () => {
 
   it('keeps filesystem-backed editor domains when agents use a source provider', async () => {
     const provider = createMockSourceProvider();
-    const editor = new MastraEditor({ source: 'code', sourceStorageProvider: provider });
+    const editor = new MastraEditor({ source: 'code', sourceControlProvider: provider });
     const defaultStorage = new InMemoryStore();
 
     const mastra = new Mastra({ storage: defaultStorage, editor, agents: {} });
@@ -109,7 +109,7 @@ describe('code source storage', () => {
 
   it('returns the existing code-defined agent when creating a stored override', async () => {
     const provider = createMockSourceProvider();
-    const editor = new MastraEditor({ source: 'code', sourceStorageProvider: provider });
+    const editor = new MastraEditor({ source: 'code', sourceControlProvider: provider });
     const codeAgent = new Agent({
       id: 'descriptions-only-agent',
       name: 'Descriptions Only Agent',

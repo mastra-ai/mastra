@@ -12,12 +12,12 @@ import type { IMastraLogger as Logger } from '@mastra/core/logger';
 import { BUILT_IN_PROCESSOR_PROVIDERS } from '@mastra/core/processor-provider';
 import type { ProcessorProvider } from '@mastra/core/processor-provider';
 import {
-  createGitHubSourceStorageProviderFromEnv,
+  createGitHubSourceControlProviderFromEnv,
   FilesystemStore,
   MastraCompositeStore,
-  SourceAgentsStorage,
+  SourceAgentsSourceControl,
 } from '@mastra/core/storage';
-import type { BlobStore, SourceStorageProvider } from '@mastra/core/storage';
+import type { BlobStore, SourceControlProvider } from '@mastra/core/storage';
 import { UnknownToolProviderError } from '@mastra/core/tool-provider';
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
@@ -65,7 +65,7 @@ export class MastraEditor implements IMastraEditor {
   private __processorProviders: Record<string, ProcessorProvider>;
   private __source?: 'code' | 'db';
   private __codePath: string;
-  private __sourceStorageProvider?: SourceStorageProvider;
+  private __sourceControlProvider?: SourceControlProvider;
   private readonly __builderConfig?: AgentBuilderOptions;
   private __builderInstance?: IAgentBuilder;
   private __builderResolved = false;
@@ -114,9 +114,9 @@ export class MastraEditor implements IMastraEditor {
     this.__processorProviders = { ...BUILT_IN_PROCESSOR_PROVIDERS, ...config?.processorProviders };
     this.__source = config?.source;
     this.__codePath = config?.codePath ?? './mastra/editor';
-    this.__sourceStorageProvider =
-      config?.sourceStorageProvider ??
-      createGitHubSourceStorageProviderFromEnv(process.env, { pathPrefix: this.__codePath });
+    this.__sourceControlProvider =
+      config?.sourceControlProvider ??
+      createGitHubSourceControlProviderFromEnv(process.env, { pathPrefix: this.__codePath });
 
     // Built-in providers are always registered first, then merged with user-provided ones
     this.__filesystems = new Map<string, FilesystemProvider>();
@@ -174,15 +174,15 @@ export class MastraEditor implements IMastraEditor {
     if (this.__source === 'code') {
       const existingStorage = mastra.getStorage();
 
-      if (this.__sourceStorageProvider) {
-        const sourceAgentsStore = new SourceAgentsStorage({
-          provider: this.__sourceStorageProvider,
+      if (this.__sourceControlProvider) {
+        const sourceAgentsStore = new SourceAgentsSourceControl({
+          provider: this.__sourceControlProvider,
         });
         const filesystemStore = new FilesystemStore({ dir: this.__codePath });
 
         mastra.setStorage(
           new MastraCompositeStore({
-            id: `${existingStorage?.id ?? 'mastra'}-with-editor-source-provider`,
+            id: `${existingStorage?.id ?? 'mastra'}-with-editor-source-control`,
             ...(existingStorage ? { default: existingStorage } : {}),
             editor: filesystemStore,
             domains: { agents: sourceAgentsStore },
@@ -408,9 +408,9 @@ export class MastraEditor implements IMastraEditor {
     return this.__source;
   }
 
-  /** Returns the configured source storage provider, if any. */
-  getSourceStorageProvider(): SourceStorageProvider | undefined {
-    return this.__sourceStorageProvider;
+  /** Returns the configured source control provider, if any. */
+  getSourceControlProvider(): SourceControlProvider | undefined {
+    return this.__sourceControlProvider;
   }
 
   /** Registered tool providers */

@@ -8,7 +8,7 @@ import type { MCPServerBase } from '../mcp';
 import type { ProcessorProvider } from '../processor-provider';
 import type { RequestContext } from '../request-context';
 import type { BlobStore } from '../storage/domains/blobs/base';
-import type { SourceStorageProvider } from '../storage/source-storage';
+import type { SourceControlProvider } from '../storage/source-control';
 import type {
   AgentInstructionBlock,
   StorageCreateAgentInput,
@@ -204,7 +204,7 @@ export interface MastraEditorConfig {
    * should provide a source provider or expose code-source editing as
    * unavailable.
    */
-  sourceStorageProvider?: SourceStorageProvider;
+  sourceControlProvider?: SourceControlProvider;
 }
 
 export interface GetByIdOptions {
@@ -473,6 +473,6 @@ export interface IMastraEditor {
    */
   getSource?(): 'code' | 'db' | undefined;
 
-  /** Returns the source storage provider configured for code source, if any. */
-  getSourceStorageProvider?(): SourceStorageProvider | undefined;
+  /** Returns the source control provider configured for code source, if any. */
+  getSourceControlProvider?(): SourceControlProvider | undefined;
 }

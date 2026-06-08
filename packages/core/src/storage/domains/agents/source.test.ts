@@ -6,15 +6,15 @@ import type {
   SourceFileListEntry,
   SourceFileListInput,
   SourceFileRef,
-  SourceStorageCapabilities,
-  SourceStorageProvider,
+  SourceControlCapabilities,
+  SourceControlProvider,
   SourceWriteFileInput,
   SourceWriteResult,
-} from '../../source-storage';
-import { getSourceAgentFilePath } from '../../source-storage';
-import { SourceAgentsStorage } from './source';
+} from '../../source-control';
+import { getSourceAgentFilePath } from '../../source-control';
+import { SourceAgentsSourceControl } from './source';
 
-class MockSourceProvider implements SourceStorageProvider {
+class MockSourceProvider implements SourceControlProvider {
   id = 'mock-source';
   displayName = 'Mock Source';
 
@@ -22,14 +22,14 @@ class MockSourceProvider implements SourceStorageProvider {
   refs = new Map<string, Map<string, string>>();
   writes: SourceWriteFileInput[] = [];
   history: SourceFileHistoryEntry[] = [];
-  capabilities: SourceStorageCapabilities = {
+  capabilities: SourceControlCapabilities = {
     canRead: true,
     canWrite: true,
     canListHistory: true,
     canOpenChangeRequest: false,
   };
 
-  async getCapabilities(): Promise<SourceStorageCapabilities> {
+  async getCapabilities(): Promise<SourceControlCapabilities> {
     return this.capabilities;
   }
 
@@ -59,10 +59,10 @@ class MockSourceProvider implements SourceStorageProvider {
 
 const model = { provider: 'openai', name: 'gpt-4' };
 
-describe('SourceAgentsStorage', () => {
+describe('SourceAgentsSourceControl', () => {
   it('persists code-source snapshots through the source provider using canonical paths', async () => {
     const provider = new MockSourceProvider();
-    const storage = new SourceAgentsStorage({ provider });
+    const storage = new SourceAgentsSourceControl({ provider });
     storage.__registerMastra({
       getAgentById: () => ({
         source: 'code',
@@ -90,7 +90,7 @@ describe('SourceAgentsStorage', () => {
 
   it('omits instructions for descriptions-only code agents', async () => {
     const provider = new MockSourceProvider();
-    const storage = new SourceAgentsStorage({ provider });
+    const storage = new SourceAgentsSourceControl({ provider });
     storage.__registerMastra({
       getAgentById: () => ({
         source: 'code',
@@ -117,7 +117,7 @@ describe('SourceAgentsStorage', () => {
 
   it('persists editable snapshots for storage-only agents without a code definition', async () => {
     const provider = new MockSourceProvider();
-    const storage = new SourceAgentsStorage({ provider });
+    const storage = new SourceAgentsSourceControl({ provider });
 
     await storage.create({
       agent: {
@@ -144,7 +144,7 @@ describe('SourceAgentsStorage', () => {
 
   it('still strips non-editable fields when getAgentById throws for storage-only agents', async () => {
     const provider = new MockSourceProvider();
-    const storage = new SourceAgentsStorage({ provider });
+    const storage = new SourceAgentsSourceControl({ provider });
     storage.__registerMastra({
       getAgentById: () => {
         throw new Error('Agent with id storage-only not found');
@@ -174,7 +174,7 @@ describe('SourceAgentsStorage', () => {
       getSourceAgentFilePath('weather-agent'),
       JSON.stringify({ instructions: 'Stored instructions', tools: { weatherTool: { description: 'Stored' } } }),
     );
-    const storage = new SourceAgentsStorage({ provider });
+    const storage = new SourceAgentsSourceControl({ provider });
 
     const agent = await storage.getByIdResolved('weather-agent');
 
@@ -190,9 +190,9 @@ describe('SourceAgentsStorage', () => {
     const provider = new MockSourceProvider();
     provider.files.set(
       getSourceAgentFilePath('studio only'),
-      JSON.stringify({ name: 'Studio Only', instructions: 'Persisted in source storage.', model }),
+      JSON.stringify({ name: 'Studio Only', instructions: 'Persisted in source control.', model }),
     );
-    const storage = new SourceAgentsStorage({ provider });
+    const storage = new SourceAgentsSourceControl({ provider });
 
     await storage.init();
     const list = await storage.listResolved();
@@ -201,7 +201,7 @@ describe('SourceAgentsStorage', () => {
     expect(list.agents[0]).toMatchObject({
       id: 'studio only',
       name: 'Studio Only',
-      instructions: 'Persisted in source storage.',
+      instructions: 'Persisted in source control.',
     });
   });
 
@@ -217,7 +217,7 @@ describe('SourceAgentsStorage', () => {
       { id: 'sha-2', ref: 'sha-2', message: 'Second save', createdAt: '2026-06-01T02:00:00.000Z' },
       { id: 'sha-1', ref: 'sha-1', message: 'First save', createdAt: '2026-06-01T01:00:00.000Z' },
     ];
-    const storage = new SourceAgentsStorage({ provider });
+    const storage = new SourceAgentsSourceControl({ provider });
 
     const versions = await storage.listVersions({
       agentId: 'weather-agent',
@@ -238,7 +238,7 @@ describe('SourceAgentsStorage', () => {
       canOpenChangeRequest: false,
       reason: 'missing-permissions',
     };
-    const storage = new SourceAgentsStorage({ provider });
+    const storage = new SourceAgentsSourceControl({ provider });
 
     await expect(
       storage.create({
@@ -259,7 +259,7 @@ describe('SourceAgentsStorage', () => {
     const draft = new Map<string, string>();
     draft.set(getSourceAgentFilePath('weather-agent'), JSON.stringify({ instructions: 'From proposal' }));
     provider.refs.set('mastra/weather-agent', draft);
-    const storage = new SourceAgentsStorage({ provider });
+    const storage = new SourceAgentsSourceControl({ provider });
 
     await expect(storage.getByIdResolved('weather-agent')).resolves.toMatchObject({ instructions: 'From main' });
 
@@ -282,7 +282,7 @@ describe('SourceAgentsStorage', () => {
 
   it('does not create an in-memory version when source persistence fails', async () => {
     const provider = new MockSourceProvider();
-    const storage = new SourceAgentsStorage({ provider });
+    const storage = new SourceAgentsSourceControl({ provider });
     await storage.create({
       agent: {
         id: 'weather-agent',
@@ -318,7 +318,7 @@ describe('SourceAgentsStorage', () => {
       .spyOn(provider, 'listFiles')
       .mockRejectedValueOnce(new Error('temporary-list-failure'))
       .mockImplementation(input => MockSourceProvider.prototype.listFiles.call(provider, input));
-    const storage = new SourceAgentsStorage({ provider });
+    const storage = new SourceAgentsSourceControl({ provider });
 
     await expect(storage.listResolved()).rejects.toThrow('temporary-list-failure');
     const list = await storage.listResolved();
@@ -334,7 +334,7 @@ describe('SourceAgentsStorage', () => {
       .spyOn(provider, 'readFile')
       .mockRejectedValueOnce(new Error('temporary-read-failure'))
       .mockImplementation(input => MockSourceProvider.prototype.readFile.call(provider, input));
-    const storage = new SourceAgentsStorage({ provider });
+    const storage = new SourceAgentsSourceControl({ provider });
 
     await expect(storage.getByIdResolved('retry-agent')).rejects.toThrow('temporary-read-failure');
     const agent = await storage.getByIdResolved('retry-agent');
@@ -353,7 +353,7 @@ describe('SourceAgentsStorage', () => {
       .spyOn(provider, 'listFileHistory')
       .mockRejectedValueOnce(new Error('temporary-history-failure'))
       .mockImplementation(input => MockSourceProvider.prototype.listFileHistory.call(provider, input));
-    const storage = new SourceAgentsStorage({ provider });
+    const storage = new SourceAgentsSourceControl({ provider });
 
     await expect(storage.listVersions({ agentId: 'weather-agent' })).rejects.toThrow('temporary-history-failure');
     const versions = await storage.listVersions({ agentId: 'weather-agent' });
@@ -372,7 +372,7 @@ describe('SourceAgentsStorage', () => {
       canOpenChangeRequest: false,
       reason: 'provider-unavailable',
     };
-    const storage = new SourceAgentsStorage({ provider });
+    const storage = new SourceAgentsSourceControl({ provider });
 
     await expect(storage.init()).rejects.toThrow('provider-unavailable');
   });

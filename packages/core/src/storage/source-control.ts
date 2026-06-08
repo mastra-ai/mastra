@@ -1,16 +1,16 @@
-export type SourceStorageCapabilityReason =
+export type SourceControlCapabilityReason =
   | 'provider-not-configured'
   | 'provider-unavailable'
   | 'missing-permissions'
   | 'project-not-linked'
   | 'unsupported';
 
-export type SourceStorageCapabilities = {
+export type SourceControlCapabilities = {
   canRead: boolean;
   canWrite: boolean;
   canListHistory: boolean;
   canOpenChangeRequest: boolean;
-  reason?: SourceStorageCapabilityReason | string;
+  reason?: SourceControlCapabilityReason | string;
 };
 
 export type SourceProviderInfo = {
@@ -82,18 +82,18 @@ export type SourceChangeRequestResult = {
   ref?: string;
 };
 
-export const SOURCE_STORAGE_AGENTS_DIR = 'agents';
+export const SOURCE_CONTROL_AGENTS_DIR = 'agents';
 
-export function getSourceStorageEntityFilePath(directory: string, entityId: string): string {
+export function getSourceControlEntityFilePath(directory: string, entityId: string): string {
   return `${directory}/${encodeURIComponent(entityId)}.json`;
 }
 
 export function getSourceAgentFilePath(agentId: string): string {
-  return getSourceStorageEntityFilePath(SOURCE_STORAGE_AGENTS_DIR, agentId);
+  return getSourceControlEntityFilePath(SOURCE_CONTROL_AGENTS_DIR, agentId);
 }
 
-export interface SourceStorageProvider extends SourceProviderInfo {
-  getCapabilities(): Promise<SourceStorageCapabilities>;
+export interface SourceControlProvider extends SourceProviderInfo {
+  getCapabilities(): Promise<SourceControlCapabilities>;
   readFile(input: SourceFileRef): Promise<SourceFile | null>;
   writeFile(input: SourceWriteFileInput): Promise<SourceWriteResult>;
   listFileHistory(input: SourceFileHistoryInput): Promise<SourceFileHistoryEntry[]>;
@@ -103,7 +103,7 @@ export interface SourceStorageProvider extends SourceProviderInfo {
 
 export type EditorSourceCapabilities = {
   source: 'db' | 'code';
-  storage: 'database' | 'filesystem' | 'source-provider' | 'unavailable';
+  storage: 'database' | 'filesystem' | 'source-control' | 'unavailable';
   provider?: SourceProviderInfo;
   canSave: boolean;
   canOpenChangeRequest: boolean;

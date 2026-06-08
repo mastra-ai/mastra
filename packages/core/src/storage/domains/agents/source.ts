@@ -1,7 +1,7 @@
 import { calculatePagination, normalizePerPage } from '../../base';
 import type { StorageMastraRef } from '../../base';
-import { SOURCE_STORAGE_AGENTS_DIR, getSourceAgentFilePath } from '../../source-storage';
-import type { SourceFileHistoryEntry, SourceStorageProvider, SourceWriteResult } from '../../source-storage';
+import { SOURCE_CONTROL_AGENTS_DIR, getSourceAgentFilePath } from '../../source-control';
+import type { SourceFileHistoryEntry, SourceControlProvider, SourceWriteResult } from '../../source-control';
 import type {
   StorageAgentType,
   StorageCreateAgentInput,
@@ -47,8 +47,8 @@ const OWNED_FIELDS_BY_GROUP = {
   tools: ['tools'],
 } as const;
 
-export interface SourceAgentsStorageConfig {
-  provider: SourceStorageProvider;
+export interface SourceAgentsSourceControlConfig {
+  provider: SourceControlProvider;
   agentIds?: string[];
 }
 
@@ -135,7 +135,7 @@ function stableStringify(value: unknown): string {
 }
 
 function agentIdFromSourcePath(path: string): string | undefined {
-  const prefix = `${SOURCE_STORAGE_AGENTS_DIR}/`;
+  const prefix = `${SOURCE_CONTROL_AGENTS_DIR}/`;
   if (!path.startsWith(prefix) || !path.endsWith('.json')) return undefined;
 
   const filename = path.slice(prefix.length, -'.json'.length);
@@ -148,8 +148,8 @@ function agentIdFromSourcePath(path: string): string | undefined {
   }
 }
 
-export class SourceAgentsStorage extends AgentsStorage {
-  private readonly provider: SourceStorageProvider;
+export class SourceAgentsSourceControl extends AgentsStorage {
+  private readonly provider: SourceControlProvider;
   private readonly knownAgentIds: Set<string>;
   private readonly db = new InMemoryDB();
   private readonly memory = new InMemoryAgentsStorage({ db: this.db });
@@ -160,7 +160,7 @@ export class SourceAgentsStorage extends AgentsStorage {
   private readonly activeRefs = new Map<string, string>();
   private providerAgentIdsDiscovered = false;
 
-  constructor({ provider, agentIds = [] }: SourceAgentsStorageConfig) {
+  constructor({ provider, agentIds = [] }: SourceAgentsSourceControlConfig) {
     super();
     this.provider = provider;
     this.knownAgentIds = new Set(agentIds);
@@ -350,7 +350,7 @@ export class SourceAgentsStorage extends AgentsStorage {
   private async discoverProviderAgentIds(): Promise<void> {
     if (this.providerAgentIdsDiscovered || !this.provider.listFiles) return;
 
-    const files = await this.provider.listFiles({ path: SOURCE_STORAGE_AGENTS_DIR });
+    const files = await this.provider.listFiles({ path: SOURCE_CONTROL_AGENTS_DIR });
     for (const file of files) {
       const agentId = agentIdFromSourcePath(file.path);
       if (agentId) {
