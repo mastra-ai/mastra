@@ -121,7 +121,7 @@ importers:
         specifier: ^2.12.2
         version: 2.12.8(typescript@5.9.3)
       tsx:
-        specifier: ^4.19.0
+        specifier: ^4
         version: 4.21.1
 
 packages:
