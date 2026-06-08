@@ -16,6 +16,11 @@ vi.mock('sonner', () => ({
 const playStreamWithWebAudioMock = vi.mocked(playStreamWithWebAudio);
 const toastErrorMock = vi.mocked(toast.error);
 
+// Lets every pending promise chain in the adapter settle (speak() -> body ->
+// playback -> cleanup) so "did not toast" assertions can't pass simply by
+// running before a regression would have fired the toast.
+const flushAsync = () => new Promise(resolve => setTimeout(resolve, 0));
+
 const createAgent = () => {
   const speak = vi.fn(async () => new Response(new ReadableStream()));
   return {
@@ -134,6 +139,8 @@ describe('VoiceAttachmentAdapter', () => {
     await vi.waitFor(() => expect(playStreamWithWebAudioMock).toHaveBeenCalled());
     playStreamWithWebAudioMock.mock.calls[0]![1]!();
 
+    await vi.waitFor(() => expect(utterance.status).toMatchObject({ type: 'ended', reason: 'finished' }));
+    await flushAsync();
     expect(toastErrorMock).not.toHaveBeenCalled();
   });
 
@@ -153,6 +160,8 @@ describe('VoiceAttachmentAdapter', () => {
     resolveSpeak(new Response(new ReadableStream()));
 
     await vi.waitFor(() => expect(speak).toHaveBeenCalledTimes(1));
+    await flushAsync();
+    expect(utterance.status).toMatchObject({ type: 'ended', reason: 'cancelled' });
     expect(toastErrorMock).not.toHaveBeenCalled();
   });
 
