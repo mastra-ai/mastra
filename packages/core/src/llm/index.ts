@@ -158,7 +158,13 @@ export type LLMStreamObjectOptions<Z extends StandardSchemaWithJSON | undefined 
 } & LLMInnerStreamOptions<Z> &
   DefaultLLMStreamObjectOptions;
 
-export type { ProviderConfig, GatewayLanguageModel } from './model/gateways/base';
+export type {
+  ProviderConfig,
+  GatewayLanguageModel,
+  MastraModelGatewayInterface,
+  GatewayAuthRequest,
+  GatewayAuthResult,
+} from './model/gateways/base';
 export {
   MastraModelGateway,
   NetlifyGateway,
@@ -173,5 +179,6 @@ export type {
   MastraGatewayConfig,
 } from './model/gateways';
 export { GATEWAY_AUTH_HEADER } from './model/gateways/constants';
+export { resolveModelAuth, type ResolveModelAuthArgs } from './model/model-auth-resolver';
 
 export { ModelRouterEmbeddingModel, type EmbeddingModelId, EMBEDDING_MODELS, type EmbeddingModelInfo } from './model';

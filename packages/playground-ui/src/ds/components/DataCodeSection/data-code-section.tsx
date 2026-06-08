@@ -71,7 +71,7 @@ function searchHighlightExtension(): Extension {
 function buildDarkTheme(): Extension {
   return draculaInit({
     settings: {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
       fontSize: '0.75rem',
       lineHighlight: 'transparent',
       gutterBackground: 'transparent',
@@ -90,7 +90,7 @@ function buildLightTheme(): Extension {
       fontSize: '0.75rem',
     },
     '&.cm-editor .cm-scroller': {
-      fontFamily: 'var(--geist-mono)',
+      fontFamily: 'var(--font-mono)',
     },
     '.cm-gutters': {
       backgroundColor: 'transparent',

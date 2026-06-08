@@ -96,6 +96,14 @@ export class SimpleAuth<TUser> extends MastraAuthProvider<TUser> {
   }
 
   /**
+   * Get multiple users by ID in one call. Returns positionally-aligned
+   * results, with `null` for any unknown ID.
+   */
+  async getUsers(userIds: string[]): Promise<Array<TUser | null>> {
+    return userIds.map(id => this.userById.get(id) ?? null);
+  }
+
+  /**
    * Sign in with token (passed as password field).
    * The email field is ignored - only the token matters.
    */

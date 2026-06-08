@@ -997,10 +997,19 @@ export class Agent<
         for (const part of parts) {
           if (!part || typeof part !== 'object') continue;
           const block = part as Record<string, unknown>;
-          if (block.type !== 'tool-invocation') continue;
-          const toolInvocation = block.toolInvocation;
-          if (!toolInvocation || typeof toolInvocation !== 'object') continue;
-          handleObservabilityBlock(toolInvocation as Record<string, unknown>);
+          if (block.type === 'tool-invocation') {
+            const toolInvocation = block.toolInvocation;
+            if (!toolInvocation || typeof toolInvocation !== 'object') continue;
+            handleObservabilityBlock(toolInvocation as Record<string, unknown>);
+            continue;
+          }
+
+          // AI SDK v6 UIMessage tool parts carry arbitrary `toolMetadata` that survives the
+          // full useChat round-trip. We use it as the transport for the W3C carrier and
+          // buffered OTLP payload emitted during client-side tool execution.
+          const toolMetadata = block.toolMetadata;
+          if (!toolMetadata || typeof toolMetadata !== 'object') continue;
+          handleObservabilityBlock(toolMetadata as Record<string, unknown>);
         }
       }
 
