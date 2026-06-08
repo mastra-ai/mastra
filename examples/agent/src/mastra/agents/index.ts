@@ -27,7 +27,7 @@ export const codeOverrideEditableAgent = new Agent({
   description: 'Code-defined agent that Studio may override (instructions + tools)',
   // instructions: 'You are the original code-defined instructions for the editable override agent.',
   model: 'openai/gpt-5.4-mini',
-  editor: { instructions: true, tools: true }
+  editor: { instructions: true, tools: true },
 });
 
 /**

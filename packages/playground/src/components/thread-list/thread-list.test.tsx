@@ -1,9 +1,41 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ThreadListItem } from './thread-list';
+import { ThreadList, ThreadListItem } from './thread-list';
 
 afterEach(cleanup);
+
+describe('ThreadList', () => {
+  it('renders standalone block chrome by default', () => {
+    render(
+      <ThreadList>
+        <div>child</div>
+      </ThreadList>,
+    );
+
+    const nav = screen.getByRole('navigation', { name: 'Threads' });
+    expect(nav.className).toContain('bg-surface3');
+    expect(nav.className).toContain('rounded-studio-panel');
+    expect(nav.className).toContain('border-border1/50');
+    expect(nav.parentElement!.className).toContain('pl-2');
+  });
+
+  it('drops block chrome and inset when embedded', () => {
+    render(
+      <ThreadList embedded>
+        <div>child</div>
+      </ThreadList>,
+    );
+
+    const nav = screen.getByRole('navigation', { name: 'Threads' });
+    expect(nav.className).not.toContain('bg-surface3');
+    expect(nav.className).not.toContain('rounded-studio-panel');
+    expect(nav.className).not.toContain('border-border1/50');
+    expect(nav.parentElement!.className).not.toContain('pl-2');
+    // still scrolls inside the parent block
+    expect(nav.className).toContain('overflow-y-auto');
+  });
+});
 
 describe('ThreadListItem', () => {
   it('contains row content in a shrinkable overflow boundary', () => {
