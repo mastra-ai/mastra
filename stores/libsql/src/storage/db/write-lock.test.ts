@@ -1,7 +1,7 @@
-import type { Client } from '@libsql/client';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import type { Client } from '@libsql/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { LibSQLStore } from '..';
