@@ -22,6 +22,13 @@ export async function playStreamWithWebAudio(stream: ReadableStream, onEnded?: (
       offset += chunk.length;
     }
 
+    // Some browsers (notably Safari) start the AudioContext in a suspended
+    // state when it is created outside a synchronous user gesture, which makes
+    // playback silent with no error. Resume it before playing.
+    if (audioContext.state === 'suspended') {
+      await audioContext.resume();
+    }
+
     // Decode and play
     const audioBuffer = await audioContext.decodeAudioData(combinedBuffer.buffer);
     const source = audioContext.createBufferSource();
