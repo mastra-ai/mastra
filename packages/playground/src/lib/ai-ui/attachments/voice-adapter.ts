@@ -26,7 +26,6 @@ export class VoiceAttachmentAdapter implements SpeechSynthesisAdapter {
       if (started) return;
 
       started = true;
-      notify();
 
       this.agent.voice
         .speak(text)
@@ -35,7 +34,11 @@ export class VoiceAttachmentAdapter implements SpeechSynthesisAdapter {
           return (response as unknown as { body?: ReadableStream }).body;
         })
         .then(readableStream => {
-          if (res.status.type === 'ended' || !readableStream) return undefined;
+          if (res.status.type === 'ended') return undefined;
+          if (!readableStream) {
+            handleEnd('error', new Error('No audio stream returned from voice.speak()'));
+            return undefined;
+          }
           return playStreamWithWebAudio(readableStream, () => handleEnd('finished'));
         })
         .then(nextCleanup => {

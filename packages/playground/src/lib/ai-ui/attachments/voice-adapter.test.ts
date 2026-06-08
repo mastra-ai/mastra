@@ -66,7 +66,8 @@ describe('VoiceAttachmentAdapter', () => {
 
     expect(utterance.status).toEqual({ type: 'ended', reason: 'finished', error: undefined });
     expect(cleanup).toHaveBeenCalledTimes(1);
-    expect(subscriber).toHaveBeenCalledTimes(3);
+    // One initial notification on subscribe + one on the terminal transition.
+    expect(subscriber).toHaveBeenCalledTimes(2);
   });
 
   it('reports errors to subscribers', async () => {
@@ -81,7 +82,34 @@ describe('VoiceAttachmentAdapter', () => {
     utterance.subscribe(subscriber);
 
     await vi.waitFor(() => expect(utterance.status).toEqual({ type: 'ended', reason: 'error', error }));
-    expect(subscriber).toHaveBeenCalledTimes(3);
+    // One initial notification on subscribe + one on the terminal transition.
+    expect(subscriber).toHaveBeenCalledTimes(2);
+  });
+
+  it('notifies a single subscriber exactly once before any transition', async () => {
+    const { agent } = createAgent();
+    const adapter = new VoiceAttachmentAdapter(agent as never);
+    const utterance = adapter.speak('hello');
+    const subscriber = vi.fn();
+
+    utterance.subscribe(subscriber);
+
+    // The initial subscribe should deliver current state exactly once, not twice.
+    expect(subscriber).toHaveBeenCalledTimes(1);
+    expect(utterance.status).toEqual({ type: 'running' });
+  });
+
+  it('ends the utterance when speak() returns no stream body', async () => {
+    const speak = vi.fn(async () => new Response(null));
+    const adapter = new VoiceAttachmentAdapter({ voice: { speak } } as never);
+    const utterance = adapter.speak('hello');
+    const subscriber = vi.fn();
+
+    utterance.subscribe(subscriber);
+
+    await vi.waitFor(() => expect(utterance.status.type).toBe('ended'));
+    expect(utterance.status).toMatchObject({ type: 'ended', reason: 'error' });
+    expect(playStreamWithWebAudioMock).not.toHaveBeenCalled();
   });
 
   it('cancels pending playback without later marking it successful', async () => {
