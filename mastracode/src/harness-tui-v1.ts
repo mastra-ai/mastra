@@ -169,35 +169,50 @@ async function main() {
 
     try {
       // ─── Subscribe to the session thread for streamed output ────────────
-      console.info('[debug] Subscribing to thread...');
       const subscription = await session.subscribeToThread();
-      console.info('[debug] Subscribed. activeRunId:', subscription.activeRunId());
 
       // ─── Start the run via queueMessage ─────────────────────────────────
-      console.info('[debug] Queueing message...');
       const result = await session.queueMessage({ messages: promptText });
-      console.info('[debug] queueMessage result:', result);
       if (result.accepted) {
         isRunning = true;
-        console.info('[debug] Run accepted, isRunning = true');
       }
 
       // ─── Read streamed chunks ───────────────────────────────────────────
-      let chunkCount = 0;
       const streamPromise = (async () => {
-        console.info('[debug] Stream consumer started');
         try {
           for await (const chunk of subscription.stream) {
-            chunkCount++;
-            if (chunkCount === 1) {
-              console.info('[debug] First chunk received');
-            }
-            // Handle different chunk types
+            // Skip terminal / non-text chunks
             if (typeof chunk === 'string') {
               process.stdout.write(chunk);
-            } else if (chunk && typeof chunk === 'object') {
-              const text = (chunk as { text?: string }).text ?? '';
-              if (text) process.stdout.write(text);
+              continue;
+            }
+            if (!chunk || typeof chunk !== 'object') continue;
+
+            // Handle Mastra stream chunk shapes
+            const c = chunk as unknown as Record<string, unknown>;
+            if (c.type === 'text-delta') {
+              // Callback-style: { type: 'text-delta', textDelta: '...' }
+              if (c.textDelta) {
+                process.stdout.write(String(c.textDelta));
+                continue;
+              }
+              // Agent-signal-style: { type: 'text-delta', id, delta: '...' }
+              if (c.delta) {
+                process.stdout.write(String(c.delta));
+                continue;
+              }
+              // Payload-style: { type: 'text-delta', payload: { text: '...' } }
+              if (c.payload && typeof c.payload === 'object') {
+                const payload = c.payload as Record<string, unknown>;
+                if (payload.text) {
+                  process.stdout.write(String(payload.text));
+                  continue;
+                }
+              }
+            }
+            // Fallback: any object with a .text property
+            if (c.text) {
+              process.stdout.write(String(c.text));
             }
           }
         } catch (err) {
@@ -205,7 +220,6 @@ async function main() {
             console.error('Stream error:', err);
           }
         }
-        console.info('[debug] Stream consumer ended, chunks received:', chunkCount);
       })();
 
       // ─── While the agent is running, allow follow-up prompts ────────────
@@ -215,7 +229,7 @@ async function main() {
           await new Promise<void>(resolve => setTimeout(resolve, 50));
           if (!isRunning) break;
 
-          const steerText = await ask('\n> ');
+          const steerText = await ask('\n  steer: ');
           if (!steerText.trim()) continue;
 
           try {
@@ -228,34 +242,26 @@ async function main() {
 
       // ─── Poll activeRunId to detect when the run finishes ───────────────
       const pollPromise = (async () => {
-        console.info('[debug] Poll started, activeRunId:', subscription.activeRunId());
         // Wait a tick for the run to register
         await new Promise<void>(resolve => setTimeout(resolve, 50));
         while (isRunning) {
           const runId = subscription.activeRunId();
-          console.info('[debug] Poll check, activeRunId:', runId);
           if (!runId) {
             // No active run — the stream should finish shortly
-            console.info('[debug] No active run, breaking poll');
             break;
           }
           await new Promise<void>(resolve => setTimeout(resolve, 100));
         }
         isRunning = false;
-        console.info('[debug] Poll ended');
       })();
 
       // ─── Wait for run completion, then unsubscribe to end the stream ─────
       await pollPromise;
-      console.info('[debug] Poll done, unsubscribing...');
       subscription.unsubscribe();
-      console.info('[debug] Unsubscribed, awaiting stream...');
       await streamPromise;
-      console.info('[debug] Stream done, awaiting steer...');
       await steerPromise;
 
-      console.info('[debug] Prompt handling complete');
-      console.info();
+      console.info('\n');
     } catch (err) {
       console.error('Error:', err);
     }
