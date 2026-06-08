@@ -219,7 +219,7 @@ export default function IntegrationsPage() {
                       isAdmin={isAdmin}
                       providerId={providerId}
                       disconnectPending={disconnect.isPending}
-                      onDisconnect={() => disconnect.mutate({ providerId, connectionId: c.connectionId, force: true })}
+                      onDisconnect={() => disconnect.mutate({ providerId, connectionId: c.connectionId })}
                     />
                   ))}
                 </ul>
@@ -235,7 +235,7 @@ export default function IntegrationsPage() {
                 isAdmin={isAdmin}
                 providerId={providerId}
                 disconnectPending={disconnect.isPending}
-                onDisconnect={() => disconnect.mutate({ providerId, connectionId: c.connectionId, force: true })}
+                onDisconnect={() => disconnect.mutate({ providerId, connectionId: c.connectionId })}
               />
             ))}
           </ul>

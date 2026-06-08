@@ -24,7 +24,7 @@ const Wrap = ({ children }: { children: ReactNode }) => {
 
 describe('IntegrationsPage', () => {
   const server = setupServer();
-  beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }));
+  beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
   afterEach(() => {
     cleanup();
     server.resetHandlers();
