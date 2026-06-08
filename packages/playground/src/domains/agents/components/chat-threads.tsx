@@ -20,9 +20,18 @@ export interface ChatThreadsProps {
   onDelete: (threadId: string) => void;
   resourceId: string;
   resourceType: 'agent' | 'network';
+  embedded?: boolean;
 }
 
-export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId, resourceType }: ChatThreadsProps) => {
+export const ChatThreads = ({
+  threads,
+  isLoading,
+  threadId,
+  onDelete,
+  resourceId,
+  resourceType,
+  embedded = false,
+}: ChatThreadsProps) => {
   const { Link, paths } = useLinkComponent();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const { canDelete } = usePermissions();
@@ -38,7 +47,7 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
 
   return (
     <>
-      <ThreadList>
+      <ThreadList embedded={embedded}>
         <ThreadListNewItem as={Link} to={newThreadLink}>
           <Icon>
             <Plus />

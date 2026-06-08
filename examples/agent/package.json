@@ -76,6 +76,6 @@
   "devDependencies": {
     "concurrently": "^9.1.2",
     "msw": "^2.12.2",
-    "tsx": "catalog:"
+    "tsx": "^4"
   }
 }
