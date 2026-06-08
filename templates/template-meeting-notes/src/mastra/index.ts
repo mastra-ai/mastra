@@ -34,4 +34,10 @@ export const mastra = new Mastra({
       },
     },
   }),
+  bundler: {
+    // Resolved dynamically via require.resolve in src/mastra/mcp.ts, so static
+    // analysis can't see it. Listing it here makes sure the deploy install
+    // includes the Notion MCP server binary.
+    dynamicPackages: ['@notionhq/notion-mcp-server'],
+  },
 });

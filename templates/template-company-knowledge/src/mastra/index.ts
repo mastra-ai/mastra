@@ -20,4 +20,10 @@ export const mastra = new Mastra({
   vectors: { pgVector: vector },
   editor: new MastraEditor({ source: 'code' }),
   logger: new PinoLogger({ name: 'company-knowledge', level: 'info' }),
+  bundler: {
+    // Resolved dynamically via require.resolve in src/mastra/mcp.ts, so static
+    // analysis can't see it. Listing it here makes sure the deploy install
+    // includes the Notion MCP server binary.
+    dynamicPackages: ['@notionhq/notion-mcp-server'],
+  },
 });
