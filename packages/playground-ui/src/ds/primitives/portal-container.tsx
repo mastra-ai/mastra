@@ -1,22 +1,22 @@
 /* eslint-disable react-refresh/only-export-components */
 import * as React from 'react';
 
-/**
- * Lets a modal container (e.g. `SideDialog`'s `Drawer`) advertise a DOM node
- * that nested portaled popups should render into instead of `document.body`.
- *
- * Why this exists: Base UI's modal `Drawer` wraps its contents in a
- * `FloatingFocusManager` with `modal`, which traps focus/interaction inside the
- * drawer's floating element. A popup portaled to `document.body` (the default
- * for `Select`, `Popover`, `DropdownMenu`, `Combobox`) lands *outside* that
- * region and becomes unclickable. Portaling it into a node inside the drawer
- * keeps it within the modal region, so it stays interactive.
- *
- * Portaled components default their portal `container` to this value, so any
- * dropdown placed inside a `SideDialog` works without per-call wiring. A `null`
- * value (the default, outside any provider) means "fall back to document.body".
- */
-const PortalContainerContext = React.createContext<HTMLElement | null>(null);
+/** Anything Base UI's `*.Portal` `container` accepts. */
+export type PortalContainer =
+  | HTMLElement
+  | ShadowRoot
+  | React.RefObject<HTMLElement | ShadowRoot | null>
+  | null
+  | undefined;
+
+// Why: modal SideDialog/Drawer traps focus+clicks inside its region. Popups portal to
+// document.body by default → land outside the trap → unclickable. SideDialog publishes a
+// node inside the trap; popups portal there instead.
+//
+// Sentinel is `undefined`, never `null`: Base UI reads container={undefined} as "portal to
+// body", but container={null} as "not ready, render nothing" — a leaked null opens the popup
+// in state but mounts it nowhere (the model-picker bug).
+const PortalContainerContext = React.createContext<HTMLElement | undefined>(undefined);
 
 export function PortalContainerProvider({
   container,
@@ -25,10 +25,12 @@ export function PortalContainerProvider({
   container: HTMLElement | null;
   children: React.ReactNode;
 }) {
-  return <PortalContainerContext.Provider value={container}>{children}</PortalContainerContext.Provider>;
+  // Accept null for callers; normalize so null never reaches a portal.
+  return <PortalContainerContext.Provider value={container ?? undefined}>{children}</PortalContainerContext.Provider>;
 }
 
-/** Nearest portal container node, or `null` to fall back to `document.body`. */
-export function usePortalContainer(): HTMLElement | null {
-  return React.useContext(PortalContainerContext);
+/** Resolve a popup's portal target: explicit `container` → provider → `undefined` (body). Never null. */
+export function usePortalContainer(container?: PortalContainer): Exclude<PortalContainer, null> {
+  const fromContext = React.useContext(PortalContainerContext);
+  return container ?? fromContext ?? undefined;
 }

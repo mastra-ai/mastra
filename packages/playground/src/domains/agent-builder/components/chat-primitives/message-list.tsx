@@ -1,6 +1,7 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { MessageFactoryPart } from '@mastra/react';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { ChatMessage, ChatMessagePart } from './messages';
 import { MessageRow, MessagesSkeleton, PendingIndicator } from './messages';
 import { useAutoScroll } from '@/domains/agent-builder/hooks/use-auto-scroll';
 
@@ -25,7 +26,7 @@ const useDelayedFlag = (flag: boolean, delayMs: number) => {
 const SKELETON_DELAY_MS = 300;
 
 interface MessageListProps {
-  messages: ChatMessage[];
+  messages: MastraDBMessage[];
   isLoading?: boolean;
   isRunning?: boolean;
   emptyState?: ReactNode;
@@ -39,14 +40,12 @@ interface MessageListProps {
  * e.g. while the server is internally retrying via
  * `StreamErrorRetryProcessor` after the previous step finished cleanly.
  */
-const getMessageParts = (message: ChatMessage): ChatMessagePart[] => {
-  if ('content' in message) return message.content.parts;
-  return message.parts;
-};
-
-const hasStreamingPart = (message: ChatMessage | undefined) => {
+const hasStreamingPart = (message: MastraDBMessage | undefined) => {
   if (!message) return false;
-  return getMessageParts(message).some(part => {
+  // `MastraMessagePart[]` widens into `MessageFactoryPart[]`, surfacing the
+  // runtime `dynamic-tool` / `tool-${string}` parts, so no cast is needed.
+  const parts: MessageFactoryPart[] = message.content.parts;
+  return parts.some(part => {
     if (part.type === 'reasoning' || part.type === 'text') {
       return 'state' in part && part.state === 'streaming';
     }

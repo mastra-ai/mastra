@@ -478,6 +478,7 @@ export interface GetAgentResponse {
   provider: string;
   modelId: string;
   modelVersion: string;
+  supportsMemory?: boolean;
   modelList:
     | Array<{
         id: string;
@@ -3104,6 +3105,29 @@ export interface BuilderSettingsResponse {
    */
   modelPolicyWarnings?: string[];
 }
+
+/**
+ * Response from GET /editor/builder/models/available.
+ *
+ * Same provider shape as {@link ListAgentsModelProvidersResponse}, but each
+ * provider's `models` list is already filtered by the active builder model
+ * policy (the server applies the EE allowlist). Providers with no allowed
+ * models are omitted, so the picker can render this verbatim.
+ */
+export type BuilderAvailableModelsResponse = GeneratedResponse<'GET /editor/builder/models/available'>;
+
+/**
+ * A valid permission-pattern string (e.g. `agents:read`, `*`).
+ *
+ * Kept as a string alias so the Playground can name the type while the
+ * authoritative set is fetched from the server at runtime.
+ */
+export type PermissionPattern = string;
+
+/**
+ * Response from GET /auth/permission-patterns.
+ */
+export type PermissionPatternsResponse = GeneratedResponse<'GET /auth/permission-patterns'>;
 
 /**
  * Resolved picker visibility section returned in {@link BuilderSettingsResponse}.

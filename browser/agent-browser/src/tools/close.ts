@@ -13,14 +13,17 @@ export function createCloseTool(browser: AgentBrowser) {
     execute: async (_input, { agent }) => {
       // For thread scope, close only the thread's session
       const threadId = agent?.threadId;
+      browser.setCurrentThread(threadId);
       if (browser.getScope() !== 'shared') {
         if (!threadId) {
           throw new Error('browser_close requires agent.threadId when browser scope is not shared');
         }
+        browser.markBrowserCloseReason('agent', threadId);
         await browser.closeThreadSession(threadId);
         return { success: true, hint: "Thread's browser session closed. A new session will be created on next use." };
       }
       // For shared scope, close the entire browser
+      browser.markBrowserCloseReason('agent');
       await browser.close();
       return { success: true, hint: 'Browser closed. It will be re-launched automatically on next use.' };
     },

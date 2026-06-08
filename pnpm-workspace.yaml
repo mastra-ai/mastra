@@ -12,6 +12,7 @@ packages:
   - examples/voice/aws-nova-sonic-test
   - workflows/*
   - workspaces/*
+  - signals/*
   - server-adapters/*
   - pubsub/*
   - client-sdks/*
@@ -39,6 +40,7 @@ catalog:
   typescript: ^6.0.3
   vitest: 4.1.5
   zod: ^4.4.3
+  tsx: ^4.22.4
 
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch

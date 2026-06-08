@@ -23,11 +23,10 @@ export const sharedFormElementDisabledStyle = 'disabled:opacity-50 disabled:curs
 export const inputFocusBorderVisible = 'focus-visible:border-neutral5/50';
 export const inputFocusBorderWithin = 'focus-within:border-neutral5/50';
 
-// Hover border for the wrapper variants (InputGroup, Searchbar), guarded with
-// :not(:focus-within) so it can never clobber the focus border. Tailwind emits the
-// `focus-within` variant BEFORE `hover`, so an unguarded `hover:border-*` of equal
-// specificity would win on a field that is focused AND hovered. The bare <Input>
-// does not need this — its `focus-visible` variant is emitted after `hover`.
+// Hover borders are guarded so they can never clobber the focus border. Tailwind
+// can emit focus variants before hover variants, so an unguarded `hover:border-*`
+// of equal specificity may win on a field that is focused AND hovered.
+export const inputHoverBorderVisible = '[&:hover:not(:focus-visible)]:border-border2';
 export const inputHoverBorderWithin = '[&:hover:not(:focus-within)]:border-border2';
 
 // Background-agnostic surface + focus recipe shared by Input and Textarea.
@@ -36,13 +35,17 @@ export const inputHoverBorderWithin = '[&:hover:not(:focus-within)]:border-borde
 // single-line inputs, `rounded-xl` for textareas).
 export const inputSurfaceAndFocusStyle =
   'bg-surface-overlay-soft border border-border1 text-neutral5 ' +
-  'hover:text-neutral6 hover:bg-surface-overlay-strong hover:border-border2 ' +
+  'hover:text-neutral6 hover:bg-surface-overlay-strong ' +
+  inputHoverBorderVisible +
+  ' ' +
   'outline-hidden focus-visible:outline-hidden focus-visible:bg-surface-overlay-strong ' +
   inputFocusBorderVisible;
 
 export const inputOutlineAndFocusStyle =
   'bg-transparent border border-border1 text-neutral5 ' +
-  'hover:text-neutral6 hover:border-border2 ' +
+  'hover:text-neutral6 ' +
+  inputHoverBorderVisible +
+  ' ' +
   'outline-hidden focus-visible:outline-hidden ' +
   inputFocusBorderVisible;
 

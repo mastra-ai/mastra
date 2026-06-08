@@ -251,6 +251,24 @@ curl -sS -X POST http://localhost:4111/api/observability/metrics/aggregate \
   -d '{"name":["mastra_tool_duration_ms"],"aggregation":"avg","filters":{"entityName":"weatherTool","labels":{"status":"error"}}}'
 ```
 
+### Always provide a time range
+
+`filters.timestamp` is optional, but you should treat it as required for any query that runs against a production store. Observability tables are typically partitioned (or chunked, for TimescaleDB) by event time. When you supply `timestamp.start` (and ideally `end`), the backend can prune to the partitions that overlap the range — usually one or two. Without a time range, the planner has to scan every partition, which can be hundreds of segments over a year of retention and is the most common cause of slow OLAP queries on Postgres-backed stores.
+
+A safe default for ad-hoc queries is the last 24 hours; alerts and dashboards should match their actual evaluation window:
+
+```typescript
+await observability!.getMetricAggregate({
+  name: ['mastra_agent_duration_ms'],
+  aggregation: 'p95',
+  filters: {
+    timestamp: { start: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+  },
+})
+```
+
+This guidance applies to all backends (ClickHouse, Postgres v-next, DuckDB), but matters most for Postgres v-next where each missing time bound translates directly into one extra partition scan.
+
 ## Example: build a custom KPI tile
 
 The following tool returns input-token volume and estimated cost for the last hour. An agent or a dashboard can call it as `structuredContent` without re-implementing the query.

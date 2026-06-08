@@ -13,6 +13,8 @@ export type MastraCodeComposedState = MastraCodeState & MastraCodeSessionState;
 export interface MastraCodeState {
   [key: string]: unknown;
   [key: `subagentModelId_${string}`]: string | undefined;
+  currentModelId?: string;
+  modeId?: string;
   subagentModelId?: string;
   projectPath?: string;
   projectName?: string;
@@ -64,6 +66,8 @@ export interface MastraCodeState {
 }
 
 export const stateSchema = z.object({
+  currentModelId: z.string().optional(),
+  modeId: z.string().optional(),
   subagentModelId: z.string().optional(),
   projectPath: z.string().optional(),
   projectName: z.string().optional(),

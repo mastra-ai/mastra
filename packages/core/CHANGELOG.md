@@ -1,5 +1,454 @@
 # @mastra/core
 
+## 1.42.0-alpha.2
+
+### Patch Changes
+
+- Improved BM25 tokenization to support CJK (Japanese, Chinese, Korean) and other non-Latin languages. Added `TokenizeOptions.tokenizer` for plugging in custom tokenizers (e.g. n-gram, kuromoji). Workspace `bm25` config now accepts `tokenize` options for full control over how text is split into search tokens. ([#17640](https://github.com/mastra-ai/mastra/pull/17640))
+
+  **Before:** BM25 search returned no results for non-English content — CJK characters were silently stripped during tokenization.
+
+  **After:** Non-Latin characters are preserved by default. Users can also plug in a custom tokenizer:
+
+  ```ts
+  new Workspace({
+    bm25: {
+      tokenize: {
+        tokenizer: myCustomCjkTokenizer,
+      },
+    },
+  });
+  ```
+
+  Fixes #17636
+
+## 1.42.0-alpha.1
+
+### Minor Changes
+
+- Added agent and workspace tool hooks for applications that need to run logic before and after tool calls execute. Mastra Code now uses agent hooks so hook handlers run for built-in workspace tools as well as dynamic tools. ([#17637](https://github.com/mastra-ai/mastra/pull/17637))
+
+  **Example**
+
+  ```ts
+  const agent = new Agent({
+    name: 'Support Agent',
+    instructions: 'Help users.',
+    model,
+    hooks: {
+      beforeToolCall: ({ toolName, input }) => {
+        console.log(`Running ${toolName}`, input);
+      },
+      afterToolCall: ({ toolName, output, error }) => {
+        console.log(`Finished ${toolName}`, { output, error });
+      },
+    },
+  });
+
+  const workspace = new Workspace({
+    tools: {
+      hooks: {
+        beforeToolCall: ({ toolName, workspaceToolName, input }) => {
+          console.log(`Running ${toolName} from ${workspaceToolName}`, input);
+        },
+      },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Plan due notification dispatches per thread from a single due snapshot so high-priority notifications that already emitted summaries are delivered in full before lower-priority notifications or summaries can wake the same thread. `Agent.sendNotificationSignal` also accepts an array of notification inputs so related notifications can be evaluated against the same initial thread state before any delivery wakes the thread. ([#17590](https://github.com/mastra-ai/mastra/pull/17590))
+
+- Fixed medium-priority notification summaries so they wake idle agent threads when they are ready to deliver. ([#17590](https://github.com/mastra-ai/mastra/pull/17590))
+
+- Fixed browser state signals so they no longer show 'Browser is closed' before the browser is used. Added attribution for browser closes and active URL changes when the agent or user caused them. ([#17631](https://github.com/mastra-ai/mastra/pull/17631))
+
+## 1.42.0-alpha.0
+
+### Minor Changes
+
+- Added SignalProvider abstraction for building notification signal providers. Enables declarative signal wiring in Agent config with built-in subscription tracking, polling lifecycle, and webhook support. Includes WebhookSignalProvider as a proof-of-concept. ([#17577](https://github.com/mastra-ai/mastra/pull/17577))
+
+  **Writing a signal provider:**
+
+  ```ts
+  import { SignalProvider } from '@mastra/core/signals';
+  import type { SignalSubscription } from '@mastra/core/signals';
+
+  class SlackSignalProvider extends SignalProvider<'slack-signals'> {
+    readonly id = 'slack-signals' as const;
+    readonly pollInterval = 30_000; // poll every 30s
+
+    async poll(subscriptions: SignalSubscription[]) {
+      for (const sub of subscriptions) {
+        const messages = await fetchNewMessages(sub.externalResourceId);
+        if (messages.length > 0) {
+          await this.notify(
+            { source: 'slack', kind: 'new-message', summary: `${messages.length} new messages` },
+            { threadId: sub.threadId, resourceId: sub.resourceId },
+          );
+        }
+      }
+    }
+  }
+  ```
+
+  **Declarative wiring:**
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+
+  const agent = new Agent({
+    signals: [new SlackSignalProvider()],
+    // ... other config
+  });
+  ```
+
+- Add batching primitives to the PubSub abstraction. ([#16482](https://github.com/mastra-ai/mastra/pull/16482))
+
+  **New options**
+  - `SubscribeOptions.batch` (`SubscribeBatchOptions`): opt in to coalesced delivery on a per-subscriber basis. Fields: `maxSize`, `maxWaitMs`, `minIntervalMs`, `isImmediate`, `coalesce`, `maxBufferSize`, `overflow`.
+  - `EventEmitterPubSub` constructor accepts optional `EventEmitterPubSubOptions` with a `logger` for batched-delivery error diagnostics.
+
+  **Example**
+
+  ```ts
+  import { EventEmitterPubSub } from '@mastra/core/events';
+
+  const pubsub = new EventEmitterPubSub();
+
+  await pubsub.subscribe(
+    'agent-events',
+    event => {
+      // delivered in coalesced batches; the cb is still invoked once per event
+    },
+    {
+      batch: {
+        maxSize: 10, // flush once 10 events have queued
+        maxWaitMs: 500, // ...or after 500ms, whichever comes first
+      },
+    },
+  );
+  ```
+
+  **New exports**
+  - `SubscribeBatchOptions` type.
+  - `PubSub.supportsNativeBatching` — advertises whether an adapter honors `options.batch` internally.
+
+  **Behavior**
+  - `EventEmitterPubSub.supportsNativeBatching === true`. Batched subscribers receive coalesced delivery driven by an in-memory buffer governed by `maxSize` / `maxWaitMs` / `minIntervalMs` / `isImmediate` / `coalesce` / `overflow` / `maxBufferSize`.
+  - `EventEmitterPubSub.flush()` drains every batched subscriber buffer and waits for any pending nack redeliveries before resolving. Non-callback rejections surface through the configured `logger` instead of being swallowed.
+  - `CachingPubSub` is transparent to batching: it forwards `options` (including `batch`) to its inner PubSub and forwards `supportsNativeBatching` from the inner. Whether batching is honored depends entirely on the wrapped transport.
+
+  **Contract notes**
+  - `SubscribeBatchOptions.coalesce` must return a subset of its input array by reference identity. Returning freshly-constructed `Event` objects (even with matching `id`) is treated as a contract violation: the batching layer can't route `ack`/`nack` to original transport handles for manufactured events, so the entire batch is discarded and every original event is acked as dropped. If you need merged payloads, build them in the subscriber callback after delivery.
+  - `flush()` is best-effort: a successful resolution does not guarantee every subscriber callback succeeded. Per-event errors surface via the configured logger.
+
+### Patch Changes
+
+- Fixed ConsoleLogger.warn() to correctly call console.warn() instead of console.info(), ensuring warn-level logs are routed to stderr and properly classified by log backends (e.g. Datadog) ([#17623](https://github.com/mastra-ai/mastra/pull/17623))
+
+- Prevented user-created filesystem stored agents from being treated as code agents when they are not declared in the code Mastra instance. ([#17622](https://github.com/mastra-ai/mastra/pull/17622))
+
+- Fixed per-item request context being dropped for inline experiment data. When running an experiment with inline `data`, each item's `requestContext` is now passed to the agent or workflow and merged over the global request context (per-item values win on key collisions), matching the behavior of storage-backed datasets. ([#17597](https://github.com/mastra-ai/mastra/pull/17597))
+
+  ```ts
+  await dataset.startExperiment({
+    data: [{ input: { prompt: 'Hello' }, requestContext: { clinicId: 'clinic-1' } }],
+    targetType: 'agent',
+    targetId: 'support-agent',
+  });
+  // Tools can now read clinicId from requestContext during inline experiments
+  ```
+
+- Fixed thread subscribers so they can join an already-running remote stream and receive new output without waiting for the next run. ([#17635](https://github.com/mastra-ai/mastra/pull/17635))
+
+- Added OTel span instrumentation for the hardcoded 10-second rate-limit backpressure sleep, making it visible in traces as a 'rate-limit-sleep' span with remainingTokens and delayMs metadata ([#17623](https://github.com/mastra-ai/mastra/pull/17623))
+
+- Fixed message part timestamps affecting transcript ordering by ensuring only message-level timestamps advance the ordering watermark. ([#17598](https://github.com/mastra-ai/mastra/pull/17598))
+
+- Fix `Cannot get workflow run. Mastra storage is not initialized` debug log spam on agents that use memory or any input/output processors. ([#17571](https://github.com/mastra-ai/mastra/pull/17571))
+
+  #17344 fixed this for the internal `execution-workflow`, but agents with memory/processors also build an internal _processor_ workflow (`Agent.combineProcessorsIntoWorkflow`, run by `ProcessorRunner.executeWorkflowAsProcessor`) that never received the parent `Mastra` instance — so its `createRun()` → `getWorkflowRunById()` saw no storage and logged the noise on every run. The processor workflow now receives the parent `Mastra` instance and opts out of snapshot persistence (`shouldPersistSnapshot: () => false`), mirroring the execution-workflow fix. Follow-up to #17137 / #17344.
+
+## 1.41.0
+
+### Minor Changes
+
+- Workspace `sandbox` now accepts a resolver function for per-request sandboxes. ([#16048](https://github.com/mastra-ai/mastra/pull/16048))
+
+  **Before:** `sandbox: WorkspaceSandbox` (static, same sandbox for every request)
+  **After:** `sandbox: WorkspaceSandbox | (({ requestContext }) => WorkspaceSandbox)` (static or per-request)
+
+  This enables per-request sandbox routing from a single Workspace — useful for multi-tenant deployments where each user/role needs an isolated working directory or different execution permissions.
+
+  ```ts
+  const workspace = new Workspace({
+    sandbox: ({ requestContext }) => {
+      const userId = requestContext.get('user-id') as string;
+      return new LocalSandbox({ workingDirectory: `/workspaces/${userId}` });
+    },
+  });
+  ```
+
+  When using a resolver, the caller owns the returned sandbox's lifecycle — the Workspace will not call `start()` or `destroy()` on it. `mounts` throws an `INVALID_CONFIG` error with a resolver, and `lsp: true` is disabled with a warning because both require a concrete sandbox instance up front.
+
+  **Stable prompts by default**
+
+  Building workspace instructions no longer calls a sandbox resolver. Resolver-backed sandboxes contribute stable placeholder text to the agent's system message, so constructing the prompt never provisions a caller-owned sandbox and the prompt stays cache-friendly. Opt into concrete per-request instructions with `instructions.dynamicSandbox`:
+
+  ```ts
+  const workspace = new Workspace({
+    sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+    instructions: { dynamicSandbox: 'resolve' }, // or a ({ requestContext }) => string function
+  });
+  ```
+
+  **Background process continuity**
+
+  Set `sandboxCacheKey` to keep `execute_command({ background: true })`, `get_process_output`, and `kill_process` on the same sandbox across follow-up requests — continuity is keyed by a stable id rather than the `RequestContext` instance:
+
+  ```ts
+  const workspace = new Workspace({
+    sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+    sandboxCacheKey: ({ requestContext }) => requestContext.get('thread-id') as string,
+  });
+  ```
+
+  Failed sandbox resolver calls are removed from the cache so later calls can retry. Use `workspace.clearSandboxCache(cacheKey)` to drop a keyed sandbox reference when your own lifecycle code has destroyed or replaced that sandbox.
+
+  When background process tools cannot find a PID on a dynamic sandbox without `sandboxCacheKey`, the tool output now points to `sandboxCacheKey` so callers can fix continuity across follow-up requests.
+
+### Patch Changes
+
+- Added `untilIdle` option to `stream()` and `resumeStream()` methods. Pass `untilIdle: true` (or `untilIdle: { maxIdleMs: 60_000 }`) to keep the stream open across background-task continuations — same behavior as the now-deprecated `streamUntilIdle()` method. ([#17536](https://github.com/mastra-ai/mastra/pull/17536))
+
+  **Example:**
+
+  ```ts
+  const result = await agent.stream('Research solana for me', {
+    untilIdle: true,
+    memory: { thread: 't1', resource: 'u1' },
+  });
+  ```
+
+  Deprecated `streamUntilIdle()` and `resumeStreamUntilIdle()` — they still work but now delegate internally to `stream({ untilIdle: true })`.
+
+## 1.41.0-alpha.0
+
+### Minor Changes
+
+- Workspace `sandbox` now accepts a resolver function for per-request sandboxes. ([#16048](https://github.com/mastra-ai/mastra/pull/16048))
+
+  **Before:** `sandbox: WorkspaceSandbox` (static, same sandbox for every request)
+  **After:** `sandbox: WorkspaceSandbox | (({ requestContext }) => WorkspaceSandbox)` (static or per-request)
+
+  This enables per-request sandbox routing from a single Workspace — useful for multi-tenant deployments where each user/role needs an isolated working directory or different execution permissions.
+
+  ```ts
+  const workspace = new Workspace({
+    sandbox: ({ requestContext }) => {
+      const userId = requestContext.get('user-id') as string;
+      return new LocalSandbox({ workingDirectory: `/workspaces/${userId}` });
+    },
+  });
+  ```
+
+  When using a resolver, the caller owns the returned sandbox's lifecycle — the Workspace will not call `start()` or `destroy()` on it. `mounts` throws an `INVALID_CONFIG` error with a resolver, and `lsp: true` is disabled with a warning because both require a concrete sandbox instance up front.
+
+  **Stable prompts by default**
+
+  Building workspace instructions no longer calls a sandbox resolver. Resolver-backed sandboxes contribute stable placeholder text to the agent's system message, so constructing the prompt never provisions a caller-owned sandbox and the prompt stays cache-friendly. Opt into concrete per-request instructions with `instructions.dynamicSandbox`:
+
+  ```ts
+  const workspace = new Workspace({
+    sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+    instructions: { dynamicSandbox: 'resolve' }, // or a ({ requestContext }) => string function
+  });
+  ```
+
+  **Background process continuity**
+
+  Set `sandboxCacheKey` to keep `execute_command({ background: true })`, `get_process_output`, and `kill_process` on the same sandbox across follow-up requests — continuity is keyed by a stable id rather than the `RequestContext` instance:
+
+  ```ts
+  const workspace = new Workspace({
+    sandbox: ({ requestContext }) => resolveSandbox(requestContext),
+    sandboxCacheKey: ({ requestContext }) => requestContext.get('thread-id') as string,
+  });
+  ```
+
+  Failed sandbox resolver calls are removed from the cache so later calls can retry. Use `workspace.clearSandboxCache(cacheKey)` to drop a keyed sandbox reference when your own lifecycle code has destroyed or replaced that sandbox.
+
+  When background process tools cannot find a PID on a dynamic sandbox without `sandboxCacheKey`, the tool output now points to `sandboxCacheKey` so callers can fix continuity across follow-up requests.
+
+### Patch Changes
+
+- Added `untilIdle` option to `stream()` and `resumeStream()` methods. Pass `untilIdle: true` (or `untilIdle: { maxIdleMs: 60_000 }`) to keep the stream open across background-task continuations — same behavior as the now-deprecated `streamUntilIdle()` method. ([#17536](https://github.com/mastra-ai/mastra/pull/17536))
+
+  **Example:**
+
+  ```ts
+  const result = await agent.stream('Research solana for me', {
+    untilIdle: true,
+    memory: { thread: 't1', resource: 'u1' },
+  });
+  ```
+
+  Deprecated `streamUntilIdle()` and `resumeStreamUntilIdle()` — they still work but now delegate internally to `stream({ untilIdle: true })`.
+
+## 1.40.0
+
+### Minor Changes
+
+- Added support for Gateway embedding routing with `mastra/provider/model` IDs: ([#17469](https://github.com/mastra-ai/mastra/pull/17469))
+
+  ```ts
+  const embedder = new ModelRouterEmbeddingModel('mastra/__GATEWAY_OPENAI_EMBEDDING_MODEL__');
+  ```
+
+## 1.40.0-alpha.0
+
+### Minor Changes
+
+- Added support for Gateway embedding routing with `mastra/provider/model` IDs: ([#17469](https://github.com/mastra-ai/mastra/pull/17469))
+
+  ```ts
+  const embedder = new ModelRouterEmbeddingModel('mastra/__GATEWAY_OPENAI_EMBEDDING_MODEL__');
+  ```
+
+## 1.39.0
+
+### Minor Changes
+
+- Add a type-safe `MessageFactory` component to `@mastra/react` for rendering a `MastraDBMessage` with your own per-part components, and align its tripwire/task-verdict types with `@mastra/core`. ([#17514](https://github.com/mastra-ai/mastra/pull/17514))
+
+  **@mastra/react**
+
+  `MessageFactory` provides optional, fully type-safe render functions for each kind of message part. Only the renderer matching a part's type runs, and each receives correctly narrowed props; missing renderers fall back gracefully. Runtime-only `dynamic-tool` and AI SDK v5 `tool-${string}` parts are covered by a dedicated `DynamicTool` renderer, and optional role wrappers let you frame parts per message role.
+
+  ```tsx
+  import { MessageFactory } from '@mastra/react';
+
+  <MessageFactory
+    message={message}
+    Text={part => <p>{part.text}</p>}
+    ToolInvocation={part => <ToolCard name={part.toolInvocation.toolName} />}
+    DynamicTool={part => <ToolCard name={part.toolName} state={part.state} />}
+    Data={part => <DataView type={part.type} data={part.data} />}
+    roles={{ Signal: ({ children }) => <SignalFrame>{children}</SignalFrame> }}
+  />;
+  ```
+
+  It also accepts an optional `status` prop with four strongly-typed slots that render from a message's metadata while keeping part renderers pure. `Tripwire`, `Warning`, and `Error` are _replacement_ slots (rendered instead of the parts when `metadata.status` matches); `Task` is an _adjacent_ slot (rendered alongside the parts when a task-completion verdict exists). The factory only surfaces metadata to the slots and never filters it (for example, it still invokes `Task` when `suppressFeedback` is true) — the consumer decides what to render or skip. Existing behavior is unchanged when `status` is omitted.
+
+  ```tsx
+  <MessageFactory
+    message={message}
+    status={{
+      Error: ({ text }) => <ErrorNotice>{text}</ErrorNotice>,
+      Task: ({ passed, suppressFeedback }) => (suppressFeedback ? null : <TaskVerdict passed={passed} />),
+    }}
+    {...renderers}
+  />
+  ```
+
+  The narrowed part types used by the renderers are exported so consumers can type their own components: `TextPart`, `ReasoningPart`, `FilePart`, `StepStartPart`, `ToolInvocationPart`, `SourceDocumentPart`, and `SourceUrlPart`, plus `MessageFactoryPart` (the exact union of part shapes `MessageFactory` can dispatch — the typed accumulator parts plus the runtime-only `dynamic-tool` / `tool-${string}` parts) for typing part arrays precisely instead of `unknown[]`.
+
+  `MastraDBMessageMetadata.isTaskCompleteResult` is now typed as the `{ passed?, suppressFeedback? }` completion-verdict shape (matching `completionResult`) instead of `boolean`, so the `Task` slot resolves verdicts from either field without a cast.
+
+  `TripwireMetadata` is now an alias of core's `TripwirePayload`, and the message accumulator persists the canonical shape. Two behavioral changes to persisted `metadata.tripwire`:
+  - The tripwire `reason` is now persisted as `tripwire.reason` (previously it was only stored in the message text part).
+  - The processor metadata field was renamed from `tripwire.tripwirePayload` to `tripwire.metadata` to match the canonical type.
+
+  The `MessageFactory` `Tripwire` slot receives `reason` through `props.tripwire`.
+
+  **@mastra/core**
+
+  Exported the canonical `IsTaskCompletePayload` and `TripwirePayload` types from `@mastra/core/stream` so consumers can type their own task/completion and tripwire UI against them instead of redeclaring the shapes.
+
+  ```ts
+  import type { IsTaskCompletePayload, TripwirePayload } from '@mastra/core/stream';
+  ```
+
+- Add experimental record-first notification signals with thread-scoped inbox storage, `agent.sendNotificationSignal()`, priority-aware notification delivery policies, due-notification dispatch, summary rollups for low-priority notifications, a structured `metadata.notification` signal contract, and a flexible notification inbox tool. ([#17241](https://github.com/mastra-ai/mastra/pull/17241))
+
+  ```ts
+  await agent.sendNotificationSignal(
+    {
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed on main',
+    },
+    { resourceId: 'user-1', threadId: 'thread-1' },
+  );
+  ```
+
+  Agents can then use the `notification_inbox` tool to list, read, dismiss, or archive persisted inbox records.
+
+- Add processor state signals for memory-backed thread context. ([#17240](https://github.com/mastra-ai/mastra/pull/17240))
+
+  Processors can now publish named state lanes with `computeStateSignal()`, and external producers can update the same lanes with `agent.sendStateSignal()`. The runtime tracks each lane by `id`, `cacheKey`, and `mode`, so unchanged state is deduped and snapshot/delta history can be replayed efficiently.
+
+  Browser context now uses this state-signal path, so browser state is represented as thread state instead of being injected as ad hoc context.
+
+  ```ts
+  // External producer: push browser state outside a model run.
+  await agent.sendStateSignal(
+    {
+      id: 'browser',
+      cacheKey: 'tab-42:https://app.example.com/dashboard',
+      mode: 'snapshot',
+      contents: 'Browser is open on https://app.example.com/dashboard',
+      value: { url: 'https://app.example.com/dashboard', title: 'Dashboard' },
+    },
+    { resourceId, threadId, ifIdle: { behavior: 'persist' } },
+  );
+
+  // Processor-owned state: compute state before the model request.
+  const browserProcessor = {
+    id: 'browser-state',
+    stateId: 'browser',
+    async computeStateSignal({ lastSnapshot }) {
+      const nextBrowserState = await getBrowserState();
+
+      return {
+        cacheKey: nextBrowserState.url,
+        mode: 'snapshot',
+        contents: `Browser is open on ${nextBrowserState.url}`,
+        value: nextBrowserState,
+      };
+    },
+  };
+  ```
+
+### Patch Changes
+
+- Fixed CostGuardProcessor thread and resource scope resolution when running without auth middleware (e.g. Studio dev mode). The processor now falls back to the MastraMemory context on RequestContext to resolve threadId and resourceId, matching the pattern used by other processor helpers. ([#17522](https://github.com/mastra-ai/mastra/pull/17522))
+
+- Removed Hono from @mastra/core and auth package runtime dependencies. Auth providers now receive framework-agnostic request types that support standard Request objects and Hono-compatible request shapes. MCP and deployer avoid relying on core-bundled Hono context types at package boundaries. ([#17410](https://github.com/mastra-ai/mastra/pull/17410))
+
+- Improved notification delivery targeting and inbox search so notification records can be found and delivered to the intended thread. ([#17447](https://github.com/mastra-ai/mastra/pull/17447))
+
+- Fixed subscribed client tools so browser-executed tool results continue through the existing thread subscription instead of opening and canceling a second stream. This prevents closed-stream errors in apps like Agent Builder when multiple client tools run during one response. ([#17532](https://github.com/mastra-ai/mastra/pull/17532))
+
+- Added experimental `workingMemory.useStateSignals` opt-in. When set to `true`, working memory is delivered to the model as a `state` signal (via the new state-signals API) instead of being folded into the system message. `Memory` auto-attaches a `WorkingMemoryStateProcessor` that emits a signal with `stateId: 'working-memory'` and dedups via `cacheKey`. Subsequent turns emit unified-diff deltas against the prior snapshot when the diff is smaller than the snapshot (markdown mode only); schema mode and the fallback path always emit a full snapshot. The working-memory tool is registered as `setWorkingMemory` instead of `updateWorkingMemory` under this opt-in so legacy persistence/prompt strip filters naturally bypass it. The default (`false`) preserves the existing system-message behavior. `useStateSignals` is not supported with template working memory `version: 'vnext'`. ([#17497](https://github.com/mastra-ai/mastra/pull/17497))
+
+  ```ts
+  import { Memory } from '@mastra/memory';
+
+  const memory = new Memory({
+    options: {
+      workingMemory: {
+        enabled: true,
+        useStateSignals: true,
+      },
+    },
+  });
+  ```
+
 ## 1.39.0-alpha.0
 
 ### Minor Changes

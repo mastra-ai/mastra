@@ -80,20 +80,36 @@ function stripUnusedFields<T extends Record<string, unknown>>(obj: T): T {
   return result as T;
 }
 
+function isAgentNotFoundError(error: unknown, entityId: string): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const maybeError = error as { id?: unknown; message?: unknown; details?: { status?: unknown; agentId?: unknown } };
+  return (
+    maybeError.id === 'MASTRA_GET_AGENT_BY_AGENT_ID_NOT_FOUND' ||
+    (maybeError.details?.status === 404 && maybeError.details?.agentId === entityId) ||
+    maybeError.message === `Agent with id ${entityId} not found`
+  );
+}
+
 export class FilesystemAgentsStorage extends AgentsStorage {
   private helpers: FilesystemVersionedHelpers<StorageAgentType, AgentVersion>;
   private storageMastra?: StorageMastraRef;
 
   constructor({ db }: { db: FilesystemDB }) {
     super();
-    const isCodeAgent = (entityId: string): boolean => {
-      const agent = this.storageMastra?.getAgentById?.(entityId);
-      return agent?.source === 'code';
+    const getCodeAgent = (entityId: string) => {
+      try {
+        const agent = this.storageMastra?.getAgentById?.(entityId);
+        return agent?.source === 'code' ? agent : undefined;
+      } catch (error) {
+        if (isAgentNotFoundError(error, entityId)) {
+          return undefined;
+        }
+        throw error;
+      }
     };
-    const editorConfigFor = (entityId: string): unknown => {
-      const agent = this.storageMastra?.getAgentById?.(entityId);
-      return agent?.__getEditorConfig?.();
-    };
+    const isCodeAgent = (entityId: string): boolean => Boolean(getCodeAgent(entityId));
+    const editorConfigFor = (entityId: string): unknown => getCodeAgent(entityId)?.__getEditorConfig?.();
     this.helpers = new FilesystemVersionedHelpers({
       db,
       entitiesFile: 'agents.json',
