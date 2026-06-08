@@ -4,8 +4,8 @@
  * Run with: npx tsx src/test-model-swapper.ts
  *
  * This script demonstrates:
- * 1. Simple weather requests route to openai/gpt-5-mini
- * 2. Complex search/synthesis requests route to openai/gpt-5.5
+ * 1. Simple weather requests use the default openai/gpt-5-mini model
+ * 2. Research and planning requests route to openai/gpt-5.5
  *
  * The agent logs the selected model from its ModelSwapperProcessor before each LLM call.
  */
@@ -25,9 +25,9 @@ async function main() {
   console.log('Agent response:', simpleResponse.text);
   console.log('Tools used:', toolNames(simpleResponse));
 
-  console.log('\n--- Complex request: should use openai/gpt-5.5 ---\n');
+  console.log('\n--- Research/planning request: should use openai/gpt-5.5 ---\n');
   const complexResponse = await modelSwapperTestAgent.generate(
-    'Research whether Austin or Denver is better for a remote engineering team offsite, compare tradeoffs, and recommend one.',
+    'Research whether Austin or Denver is better for a remote engineering team offsite, compare tradeoffs, create a plan, and recommend one.',
   );
   console.log('Agent response:', complexResponse.text);
   console.log('Tools used:', toolNames(complexResponse));

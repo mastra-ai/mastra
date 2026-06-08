@@ -7,9 +7,11 @@ packages:
 
 # ModelSwapperProcessor
 
-The `ModelSwapperProcessor` is an **input processor** that classifies the latest user request and swaps the agent model before the first language model call. Use it to route short or routine requests to lower-cost models while preserving stronger models for requests that need more reasoning.
+The `ModelSwapperProcessor` is an **input processor** that classifies the latest user request and swaps the agent model before the first language model call. Use it for explicit, opt-in routing when a known share of requests can use a lower-cost model while stronger models handle requests that need more reasoning.
 
 The processor runs classification once in `processInput()` and applies the selected model in `processInputStep()`. Messages are not rewritten.
+
+This processor is best for advanced cost and latency tuning. It adds one classifier call per request, and model switching can reduce prompt cache efficiency because cache entries are usually scoped by model.
 
 ## Usage example
 
@@ -156,6 +158,22 @@ type ModelSwapperResult = {
 
 `selectedModel` is set when a valid rule number matches, or when `defaultModel` is configured for unmatched requests.
 
+## When to use it
+
+Use `ModelSwapperProcessor` when:
+
+- You have measured traffic where a meaningful share of requests can use a lower-cost model.
+- You want per-request routing without changing the user's messages.
+- You can accept one extra classifier call before the first model call.
+- You can test quality for each routed model.
+
+Avoid it when:
+
+- Prompt caching is a major part of your cost strategy. Splitting traffic across models can reduce cache hit rates.
+- Users expect every request to use the agent's configured model.
+- Tool-calling, formatting, or safety behavior must be identical across requests.
+- The cost of the classifier call is higher than the expected routing savings.
+
 ## Behavior notes
 
 - Classification uses the latest message by default. Set `lastMessageOnly: false` to classify all selected input messages.
@@ -163,3 +181,4 @@ type ModelSwapperResult = {
 - If the classifier returns `0` and no `defaultModel` is configured, the processor returns `{}` from `processInputStep()` and the agent's configured model stays unchanged.
 - If the classifier fails, the processor fails open and leaves the model unchanged.
 - Message content is passed through unchanged.
+- The selected model can differ from the model configured on the agent. Use traces or request metadata when users need to audit which model handled a request.

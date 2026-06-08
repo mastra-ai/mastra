@@ -437,6 +437,8 @@ See the [`ProviderHistoryCompat` reference](/reference/processors/provider-histo
 
 Routes each request to a model based on the latest user message. The processor uses a lightweight classifier model in `processInput()`, stores the matched route in processor state, and applies the selected model during the first `processInputStep()`.
 
+Use this processor only when you want explicit, opt-in model routing for a known traffic shape. It can reduce direct model cost when many requests can use a lower-cost model, but it adds a classifier call and can reduce prompt cache efficiency because cache entries are usually scoped by model.
+
 ```typescript {8-29}
 import { Agent } from '@mastra/core/agent'
 import { ModelSwapperProcessor } from '@mastra/core/processors'
@@ -465,6 +467,8 @@ export const supportAgent = new Agent({
 ```
 
 Use `defaultModel` when unmatched requests should still use a known model. Omit it to leave the agent's configured model unchanged when no rule matches.
+
+Before using this processor in production, compare it against a single-model baseline with prompt caching enabled. If repeated prompts already get strong cache hit rates on one model, splitting requests across multiple models can offset the direct savings.
 
 See the [`ModelSwapperProcessor` reference](/reference/processors/model-swapper) for routing rules and behavior notes.
 
