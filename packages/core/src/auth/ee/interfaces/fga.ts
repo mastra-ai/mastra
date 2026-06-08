@@ -29,7 +29,11 @@ export interface FGACheckContext {
    * Optional request context for providers that need additional request-scoped
    * data to derive the authorization resource identifier.
    */
-  requestContext?: RequestContext;
+  requestContext?: RequestContext<any>;
+  /**
+   * Optional provider-specific metadata about the attempted action.
+   */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -38,11 +42,65 @@ export interface FGACheckContext {
 export interface FGACheckParams {
   /** The resource being accessed */
   resource: { type: string; id: string };
-  /** The permission being checked */
-  permission: MastraFGAPermissionInput;
+  /**
+   * The permission(s) being checked.
+   * When an array is provided, the user needs ANY ONE of the listed permissions
+   * (the check passes if any single permission resolves to allow).
+   */
+  permission: MastraFGAPermissionInput | MastraFGAPermissionInput[];
   /** Optional provider-specific context for resource resolution */
   context?: FGACheckContext;
 }
+
+/**
+ * Route-level FGA metadata.
+ */
+export interface FGARouteConfig {
+  /** Resource type slug to authorize against, e.g. `agent`, `workflow`, or `thread`. */
+  resourceType: string;
+  /** Path/body/query parameter name that contains the resource ID. */
+  resourceIdParam?: string;
+  /** Static or dynamic resource ID resolver. */
+  resourceId?:
+    | string
+    | ((params: Record<string, unknown>, context: { requestContext?: RequestContext<any> }) => string | undefined);
+  /**
+   * Permission(s) to check for this route. Falls back to the route permission when omitted.
+   * When an array is provided, the user needs ANY ONE of the listed permissions.
+   */
+  permission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
+}
+
+/**
+ * Minimal route information exposed to global FGA route resolvers.
+ */
+export interface FGARouteInfo {
+  path: string;
+  method: string;
+  requiresAuth?: boolean;
+  /**
+   * Permission(s) required by this route.
+   * When an array is provided, the user needs ANY ONE of the listed permissions.
+   */
+  requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
+  fga?: FGARouteConfig;
+}
+
+/**
+ * Context passed to global FGA route resolvers.
+ */
+export interface FGARouteResolverContext {
+  route: FGARouteInfo;
+  params: Record<string, unknown>;
+  requestContext?: RequestContext<any>;
+}
+
+/**
+ * Resolves route-level FGA metadata without mutating each route registration.
+ */
+export type FGARouteResolver = (
+  context: FGARouteResolverContext,
+) => FGARouteConfig | null | undefined | Promise<FGARouteConfig | null | undefined>;
 
 /**
  * An authorization resource in the FGA system.
@@ -191,9 +249,9 @@ export interface FGAListResourcesOptions {
  *
  * const fga = new MastraFGAWorkos({
  *   resourceMapping: {
- *     agents: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
- *     workflows: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
- *     memory: { fgaResourceType: 'user', deriveId: (ctx) => ctx.user.userId },
+ *     agent: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+ *     workflow: { fgaResourceType: 'team', deriveId: (ctx) => ctx.user.teamId },
+ *     thread: { fgaResourceType: 'user', deriveId: (ctx) => ctx.resourceId ?? ctx.user.userId },
  *   },
  *   permissionMapping: {
  *     [MastraFGAPermissions.AGENTS_READ]: 'read',
@@ -212,6 +270,35 @@ export interface FGAListResourcesOptions {
  * ```
  */
 export interface IFGAProvider<TUser = unknown> {
+  /**
+   * When true, protected routes without route-level FGA metadata or resolver
+   * output are denied instead of being allowed through.
+   *
+   * @default false
+   */
+  requireForProtectedRoutes?: boolean;
+
+  /**
+   * Audits protected routes that do not have built-in FGA metadata.
+   * Use `true` or `'warn'` to log a startup warning, `'error'` to fail startup,
+   * or `false` to disable the audit.
+   *
+   * @default false
+   */
+  auditProtectedRoutes?: boolean | 'warn' | 'error';
+
+  /**
+   * Global route FGA resolver. This can derive resource type, resource ID, and
+   * permission from the route, parsed params, and request context.
+   */
+  resolveRouteFGA?: FGARouteResolver;
+
+  /**
+   * Optional startup validation for provider-specific permission mappings.
+   * Providers can throw when a permission Mastra may emit is not mapped.
+   */
+  validatePermissions?: (permissions: MastraFGAPermissionInput[]) => void | Promise<void>;
+
   /**
    * Check if a user has a specific permission on a resource.
    *

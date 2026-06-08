@@ -1,16 +1,18 @@
 import type { FeedbackRecord, ListFeedbackResponse } from '@mastra/core/storage';
-import { EntryList, EntryListSkeleton } from '@mastra/playground-ui';
-import { isToday, format } from 'date-fns';
+import { DataList, DataListSkeleton } from '@mastra/playground-ui';
+import { format } from 'date-fns';
 import { useState } from 'react';
 import { FeedbackDialog } from './feedback-dialog';
 
 const feedbackListColumns = [
-  { name: 'source', label: 'Source', size: '1fr' },
-  { name: 'date', label: 'Date', size: '0.8fr' },
-  { name: 'time', label: 'Time', size: '0.8fr' },
-  { name: 'value', label: 'Value', size: '0.6fr' },
-  { name: 'comment', label: 'Comment', size: '2fr' },
-];
+  { label: 'Source', size: '1fr' },
+  { label: 'Date', size: '0.8fr' },
+  { label: 'Time', size: '0.8fr' },
+  { label: 'Value', size: '0.6fr' },
+  { label: 'Comment', size: '2fr' },
+] as const;
+
+const gridColumns = feedbackListColumns.map(c => c.size).join(' ');
 
 type SpanFeedbackListProps = {
   feedbackData?: ListFeedbackResponse | null;
@@ -42,76 +44,61 @@ export function SpanFeedbackList({ feedbackData, isLoadingFeedbackData, onPageCh
   const [dialogIsOpen, setDialogIsOpen] = useState(false);
   const [selectedFeedback, setSelectedFeedback] = useState<FeedbackRecord | undefined>();
 
+  if (isLoadingFeedbackData) {
+    return <DataListSkeleton columns={gridColumns} />;
+  }
+
   const feedbackItems = feedbackData?.feedback ?? [];
+  const currentPage = feedbackData?.pagination?.page ?? 0;
 
   const handleOnFeedback = (index: number) => {
     setSelectedFeedback(feedbackItems[index]);
     setDialogIsOpen(true);
   };
 
-  if (isLoadingFeedbackData) {
-    return <EntryListSkeleton columns={feedbackListColumns} />;
-  }
-
   const selectedIndex = selectedFeedback ? feedbackItems.indexOf(selectedFeedback) : -1;
-
   const toNext =
     selectedIndex >= 0 && selectedIndex < feedbackItems.length - 1
       ? () => setSelectedFeedback(feedbackItems[selectedIndex + 1])
       : undefined;
-
   const toPrevious = selectedIndex > 0 ? () => setSelectedFeedback(feedbackItems[selectedIndex - 1]) : undefined;
 
   return (
     <>
-      <EntryList>
-        <EntryList.Trim>
-          <EntryList.Header columns={feedbackListColumns} />
-          {feedbackItems.length > 0 ? (
-            <EntryList.Entries>
-              {feedbackItems.map((fb, index) => {
-                const ts = new Date(fb.timestamp);
-                const isTodayDate = isToday(ts);
+      <DataList columns={gridColumns}>
+        <DataList.Top>
+          {feedbackListColumns.map(col => (
+            <DataList.TopCell key={col.label}>{col.label}</DataList.TopCell>
+          ))}
+        </DataList.Top>
 
-                const entry = {
-                  id: `${fb.traceId}-${index}`,
-                  source: fb.feedbackUserId || fb.feedbackSource || 'unknown',
-                  date: isTodayDate ? 'Today' : format(ts, 'MMM dd'),
-                  time: format(ts, 'h:mm:ss aaa'),
-                  value: formatValue(fb),
-                  comment: formatComment(fb),
-                };
+        {feedbackItems.length === 0 ? (
+          <DataList.NoMatch message="No feedback found" />
+        ) : (
+          feedbackItems.map((fb, index) => {
+            const ts = new Date(fb.timestamp);
+            const source = fb.feedbackUserId || fb.feedbackSource || 'unknown';
+            return (
+              <DataList.RowButton key={`${fb.traceId}-${index}`} onClick={() => handleOnFeedback(index)}>
+                <DataList.Cell height="compact">{source}</DataList.Cell>
+                <DataList.DateCell timestamp={ts} />
+                <DataList.Cell height="compact">{format(ts, 'h:mm:ss aaa')}</DataList.Cell>
+                <DataList.Cell height="compact">{formatValue(fb)}</DataList.Cell>
+                <DataList.Cell height="compact">{formatComment(fb)}</DataList.Cell>
+              </DataList.RowButton>
+            );
+          })
+        )}
 
-                return (
-                  <EntryList.Entry
-                    key={entry.id}
-                    columns={feedbackListColumns}
-                    onClick={() => handleOnFeedback(index)}
-                    entry={entry}
-                  >
-                    {feedbackListColumns.map(col => (
-                      <EntryList.EntryText key={`col-${col.name}`}>
-                        {String(entry[col.name as keyof typeof entry] ?? '')}
-                      </EntryList.EntryText>
-                    ))}
-                  </EntryList.Entry>
-                );
-              })}
-            </EntryList.Entries>
-          ) : (
-            <EntryList.Message message="No feedback found" type="info" />
-          )}
-        </EntryList.Trim>
-        <EntryList.Pagination
-          currentPage={feedbackData?.pagination?.page || 0}
+        <DataList.Pagination
+          currentPage={currentPage}
           hasMore={feedbackData?.pagination?.hasMore}
-          onNextPage={() => onPageChange?.((feedbackData?.pagination?.page || 0) + 1)}
+          onNextPage={() => onPageChange?.(currentPage + 1)}
           onPrevPage={() => {
-            const currentPage = feedbackData?.pagination?.page || 0;
             if (currentPage > 0) onPageChange?.(currentPage - 1);
           }}
         />
-      </EntryList>
+      </DataList>
       <FeedbackDialog
         feedback={selectedFeedback}
         isOpen={dialogIsOpen}

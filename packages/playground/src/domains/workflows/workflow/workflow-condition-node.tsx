@@ -72,7 +72,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
       >
         <Collapsible
           open={!isCollapsible ? true : open}
-          onOpenChange={_open => {
+          onOpenChange={(_open: boolean) => {
             if (isCollapsible) {
               setOpen(_open);
             }

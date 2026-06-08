@@ -82,7 +82,7 @@ const workspace = new Workspace({
 
 export const myAgent = new Agent({
   id: 'my-agent',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   workspace,
 })
 ```
@@ -182,6 +182,23 @@ const workspace = new Workspace({
 
 One workspace instance serves all requests. The resolver runs at tool execution time, so each request gets its own filesystem. See [dynamic filesystem](/docs/workspace/filesystem#dynamic-filesystem) for details.
 
+### Dynamic sandbox (per-request)
+
+Pass a resolver function to `sandbox` to return a different sandbox per request. This is useful for multi-tenant deployments where each user or role needs an isolated working directory or different execution permissions.
+
+```typescript
+const workspace = new Workspace({
+  sandbox: ({ requestContext }) => {
+    const userId = requestContext.get('user-id') as string
+    return new LocalSandbox({
+      workingDirectory: `/workspaces/${userId}`,
+    })
+  },
+})
+```
+
+The resolver is incompatible with `mounts` and `lsp: true`, since both require a concrete sandbox instance at construction time. See [dynamic sandbox](/docs/workspace/sandbox#dynamic-sandbox) for details.
+
 ### Which pattern should I use?
 
 | Scenario | Pattern |
@@ -192,6 +209,7 @@ One workspace instance serves all requests. The resolver runs at tool execution 
 | Agent reads/writes files, no command execution needed | `filesystem` only |
 | Agent runs commands, no file tools needed | `sandbox` only |
 | Multi-role or multi-tenant agent with per-request storage | `filesystem` with resolver function |
+| Multi-tenant agent with per-request execution scope | `sandbox` with resolver function |
 
 ## Tool configuration
 

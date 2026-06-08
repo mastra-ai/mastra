@@ -3,7 +3,14 @@ import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
 import type { PublicSchema, StandardSchemaWithJSON, InferPublicSchema } from '../schema';
 import type { SuspendOptions } from '../workflows';
-import type { McpMetadata, MCPToolProperties, ToolAction, ToolExecutionContext } from './types';
+import type {
+  McpMetadata,
+  MCPToolProperties,
+  NeedsApprovalFn,
+  ToolAction,
+  ToolExecutionContext,
+  ToolPayloadTransform,
+} from './types';
 import { validateToolInput, validateToolOutput, validateToolSuspendData, validateRequestContext } from './validation';
 
 /**
@@ -138,6 +145,16 @@ export class Tool<
   >['requireApproval'];
 
   /**
+   * Runtime-resolved per-tool approval predicate, evaluated per call.
+   *
+   * This is set automatically when a tool's `requireApproval` is a function, or by the
+   * MCP client when wrapping a server-level `requireToolApproval` function — not something
+   * you normally set yourself (prefer the `requireApproval` option). When present it is the
+   * authoritative per-tool approval decision and is always evaluated by the agent runtime.
+   */
+  needsApprovalFn?: NeedsApprovalFn;
+
+  /**
    * Enables strict tool input generation for providers that support it.
    */
   strict?: boolean;
@@ -161,6 +178,11 @@ export class Tool<
    * The raw result is still available for application logic; only the model sees the transformed version.
    */
   toModelOutput?: (output: TSchemaOut) => unknown;
+
+  /**
+   * Optional target-aware transform for display and transcript payloads.
+   */
+  transform?: ToolPayloadTransform<TSchemaIn, TSchemaOut>;
 
   /**
    * Optional MCP-specific properties including annotations and metadata.
@@ -258,6 +280,7 @@ export class Tool<
     this.strict = opts.strict;
     this.providerOptions = opts.providerOptions;
     this.toModelOutput = opts.toModelOutput;
+    this.transform = opts.transform;
     this.inputExamples = opts.inputExamples;
     this.mcp = opts.mcp;
     this.mcpMetadata = opts.mcpMetadata;

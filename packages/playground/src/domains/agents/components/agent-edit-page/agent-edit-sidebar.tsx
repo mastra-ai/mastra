@@ -16,7 +16,7 @@ import {
   ToolsIcon,
   VariablesIcon,
 } from '@mastra/playground-ui';
-import type { JsonSchema } from '@mastra/playground-ui';
+import type { JsonSchema, SchemaField } from '@mastra/playground-ui';
 import { Check, PlusIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
 import type { RefObject } from 'react';
@@ -26,7 +26,6 @@ import type { UseFormReturn } from 'react-hook-form';
 import { ToolsSection, WorkflowsSection, AgentsSection, ScorersSection, MemorySection } from './sections';
 import type { AgentFormValues } from './utils/form-validation';
 import { SectionHeader } from '@/domains/cms';
-import type { SchemaField } from '@/domains/datasets/components/schema-settings/schema-field';
 import { LLMProviders, LLMModels } from '@/domains/llm';
 
 function RecursiveFieldRenderer({

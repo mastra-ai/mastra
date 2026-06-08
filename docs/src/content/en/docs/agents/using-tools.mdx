@@ -66,7 +66,7 @@ export const weatherAgent = new Agent({
   instructions: `
     You are a helpful weather assistant.
     Use the weatherTool to fetch current weather data.`,
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   tools: { weatherTool },
 })
 ```
@@ -161,7 +161,7 @@ export const weatherAgent = new Agent({
     You are a helpful weather assistant.
     Use the weatherTool to fetch current weather data.
     Use the hazardsTool to provide information about potential weather hazards.`,
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   tools: { weatherTool, hazardsTool },
 })
 ```
@@ -178,14 +178,14 @@ const writer = new Agent({
   name: 'Writer',
   description: 'Drafts and edits written content',
   instructions: 'You are a skilled writer.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 export const supervisor = new Agent({
   id: 'supervisor',
   name: 'Supervisor',
   instructions: 'Coordinate the writer to produce content.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   // highlight-next-line
   agents: { writer },
 })
@@ -203,7 +203,7 @@ export const researchAgent = new Agent({
   id: 'research-agent',
   name: 'Research Agent',
   instructions: 'You are a research assistant.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   // highlight-next-line
   workflows: { researchWorkflow },
 })
@@ -241,6 +241,14 @@ export const weatherTool = createTool({
   },
 })
 ```
+
+## Transform tool payloads for UI and transcripts
+
+Use `transform` when a tool returns raw data your application needs, but browser-facing streams or user-visible transcript messages should receive a smaller or safer shape. `transform` is separate from `toModelOutput`: `toModelOutput` shapes the payload sent back to the model, while `transform` shapes tool input, output, errors, approval payloads, and suspension payloads for `display` and `transcript` targets.
+
+If a transform is configured and it fails, Mastra does not fall back to the raw payload for display or transcript targets. Input deltas are suppressed when no safe `inputDelta` transform is available.
+
+See the [`createTool()` reference](/reference/tools/create-tool#example-with-transform) for a `transform` example. For shared rules across several tools, configure the agent-level `transform` policy in the [`Agent` constructor](/reference/agents/agent#constructor-parameters).
 
 ## Control tool selection
 

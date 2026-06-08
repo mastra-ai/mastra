@@ -11,9 +11,10 @@ import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import ReactCodeMirror from '@uiw/react-codemirror';
 import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon, XIcon } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
-import { ButtonWithTooltip } from '@/ds/components/Button';
+import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { CopyButton } from '@/ds/components/CopyButton';
+import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
 import {
   Dialog,
   DialogClose,
@@ -244,15 +245,7 @@ export function DataCodeSection({
   return (
     <div className={cn('flex flex-col gap-2', className)}>
       <div className="flex items-center justify-between">
-        <div
-          className={cn(
-            'flex items-center gap-1.5 text-ui-sm uppercase tracking-widest text-neutral2',
-            '[&>svg]:size-3.5',
-          )}
-        >
-          {icon}
-          {title}
-        </div>
+        <DataPanelSectionHeading icon={icon}>{title}</DataPanelSectionHeading>
         <div className="flex items-center gap-2">
           {!usePlainTextView && (
             <SearchFieldBlock
@@ -271,23 +264,18 @@ export function DataCodeSection({
           <ButtonsGroup>
             <CopyButton content={codeStr || 'No content'} size="sm" />
             {hasMultilineText && (
-              <ButtonWithTooltip
+              <Button
                 size="sm"
                 aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
-                tooltipContent={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
+                tooltip={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
                 onClick={() => setShowAsMultilineText(v => !v)}
               >
                 {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
-              </ButtonWithTooltip>
+              </Button>
             )}
-            <ButtonWithTooltip
-              size="sm"
-              aria-label="Expand"
-              tooltipContent="Expand"
-              onClick={() => setExpandedOpen(true)}
-            >
+            <Button size="sm" aria-label="Expand" tooltip="Expand" onClick={() => setExpandedOpen(true)}>
               <ExpandIcon />
-            </ButtonWithTooltip>
+            </Button>
           </ButtonsGroup>
         </div>
       </div>
@@ -336,19 +324,19 @@ export function DataCodeSection({
               <ButtonsGroup>
                 <CopyButton content={codeStr || 'No content'} size="sm" />
                 {hasMultilineText && (
-                  <ButtonWithTooltip
+                  <Button
                     size="sm"
                     aria-label={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
-                    tooltipContent={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
+                    tooltip={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
                     onClick={() => setExpandedMultiline(v => !v)}
                   >
                     {expandedMultiline ? <AlignLeftIcon /> : <AlignJustifyIcon />}
-                  </ButtonWithTooltip>
+                  </Button>
                 )}
                 <DialogClose asChild>
-                  <ButtonWithTooltip size="sm" aria-label="Close" tooltipContent="Close">
+                  <Button size="sm" aria-label="Close" tooltip="Close">
                     <XIcon />
-                  </ButtonWithTooltip>
+                  </Button>
                 </DialogClose>
               </ButtonsGroup>
             </div>

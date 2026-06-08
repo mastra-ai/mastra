@@ -18,7 +18,9 @@ import type {
 import type { IRBACProvider, IFGAProvider, EEUser } from '@mastra/core/auth/ee';
 import type { MastraAuthProvider } from '@mastra/core/server';
 
+import { z } from 'zod/v4';
 import { supportsSessionRefresh } from '../auth/helpers';
+import { MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   capabilitiesResponseSchema,
@@ -28,8 +30,9 @@ import {
   credentialsSignInBodySchema,
   credentialsSignUpBodySchema,
   refreshResponseSchema,
+  permissionPatternsResponseSchema,
 } from '../schemas/auth';
-import { createPublicRoute } from '../server-adapter/routes/route-builder';
+import { createPublicRoute, createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
 type BuildCapabilitiesFn = (
@@ -50,6 +53,21 @@ function loadBuildCapabilities(): Promise<BuildCapabilitiesFn | undefined> {
       });
   }
   return _buildCapabilitiesPromise;
+}
+
+let _permissionPatternsPromise: Promise<Record<string, unknown> | undefined> | undefined;
+function loadPermissionPatterns(): Promise<Record<string, unknown> | undefined> {
+  if (!_permissionPatternsPromise) {
+    _permissionPatternsPromise = import('@mastra/core/auth/ee')
+      .then(m => m.PERMISSION_PATTERNS as Record<string, unknown>)
+      .catch(() => {
+        console.error(
+          '[@mastra/server] EE auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+        );
+        return undefined;
+      });
+  }
+  return _permissionPatternsPromise;
 }
 
 /**
@@ -122,7 +140,7 @@ function getFGAProvider(mastra: any): IFGAProvider<EEUser> | undefined {
  * Type guard to check if auth provider implements an interface.
  */
 function implementsInterface<T>(auth: unknown, method: keyof T): auth is T {
-  return auth !== null && typeof auth === 'object' && method in auth;
+  return auth !== null && typeof auth === 'object' && typeof (auth as any)[method] === 'function';
 }
 
 // ============================================================================
@@ -683,6 +701,69 @@ export const POST_CREDENTIALS_SIGN_UP_ROUTE = createPublicRoute({
 });
 
 // ============================================================================
+// GET /auth/roles/:roleId/permissions
+// ============================================================================
+
+const rolePermissionsPathSchema = z.object({ roleId: z.string() });
+const rolePermissionsResponseSchema = z.object({ roleId: z.string(), permissions: z.array(z.string()) });
+
+export const GET_ROLE_PERMISSIONS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/roles/:roleId/permissions',
+  requiresAuth: true,
+  responseType: 'json',
+  pathParamSchema: rolePermissionsPathSchema,
+  responseSchema: rolePermissionsResponseSchema,
+  summary: 'Get permissions for a role',
+  description:
+    'Returns the resolved permissions for a specific role. Only accessible by admin users. Used by the "View as role" feature.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    try {
+      const { mastra, requestContext, roleId } = ctx as any;
+
+      // Check that the caller is an admin
+      const callerPermissions: string[] = requestContext?.get(MASTRA_USER_PERMISSIONS_KEY) ?? [];
+      const isAdmin = callerPermissions.some((p: string) => p === '*' || p === '*:*');
+      if (!isAdmin) {
+        throw new HTTPException(403, { message: 'Admin access required' });
+      }
+
+      const rbac = getRBACProvider(mastra);
+      if (!rbac?.getPermissionsForRole) {
+        throw new HTTPException(404, { message: 'RBAC provider does not support role permission resolution' });
+      }
+
+      const permissions = await rbac.getPermissionsForRole(roleId);
+      return { roleId, permissions };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      return handleError(error, 'Error getting role permissions');
+    }
+  },
+});
+
+// ============================================================================
+// GET /auth/permission-patterns
+// ============================================================================
+
+export const GET_PERMISSION_PATTERNS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/permission-patterns',
+  requiresAuth: true,
+  responseType: 'json',
+  responseSchema: permissionPatternsResponseSchema,
+  summary: 'List valid permission patterns',
+  description:
+    'Returns the authoritative list of valid permission-pattern strings. Used by Studio to validate the route→permission literals it ships and to gate the sidebar.',
+  tags: ['Auth'],
+  handler: async () => {
+    const patterns = await loadPermissionPatterns();
+    return { patterns: Object.keys(patterns ?? {}) };
+  },
+});
+
+// ============================================================================
 // Export all auth routes
 // ============================================================================
 
@@ -695,4 +776,6 @@ export const AUTH_ROUTES = [
   POST_REFRESH_ROUTE,
   POST_CREDENTIALS_SIGN_IN_ROUTE,
   POST_CREDENTIALS_SIGN_UP_ROUTE,
+  GET_ROLE_PERMISSIONS_ROUTE,
+  GET_PERMISSION_PATTERNS_ROUTE,
 ] as const;

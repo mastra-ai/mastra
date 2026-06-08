@@ -28,6 +28,30 @@ export interface DockerProviderConfig {
   workingDir?: string;
   /** Run in privileged mode */
   privileged?: boolean;
+  /** Memory limit in bytes */
+  memory?: number;
+  /** Total memory plus swap in bytes */
+  memorySwap?: number;
+  /** CPU shares relative weight */
+  cpuShares?: number;
+  /** CPU quota in microseconds per period */
+  cpuQuota?: number;
+  /** CPU period in microseconds */
+  cpuPeriod?: number;
+  /** Maximum number of PIDs in the container */
+  pidsLimit?: number;
+  /** Mount the container root filesystem as read-only */
+  readonlyRootfs?: boolean;
+  /** Linux capabilities to drop */
+  capDrop?: string[];
+  /** Linux capabilities to add */
+  capAdd?: string[];
+  /** Docker security options */
+  securityOpt?: string[];
+  /** Ulimit entries for Docker HostConfig.Ulimits */
+  ulimits?: DockerSandboxOptions['ulimits'];
+  /** tmpfs mount paths with options */
+  tmpfs?: DockerSandboxOptions['tmpfs'];
 }
 
 export const dockerSandboxProvider: SandboxProvider<DockerProviderConfig> = {
@@ -70,6 +94,68 @@ export const dockerSandboxProvider: SandboxProvider<DockerProviderConfig> = {
         type: 'boolean',
         description: 'Run in privileged mode',
         default: false,
+      },
+      memory: {
+        type: 'number',
+        description: 'Memory limit in bytes',
+      },
+      memorySwap: {
+        type: 'number',
+        description: 'Total memory plus swap in bytes',
+      },
+      cpuShares: {
+        type: 'number',
+        description: 'CPU shares relative weight',
+      },
+      cpuQuota: {
+        type: 'number',
+        description: 'CPU quota in microseconds per period',
+      },
+      cpuPeriod: {
+        type: 'number',
+        description: 'CPU period in microseconds',
+      },
+      pidsLimit: {
+        type: 'number',
+        description: 'Maximum number of PIDs in the container',
+      },
+      readonlyRootfs: {
+        type: 'boolean',
+        description: 'Mount the container root filesystem as read-only',
+      },
+      capDrop: {
+        type: 'array',
+        description: 'Linux capabilities to drop',
+        items: { type: 'string' },
+      },
+      capAdd: {
+        type: 'array',
+        description: 'Linux capabilities to add',
+        items: { type: 'string' },
+      },
+      securityOpt: {
+        type: 'array',
+        description: 'Docker security options',
+        items: { type: 'string' },
+      },
+      ulimits: {
+        type: 'array',
+        description: 'Ulimit entries for Docker HostConfig.Ulimits',
+        items: {
+          type: 'object',
+          required: ['name', 'soft', 'hard'],
+          additionalProperties: false,
+          properties: {
+            name: { type: 'string' },
+            soft: { type: 'number' },
+            hard: { type: 'number' },
+          },
+        },
+      },
+      tmpfs: {
+        type: 'object',
+        description: 'tmpfs mount paths with options',
+        additionalProperties: { type: 'string' },
       },
     },
   },

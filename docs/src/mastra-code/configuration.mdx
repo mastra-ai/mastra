@@ -26,7 +26,7 @@ The simplest way to get started is to set API key environment variables for the 
 ```sh
 export ANTHROPIC_API_KEY=sk-ant-...
 export OPENAI_API_KEY=sk-...
-export GOOGLE_GENERATIVE_AI_API_KEY=...
+export GOOGLE_API_KEY=...
 export DEEPSEEK_API_KEY=...
 export CEREBRAS_API_KEY=...
 ```
@@ -53,6 +53,17 @@ If you have an Anthropic Claude Max or OpenAI ChatGPT Plus subscription, you can
 
 OAuth credentials are stored in `auth.json` alongside the database in the app data directory. During onboarding, you can skip the OAuth step if you already have API keys configured.
 
+When you select **ChatGPT Plus/Pro (Codex Subscription)** in `/login` or during onboarding, Mastra Code asks how you want to sign in:
+
+- **Browser (local callback)**: opens the browser and waits for the OAuth callback on localhost. This is the default.
+- **Device code (headless)**: shows a code to enter at `https://auth.openai.com/codex/device` — useful for SSH sessions, remote shells, or environments without a browser.
+
+To preselect the device-code flow (for example in scripts or remote shells where the prompt is inconvenient), set `MASTRACODE_OPENAI_CODEX_AUTH_MODE=device` before launching Mastra Code:
+
+```sh
+export MASTRACODE_OPENAI_CODEX_AUTH_MODE=device
+```
+
 ### Authentication priority for Anthropic
 
 When resolving Anthropic models, Mastra Code checks for credentials in this order:
@@ -66,6 +77,112 @@ To switch from OAuth to API key usage, log out with `/logout` and set your `ANTH
 ### Anthropic OAuth warning
 
 Authenticating with a Claude Max subscription through OAuth is a grey area. Anthropic has reportedly banned users for using Claude max credentials outside of Claude Code, so it may violate Anthropic Terms of Service.
+
+## Direct shell passthrough
+
+In the interactive TUI, input that starts with `!` runs as a direct shell passthrough command:
+
+```sh
+!pwd
+!git status --short
+```
+
+This direct passthrough is separate from the agent's `execute_command` tool. Tool permissions and agent command execution are not changed by this setting.
+
+By default, Mastra Code keeps the compatibility behavior from earlier versions:
+
+- macOS and Linux: `execa(command, { shell: true })`, which behaves like `/bin/sh -c`.
+- Windows: `execa(command, { shell: true })`, which behaves like `cmd.exe` through the platform shell.
+
+Mastra Code does not use `$SHELL` automatically and does not switch Windows users to PowerShell automatically. Configure a shell only when you want direct `!` commands to use a specific command language.
+
+### Shell passthrough settings
+
+Set the shell in global `settings.json` with the `shellPassthrough` block:
+
+```json title="settings.json"
+{
+  "shellPassthrough": {
+    "mode": "path",
+    "executable": "/bin/zsh",
+    "family": "posix"
+  }
+}
+```
+
+The `mode` field accepts:
+
+| Mode | Behavior |
+| - | - |
+| `default` | Keep the built-in `shell: true` behavior. |
+| `path` | Run the configured executable without loading login or profile files. |
+| `login` | Run the configured executable and allow shell startup or profile files when supported. |
+
+If `executable` is set and `mode` is omitted, Mastra Code treats the shell as `path` mode.
+
+The `family` field accepts:
+
+| Family | Behavior |
+| - | - |
+| `posix` | Run the executable with `-c`. In `login` mode, run it with `-l -c`. |
+| `cmd` | Run `cmd.exe` with `/d /s /c`. |
+| `powershell` | Run PowerShell or PowerShell Core with an encoded command. |
+
+For common executables, Mastra Code infers `family` from the executable name. `pwsh`, `pwsh.exe`, `powershell`, and `powershell.exe` use `powershell`. `cmd` and `cmd.exe` use `cmd`. Other explicit shells use `posix` on macOS and Linux. On Windows, set `family` when the executable is not `cmd.exe`, `powershell.exe`, or `pwsh.exe`.
+
+### Environment overrides
+
+Use environment variables to override the persisted shell for the current process:
+
+```sh
+export MASTRACODE_SHELL=/bin/zsh
+export MASTRACODE_SHELL_MODE=path
+```
+
+`MASTRACODE_SHELL` sets the executable. `MASTRACODE_SHELL_MODE` accepts `default`, `path`, or `login`. Empty values are ignored.
+
+### macOS and Linux examples
+
+Run direct `!` commands through `zsh` without loading startup files:
+
+```sh
+export MASTRACODE_SHELL=/bin/zsh
+export MASTRACODE_SHELL_MODE=path
+```
+
+Opt into a login shell when you need shell startup files:
+
+```sh
+export MASTRACODE_SHELL=/bin/zsh
+export MASTRACODE_SHELL_MODE=login
+```
+
+Login mode can be slower or noisy because startup files can print output, prompt for input, change directories, or run long setup commands.
+
+### Windows examples
+
+Use `cmd.exe` explicitly:
+
+```powershell
+$env:MASTRACODE_SHELL = "cmd.exe"
+$env:MASTRACODE_SHELL_MODE = "path"
+```
+
+Use PowerShell Core without loading profiles:
+
+```powershell
+$env:MASTRACODE_SHELL = "pwsh"
+$env:MASTRACODE_SHELL_MODE = "path"
+```
+
+Use Windows PowerShell and load profiles:
+
+```powershell
+$env:MASTRACODE_SHELL = "powershell.exe"
+$env:MASTRACODE_SHELL_MODE = "login"
+```
+
+PowerShell passthrough uses `-EncodedCommand` and preserves native command exit codes where practical. It treats cmdlet errors as failures so direct shell commands return a non-zero exit code. In `path` mode, it also uses `-NoProfile`. In `login` mode, it omits `-NoProfile` so PowerShell profiles can load.
 
 ## MCP servers
 
@@ -118,7 +235,45 @@ Connect to a remote MCP server via URL. Requires a `url` field. The optional `he
 }
 ```
 
-Since `headers` only supports static values, use a stdio wrapper for dynamic authentication such as token refresh.
+#### HTTP OAuth
+
+HTTP servers can also use OAuth when the server supports MCP authorization. Add an `oauth` object with a `redirectUrl`. Mastra Code stores OAuth client data and tokens in the app data directory.
+
+Mastra Code passes this configuration to `@mastra/mcp` when connecting. The redirect URL must use HTTPS unless it is a loopback HTTP URL, and it must be handled by a callback endpoint that can complete the OAuth flow for that server.
+
+```json title=".mastracode/mcp.json"
+{
+  "mcpServers": {
+    "remote-api": {
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "redirectUrl": "http://localhost:3000/oauth/callback",
+        "clientName": "Remote MCP",
+        "scopes": ["mcp:read", "mcp:write"]
+      }
+    }
+  }
+}
+```
+
+Use `clientId` and `clientSecret` when the MCP server requires a pre-registered OAuth client:
+
+```json title=".mastracode/mcp.json"
+{
+  "mcpServers": {
+    "remote-api": {
+      "url": "https://mcp.example.com/mcp",
+      "oauth": {
+        "redirectUrl": "http://localhost:3000/oauth/callback",
+        "clientId": "your-client-id",
+        "clientSecret": "your-client-secret"
+      }
+    }
+  }
+}
+```
+
+Do not commit real `clientSecret` values to a repository. Prefer a project-local or global config file that is not shared.
 
 #### Startup behavior
 
@@ -239,6 +394,17 @@ The filename (or directory structure) determines the command name. For example, 
 
 Commands support variables like `$ARGUMENTS` for positional args, `@filename` for file content injection, and `!command` for shell command output.
 
+Add `goal: true` to expose the command as a goal entry point under `/goal/<command-name>`:
+
+```md title=".mastracode/commands/pr-triage.md"
+---
+description: Triage every open PR
+goal: true
+---
+
+Review every open PR and continue until each PR has a concise TL;DR.
+```
+
 ## Skills
 
 Skills are structured instruction files that the agent loads automatically based on trigger conditions. They provide domain-specific guidance without manually pasting instructions.
@@ -249,10 +415,35 @@ Mastra Code scans these directories for skills:
 | - | - | - |
 | Highest | `.mastracode/skills/` | Project |
 | | `.claude/skills/` | Project (Claude Code compatible) |
+| | `.agents/skills/` | Project (Agent Skills spec compatible) |
 | | `~/.mastracode/skills/` | Global |
-| Lowest | `~/.claude/skills/` | Global (Claude Code compatible) |
+| | `~/.claude/skills/` | Global (Claude Code compatible) |
+| Lowest | `~/.agents/skills/` | Global (Agent Skills spec compatible) |
 
 Each skill is a directory containing a `SKILL.md` file with instructions and trigger descriptions. Skills installed via symlinks (e.g., from `npx skills add`) are automatically resolved.
+
+Use `/skill/<name>` to activate a specific skill in the current conversation:
+
+```text
+/skill/release-check
+```
+
+Mastra Code loads the skill instructions and sends them to the agent before the next response.
+
+Set `user-invocable: false` in `SKILL.md` frontmatter to hide a skill from `/skill/<name>` autocomplete, the `/skills` listing, and direct activation. The agent can still load that skill automatically when relevant.
+
+Add `metadata.goal: true` to expose a skill as a goal entry point under `/goal/<skill-name>`:
+
+```md title=".mastracode/skills/release-check/SKILL.md"
+---
+name: release-check
+description: Check whether a release is ready
+metadata:
+  goal: true
+---
+
+Run the release checks and continue until the release is ready or a human decision is required.
+```
 
 ## Agent instructions
 
@@ -350,6 +541,8 @@ Running `/theme` with no arguments shows the current theme. The choice is persis
 | `DEFAULT_OM_MODEL_ID` | Default model for OM observer and reflector |
 | `MASTRA_PLANS_DIR` | Override the directory where approved plans are saved (default: app data directory) |
 | `MASTRA_THEME` | Color theme override (`dark` or `light`) |
+| `MASTRACODE_SHELL` | Direct TUI `!` shell executable override |
+| `MASTRACODE_SHELL_MODE` | Direct TUI `!` shell mode (`default`, `path`, or `login`) |
 | `TAVILY_API_KEY` | Enable Tavily-powered web search and extract tools |
 
 ## Resource ID override
@@ -363,3 +556,19 @@ Resource IDs determine how threads are grouped. By default, Mastra Code generate
 ```
 
 You can also set `MASTRA_RESOURCE_ID` as an environment variable. Two users who set the same resource ID share threads and observations for that resource.
+
+## Telemetry
+
+By default, Mastra Code collects anonymous product analytics about how the TUI is used. Each event includes your OS, Mastra Code version, Node.js version, CPU architecture, and a hostname-derived distinct ID. Tracked events cover session start, prompt submission, thread and model changes, slash command usage, and interactive prompts. Prompt text, message content, file paths, and tool inputs are not collected. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/mastracode/src/analytics.ts) to check what's collected.
+
+You can opt out of analytics by setting an environment variable:
+
+```bash
+MASTRA_TELEMETRY_DISABLED=1
+```
+
+You can also set this when launching Mastra Code:
+
+```sh npm2yarn
+MASTRA_TELEMETRY_DISABLED=1 npx mastracode
+```

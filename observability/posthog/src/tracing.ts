@@ -19,9 +19,9 @@ export interface PostHogUsageMetrics {
 /**
  * Formats UsageStats to PostHog's expected property format.
  *
- * PostHog expects $ai_input_tokens to be NON-cached tokens only,
- * with cache tokens tracked separately for accurate cost calculation.
- * See: https://posthog.com/docs/llm-analytics/calculating-costs
+ * Pass through gross input token counts with cache fields as subsets.
+ * PostHog subtracts cache tokens when computing costs for non-Anthropic
+ * providers and detects Anthropic-style exclusive reporting on its own.
  *
  * @param usage - The UsageStats from span attributes
  * @returns PostHog-formatted usage properties
@@ -32,25 +32,20 @@ export function formatUsageMetrics(usage?: UsageStats): PostHogUsageMetrics {
   const props: PostHogUsageMetrics = {};
 
   if (usage.inputTokens !== undefined) {
-    // Start with total input tokens (which includes cached tokens from usage.ts)
     props.$ai_input_tokens = usage.inputTokens;
-
-    // Subtract cache tokens to get the actual non-cached input count
-    if (usage.inputDetails?.cacheRead !== undefined) {
-      props.$ai_cache_read_input_tokens = usage.inputDetails.cacheRead;
-      props.$ai_input_tokens -= props.$ai_cache_read_input_tokens;
-    }
-
-    if (usage.inputDetails?.cacheWrite !== undefined) {
-      props.$ai_cache_creation_input_tokens = usage.inputDetails.cacheWrite;
-      props.$ai_input_tokens -= props.$ai_cache_creation_input_tokens;
-    }
-
-    // Defensive clamp: ensure input tokens is never negative
-    if (props.$ai_input_tokens < 0) props.$ai_input_tokens = 0;
   }
 
-  if (usage.outputTokens !== undefined) props.$ai_output_tokens = usage.outputTokens;
+  if (usage.inputDetails?.cacheRead !== undefined) {
+    props.$ai_cache_read_input_tokens = usage.inputDetails.cacheRead;
+  }
+
+  if (usage.inputDetails?.cacheWrite !== undefined) {
+    props.$ai_cache_creation_input_tokens = usage.inputDetails.cacheWrite;
+  }
+
+  if (usage.outputTokens !== undefined) {
+    props.$ai_output_tokens = usage.outputTokens;
+  }
 
   return props;
 }
@@ -179,12 +174,14 @@ export class PosthogExporter extends TrackingExporter<
     const distinctId = this.getDistinctId(span, traceData);
     const properties = this.buildEventProperties(span, 0);
 
-    this.#client?.capture({
-      distinctId,
-      event: eventName,
-      properties,
-      timestamp: span.endTime ? new Date(span.endTime) : new Date(),
-    });
+    this.#client?.capture(
+      this.withGroups({
+        distinctId,
+        event: eventName,
+        properties,
+        timestamp: span.endTime ? new Date(span.endTime) : new Date(),
+      }),
+    );
 
     return true;
   }
@@ -218,7 +215,7 @@ export class PosthogExporter extends TrackingExporter<
     const mergedSpan = !span.input && cachedSpan?.input ? { ...span, input: cachedSpan.input } : span;
 
     const eventMessage = this.buildEventMessage({ span: mergedSpan, traceData });
-    this.#client?.capture(eventMessage);
+    this.#client?.capture(this.withGroups(eventMessage));
   }
 
   protected override async _abortSpan(args: {
@@ -232,7 +229,21 @@ export class PosthogExporter extends TrackingExporter<
     span.errorInfo = reason;
 
     const eventMessage = this.buildEventMessage({ span, traceData });
-    this.#client?.capture(eventMessage);
+    this.#client?.capture(this.withGroups(eventMessage));
+  }
+
+  /**
+   * PostHog group analytics are keyed off the top-level `groups` field on the
+   * capture call. The Node SDK derives the event's `$groups` from that field and
+   * overwrites any property-level `$groups`, so group metadata carried in
+   * properties is dropped unless it is mirrored here.
+   */
+  private withGroups(message: EventMessage): EventMessage {
+    const groups = message.properties?.$groups;
+    if (groups && typeof groups === 'object' && !Array.isArray(groups)) {
+      return { ...message, groups };
+    }
+    return message;
   }
 
   private buildEventMessage(args: { span: AnyExportedSpan; traceData: PosthogTraceData }): EventMessage {

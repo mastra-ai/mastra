@@ -1,5 +1,6 @@
 import { getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '../../auth/storage.js';
 import { LoginDialogComponent } from '../components/login-dialog.js';
+import { promptAuthMode } from '../components/login-mode-selector.js';
 import { LoginSelectorComponent } from '../components/login-selector.js';
 import { showModalOverlay } from '../overlay.js';
 import type { SlashCommandContext } from './types.js';
@@ -10,6 +11,12 @@ async function performLogin(ctx: SlashCommandContext, providerId: string): Promi
 
   if (!ctx.authStorage) {
     ctx.showError('Auth storage not configured');
+    return;
+  }
+
+  const authMode = await promptAuthMode(ctx.state.ui, providerName, provider?.authModes);
+  if (authMode === null) {
+    // User cancelled at the mode-selection step.
     return;
   }
 
@@ -39,6 +46,7 @@ async function performLogin(ctx: SlashCommandContext, providerId: string): Promi
           dialog.showProgress(message);
         },
         signal: dialog.signal,
+        authMode,
       })
       .then(async () => {
         ctx.state.ui.hideOverlay();
@@ -79,6 +87,14 @@ export async function handleLoginCommand(ctx: SlashCommandContext, mode: 'login'
   if (providers.length === 0) {
     ctx.showInfo('No OAuth providers available.');
     return;
+  }
+
+  if (mode === 'login') {
+    ctx.analytics?.trackInteractivePrompt('login_provider_selector', {
+      threadId: ctx.state.harness.getCurrentThreadId(),
+      resourceId: ctx.state.harness.getResourceId(),
+      mode: ctx.state.harness.getCurrentModeId(),
+    });
   }
 
   return new Promise<void>(resolve => {

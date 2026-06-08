@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { Agent } from '../agent';
+import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
+import { ChunkFrom } from '../stream/types';
 import { Harness } from './harness';
-import type { HarnessEvent } from './types';
-import { defaultDisplayState } from './types';
+import type { HarnessEvent, HarnessSubagent, HarnessSubagentHistoryEntry } from './types';
+import { createEmptyTokenUsage, defaultDisplayState } from './types';
 
-function createHarness(storage?: InMemoryStore) {
+function createHarness(storage?: InMemoryStore, opts?: { subagents?: HarnessSubagent[] }) {
   const agent = new Agent({
     name: 'test-agent',
     instructions: 'You are a test agent.',
@@ -16,6 +18,7 @@ function createHarness(storage?: InMemoryStore) {
     id: 'test-harness',
     storage: storage ?? new InMemoryStore(),
     modes: [{ id: 'default', name: 'Default', default: true, agent }],
+    subagents: opts?.subagents,
   });
 }
 
@@ -29,7 +32,8 @@ describe('defaultDisplayState', () => {
     const ds = defaultDisplayState();
     expect(ds.isRunning).toBe(false);
     expect(ds.currentMessage).toBeNull();
-    expect(ds.tokenUsage).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
+    expect(ds.queuedFollowUps).toBe(0);
+    expect(ds.tokenUsage).toEqual(createEmptyTokenUsage());
     expect(ds.activeTools).toBeInstanceOf(Map);
     expect(ds.activeTools.size).toBe(0);
     expect(ds.toolInputBuffers).toBeInstanceOf(Map);
@@ -53,7 +57,7 @@ describe('defaultDisplayState', () => {
   it('returns independent instances', () => {
     const ds1 = defaultDisplayState();
     const ds2 = defaultDisplayState();
-    ds1.tasks.push({ content: 'test', status: 'pending', activeForm: 'Testing' });
+    ds1.tasks.push({ id: 'test', content: 'test', status: 'pending', activeForm: 'Testing' });
     expect(ds2.tasks).toEqual([]);
   });
 });
@@ -69,7 +73,7 @@ describe('Harness.getDisplayState()', () => {
     const ds = harness.getDisplayState();
     expect(ds.isRunning).toBe(false);
     expect(ds.currentMessage).toBeNull();
-    expect(ds.tokenUsage).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
+    expect(ds.tokenUsage).toEqual(createEmptyTokenUsage());
     expect(ds.activeTools.size).toBe(0);
     expect(ds.pendingApproval).toBeNull();
     expect(ds.pendingQuestion).toBeNull();
@@ -342,6 +346,173 @@ describe('tool lifecycle', () => {
     });
   });
 
+  it('uses display transforms while processing tool stream chunks', async () => {
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    const result = await (harness as any).processStream(
+      {
+        fullStream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({
+              type: 'tool-call',
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: 'call-1',
+                toolName: 'lookupCustomer',
+                args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
+              },
+              metadata: {
+                mastra: {
+                  toolPayloadTransform: {
+                    display: {
+                      'input-available': { transformed: { customerId: 'cus_123' } },
+                    },
+                  },
+                },
+              },
+            });
+            controller.enqueue({
+              type: 'tool-result',
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: 'call-1',
+                toolName: 'lookupCustomer',
+                result: { displayName: 'Acme', apiKey: 'secret-output' },
+              },
+              metadata: {
+                mastra: {
+                  toolPayloadTransform: {
+                    display: {
+                      'output-available': { transformed: { displayName: 'Acme' } },
+                    },
+                  },
+                },
+              },
+            });
+            controller.close();
+          },
+        }),
+      },
+      new RequestContext(),
+    );
+
+    expect(result.message.content).toEqual([
+      { type: 'tool_call', id: 'call-1', name: 'lookupCustomer', args: { customerId: 'cus_123' } },
+      { type: 'tool_result', id: 'call-1', name: 'lookupCustomer', result: { displayName: 'Acme' }, isError: false },
+    ]);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_start',
+        args: { customerId: 'cus_123' },
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_end',
+        result: { displayName: 'Acme' },
+      }),
+    );
+  });
+
+  it('preserves explicit null display transforms', async () => {
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => events.push(event));
+
+    const result = await (harness as any).processStream(
+      {
+        fullStream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({
+              type: 'tool-call-delta',
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: 'call-1',
+                toolName: 'lookupCustomer',
+                argsTextDelta: '{"internalPath":"/workspace/private',
+              },
+              metadata: {
+                mastra: {
+                  toolPayloadTransform: {
+                    display: {
+                      'input-delta': { transformed: null },
+                    },
+                  },
+                },
+              },
+            });
+            controller.enqueue({
+              type: 'tool-call',
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: 'call-1',
+                toolName: 'lookupCustomer',
+                args: { customerId: 'cus_123', internalPath: '/workspace/private/customer.json' },
+              },
+              metadata: {
+                mastra: {
+                  toolPayloadTransform: {
+                    display: {
+                      'input-available': { transformed: null },
+                    },
+                  },
+                },
+              },
+            });
+            controller.enqueue({
+              type: 'tool-result',
+              runId: 'run-1',
+              from: ChunkFrom.AGENT,
+              payload: {
+                toolCallId: 'call-1',
+                toolName: 'lookupCustomer',
+                result: { displayName: 'Acme', apiKey: 'secret-output' },
+              },
+              metadata: {
+                mastra: {
+                  toolPayloadTransform: {
+                    display: {
+                      'output-available': { transformed: null },
+                    },
+                  },
+                },
+              },
+            });
+            controller.close();
+          },
+        }),
+      },
+      new RequestContext(),
+    );
+
+    expect(result.message.content).toEqual([
+      { type: 'tool_call', id: 'call-1', name: 'lookupCustomer', args: null },
+      { type: 'tool_result', id: 'call-1', name: 'lookupCustomer', result: null, isError: false },
+    ]);
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_input_delta',
+        argsTextDelta: null,
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_start',
+        args: null,
+      }),
+    );
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_end',
+        result: null,
+      }),
+    );
+  });
+
   describe('tool_approval_required', () => {
     it('sets pendingApproval', () => {
       emit(harness, {
@@ -577,6 +748,44 @@ describe('subagent lifecycle', () => {
     expect(sub!.toolCalls).toEqual([]);
   });
 
+  it('includes displayName from configured subagent name on subagent_start', () => {
+    harness = createHarness(undefined, {
+      subagents: [
+        {
+          id: 'explore',
+          name: 'Explore',
+          description: 'Find relevant context',
+          instructions: 'Find relevant context.',
+        },
+      ],
+    });
+
+    emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 't', modelId: 'm' });
+
+    const sub = harness.getDisplayState().activeSubagents.get('s1');
+    expect(sub!.agentType).toBe('explore');
+    expect(sub!.displayName).toBe('Explore');
+  });
+
+  it('leaves displayName unset when agentType has no configured subagent match', () => {
+    harness = createHarness(undefined, {
+      subagents: [
+        {
+          id: 'explore',
+          name: 'Explore',
+          description: 'Find relevant context',
+          instructions: 'Find relevant context.',
+        },
+      ],
+    });
+
+    emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'execute', task: 't', modelId: 'm' });
+
+    const sub = harness.getDisplayState().activeSubagents.get('s1');
+    expect(sub!.agentType).toBe('execute');
+    expect(sub!.displayName).toBeUndefined();
+  });
+
   it('appends text on subagent_text_delta', () => {
     emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 't', modelId: 'm' });
     emit(harness, { type: 'subagent_text_delta', toolCallId: 's1', agentType: 'explore', textDelta: 'hello ' });
@@ -633,6 +842,37 @@ describe('subagent lifecycle', () => {
     expect(sub.status).toBe('completed');
     expect(sub.durationMs).toBe(1234);
     expect(sub.result).toBe('done');
+  });
+
+  it('preserves displayName on terminal subagent history entries', () => {
+    harness = createHarness(undefined, {
+      subagents: [
+        {
+          id: 'execute',
+          name: 'Execute',
+          description: 'Perform the delegated task',
+          instructions: 'Perform the delegated task.',
+        },
+      ],
+    });
+
+    emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'execute', task: 't', modelId: 'm' });
+    emit(harness, {
+      type: 'subagent_end',
+      toolCallId: 's1',
+      agentType: 'execute',
+      result: 'done',
+      isError: false,
+      durationMs: 1234,
+    });
+
+    const terminalSubagent = harness.getDisplayState().activeSubagents.get('s1')!;
+    const historyEntry: HarnessSubagentHistoryEntry = terminalSubagent;
+
+    expect(terminalSubagent.status).toBe('completed');
+    expect(historyEntry.agentType).toBe('execute');
+    expect(historyEntry.displayName).toBe('Execute');
+    expect(historyEntry.result).toBe('done');
   });
 
   it('marks subagent as error on failed subagent_end', () => {
@@ -732,24 +972,35 @@ describe('task_updated', () => {
 
   it('updates tasks from event payload', () => {
     const tasks = [
-      { content: 'Fix bug', status: 'in_progress' as const, activeForm: 'Fixing bug' },
-      { content: 'Write tests', status: 'pending' as const, activeForm: 'Writing tests' },
+      { id: 'fix-bug', content: 'Fix bug', status: 'in_progress' as const, activeForm: 'Fixing bug' },
+      { id: 'write-tests', content: 'Write tests', status: 'pending' as const, activeForm: 'Writing tests' },
     ];
     emit(harness, { type: 'task_updated', tasks });
     expect(harness.getDisplayState().tasks).toBe(tasks);
   });
 
   it('snapshots current tasks to previousTasks before update', () => {
-    const tasks1 = [{ content: 'Task 1', status: 'pending' as const, activeForm: 'T1' }];
+    const tasks1 = [{ id: 'task-1', content: 'Task 1', status: 'pending' as const, activeForm: 'T1' }];
     const tasks2 = [
-      { content: 'Task 1', status: 'completed' as const, activeForm: 'T1' },
-      { content: 'Task 2', status: 'in_progress' as const, activeForm: 'T2' },
+      { id: 'task-1', content: 'Task 1', status: 'completed' as const, activeForm: 'T1' },
+      { id: 'task-2', content: 'Task 2', status: 'in_progress' as const, activeForm: 'T2' },
     ];
 
     emit(harness, { type: 'task_updated', tasks: tasks1 });
     expect(harness.getDisplayState().previousTasks).toEqual([]);
 
     emit(harness, { type: 'task_updated', tasks: tasks2 });
+    expect(harness.getDisplayState().previousTasks).toEqual(tasks1);
+    expect(harness.getDisplayState().tasks).toBe(tasks2);
+  });
+
+  it('preserves task ids in current and previous task snapshots', () => {
+    const tasks1 = [{ id: 'task-1', content: 'Task 1', status: 'in_progress' as const, activeForm: 'T1' }];
+    const tasks2 = [{ id: 'task-1', content: 'Task 1', status: 'completed' as const, activeForm: 'T1' }];
+
+    emit(harness, { type: 'task_updated', tasks: tasks1 });
+    emit(harness, { type: 'task_updated', tasks: tasks2 });
+
     expect(harness.getDisplayState().previousTasks).toEqual(tasks1);
     expect(harness.getDisplayState().tasks).toBe(tasks2);
   });
@@ -1108,7 +1359,10 @@ describe('resetThreadDisplayState', () => {
     emit(harness, { type: 'ask_question', questionId: 'q1', question: 'Q?', options: [] });
     emit(harness, { type: 'plan_approval_required', planId: 'p1', title: 'P', plan: '#' });
     emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 't', modelId: 'm' });
-    emit(harness, { type: 'task_updated', tasks: [{ content: 'T', status: 'pending', activeForm: 'T' }] });
+    emit(harness, {
+      type: 'task_updated',
+      tasks: [{ id: 'task-t', content: 'T', status: 'pending', activeForm: 'T' }],
+    });
     emit(harness, { type: 'om_observation_start', cycleId: 'c1', operationType: 'observation', tokensToObserve: 5000 });
     emit(harness, { type: 'om_buffering_start', cycleId: 'c2', operationType: 'observation', tokensToBuffer: 1000 });
 
@@ -1138,7 +1392,7 @@ describe('resetThreadDisplayState', () => {
     expect(harness.getDisplayState().tokenUsage.totalTokens).toBe(150);
 
     emit(harness, { type: 'thread_created', thread: { id: 'new', title: 'New' } } as any);
-    expect(harness.getDisplayState().tokenUsage).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0 });
+    expect(harness.getDisplayState().tokenUsage).toEqual(createEmptyTokenUsage());
   });
 
   it('preserves isRunning across thread_created', () => {
@@ -1210,6 +1464,18 @@ describe('display_state_changed emission', () => {
     emit(harness, { type: 'display_state_changed', displayState: harness.getDisplayState() });
     expect(events.length).toBe(1);
     expect(events[0]!.type).toBe('display_state_changed');
+  });
+
+  it('restores replayed task display state without emitting task_updated', () => {
+    const tasks = [{ id: 'tests', content: 'Write tests', status: 'pending' as const, activeForm: 'Writing tests' }];
+
+    harness.restoreDisplayTasks(tasks);
+
+    const displayStateChanged = events.find(event => event.type === 'display_state_changed');
+    expect(harness.getDisplayState().tasks).toEqual(tasks);
+    expect(harness.getDisplayState().previousTasks).toEqual([]);
+    expect(events.map(event => event.type)).toEqual(['display_state_changed']);
+    expect(displayStateChanged).toMatchObject({ displayState: harness.getDisplayState() });
   });
 
   it('emits display_state_changed for each event in a sequence', () => {
@@ -1553,7 +1819,7 @@ describe('full lifecycle integration', () => {
     // Task update
     emit(harness, {
       type: 'task_updated',
-      tasks: [{ content: 'Edit foo', status: 'completed', activeForm: 'Editing' }],
+      tasks: [{ id: 'edit-foo', content: 'Edit foo', status: 'completed', activeForm: 'Editing' }],
     });
     expect(ds.tasks).toHaveLength(1);
 

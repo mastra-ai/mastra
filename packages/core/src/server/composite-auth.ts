@@ -1,4 +1,3 @@
-import type { HonoRequest } from 'hono';
 import type {
   ISSOProvider,
   ISessionProvider,
@@ -9,20 +8,31 @@ import type {
   SSOLoginConfig,
 } from '../auth';
 import { MastraAuthProvider } from './auth';
+import type { MastraAuthRequest } from './request-types';
 
 type PrimitiveAuthUser = string | number | boolean | bigint | symbol | null | undefined;
 
 // Type guards for interface detection
 function isSSOProvider(p: unknown): p is ISSOProvider {
-  return p !== null && typeof p === 'object' && 'getLoginUrl' in p && 'handleCallback' in p;
+  return (
+    p !== null &&
+    typeof p === 'object' &&
+    typeof (p as any).getLoginUrl === 'function' &&
+    typeof (p as any).handleCallback === 'function'
+  );
 }
 
 function isSessionProvider(p: unknown): p is ISessionProvider {
-  return p !== null && typeof p === 'object' && 'validateSession' in p && 'createSession' in p;
+  return (
+    p !== null &&
+    typeof p === 'object' &&
+    typeof (p as any).validateSession === 'function' &&
+    typeof (p as any).createSession === 'function'
+  );
 }
 
 function isUserProvider(p: unknown): p is IUserProvider {
-  return p !== null && typeof p === 'object' && 'getCurrentUser' in p;
+  return p !== null && typeof p === 'object' && typeof (p as any).getCurrentUser === 'function';
 }
 
 function isObjectLike(value: unknown): value is object {
@@ -49,6 +59,25 @@ export class CompositeAuth
     this.providers = providers;
     if (providers.some(provider => typeof provider.mapUserToResourceId === 'function')) {
       this.mapUserToResourceId = user => this.mapAuthenticatedUserToResourceId(user);
+    }
+
+    // Null out interface methods when no inner provider supports them.
+    // This ensures duck-typing checks (typeof auth.method === 'function')
+    // accurately reflect the composite's actual capabilities — preventing
+    // Studio from showing login options that no provider can handle.
+    if (!providers.some(isSSOProvider)) {
+      this.getLoginUrl = undefined as any;
+      this.handleCallback = undefined as any;
+      this.getLoginButtonConfig = undefined as any;
+    }
+    if (!providers.some(isSessionProvider)) {
+      this.createSession = undefined as any;
+      this.validateSession = undefined as any;
+      this.getSessionIdFromRequest = undefined as any;
+    }
+    if (!providers.some(isUserProvider)) {
+      this.getCurrentUser = undefined as any;
+      this.getUser = undefined as any;
     }
   }
 
@@ -109,7 +138,7 @@ export class CompositeAuth
   // MastraAuthProvider Implementation
   // ============================================================================
 
-  async authenticateToken(token: string, request: HonoRequest): Promise<unknown | null> {
+  async authenticateToken(token: string, request: MastraAuthRequest): Promise<unknown | null> {
     for (const provider of this.providers) {
       try {
         const user = await provider.authenticateToken(token, request);
@@ -124,7 +153,7 @@ export class CompositeAuth
     return null;
   }
 
-  async authorizeUser(user: unknown, request: HonoRequest): Promise<boolean> {
+  async authorizeUser(user: unknown, request: MastraAuthRequest): Promise<boolean> {
     for (const provider of this.providers) {
       const authorized = await provider.authorizeUser(user, request);
       if (authorized) {

@@ -34,6 +34,10 @@ describe('Background Tasks handlers', () => {
       },
     });
 
+    // Default engine is 'workflow' — the workflow event processor needs to
+    // be subscribed to the pubsub for tasks to execute.
+    await mastra.startEventEngine();
+
     bgManager = mastra.backgroundTaskManager!;
     // The Mastra constructor fires init() in the background — wait for it
     await tick(100);
@@ -41,6 +45,7 @@ describe('Background Tasks handlers', () => {
 
   afterEach(async () => {
     await bgManager.shutdown();
+    await mastra.stopEventEngine();
     await pubsub.close();
     const bgStore = await storage.getStore('backgroundTasks');
     await bgStore?.dangerouslyClearAll();

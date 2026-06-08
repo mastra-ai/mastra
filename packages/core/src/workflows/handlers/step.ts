@@ -572,8 +572,12 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
 
   if (!disableScorers && scorersToUse && Object.keys(scorersToUse || {}).length > 0) {
     for (const [_id, scorerObject] of Object.entries(scorersToUse || {})) {
+      if (engine.mastra) {
+        scorerObject.scorer.__registerMastra(engine.mastra);
+        engine.mastra.addScorer(scorerObject.scorer, undefined, { source: 'code' });
+      }
       runScorer({
-        scorerId: scorerObject.name,
+        scorerId: scorerObject.scorer.id,
         scorerObject: scorerObject,
         runId: runId,
         input: input,

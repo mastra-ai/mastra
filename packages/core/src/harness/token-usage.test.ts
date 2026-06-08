@@ -248,4 +248,14 @@ describe('step-finish token usage extraction', () => {
       raw: { step: 2 },
     });
   });
+
+  it('defaults cache usage fields to 0 when not present in usage', async () => {
+    const usage = { inputTokens: 100, outputTokens: 50, totalTokens: 150 };
+
+    await (harness as any).processStream({ fullStream: mockStream(usage) });
+
+    const tokenUsage = harness.getTokenUsage();
+    expect(tokenUsage.cachedInputTokens).toBe(0);
+    expect(tokenUsage.cacheCreationInputTokens).toBe(0);
+  });
 });

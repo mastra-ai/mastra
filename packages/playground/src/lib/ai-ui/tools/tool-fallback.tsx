@@ -1,9 +1,10 @@
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
 import { useAui } from '@assistant-ui/react';
 
-import type { MastraUIMessage } from '@mastra/react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
+import { CodeModeBadge, getCodeModeCall } from './badges/code-mode-badge';
 import { FileTreeBadge } from './badges/file-tree-badge';
 import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
@@ -15,13 +16,15 @@ import {
   isBrowserToolError,
   useBrowserToolCallsSafe,
 } from '@/domains/agents/context/browser-tool-calls-context';
+import type { BrowserSessionProbe } from '@/domains/agents/hooks/use-browser-session-probe';
 import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result';
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
+import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
-  metadata?: MastraUIMessage['metadata'];
+  metadata?: MessageMetadata;
 }
 
 export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackProps) => {
@@ -39,6 +42,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const { activateSkill } = useActivatedSkills();
   const { data: mcpAppToolsMap } = useMcpAppTools();
   const aui = useAui();
+  const queryClient = useQueryClient();
 
   const handleMcpAppSendMessage = useCallback(
     (content: string) => {
@@ -67,7 +71,32 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
       status,
       timestamp: Date.now(),
     });
-  }, [isBrowser, toolCallId, toolName, args, result, browserCtx]);
+
+    // Seeing any browser tool call means the server has an active session for
+    // this thread, so the probe can flip to `hasSession: true` immediately
+    // without polling or a network round trip. `setQueriesData` always notifies
+    // observers (even on reference-equal updates), so calling it on every
+    // render would feed back into the provider → consumer re-render loop. Read
+    // the cache synchronously first via `getQueriesData` (no notify) and only
+    // write entries that actually need to change.
+    //
+    // Important: preserve each probe's existing `screencastAvailable`. The
+    // deployer fallback returns `screencastAvailable: false` when ws packages
+    // aren't installed; clobbering that to `true` would make the client try to
+    // open a WebSocket the server can't accept.
+    const cachedProbes = queryClient.getQueriesData<BrowserSessionProbe>({
+      queryKey: ['browser-session-probe'],
+    });
+    const needsUpdate = cachedProbes.some(([, data]) => data?.screencastAvailable && !data.hasSession);
+    if (needsUpdate) {
+      queryClient.setQueriesData<BrowserSessionProbe>({ queryKey: ['browser-session-probe'] }, prev => {
+        if (!prev) return prev;
+        if (!prev.screencastAvailable) return prev;
+        if (prev.hasSession) return prev;
+        return { ...prev, hasSession: true };
+      });
+    }
+  }, [isBrowser, toolCallId, toolName, args, result, browserCtx, queryClient]);
 
   // Detect skill activation tool calls
   useEffect(() => {
@@ -114,6 +143,11 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
 
   const isBackgroundTaskResult =
     result && typeof result === 'string' && (result as string)?.toLowerCase()?.includes('background task');
+
+  if (toolName === 'updateWorkingMemory') {
+    // We want to hide the updateWorkingMemory tool call in the UI
+    return null;
+  }
 
   if (isBackgroundTaskResult) {
     return (
@@ -199,6 +233,25 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         toolName={toolName}
         args={args}
         result={result}
+        metadata={metadata}
+        toolCallId={toolCallId}
+        toolApprovalMetadata={toolApprovalMetadata}
+        isNetwork={isNetwork}
+        toolCalled={toolCalled}
+      />
+    );
+  }
+
+  // Code Mode (`execute_typescript`) calls carry a `code` string arg and a
+  // `CodeModeResult` shape. Detect by shape since the tool id is configurable.
+  const codeModeCall = getCodeModeCall(args, result);
+
+  if (codeModeCall) {
+    return (
+      <CodeModeBadge
+        toolName={toolName}
+        code={codeModeCall.code}
+        result={codeModeCall.result}
         metadata={metadata}
         toolCallId={toolCallId}
         toolApprovalMetadata={toolApprovalMetadata}

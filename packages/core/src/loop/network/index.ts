@@ -11,7 +11,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraLLMVNext } from '../../llm/model/model.loop';
 import { noopLogger } from '../../logger';
 import type { ObservabilityContext } from '../../observability';
-import { createObservabilityContext, resolveObservabilityContext } from '../../observability';
+import { createObservabilityContext, InternalSpans, resolveObservabilityContext } from '../../observability';
 import { ProcessorRunner } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
 import type { PublicSchema } from '../../schema';
@@ -20,9 +20,10 @@ import { ChunkFrom } from '../../stream';
 import type { ChunkType } from '../../stream';
 import { escapeUnescapedControlCharsInJsonStrings } from '../../stream/base/output-format-handlers';
 import { MastraAgentNetworkStream } from '../../stream/MastraAgentNetworkStream';
+import { getNeedsApprovalFn } from '../../tools/toolchecks';
 import type { IdGeneratorContext } from '../../types';
-import { createStep, createWorkflow } from '../../workflows';
-import type { Step, SuspendOptions } from '../../workflows';
+import type { Step, SuspendOptions } from '../../workflows/step';
+import { createStep, createWorkflow } from '../../workflows/workflow';
 import { PRIMITIVE_TYPES } from '../types';
 
 /**
@@ -356,6 +357,8 @@ export async function prepareMemoryStep({
     });
     messageList.add(messages, 'user');
     const messagesToSave = messageList.get.all.db();
+    // make sure network instruction is always last (temporary fix)
+    await new Promise(resolve => setTimeout(resolve, 10));
 
     if (memory) {
       promises.push(
@@ -1525,8 +1528,7 @@ export async function createNetworkLoop({
         throw mastraError;
       }
 
-      // @ts-expect-error - bad type
-      const toolId = tool.id;
+      const toolId = 'id' in tool && typeof tool.id === 'string' ? tool.id : inputData.primitiveId;
       // Use safeParseLLMJson to handle malformed JSON from LLM (truncated, unescaped chars, etc.)
       const inputDataToUse = await safeParseLLMJson(inputData.prompt);
       if (inputDataToUse === null) {
@@ -1577,10 +1579,11 @@ export async function createNetworkLoop({
       // - undefined (no approval needed)
       // If needsApprovalFn exists, evaluate it with the tool args
       let toolRequiresApproval = (tool as any).requireApproval;
-      if ((tool as any).needsApprovalFn) {
+      const needsApprovalFn = getNeedsApprovalFn(tool);
+      if (needsApprovalFn) {
         // Evaluate the function with the parsed args
         try {
-          const needsApprovalResult = await (tool as any).needsApprovalFn(inputDataToUse);
+          const needsApprovalResult = await needsApprovalFn(inputDataToUse);
           toolRequiresApproval = needsApprovalResult;
         } catch (error) {
           // Log error to help developers debug faulty needsApprovalFn implementations
@@ -2001,6 +2004,12 @@ export async function createNetworkLoop({
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
       validateInputs: false,
+      // Internal agent.network() plumbing — the workflow exists to coordinate
+      // routing and primitive execution, but only the user-facing
+      // agent/tool/model spans should appear in exported traces.
+      tracingPolicy: {
+        internal: InternalSpans.WORKFLOW,
+      },
     },
   });
 
@@ -2589,6 +2598,10 @@ export async function networkLoop<OUTPUT = undefined>({
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
       validateInputs: false,
+      // Internal agent.network() plumbing — see networkWorkflow above.
+      tracingPolicy: {
+        internal: InternalSpans.WORKFLOW,
+      },
     },
   })
     .then(networkWorkflow)
@@ -2622,6 +2635,10 @@ export async function networkLoop<OUTPUT = undefined>({
     options: {
       shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
       validateInputs: false,
+      // Internal agent.network() plumbing — see networkWorkflow above.
+      tracingPolicy: {
+        internal: InternalSpans.WORKFLOW,
+      },
     },
   })
     .dountil(iterationWithValidation, async ({ inputData }) => {

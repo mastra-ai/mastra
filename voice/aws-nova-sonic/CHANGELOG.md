@@ -1,5 +1,33 @@
 # @mastra/voice-aws-nova-sonic
 
+## 0.1.3-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#17521](https://github.com/mastra-ai/mastra/pull/17521))
+  - Updated dependency [`@aws-sdk/client-bedrock-runtime@^3.1057.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-bedrock-runtime/v/3.1057.0) (from `^3.1040.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/credential-provider-node@^3.972.47` ↗︎](https://www.npmjs.com/package/@aws-sdk/credential-provider-node/v/3.972.47) (from `^3.972.38`, in `dependencies`)
+
+- dependencies updates: ([#17600](https://github.com/mastra-ai/mastra/pull/17600))
+  - Updated dependency [`@aws-sdk/client-bedrock-runtime@^3.1058.0` ↗︎](https://www.npmjs.com/package/@aws-sdk/client-bedrock-runtime/v/3.1058.0) (from `^3.1057.0`, in `dependencies`)
+  - Updated dependency [`@aws-sdk/credential-provider-node@^3.972.48` ↗︎](https://www.npmjs.com/package/@aws-sdk/credential-provider-node/v/3.972.48) (from `^3.972.47`, in `dependencies`)
+
+## 0.1.2
+
+### Patch Changes
+
+- Moved shared voice primitives and route metadata into the new `@internal/voice` package so voice providers no longer depend on `@mastra/core` and server voice routes share the same route definitions. ([#16725](https://github.com/mastra-ai/mastra/pull/16725))
+
+  `@mastra/core/voice` continues to re-export the voice APIs for backwards compatibility.
+
+## 0.1.2-alpha.0
+
+### Patch Changes
+
+- Moved shared voice primitives and route metadata into the new `@internal/voice` package so voice providers no longer depend on `@mastra/core` and server voice routes share the same route definitions. ([#16725](https://github.com/mastra-ai/mastra/pull/16725))
+
+  `@mastra/core/voice` continues to re-export the voice APIs for backwards compatibility.
+
 ## 0.1.1
 
 ### Patch Changes

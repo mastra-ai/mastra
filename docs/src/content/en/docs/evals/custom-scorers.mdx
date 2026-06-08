@@ -50,7 +50,7 @@ const glutenCheckerScorer = createScorer({
   id: 'gluten-checker',
   description: 'Check if recipes contain gluten ingredients',
   judge: {                    // Optional: for prompt object steps
-    model: 'openai/gpt-5.4',
+    model: '__GATEWAY_OPENAI_MODEL__',
     instructions: 'You are a Chef that identifies if recipes contain gluten.'
   }
 })
@@ -77,7 +77,7 @@ const quoteSourcesScorer = createScorer({
   id: 'quote-sources',
   description: 'Check if the response includes sources',
   judge: {
-    model: 'openai/gpt-5-mini',
+    model: '__GATEWAY_OPENAI_MODEL_MINI__',
     instructions: 'You are a strict evaluator.',
   },
 })
@@ -415,7 +415,7 @@ export const glutenCheckerScorer = createScorer({
   id: 'gluten-checker',
   description: 'Check if the output contains any gluten',
   judge: {
-    model: 'openai/gpt-5-mini',
+    model: '__GATEWAY_OPENAI_MODEL_MINI__',
     instructions: GLUTEN_INSTRUCTIONS,
   },
 })
@@ -450,7 +450,7 @@ Sets up the LLM model and defines its role as a domain expert.
 
 ```typescript prettier:false
 judge: {
-  model: 'openai/gpt-5-mini',
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
   instructions: GLUTEN_INSTRUCTIONS,
 }
 ```

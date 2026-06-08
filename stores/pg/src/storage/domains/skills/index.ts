@@ -7,6 +7,7 @@ import {
   TABLE_SKILLS,
   TABLE_SKILL_VERSIONS,
   TABLE_SCHEMAS,
+  TABLE_FAVORITES,
 } from '@mastra/core/storage';
 import type {
   StorageSkillType,
@@ -22,9 +23,10 @@ import type {
   ListSkillVersionsInput,
   ListSkillVersionsOutput,
 } from '@mastra/core/storage/domains/skills';
-import { PgDB, resolvePgConfig } from '../../db';
+import { parseSqlIdentifier } from '@mastra/core/utils';
+import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
-import { getTableName, getSchemaName } from '../utils';
+import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
   'name',
@@ -36,6 +38,7 @@ const SNAPSHOT_FIELDS = [
   'references',
   'scripts',
   'assets',
+  'files',
   'metadata',
   'tree',
 ] as const;
@@ -57,15 +60,43 @@ export class SkillsPG extends SkillsStorage {
     this.#indexes = indexes?.filter(idx => (SkillsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
-  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+  static getDefaultIndexDefs(schemaPrefix: string): CreateIndexOptions[] {
     return [
       {
-        name: 'idx_skill_versions_skill_version',
+        name: `${schemaPrefix}idx_skill_versions_skill_version`,
         table: TABLE_SKILL_VERSIONS,
         columns: ['skillId', 'versionNumber'],
         unique: true,
       },
     ];
+  }
+
+  static getExportDDL(schemaName?: string): string[] {
+    const statements: string[] = [];
+    const parsedSchema = schemaName ? parseSqlIdentifier(schemaName, 'schema name') : '';
+    const schemaPrefix = parsedSchema && parsedSchema !== 'public' ? `${parsedSchema}_` : '';
+
+    for (const tableName of SkillsPG.MANAGED_TABLES) {
+      statements.push(
+        generateTableSQL({
+          tableName,
+          schema: TABLE_SCHEMAS[tableName],
+          schemaName,
+          includeAllConstraints: true,
+        }),
+      );
+    }
+
+    for (const idx of SkillsPG.getDefaultIndexDefs(schemaPrefix)) {
+      statements.push(generateIndexSQL(idx, schemaName));
+    }
+
+    return statements;
+  }
+
+  getDefaultIndexDefinitions(): CreateIndexOptions[] {
+    const schemaPrefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    return SkillsPG.getDefaultIndexDefs(schemaPrefix);
   }
 
   async createDefaultIndexes(): Promise<void> {
@@ -89,6 +120,17 @@ export class SkillsPG extends SkillsStorage {
     await this.#db.createTable({
       tableName: TABLE_SKILL_VERSIONS,
       schema: TABLE_SCHEMAS[TABLE_SKILL_VERSIONS],
+    });
+    // Add new columns for backwards compatibility with intermediate schema versions
+    await this.#db.alterTable({
+      tableName: TABLE_SKILLS,
+      schema: TABLE_SCHEMAS[TABLE_SKILLS],
+      ifNotExists: ['visibility', 'favoriteCount'],
+    });
+    await this.#db.alterTable({
+      tableName: TABLE_SKILL_VERSIONS,
+      schema: TABLE_SCHEMAS[TABLE_SKILL_VERSIONS],
+      ifNotExists: ['files'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -147,17 +189,19 @@ export class SkillsPG extends SkillsStorage {
       const now = new Date();
       const nowIso = now.toISOString();
 
+      const visibility = skill.visibility ?? (skill.authorId ? 'private' : undefined);
+
       // 1. Create the thin skill record (no metadata on entity)
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
-          id, status, "activeVersionId", "authorId",
+          id, status, "activeVersionId", "authorId", visibility, "favoriteCount",
           "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [skill.id, 'draft', null, skill.authorId ?? null, nowIso, nowIso, nowIso, nowIso],
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        [skill.id, 'draft', null, skill.authorId ?? null, visibility ?? null, 0, nowIso, nowIso, nowIso, nowIso],
       );
 
       // 2. Extract snapshot fields and create version 1
-      const { id: _id, authorId: _authorId, ...snapshotConfig } = skill;
+      const { id: _id, authorId: _authorId, visibility: _visibility, ...snapshotConfig } = skill;
       const versionId = crypto.randomUUID();
       await this.createVersion({
         id: versionId,
@@ -173,6 +217,8 @@ export class SkillsPG extends SkillsStorage {
         status: 'draft',
         activeVersionId: undefined,
         authorId: skill.authorId,
+        visibility,
+        favoriteCount: 0,
         createdAt: now,
         updatedAt: now,
       };
@@ -220,8 +266,17 @@ export class SkillsPG extends SkillsStorage {
         });
       }
 
-      const { authorId, activeVersionId, status, ...configFields } = updates;
+      const { authorId, visibility, activeVersionId, status, ...rawConfigFields } = updates;
       let versionCreated = false;
+
+      // Filter out undefined keys: callers may spread partial snapshots into
+      // update() and rely on "omit = no change" semantics. Forwarding
+      // undefined would overwrite populated columns with undefined and trip
+      // pg-promise's "undefined cannot be passed as argument" guard.
+      const configFields: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(rawConfigFields)) {
+        if (value !== undefined) configFields[key] = value;
+      }
 
       // Check if any snapshot config fields are present
       const hasConfigUpdate = SNAPSHOT_FIELDS.some(field => field in configFields);
@@ -278,6 +333,11 @@ export class SkillsPG extends SkillsStorage {
       if (authorId !== undefined) {
         setClauses.push(`"authorId" = $${paramIndex++}`);
         values.push(authorId);
+      }
+
+      if (visibility !== undefined) {
+        setClauses.push(`visibility = $${paramIndex++}`);
+        values.push(visibility);
       }
 
       if (activeVersionId !== undefined) {
@@ -357,7 +417,17 @@ export class SkillsPG extends SkillsStorage {
   }
 
   async list(args?: StorageListSkillsInput): Promise<StorageListSkillsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId } = args || {};
+    const {
+      page = 0,
+      perPage: perPageInput,
+      orderBy,
+      authorId,
+      visibility,
+      status,
+      entityIds,
+      pinFavoritedFor,
+      favoritedOnly,
+    } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -376,24 +446,72 @@ export class SkillsPG extends SkillsStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      const tableName = getTableName({ indexName: TABLE_SKILLS, schemaName: getSchemaName(this.#schema) });
+      // Empty entityIds is short-circuit: no rows possible.
+      if (entityIds && entityIds.length === 0) {
+        return {
+          skills: [],
+          total: 0,
+          page,
+          perPage: perPageForResponse,
+          hasMore: false,
+        };
+      }
 
-      // Build WHERE conditions (no metadata column on entity)
+      const tableName = getTableName({ indexName: TABLE_SKILLS, schemaName: getSchemaName(this.#schema) });
+      const favoritesTable = getTableName({ indexName: TABLE_FAVORITES, schemaName: getSchemaName(this.#schema) });
+
+      // Build WHERE conditions (referenced via alias `s` for skills, `sr` for favorites).
       const conditions: string[] = [];
       const queryParams: any[] = [];
       let paramIdx = 1;
 
+      const joinUserId = pinFavoritedFor;
+      const useJoin = Boolean(joinUserId);
+      let joinSqlIdx: number | null = null;
+      if (useJoin) {
+        joinSqlIdx = paramIdx++;
+      }
+
+      if (status) {
+        conditions.push(`s.status = $${paramIdx++}`);
+        queryParams.push(status);
+      }
+
       if (authorId !== undefined) {
-        conditions.push(`"authorId" = $${paramIdx++}`);
+        conditions.push(`s."authorId" = $${paramIdx++}`);
         queryParams.push(authorId);
       }
 
+      if (visibility !== undefined) {
+        conditions.push(`s.visibility = $${paramIdx++}`);
+        queryParams.push(visibility);
+      }
+
+      if (entityIds && entityIds.length > 0) {
+        const placeholders = entityIds.map(() => `$${paramIdx++}`).join(', ');
+        conditions.push(`s.id IN (${placeholders})`);
+        queryParams.push(...entityIds);
+      }
+
+      if (useJoin && favoritedOnly) {
+        conditions.push('sr."userId" IS NOT NULL');
+      } else if (favoritedOnly) {
+        // Defensive: favoritedOnly with no userId can never match a real row.
+        conditions.push('1=0');
+      }
+
+      const joinClause =
+        useJoin && joinSqlIdx !== null
+          ? `LEFT JOIN ${favoritesTable} sr ON sr."entityType" = 'skill' AND sr."entityId" = s.id AND sr."userId" = $${joinSqlIdx}`
+          : '';
+      const joinParams: any[] = useJoin && joinUserId ? [joinUserId] : [];
+
       const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-      // Get total count
+      // Get total count (mirrors join + where, no ORDER BY / LIMIT).
       const countResult = await this.#db.client.one(
-        `SELECT COUNT(*) as count FROM ${tableName} ${whereClause}`,
-        queryParams,
+        `SELECT COUNT(*) as count FROM ${tableName} s ${joinClause} ${whereClause}`,
+        [...joinParams, ...queryParams],
       );
       const total = parseInt(countResult.count, 10);
 
@@ -407,13 +525,31 @@ export class SkillsPG extends SkillsStorage {
         };
       }
 
+      // Compose ORDER BY: favorited-first when JOIN active, then existing field, then id ASC tie-break.
+      const orderByParts: string[] = [];
+      if (useJoin) {
+        orderByParts.push(`(sr."userId" IS NOT NULL) DESC`);
+      }
+      orderByParts.push(`s."${field}" ${direction}`);
+      orderByParts.push(`s."id" ASC`);
+      const orderByClause = `ORDER BY ${orderByParts.join(', ')}`;
+
       const limitValue = perPageInput === false ? total : perPage;
+      const limitIdx = paramIdx++;
+      const offsetIdx = paramIdx++;
       const dataResult = await this.#db.client.manyOrNone(
-        `SELECT * FROM ${tableName} ${whereClause} ORDER BY "${field}" ${direction} LIMIT $${paramIdx++} OFFSET $${paramIdx++}`,
-        [...queryParams, limitValue, offset],
+        `SELECT s.* FROM ${tableName} s ${joinClause} ${whereClause} ${orderByClause} LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+        [...joinParams, ...queryParams, limitValue, offset],
       );
 
-      const skills = (dataResult || []).map(row => this.parseSkillRow(row));
+      const skills = (dataResult || []).flatMap(row => {
+        try {
+          return [this.parseSkillRow(row)];
+        } catch (err) {
+          this.logger?.warn?.('[PG] Failed to map skill row, skipping', { id: row?.id, error: err });
+          return [];
+        }
+      });
 
       return {
         skills,
@@ -452,10 +588,10 @@ export class SkillsPG extends SkillsStorage {
         `INSERT INTO ${tableName} (
           id, "skillId", "versionNumber",
           name, description, instructions, license, compatibility,
-          source, "references", scripts, assets, metadata, tree,
+          source, "references", scripts, assets, files, metadata, tree,
           "changedFields", "changeMessage",
           "createdAt", "createdAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
         [
           input.id,
           input.skillId,
@@ -469,6 +605,7 @@ export class SkillsPG extends SkillsStorage {
           input.references ? JSON.stringify(input.references) : null,
           input.scripts ? JSON.stringify(input.scripts) : null,
           input.assets ? JSON.stringify(input.assets) : null,
+          input.files ? JSON.stringify(input.files) : null,
           input.metadata ? JSON.stringify(input.metadata) : null,
           input.tree ? JSON.stringify(input.tree) : null,
           input.changedFields ? JSON.stringify(input.changedFields) : null,
@@ -629,7 +766,14 @@ export class SkillsPG extends SkillsStorage {
         [skillId, limitValue, offset],
       );
 
-      const versions = (dataResult || []).map(row => this.parseVersionRow(row));
+      const versions = (dataResult || []).flatMap(row => {
+        try {
+          return [this.parseVersionRow(row)];
+        } catch (err) {
+          this.logger?.warn?.('[PG] Failed to map skill version row, skipping', { id: row?.id, error: err });
+          return [];
+        }
+      });
 
       return {
         versions,
@@ -722,40 +866,14 @@ export class SkillsPG extends SkillsStorage {
   // Private Helper Methods
   // ==========================================================================
 
-  private parseJson(value: any, fieldName?: string): any {
-    if (!value) return undefined;
-    if (typeof value !== 'string') return value;
-
-    try {
-      return JSON.parse(value);
-    } catch (error) {
-      if (error instanceof MastraError) throw error;
-      const details: Record<string, string> = {
-        value: value.length > 100 ? value.substring(0, 100) + '...' : value,
-      };
-      if (fieldName) {
-        details.field = fieldName;
-      }
-
-      throw new MastraError(
-        {
-          id: createStorageErrorId('PG', 'PARSE_JSON', 'INVALID_JSON'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.SYSTEM,
-          text: `Failed to parse JSON${fieldName ? ` for field "${fieldName}"` : ''}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          details,
-        },
-        error,
-      );
-    }
-  }
-
   private parseSkillRow(row: any): StorageSkillType {
     return {
       id: row.id as string,
       status: row.status as StorageSkillType['status'],
       activeVersionId: row.activeVersionId as string | undefined,
       authorId: row.authorId as string | undefined,
+      visibility: row.visibility as StorageSkillType['visibility'],
+      favoriteCount: row.favoriteCount === null || row.favoriteCount === undefined ? 0 : Number(row.favoriteCount),
       createdAt: new Date(row.createdAtZ || row.createdAt),
       updatedAt: new Date(row.updatedAtZ || row.updatedAt),
     };
@@ -770,14 +888,15 @@ export class SkillsPG extends SkillsStorage {
       description: row.description as string,
       instructions: row.instructions as string,
       license: row.license as string | undefined,
-      compatibility: this.parseJson(row.compatibility, 'compatibility'),
-      source: this.parseJson(row.source, 'source'),
-      references: this.parseJson(row.references, 'references'),
-      scripts: this.parseJson(row.scripts, 'scripts'),
-      assets: this.parseJson(row.assets, 'assets'),
-      metadata: this.parseJson(row.metadata, 'metadata'),
-      tree: this.parseJson(row.tree, 'tree'),
-      changedFields: this.parseJson(row.changedFields, 'changedFields'),
+      compatibility: parseJsonResilient(row.compatibility, 'compatibility'),
+      source: parseJsonResilient(row.source, 'source'),
+      references: parseJsonResilient(row.references, 'references'),
+      scripts: parseJsonResilient(row.scripts, 'scripts'),
+      assets: parseJsonResilient(row.assets, 'assets'),
+      files: parseJsonResilient(row.files, 'files'),
+      metadata: parseJsonResilient(row.metadata, 'metadata'),
+      tree: parseJsonResilient(row.tree, 'tree'),
+      changedFields: parseJsonResilient(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: new Date(row.createdAtZ || row.createdAt),
     };

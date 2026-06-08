@@ -6,10 +6,13 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import * as p from '@clack/prompts';
 import archiver from 'archiver';
+import { config } from 'dotenv';
 import { runBuild } from '../../utils/run-build.js';
+import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
+import { preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
 import { fetchProjects, createProject, uploadDeploy, pollDeploy } from './platform-api.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from './project-config.js';
 
@@ -94,6 +97,19 @@ export function parseEnvFile(content: string): Record<string, string> {
     if (key) vars[key] = value;
   }
   return vars;
+}
+
+/**
+ * Loads MASTRA_PROJECT_ID and MASTRA_ORG_ID from the project's .env files
+ * into process.env so deploys auto-link to the project that `mastra init --observability`
+ * provisioned. Uses dotenv with override: false (the default), so any
+ * existing process.env value (e.g. from CI) always wins.
+ */
+export function loadDeployEnvFromDotenv(projectDir: string): void {
+  config({
+    path: [join(projectDir, '.env'), join(projectDir, '.env.local'), join(projectDir, '.env.production')],
+    quiet: true,
+  });
 }
 
 async function getDeployEnvFiles(projectDir: string): Promise<string[]> {
@@ -248,6 +264,7 @@ async function resolveProject(
   projectConfig: { projectId?: string; projectName?: string; projectSlug?: string; organizationId?: string } | null,
   flagProject?: string,
   defaultName?: string | null,
+  autoAccept?: boolean,
 ): Promise<ProjectResolution> {
   // 0. MASTRA_PROJECT_ID env var (CI/CD headless path)
   const envProjectId = process.env.MASTRA_PROJECT_ID;
@@ -255,10 +272,19 @@ async function resolveProject(
     return { existing: true, projectId: envProjectId, projectName: envProjectId, projectSlug: envProjectId };
   }
 
-  // 1. CLI flag — match by slug first, then id
+  // 1. CLI flag — match by id, slug, or unambiguous name
   if (flagProject) {
     const projects = await fetchProjects(token, orgId);
-    const match = projects.find(proj => proj.slug === flagProject || proj.id === flagProject);
+    const byId = projects.find(proj => proj.id === flagProject);
+    const bySlug = projects.find(proj => proj.slug === flagProject);
+    const byName = projects.filter(proj => proj.name === flagProject);
+    if (!byId && !bySlug && byName.length > 1) {
+      p.cancel(
+        `Multiple projects are named "${flagProject}". Pass --project with the project id or slug to disambiguate.`,
+      );
+      process.exit(1);
+    }
+    const match = byId ?? bySlug ?? (byName.length === 1 ? byName[0] : undefined);
     if (match) {
       return { existing: true, projectId: match.id, projectName: match.name, projectSlug: match.slug ?? match.name };
     }
@@ -275,7 +301,52 @@ async function resolveProject(
     };
   }
 
-  // 3. No existing project — return the name so caller can create after confirmation
+  // 3. Consult the list of existing projects in this org before defaulting to create-new.
+  const projects = await fetchProjects(token, orgId);
+  const nameMatches = defaultName
+    ? projects.filter(proj => proj.name === defaultName || proj.slug === defaultName)
+    : [];
+
+  if (projects.length > 0) {
+    if (autoAccept) {
+      // Non-interactive: only safe to auto-pick when there is exactly one
+      // project whose name/slug matches the package.json name.
+      if (nameMatches.length === 1) {
+        const m = nameMatches[0]!;
+        return { existing: true, projectId: m.id, projectName: m.name, projectSlug: m.slug ?? m.name };
+      }
+      throw new Error(
+        `Found ${projects.length} existing project(s) in this organization. Pass --project <id-or-slug> to select one, or re-run without --yes to choose interactively.`,
+      );
+    }
+
+    const CREATE_NEW = '__create_new__';
+    const initialValue = nameMatches.length === 1 ? nameMatches[0]!.id : projects[0]!.id;
+    const selected = await p.select({
+      message: 'Select a project to deploy to',
+      initialValue,
+      options: [
+        ...projects.map(proj => ({
+          value: proj.id,
+          label: `${proj.name} (${proj.id})`,
+        })),
+        { value: CREATE_NEW, label: defaultName ? `＋ Create new project "${defaultName}"` : '＋ Create new project' },
+      ],
+    });
+
+    if (p.isCancel(selected)) {
+      p.cancel('Deploy cancelled.');
+      process.exit(0);
+    }
+
+    if (selected !== CREATE_NEW) {
+      const match = projects.find(proj => proj.id === selected)!;
+      return { existing: true, projectId: match.id, projectName: match.name, projectSlug: match.slug ?? match.name };
+    }
+    // fall through to create-new flow
+  }
+
+  // 4. No existing project (or user chose "Create new") — return the name so caller can create after confirmation.
   const name = defaultName;
   if (!name) {
     throw new Error('Could not determine project name from package.json. Use --project to specify one.');
@@ -296,16 +367,21 @@ export async function deployAction(
     yes?: boolean;
     config?: string;
     skipBuild?: boolean;
+    skipPreflight?: boolean;
     debug?: boolean;
     envFile?: string;
   },
 ) {
   const targetDir = resolve(dir || process.cwd());
+  // Seed MASTRA_PROJECT_ID / MASTRA_ORG_ID from the project's .env so deploys
+  // auto-link to the project that `mastra init --observability` provisioned.
+  loadDeployEnvFromDotenv(targetDir);
   const isHeadless = Boolean(process.env.MASTRA_API_TOKEN);
   if (isHeadless && (!process.env.MASTRA_ORG_ID || !process.env.MASTRA_PROJECT_ID)) {
     throw new Error('MASTRA_ORG_ID and MASTRA_PROJECT_ID are required when MASTRA_API_TOKEN is set');
   }
   const autoAccept = opts.yes ?? isHeadless;
+  const skipPreflight = opts.skipPreflight || process.env.MASTRA_SKIP_PREFLIGHT === '1';
 
   p.intro('mastra studio deploy');
 
@@ -324,7 +400,7 @@ export async function deployAction(
   const { orgId, orgName } = await resolveOrg(token, projectConfig, opts.org);
 
   // Step 4: Resolve project (does NOT create yet — waits for confirmation)
-  const resolution = await resolveProject(token, orgId, projectConfig, opts.project, packageName);
+  const resolution = await resolveProject(token, orgId, projectConfig, opts.project, packageName, autoAccept);
 
   let projectId: string;
   let projectName: string;
@@ -415,12 +491,32 @@ export async function deployAction(
 
   let t: number;
 
+  // Check build staleness to determine if we need to rebuild
+  const mastraDir = join(targetDir, 'src', 'mastra');
+  const outputDirectory = join(targetDir, '.mastra');
+  const staleness = await checkBuildStaleness(targetDir, mastraDir, outputDirectory);
+
   if (opts.skipBuild) {
+    if (staleness.isStale && staleness.reason !== 'no-build') {
+      // User explicitly skipped build, but sources have changed — warn them
+      if (staleness.reason === 'hash-mismatch') {
+        p.log.warn('Source files have changed since last build. Deploy may not reflect latest changes.');
+      } else if (staleness.reason === 'no-manifest') {
+        p.log.warn('No build manifest found. Cannot verify if build is up-to-date.');
+      }
+    }
     p.log.step('Skipping build (--skip-build)');
-  } else {
+  } else if (staleness.isStale) {
+    // Build is stale or doesn't exist — rebuild
     t = performance.now();
+    if (staleness.reason === 'hash-mismatch') {
+      p.log.step('Source files changed, rebuilding...');
+    }
     await runBuild(targetDir, { debug: opts.debug });
     p.log.step(`Build completed (${elapsed(performance.now() - t)})`);
+  } else {
+    // Build is up-to-date — skip rebuild
+    p.log.step('Build is up-to-date, skipping rebuild');
   }
 
   // Verify build output exists
@@ -431,14 +527,6 @@ export async function deployAction(
     throw new Error('.mastra/output/index.mjs not found — did the build succeed?');
   }
 
-  t = performance.now();
-  s.start('Zipping build artifact...');
-  const zipPath = await zipOutput(targetDir);
-  const zipStat = await stat(zipPath);
-  const sizeKB = zipStat.size / 1024;
-  const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;
-  s.stop(`Created ${sizeLabel} archive (${elapsed(performance.now() - t)})`);
-
   const envVars = await readEnvVars(targetDir, { autoAccept, envFile: opts.envFile });
   const envCount = Object.keys(envVars).length;
   if (envCount > 0) {
@@ -446,6 +534,28 @@ export async function deployAction(
   } else {
     p.log.step('No env vars found in selected env file');
   }
+
+  // Pre-upload validation — catch USER-attributable errors before zipping/shipping.
+  if (!skipPreflight) {
+    const issues = await preflightBuildOutput(targetDir, envVars);
+    const outcome = await printPreflightIssues(issues, { autoAccept });
+    if (outcome === 'blocked') {
+      p.cancel('Deploy blocked by preflight errors.');
+      process.exit(1);
+    }
+    if (outcome === 'cancelled') {
+      p.cancel('Deploy cancelled.');
+      process.exit(0);
+    }
+  }
+
+  t = performance.now();
+  s.start('Zipping build artifact...');
+  const zipPath = await zipOutput(targetDir);
+  const zipStat = await stat(zipPath);
+  const sizeKB = zipStat.size / 1024;
+  const sizeLabel = sizeKB > 1024 ? `${(sizeKB / 1024).toFixed(1)}MB` : `${sizeKB.toFixed(1)}KB`;
+  s.stop(`Created ${sizeLabel} archive (${elapsed(performance.now() - t)})`);
 
   t = performance.now();
   s.start('Uploading...');

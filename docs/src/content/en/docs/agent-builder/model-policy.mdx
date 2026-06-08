@@ -1,0 +1,58 @@
+---
+title: "Model policy | Agent Builder"
+description: Restrict which providers and models the Agent Builder exposes, pin a default model, and lock the picker.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# Model policy
+
+:::note
+The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
+:::
+
+The model policy controls which providers and models Builder-created agents can use, which model is selected by default, and whether end users can change it. The policy lives at `builder.configuration.agent.models`.
+
+## Quickstart
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        models: {
+          allowed: [
+            { provider: 'openai', modelId: 'gpt-5.4-mini' },
+            { provider: 'openai', modelId: 'gpt-5.4' },
+            { provider: 'anthropic', modelId: 'claude-opus-4-7' },
+          ],
+        },
+      },
+    },
+  },
+})
+```
+
+This restricts the Builder's model picker to two OpenAI models and one Anthropic model. End users choose one when creating an agent.
+
+## Validation rules
+
+Mastra validates the model policy at server boot. Violations are surfaced as warnings through `getModelPolicyWarnings()`.
+
+- When `allowed` is empty or omitted, every registered model is available.
+- When `allowed` is non-empty, `default` (if set) must satisfy the allowlist. A `default` that fails this check is dropped and surfaced as a warning.
+- To hide the end-user model picker, set `features.agent.model: false` in [AgentBuilderOptions](/reference/editor/agent-builder/agent-builder-options). When the picker is hidden, provide a `default` so new agents resolve a model.
+
+Registered providers (`provider: 'openai'`, `provider: 'anthropic'`, and so on) can omit `modelId` to allow every model from that provider.
+
+See the [`builder.configuration.agent.models`](/reference/editor/agent-builder/builder-models) reference for every admin-writable field and validation rules.
+
+## Related
+
+- [Configuration](/docs/agent-builder/configuration) — wire the model policy into the broader Builder config.
+- [`builder.configuration.agent.models`](/reference/editor/agent-builder/builder-models) — full property list.
+- [Provider registry](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/llm/model/provider-registry.json) — every model ID Mastra recognizes out of the box.

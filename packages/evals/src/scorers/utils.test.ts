@@ -18,6 +18,7 @@ import {
   isScorerRunOutputForAgent,
   createTestMessage,
   createToolInvocation,
+  extractToolCalls,
   extractToolResults,
   extractTrajectory,
   compareTrajectories,
@@ -556,6 +557,147 @@ describe('Scorer Utils', () => {
 
       expect(results).toHaveLength(1);
       expect(results[0]?.toolName).toBe('hasResultTool');
+    });
+
+    it('should extract tool results from V2 content.parts when toolInvocations is absent', () => {
+      const output: ScorerRunOutputForAgent = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-1',
+                  toolName: 'weatherTool',
+                  args: { city: 'Seoul' },
+                  result: { temperature: 22 },
+                },
+              },
+              { type: 'text', text: 'The temperature in Seoul is 22°C.' },
+            ],
+            content: 'The temperature in Seoul is 22°C.',
+          } as any,
+          createdAt: new Date(),
+        },
+      ];
+
+      const results = extractToolResults(output);
+
+      expect(results).toHaveLength(1);
+      expect(results[0]).toEqual({
+        toolName: 'weatherTool',
+        toolCallId: 'call-1',
+        args: { city: 'Seoul' },
+        result: { temperature: 22 },
+      });
+    });
+
+    it('should prefer toolInvocations over content.parts when both are present', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Done.',
+          role: 'assistant',
+          toolInvocations: [
+            createToolInvocation({
+              toolCallId: 'legacy-call',
+              toolName: 'legacyTool',
+              args: {},
+              result: { source: 'legacy' },
+              state: 'result',
+            }),
+          ],
+        }),
+      ];
+      // Inject an extra tool-invocation part that should be ignored
+      (output[0]!.content as any).parts.push({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'parts-call',
+          toolName: 'partsTool',
+          args: {},
+          result: { source: 'parts' },
+        },
+      });
+
+      const results = extractToolResults(output);
+
+      expect(results).toHaveLength(1);
+      expect(results[0]?.toolName).toBe('legacyTool');
+    });
+  });
+
+  describe('extractToolCalls', () => {
+    it('should extract tool calls from legacy toolInvocations', () => {
+      const output: ScorerRunOutputForAgent = [
+        createTestMessage({
+          content: 'Checking weather.',
+          role: 'assistant',
+          toolInvocations: [
+            createToolInvocation({
+              toolCallId: 'call-1',
+              toolName: 'weatherTool',
+              args: { location: 'Tokyo' },
+              result: { temp: 28 },
+              state: 'result',
+            }),
+          ],
+        }),
+      ];
+
+      const { tools, toolCallInfos } = extractToolCalls(output);
+
+      expect(tools).toEqual(['weatherTool']);
+      expect(toolCallInfos).toHaveLength(1);
+      expect(toolCallInfos[0]?.toolName).toBe('weatherTool');
+      expect(toolCallInfos[0]?.toolCallId).toBe('call-1');
+    });
+
+    it('should extract tool calls from V2 content.parts when toolInvocations is absent', () => {
+      const output: ScorerRunOutputForAgent = [
+        {
+          id: 'msg-1',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-1',
+                  toolName: 'weatherTool',
+                  args: { city: 'Seoul' },
+                  result: { temperature: 22 },
+                },
+              },
+              { type: 'text', text: 'The temperature in Seoul is 22°C.' },
+            ],
+            content: 'The temperature in Seoul is 22°C.',
+          } as any,
+          createdAt: new Date(),
+        },
+      ];
+
+      const { tools, toolCallInfos } = extractToolCalls(output);
+
+      expect(tools).toEqual(['weatherTool']);
+      expect(toolCallInfos).toHaveLength(1);
+      expect(toolCallInfos[0]?.toolName).toBe('weatherTool');
+      expect(toolCallInfos[0]?.toolCallId).toBe('call-1');
+    });
+
+    it('should return empty arrays when output has no tool calls', () => {
+      const output: ScorerRunOutputForAgent = [createTestMessage({ content: 'Hello!', role: 'assistant' })];
+
+      const { tools, toolCallInfos } = extractToolCalls(output);
+
+      expect(tools).toHaveLength(0);
+      expect(toolCallInfos).toHaveLength(0);
     });
   });
 

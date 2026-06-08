@@ -37,7 +37,7 @@ export const mastra = new Mastra({
       id: 'weather-agent',
       name: 'Weather Agent',
       instructions: 'You help with weather information',
-      model: 'openai/gpt-5.4',
+      model: '__GATEWAY_OPENAI_MODEL__',
     }),
   },
 })
@@ -77,7 +77,7 @@ export const mastra = new Mastra({
     type: 'boolean',
     defaultValue: 'false',
     description:
-      'Whether background tasks are enabled. The manager only initializes when this is true and a storage backend is configured.',
+      'Whether the background task manager is available. The manager only initializes when this is true and a storage backend is configured. This is a feature-availability switch — it does not opt any tool into background dispatch. Tools must opt in at the tool or agent layer (see the Background tasks guide).',
   },
   {
     name: 'globalConcurrency',
@@ -293,20 +293,20 @@ This is used internally by Mastra for creating IDs for workflow runs, agent conv
 :::
 
 ```typescript title="src/mastra/index.ts"
+import { v4 as uuid } from '@lukeed/uuid'
 import { Mastra } from '@mastra/core'
-import { nanoid } from 'nanoid'
 
 export const mastra = new Mastra({
   idGenerator: context => {
     if (context?.idType === 'message' && context?.threadId) {
-      return `msg-${context.threadId}-${nanoid(8)}`
+      return `msg-${context.threadId}-${uuid()}`
     }
 
     if (context?.idType === 'run' && context?.source && context?.entityId) {
-      return `${context.source}-run-${context.entityId}-${nanoid(6)}`
+      return `${context.source}-run-${context.entityId}-${uuid()}`
     }
 
-    return nanoid()
+    return uuid()
   },
 })
 ```
@@ -399,7 +399,7 @@ Visit the [Observability documentation](/docs/observability/overview) to learn m
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { LibSQLStore } from '@mastra/libsql'
-import { Observability, DefaultExporter } from '@mastra/observability'
+import { Observability, MastraStorageExporter } from '@mastra/observability'
 
 export const mastra = new Mastra({
   storage: new LibSQLStore({
@@ -410,7 +410,7 @@ export const mastra = new Mastra({
     configs: {
       default: {
         serviceName: 'my-app',
-        exporters: [new DefaultExporter()],
+        exporters: [new MastraStorageExporter()],
       },
     },
   }),
@@ -438,7 +438,7 @@ import { ModerationProcessor } from '@mastra/core/processors'
 export const mastra = new Mastra({
   processors: {
     moderation: new ModerationProcessor({
-      model: 'openai/gpt-5-mini',
+      model: '__GATEWAY_OPENAI_MODEL_MINI__',
       categories: ['hate', 'harassment', 'violence'],
     }),
   },
@@ -485,7 +485,7 @@ import { createToxicityScorer } from '@mastra/evals/scorers/prebuilt'
 
 export const mastra = new Mastra({
   scorers: {
-    toxicity: createToxicityScorer({ model: 'openai/gpt-5-mini' }),
+    toxicity: createToxicityScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
   },
 })
 ```
@@ -822,13 +822,13 @@ export const mastra = new Mastra({
 
 **Type:** `CorsOptions | false`
 
-CORS (Cross-Origin Resource Sharing) configuration for the server. Set to `false` to disable CORS entirely.
+CORS (Cross-Origin Resource Sharing) configuration for the server. Set to `false` to disable CORS entirely. Use this for one policy across all routes. For a custom route-specific policy, use the `cors` option in [`registerApiRoute()`](/reference/server/register-api-route).
 
 | Property | Type | Default | Description |
 | - | - | - | - |
 | `origin` | `string \| string[]` | `'*'` | Origins for CORS requests |
 | `allowMethods` | `string[]` | `['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']` | HTTP methods |
-| `allowHeaders` | `string[]` | `['Content-Type', 'Authorization', 'x-mastra-client-type']` | Request headers |
+| `allowHeaders` | `string[]` | `['Content-Type', 'Authorization', 'x-mastra-client-type', 'x-mastra-dev-playground']` | Request headers |
 | `exposeHeaders` | `string[]` | `['Content-Length', 'X-Requested-With']` | Browser headers |
 | `credentials` | `boolean` | `false` | Credentials (cookies, authorization headers) |
 | `maxAge` | `number` | `3600` | Preflight request cache duration in seconds |

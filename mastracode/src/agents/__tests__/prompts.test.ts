@@ -1,4 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// Keep prompt tests independent from optional web-search package artifacts.
+vi.mock('../../tools/index.js', () => ({
+  hasTavilyKey: () => false,
+}));
+
 import { buildFullPrompt } from '../prompts/index.js';
 
 describe('buildFullPrompt', () => {
@@ -83,6 +89,55 @@ describe('buildFullPrompt', () => {
 
     expect(prompt).not.toContain('<autonomy_and_persistence>');
     expect(prompt).not.toContain('<coding_behavior>');
+  });
+
+  it('describes goal mode and goal-ready plan expectations in the base prompt', () => {
+    const prompt = buildFullPrompt({
+      projectPath: '/tmp/project',
+      projectName: 'test-project',
+      gitBranch: 'main',
+      platform: 'darwin',
+      date: '2026-03-23',
+      mode: 'build',
+      activePlan: null,
+      modeId: 'build',
+      currentDate: '2026-03-23',
+      workingDir: '/tmp/project',
+      state: {
+        permissionRules: { tools: {} },
+      },
+    });
+
+    expect(prompt).toContain('## Goal Mode Awareness');
+    expect(prompt).toContain('A goal is a persistent objective');
+    expect(prompt).toContain('submit_plan tool may also be started as a goal');
+    expect(prompt).toContain('make them goal-ready');
+    expect(prompt).toContain('concrete, outcome-focused, verifiable, and bounded');
+  });
+
+  it('includes goal mode as a submit_plan approval option in plan mode', () => {
+    const prompt = buildFullPrompt({
+      projectPath: '/tmp/project',
+      projectName: 'test-project',
+      gitBranch: 'main',
+      platform: 'darwin',
+      date: '2026-03-23',
+      mode: 'plan',
+      activePlan: null,
+      modeId: 'plan',
+      currentDate: '2026-03-23',
+      workingDir: '/tmp/project',
+      state: {
+        permissionRules: { tools: {} },
+      },
+    });
+
+    expect(prompt).toContain('## Goal-Ready Plans');
+    expect(prompt).toContain(
+      'The submit_plan approval UI can let the user approve the plan normally or start it as a persistent goal',
+    );
+    expect(prompt).toContain('**Start as goal**');
+    expect(prompt).toContain('goal judge can tell when the work is done');
   });
 
   it('includes common binary availability in environment details', () => {

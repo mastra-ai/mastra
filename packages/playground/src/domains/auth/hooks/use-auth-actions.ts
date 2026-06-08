@@ -1,3 +1,4 @@
+import type { MastraClient } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
@@ -38,10 +39,10 @@ import type { SSOLoginResponse, LogoutResponse } from '../types';
  * @internal
  */
 export async function makeSSOLoginRequest(
-  client: { options: any },
+  client: MastraClient,
   { redirectUri }: { redirectUri?: string },
 ): Promise<SSOLoginResponse> {
-  const { baseUrl = '', apiPrefix } = client.options || {};
+  const { baseUrl = '', apiPrefix, headers: clientHeaders = {} } = client.options;
   const raw = (apiPrefix || '/api').trim();
   const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');
 
@@ -55,6 +56,7 @@ export async function makeSSOLoginRequest(
   const response = await fetch(url, {
     credentials: 'include',
     headers: {
+      ...clientHeaders,
       'Content-Type': 'application/json',
     },
   });
@@ -70,7 +72,7 @@ export function useSSOLogin() {
   const client = useMastraClient();
 
   return useMutation<SSOLoginResponse, Error, { redirectUri?: string }>({
-    mutationFn: ({ redirectUri }) => makeSSOLoginRequest(client as any, { redirectUri }),
+    mutationFn: ({ redirectUri }) => makeSSOLoginRequest(client, { redirectUri }),
   });
 }
 
@@ -115,8 +117,8 @@ export function useSSOLogin() {
  *
  * @internal
  */
-export async function makeLogoutRequest(client: { options: any }): Promise<LogoutResponse> {
-  const { baseUrl = '', apiPrefix } = client.options || {};
+export async function makeLogoutRequest(client: MastraClient): Promise<LogoutResponse> {
+  const { baseUrl = '', apiPrefix, headers: clientHeaders = {} } = client.options;
   const raw = (apiPrefix || '/api').trim();
   const prefix = (raw.startsWith('/') ? raw : `/${raw}`).replace(/\/$/, '');
 
@@ -124,6 +126,7 @@ export async function makeLogoutRequest(client: { options: any }): Promise<Logou
     method: 'POST',
     credentials: 'include',
     headers: {
+      ...clientHeaders,
       'Content-Type': 'application/json',
     },
   });
@@ -140,7 +143,7 @@ export function useLogout() {
   const queryClient = useQueryClient();
 
   return useMutation<LogoutResponse, Error, void>({
-    mutationFn: () => makeLogoutRequest(client as any),
+    mutationFn: () => makeLogoutRequest(client),
     onSuccess: () => {
       // Invalidate all auth-related queries
       void queryClient.invalidateQueries({ queryKey: ['auth'] });

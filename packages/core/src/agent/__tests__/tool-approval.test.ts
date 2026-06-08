@@ -159,6 +159,190 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           expect(toolName).toBe('findUserTool');
         }
       }, 500000);
+
+      it('should evaluate a function-valued global requireToolApproval per tool call', async () => {
+        const execute = vi.fn().mockResolvedValue({ name: 'Dero Israel', email: 'dero@mail.com' });
+        const findUserTool = createTool({
+          id: 'find-user-tool',
+          description: 'Returns the name and email for a user',
+          inputSchema: z.object({ name: z.string() }),
+          execute: async () => execute(),
+        });
+
+        const makeModel = () =>
+          new MockLanguageModelV2({
+            doStream: async () => ({
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'findUserTool',
+                  input: '{"name":"Dero Israel"}',
+                  providerExecuted: false,
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            }),
+          });
+
+        const makeAgent = () =>
+          new Agent({
+            id: 'global-approval-agent',
+            name: 'Global Approval Agent',
+            instructions: 'You can look up users.',
+            model: makeModel(),
+            tools: { findUserTool },
+            memory: new MockMemory(),
+          });
+
+        // Case 1: the policy returns true → the tool call suspends for approval and does not execute.
+        const approveAll = vi.fn().mockReturnValue(true);
+        const suspendingAgent = makeAgent();
+        const suspendStream = await suspendingAgent.stream('Find the user with name - Dero Israel', {
+          memory: { thread: randomUUID(), resource: randomUUID() },
+          requireToolApproval: approveAll,
+        });
+        let approvedToolName = '';
+        for await (const chunk of suspendStream.fullStream) {
+          if (chunk.type === 'tool-call-approval') {
+            approvedToolName = chunk.payload.toolName;
+          }
+        }
+        expect(approveAll).toHaveBeenCalledWith(
+          expect.objectContaining({ toolName: 'findUserTool', args: { name: 'Dero Israel' } }),
+        );
+        expect(approvedToolName).toBe('findUserTool');
+        expect(execute).not.toHaveBeenCalled();
+
+        // Case 2: the policy returns false → the tool runs without requiring approval.
+        const denyApproval = vi.fn().mockReturnValue(false);
+        const runningAgent = makeAgent();
+        const runStream = await runningAgent.stream('Find the user with name - Dero Israel', {
+          memory: { thread: randomUUID(), resource: randomUUID() },
+          requireToolApproval: denyApproval,
+        });
+        let sawApproval = false;
+        for await (const chunk of runStream.fullStream) {
+          if (chunk.type === 'tool-call-approval') {
+            sawApproval = true;
+          }
+        }
+        expect(denyApproval).toHaveBeenCalled();
+        expect(sawApproval).toBe(false);
+        expect(execute).toHaveBeenCalled();
+      }, 500000);
+
+      it('honors a function-valued global requireToolApproval across suspend and resume', async () => {
+        // The function policy lives only in the live JS call (RequestContext.toJSON strips it from
+        // the persisted suspend snapshot). This proves the resume call re-supplies and re-evaluates
+        // the function, so approval survives a real suspend -> resume cycle without serialization.
+        let callCount = 0;
+        const mockModel = new MockLanguageModelV2({
+          doStream: async () => {
+            callCount++;
+            if (callCount === 1) {
+              return {
+                rawCall: { rawPrompt: null, rawSettings: {} },
+                warnings: [],
+                stream: convertArrayToReadableStream([
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-1',
+                    toolName: 'findUserTool',
+                    input: '{"name":"Dero Israel"}',
+                    providerExecuted: false,
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  },
+                ]),
+              };
+            }
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-2',
+                  toolName: 'findUserTool',
+                  input: '{"name":"Dero Israel", "resumeData": { "approved": true }}',
+                  providerExecuted: false,
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            };
+          },
+        });
+
+        const findUserTool = createTool({
+          id: 'find-user-tool',
+          description: 'Returns the name and email for a user',
+          inputSchema: z.object({ name: z.string() }),
+          execute: async input => mockFindUser(input) as Promise<Record<string, any>>,
+        });
+
+        const resumeAgent = new Agent({
+          id: 'resume-approval-agent',
+          name: 'Resume Approval Agent',
+          instructions: 'You can look up users.',
+          model: mockModel,
+          tools: { findUserTool },
+          memory: new MockMemory(),
+        });
+
+        const mastra = new Mastra({ agents: { resumeAgent }, logger: false, storage: mockStorage });
+        const agent = mastra.getAgent('resumeAgent');
+        const memory = { thread: randomUUID(), resource: randomUUID() };
+        const requireToolApproval = vi.fn().mockReturnValue(true);
+
+        mockFindUser.mockClear();
+
+        // First call: the function policy requires approval, so the tool suspends.
+        const suspendStream = await agent.stream('Find the user with name - Dero Israel', {
+          memory,
+          requireToolApproval,
+        });
+        let toolName = '';
+        for await (const chunk of suspendStream.fullStream) {
+          if (chunk.type === 'tool-call-approval') {
+            toolName = chunk.payload.toolName;
+          }
+        }
+        expect(toolName).toBe('findUserTool');
+        expect(mockFindUser).not.toHaveBeenCalled();
+
+        // Resume call: re-supplies the same function policy. Approval is granted, tool executes.
+        const resumeStream = await agent.stream('Approve', { memory, requireToolApproval });
+        for await (const _chunk of resumeStream.fullStream) {
+          // drain
+        }
+        const toolResults = await resumeStream.toolResults;
+        const toolCall = toolResults?.find((result: any) => result.payload.toolName === 'findUserTool')?.payload;
+
+        // The policy was evaluated on both the suspend and resume passes (function survived resume).
+        expect(requireToolApproval.mock.calls.length).toBeGreaterThanOrEqual(2);
+        expect(mockFindUser).toHaveBeenCalled();
+        expect((toolCall?.result as any)?.name).toBe('Dero Israel');
+      }, 500000);
     });
   });
 }

@@ -121,6 +121,92 @@ describe('Memory Handlers', () => {
       expect(result).toMatchObject({ result: true });
     });
 
+    it('should return false when a registered agent has no local memory even if storage is configured', async () => {
+      const agentWithoutMemory = new Agent({
+        id: 'no-memory-agent',
+        name: 'Agent Without Memory',
+        instructions: 'test-instructions',
+        model: {} as any,
+      });
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        agents: { 'no-memory-agent': agentWithoutMemory },
+      });
+
+      const result = await GET_MEMORY_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'no-memory-agent',
+      });
+
+      expect(result).toEqual({ result: false });
+    });
+
+    it('detects memory via hasOwnMemory(): resolved agent without memory is false, with memory is true', async () => {
+      const withoutMemory = new Agent({
+        id: 'agent-without-own-memory',
+        name: 'Agent Without Own Memory',
+        instructions: 'test-instructions',
+        model: {} as any,
+      });
+      const withMemory = new Agent({
+        id: 'agent-with-own-memory',
+        name: 'Agent With Own Memory',
+        instructions: 'test-instructions',
+        model: {} as any,
+        memory: new MockMemory({ storage }),
+      });
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        agents: {
+          'agent-without-own-memory': withoutMemory,
+          'agent-with-own-memory': withMemory,
+        },
+      });
+
+      expect(withoutMemory.hasOwnMemory()).toBe(false);
+      expect(withMemory.hasOwnMemory()).toBe(true);
+
+      const negative = await GET_MEMORY_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'agent-without-own-memory',
+      });
+      expect(negative).toEqual({ result: false });
+
+      const positive = await GET_MEMORY_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'agent-with-own-memory',
+      });
+      expect(positive).toMatchObject({ result: true });
+    });
+
+    it('should return false when an agent explicitly does not support Mastra memory', async () => {
+      const agentWithoutMemorySupport = Object.assign(
+        new Agent({
+          id: 'unsupported-memory-agent',
+          name: 'Agent Without Memory Support',
+          instructions: 'test-instructions',
+          model: {} as any,
+        }),
+        {
+          supportsMemory: () => false,
+        },
+      );
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        agents: { 'unsupported-memory-agent': agentWithoutMemorySupport },
+      });
+
+      const result = await GET_MEMORY_STATUS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'unsupported-memory-agent',
+      });
+
+      expect(result).toEqual({ result: false });
+    });
+
     it('should use agent memory when agentId is provided', async () => {
       const mastra = new Mastra({
         logger: false,
@@ -1318,7 +1404,7 @@ describe('Memory Handlers', () => {
         filter: undefined,
       });
 
-      expect(result).toEqual(mockResult);
+      expect(result).toEqual({ ...mockResult, uiMessages: null });
       expect(mockMemory.getThreadById).toHaveBeenCalledWith({ threadId: 'test-thread' });
       expect(mockMemory.recall).toHaveBeenCalledWith({
         threadId: 'test-thread',
@@ -1923,7 +2009,7 @@ describe('Memory Handlers', () => {
           perPage: 10,
         });
 
-        expect(result.threads.map(t => t.id)).toEqual(['thread-a', 'thread-c']);
+        expect(result.threads.map(t => t.id).sort()).toEqual(['thread-a', 'thread-c']);
         expect(result.total).toBe(2);
         expect(result.hasMore).toBe(false);
         expect(filterAccessible).toHaveBeenCalledWith(

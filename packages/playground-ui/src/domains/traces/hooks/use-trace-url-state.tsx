@@ -2,11 +2,14 @@ import { useCallback, useMemo, useRef } from 'react';
 import type { SpanTab, TraceDatePreset } from '../index';
 import {
   ROOT_ENTITY_TYPE_OPTIONS,
+  TRACE_ANCHOR_SPAN_ID_PARAM,
   TRACE_DATE_FROM_PARAM,
   TRACE_DATE_PRESET_PARAM,
   TRACE_DATE_PRESET_VALUES,
   TRACE_DATE_TO_PARAM,
   TRACE_PROPERTY_FILTER_FIELD_IDS,
+  TRACE_LIST_MODE_PARAM,
+  TRACE_LIST_MODE_VALUES,
   TRACE_PROPERTY_FILTER_PARAM_BY_FIELD,
   TRACE_ROOT_ENTITY_TYPE_PARAM,
   TRACE_STATUS_PARAM,
@@ -14,7 +17,7 @@ import {
   applyTracePropertyFilterTokens,
   getTracePropertyFilterTokens,
 } from '../trace-filters';
-import type { EntityOptions, TraceStatusFilter } from '../trace-filters';
+import type { EntityOptions, TraceListMode, TraceStatusFilter } from '../trace-filters';
 import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
 const TRACE_ID_PARAM = 'traceId';
@@ -36,6 +39,7 @@ const PRESET_MS: Partial<Record<TraceDatePreset, number>> = {
 function clearSelectionParams(params: URLSearchParams) {
   params.delete(TRACE_ID_PARAM);
   params.delete(SPAN_ID_PARAM);
+  params.delete(TRACE_ANCHOR_SPAN_ID_PARAM);
   params.delete(TAB_PARAM);
   params.delete(SCORE_ID_PARAM);
 }
@@ -68,16 +72,26 @@ export interface UseTraceUrlStateResult {
   // Selection state (derived from URL)
   traceIdParam: string | undefined;
   spanIdParam: string | undefined;
+  /** Branch-mode only: the anchor span that defines the displayed subtree. Stable while the
+   *  user navigates between spans inside the panel (which only changes `spanIdParam`). */
+  anchorSpanIdParam: string | undefined;
   spanTabParam: SpanTab | undefined;
   scoreIdParam: string | undefined;
 
   // Filter state (derived from URL)
+  listMode: TraceListMode;
   selectedEntityOption: EntityOptions | undefined;
   selectedStatus: TraceStatusFilter | undefined;
   filterTokens: PropertyFilterToken[];
 
   // URL-modifying handlers
-  handleTraceClick: (traceId: string) => void;
+  /**
+   * Selects a row. In traces mode pass just `traceId` (and optionally a `spanId` for an
+   * initial span selection in the panel). In branches mode also pass `anchorSpanId` — the
+   * branch identity, kept stable while the user navigates between spans inside the panel.
+   * Branch rows are identified by (traceId, anchorSpanId); trace rows by traceId alone.
+   */
+  handleTraceClick: (traceId: string, spanId?: string, anchorSpanId?: string) => void;
   /** Convenience: clears the featured trace selection. Equivalent to `handleTraceClick('')`. */
   handleTraceClose: () => void;
   handleSpanChange: (spanId: string | null) => void;
@@ -85,6 +99,8 @@ export interface UseTraceUrlStateResult {
   handleSpanClose: () => void;
   handleSpanTabChange: (tab: SpanTab) => void;
   handleScoreChange: (scoreId: string | null) => void;
+  /** Switches the list view between traces and branches. Clears the current selection. */
+  handleListModeChange: (mode: TraceListMode) => void;
   handleFilterTokensChange: (nextTokens: PropertyFilterToken[]) => void;
   handleDateChange: (value: Date | undefined, type: 'from' | 'to') => void;
   handleDatePresetChange: (preset: TraceDatePreset) => void;
@@ -141,6 +157,9 @@ export function useTraceUrlState(
 
   const traceIdParam = searchParams.get(TRACE_ID_PARAM) || undefined;
   const spanIdParam = searchParams.get(SPAN_ID_PARAM) || undefined;
+  /** Branch-mode only: identifies which branch (anchor span) the panel is viewing. Stays put
+   *  while the user navigates between spans inside the panel (which only changes spanIdParam). */
+  const anchorSpanIdParam = searchParams.get(TRACE_ANCHOR_SPAN_ID_PARAM) || undefined;
   const tabParam = searchParams.get(TAB_PARAM);
   const spanTabParam: SpanTab | undefined =
     tabParam === 'scoring'
@@ -152,6 +171,10 @@ export function useTraceUrlState(
           : undefined;
   const scoreIdParam = searchParams.get(SCORE_ID_PARAM) || undefined;
 
+  const listMode = useMemo<TraceListMode>(() => {
+    const value = searchParams.get(TRACE_LIST_MODE_PARAM);
+    return value && TRACE_LIST_MODE_VALUES.has(value as TraceListMode) ? (value as TraceListMode) : 'traces';
+  }, [searchParams]);
   const selectedEntityOption = useMemo(
     () => ROOT_ENTITY_TYPE_OPTIONS.find(option => option.entityType === searchParams.get(TRACE_ROOT_ENTITY_TYPE_PARAM)),
     [searchParams],
@@ -163,7 +186,7 @@ export function useTraceUrlState(
   const filterTokens = useMemo(() => getTracePropertyFilterTokens(searchParams), [searchParams]);
 
   const handleTraceClick = useCallback(
-    (traceId: string) => {
+    (traceId: string, spanId?: string, anchorSpanId?: string) => {
       setSearchParams(
         prev => {
           const next = new URLSearchParams(prev);
@@ -172,7 +195,16 @@ export function useTraceUrlState(
           } else {
             next.delete(TRACE_ID_PARAM);
           }
-          next.delete(SPAN_ID_PARAM);
+          if (spanId) {
+            next.set(SPAN_ID_PARAM, spanId);
+          } else {
+            next.delete(SPAN_ID_PARAM);
+          }
+          if (anchorSpanId) {
+            next.set(TRACE_ANCHOR_SPAN_ID_PARAM, anchorSpanId);
+          } else {
+            next.delete(TRACE_ANCHOR_SPAN_ID_PARAM);
+          }
           next.delete(TAB_PARAM);
           next.delete(SCORE_ID_PARAM);
           return next;
@@ -328,10 +360,31 @@ export function useTraceUrlState(
     [setSearchParams],
   );
 
+  const handleListModeChange = useCallback(
+    (mode: TraceListMode) => {
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev);
+          if (mode === 'traces') {
+            next.delete(TRACE_LIST_MODE_PARAM);
+          } else {
+            next.set(TRACE_LIST_MODE_PARAM, mode);
+          }
+          // Clear selection: rows from the previous mode don't map cleanly to the new mode.
+          clearSelectionParams(next);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   const handleRemoveAll = useCallback(() => {
     setSearchParams(
       prev => {
         const next = new URLSearchParams(prev);
+        next.delete(TRACE_LIST_MODE_PARAM);
         next.delete(TRACE_ROOT_ENTITY_TYPE_PARAM);
         next.delete(TRACE_STATUS_PARAM);
         for (const fieldId of TRACE_PROPERTY_FILTER_FIELD_IDS) {
@@ -354,8 +407,10 @@ export function useTraceUrlState(
     datePresetRef,
     traceIdParam,
     spanIdParam,
+    anchorSpanIdParam,
     spanTabParam,
     scoreIdParam,
+    listMode,
     selectedEntityOption,
     selectedStatus,
     filterTokens,
@@ -365,6 +420,7 @@ export function useTraceUrlState(
     handleSpanClose,
     handleSpanTabChange,
     handleScoreChange,
+    handleListModeChange,
     handleFilterTokensChange,
     handleDateChange,
     handleDatePresetChange,

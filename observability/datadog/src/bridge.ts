@@ -19,6 +19,7 @@ import type {
   TracingEvent,
   AnyExportedSpan,
   ModelGenerationAttributes,
+  ModelInferenceAttributes,
   ModelStepAttributes,
   ObservabilityBridge,
   CreateSpanOptions,
@@ -30,6 +31,7 @@ import { omitKeys } from '@mastra/core/utils';
 import { BaseExporter, getExternalParentId } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import tracer from 'dd-trace';
+import { isModelInferenceEnabled } from './features';
 import { formatUsageMetrics } from './metrics';
 import { ensureTracer, formatInput, formatOutput, kindFor, toDate } from './utils';
 import type { DatadogSpanKind } from './utils';
@@ -495,8 +497,11 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       annotations.outputData = formatOutput(span.output, span.type);
     }
 
-    if (span.type === SpanTypeEnum.MODEL_STEP) {
-      const usage = (span.attributes as ModelStepAttributes)?.usage;
+    // Token usage attaches to the LLM-kind span only — MODEL_INFERENCE when
+    // the feature is enabled, MODEL_STEP on legacy paired packages.
+    const usageSpanType = isModelInferenceEnabled() ? SpanTypeEnum.MODEL_INFERENCE : SpanTypeEnum.MODEL_STEP;
+    if (span.type === usageSpanType) {
+      const usage = (span.attributes as ModelStepAttributes | ModelInferenceAttributes | undefined)?.usage;
       const metrics = formatUsageMetrics(usage);
       if (metrics) {
         annotations.metrics = metrics;

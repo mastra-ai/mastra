@@ -18,9 +18,9 @@ import { handleError } from './error';
 import {
   buildCompletedResponse,
   buildInProgressResponse,
+  createResponseStreamEventTranslator,
   createMessageId,
   createOutputTextPart,
-  extractTextDelta,
   formatSseEvent,
   mapMastraToolsToResponseTools,
   mapResponseInputToExecutionMessages,
@@ -150,11 +150,7 @@ function getStreamedMessageOutputItem(response: ResponseObject, responseId: stri
     response.output.find(
       (item): item is Extract<ResponseObject['output'][number], { type: 'message' }> =>
         item.type === 'message' && item.id === responseId,
-    ) ??
-    response.output.find(
-      (item): item is Extract<ResponseObject['output'][number], { type: 'message' }> => item.type === 'message',
-    ) ??
-    null
+    ) ?? null
   );
 }
 
@@ -513,6 +509,7 @@ async function storeCompletedResponse({
   metadata,
   completedState,
   messages,
+  outputItems,
 }: {
   agentMemoryStore: MemoryStorage | null;
   didStore: boolean;
@@ -521,6 +518,7 @@ async function storeCompletedResponse({
   metadata: Omit<ResponseTurnRecordMetadata, 'completedAt' | 'status' | 'usage' | 'providerOptions' | 'messageIds'>;
   completedState: CompletedResponseState;
   messages: MastraDBMessage[];
+  outputItems: ResponseObject['output'];
 }): Promise<void> {
   if (!didStore || !threadContext) {
     return;
@@ -536,6 +534,7 @@ async function storeCompletedResponse({
       usage: completedState.usageDetails,
       providerOptions: completedState.providerOptions,
       messageIds: [],
+      outputItems,
     },
     threadContext,
     messages,
@@ -559,6 +558,7 @@ async function finalizeResponse({
   configuredTools,
   responseMetadata,
   fallbackText,
+  fallbackOutputItems,
 }: {
   agentMemoryStore: MemoryStorage | null;
   didStore: boolean;
@@ -576,13 +576,16 @@ async function finalizeResponse({
     'completedAt' | 'status' | 'usage' | 'providerOptions' | 'messageIds'
   >;
   fallbackText: string;
+  fallbackOutputItems?: (completedState: CompletedResponseState) => ResponseObject['output'];
 }): Promise<FinalizedResponse> {
   const completedState = await resolveCompletedResponseState(result, fallbackText);
+  const fallbackItems = fallbackOutputItems?.(completedState);
   const responseMessages = await resolveResponseTurnMessagesForStorage({
     result,
     responseId,
     text: completedState.text,
     threadContext,
+    fallbackOutputItems: threadContext ? fallbackItems : undefined,
   });
   const response = buildCompletedResponse({
     responseId,
@@ -600,6 +603,7 @@ async function finalizeResponse({
     providerOptions: completedState.providerOptions,
     tools: configuredTools,
     messages: responseMessages,
+    fallbackOutputItems: fallbackItems,
     store: didStore,
   });
 
@@ -611,6 +615,7 @@ async function finalizeResponse({
     metadata: responseMetadata,
     completedState,
     messages: responseMessages,
+    outputItems: response.output,
   });
 
   return { completedState, response, responseMessages };
@@ -833,26 +838,8 @@ function createResponseEventStream({
         type: 'response.in_progress',
         response: createdResponse,
       });
-      enqueueEvent('response.output_item.added', {
-        type: 'response.output_item.added',
-        output_index: 0,
-        item: {
-          id: responseId,
-          type: 'message',
-          role: 'assistant',
-          status: 'in_progress',
-          content: [],
-        },
-      });
-      enqueueEvent('response.content_part.added', {
-        type: 'response.content_part.added',
-        output_index: 0,
-        content_index: 0,
-        item_id: responseId,
-        part: createOutputTextPart(''),
-      });
 
-      let text = '';
+      const streamEvents = createResponseStreamEventTranslator(responseId);
       const fullStream = await streamResult.fullStream;
       const reader = fullStream.getReader();
 
@@ -863,17 +850,13 @@ function createResponseEventStream({
             break;
           }
 
-          const delta = extractTextDelta(value);
-          if (delta) {
-            text += delta;
-            enqueueEvent('response.output_text.delta', {
-              type: 'response.output_text.delta',
-              output_index: 0,
-              content_index: 0,
-              item_id: responseId,
-              delta,
-            });
+          for (const event of streamEvents.consume(value)) {
+            enqueueEvent(event.event, event.payload);
           }
+        }
+
+        for (const event of streamEvents.flushPendingToolResults()) {
+          enqueueEvent(event.event, event.payload);
         }
 
         const { completedState, response } = await finalizeResponse({
@@ -889,36 +872,29 @@ function createResponseEventStream({
           conversationId: threadContext?.threadId ?? body.conversation_id,
           configuredTools,
           responseMetadata,
-          fallbackText: text,
-        });
-        enqueueEvent('response.output_text.done', {
-          type: 'response.output_text.done',
-          output_index: 0,
-          content_index: 0,
-          item_id: responseId,
-          text: completedState.text,
+          fallbackText: streamEvents.text,
+          fallbackOutputItems: completedState =>
+            streamEvents.getOutputItems({
+              text: completedState.text,
+              status: completedState.status,
+            }),
         });
 
-        const completedItem = getStreamedMessageOutputItem(response, responseId) ?? {
-          id: responseId,
-          type: 'message' as const,
-          role: 'assistant' as const,
-          status: 'completed' as const,
-          content: [createOutputTextPart(completedState.text)],
-        };
-
-        enqueueEvent('response.content_part.done', {
-          type: 'response.content_part.done',
-          output_index: 0,
-          content_index: 0,
-          item_id: responseId,
-          part: createOutputTextPart(completedState.text),
-        });
-        enqueueEvent('response.output_item.done', {
-          type: 'response.output_item.done',
-          output_index: 0,
-          item: completedItem,
-        });
+        const completedItem = getStreamedMessageOutputItem(response, responseId);
+        if (completedItem || completedState.text) {
+          for (const event of streamEvents.completeText(
+            completedState.text,
+            completedItem ?? {
+              id: responseId,
+              type: 'message' as const,
+              role: 'assistant' as const,
+              status: 'completed' as const,
+              content: [createOutputTextPart(completedState.text)],
+            },
+          )) {
+            enqueueEvent(event.event, event.payload);
+          }
+        }
         enqueueEvent('response.completed', {
           type: 'response.completed',
           response,

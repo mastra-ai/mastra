@@ -1,0 +1,158 @@
+---
+title: "Evals with memory | Evals"
+description: "Run scorers against memory-enabled agents — including observational memory in thread scope — using runEvals and dataset experiments."
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+---
+
+# Evals with memory
+
+Agents that use memory in `thread` scope — including observational memory — require a thread ID at run time. When an eval invokes the agent without one, you'll see:
+
+```
+ObservationalMemory (scope: 'thread') requires a threadId, but none was found in RequestContext or MessageList.
+```
+
+This page covers the three working patterns for running Mastra evals against memory-enabled agents, what each path supports, and which one to pick. A complete runnable repro for all three approaches lives in [`examples/evals-with-memory`](https://github.com/mastra-ai/mastra/tree/main/examples/evals-with-memory).
+
+## When to use which approach
+
+| Goal | Approach |
+| - | - |
+| One shared conversation across every item | [`runEvals` with global `targetOptions.memory`](#shared-thread-with-runevals) |
+| One independent thread per item, simple CI loop | [`runEvals` per item](#per-item-threads-with-runevals) |
+| Per-item threads driven by a stored `Dataset` | [`dataset.startExperiment` with an inline task](#dataset-experiments-with-an-inline-task) |
+
+Pre-seeding `RequestContext` with `MastraMemory` is **not** a supported way to drive memory into an agent. Thread resolution reads `args.memory.thread` — `RequestContext.MastraMemory` is populated by `prepare-memory-step` after the agent has already resolved its thread.
+
+## Shared thread with `runEvals`
+
+`runEvals` accepts `targetOptions`, which is forwarded to `agent.generate()`. Passing `memory: { thread, resource }` runs every data item against the same thread — useful for testing recall across a multi-turn conversation.
+
+```typescript title="src/mastra/agents/support-agent.test.ts"
+import { runEvals } from '@mastra/core/evals'
+import { supportAgent } from './support-agent'
+import { recallScorer } from '../scorers/recall-scorer'
+
+const memory = await supportAgent.getMemory()
+await memory!.createThread({ threadId: 'eval-thread', resourceId: 'ci-user' })
+
+const result = await runEvals({
+  target: supportAgent,
+  scorers: [recallScorer],
+  targetOptions: {
+    memory: { thread: 'eval-thread', resource: 'ci-user' },
+  },
+  data: [
+    { input: 'My order number is 12345' },
+    { input: 'What is my order number?', groundTruth: '12345' },
+  ],
+})
+```
+
+`targetOptions` is **global per call**. There is no per-item override on `RunEvalsDataItem` today.
+
+## Per-item threads with `runEvals`
+
+When each data item needs its own thread (the common CI shape), call `runEvals` once per item with a unique `targetOptions.memory` and aggregate the scores yourself.
+
+```typescript title="src/mastra/agents/support-agent.test.ts"
+import { randomUUID } from 'node:crypto'
+import { runEvals } from '@mastra/core/evals'
+import { supportAgent } from './support-agent'
+import { recallScorer } from '../scorers/recall-scorer'
+
+const memory = await supportAgent.getMemory()
+const resourceId = 'ci-user'
+
+const items = [
+  { input: 'Cats are mammals', groundTruth: 'mammals' },
+  { input: 'Dogs are mammals too', groundTruth: 'mammals' },
+]
+
+// `runEvals` returns `{ scores: Record<string, number>; summary: { totalItems } }`.
+const scores: number[] = []
+for (const item of items) {
+  const threadId = `eval-${randomUUID()}`
+  await memory!.createThread({ threadId, resourceId, title: item.input })
+
+  const result = await runEvals({
+    target: supportAgent,
+    scorers: [recallScorer],
+    targetOptions: { memory: { thread: threadId, resource: resourceId } },
+    data: [item],
+  })
+
+  scores.push(result.scores[recallScorer.id])
+}
+
+const average = scores.reduce((a, b) => a + b, 0) / scores.length
+```
+
+:::note
+Create the thread before running the eval. Observational memory in `thread` scope reads from a record that must already exist.
+:::
+
+## Dataset experiments with an inline task
+
+`dataset.startExperiment({ target: agent })` does **not** forward a `memory` option to the agent — only `requestContext`. To run a stored dataset against a memory-enabled agent, use an inline `task` function and stash `{ threadId, resourceId }` in each item's `metadata`. The scorer pipeline still runs as normal.
+
+```typescript title="src/mastra/evals/dataset-experiment.ts"
+import { randomUUID } from 'node:crypto'
+import { mastra } from '../index'
+import { supportAgent } from '../agents/support-agent'
+import { recallScorer } from '../scorers/recall-scorer'
+
+const memory = await supportAgent.getMemory()
+const resourceId = 'ci-user'
+
+const items = [
+  { input: 'Cats are mammals', groundTruth: 'mammals', thread: `ds-${randomUUID()}` },
+  { input: 'Dogs are mammals too', groundTruth: 'mammals', thread: `ds-${randomUUID()}` },
+]
+
+for (const it of items) {
+  await memory!.createThread({ threadId: it.thread, resourceId, title: it.input })
+}
+
+const dataset = await mastra.datasets.create({
+  name: 'support-recall',
+  description: 'Per-item memory via inline task + item metadata',
+})
+
+await dataset.addItems({
+  items: items.map(it => ({
+    input: it.input,
+    groundTruth: it.groundTruth,
+    metadata: { threadId: it.thread, resourceId },
+  })),
+})
+
+const summary = await dataset.startExperiment({
+  scorers: [recallScorer],
+  task: async ({ input, metadata }) => {
+    const { threadId, resourceId: rid } = (metadata ?? {}) as {
+      threadId: string
+      resourceId: string
+    }
+    const result = await supportAgent.generate(input as string, {
+      memory: { thread: threadId, resource: rid },
+    })
+    return result.text
+  },
+})
+```
+
+The inline `task` receives the item's `metadata`, so each row can drive its own thread without changing the agent or any scorer.
+
+:::note
+Visit [runEvals reference](/reference/evals/run-evals) and [Dataset reference](/reference/datasets/dataset) for full configuration.
+:::
+
+## Related
+
+- [Running scorers in CI](/docs/evals/running-in-ci)
+- [Running experiments](/docs/evals/datasets/running-experiments)
+- [Observational memory](/docs/memory/observational-memory)
+- [runEvals API reference](/reference/evals/run-evals)

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "1.4.0-alpha.1",
+  "version": "1.5.0",
   "description": "Mastra Inngest integration",
   "type": "module",
   "main": "dist/index.js",
@@ -18,6 +18,16 @@
       "require": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.cjs"
+      }
+    },
+    "./connect": {
+      "import": {
+        "types": "./dist/connect.d.ts",
+        "default": "./dist/connect.js"
+      },
+      "require": {
+        "types": "./dist/connect.d.ts",
+        "default": "./dist/connect.cjs"
       }
     },
     "./package.json": "./package.json"
@@ -56,7 +66,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai": "^4.3.19",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.1",
     "execa": "^9.6.1",
     "express": "^5.2.1",
     "fastify": "^5.8.5",

@@ -1,5 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { isDevEnvironment, isEEEnabled, isLicenseValid, validateLicense, clearLicenseCache } from './license';
+import {
+  isDevEnvironment,
+  isEEEnabled,
+  isFeatureEnabled,
+  isLicenseValid,
+  validateLicense,
+  clearLicenseCache,
+} from './license';
 
 describe('license', () => {
   let originalNodeEnv: string | undefined;
@@ -37,6 +44,7 @@ describe('license', () => {
       const result = validateLicense(key);
       expect(result.valid).toBe(true);
       expect(result.tier).toBe('enterprise');
+      expect(result.features).toContain('fga');
     });
 
     it('should read from MASTRA_EE_LICENSE env var when no key argument', () => {
@@ -55,6 +63,13 @@ describe('license', () => {
     it('should return true when valid license key is set', () => {
       process.env['MASTRA_EE_LICENSE'] = 'a'.repeat(32);
       expect(isLicenseValid()).toBe(true);
+    });
+  });
+
+  describe('isFeatureEnabled', () => {
+    it('should return true for fga when a valid license key is set', () => {
+      process.env['MASTRA_EE_LICENSE'] = 'a'.repeat(32);
+      expect(isFeatureEnabled('fga')).toBe(true);
     });
   });
 

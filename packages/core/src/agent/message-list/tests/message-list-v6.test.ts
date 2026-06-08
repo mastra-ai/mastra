@@ -152,6 +152,189 @@ describe('MessageList AI SDK v6 support', () => {
     ]);
   });
 
+  it('preserves plain dynamic-tool parts with input-streaming state', () => {
+    const list = new MessageList().add(
+      [
+        {
+          id: 'assistant-dynamic-tool-streaming',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'search',
+              toolCallId: 'call-1',
+              state: 'input-streaming',
+              input: { query: 'weath' },
+            },
+          ],
+        },
+      ] satisfies UIMessageV6[],
+      'memory',
+    );
+
+    expect(list.get.all.db()[0]?.content.parts).toMatchObject([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolName: 'search',
+          toolCallId: 'call-1',
+          state: 'partial-call',
+          args: { query: 'weath' },
+        },
+      },
+    ]);
+  });
+
+  it('preserves plain dynamic-tool parts with input-available state', () => {
+    const list = new MessageList().add(
+      [
+        {
+          id: 'assistant-dynamic-tool-input',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'search',
+              toolCallId: 'call-1',
+              state: 'input-available',
+              input: { query: 'weather' },
+            },
+          ],
+        },
+      ] satisfies UIMessageV6[],
+      'memory',
+    );
+
+    expect(list.get.all.db()[0]?.content.parts).toMatchObject([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolName: 'search',
+          toolCallId: 'call-1',
+          state: 'call',
+          args: { query: 'weather' },
+        },
+      },
+    ]);
+    expect(list.get.all.db()[0]?.content.toolInvocations).toMatchObject([
+      {
+        toolName: 'search',
+        toolCallId: 'call-1',
+        state: 'call',
+        args: { query: 'weather' },
+      },
+    ]);
+  });
+
+  it('preserves plain dynamic-tool parts with output-available state', () => {
+    const list = new MessageList().add(
+      [
+        {
+          id: 'assistant-dynamic-tool-output',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'search',
+              toolCallId: 'call-1',
+              state: 'output-available',
+              input: { query: 'weather' },
+              output: { forecast: 'sunny' },
+            },
+          ],
+        },
+      ] satisfies UIMessageV6[],
+      'memory',
+    );
+
+    expect(list.get.all.db()[0]?.content.parts).toMatchObject([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolName: 'search',
+          toolCallId: 'call-1',
+          state: 'result',
+          args: { query: 'weather' },
+          result: { forecast: 'sunny' },
+        },
+      },
+    ]);
+  });
+
+  it('preserves plain dynamic-tool parts with output-error state', () => {
+    const list = new MessageList().add(
+      [
+        {
+          id: 'assistant-dynamic-tool-error',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'search',
+              toolCallId: 'call-1',
+              state: 'output-error',
+              input: { query: 'weather' },
+              errorText: 'Search failed',
+              rawInput: '{"query":"weather"}',
+            },
+          ],
+        },
+      ] satisfies UIMessageV6[],
+      'memory',
+    );
+
+    expect(list.get.all.db()[0]?.content.parts).toMatchObject([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolName: 'search',
+          toolCallId: 'call-1',
+          state: 'output-error',
+          args: { query: 'weather' },
+          errorText: 'Search failed',
+          rawInput: '{"query":"weather"}',
+        },
+      },
+    ]);
+  });
+
+  it('preserves plain dynamic-tool parts mixed with custom data parts', () => {
+    const list = new MessageList().add(
+      [
+        {
+          id: 'assistant-dynamic-tool-data',
+          role: 'assistant',
+          parts: [
+            { type: 'data-progress', data: { step: 1 } } as any,
+            {
+              type: 'dynamic-tool',
+              toolName: 'search',
+              toolCallId: 'call-1',
+              state: 'input-available',
+              input: { query: 'weather' },
+            },
+            { type: 'data-custom', data: { foo: 'bar' } } as any,
+          ],
+        },
+      ] satisfies UIMessageV6[],
+      'memory',
+    );
+
+    expect(list.get.all.db()[0]?.content.parts).toMatchObject([
+      { type: 'data-progress', data: { step: 1 } },
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          toolName: 'search',
+          toolCallId: 'call-1',
+          state: 'call',
+          args: { query: 'weather' },
+        },
+      },
+      { type: 'data-custom', data: { foo: 'bar' } },
+    ]);
+  });
+
   it('supports AIV6.UI in convertMessages()', () => {
     const messages: UIMessageV6[] = [
       {

@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { RequestContext } from '@mastra/core/di';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
@@ -15,6 +16,137 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod/v3';
 
 import { InternalMastraMCPClient } from './client.js';
+
+describe('InternalMastraMCPClient - server instructions', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function mockSdkConnection(instructions: string | undefined) {
+    vi.spyOn(Client.prototype, 'connect').mockResolvedValue(undefined as any);
+    vi.spyOn(Client.prototype, 'getInstructions').mockReturnValue(instructions);
+    vi.spyOn(StreamableHTTPClientTransport.prototype, 'close').mockResolvedValue(undefined as any);
+  }
+
+  it('retrieves instructions after connect', async () => {
+    mockSdkConnection('Validate schemas before migrations.');
+
+    const client = new InternalMastraMCPClient({
+      name: 'db-tools',
+      server: {
+        url: new URL('http://localhost:1234/mcp'),
+      },
+    });
+
+    await client.connect();
+
+    expect(client.instructions).toBe('Validate schemas before migrations.');
+    await client.disconnect();
+  });
+
+  it('refreshes instructions on forceReconnect', async () => {
+    vi.spyOn(Client.prototype, 'connect').mockResolvedValue(undefined as any);
+    vi.spyOn(Client.prototype, 'getInstructions')
+      .mockReturnValueOnce('Use the old schema policy.')
+      .mockReturnValueOnce('Use the new schema policy.');
+    vi.spyOn(StreamableHTTPClientTransport.prototype, 'close').mockResolvedValue(undefined as any);
+
+    const client = new InternalMastraMCPClient({
+      name: 'db-tools',
+      server: {
+        url: new URL('http://localhost:1234/mcp'),
+      },
+    });
+
+    await client.connect();
+    expect(client.instructions).toBe('Use the old schema policy.');
+
+    await client.forceReconnect();
+    expect(client.instructions).toBe('Use the new schema policy.');
+
+    await client.disconnect();
+  });
+
+  it('handles empty instructions', async () => {
+    mockSdkConnection(undefined);
+
+    const client = new InternalMastraMCPClient({
+      name: 'empty-tools',
+      server: {
+        url: new URL('http://localhost:1234/mcp'),
+      },
+    });
+
+    await client.connect();
+
+    expect(client.instructions).toBeUndefined();
+    await client.disconnect();
+  });
+
+  it('adds forwarding metadata to MCP tools', async () => {
+    mockSdkConnection('Only run read-only checks.');
+    vi.spyOn(Client.prototype, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'check',
+          description: 'Check state',
+          inputSchema: { type: 'object', properties: {} },
+        },
+      ],
+    } as any);
+
+    const client = new InternalMastraMCPClient({
+      name: 'audit-tools',
+      server: {
+        url: new URL('http://localhost:1234/mcp'),
+        forwardInstructions: false,
+        instructionsMaxLength: 16,
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+
+    expect(tools.check.mcpMetadata).toMatchObject({
+      serverName: 'audit-tools',
+      serverInstructions: 'Only run read-only checks.',
+      forwardInstructions: false,
+      instructionsMaxLength: 16,
+    });
+
+    await client.disconnect();
+  });
+
+  it('defaults forwardInstructions to false (opt-in)', async () => {
+    mockSdkConnection('Only run read-only checks.');
+    vi.spyOn(Client.prototype, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'check',
+          description: 'Check state',
+          inputSchema: { type: 'object', properties: {} },
+        },
+      ],
+    } as any);
+
+    const client = new InternalMastraMCPClient({
+      name: 'audit-tools',
+      server: {
+        url: new URL('http://localhost:1234/mcp'),
+      },
+    });
+
+    await client.connect();
+    const tools = await client.tools();
+
+    expect(tools.check.mcpMetadata).toMatchObject({
+      serverName: 'audit-tools',
+      forwardInstructions: false,
+    });
+
+    await client.disconnect();
+  });
+});
 
 async function setupTestServer(withSessionManagement: boolean) {
   const httpServer: HttpServer = createServer();
@@ -625,6 +757,51 @@ describe('MastraMCPClient - tools without outputSchema preserve envelope', () =>
 
     // Returns the full CallToolResult envelope
     expect(result).toEqual(callToolResult);
+  });
+});
+
+describe('MastraMCPClient - multimodal content', () => {
+  let testServer: {
+    httpServer: HttpServer;
+    mcpServer: McpServer;
+    serverTransport: StreamableHTTPServerTransport;
+    baseUrl: URL;
+  };
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'multimodal-test',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('should not attach toModelOutput that duplicates MCP image content into providerMetadata', async () => {
+    const sdkClient = (client as any).client as Client;
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'screenshot',
+          description: 'Takes a screenshot',
+          inputSchema: { type: 'object' as const, properties: {} },
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    const tool = tools['screenshot'];
+    expect(tool).toBeDefined();
+    expect((tool as any).toModelOutput).toBeUndefined();
   });
 });
 
@@ -2676,8 +2853,87 @@ describe('MastraMCPClient - requireToolApproval', () => {
     expect(approvalFn).toHaveBeenCalledWith({
       toolName: 'greet',
       args: testArgs,
+      annotations: undefined,
       requestContext: { userId: '123' },
     });
+  });
+
+  it('should forward MCP tool annotations to the requireToolApproval callback', async () => {
+    testServer = await setupTestServer(false);
+    // Register a tool with annotations on the test server
+    testServer.mcpServer.tool(
+      'delete_repo',
+      'Delete a repo',
+      { repo: z.string() },
+      {
+        title: 'Delete Repository',
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+      async (): Promise<CallToolResult> => ({ content: [{ type: 'text', text: 'ok' }] }),
+    );
+
+    const approvalFn = vi.fn().mockImplementation(({ annotations }) => Boolean(annotations?.destructiveHint));
+    client = new InternalMastraMCPClient({
+      name: 'approval-annotations-client',
+      server: {
+        url: testServer.baseUrl,
+        requireToolApproval: approvalFn,
+      },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const destructiveTool = tools.delete_repo;
+    expect(destructiveTool).toBeDefined();
+
+    const result = await (destructiveTool as any).needsApprovalFn({ repo: 'foo' }, {});
+    expect(result).toBe(true);
+    expect(approvalFn).toHaveBeenCalledWith({
+      toolName: 'delete_repo',
+      args: { repo: 'foo' },
+      annotations: expect.objectContaining({
+        title: 'Delete Repository',
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: false,
+        openWorldHint: false,
+      }),
+    });
+  });
+
+  it('should expose MCP tool annotations on the Mastra tool (mcp.annotations)', async () => {
+    testServer = await setupTestServer(false);
+    testServer.mcpServer.tool(
+      'list_repos',
+      'List repos',
+      { owner: z.string() },
+      {
+        title: 'List Repositories',
+        readOnlyHint: true,
+        destructiveHint: false,
+      },
+      async (): Promise<CallToolResult> => ({ content: [{ type: 'text', text: 'ok' }] }),
+    );
+
+    client = new InternalMastraMCPClient({
+      name: 'annotations-exposure-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+    const tools = await client.tools();
+    const readTool = tools.list_repos as any;
+    expect(readTool).toBeDefined();
+    expect(readTool.mcp?.annotations).toMatchObject({
+      title: 'List Repositories',
+      readOnlyHint: true,
+      destructiveHint: false,
+    });
+
+    // Tool without annotations should not have `annotations` populated
+    const greetTool = tools.greet as any;
+    expect(greetTool.mcp?.annotations).toBeUndefined();
   });
 
   it('should support async approval functions', async () => {
@@ -2779,15 +3035,13 @@ describe('MastraMCPClient - custom fetch failure modes (auth-token loop)', () =>
           const authHeader = req.headers['authorization'];
           if (authHeader !== `Bearer ${VALID_TOKEN}`) {
             unauthorizedPostCount++;
-            res
-              .writeHead(401, { 'content-type': 'application/json' })
-              .end(
-                JSON.stringify({
-                  jsonrpc: '2.0',
-                  id: body?.id ?? null,
-                  error: { code: -32001, message: 'unauthorized' },
-                }),
-              );
+            res.writeHead(401, { 'content-type': 'application/json' }).end(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                id: body?.id ?? null,
+                error: { code: -32001, message: 'unauthorized' },
+              }),
+            );
             return;
           }
         }
@@ -3023,4 +3277,51 @@ describe('MastraMCPClient - custom fetch failure modes (auth-token loop)', () =>
 
     tokenWaiters.forEach(cancel => cancel());
   }, 20000);
+});
+
+describe('InternalMastraMCPClient - transport cleanup on close (issue #16693)', () => {
+  let testServer: Awaited<ReturnType<typeof setupTestServer>>;
+  let client: InternalMastraMCPClient;
+
+  beforeEach(async () => {
+    testServer = await setupTestServer(false);
+    client = new InternalMastraMCPClient({
+      name: 'test-close-cleanup-client',
+      server: { url: testServer.baseUrl },
+    });
+    await client.connect();
+  });
+
+  afterEach(async () => {
+    await client?.disconnect().catch(() => {});
+    await testServer?.mcpServer.close().catch(() => {});
+    await testServer?.serverTransport?.close().catch(() => {});
+    testServer?.httpServer.close();
+  });
+
+  it('closes and clears the stale transport when the connection closes', async () => {
+    const staleTransport = (client as any).transport;
+    expect(staleTransport).toBeDefined();
+    const closeSpy = vi.spyOn(staleTransport, 'close');
+
+    // Simulate a server-initiated close firing the SDK client's onclose handler.
+    (client as any).client.onclose?.();
+
+    expect((client as any).transport).toBeUndefined();
+    expect((client as any).isConnected).toBeNull();
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+
+    // Let the fire-and-forget close settle.
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
+
+  it('does not throw when the stale transport close rejects', async () => {
+    const staleTransport = (client as any).transport;
+    vi.spyOn(staleTransport, 'close').mockRejectedValueOnce(new Error('already closed'));
+
+    expect(() => (client as any).client.onclose?.()).not.toThrow();
+    expect((client as any).transport).toBeUndefined();
+    expect((client as any).isConnected).toBeNull();
+    await new Promise(resolve => setTimeout(resolve, 0));
+  });
 });

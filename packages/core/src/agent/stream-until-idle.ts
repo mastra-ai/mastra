@@ -54,6 +54,7 @@ const TERMINAL_BG_CHUNKS = new Set([
   'background-task-completed',
   'background-task-failed',
   'background-task-cancelled',
+  'background-task-suspended',
 ]);
 
 /**
@@ -100,20 +101,34 @@ function buildContinuationDirective(batch: Array<Record<string, unknown>>): stri
     .map(chunk => {
       const payload = (chunk as { payload?: Record<string, unknown> }).payload ?? {};
       return {
-        toolCallId: payload.toolCallId as string | undefined,
-        toolName: payload.toolName as string | undefined,
+        toolCallId: payload.toolCallId as string,
+        toolName: payload.toolName as string,
+        isSuspended: !!payload.suspendedAt,
       };
     })
     .filter(e => !!e.toolCallId);
 
-  const idList = entries.map(e => (e.toolName ? `${e.toolCallId} (${e.toolName})` : e.toolCallId)).join(', ');
+  const idList = entries
+    .filter(e => !e.isSuspended)
+    .map(e => `${e.toolCallId} (${e.toolName})`)
+    .join(', ');
+
+  // Suspend payloads are tool-controlled and may carry secrets, PII, or
+  // large opaque blobs — never serialize them into the continuation
+  // prompt. Just name the suspended tool-call IDs; the agent already has
+  // the full chunk via `streamUntilIdle().fullStream` if it needs more.
+  const suspendedIdList = entries
+    .filter(e => e.isSuspended)
+    .map(e => `${e.toolCallId} (${e.toolName})`)
+    .join(', ');
 
   return (
     `Background task(s) you previously dispatched have completed. ` +
     `Process ONLY these tool-call IDs (their results are now in the conversation): ${idList}. ` +
     `IMPORTANT: Do NOT process any tool-call IDs that were not in the list, ` +
     `and do NOT call the same tool again — the result is already available. ` +
-    `Use these result(s) to answer the user's original question.`
+    `Use these result(s) to answer the user's original question.` +
+    `IMPORTANT: The following tool-call IDs are suspended: ${suspendedIdList}. Do not attempt to resume them; let the user know they are waiting for explicit resume input.`
   );
 }
 
@@ -159,20 +174,28 @@ function releaseStreamSlot(activeStreams: Map<string, () => void>, scopeKey: str
 }
 
 /**
- * Run `agent.streamUntilIdle`. See the module doc above for the high-level
- * flow. Returns a `MastraModelOutput` whose `fullStream` spans the initial
- * turn PLUS any continuations triggered by background task completions.
- *
- * Aggregate properties (`text`, `toolCalls`, `toolResults`, `finishReason`,
- * `messageList`, `getFullOutput()`) still resolve against the first turn's
- * internal buffer. Consumers who need an aggregated view should read
- * `fullStream` and accumulate, or follow up with `agent.generate(...)`.
+ * Hook the caller passes to `runWithIdleWrapper` to drive the initial turn.
+ * Receives the prepared options object; returns the resulting
+ * `MastraModelOutput`. Lets `runStreamUntilIdle` pass `agent.stream(messages,
+ * opts)` and `runResumeStreamUntilIdle` pass `agent.resumeStream(resumeData,
+ * opts)` — the rest of the wrapper (state machine, bg-task subscription,
+ * continuation loop) is identical between the two.
  */
-export async function runStreamUntilIdle<OUTPUT>(
+type FirstTurnRunner<OUTPUT> = (opts: Record<string, any>) => Promise<MastraModelOutput<OUTPUT>>;
+
+/**
+ * Shared idle-loop wrapper used by both `runStreamUntilIdle` (initial turn:
+ * `agent.stream(messages, ...)`) and `runResumeStreamUntilIdle` (initial
+ * turn: `agent.resumeStream(resumeData, ...)`). The continuation loop —
+ * triggered by terminal bg-task events — always uses `agent.stream([],
+ * continuationOpts)` regardless of how the run started, since at that point
+ * we're back to a normal multi-turn conversation.
+ */
+async function runWithIdleWrapper<OUTPUT>(
   agent: Agent<any, any, any, any>,
-  messages: MessageListInput,
   streamOptions: (Record<string, any> & { maxIdleMs?: number }) | undefined,
   deps: StreamUntilIdleDeps,
+  firstTurn: FirstTurnRunner<OUTPUT>,
 ): Promise<MastraModelOutput<OUTPUT>> {
   const { maxIdleMs: _maxIdleMs, ...restStreamOptions } = streamOptions ?? {};
 
@@ -187,9 +210,9 @@ export async function runStreamUntilIdle<OUTPUT>(
   const scope = await resolveStreamUntilIdleScope(agent, mergedOptions);
 
   // Without a background task manager or memory, there's no continuation to
-  // orchestrate — fall through to a plain stream with no wrapping.
+  // orchestrate — fall through to the plain underlying call with no wrapping.
   if (!deps.bgManager || !scope) {
-    return agent.stream(messages, restStreamOptions as any) as Promise<MastraModelOutput<OUTPUT>>;
+    return firstTurn(restStreamOptions as Record<string, any>);
   }
 
   const { threadId, resourceId, scopeKey } = scope;
@@ -219,7 +242,12 @@ export async function runStreamUntilIdle<OUTPUT>(
   // in-process path each terminal event arrives once per subscriber, but
   // this guard also absorbs pathological cases where a completion is
   // redelivered while a continuation is still running.
-  const processedCompletionIds = new Set<string>();
+  // Keyed by `${taskId}:${chunkType}` so a task that suspends + later
+  // resumes + completes doesn't see its `background-task-completed`
+  // dropped as a "duplicate" of the earlier `background-task-suspended`
+  // (both are terminal-for-this-iteration and would collide on bare
+  // taskId).
+  const processedTerminalKeys = new Set<string>();
   let isProcessing = false;
   let closed = false;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -316,7 +344,8 @@ export async function runStreamUntilIdle<OUTPUT>(
       // filters it out rather than queueing another continuation.
       for (const chunk of batch) {
         const tid = (chunk as { payload?: { taskId?: string } }).payload?.taskId;
-        if (tid) processedCompletionIds.add(tid);
+        const ctype = (chunk as { type?: string }).type;
+        if (tid && ctype) processedTerminalKeys.add(`${tid}:${ctype}`);
       }
       const continuationOpts = buildContinuationOpts(baseContinuationOpts, restStreamOptions?.context as any[], batch);
       const inner = await (agent.stream as any)([], continuationOpts);
@@ -379,11 +408,13 @@ export async function runStreamUntilIdle<OUTPUT>(
 
         const taskId = (chunk.payload as { taskId?: string } | undefined)?.taskId;
 
-        // Dedup guard: skip terminal events for tasks already handled on
-        // a prior continuation (or about to be). Dropping both the
-        // forward AND the state update so duplicates don't double-render
-        // on the UI and don't queue redundant continuation turns.
-        if (taskId && TERMINAL_BG_CHUNKS.has(chunk.type) && processedCompletionIds.has(taskId)) {
+        // Dedup guard: skip terminal events already handled on a prior
+        // continuation (or about to be). Dedupe key includes chunk type
+        // so a suspend → resume → complete cycle doesn't drop the final
+        // `background-task-completed` as a duplicate of the earlier
+        // `background-task-suspended`.
+        const terminalKey = taskId && TERMINAL_BG_CHUNKS.has(chunk.type) ? `${taskId}:${chunk.type}` : undefined;
+        if (terminalKey && processedTerminalKeys.has(terminalKey)) {
           continue;
         }
 
@@ -403,7 +434,7 @@ export async function runStreamUntilIdle<OUTPUT>(
 
         // Drive the state machine from the chunk type.
         if (!taskId) continue;
-        if (chunk.type === 'background-task-running') {
+        if (chunk.type === 'background-task-running' || chunk.type === 'background-task-resumed') {
           runningTaskIds.add(taskId);
         } else if (TERMINAL_BG_CHUNKS.has(chunk.type)) {
           runningTaskIds.delete(taskId);
@@ -422,19 +453,21 @@ export async function runStreamUntilIdle<OUTPUT>(
   })();
 
   // --- Initial turn ---
-  // We need the MastraModelOutput object to return, so run stream() and
-  // await the result. Its internal fullStream getter is what we consume
-  // to feed the combined stream.
+  // We need the MastraModelOutput object to return, so run the first turn
+  // and await the result. Its internal fullStream getter is what we consume
+  // to feed the combined stream. The caller decides whether the first turn
+  // is `agent.stream(messages, ...)` or `agent.resumeStream(resumeData,
+  // ...)`.
   isProcessing = true;
   clearIdleTimer();
   let first: MastraModelOutput<OUTPUT>;
   try {
-    first = (await agent.stream(messages, initialStreamOpts as any)) as MastraModelOutput<OUTPUT>;
+    first = await firstTurn(initialStreamOpts);
   } catch (err) {
     // The outer machinery — bg reader, idle timer, controller — was
-    // started above. If the first stream() call rejects, nothing will
-    // feed the outer controller but the background subscription would
-    // keep running. Tear everything down before rethrowing so the caller
+    // started above. If the first call rejects, nothing will feed the
+    // outer controller but the background subscription would keep
+    // running. Tear everything down before rethrowing so the caller
     // isn't left with orphaned resources.
     forceClose();
     throw err;
@@ -478,4 +511,55 @@ export async function runStreamUntilIdle<OUTPUT>(
       return typeof value === 'function' ? value.bind(target) : value;
     },
   }) as MastraModelOutput<OUTPUT>;
+}
+
+/**
+ * Run `agent.streamUntilIdle`. See the module doc above for the high-level
+ * flow. Returns a `MastraModelOutput` whose `fullStream` spans the initial
+ * turn PLUS any continuations triggered by background task completions.
+ *
+ * Aggregate properties (`text`, `toolCalls`, `toolResults`, `finishReason`,
+ * `messageList`, `getFullOutput()`) still resolve against the first turn's
+ * internal buffer. Consumers who need an aggregated view should read
+ * `fullStream` and accumulate, or follow up with `agent.generate(...)`.
+ */
+export async function runStreamUntilIdle<OUTPUT>(
+  agent: Agent<any, any, any, any>,
+  messages: MessageListInput,
+  streamOptions: (Record<string, any> & { maxIdleMs?: number }) | undefined,
+  deps: StreamUntilIdleDeps,
+): Promise<MastraModelOutput<OUTPUT>> {
+  return runWithIdleWrapper<OUTPUT>(
+    agent,
+    streamOptions,
+    deps,
+    opts => agent.stream(messages, opts as any) as Promise<MastraModelOutput<OUTPUT>>,
+  );
+}
+
+/**
+ * Run `agent.resumeStreamUntilIdle`. Same idle-loop semantics as
+ * `runStreamUntilIdle` — initial turn calls `agent.resumeStream(resumeData,
+ * ...)` against the existing run snapshot identified by `streamOptions.runId`,
+ * and any subsequent continuations triggered by background-task completions
+ * use `agent.stream([], continuationOpts)` (a normal multi-turn agent stream)
+ * since the resume completes and we're back in regular conversation flow.
+ *
+ * `streamOptions` should include `runId` (required by `resumeStream` to load
+ * the snapshot) and may include `toolCallId` if the resume is targeting a
+ * specific suspended tool call. `maxIdleMs` works the same way as in
+ * `streamUntilIdle`.
+ */
+export async function runResumeStreamUntilIdle<OUTPUT>(
+  agent: Agent<any, any, any, any>,
+  resumeData: any,
+  streamOptions: (Record<string, any> & { maxIdleMs?: number; runId?: string; toolCallId?: string }) | undefined,
+  deps: StreamUntilIdleDeps,
+): Promise<MastraModelOutput<OUTPUT>> {
+  return runWithIdleWrapper<OUTPUT>(
+    agent,
+    streamOptions,
+    deps,
+    opts => agent.resumeStream(resumeData, opts as any) as Promise<MastraModelOutput<OUTPUT>>,
+  );
 }

@@ -9,8 +9,8 @@
 
 import { LangfuseClient } from '@langfuse/client';
 import { LangfuseSpanProcessor } from '@langfuse/otel';
-import type { TracingEvent, AnyExportedSpan, InitExporterOptions } from '@mastra/core/observability';
-import { TracingEventType } from '@mastra/core/observability';
+import type { TracingEvent, AnyExportedSpan, InitExporterOptions, ScoreEvent } from '@mastra/core/observability';
+import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { BaseExporter } from '@mastra/observability';
 import type { BaseExporterConfig } from '@mastra/observability';
 import { SpanConverter } from '@mastra/otel-exporter';
@@ -129,7 +129,7 @@ export class LangfuseExporter extends BaseExporter {
       // endpoint reads them correctly. SpanConverter produces mastra.* attributes,
       // but Langfuse only reads langfuse.* attributes for prompt linking, TTFT, etc.
       // @see https://langfuse.com/integrations/native/opentelemetry#property-mapping
-      mapMastraToLangfuseAttributes(otelSpan.attributes, this.#environment, this.#release);
+      mapMastraToLangfuseAttributes(otelSpan.attributes, span, this.#environment, this.#release);
 
       this.#processor!.onEnd(otelSpan);
     } catch (error) {
@@ -146,7 +146,60 @@ export class LangfuseExporter extends BaseExporter {
   }
 
   /**
-   * Add a score to a trace via the Langfuse client.
+   * Submit a score to Langfuse. Used by both the new `onScoreEvent` path and the
+   * deprecated `addScoreToTrace` wrapper.
+   */
+  private submitScore(args: {
+    id: string;
+    traceId: string;
+    spanId?: string;
+    name: string;
+    value: number;
+    comment?: string;
+    metadata?: Record<string, unknown>;
+  }): void {
+    if (!this.#client) return;
+
+    const { id, traceId, spanId, name, value, comment, metadata } = args;
+    try {
+      this.#client.score.create({
+        id,
+        traceId,
+        ...(spanId ? { observationId: spanId } : {}),
+        name,
+        value,
+        ...(comment ? { comment } : {}),
+        ...(metadata ? { metadata } : {}),
+        dataType: 'NUMERIC' as const,
+      });
+    } catch (error) {
+      this.logger.error(`${LOG_PREFIX} Error submitting score`, {
+        error,
+        traceId,
+        spanId,
+        name,
+      });
+    }
+  }
+
+  async onScoreEvent(event: ScoreEvent): Promise<void> {
+    const { score } = event;
+    if (!score.traceId) return;
+    this.submitScore({
+      id: score.scoreId,
+      traceId: score.traceId,
+      spanId: score.spanId,
+      name: score.scorerName ?? score.scorerId,
+      value: score.score,
+      comment: score.reason,
+      metadata: score.metadata,
+    });
+  }
+
+  /**
+   * @deprecated Use the observability score event pipeline (`mastra.observability.addScore`)
+   * instead. This method is preserved for backwards compatibility and forwards to the same
+   * underlying client call as `onScoreEvent`.
    */
   async addScoreToTrace({
     traceId,
@@ -163,27 +216,15 @@ export class LangfuseExporter extends BaseExporter {
     scorerName: string;
     metadata?: Record<string, any>;
   }): Promise<void> {
-    if (!this.#client) return;
-
-    try {
-      this.#client.score.create({
-        id: `${traceId}-${spanId || ''}-${scorerName}`,
-        traceId,
-        ...(spanId ? { observationId: spanId } : {}),
-        name: scorerName,
-        value: score,
-        ...(reason ? { comment: reason } : {}),
-        ...(metadata ? { metadata } : {}),
-        dataType: 'NUMERIC' as const,
-      });
-    } catch (error) {
-      this.logger.error(`${LOG_PREFIX} Error adding score to trace`, {
-        error,
-        traceId,
-        spanId,
-        scorerName,
-      });
-    }
+    this.submitScore({
+      id: `${traceId}-${spanId || ''}-${scorerName}`,
+      traceId,
+      spanId,
+      name: scorerName,
+      value: score,
+      comment: reason,
+      metadata,
+    });
   }
 
   async flush(): Promise<void> {
@@ -205,7 +246,12 @@ export class LangfuseExporter extends BaseExporter {
  * This function mutates the attributes object in place.
  * @see https://langfuse.com/integrations/native/opentelemetry#property-mapping
  */
-function mapMastraToLangfuseAttributes(attributes: Record<string, any>, environment?: string, release?: string): void {
+function mapMastraToLangfuseAttributes(
+  attributes: Record<string, any>,
+  span: AnyExportedSpan,
+  environment?: string,
+  release?: string,
+): void {
   // Environment and release: set directly since onStart() is not called
   if (environment) {
     attributes['langfuse.environment'] = environment;
@@ -269,6 +315,36 @@ function mapMastraToLangfuseAttributes(attributes: Record<string, any>, environm
   if (attributes['mastra.metadata.version']) {
     attributes['langfuse.trace.version'] = attributes['mastra.metadata.version'];
     delete attributes['mastra.metadata.version'];
+  }
+
+  // Root-span trace identity: scope each Langfuse trace to the entity that
+  // started it (agent or workflow). This makes the Langfuse trace name match
+  // the agent/workflow id and exposes the same identity as trace metadata, so
+  // users can scope Langfuse evaluators per agent via trace name or metadata
+  // filters. User-provided traceName (set via mastra.metadata.traceName) takes
+  // precedence and is preserved.
+  if (span.isRootSpan) {
+    if (span.type === SpanType.AGENT_RUN) {
+      if (!attributes['langfuse.trace.name'] && (span.entityName || span.entityId)) {
+        attributes['langfuse.trace.name'] = span.entityName ?? span.entityId;
+      }
+      if (span.entityId) {
+        attributes['langfuse.trace.metadata.agentId'] = span.entityId;
+      }
+      if (span.entityName) {
+        attributes['langfuse.trace.metadata.agentName'] = span.entityName;
+      }
+    } else if (span.type === SpanType.WORKFLOW_RUN) {
+      if (!attributes['langfuse.trace.name'] && (span.entityName || span.entityId)) {
+        attributes['langfuse.trace.name'] = span.entityName ?? span.entityId;
+      }
+      if (span.entityId) {
+        attributes['langfuse.trace.metadata.workflowId'] = span.entityId;
+      }
+      if (span.entityName) {
+        attributes['langfuse.trace.metadata.workflowName'] = span.entityName;
+      }
+    }
   }
 
   // Observation metadata: map semantic attributes to langfuse.observation.metadata.*

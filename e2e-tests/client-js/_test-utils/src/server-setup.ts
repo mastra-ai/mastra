@@ -82,7 +82,7 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
       { LibSQLStore, LibSQLVector },
       { MastraServer },
       { registerApiRoute },
-      { Observability, DefaultExporter },
+      { Observability, MastraStorageExporter },
       { Memory },
       { createWorkflow, createStep },
       { createTool },
@@ -197,7 +197,7 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
             exporters: [
               // Use realtime strategy for tests to ensure spans are persisted immediately
               // (default batch strategy has 5 second flush interval which is too slow for tests)
-              new DefaultExporter({ strategy: 'realtime' }),
+              new MastraStorageExporter({ strategy: 'realtime' }),
             ],
           },
         },

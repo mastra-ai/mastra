@@ -1,7 +1,6 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { languages } from '@codemirror/language-data';
 import { EditorState } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
@@ -11,6 +10,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { forwardRef, useMemo } from 'react';
 import type { HTMLAttributes } from 'react';
+import { codeLanguages } from './code-languages';
 import { createVariableAutocomplete } from './variable-autocomplete-extension';
 import { variableHighlight } from './variable-highlight-extension';
 import { CopyButton } from '@/ds/components/CopyButton';
@@ -216,6 +216,7 @@ function buildLightTheme(): Extension {
   return [editorTheme, syntaxHighlighting(highlightStyle)];
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- shared hook intentionally co-located with the editor it themes
 export const useCodemirrorTheme = (): Extension => {
   const isDark = useTheme().resolvedTheme === 'dark';
   return useMemo(() => (isDark ? buildDarkTheme() : buildLightTheme()), [isDark]);
@@ -267,7 +268,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       if (language === 'json') {
         exts.push(jsonLanguage);
       } else if (language === 'markdown') {
-        exts.push(markdown({ base: markdownLanguage, codeLanguages: languages }));
+        exts.push(markdown({ base: markdownLanguage, codeLanguages }));
         exts.push(EditorView.lineWrapping);
       }
 
@@ -310,20 +311,3 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     );
   },
 );
-
-export async function highlight(code: string, language: string) {
-  const { codeToTokens, bundledLanguages } = await import('shiki');
-
-  if (!(language in bundledLanguages)) return null;
-
-  const { tokens } = await codeToTokens(code, {
-    lang: language as keyof typeof bundledLanguages,
-    defaultColor: false,
-    themes: {
-      light: 'github-light',
-      dark: 'github-dark',
-    },
-  });
-
-  return tokens;
-}

@@ -5,6 +5,7 @@ import type {
   StoredAgentResponse,
   UpdateStoredAgentParams,
   DeleteStoredAgentResponse,
+  StoredAgentDependentsResponse,
   AgentVersionResponse,
   ListAgentVersionsParams,
   ListAgentVersionsResponse,
@@ -12,6 +13,9 @@ import type {
   ActivateAgentVersionResponse,
   CompareVersionsResponse,
   DeleteAgentVersionResponse,
+  FavoriteToggleResponse,
+  ExportStoredAgentParams,
+  ExportStoredAgentResponse,
 } from '../types';
 import { requestContextQueryString } from '../utils';
 
@@ -64,6 +68,16 @@ export class StoredAgent extends BaseResource {
   }
 
   /**
+   * Exports deterministic JSON for this agent without mutating storage.
+   */
+  export(params: ExportStoredAgentParams): Promise<ExportStoredAgentResponse> {
+    return this.request(`/stored/agents/${encodeURIComponent(this.storedAgentId)}/export`, {
+      method: 'POST',
+      body: params,
+    });
+  }
+
+  /**
    * Deletes the stored agent
    * @param requestContext - Optional request context to pass as query parameter
    * @returns Promise containing deletion confirmation
@@ -71,6 +85,52 @@ export class StoredAgent extends BaseResource {
   delete(requestContext?: RequestContext | Record<string, any>): Promise<DeleteStoredAgentResponse> {
     return this.request(
       `/stored/agents/${encodeURIComponent(this.storedAgentId)}${requestContextQueryString(requestContext)}`,
+      {
+        method: 'DELETE',
+      },
+    );
+  }
+
+  /**
+   * Lists other stored agents that reference this agent as a sub-agent.
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the list of dependent agents and a hidden count
+   *          for cross-workspace private dependents (only non-zero when this agent is public).
+   */
+  dependents(requestContext?: RequestContext | Record<string, any>): Promise<StoredAgentDependentsResponse> {
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/dependents${requestContextQueryString(requestContext)}`,
+    );
+  }
+
+  // ==========================================================================
+  // Favorite Methods (EE feature)
+  // ==========================================================================
+
+  /**
+   * Favorites this agent for the calling user. Idempotent.
+   * Requires the `agent.favorites` builder feature flag to be enabled on the server.
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the new favorited state and updated favorite count
+   */
+  favorite(requestContext?: RequestContext | Record<string, any>): Promise<FavoriteToggleResponse> {
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/favorite${requestContextQueryString(requestContext)}`,
+      {
+        method: 'PUT',
+      },
+    );
+  }
+
+  /**
+   * Unfavorites this agent for the calling user. Idempotent.
+   * Requires the `agent.favorites` builder feature flag to be enabled on the server.
+   * @param requestContext - Optional request context to pass as query parameter
+   * @returns Promise containing the new favorited state and updated favorite count
+   */
+  unfavorite(requestContext?: RequestContext | Record<string, any>): Promise<FavoriteToggleResponse> {
+    return this.request(
+      `/stored/agents/${encodeURIComponent(this.storedAgentId)}/favorite${requestContextQueryString(requestContext)}`,
       {
         method: 'DELETE',
       },
@@ -94,8 +154,14 @@ export class StoredAgent extends BaseResource {
     const queryParams = new URLSearchParams();
     if (params?.page !== undefined) queryParams.set('page', String(params.page));
     if (params?.perPage !== undefined) queryParams.set('perPage', String(params.perPage));
-    if (params?.orderBy) queryParams.set('orderBy', params.orderBy);
-    if (params?.sortDirection) queryParams.set('sortDirection', params.sortDirection);
+    if (params?.orderBy) {
+      if (params.orderBy.field) {
+        queryParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        queryParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
 
     const queryString = queryParams.toString();
     const contextString = requestContextQueryString(requestContext);

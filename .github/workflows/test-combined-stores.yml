@@ -1,0 +1,110 @@
+name: Combined store Tests (vector+storage)
+
+on:
+  workflow_call:
+    inputs:
+      head_sha:
+        required: true
+        type: string
+    secrets:
+      TURBO_TOKEN:
+        required: false
+      TURBO_TEAM:
+        required: false
+      PINECONE_API_KEY:
+        required: false
+      ASTRA_DB_ENDPOINT:
+        required: false
+      ASTRA_DB_TOKEN:
+        required: false
+      ABHI_CLOUDFLARE_API_TOKEN:
+        required: false
+      ABHI_CLOUDFLARE_ACCOUNT_ID:
+        required: false
+
+permissions: {}
+
+jobs:
+  setup:
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      stores: ${{ steps.set-stores.outputs.stores }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.head_sha }}
+          persist-credentials: false
+      - id: set-stores
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          STORES=$(ls -d stores/*/ | grep -v '_test-utils' | cut -f2 -d'/' | jq -R -s -c 'split("\n")[:-1]')
+          INVALID_STORES=$(echo "$STORES" | jq -r '.[] | select(test("^[a-zA-Z0-9_-]+$") | not)')
+          if [[ -n "$INVALID_STORES" ]]; then
+            echo "::error::Invalid store names: $INVALID_STORES"
+            exit 1
+          fi
+
+          # Check if we should include vectorize tests
+          # Only run vectorize tests for dane-ai-mastra bot's version packages PRs
+          PR_DATA=$(gh api "/repos/${{ github.repository }}/commits/${{ inputs.head_sha }}/pulls" --jq '.[0] | {user: .user.login, title: .title}' 2>/dev/null || echo '{}')
+          PR_USER=$(echo "$PR_DATA" | jq -r '.user // ""')
+          PR_TITLE=$(echo "$PR_DATA" | jq -r '.title // ""')
+          IS_VERSIONING_PR=false
+          if [[ "$PR_USER" == "dane-ai-mastra" ]] && [[ "$PR_TITLE" == "chore: version packages" || "$PR_TITLE" == "chore: version packages (alpha)" ]]; then
+            IS_VERSIONING_PR=true
+          fi
+
+          if [[ "$IS_VERSIONING_PR" == "true" ]]; then
+            echo "✓ This is a version packages PR from dane-ai-mastra bot - vectorize tests will run"
+          else
+            echo "✗ Not a version packages PR from dane-ai-mastra bot - filtering out vectorize tests"
+            STORES=$(echo "$STORES" | jq -c '[.[] | select(. != "vectorize")]')
+          fi
+
+          echo "stores=$STORES" >> $GITHUB_OUTPUT
+
+  test:
+    needs: setup
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        store: ${{fromJson(needs.setup.outputs.stores)}}
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.head_sha }}
+          persist-credentials: false
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build combined storage packages
+        run: pnpm turbo --filter "@mastra/${{ matrix.store }}" build
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+      - name: Run ${{ matrix.store }} tests
+        run: pnpm test
+        working-directory: stores/${{ matrix.store }}
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+          PINECONE_API_KEY: ${{ secrets.PINECONE_API_KEY }}
+          ASTRA_DB_ENDPOINT: ${{ secrets.ASTRA_DB_ENDPOINT }}
+          ASTRA_DB_TOKEN: ${{ secrets.ASTRA_DB_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}

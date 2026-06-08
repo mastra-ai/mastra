@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.5.0`
 
-:::warning
+:::experimental
 
 The `Harness` class is in alpha stage and subject to change. It won't follow semantic versioning guarantees until it graduates from experimental status. Use with caution and expect breaking changes in minor versions.
 
@@ -252,7 +252,7 @@ await harness.sendMessage({ content: 'Hello!' })
     name: 'disableBuiltinTools',
     type: 'BuiltinToolId[]',
     description:
-      'Built-in harness tool IDs to remove from the `harnessBuiltIn` toolset. Valid values are `ask_user`, `submit_plan`, `task_write`, `task_check`, and `subagent`.',
+      'Built-in harness tool IDs to remove from the `harnessBuiltIn` toolset. Valid values are `ask_user`, `submit_plan`, `task_write`, `task_update`, `task_complete`, `task_check`, and `subagent`.',
     isOptional: true,
   },
   {
@@ -357,12 +357,23 @@ Return the current `HarnessDisplayState` snapshot for UI rendering.
 const displayState = harness.getDisplayState()
 ```
 
+#### `restoreDisplayTasks(tasks)`
+
+Restore the task portion of `HarnessDisplayState` after a UI replays persisted task tool history. This emits `display_state_changed` without emitting a live `task_updated` event.
+
+If later task tools should read the replayed tasks, persist the same task list with `setState({ tasks })` before calling `restoreDisplayTasks(tasks)`.
+
+```typescript
+await harness.setState({ tasks: replayedTasks })
+harness.restoreDisplayTasks(replayedTasks)
+```
+
 #### `setState(updates)`
 
 Update the harness state. Validates against `stateSchema` if provided, and emits a `state_changed` event with the new state and changed keys.
 
 ```typescript
-await harness.setState({ currentModelId: 'anthropic/claude-sonnet-4-6' })
+await harness.setState({ currentModelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
 ```
 
 ### Modes
@@ -441,10 +452,10 @@ Switch the active model. When `scope` is `'thread'`, the model ID is persisted t
 
 ```typescript
 // Set for current session only
-await harness.switchModel({ modelId: 'anthropic/claude-sonnet-4-6' })
+await harness.switchModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
 
 // Persist to the current thread
-await harness.switchModel({ modelId: 'anthropic/claude-sonnet-4-6', scope: 'thread' })
+await harness.switchModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__', scope: 'thread' })
 ```
 
 #### `getCurrentModelAuthStatus()`
@@ -840,7 +851,7 @@ const modelId = harness.getReflectorModelId()
 Switch the observer model. Persists the setting to thread metadata and emits an `om_model_changed` event.
 
 ```typescript
-await harness.switchObserverModel({ modelId: 'anthropic/claude-haiku-3.5' })
+await harness.switchObserverModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__' })
 ```
 
 #### `switchReflectorModel({ modelId })`
@@ -848,7 +859,7 @@ await harness.switchObserverModel({ modelId: 'anthropic/claude-haiku-3.5' })
 Switch the reflector model. Persists the setting to thread metadata and emits an `om_model_changed` event.
 
 ```typescript
-await harness.switchReflectorModel({ modelId: 'anthropic/claude-haiku-3.5' })
+await harness.switchReflectorModel({ modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__' })
 ```
 
 #### `getObservationThreshold()`
@@ -883,10 +894,13 @@ Set the subagent model ID. Pass an `agentType` to set a per-type override, or om
 
 ```typescript
 // Set global subagent model
-await harness.setSubagentModelId({ modelId: 'anthropic/claude-sonnet-4-6' })
+await harness.setSubagentModelId({ modelId: '__GATEWAY_ANTHROPIC_MODEL_SONNET__' })
 
 // Set per-type model
-await harness.setSubagentModelId({ modelId: 'anthropic/claude-haiku-3.5', agentType: 'explore' })
+await harness.setSubagentModelId({
+  modelId: '__GATEWAY_ANTHROPIC_MODEL_HAIKU__',
+  agentType: 'explore',
+})
 ```
 
 ### Forked subagents
@@ -895,7 +909,7 @@ By default, a subagent runs with a fresh context — it doesn't see the parent c
 
 #### Enabling forked mode
 
-Set `forked: true` either on the [`HarnessSubagent` definition](#configuration) (per-type default) or on each `subagent` tool call (per-invocation override):
+Set `forked: true` either on the `HarnessSubagent` definition (per-type default) or on each `subagent` tool call (per-invocation override):
 
 ```typescript
 // Per-type default — every call to this subagent forks unless overridden.
@@ -1030,8 +1044,10 @@ The harness provides built-in tools to agents in every mode:
 | - | - |
 | `ask_user` | Ask the user a question and wait for their response. Supports free text, single-select choices, and multi-select choices. |
 | `submit_plan` | Submit a plan for user review and approval. |
-| `task_write` | Create or update a structured task list for tracking progress. |
-| `task_check` | Check the completion status of the current task list. |
+| `task_write` | Create or replace a structured task list for tracking progress. Assigns task IDs when omitted and returns the structured task list snapshot. |
+| `task_update` | Update one tracked task by ID and return the structured task list snapshot. |
+| `task_complete` | Mark one tracked task completed by ID and return the structured task list snapshot. |
+| `task_check` | Check the completion status of the current task list and return `tasks`, `summary`, `incompleteTasks`, and `isError` fields. |
 | `subagent` | Spawn a focused subagent with constrained tools (only available when `subagents` is configured). Pass `forked: true` to inherit the parent conversation — see [Forked subagents](#forked-subagents). |
 
 ### `ask_user` selections

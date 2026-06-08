@@ -160,6 +160,194 @@ for await (const part of uiMessageStream) {
 }
 ```
 
+### `sendMessage()`
+
+Send user-authored input to an active agent run or idle memory thread. Use this with `subscribeToThread()` so the client can render the stream that wakes from, or receives, the message.
+
+```typescript
+const agent = mastraClient.getAgent('support-agent')
+
+const result = await agent.sendMessage({
+  message: {
+    contents: 'Also consider the customer note I just added.',
+    attributes: { sentFrom: 'web' },
+  },
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+})
+
+console.log(result.runId)
+```
+
+`message` accepts a string, an array of text/file parts, or an object with `contents`, `attributes`, `metadata`, and `providerOptions`.
+
+### `queueMessage()`
+
+Queue user-authored input for the next thread turn. If the thread is active, Mastra starts a new run after the current run completes. If the thread is idle, Mastra starts a run immediately.
+
+```typescript
+await agent.queueMessage({
+  message: 'Also check whether the tests need updates.',
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+})
+```
+
+### `sendSignal()`
+
+Send a lower-level signal to an active agent run or memory thread. Use this for system-generated context such as reactive reminders or notification-shaped context that doesn't need inbox storage. For durable notification records, use the server-side [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) API. For user-authored input, prefer `sendMessage()` or `queueMessage()`.
+
+```typescript
+const agent = mastraClient.getAgent('support-agent')
+
+const result = await agent.sendSignal({
+  signal: {
+    type: 'reactive',
+    tagName: 'system-reminder',
+    contents: 'Also consider the latest customer note.',
+  },
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+})
+
+console.log(result.runId)
+```
+
+Use `ifActive.behavior` and `ifIdle.behavior` to control whether Mastra delivers, persists, discards, or wakes from a signal:
+
+```typescript
+await agent.sendSignal({
+  signal: { type: 'reactive', tagName: 'system-reminder', contents: 'Store this for later.' },
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+  ifIdle: {
+    behavior: 'persist',
+  },
+})
+```
+
+Pass `ifIdle.streamOptions` when the idle wake-up stream needs options such as model settings, tools, or runtime context:
+
+```typescript
+await agent.sendSignal({
+  signal: { type: 'reactive', tagName: 'system-reminder', contents: 'Start from this signal.' },
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+  ifIdle: {
+    behavior: 'wake',
+    streamOptions: {
+      maxSteps: 3,
+    },
+  },
+})
+```
+
+Returns `{ accepted: true, runId: string }`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'signal',
+    type: "{ type: 'user' | 'reactive' | 'notification' | string; tagName?: string; contents: string | Array<TextPart | FilePart>; attributes?: Record<string, JSONValue>; metadata?: Record<string, unknown>; providerOptions?: ProviderMetadata }",
+    description:
+      'Lower-level signal payload. Use `type` for the semantic signal category and `tagName` for the XML tag shown to the model. `providerOptions` is attached to the resulting prompt turn and persisted on the stored signal message.',
+  },
+  {
+    name: 'runId',
+    type: 'string',
+    isOptional: true,
+    description: 'Run ID to target directly.',
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Resource ID for the memory thread. Use with `threadId` for thread-targeted signals.',
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    isOptional: true,
+    description: 'Thread ID to target. Use with `resourceId` for thread-targeted signals.',
+  },
+  {
+    name: 'ifActive.behavior',
+    type: "'deliver' | 'persist' | 'discard'",
+    isOptional: true,
+    description: 'Controls what happens when the target thread is active. Defaults to `deliver`.',
+  },
+  {
+    name: 'ifActive.attributes',
+    type: 'Record<string, string | number | boolean>',
+    isOptional: true,
+    description: 'Attributes merged into the signal when Mastra accepts it while the target thread is active.',
+  },
+  {
+    name: 'ifIdle.behavior',
+    type: "'wake' | 'persist' | 'discard'",
+    isOptional: true,
+    description: 'Controls what happens when the target thread is idle. Defaults to `wake`.',
+  },
+  {
+    name: 'ifIdle.streamOptions',
+    type: "Omit<AgentExecutionOptions, 'messages'>",
+    isOptional: true,
+    description: 'Options for the stream that starts when `ifIdle.behavior` is `wake`.',
+  },
+  {
+    name: 'ifIdle.attributes',
+    type: 'Record<string, string | number | boolean>',
+    isOptional: true,
+    description: 'Attributes merged into the signal when Mastra accepts it while the target thread is idle.',
+  },
+]}
+/>
+
+### `subscribeToThread()`
+
+Subscribe to raw stream chunks for a memory thread. Use this to render output from a thread that may be started or continued by `sendMessage()`, `queueMessage()`, `sendSignal()`, or server-side notification dispatch.
+
+```typescript
+const agent = mastraClient.getAgent('support-agent')
+
+const subscription = await agent.subscribeToThread({
+  resourceId: 'user-123',
+  threadId: 'thread-abc',
+})
+
+await subscription.processDataStream({
+  onChunk: chunk => {
+    console.log(chunk)
+  },
+  reconnect: true,
+})
+```
+
+`subscribeToThread()` returns the underlying `Response` plus a `processDataStream()` helper. The helper reads the subscription stream until the connection closes or the request is aborted. Pass `reconnect: true` to resubscribe when the transport closes or a reconnect request fails, such as after a proxy idle timeout.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'resourceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Resource ID for the memory thread.',
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'Thread ID to subscribe to.',
+  },
+  {
+    name: 'processDataStream().reconnect',
+    type: 'boolean | { maxRetries?: number; delayMs?: number }',
+    isOptional: true,
+    description:
+      'Reconnects the subscription stream after it closes or a reconnect request fails. `true` retries indefinitely with a one-second delay.',
+  },
+]}
+/>
+
 ### `streamUntilIdle()`
 
 Stream a response and keep the stream open until every [background task](/docs/agents/background-tasks) dispatched during the run completes. The server re-enters the agentic loop on each task completion so the LLM can react to results in the same call. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call falls through to a plain `stream()`.
@@ -170,7 +358,7 @@ const response = await agent.streamUntilIdle('Research solana for me', {
     thread: 'thread-1',
     resource: 'resource-1',
   },
-  maxIdleMs: 5 * 60_000,
+  maxIdleMs: 5 * 60_000, //optional
 })
 
 response.processDataStream({
@@ -178,6 +366,31 @@ response.processDataStream({
     if (chunk.type === 'background-task-completed') {
       console.log('task complete:', chunk.payload.taskId)
     }
+  },
+})
+```
+
+### `resumeStreamUntilIdle()`
+
+Resume a suspended agent stream with custom data and keep the stream open until every [background task](/docs/agents/background-tasks) dispatched during the run completes. Use this to continue execution after a suspension point, such as a workflow suspend within an agent. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call falls through to a plain `resumeStream()`:
+
+```typescript
+const response = await agent.resumeStreamUntilIdle(
+  { approved: true, selectedOption: 'plan-b' },
+  {
+    memory: {
+      thread: 'thread-1',
+      resource: 'resource-1',
+    },
+    runId: 'run-123',
+    toolCallId: 'tool-call-456', // optional
+    maxIdleMs: 5 * 60_000, //optional
+  },
+)
+
+await response.processDataStream({
+  onChunk: chunk => {
+    console.log(chunk)
   },
 })
 ```
@@ -218,7 +431,7 @@ response.processDataStream({
 
 ### `approveToolCall()`
 
-Approve a pending tool call that requires human confirmation:
+Approve a pending tool call and return a continuation stream. Use this when you are rendering the resumed chunks from the approval response.
 
 ```typescript
 const response = await agent.approveToolCall({
@@ -233,9 +446,26 @@ response.processDataStream({
 })
 ```
 
+### `sendToolApproval()`
+
+Approve or decline a pending tool call for a subscribed thread. Use this with `subscribeToThread()` when the resumed chunks should arrive through the existing thread subscription instead of a separate continuation stream.
+
+```typescript
+const result = await agent.sendToolApproval({
+  resourceId: 'user-123',
+  threadId: 'thread-456',
+  toolCallId: 'tool-call-456',
+  approved: true,
+})
+
+console.log(result.accepted)
+```
+
+Returns `{ accepted: true, runId: string, toolCallId?: string }`.
+
 ### `declineToolCall()`
 
-Decline a pending tool call that requires human confirmation:
+Decline a pending tool call and return a continuation stream. Use this when you are rendering the resumed chunks from the decline response.
 
 ```typescript
 const response = await agent.declineToolCall({
@@ -358,6 +588,37 @@ response.processDataStream({
   },
 })
 ```
+
+### Tracing client tools
+
+When `@mastra/observability` is installed and configured on the server, a client-side tool records a `CLIENT_TOOL_CALL` span as a child of the current `AGENT_RUN` span. The server creates that span when the model emits the client tool call, injects a W3C trace carrier into the outgoing tool-call chunk, and ends the span once the tool arguments are available. Without server-side observability configured, client tool tracing is a no-op.
+
+The client SDK also measures the wall-clock duration of each client tool's `execute` function and ships it back to the server, where it's emitted as a `mastra_tool_duration_ms` metric with `toolType: "client"`.
+
+For richer telemetry from inside your tool's `execute` function, use the `observe` helper on the execution context to add child spans and structured logs:
+
+```typescript
+import { createTool } from '@mastra/client-js'
+import { z } from 'zod'
+
+const fetchUserTool = createTool({
+  id: 'fetchUser',
+  description: 'Fetches the current user profile',
+  inputSchema: z.object({ userId: z.string() }),
+  execute: async ({ userId }, { observe }) => {
+    observe.log('info', 'fetching user', { userId })
+    const user = await observe.span('http GET /users', async () => {
+      const res = await fetch(`/api/users/${userId}`)
+      return res.json()
+    })
+    return user
+  },
+})
+```
+
+`observe` is always available — when no tracing context is active (e.g. running outside a traced agent), `span` runs the function directly and `log` is a no-op. No null-checking needed.
+
+The SDK serializes everything the collector buffered as OTLP/JSON and ships it back in the next request body. The server's `@mastra/observability` package validates that the spans belong to the correct trace (preventing cross-trace injection) and forwards each span/log into the same observability bus that server-side telemetry uses. Your existing exporters pick them up automatically after observability is configured.
 
 ## Stored agents
 

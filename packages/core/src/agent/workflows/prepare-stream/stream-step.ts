@@ -8,9 +8,11 @@ import type { MemoryConfigInternal } from '../../../memory/types';
 import { resolveObservabilityContext } from '../../../observability';
 import { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
-import { createStep } from '../../../workflows';
+import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../../../tools';
+import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { SaveQueueManager } from '../../save-queue';
+import type { CreatedAgentSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
 
@@ -18,7 +20,7 @@ interface StreamStepOptions {
   capabilities: AgentCapabilities;
   runId: string;
   returnScorerData?: boolean;
-  requireToolApproval?: boolean;
+  requireToolApproval?: RequireToolApproval;
   toolCallConcurrency?: number;
   resumeContext?: {
     resumeData: any;
@@ -36,12 +38,14 @@ interface StreamStepOptions {
   workspace?: Workspace;
   backgroundTaskManager?: BackgroundTaskManager;
   agentBackgroundConfig?: AgentBackgroundConfig;
+  toolPayloadTransform?: ToolPayloadTransformPolicy;
   /**
    * When true, the in-loop `backgroundTaskCheckStep` skips its wait for
    * running tasks. Used when an outer caller (e.g. `agent.streamUntilIdle`)
    * drives continuation from outside the loop.
    */
   skipBgTaskWait?: boolean;
+  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
 }
 
 export function createStreamStep<OUTPUT = undefined>({
@@ -63,7 +67,9 @@ export function createStreamStep<OUTPUT = undefined>({
   workspace,
   backgroundTaskManager,
   agentBackgroundConfig,
+  toolPayloadTransform,
   skipBgTaskWait,
+  drainPendingSignals,
 }: StreamStepOptions) {
   return createStep({
     id: 'stream-text-step',
@@ -71,7 +77,9 @@ export function createStreamStep<OUTPUT = undefined>({
     outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
     execute: async ({ inputData, ...observabilityContext }) => {
       // Instead of validating inputData with zod, we just cast it to the type we know it should be
-      const validatedInputData = inputData as ModelLoopStreamArgs<any, OUTPUT>;
+      const validatedInputData = inputData as ModelLoopStreamArgs<any, OUTPUT> & {
+        initialSignalEchoes?: CreatedAgentSignal[];
+      };
 
       const processors =
         validatedInputData.outputProcessors ||
@@ -103,7 +111,10 @@ export function createStreamStep<OUTPUT = undefined>({
           backgroundTaskManager,
           agentBackgroundConfig,
           backgroundTaskManagerConfig: backgroundTaskManager?.config,
+          toolPayloadTransform,
           skipBgTaskWait,
+          drainPendingSignals,
+          initialSignalEchoes: validatedInputData.initialSignalEchoes,
         },
         agentId,
         agentName,

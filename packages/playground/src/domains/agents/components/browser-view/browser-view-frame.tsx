@@ -1,6 +1,6 @@
 import { Skeleton, cn } from '@mastra/playground-ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useBrowserSession } from '../../context/browser-session-context';
+import { useBrowserFrame, useBrowserSession } from '../../context/browser-session-context';
 import type { StreamStatus } from '../../hooks/use-browser-stream';
 import { useClickRipple } from '../../hooks/use-click-ripple';
 import { useInputCoordination } from '../../hooks/use-input-coordination';
@@ -29,7 +29,8 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
   const [hasFrame, setHasFrame] = useState(false);
   const [isInteractive, setIsInteractive] = useState(false);
   // Get shared state from context (WebSocket is managed by provider)
-  const { status, currentUrl, latestFrame, viewport, sendMessage } = useBrowserSession();
+  const { status, currentUrl, viewport, sendMessage } = useBrowserSession();
+  const { latestFrame } = useBrowserFrame();
 
   // Update img.src when new frame arrives
   useEffect(() => {

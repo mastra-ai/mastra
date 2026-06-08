@@ -1,13 +1,15 @@
 import { Button, StatusBadge, cn } from '@mastra/playground-ui';
 import { Monitor, ChevronUp, ChevronDown, Maximize2, PanelRight, X } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { useBrowserSession } from '../../context/browser-session-context';
+import { useBrowserFrame, useBrowserSession } from '../../context/browser-session-context';
 import { useBrowserToolCalls } from '../../context/browser-tool-calls-context';
 import { BrowserToolCallItem } from './browser-tool-call-item';
 import { BrowserViewFrame } from './browser-view-frame';
 
 interface BrowserThumbnailProps {
   agentName?: string;
+  /** Hide the "Open in sidebar" button (e.g. when no sidebar is available) */
+  hideSidebar?: boolean;
 }
 
 /**
@@ -17,8 +19,9 @@ interface BrowserThumbnailProps {
  * - Collapsed: Small thumbnail bar (click to expand)
  * - Expanded: Larger view with screencast + actions, with buttons to switch to modal or sidebar
  */
-export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps) {
-  const { hasSession, viewMode, status, currentUrl, latestFrame, setViewMode, closeBrowser } = useBrowserSession();
+export function BrowserThumbnail({ agentName = 'Agent', hideSidebar = false }: BrowserThumbnailProps) {
+  const { hasSession, viewMode, status, currentUrl, setViewMode, closeBrowser } = useBrowserSession();
+  const { latestFrame } = useBrowserFrame();
   const { toolCalls } = useBrowserToolCalls();
   const imgRef = useRef<HTMLImageElement>(null);
   const [hasFrame, setHasFrame] = useState(false);
@@ -91,7 +94,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
   return (
     <div
       className={cn(
-        'bg-surface2 border border-border1 rounded-lg overflow-hidden transition-all duration-200',
+        'bg-surface2 border border-border1 rounded-3xl overflow-hidden transition-all duration-200',
         'hover:border-border2',
       )}
     >
@@ -153,15 +156,17 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
                 >
                   <Maximize2 className="h-3.5 w-3.5" />
                 </Button>
-                <Button
-                  variant="default"
-                  size="icon-sm"
-                  tooltip="Open in sidebar"
-                  onClick={handleOpenSidebar}
-                  className="bg-surface1/80 backdrop-blur-sm"
-                >
-                  <PanelRight className="h-3.5 w-3.5" />
-                </Button>
+                {!hideSidebar && (
+                  <Button
+                    variant="default"
+                    size="icon-sm"
+                    tooltip="Open in sidebar"
+                    onClick={handleOpenSidebar}
+                    className="bg-surface1/80 backdrop-blur-sm"
+                  >
+                    <PanelRight className="h-3.5 w-3.5" />
+                  </Button>
+                )}
                 <Button
                   variant="default"
                   size="icon-sm"

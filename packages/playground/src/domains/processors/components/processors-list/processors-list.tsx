@@ -1,4 +1,4 @@
-import { EntityList, EntityListSkeleton, truncateString } from '@mastra/playground-ui';
+import { DataList as EntityList, DataListSkeleton as EntityListSkeleton, truncateString } from '@mastra/playground-ui';
 import { CheckIcon, FileInput, FileOutput } from 'lucide-react';
 import { useMemo } from 'react';
 import type { ProcessorInfo, ProcessorPhase } from '../../hooks/use-processors';

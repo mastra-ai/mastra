@@ -1,4 +1,4 @@
-import { RequestContext } from '../../di';
+import type { RequestContext } from '../../di';
 import type { SerializedError } from '../../error';
 import type { PubSub } from '../../events/pubsub';
 import { resolveObservabilityContext } from '../../observability';
@@ -90,6 +90,25 @@ function buildResumedBlockResult(
   return result;
 }
 
+function getResumeStepPrevOutput({
+  isResumedStep,
+  stepId,
+  stepResults,
+  prevOutput,
+}: {
+  isResumedStep: boolean;
+  stepId: string;
+  stepResults: Record<string, StepResult<any, any, any, any>>;
+  prevOutput: any;
+}) {
+  if (!isResumedStep) {
+    return prevOutput;
+  }
+
+  const stepResult = stepResults[stepId];
+  return stepResult && Object.prototype.hasOwnProperty.call(stepResult, 'payload') ? stepResult.payload : prevOutput;
+}
+
 export interface PersistStepUpdateParams {
   workflowId: string;
   runId: string;
@@ -139,8 +158,7 @@ export async function persistStepUpdate(
       return;
     }
 
-    const ctx = requestContext instanceof RequestContext ? requestContext : new RequestContext(requestContext);
-    const requestContextObj: Record<string, any> = ctx.toJSON();
+    const requestContextObj = engine.serializeRequestContext(requestContext);
 
     const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
     await workflowsStore?.persistWorkflowSnapshot({
@@ -231,6 +249,12 @@ export async function executeEntry(
       executionContext.stepExecutionPath?.push(entry.step.id);
     }
     const { step } = entry;
+    const stepPrevOutput = getResumeStepPrevOutput({
+      isResumedStep,
+      stepId: step.id,
+      stepResults,
+      prevOutput,
+    });
     const stepExecResult = await engine.executeStep({
       workflowId,
       runId,
@@ -241,7 +265,7 @@ export async function executeEntry(
       timeTravel,
       restart,
       resume,
-      prevOutput,
+      prevOutput: stepPrevOutput,
       ...observabilityContext,
       pubsub,
       abortController,
@@ -361,10 +385,12 @@ export async function executeEntry(
         perStep,
       });
     } else {
-      // Use the step's stored payload from the snapshot as prevOutput, since the previous
-      // step (e.g., a .map() step) may have a non-deterministic ID that doesn't match
-      // between workflow constructions.
-      const resumePrevOutput = stepResults[branchStep.step.id]?.payload ?? prevOutput;
+      const resumePrevOutput = getResumeStepPrevOutput({
+        isResumedStep: true,
+        stepId: branchStep.step.id,
+        stepResults,
+        prevOutput,
+      });
 
       branchResult = await engine.executeStep({
         workflowId,
@@ -456,13 +482,20 @@ export async function executeEntry(
       perStep,
     });
   } else if (entry.type === 'foreach') {
+    const foreachPrevOutput = getResumeStepPrevOutput({
+      isResumedStep: resume?.steps?.includes(entry.step.id) ?? false,
+      stepId: entry.step.id,
+      stepResults,
+      prevOutput,
+    });
+
     execResults = await engine.executeForeach({
       workflowId,
       runId,
       resourceId,
       entry,
       prevStep,
-      prevOutput,
+      prevOutput: foreachPrevOutput,
       stepResults,
       timeTravel,
       restart,

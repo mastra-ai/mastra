@@ -154,6 +154,8 @@ export interface SkillMetadata {
   license?: string;
   /** Optional compatibility requirements (string or object for flexibility) */
   compatibility?: unknown;
+  /** Whether this skill should be directly invokable by users. Defaults to true. */
+  'user-invocable'?: boolean;
   /** Optional arbitrary metadata - values can be strings, arrays, objects, etc. */
   metadata?: Record<string, unknown>;
 }

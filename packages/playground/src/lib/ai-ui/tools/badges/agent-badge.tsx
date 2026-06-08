@@ -1,5 +1,4 @@
 import { CodeEditor, AgentIcon } from '@mastra/playground-ui';
-import type { MastraUIMessage } from '@mastra/react';
 import React from 'react';
 import Markdown from 'react-markdown';
 import { ToolFallback } from '../tool-fallback';
@@ -8,6 +7,7 @@ import { BadgeWrapper } from './badge-wrapper';
 import { NetworkChoiceMetadataDialogTrigger } from './network-choice-metadata-dialog';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
+import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 type TextMessage = {
   type: 'text';
@@ -28,10 +28,11 @@ export type AgentMessage = TextMessage | ToolMessage;
 export interface AgentBadgeProps extends Omit<ToolApprovalButtonsProps, 'toolCalled'> {
   agentId: string;
   messages: AgentMessage[];
-  metadata?: MastraUIMessage['metadata'];
+  metadata?: MessageMetadata;
   suspendPayload?: any;
   toolCalled?: boolean;
   isComplete?: boolean;
+  keepOpenForStreamingChildMessages?: boolean;
 }
 
 export const AgentBadge = ({
@@ -45,9 +46,12 @@ export const AgentBadge = ({
   suspendPayload,
   toolCalled: toolCalledProp,
   isComplete = false,
+  keepOpenForStreamingChildMessages = false,
 }: AgentBadgeProps) => {
-  const selectionReason = metadata?.mode === 'network' ? metadata.selectionReason : undefined;
-  const agentNetworkInput = metadata?.mode === 'network' ? metadata.agentInput : undefined;
+  const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
+  const selectionReason =
+    metadata?.mode === 'network' ? (routingDecision?.selectionReason ?? metadata.selectionReason) : undefined;
+  const agentNetworkInput = metadata?.mode === 'network' ? (routingDecision ?? metadata.agentInput) : undefined;
 
   const parentRequireApprovalMetadata =
     metadata?.mode === 'stream' || metadata?.mode === 'network' || metadata?.mode === 'generate'
@@ -78,6 +82,8 @@ export const AgentBadge = ({
     toolCalled = toolCalledProp ?? allChildToolsComplete;
   }
 
+  const shouldCollapseContent = isComplete && !toolApprovalMetadata && !keepOpenForStreamingChildMessages;
+
   let suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
       <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
@@ -90,7 +96,7 @@ export const AgentBadge = ({
       data-testid="agent-badge"
       icon={<AgentIcon className="text-accent1" />}
       title={agentId}
-      initialCollapsed={isComplete && !toolApprovalMetadata}
+      initialCollapsed={shouldCollapseContent}
       extraInfo={
         metadata?.mode === 'network' ? (
           <NetworkChoiceMetadataDialogTrigger
@@ -98,11 +104,7 @@ export const AgentBadge = ({
             input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
         ) : bgEntry?.taskId && bgEntry?.startedAt ? (
-          <BackgroundTaskMetadataDialogTrigger
-            backgroundTaskTaskId={bgEntry.taskId}
-            backgroundTaskStartedAt={bgEntry.startedAt}
-            backgroundTaskCompletedAt={bgEntry.completedAt}
-          />
+          <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
         ) : null
       }
     >

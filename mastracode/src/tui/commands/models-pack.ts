@@ -589,6 +589,7 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
     cerebras: hasEnv('cerebras') ? ('apikey' as const) : false,
     google: hasEnv('google') ? ('apikey' as const) : false,
     deepseek: hasEnv('deepseek') ? ('apikey' as const) : false,
+    'github-copilot': accessLevel('github-copilot'),
   };
   // Include all other providers that have API keys configured
   const seen = new Set(Object.keys(access));

@@ -1,15 +1,16 @@
 import { Tab, TabList, Tabs, Tooltip, TooltipContent, TooltipTrigger, Txt, Icon } from '@mastra/playground-ui';
-import { ExternalLink, EyeIcon, FlaskConical, MessageSquare, ClipboardCheck, GitBranch } from 'lucide-react';
+import { ExternalLink, EyeIcon, FlaskConical, MessageSquare, ClipboardCheck, GitBranch, Radio } from 'lucide-react';
 
 import { useLinkComponent } from '@/lib/framework';
 
-export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces';
+export type AgentPageTab = 'chat' | 'versions' | 'evaluate' | 'review' | 'traces' | 'channels';
 
 interface AgentPageTabsProps {
   agentId: string;
   activeTab: AgentPageTab;
   showPlayground?: boolean;
   showObservability?: boolean;
+  showChannels?: boolean;
   reviewBadge?: number;
   rightSlot?: React.ReactNode;
 }
@@ -23,7 +24,7 @@ function DocsLink({ href, children }: { href: string; children: React.ReactNode 
       className="inline-flex items-center gap-1 underline text-inherit hover:text-white"
     >
       {children}
-      <ExternalLink className="h-3 w-3" />
+      <ExternalLink className="size-3" />
     </a>
   );
 }
@@ -84,6 +85,7 @@ export function AgentPageTabs({
   activeTab,
   showPlayground = false,
   showObservability = false,
+  showChannels = false,
   reviewBadge,
   rightSlot,
 }: AgentPageTabsProps) {
@@ -108,6 +110,7 @@ export function AgentPageTabs({
     evaluate: `/agents/${agentId}/evaluate`,
     review: `/agents/${agentId}/review`,
     traces: `/agents/${agentId}/traces`,
+    channels: `/agents/${agentId}/channels`,
   };
 
   const handleTabChange = (value: AgentPageTab) => {
@@ -115,9 +118,9 @@ export function AgentPageTabs({
   };
 
   return (
-    <div className="bg-surface2 px-4 flex items-center gap-2">
+    <div className="flex items-center gap-2 p-1.5">
       <Tabs value={activeTab} defaultTab={activeTab} onValueChange={handleTabChange} className="flex-1 min-w-0">
-        <TabList>
+        <TabList variant="pill-ghost">
           <AgentTab value="chat" icon={<MessageSquare />} label="Chat" />
           <AgentTab
             value="versions"
@@ -148,6 +151,7 @@ export function AgentPageTabs({
             disabled={!showObservability}
             disabledReason={observabilityDisabledReason}
           />
+          {showChannels && <AgentTab value="channels" icon={<Radio />} label="Channels" />}
         </TabList>
       </Tabs>
       {rightSlot && <div className="flex items-center gap-2">{rightSlot}</div>}

@@ -29,12 +29,12 @@
   --tasa-explorer: var(--font-display);
 
   /* Dark theme (default) */
-  --surface1: oklch(0.141 0 0);
-  --surface2: oklch(0.179 0 0);
-  --surface3: oklch(0.21 0 0);
-  --surface4: oklch(0.251 0 0);
-  --surface5: oklch(0.275 0 0 / 0.9);
-  --surface6: oklch(0.345 0 0);
+  --surface1: oklch(0% 0 0deg);
+  --surface2: oklch(16% 0 0deg);
+  --surface3: oklch(18% 0 0deg);
+  --surface4: oklch(21.78% 0 0deg);
+  --surface5: oklch(24.35% 0 0deg / 90%);
+  --surface6: oklch(30.92% 0 0deg);
 
   --accent1: oklch(0.723 0.219 149.579);
   --accent2: oklch(0.637 0.237 25.331);
@@ -62,9 +62,14 @@
   --neutral6: oklch(0.985 0 0);
 
   --error: oklch(0.637 0.237 25.331);
-  --overlay: oklch(0 0 0 / 0.75);
-  --border1: oklch(1 0 0 / 0.08);
-  --border2: oklch(1 0 0 / 0.12);
+  --overlay: oklch(0% 0 0deg / 75%);
+  --border1: oklch(100% 0 0deg / 7%);
+  --border2: oklch(100% 0 0deg / 11%);
+  --surface-overlay-soft: oklch(100% 0 0deg / 4%);
+  --surface-overlay-strong: oklch(100% 0 0deg / 7%);
+  --shadow-main-frame: 0 14px 48px -36px oklch(0% 0 0deg / 85%);
+  --sidebar-nav-hover: oklch(100% 0 0deg / 7%);
+  --sidebar-nav-active: oklch(100% 0 0deg / 11%);
 
   /* Semantic color aliases */
   --text1: var(--neutral6);
@@ -86,12 +91,12 @@
 }
 
 html.light {
-  --surface1: oklch(1 0 0);
-  --surface2: oklch(0.984 0 0);
-  --surface3: oklch(0.968 0 0);
-  --surface4: oklch(0.929 0 0);
-  --surface5: oklch(0.929 0 0 / 0.9);
-  --surface6: oklch(0.869 0 0);
+  --surface1: oklch(95.6% 0 0deg);
+  --surface2: oklch(98.5% 0 0deg);
+  --surface3: oklch(100% 0 0deg);
+  --surface4: oklch(96.5% 0 0deg);
+  --surface5: oklch(94.4% 0 0deg / 94%);
+  --surface6: oklch(89.5% 0 0deg);
 
   --accent1: oklch(0.627 0.194 149.214);
   --accent2: oklch(0.577 0.245 27.325);
@@ -119,9 +124,14 @@ html.light {
   --neutral6: oklch(0.13 0 0);
 
   --error: oklch(0.577 0.245 27.325);
-  --overlay: oklch(0.208 0 0 / 0.45);
-  --border1: oklch(0.208 0 0 / 0.12);
-  --border2: oklch(0.208 0 0 / 0.2);
+  --overlay: oklch(20.8% 0 0deg / 45%);
+  --border1: oklch(20.8% 0 0deg / 10%);
+  --border2: oklch(20.8% 0 0deg / 16%);
+  --surface-overlay-soft: oklch(20.8% 0 0deg / 4%);
+  --surface-overlay-strong: oklch(20.8% 0 0deg / 7%);
+  --shadow-main-frame: 0 1px 2px oklch(24% 0 0deg / 4%), 0 18px 48px -34px oklch(24% 0 0deg / 22%);
+  --sidebar-nav-hover: oklch(20.8% 0 0deg / 5.5%);
+  --sidebar-nav-active: oklch(20.8% 0 0deg / 8.5%);
 
   /* Semantic color aliases */
   --text1: var(--neutral6);
@@ -151,6 +161,30 @@ html.light {
   @media (width >= 1400px) {
     max-width: 1400px;
   }
+}
+
+@utility shadow-main-frame {
+  box-shadow: var(--shadow-main-frame);
+}
+
+@utility shadow-dialog {
+  box-shadow: var(--shadow-dialog);
+}
+
+@utility rounded-studio-frame {
+  border-radius: var(--studio-frame-radius, 1.5rem);
+}
+
+@utility rounded-studio-panel {
+  border-radius: max(0px, calc(var(--studio-frame-radius, 1.5rem) - var(--studio-frame-inset, 0.5rem)));
+}
+
+@utility bg-sidebar-nav-hover {
+  background-color: var(--sidebar-nav-hover);
+}
+
+@utility bg-sidebar-nav-active {
+  background-color: var(--sidebar-nav-active);
 }
 
 @theme {
@@ -316,6 +350,8 @@ html.light {
   --color-overlay: var(--overlay);
   --color-border1: var(--border1);
   --color-border2: var(--border2);
+  --color-surface-overlay-soft: var(--surface-overlay-soft);
+  --color-surface-overlay-strong: var(--surface-overlay-strong);
 
   /* Semantic color aliases */
   --color-text1: var(--text1);
@@ -360,11 +396,12 @@ html.light {
   --shadow-inner: inset 0 2px 4px oklch(0 0 0 / 0.3);
   --shadow-card: 0 2px 8px oklch(0 0 0 / 0.4);
   --shadow-elevated: 0 8px 24px oklch(0 0 0 / 0.5);
-  /* Inset top highlight (gloss) instead of outer 1px ring — outer ring stacked with the
-     explicit `border` on every consumer (Dialog, Select/Dropdown content, etc.) and read as
-     a duplicated outline. */
-  --shadow-dialog:
-    inset 0 1px 0 0 oklch(1 0 0 / 0.04), 0 8px 24px -8px oklch(0 0 0 / 0.28), 0 24px 56px -16px oklch(0 0 0 / 0.36);
+
+  /* Drop-shadow only. A previous version added `inset 0 1px 0 0 oklch(100% 0 0deg / 4%)` for
+     a 1px gloss highlight on top, but Tailwind v4 inlines @theme values into utility
+     classes so it can't be themed per-mode via a CSS var override — and the white inset
+     reads as a dirty band on dark surfaces and is invisible on white-ish light surfaces. */
+  --shadow-dialog: 0 8px 24px -8px oklch(0% 0 0deg / 28%), 0 24px 56px -16px oklch(0% 0 0deg / 36%);
   --shadow-glow-accent1: 0 0 20px oklch(0.723 0.219 149.579 / 0.25);
   --shadow-glow-accent2: 0 0 20px oklch(0.637 0.237 25.331 / 0.25);
   --shadow-focus-ring: 0 0 0 3px oklch(0.723 0.219 149.579 / 0.12);
@@ -383,6 +420,34 @@ html.light {
   body {
     background-color: var(--surface1);
     color: var(--neutral6);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Design-system scrollbars — thin, themed thumb on a transparent track.
+     Applies app-wide so native OS scrollbars no longer clash with DS surfaces. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--neutral4) 30%, transparent) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--neutral4) 30%, transparent);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--neutral4) 55%, transparent);
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
   }
 }
 
@@ -434,4 +499,21 @@ html.light {
 
 .animate-click-ripple {
   animation: click-ripple 300ms ease-out forwards;
+}
+
+/* Temporary highlight for delta-arrived list rows.
+   Same color as the featured / hover state (var(--surface5)), starts fully
+   visible and immediately fades out to transparent over 2s. */
+@keyframes fade-row-highlight {
+  0% {
+    background-color: var(--surface5);
+  }
+
+  100% {
+    background-color: transparent;
+  }
+}
+
+.animate-row-highlight {
+  animation: fade-row-highlight 2000ms ease-out forwards;
 }

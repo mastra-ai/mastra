@@ -18,7 +18,8 @@ const Command = React.forwardRef<
 ));
 Command.displayName = CommandPrimitive.displayName;
 
-type CommandDialogProps = React.ComponentPropsWithoutRef<typeof Dialog> & {
+type CommandDialogProps = Omit<React.ComponentPropsWithoutRef<typeof Dialog>, 'children'> & {
+  children?: React.ReactNode;
   title?: string;
   description?: string;
 };

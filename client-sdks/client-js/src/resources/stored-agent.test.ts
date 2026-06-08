@@ -103,6 +103,17 @@ describe('StoredAgent Resource', () => {
         }),
       );
     });
+
+    it('should pass favoritedOnly and pinFavoritedFor on listStoredAgents', async () => {
+      const mockResponse = { agents: [], total: 0, page: 0, perPage: 100, hasMore: false };
+      mockFetchResponse(mockResponse);
+
+      await client.listStoredAgents({ favoritedOnly: true, pinFavoritedFor: 'user-1' });
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/stored/agents?favoritedOnly=true&pinFavoritedFor=user-1`,
+        expect.anything(),
+      );
+    });
   });
 
   describe('createStoredAgent', () => {
@@ -233,6 +244,36 @@ describe('StoredAgent Resource', () => {
       );
     });
 
+    describe('Favorites', () => {
+      it('should favorite the agent via PUT /favorite', async () => {
+        const mockResponse = { favorited: true, favoriteCount: 3 };
+        mockFetchResponse(mockResponse);
+
+        const result = await storedAgent.favorite();
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/favorite`,
+          expect.objectContaining({
+            method: 'PUT',
+          }),
+        );
+      });
+
+      it('should unfavorite the agent via DELETE /favorite', async () => {
+        const mockResponse = { favorited: false, favoriteCount: 2 };
+        mockFetchResponse(mockResponse);
+
+        const result = await storedAgent.unfavorite();
+        expect(result).toEqual(mockResponse);
+        expect(global.fetch).toHaveBeenCalledWith(
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/favorite`,
+          expect.objectContaining({
+            method: 'DELETE',
+          }),
+        );
+      });
+    });
+
     it('should handle special characters in storedAgentId', async () => {
       const specialId = 'agent/with/slashes';
       const encodedId = encodeURIComponent(specialId);
@@ -305,12 +346,11 @@ describe('StoredAgent Resource', () => {
         const result = await storedAgent.listVersions({
           page: 1,
           perPage: 5,
-          orderBy: 'createdAt',
-          sortDirection: 'DESC',
+          orderBy: { field: 'createdAt', direction: 'DESC' },
         });
         expect(result).toEqual(mockResponse);
         expect(global.fetch).toHaveBeenCalledWith(
-          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions?page=1&perPage=5&orderBy=createdAt&sortDirection=DESC`,
+          `${clientOptions.baseUrl}/api/stored/agents/${storedAgentId}/versions?page=1&perPage=5&orderBy%5Bfield%5D=createdAt&orderBy%5Bdirection%5D=DESC`,
           expect.objectContaining({
             headers: expect.objectContaining(clientOptions.headers),
           }),

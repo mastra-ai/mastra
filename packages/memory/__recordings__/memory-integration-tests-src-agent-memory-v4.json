@@ -1061,6 +1061,180 @@
       }
     },
     {
+      "hash": "8147029efee4c42b",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "\n      - you will generate a short title based on the first message a user begins a conversation with\n      - ensure it is not more than 80 characters long\n      - the title should be a summary of the user's message\n      - do not use quotes or colons\n      - the entire text you return will be used as the title"
+            },
+            {
+              "role": "user",
+              "content": "[{\"type\":\"text\",\"text\":\"Hello, world!\",\"providerMetadata\":{\"mastra\":{\"createdAt\":1773176160000}}}]"
+            }
+          ]
+        },
+        "timestamp": 1773176160680
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f05ffdb6ff558f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:04 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "444",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999895",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_28264ed96d234287980e22d4619ea12e"
+        },
+        "body": {
+          "id": "chatcmpl-DXUihAqr1hwzVApNqMugIkZVn05Qh",
+          "object": "chat.completion",
+          "created": 1776875283,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Greeting the world with a hello message",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 110,
+            "completion_tokens": 7,
+            "total_tokens": 117,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_23d0326066"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "b4643447f7c67f3e",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "\n      - you will generate a short title based on the first message a user begins a conversation with\n      - ensure it is not more than 80 characters long\n      - the title should be a summary of the user's message\n      - do not use quotes or colons\n      - the entire text you return will be used as the title"
+            },
+            {
+              "role": "user",
+              "content": "[{\"type\":\"text\",\"text\":\"Hello, world!\",\"providerMetadata\":{\"mastra\":{\"createdAt\":1773176160000}}}]"
+            }
+          ]
+        },
+        "timestamp": 1773176160680
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f05ffdb6ff558f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:04 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "444",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999895",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_28264ed96d234287980e22d4619ea12e"
+        },
+        "body": {
+          "id": "chatcmpl-DXUihAqr1hwzVApNqMugIkZVn05Qh",
+          "object": "chat.completion",
+          "created": 1776875283,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Greeting the world with a hello message",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 110,
+            "completion_tokens": 7,
+            "total_tokens": 117,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_23d0326066"
+        },
+        "isStreaming": false
+      }
+    },
+    {
       "hash": "718cf70e01c699d0",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
@@ -1879,6 +2053,93 @@
     },
     {
       "hash": "8f3ff4c97ea191f1",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "system",
+              "content": "\n      - you will generate a short title based on the first message a user begins a conversation with\n      - ensure it is not more than 80 characters long\n      - the title should be a summary of the user's message\n      - do not use quotes or colons\n      - the entire text you return will be used as the title"
+            },
+            {
+              "role": "user",
+              "content": "[{\"type\":\"text\",\"text\":\"What is the weather in London?\",\"providerMetadata\":{\"mastra\":{\"createdAt\":1773176160000}}}]"
+            }
+          ]
+        },
+        "timestamp": 1773176161780
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9f0600074c7e58f2-YVR",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Wed, 22 Apr 2026 16:28:11 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "314",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149999890",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_8a58a61584a4468da174a3a0d6c87353"
+        },
+        "body": {
+          "id": "chatcmpl-DXUiojcpNWfhN0i07UnhwarivxGLl",
+          "object": "chat.completion",
+          "created": 1776875290,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Current Weather Inquiry for London",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 113,
+            "completion_tokens": 5,
+            "total_tokens": 118,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_4181e24c46"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "e7d10da34d9914bb",
       "request": {
         "url": "https://api.openai.com/v1/chat/completions",
         "method": "POST",

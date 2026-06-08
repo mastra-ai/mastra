@@ -296,6 +296,37 @@ export interface StorageMCPClientToolsConfig {
 }
 
 /**
+ * One pinned connection on a tool provider config (per-agent snapshot).
+ * Adapter-native `connectionId` is the join key into the
+ * `mastra_tool_provider_connections` storage table.
+ */
+export interface StorageToolProviderConfigConnection {
+  kind: 'author' | 'invoker' | 'platform';
+  connectionId: string;
+  toolkit: string;
+  label?: string;
+  scope?: StorageToolProviderConnectionScope;
+}
+
+/**
+ * Per-tool metadata (toolkit + optional description override) for a tool
+ * provider's selected tools.
+ */
+export interface StorageToolProviderToolMeta {
+  toolkit?: string;
+  description?: string;
+}
+
+/**
+ * Stored shape for one tool provider's configuration on one agent.
+ * Keyed by tool slug for `tools` and by toolkit slug for `connections`.
+ */
+export interface StorageToolProviderConfig {
+  tools: Record<string, StorageToolProviderToolMeta>;
+  connections: Record<string, StorageToolProviderConfigConnection[]>;
+}
+
+/**
  * Scorer reference with optional sampling configuration
  */
 export interface StorageScorerConfig {
@@ -366,7 +397,14 @@ export type StorageDefaultOptions = Omit<
   | 'system' // SystemMessage can be arrays or complex message objects
   | 'stopWhen' // StopCondition is a complex union type from AI SDK
   | 'providerOptions' // ProviderOptions includes provider-specific types from external packages
->;
+  | 'requireToolApproval' // can be a function at runtime; stored options must be serializable
+> & {
+  /**
+   * Stored agents only support a boolean here. Function-based approval policies are runtime-only
+   * and cannot be serialized, so they are intentionally excluded from stored default options.
+   */
+  requireToolApproval?: boolean;
+};
 
 /**
  * A conditional variant: a value paired with an optional RuleGroup.
@@ -413,6 +451,12 @@ export interface StorageAgentSnapshotType {
    * Static or conditional on request context.
    */
   integrationTools?: StorageConditionalField<Record<string, StorageMCPClientToolsConfig>>;
+  /**
+   * Tool provider configs keyed by provider id (e.g. `'composio'`).
+   * Each config selects tool slugs and pins per-toolkit connections.
+   * Static or conditional on request context.
+   */
+  toolProviders?: StorageConditionalField<Record<string, StorageToolProviderConfig>>;
   /** Processor graph for input processing — static or conditional on request context */
   inputProcessors?: StorageConditionalField<StoredProcessorGraph>;
   /** Processor graph for output processing — static or conditional on request context */
@@ -425,6 +469,8 @@ export interface StorageAgentSnapshotType {
   mcpClients?: StorageConditionalField<Record<string, StorageMCPClientToolsConfig>>;
   /** Workspace reference — ID of a stored workspace or inline config — static or conditional on request context */
   workspace?: StorageConditionalField<StorageWorkspaceRef>;
+  /** Browser reference — inline browser config — static or conditional on request context */
+  browser?: StorageConditionalField<StorageBrowserRef>;
   /** Skill entity IDs with optional per-skill overrides — static or conditional on request context */
   skills?: StorageConditionalField<Record<string, StorageSkillConfig>>;
   /** Skill format for system message injection (default: 'xml') */
@@ -437,6 +483,15 @@ export interface StorageAgentSnapshotType {
  * Thin agent record type containing only metadata fields.
  * All configuration lives in version snapshots (StorageAgentSnapshotType).
  */
+/**
+ * Visibility of a stored agent.
+ * - `private`: only the owner (or admins) can read the record.
+ * - `public`: any authenticated caller with `agents:read` can read the record.
+ */
+export type StorageVisibility = 'private' | 'public';
+
+export const STORAGE_VISIBILITY_VALUES = ['private', 'public'] as const satisfies readonly StorageVisibility[];
+
 export interface StorageAgentType {
   /** Unique, immutable identifier */
   id: string;
@@ -446,8 +501,19 @@ export interface StorageAgentType {
   activeVersionId?: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /**
+   * Visibility of the stored agent. `private` limits access to the owner / admins;
+   * `public` allows any authenticated caller with `agents:read` to read.
+   * May be undefined for legacy records created before visibility was introduced.
+   */
+  visibility?: StorageVisibility;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
+  /**
+   * Denormalized count of favorites on this agent. Maintained by the favorites
+   * storage domain. Optional; treat undefined as 0 for legacy rows.
+   */
+  favoriteCount?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -471,6 +537,8 @@ export type StorageCreateAgentInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Visibility of the stored agent (defaults to 'private' when an authorId is set) */
+  visibility?: StorageVisibility;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
 } & StorageAgentSnapshotType;
@@ -485,15 +553,19 @@ export type StorageUpdateAgentInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Visibility of the stored agent */
+  visibility?: StorageVisibility;
   /** Additional metadata for the agent */
   metadata?: Record<string, unknown>;
   /** FK to agent_versions.id - the currently active version */
   activeVersionId?: string;
   /** Agent status: 'draft' or 'published' */
   status?: 'draft' | 'published' | 'archived';
-} & Partial<Omit<StorageAgentSnapshotType, 'memory'>> & {
+} & Partial<Omit<StorageAgentSnapshotType, 'memory' | 'browser'>> & {
     /** Memory configuration object (static or conditional), or null to disable memory */
     memory?: StorageConditionalField<SerializedMemoryConfig> | null;
+    /** Browser configuration (inline ref), or null to disable browser */
+    browser?: StorageConditionalField<StorageBrowserRef> | null;
   };
 
 export type StorageListAgentsInput = {
@@ -514,6 +586,10 @@ export type StorageListAgentsInput = {
    */
   authorId?: string;
   /**
+   * Filter agents by visibility (exact match).
+   */
+  visibility?: StorageVisibility;
+  /**
    * Filter agents by metadata key-value pairs.
    * All specified key-value pairs must match (AND logic).
    */
@@ -523,6 +599,25 @@ export type StorageListAgentsInput = {
    * Defaults to 'published' if not specified.
    */
   status?: 'draft' | 'published' | 'archived';
+  /**
+   * Restrict results to this set of agent IDs. Used by the favorites feature
+   * to fetch a specific subset of favorited agents. When provided as an
+   * empty array, the result is empty.
+   */
+  entityIds?: string[];
+  /**
+   * When set, agents favorited by this user are returned first, ordered
+   * by `(is_favorited DESC, <existing orderBy>, id ASC)` over the full
+   * candidate set before pagination. Implementations that don't support
+   * favorited-first sort treat this as undefined.
+   */
+  pinFavoritedFor?: string;
+  /**
+   * When true, only agents favorited by `pinFavoritedFor` are returned.
+   * Requires `pinFavoritedFor` to be set. SQL backends collapse this into
+   * the same JOIN used for favorited-first sort.
+   */
+  favoritedOnly?: boolean;
 };
 
 export type StorageListAgentsOutput = PaginationInfo & {
@@ -1820,6 +1915,18 @@ export type StorageContentSource =
   | { type: 'managed'; mastraPath: string };
 
 /**
+ * A node in the skill file tree (folder or file with inline content).
+ * Used for round-tripping the full file structure through the UI.
+ */
+export interface StorageSkillFileNode {
+  id?: string;
+  name: string;
+  type: 'file' | 'folder';
+  content?: string;
+  children?: StorageSkillFileNode[];
+}
+
+/**
  * Skill version snapshot type containing ALL skill definition fields.
  * These fields live exclusively in version snapshot rows, not on the skill record.
  */
@@ -1844,6 +1951,8 @@ export interface StorageSkillSnapshotType {
   assets?: string[];
   /** Optional arbitrary metadata */
   metadata?: Record<string, unknown>;
+  /** Full file tree structure (folders, files with content) for round-tripping in the UI */
+  files?: StorageSkillFileNode[];
   /** Content-addressable file tree manifest for this skill version */
   tree?: SkillVersionTree;
 }
@@ -1861,6 +1970,16 @@ export interface StorageSkillType {
   activeVersionId?: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /**
+   * Access control: 'private' = only owner/admins, 'public' = anyone.
+   * May be undefined for legacy records created before visibility was introduced.
+   */
+  visibility?: StorageVisibility;
+  /**
+   * Denormalized count of favorites on this skill. Maintained by the favorites
+   * storage domain. Optional; treat undefined as 0 for legacy rows.
+   */
+  favoriteCount?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -1883,6 +2002,8 @@ export type StorageCreateSkillInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Access control visibility */
+  visibility?: StorageVisibility;
 } & StorageSkillSnapshotType;
 
 /**
@@ -1893,6 +2014,8 @@ export type StorageUpdateSkillInput = {
   id: string;
   /** Author identifier for multi-tenant filtering */
   authorId?: string;
+  /** Access control visibility */
+  visibility?: StorageVisibility;
   /** FK to skill_versions.id - the currently active version */
   activeVersionId?: string;
   /** Skill status */
@@ -1916,10 +2039,37 @@ export type StorageListSkillsInput = {
    */
   authorId?: string;
   /**
+   * Filter skills by visibility (exact match).
+   */
+  visibility?: StorageVisibility;
+  /**
+   * Filter skills by status (exact match).
+   */
+  status?: StorageSkillType['status'];
+  /**
    * Filter skills by metadata key-value pairs.
    * All specified key-value pairs must match (AND logic).
    */
   metadata?: Record<string, unknown>;
+  /**
+   * Restrict results to this set of skill IDs. Used by the favorites feature
+   * to fetch a specific subset of favorited skills. When provided as an
+   * empty array, the result is empty.
+   */
+  entityIds?: string[];
+  /**
+   * When set, skills favorited by this user are returned first, ordered
+   * by `(is_favorited DESC, <existing orderBy>, id ASC)` over the full
+   * candidate set before pagination. Implementations that don't support
+   * favorited-first sort treat this as undefined.
+   */
+  pinFavoritedFor?: string;
+  /**
+   * When true, only skills favorited by `pinFavoritedFor` are returned.
+   * Requires `pinFavoritedFor` to be set. SQL backends collapse this into
+   * the same JOIN used for favorited-first sort.
+   */
+  favoritedOnly?: boolean;
 };
 
 /** Paginated list output for thin skill records */
@@ -2017,6 +2167,8 @@ export interface UpdateWorkflowStateOptions {
   suspendedPaths?: Record<string, number[]>;
   waitingPaths?: Record<string, number[]>;
   resumeLabels?: Record<string, { stepId: string; foreachIndex?: number }>;
+  activePaths?: Array<number>;
+  activeStepsPath?: Record<string, number[]>;
   /**
    * Tracing context for span continuity during suspend/resume.
    * Persisted when workflow suspends to enable linking resumed spans
@@ -2158,6 +2310,67 @@ export function buildStorageSchema<Shape extends z.ZodRawShape>(
 
   return result as Record<keyof Shape & string, StorageColumn>;
 }
+
+// ============================================
+// Browser Configuration Types
+// ============================================
+
+/**
+ * Browser configuration stored in agent snapshots.
+ *
+ * Only stable, declarative configuration is persisted here. Runtime/security
+ * concerns (cdpUrl, scope, profile, executablePath) belong in the BrowserProvider
+ * registration where they're set per-instance via `createBrowser`.
+ *
+ * Runtime-only options (onLaunch, onClose, cdpUrl as function) are never stored.
+ */
+export interface StorageBrowserConfig {
+  /** Provider type identifier (e.g., 'stagehand', 'playwright') — resolved by the editor's browser registry */
+  provider: string;
+
+  /**
+   * Whether to run the browser in headless mode (no visible UI).
+   * @default true
+   */
+  headless?: boolean;
+
+  /**
+   * Browser viewport dimensions.
+   * Controls the size of the browser window and how websites render.
+   */
+  viewport?: {
+    width: number;
+    height: number;
+  };
+
+  /**
+   * Default timeout in milliseconds for browser operations.
+   * @default 10000 (10 seconds)
+   */
+  timeout?: number;
+
+  /**
+   * Screencast options for streaming browser frames.
+   */
+  screencast?: {
+    /** Image format (default: 'jpeg') */
+    format?: 'jpeg' | 'png';
+    /** JPEG quality 0-100 (default: 80) */
+    quality?: number;
+    /** Max width in pixels (default: 1280) */
+    maxWidth?: number;
+    /** Max height in pixels (default: 720) */
+    maxHeight?: number;
+    /** Capture every Nth frame (default: 1) */
+    everyNthFrame?: number;
+  };
+}
+
+/**
+ * Browser reference configuration stored in agent snapshots.
+ * Provides inline browser config that the editor resolves at hydration time.
+ */
+export type StorageBrowserRef = { type: 'inline'; config: StorageBrowserConfig };
 
 // ============================================
 // Dataset Types
@@ -2453,3 +2666,131 @@ export interface ExperimentReviewCounts {
   reviewed: number;
   complete: number;
 }
+
+// ============================================
+// Favorites Storage Types
+// ============================================
+
+/**
+ * Entity types that can be favorited.
+ * Currently agents and skills; extend here when other entities opt in.
+ */
+export type StorageFavoriteEntityType = 'agent' | 'skill';
+
+export const STORAGE_FAVORITE_ENTITY_TYPES = ['agent', 'skill'] as const satisfies readonly StorageFavoriteEntityType[];
+
+/**
+ * A single favorite row: one user favoriting one entity. Composite primary key is
+ * `(userId, entityType, entityId)`. Idempotent — re-favoriting is a no-op.
+ */
+export interface StorageFavoriteType {
+  /** Caller identifier (matches authorId conventions used elsewhere). */
+  userId: string;
+  /** Type of entity being favorited. */
+  entityType: StorageFavoriteEntityType;
+  /** ID of the entity being favorited. */
+  entityId: string;
+  /** Timestamp the favorite was created. */
+  createdAt: Date;
+}
+
+/** Identifier for a favorite row, used by lookup and delete operations. */
+export type StorageFavoriteKey = {
+  userId: string;
+  entityType: StorageFavoriteEntityType;
+  entityId: string;
+};
+
+/**
+ * Input to look up which entities in a candidate set are favorited by a given
+ * user. Used to annotate list responses without N+1 queries.
+ */
+export type StorageIsFavoritedBatchInput = {
+  userId: string;
+  entityType: StorageFavoriteEntityType;
+  entityIds: string[];
+};
+
+/** Input to list all entity IDs favorited by a given user, optionally scoped by entity type. */
+export type StorageListFavoritesInput = {
+  userId: string;
+  entityType: StorageFavoriteEntityType;
+};
+
+/**
+ * Input to remove all favorites for a given entity. Called by hard-delete handlers
+ * so favorite rows do not orphan the deleted entity.
+ */
+export type StorageDeleteFavoritesForEntityInput = {
+  entityType: StorageFavoriteEntityType;
+  entityId: string;
+};
+
+/** Identity bucketing for a persisted tool provider connection row. */
+export type StorageToolProviderConnectionScope = 'shared' | 'per-author' | 'caller-supplied';
+
+/**
+ * A persisted tool provider connection row. Stores a per-author, provider-agnostic
+ * label so the UI can surface a stable name (e.g. "Work Gmail") for the same
+ * `connectionId` across agents. Unique on `(authorId, providerId, connectionId)`.
+ */
+export interface StorageToolProviderConnection {
+  /**
+   * Author/owner the connection belongs to. `'default'` when auth is disabled.
+   * Set to the shared bucket id when `scope === 'shared'`. When
+   * `scope === 'caller-supplied'`, this is a host-app end-user identifier
+   * forwarded via request context.
+   */
+  authorId: string;
+  /** Tool provider id, e.g. `'composio'`. */
+  providerId: string;
+  /** Toolkit slug, e.g. `'gmail'`. */
+  toolkit: string;
+  /** Adapter-native connection identifier (e.g. Composio `ca_...`). */
+  connectionId: string;
+  /** User-supplied display label. `null` when the user hasn't named it yet. */
+  label: string | null;
+  /**
+   * Identity bucketing. `'per-author'` is the default; `'shared'` makes the
+   * row visible to all callers regardless of resolved authorId; `'caller-supplied'`
+   * means `authorId` is a host-app end-user identifier forwarded via request context.
+   */
+  scope: StorageToolProviderConnectionScope;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** Input to upsert a tool provider connection row. Idempotent on `(authorId, providerId, connectionId)`. */
+export type StorageUpsertToolProviderConnectionInput = {
+  authorId: string;
+  providerId: string;
+  toolkit: string;
+  connectionId: string;
+  label: string | null;
+  /** Defaults to `'per-author'` when omitted. */
+  scope?: StorageToolProviderConnectionScope;
+};
+
+/** Lookup key for a single tool provider connection row. */
+export type StorageToolProviderConnectionKey = {
+  authorId: string;
+  providerId: string;
+  connectionId: string;
+};
+
+/** Input for listing tool provider connections, optionally scoped by author/provider/toolkit. */
+export type StorageListToolProviderConnectionsInput = {
+  /** Omit to list across all authors (admin cross-author listing). */
+  authorId?: string;
+  providerId?: string;
+  toolkit?: string;
+  /** Optional scope filter. Omit to list rows of any scope. */
+  scope?: StorageToolProviderConnectionScope;
+};
+
+/** Input for deleting a single tool provider connection row. */
+export type StorageDeleteToolProviderConnectionInput = {
+  authorId: string;
+  providerId: string;
+  connectionId: string;
+};

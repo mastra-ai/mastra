@@ -11,6 +11,7 @@ import { z } from 'zod/v4';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
+import type { CreatedAgentSignal } from '../agent/signals';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
 import type { ModelRouterModelId } from '../llm/model';
@@ -34,8 +35,10 @@ import type {
   MastraOnFinishCallback,
   MastraOnStepFinishCallback,
   ModelManagerModelConfig,
+  StreamChunkType,
   StreamTransportRef,
 } from '../stream/types';
+import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../tools';
 import type { MastraIdGenerator } from '../types';
 import type { OutputWriter } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
@@ -66,12 +69,18 @@ export type StreamInternal = {
   backgroundTaskManager?: BackgroundTaskManager;
   // Agent-level background task config
   agentBackgroundConfig?: AgentBackgroundConfig;
+  // Transform policy for display/transcript tool payloads.
+  toolPayloadTransform?: ToolPayloadTransformPolicy;
   // Manager-level background task config
   backgroundTaskManagerConfig?: BackgroundTaskManagerConfig;
   // When true, backgroundTaskCheckStep returns immediately without waiting for
   // running tasks to complete. Used by `agent.streamUntilIdle`, which handles
   // continuation from the outside — the inner loop shouldn't also wait.
   skipBgTaskWait?: boolean;
+  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
+  // Signal inputs already stored in the initial message list that still need
+  // stream data-part echoes before the first model step.
+  initialSignalEchoes?: CreatedAgentSignal[];
 };
 
 export type PrepareStepResult<TOOLS extends ToolSet = ToolSet> = {
@@ -139,7 +148,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   downloadRetries?: number;
   downloadConcurrency?: number;
   modelSpanTracker?: IModelSpanTracker;
-  requireToolApproval?: boolean;
+  requireToolApproval?: RequireToolApproval;
   autoResumeSuspendedTools?: boolean;
   agentId: string;
   toolCallConcurrency?: number;
@@ -194,7 +203,7 @@ export type LoopRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = LoopO
 
 export type OuterLLMRun<Tools extends ToolSet = ToolSet, OUTPUT = undefined> = {
   messageId: string;
-  controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>;
+  controller: ReadableStreamDefaultController<StreamChunkType<OUTPUT>>;
   outputWriter: OutputWriter;
 } & LoopRun<Tools, OUTPUT>;
 

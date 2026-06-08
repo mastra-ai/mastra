@@ -1,11 +1,13 @@
-import { Combobox, Skeleton } from '@mastra/playground-ui';
+import { Combobox, Skeleton, cn } from '@mastra/playground-ui';
 import type { ComboboxProps, ComboboxOption } from '@mastra/playground-ui';
 import { Info } from 'lucide-react';
+import type { MouseEvent } from 'react';
 import { useMemo } from 'react';
 import { useFilteredProviders } from '../hooks/use-filtered-providers';
 import { useLLMProviders } from '../hooks/use-llm-providers';
 import { cleanProviderId, findProviderById } from '../utils';
 import { ProviderLogo } from './provider-logo';
+import { useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/agent-builder';
 
 export interface LLMProvidersProps {
   value: string;
@@ -16,6 +18,7 @@ export interface LLMProvidersProps {
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
+  disabled?: boolean;
 }
 
 export const LLMProviders = ({
@@ -27,11 +30,15 @@ export const LLMProviders = ({
   open,
   onOpenChange,
   container,
+  disabled,
 }: LLMProvidersProps) => {
   const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
-  const providers = dataProviders?.providers || [];
+  const allProviders = dataProviders?.providers || [];
 
-  // Sort providers: connected -> popular -> alphabetical
+  // Apply admin model policy first (drops disallowed providers entirely),
+  // then sort: connected -> popular -> alphabetical
+  const policy = useBuilderModelPolicy();
+  const providers = useBuilderFilteredProviders(allProviders, policy);
   const sortedProviders = useFilteredProviders(providers, '', false);
 
   // Create provider options with icons
@@ -40,7 +47,7 @@ export const LLMProviders = ({
       label: provider.name,
       value: provider.id,
       start: (
-        <div className="relative">
+        <div className="relative shrink-0">
           <ProviderLogo providerId={provider.id} size={16} />
           <div
             className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
@@ -52,8 +59,12 @@ export const LLMProviders = ({
       ),
       end: provider.docUrl ? (
         <Info
-          className="w-4 h-4 text-neutral2 hover:text-neutral3 cursor-pointer"
-          onClick={e => {
+          className={cn(
+            'size-3.5 text-neutral2 opacity-0 transition-opacity duration-100 cursor-pointer',
+            'hover:text-neutral4 hover:opacity-100',
+            'group-data-[highlighted]/item:opacity-100',
+          )}
+          onClick={(e: MouseEvent<SVGSVGElement>) => {
             e.stopPropagation();
             window.open(provider.docUrl, '_blank', 'noopener,noreferrer');
           }}
@@ -90,6 +101,7 @@ export const LLMProviders = ({
       open={open}
       onOpenChange={onOpenChange}
       container={container}
+      disabled={disabled}
     />
   );
 };

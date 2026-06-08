@@ -2,10 +2,11 @@ import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
-import { Agent } from '../../agent';
-import type { MastraDBMessage } from '../../agent';
+import { Agent } from '../../agent/agent';
 import { MessageList, messagesAreEqual } from '../../agent/message-list';
-import type { MessageInput } from '../../agent/message-list';
+import type { MastraDBMessage, MessageInput } from '../../agent/message-list';
+import { isAgentCompatible } from '../../agent/subagent';
+import type { SubAgent } from '../../agent/subagent';
 import { TripWire } from '../../agent/trip-wire';
 import { isSupportedLanguageModel } from '../../agent/utils';
 import { RequestContext } from '../../di';
@@ -16,8 +17,14 @@ import type { Mastra } from '../../mastra';
 import { EntityType, SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
-import type { OutputResult, Processor } from '../../processors';
-import { ProcessorRunner, ProcessorState, ProcessorStepOutputSchema, ProcessorStepSchema } from '../../processors';
+import type { OutputResult, Processor, ProcessorStreamWriter } from '../../processors';
+import {
+  ProcessorRunner,
+  ProcessorState,
+  ProcessorStepOutputSchema,
+  ProcessorStepSchema,
+  createProcessorSendSignal,
+} from '../../processors';
 import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
@@ -32,14 +39,9 @@ import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, Standa
 import { WorkflowRunOutput } from '../../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
-import { Tool } from '../../tools';
+import { Tool } from '../../tools/tool';
 import type { ToolExecutionContext } from '../../tools/types';
 import type { DynamicArgument } from '../../types';
-import { Workflow, Run } from '../../workflows';
-// Direct import (bypassing the index) avoids a cycle: the index does a
-// side-effect import of `./evented`, so going through it from here would
-// re-enter an in-flight module evaluation and put `eventedCreateWorkflow` in TDZ.
-import type { AgentStepOptions } from '../../workflows';
 import type { ExecutionEngine, ExecutionGraph } from '../../workflows/execution-engine';
 import type { Step } from '../../workflows/step';
 import type {
@@ -60,7 +62,8 @@ import { validateCron } from '../scheduler/cron';
 import type { WorkflowScheduleConfig } from '../scheduler/types';
 import { forwardAgentStreamChunk } from '../stream-utils';
 import type { StreamChunkWriter } from '../stream-utils';
-import { __registerEventedCreateWorkflow } from '../workflow';
+import { Workflow, Run, __registerEventedCreateWorkflow } from '../workflow';
+import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk } from './helpers';
 import type { TripwireChunk } from './helpers';
@@ -125,10 +128,6 @@ export function cloneStep<TStepId extends string>(
 // Type Guards
 // ============================================
 
-function isAgent<TStepId extends string>(input: unknown): input is Agent<TStepId, any> {
-  return input instanceof Agent;
-}
-
 function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> {
   return input instanceof Tool;
 }
@@ -160,7 +159,8 @@ function isProcessor(obj: unknown): obj is Processor {
       typeof (obj as any).processInputStep === 'function' ||
       typeof (obj as any).processOutputStream === 'function' ||
       typeof (obj as any).processOutputResult === 'function' ||
-      typeof (obj as any).processOutputStep === 'function')
+      typeof (obj as any).processOutputStep === 'function' ||
+      typeof (obj as any).computeStateSignal === 'function')
   );
 }
 
@@ -216,7 +216,7 @@ export function createStep<
  * Creates a step from an agent with structured output
  */
 export function createStep<TStepId extends string, TStepOutput>(
-  agent: Agent<TStepId, any>,
+  agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
   agentOptions: AgentStepOptions<TStepOutput> & {
     structuredOutput: { schema: TStepOutput };
     retries?: number;
@@ -234,7 +234,9 @@ export function createStep<
   TStepOutput extends { text: string },
   TResume,
   TSuspend,
->(agent: Agent<TStepId, any>): Step<TStepId, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
+>(
+  agent: SubAgent<TStepId, any> | Agent<TStepId, any>,
+): Step<TStepId, any, TStepInput, TStepOutput, TResume, TSuspend, DefaultEngineType>;
 
 /**
  * Creates a step from a tool
@@ -263,7 +265,8 @@ export function createStep<TProcessorId extends string>(
     | (Processor<TProcessorId> & { processInputStep: Function })
     | (Processor<TProcessorId> & { processOutputStream: Function })
     | (Processor<TProcessorId> & { processOutputResult: Function })
-    | (Processor<TProcessorId> & { processOutputStep: Function }),
+    | (Processor<TProcessorId> & { processOutputStep: Function })
+    | (Processor<TProcessorId> & { computeStateSignal: Function }),
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
@@ -305,7 +308,7 @@ export function createStep<
 export function createStep(params: any, agentOrToolOptions?: any): Step<any, any, any, any, any, any, any> {
   // Type guards determine the correct factory function
   // Overloads ensure type safety for consumers
-  if (isAgent(params)) {
+  if (isAgentCompatible(params)) {
     return createStepFromAgent(params, agentOrToolOptions);
   }
 
@@ -480,7 +483,7 @@ async function safeOnFinish(
 }
 
 function createStepFromAgent<TStepId extends string, TStepOutput>(
-  params: Agent<TStepId, any>,
+  params: SubAgent<TStepId, any>,
   agentOrToolOptions?: Record<string, unknown>,
 ): Step<TStepId, any, any, TStepOutput, unknown, unknown, DefaultEngineType> {
   const options = (agentOrToolOptions ?? {}) as
@@ -522,14 +525,12 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       const observabilityContext = resolveObservabilityContext(obsFields);
       const logger = mastra?.getLogger();
       const toolData = {
-        name: params.name,
+        name: params.name ?? params.id,
         args: inputData,
-      };
+      } as const;
 
       // Detect model version to choose streaming method
-      const llm = await params.getLLM({ requestContext });
-      const modelInfo = llm.getModel();
-      const isV2Model = isSupportedLanguageModel(modelInfo);
+      const isV2Model = isSupportedLanguageModel(await params.getModel({ requestContext }));
 
       // Track structured output result
       let structuredResult: any = null;
@@ -548,12 +549,11 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
 
       if (isV2Model) {
         // V2+ model path: use .stream() which returns MastraModelOutput
-        // @ts-expect-error - TODO: fix this
         const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
           ...(agentOptions ?? {}),
           ...observabilityContext,
           requestContext,
-          onFinish: result => {
+          onFinish: (result: any) => {
             handleFinish(result);
             void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
           },
@@ -568,11 +568,15 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
           resolveText = resolve;
         });
 
+        if (typeof params.streamLegacy !== 'function') {
+          throw new Error(`Agent step "${params.id}" uses a legacy v1 model but does not implement streamLegacy().`);
+        }
+
         const legacyResult = await params.streamLegacy((inputData as { prompt: string }).prompt, {
           ...(agentOptions ?? {}),
           ...observabilityContext,
           requestContext,
-          onFinish: result => {
+          onFinish: (result: any) => {
             handleFinish(result);
             resolveText!(result.text);
             void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
@@ -612,7 +616,7 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
         text: await textPromise,
       } as TStepOutput;
     },
-    component: params.component,
+    component: 'AGENT',
   };
 }
 
@@ -752,7 +756,7 @@ function createStepFromProcessor<TProcessorId extends string>(
     outputSchema: toStandardSchema(ProcessorStepOutputSchema) as StandardSchemaWithJSON<
       z.infer<typeof ProcessorStepOutputSchema>
     >,
-    execute: async ({ inputData, requestContext, ...obsFields }) => {
+    execute: async ({ inputData, requestContext, outputWriter, ...obsFields }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
@@ -1011,15 +1015,40 @@ function createStepFromProcessor<TProcessorId extends string>(
       // Base context for all processor methods - includes requestContext for memory processors
       // and observabilityContext for proper span nesting when processors call internal agents
       // state is per-processor state that persists across all method calls within this request
+      const processorWriter: ProcessorStreamWriter | undefined = outputWriter
+        ? {
+            custom: async <T extends { type: string }>(data: T) => {
+              await outputWriter(data as any);
+            },
+          }
+        : undefined;
+      const processorMessageList =
+        messageList ??
+        (Array.isArray(messages)
+          ? new MessageList()
+              .add(messages as MastraDBMessage[], 'input')
+              .addSystem((systemMessages ?? []) as CoreMessage[])
+          : undefined);
+
       const baseContext = {
         abort,
         retryCount: retryCount ?? 0,
         requestContext,
         ...processorObservabilityContext,
         state: processorState,
+        writer: processorWriter,
         abortSignal,
         messageId: currentMessageId,
         rotateResponseMessageId: rotateCurrentResponseMessageId,
+        ...(processorMessageList
+          ? {
+              sendSignal: createProcessorSendSignal({
+                messageList: processorMessageList,
+                writer: processorWriter,
+                rotateResponseMessageId: rotateCurrentResponseMessageId,
+              }),
+            }
+          : {}),
       };
 
       // Pass-through data that should flow to the next processor in a chain
@@ -1028,13 +1057,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         phase,
         // Auto-create MessageList from messages if not provided
         // This enables running processor workflows from the UI where messageList can't be serialized
-        messageList:
-          messageList ??
-          (Array.isArray(messages)
-            ? new MessageList()
-                .add(messages as MastraDBMessage[], 'input')
-                .addSystem((systemMessages ?? []) as CoreMessage[])
-            : undefined),
+        messageList: processorMessageList,
         stepNumber,
         systemMessages,
         streamParts,
@@ -1116,7 +1139,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1142,7 +1165,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1209,6 +1232,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 ...passThrough,
                 messages,
                 ...validatedResult,
+                systemMessages: passThrough.messageList!.getSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
               };
             }
@@ -1324,7 +1348,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1350,7 +1374,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1404,7 +1428,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: result.get.all.db(),
-                  systemMessages: result.getAllSystemMessages(),
+                  systemMessages: result.getSystemMessages(),
                 };
               } else if (Array.isArray(result)) {
                 // Processor returned an array of messages
@@ -1430,7 +1454,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 return {
                   ...passThrough,
                   messages: typedResult.messages,
-                  systemMessages: typedResult.systemMessages,
+                  systemMessages: passThrough.messageList.getSystemMessages(),
                 };
               }
               return { ...passThrough, messages };
@@ -1557,6 +1581,15 @@ export class EventedWorkflow<
     resourceId?: string;
     disableScorers?: boolean;
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput>> {
+    if (this.stepFlow.length === 0) {
+      throw new Error(
+        'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
+      );
+    }
+    if (!this.executionGraph.steps) {
+      throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
+    }
+
     const runIdToUse = options?.runId || randomUUID();
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
@@ -1732,7 +1765,7 @@ export class EventedRun<
         status: 'running',
         value: {},
         context: {} as any,
-        requestContext: Object.fromEntries(requestContext.entries()),
+        requestContext: requestContext.toJSON(),
         activePaths: [],
         activeStepsPath: {},
         suspendedPaths: {},
@@ -1815,7 +1848,7 @@ export class EventedRun<
         status: 'running',
         value: {},
         context: {} as any,
-        requestContext: Object.fromEntries(requestContext.entries()),
+        requestContext: requestContext.toJSON(),
         activePaths: [],
         activeStepsPath: {},
         suspendedPaths: {},
@@ -1840,7 +1873,7 @@ export class EventedRun<
         workflowId: this.workflowId,
         runId: this.runId,
         prevResult: { status: 'success', output: inputDataToUse },
-        requestContext: Object.fromEntries(requestContext.entries()),
+        requestContext: requestContext.toJSON(),
         initialState: initialStateToUse,
         perStep,
       },
@@ -2136,11 +2169,6 @@ export class EventedRun<
     }
 
     const resumePath = snapshot.suspendedPaths?.[steps[0]!] as any;
-
-    console.dir(
-      { resume: { requestContextObj: snapshot.requestContext, requestContext: params.requestContext } },
-      { depth: null },
-    );
     // Start with the snapshot's request context (old values)
     const requestContextObj = snapshot.requestContext ?? {};
     const requestContext = new RequestContext();

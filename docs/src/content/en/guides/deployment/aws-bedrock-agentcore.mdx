@@ -1,0 +1,297 @@
+---
+title: "Deploy Mastra to Amazon Bedrock AgentCore | Deployment"
+description: "Learn how to deploy a Mastra application to Amazon Bedrock AgentCore Runtime with the AgentCore CLI"
+---
+
+# Deploy Mastra to Amazon Bedrock AgentCore
+
+Deploy your Mastra application to [Amazon Bedrock AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/) using the [AgentCore CLI](https://github.com/aws/agentcore-cli). The CLI scaffolds a bring-your-own-code (BYO) TypeScript project, builds the container with AWS CodeBuild, and provisions the runtime. A local Docker daemon is not required for deployment.
+
+This guide follows the [official AgentCore TypeScript walkthrough](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-get-started-cli-typescript.html) and adapts it to call a Mastra agent from the invocation handler.
+
+:::info
+
+For a Lambda-based deployment of the full Mastra server, see the [AWS Lambda guide](/guides/deployment/aws-lambda). For a long-lived virtual machine, see the [Amazon EC2 guide](/guides/deployment/amazon-ec2).
+
+:::
+
+## Before you begin
+
+You'll need:
+
+- An [AWS account](https://aws.amazon.com/) with permissions for Amazon Bedrock AgentCore, AWS CodeBuild, Amazon ECR, and AWS IAM
+- [AWS CLI](https://aws.amazon.com/cli/) installed and authenticated (`aws configure` or `aws sso login`)
+- Node.js `v22.13.0` or later installed
+- [Docker](https://www.docker.com/), [Podman](https://podman.io/), or [Finch](https://runfinch.com/) for local testing with `agentcore dev` (not required for `agentcore deploy`)
+
+Amazon Bedrock AgentCore Runtime is available in [a subset of AWS Regions](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/agentcore-regions.html). Use a region where AgentCore is available and where the foundation models you plan to call are enabled.
+
+## Create a new AgentCore project
+
+Run the following command to create a new AgentCore project:
+
+```bash npm2yarn
+npx @aws/agentcore create --name MastraOnAgentCore --no-agent
+```
+
+Navigate to the newly created `MastraOnAgentCore` directory:
+
+```bash
+cd MastraOnAgentCore
+```
+
+Initialize a BYO TypeScript agent that will be created inside `app/MastraAgent`:
+
+```bash npm2yarn
+npx @aws/agentcore add agent --name MastraAgent --type byo --build Container --language TypeScript --framework Strands --model-provider Bedrock --code-location app/MastraAgent
+```
+
+The CLI will modify the `agentcore/agentcore.json` file and create an empty `app/MastraAgent` directory.
+
+## Set up the agent project
+
+Navigate to the `app/MastraAgent` directory and initialize a new Node.js project:
+
+```bash
+cd app/MastraAgent
+npm init --init-type=module -y
+```
+
+Install the required dependencies. The `bedrock-agentcore` package provides the `BedrockAgentCoreApp` HTTP server that implements the [AgentCore Runtime service contract](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-service-contract.html). The `@ai-sdk/amazon-bedrock` and `@aws-sdk/credential-providers` packages let the Mastra agent call Bedrock through the AgentCore Runtime execution role:
+
+```bash npm2yarn
+npm install bedrock-agentcore @opentelemetry/auto-instrumentations-node @ai-sdk/amazon-bedrock @aws-sdk/credential-providers --legacy-peer-deps
+```
+
+Also install TypeScript and related dev dependencies:
+
+```bash npm2yarn
+npm install --save-dev typescript @types/node tsx
+```
+
+Run [`mastra init`](/reference/cli/mastra#mastra-init) to set up a new Mastra project. The provider you choose at the prompt is overwritten in the next step, so any value works:
+
+```bash npm2yarn
+npx mastra@latest init
+```
+
+Replace the generated `src/mastra/agents/weather-agent.ts` to use Amazon Bedrock. The original `memory: new Memory()` is removed because the storage layer is removed in the next step:
+
+```ts title="app/MastraAgent/src/mastra/agents/weather-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock'
+import { fromNodeProviderChain } from '@aws-sdk/credential-providers'
+import { weatherTool } from '../tools/weather-tool.js'
+
+const bedrock = createAmazonBedrock({
+  credentialProvider: fromNodeProviderChain(),
+})
+
+export const weatherAgent = new Agent({
+  id: 'weather-agent',
+  name: 'Weather Agent',
+  instructions:
+    'You are a helpful weather assistant. Use the weatherTool to fetch current weather data.',
+  model: bedrock('us.anthropic.claude-sonnet-4-6'),
+  tools: { weatherTool },
+})
+```
+
+:::note
+
+`fromNodeProviderChain()` lets the agent pick up AWS credentials through the standard SDK resolution chain (environment variables, shared config files, SSO, and container or EC2 roles) instead of environment variables only.
+
+:::
+
+Replace the generated `src/mastra/index.ts` to remove the default file-based storage and observability config. AgentCore Runtime containers run as a non-root user with a read-only application directory, so the default `LibSQLStore` cannot open `./mastra.db` and the runtime fails at startup:
+
+```ts title="app/MastraAgent/src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { PinoLogger } from '@mastra/loggers'
+import { weatherWorkflow } from './workflows/weather-workflow.js'
+import { weatherAgent } from './agents/weather-agent.js'
+
+export const mastra = new Mastra({
+  workflows: { weatherWorkflow },
+  agents: { weatherAgent },
+  logger: new PinoLogger({
+    name: 'Mastra',
+    level: 'info',
+  }),
+})
+```
+
+Create a `tsconfig.json` file with the following content:
+
+```json title="app/MastraAgent/tsconfig.json"
+{
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": ".",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["*.ts", "src/**/*"],
+  "exclude": ["node_modules", "dist"]
+}
+```
+
+:::note
+
+After adding the `tsconfig.json` file your editor will show errors inside the generated `src/mastra` project. This is expected since the configuration now requires file extensions on imports. You can fix these by adding `.js`, for example:
+
+```ts title="app/MastraAgent/src/mastra/index.ts"
+// Before
+import { weatherWorkflow } from './workflows/weather-workflow'
+// After
+import { weatherWorkflow } from './workflows/weather-workflow.js'
+```
+
+:::
+
+Update your `package.json` to set the entry point and build scripts. Using `npm pkg set` preserves the dependencies that `mastra init` added:
+
+```bash
+npm pkg set main=dist/agent.js scripts.build=tsc scripts.start="node dist/agent.js" scripts.dev="npx tsx --watch agent.ts"
+```
+
+## Initialize the agent
+
+Create an `agent.ts` file. This handler is called for every `POST /invocations` request. Resolve the Mastra agent and call it inside the handler:
+
+```ts title="app/MastraAgent/agent.ts"
+import { BedrockAgentCoreApp } from 'bedrock-agentcore/runtime'
+import { mastra } from './src/mastra/index.js'
+
+const app = new BedrockAgentCoreApp({
+  invocationHandler: {
+    process: async (payload, context) => {
+      const { prompt } = payload as { prompt: string }
+
+      const agent = mastra.getAgentById('weather-agent')
+      const response = await agent.generate(prompt, {
+        runId: context.sessionId,
+      })
+
+      return response.text
+    },
+  },
+})
+
+app.run()
+```
+
+Run `npm run build` to verify that your project compiles successfully.
+
+## Create a Dockerfile
+
+Create a `Dockerfile` in the `app/MastraAgent` directory. Container-based deployment uses a multi-stage Docker build: the builder stage compiles TypeScript to JavaScript, and the production stage runs only the compiled output. The image runs as a non-root user for security, and exposes port 8080 (HTTP), port 8000 (MCP), and port 9000 (A2A). OpenTelemetry instrumentation is included automatically at startup.
+
+```dockerfile title="app/MastraAgent/Dockerfile"
+FROM node:22-slim AS builder
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:22-slim
+WORKDIR /app
+ENV AWS_REGION=us-east-1
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package*.json ./
+
+RUN useradd -m bedrock_agentcore
+USER bedrock_agentcore
+
+EXPOSE 8080 8000 9000
+CMD ["node", "--require", "@opentelemetry/auto-instrumentations-node/register", "dist/agent.js"]
+```
+
+:::note
+
+Pick an `AWS_REGION` that pairs with your Bedrock model ID prefix (`us.`, `jp.`, `eu.`, or `global.`).
+
+:::
+
+Also create a `.dockerignore` file to exclude unnecessary files from the Docker build context:
+
+```bash
+node_modules
+dist
+.git
+*.log
+```
+
+## Test your agent
+
+Return to the project root:
+
+```bash
+cd ../..
+```
+
+Test your agent locally:
+
+```bash npm2yarn
+npx @aws/agentcore dev --runtime MastraAgent
+```
+
+In a separate terminal, send a test request:
+
+```bash npm2yarn
+npx @aws/agentcore dev "What is the weather in Tokyo?"
+```
+
+## Deploy your agent
+
+Set the AWS account and region in `agentcore/aws-targets.json`:
+
+```json title="agentcore/aws-targets.json"
+[
+  {
+    "name": "default",
+    "account": "123456789012",
+    "region": "us-east-1"
+  }
+]
+```
+
+Deploy to AgentCore Runtime. The CLI builds the image with AWS CodeBuild, pushes it to Amazon ECR, and creates the runtime and a `DEFAULT` endpoint:
+
+```bash npm2yarn
+npx @aws/agentcore deploy
+```
+
+:::note
+
+Set provider API keys and other secrets in `agentcore/agentcore.json` under the agent's `environmentVariables` field before deploying.
+
+:::
+
+## Verify your deployment
+
+Run `agentcore status` to view the runtime ARN, endpoint, and recent invocations. Then call the deployed agent from the CLI:
+
+```bash
+npx @aws/agentcore invoke "What is the weather in Tokyo?"
+```
+
+To stream tokens as they are generated, use `--stream`:
+
+```bash
+npx @aws/agentcore invoke --stream "Plan a 3-day trip to Tokyo"
+```
+
+## Related
+
+- [Amazon Bedrock AgentCore documentation](https://docs.aws.amazon.com/bedrock-agentcore/)
+- [AgentCore CLI on GitHub](https://github.com/aws/agentcore-cli)

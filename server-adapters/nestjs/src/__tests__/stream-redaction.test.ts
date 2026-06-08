@@ -161,4 +161,151 @@ describe('NestJS Adapter - Stream Data Redaction', () => {
     expect(textDelta).toBeDefined();
     expect(textDelta.textDelta).toBe('Hello');
   });
+
+  it('should pass SSE comment chunks through without data wrapping', async () => {
+    const commentRoute: ServerRoute<any, any, any> = {
+      method: 'POST',
+      path: '/test/sse-comment',
+      responseType: 'stream',
+      streamFormat: 'sse',
+      handler: async () =>
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(': heartbeat\n\n');
+            controller.enqueue({ type: 'text-delta', payload: { text: 'hello' } });
+            controller.close();
+          },
+        }),
+    };
+
+    registerRoute(commentRoute);
+    try {
+      await setupApp();
+
+      const response = await executeExpressRequest(expressApp, {
+        method: 'POST',
+        path: '/test/sse-comment',
+        body: {},
+      });
+
+      expect(response.status).toBe(200);
+      if (!response.stream) {
+        throw new Error('Expected streaming response');
+      }
+
+      const webStream = Readable.toWeb(response.stream as any) as ReadableStream<Uint8Array>;
+      const reader = webStream.getReader();
+      const decoder = new TextDecoder();
+      let text = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        text += decoder.decode(value, { stream: true });
+      }
+
+      expect(text).toContain(': heartbeat\n\n');
+      expect(text).toContain('data: {"type":"text-delta","payload":{"text":"hello"}}\n\n');
+      expect(text).not.toContain('data: ": heartbeat');
+    } finally {
+      unregisterRoute(commentRoute);
+    }
+  });
+
+  it('should write SSE connected comment when sseFlushOnConnect is true', async () => {
+    const flushRoute: ServerRoute<any, any, any> = {
+      method: 'POST',
+      path: '/test/sse-flush',
+      responseType: 'stream',
+      streamFormat: 'sse',
+      sseFlushOnConnect: true,
+      handler: async () =>
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'text-delta', payload: { text: 'hello' } });
+            controller.close();
+          },
+        }),
+    };
+
+    registerRoute(flushRoute);
+    try {
+      await setupApp();
+
+      const response = await executeExpressRequest(expressApp, {
+        method: 'POST',
+        path: '/test/sse-flush',
+        body: {},
+      });
+
+      expect(response.status).toBe(200);
+      if (!response.stream) {
+        throw new Error('Expected streaming response');
+      }
+
+      const webStream = Readable.toWeb(response.stream as any) as ReadableStream<Uint8Array>;
+      const reader = webStream.getReader();
+      const decoder = new TextDecoder();
+      let text = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        text += decoder.decode(value, { stream: true });
+      }
+
+      const connectedIndex = text.indexOf(': connected\n\n');
+      const dataIndex = text.indexOf('data: ');
+      expect(connectedIndex).toBeGreaterThanOrEqual(0);
+      expect(dataIndex).toBeGreaterThanOrEqual(0);
+      expect(connectedIndex).toBeLessThan(dataIndex);
+    } finally {
+      unregisterRoute(flushRoute);
+    }
+  });
+
+  it('should not write SSE connected comment when sseFlushOnConnect is not set', async () => {
+    const noFlushRoute: ServerRoute<any, any, any> = {
+      method: 'POST',
+      path: '/test/sse-no-flush',
+      responseType: 'stream',
+      streamFormat: 'sse',
+      handler: async () =>
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'text-delta', payload: { text: 'hello' } });
+            controller.close();
+          },
+        }),
+    };
+
+    registerRoute(noFlushRoute);
+    try {
+      await setupApp();
+
+      const response = await executeExpressRequest(expressApp, {
+        method: 'POST',
+        path: '/test/sse-no-flush',
+        body: {},
+      });
+
+      expect(response.status).toBe(200);
+      if (!response.stream) {
+        throw new Error('Expected streaming response');
+      }
+
+      const webStream = Readable.toWeb(response.stream as any) as ReadableStream<Uint8Array>;
+      const reader = webStream.getReader();
+      const decoder = new TextDecoder();
+      let text = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        text += decoder.decode(value, { stream: true });
+      }
+
+      expect(text).not.toContain(': connected');
+      expect(text).toContain('data: ');
+    } finally {
+      unregisterRoute(noFlushRoute);
+    }
+  });
 });

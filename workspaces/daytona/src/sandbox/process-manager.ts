@@ -104,6 +104,8 @@ class DaytonaProcessHandle extends ProcessHandle {
             stdout: this.stdout,
             stderr: this.stderr || error.message,
             executionTimeMs: Date.now() - this._startTime,
+            killed: true,
+            timedOut: true,
           };
         }
         throw error;
@@ -123,6 +125,8 @@ class DaytonaProcessHandle extends ProcessHandle {
         stdout: this.stdout,
         stderr: this.stderr,
         executionTimeMs: Date.now() - this._startTime,
+        killed: true,
+        timedOut: false,
       };
     }
 
@@ -187,17 +191,19 @@ export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox>
       ...options,
       timeout: options.timeout ?? this._defaultTimeout,
     };
+
+    // Merge default env with per-spawn env
+    const mergedEnv = { ...this.env, ...effectiveOptions.env };
+    const envs = Object.fromEntries(
+      Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
+    );
+
+    // Validate/build before retryOnDead so user-controlled validation errors
+    // cannot be mistaken for Daytona dead-sandbox errors.
+    const sessionCommand = buildSpawnCommand(command, effectiveOptions.cwd, envs);
+
     return this.sandbox.retryOnDead(async () => {
       const sandbox = this.sandbox.daytona;
-
-      // Merge default env with per-spawn env
-      const mergedEnv = { ...this.env, ...effectiveOptions.env };
-      const envs = Object.fromEntries(
-        Object.entries(mergedEnv).filter((entry): entry is [string, string] => entry[1] !== undefined),
-      );
-
-      // Build command with baked-in env and cwd, wrapped in subshell
-      const sessionCommand = buildSpawnCommand(command, effectiveOptions.cwd, envs);
 
       // Unique session ID per spawn — used as the PID
       const sessionId = `mastra-proc-${Date.now().toString(36)}-${++this._spawnCounter}`;
@@ -248,6 +254,8 @@ export class DaytonaProcessManager extends SandboxProcessManager<DaytonaSandbox>
 // Command Building
 // =============================================================================
 
+const SHELL_IDENTIFIER_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
 /**
  * Build a shell command string that bakes in cwd and env vars.
  * Wraps the user command in a subshell `(command)` so that:
@@ -262,6 +270,9 @@ function buildSpawnCommand(command: string, cwd: string | undefined, envs: Recor
   const parts: string[] = [];
 
   for (const [k, v] of Object.entries(envs)) {
+    if (!SHELL_IDENTIFIER_PATTERN.test(k)) {
+      throw new Error(`Invalid environment variable name: ${JSON.stringify(k)}`);
+    }
     parts.push(`export ${k}=${shellQuote(v)}`);
   }
 

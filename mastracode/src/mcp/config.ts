@@ -11,22 +11,23 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { McpConfig, McpServerConfig, McpSkippedServer } from './types.js';
+import { DEFAULT_CONFIG_DIR } from '../constants.js';
+import type { McpConfig, McpHttpOAuthConfig, McpServerConfig, McpSkippedServer } from './types.js';
 
-export function loadMcpConfig(projectDir: string): McpConfig {
+export function loadMcpConfig(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): McpConfig {
   const claudeConfig = loadClaudeSettings(projectDir);
-  const globalConfig = loadSingleConfig(getGlobalMcpPath());
-  const projectConfig = loadSingleConfig(getProjectMcpPath(projectDir));
+  const globalConfig = loadSingleConfig(getGlobalMcpPath(configDirName));
+  const projectConfig = loadSingleConfig(getProjectMcpPath(projectDir, configDirName));
 
   return mergeConfigs(claudeConfig, globalConfig, projectConfig);
 }
 
-export function getProjectMcpPath(projectDir: string): string {
-  return path.join(projectDir, '.mastracode', 'mcp.json');
+export function getProjectMcpPath(projectDir: string, configDirName = DEFAULT_CONFIG_DIR): string {
+  return path.join(projectDir, configDirName, 'mcp.json');
 }
 
-export function getGlobalMcpPath(): string {
-  return path.join(os.homedir(), '.mastracode', 'mcp.json');
+export function getGlobalMcpPath(configDirName = DEFAULT_CONFIG_DIR): string {
+  return path.join(os.homedir(), configDirName, 'mcp.json');
 }
 
 export function getClaudeSettingsPath(projectDir: string): string {
@@ -113,10 +114,16 @@ export function validateConfig(raw: unknown): McpConfig {
       };
     } else if (classification.kind === 'http') {
       const e = entry as Record<string, unknown>;
+      const oauthResult = parseOAuthConfig(e.oauth);
+      if (oauthResult.reason) {
+        skippedServers.push({ name, reason: oauthResult.reason });
+        continue;
+      }
       servers[name] = {
         url: e.url as string,
         headers:
           typeof e.headers === 'object' && e.headers !== null ? (e.headers as Record<string, string>) : undefined,
+        oauth: oauthResult.config,
       };
     } else {
       skippedServers.push({ name, reason: classification.reason! });
@@ -131,6 +138,44 @@ export function validateConfig(raw: unknown): McpConfig {
     result.skippedServers = skippedServers;
   }
   return result;
+}
+
+function parseOAuthConfig(raw: unknown): { config?: McpHttpOAuthConfig; reason?: string } {
+  if (raw === undefined) return {};
+  if (!raw || typeof raw !== 'object') {
+    return { reason: 'Invalid OAuth config: expected an object' };
+  }
+
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.redirectUrl !== 'string') {
+    return { reason: 'Invalid OAuth config: missing required field "redirectUrl"' };
+  }
+  try {
+    const redirectUrl = new URL(obj.redirectUrl);
+    const isLoopback =
+      redirectUrl.hostname === 'localhost' ||
+      redirectUrl.hostname.startsWith('127.') ||
+      redirectUrl.hostname === '[::1]';
+    if (redirectUrl.protocol !== 'https:' && !(redirectUrl.protocol === 'http:' && isLoopback)) {
+      return { reason: 'Invalid OAuth redirectUrl: must use HTTPS unless it is a loopback HTTP URL' };
+    }
+  } catch {
+    return { reason: `Invalid OAuth redirectUrl: "${obj.redirectUrl}"` };
+  }
+
+  if (obj.scopes !== undefined && (!Array.isArray(obj.scopes) || obj.scopes.some(scope => typeof scope !== 'string'))) {
+    return { reason: 'Invalid OAuth config: "scopes" must be an array of strings' };
+  }
+
+  return {
+    config: {
+      redirectUrl: obj.redirectUrl,
+      clientName: typeof obj.clientName === 'string' ? obj.clientName : undefined,
+      scopes: obj.scopes as string[] | undefined,
+      clientId: typeof obj.clientId === 'string' ? obj.clientId : undefined,
+      clientSecret: typeof obj.clientSecret === 'string' ? obj.clientSecret : undefined,
+    },
+  };
 }
 
 /**

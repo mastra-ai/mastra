@@ -44,7 +44,7 @@ if (!apiKey || !orgId || !membershipId || !orgResourceId) {
 }
 
 const headers = {
-  'Authorization': `Bearer ${apiKey}`,
+  Authorization: `Bearer ${apiKey}`,
   'Content-Type': 'application/json',
 };
 const BASE = 'https://api.workos.com';
@@ -66,7 +66,11 @@ async function apiCall(method, path, body) {
   const res = await fetch(`${BASE}${path}`, opts);
   const text = await res.text();
   let json;
-  try { json = JSON.parse(text); } catch { json = { raw: text }; }
+  try {
+    json = JSON.parse(text);
+  } catch {
+    json = { raw: text };
+  }
   if (!res.ok) {
     const err = new Error(JSON.stringify(json));
     err.status = res.status;
@@ -76,7 +80,12 @@ async function apiCall(method, path, body) {
 }
 
 function isConflict(err) {
-  return err.status === 409 || err.message.includes('already exists') || err.message.includes('Conflict') || err.message.includes('duplicate');
+  return (
+    err.status === 409 ||
+    err.message.includes('already exists') ||
+    err.message.includes('Conflict') ||
+    err.message.includes('duplicate')
+  );
 }
 
 async function main() {
@@ -87,13 +96,13 @@ async function main() {
     await apiCall('GET', `/authorization/resources?resource_type_slug=agent&organization_id=${orgId}&limit=1`);
   } catch {
     console.error(
-`Error: The "agent" resource type does not exist in your WorkOS environment.
+      `Error: The "agent" resource type does not exist in your WorkOS environment.
 
 Create it in your WorkOS dashboard before running this script:
   1. Go to Authorization > Resource Types
   2. Create a resource type with slug "agent" as a child of Organization
 
-This is the one step that cannot be done via API.`
+This is the one step that cannot be done via API.`,
     );
     process.exit(1);
   }

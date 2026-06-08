@@ -109,6 +109,7 @@ export const HEAD = handle(app);
       telemetryDisabled: `''`,
       requestContextPresets: `''`,
       experimentalUI: `'false'`,
+      agentSignals: process.env.MASTRA_AGENT_SIGNALS === 'false' ? `'false'` : `'true'`,
     });
 
     writeFileSync(indexPath, html);

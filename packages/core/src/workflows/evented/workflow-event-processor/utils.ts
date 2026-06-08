@@ -37,7 +37,15 @@ export function getNestedWorkflow(
     workflow = nestedWorkflow;
   }
 
-  workflow = workflow ?? mastra.getWorkflow(workflowId);
+  // Internal workflows (registered via `Mastra.__registerInternalWorkflow`)
+  // aren't visible to `Mastra.getWorkflow` — it only sees the public registry.
+  // Prefer the internal registry first so nested-workflow resolution works
+  // for callers like the bg-tasks `__background-task` workflow.
+  workflow =
+    workflow ??
+    (mastra.__hasInternalWorkflow(workflowId)
+      ? mastra.__getInternalWorkflow(workflowId)
+      : mastra.getWorkflow(workflowId));
   const stepGraph = workflow.stepGraph;
   let parentStep = stepGraph[executionPath[0]!];
   if (parentStep?.type === 'parallel' || parentStep?.type === 'conditional') {

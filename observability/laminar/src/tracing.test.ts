@@ -133,6 +133,34 @@ describe('LaminarExporter', () => {
     const body2 = JSON.parse(fetchSpy.mock.calls[1][1]!.body as string);
     expect(body2.spanId).toBe(otelSpanIdToUUID('0000000000000002'));
   });
+
+  it('onScoreEvent posts the score event payload to the evaluator endpoint', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue({ ok: true, status: 200, statusText: 'OK' } as Response);
+
+    await exporter.onScoreEvent({
+      type: 'score',
+      score: {
+        scoreId: 'score-1',
+        timestamp: new Date(),
+        traceId: '00000000000000000000000000000001',
+        spanId: '0000000000000002',
+        scorerId: 'accuracy',
+        scorerName: 'Accuracy',
+        score: 0.75,
+        reason: 'ok',
+        metadata: { foo: 'bar' },
+      },
+    } as any);
+
+    expect(fetchSpy).toHaveBeenCalled();
+    const body = JSON.parse(fetchSpy.mock.calls[0][1]!.body as string);
+    expect(body.name).toBe('Accuracy');
+    expect(body.score).toBe(0.75);
+    expect(body.spanId).toBe(otelSpanIdToUUID('0000000000000002'));
+    expect(body.metadata).toMatchObject({ foo: 'bar', reason: 'ok' });
+  });
 });
 
 describe('stripTrailingSlash', () => {

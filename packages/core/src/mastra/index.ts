@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
+import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
 import { BackgroundTaskManager } from '../background-tasks';
@@ -16,7 +17,7 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
-import type { Event } from '../events/types';
+import type { Event, EventCallback } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
 import type { MastraModelGateway } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/router';
@@ -24,6 +25,8 @@ import { LogLevel, noopLogger, ConsoleLogger, DualLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
+import type { NotificationDispatchConfig } from '../notifications/workflow';
+import { createNotificationDispatchWorkflow } from '../notifications/workflow';
 import type {
   DefinitionSource,
   ObservabilityEntrypoint,
@@ -43,14 +46,17 @@ import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
 import { isToolLoopAgentLike, toolLoopAgentToMastraAgent } from '../tool-loop-agent';
-import type { ToolAction } from '../tools';
+import type { ToolAction, ToolPayloadTransformPolicy } from '../tools';
+import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import type { MastraVector } from '../vector';
+import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
+import type { MastraWorker, WorkerDeps } from '../worker';
 import type { AnyWorkflow, Workflow } from '../workflows';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import { WorkflowScheduler, computeNextFireAt } from '../workflows/scheduler';
-import type { WorkflowScheduleConfig, WorkflowSchedulerConfig } from '../workflows/scheduler';
+import { computeNextFireAt } from '../workflows/scheduler';
+import type { WorkflowScheduleConfig, WorkflowSchedulerConfig, WorkflowScheduler } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
 import type { VersionOverrides, VersionSelector } from './types';
@@ -147,6 +153,25 @@ function ownerWorkflowIdForRow(rowId: string, byWorkflow: Map<string, Set<string
     }
   }
   return undefined;
+}
+
+/**
+ * Decodes the owning workflow id directly from a `wf_<encoded>` /
+ * `wf_<encoded>__<...>` row id without needing the workflow to be in the
+ * current registry. Used to identify rows whose workflow has been deleted
+ * from code so we can clean them up on startup.
+ */
+function ownerWorkflowIdFromRowId(rowId: string): string | undefined {
+  if (!rowId.startsWith('wf_')) return undefined;
+  const rest = rowId.slice('wf_'.length);
+  const sep = rest.indexOf('__');
+  const encoded = sep === -1 ? rest : rest.slice(0, sep);
+  if (!encoded) return undefined;
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return undefined;
+  }
 }
 
 /** See {@link targetsEqual}. Same approach for free-form metadata. */
@@ -248,20 +273,24 @@ export interface Config<
    *
    * @example
    * ```typescript
-   * import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+   * import { Observability, MastraStorageExporter, MastraPlatformExporter } from '@mastra/observability';
    *
    * new Mastra({
    *   observability: new Observability({
    *     configs: {
    *       default: {
    *         serviceName: 'mastra',
-   *         exporters: [new DefaultExporter(), new CloudExporter()],
-   *         spanOutputProcessors: [new SensitiveDataFilter()],
+   *         exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
    *       },
    *     },
    *   })
    * })
    * ```
+   *
+   * `Observability` auto-applies a `SensitiveDataFilter` span output processor
+   * to every configured instance. Set `sensitiveDataFilter: false` on the
+   * registry config to opt out, or pass a `SensitiveDataFilterOptions` object
+   * to customize it.
    */
   observability?: ObservabilityEntrypoint;
 
@@ -398,6 +427,13 @@ export interface Config<
   scheduler?: WorkflowSchedulerConfig;
 
   /**
+   * Notification runtime configuration. Notification dispatch is scheduled automatically by default.
+   */
+  notifications?: {
+    dispatch?: NotificationDispatchConfig;
+  };
+
+  /**
    * Platform channels for messaging integrations (Slack, Discord, etc.).
    * Routes are automatically registered and agents can reference channel configs.
    *
@@ -437,6 +473,19 @@ export interface Config<
    * ```
    */
   environment?: string;
+  /**
+   * Optional central transform policy for tool payloads before they are
+   * serialized into display streams or user-visible transcripts.
+   */
+  transform?: ToolPayloadTransformPolicy;
+  /**
+   * Configure which workers run in this Mastra instance.
+   *
+   * - `undefined` (default): Auto-creates default workers (existing behavior)
+   * - `false`: Disables all event processing — useful when running standalone workers separately
+   * - `MastraWorker[]`: Use exactly these workers
+   */
+  workers?: MastraWorker[] | false;
 }
 
 /**
@@ -492,6 +541,7 @@ export class Mastra<
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
+  #hiddenWorkflowKeys = new Set<string>();
   #observability: ObservabilityEntrypoint;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
@@ -518,8 +568,7 @@ export class Mastra<
   #backgroundTaskConfig?: BackgroundTaskManagerConfig;
   #backgroundTaskManager?: BackgroundTaskManager;
   #schedulerConfig?: WorkflowSchedulerConfig;
-  #scheduler?: WorkflowScheduler;
-  #schedulerInitPromise?: Promise<void>;
+  #notificationDispatchConfig?: NotificationDispatchConfig;
   /**
    * Tracks whether any registered workflow has declared a `schedule` config.
    * Used as a fast short-circuit so users without scheduled workflows pay
@@ -529,6 +578,24 @@ export class Mastra<
   #gateways?: Record<string, MastraModelGateway>;
   #channels?: TChannels;
   #environment?: string;
+  #toolPayloadTransform?: ToolPayloadTransformPolicy;
+  #workers: MastraWorker[] = [];
+  #workerFilter?: Set<string>;
+  // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
+  // pull-mode workers (OrchestrationWorker) and push-mode entry points
+  // (in-process EventEmitter listener, the /api/workers/events HTTP route).
+  #workflowEventProcessor?: WorkflowEventProcessor;
+  // Callback registered against the pubsub when running in push mode so we can
+  // unsubscribe it cleanly during stopWorkers().
+  #pushSubscription?: { topic: string; cb: EventCallback };
+  // Tracks (topic, listener) pairs registered against the pubsub on behalf of
+  // user-defined event listeners during startWorkers(). Used to make
+  // startWorkers()/stopWorkers() idempotent — a second startWorkers() call
+  // must not double-subscribe the same listener.
+  #userEventSubscriptions: Array<{
+    topic: string;
+    cb: (event: Event, ack?: () => Promise<void>) => Promise<void>;
+  }> = [];
 
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
@@ -552,20 +619,32 @@ export class Mastra<
     return this.#pubsub;
   }
 
+  get agentThreadStreamRuntime() {
+    return agentThreadStreamRuntime;
+  }
+
+  get workers(): readonly MastraWorker[] {
+    return this.#workers;
+  }
+
+  getWorker<T extends MastraWorker>(name: string): T | undefined {
+    return this.#workers.find(w => w.name === name) as T | undefined;
+  }
+
   get backgroundTaskManager() {
     return this.#backgroundTaskManager;
   }
 
   /**
-   * Returns the workflow scheduler if it has been auto-instantiated.
+   * Returns the workflow scheduler owned by the SchedulerWorker,
+   * or undefined if the scheduler is not enabled / not yet started.
    *
-   * The scheduler is created lazily once a workflow with a `schedule`
-   * config is registered (or when `scheduler.enabled` is true on the
-   * Mastra config). Use it to create, pause, resume, or delete
-   * schedules imperatively.
+   * The scheduler is created when `startWorkers()` initializes the
+   * SchedulerWorker (guarded by `#shouldEnableScheduler()`). Use it
+   * to create, pause, resume, or delete schedules imperatively.
    */
-  get scheduler() {
-    return this.#scheduler;
+  get scheduler(): WorkflowScheduler | undefined {
+    return this.#findSchedulerWorker()?.scheduler;
   }
 
   get datasets(): DatasetsManager {
@@ -657,6 +736,10 @@ export class Mastra<
    */
   public getEnvironment(): string | undefined {
     return this.#environment;
+  }
+
+  public getToolPayloadTransform(): ToolPayloadTransformPolicy | undefined {
+    return this.#toolPayloadTransform;
   }
 
   /**
@@ -765,7 +848,7 @@ export class Mastra<
    * as default. If a real observability entrypoint already exists, the exporter
    * is added directly to the existing default instance.
    *
-   * @param exporter - The exporter to register (e.g. a CloudExporter)
+   * @param exporter - The exporter to register (e.g. a MastraPlatformExporter)
    * @param instance - An ObservabilityInstance pre-configured with the exporter, used as default when bootstrapping
    * @param entrypoint - A real ObservabilityEntrypoint to bootstrap if the current one is a no-op
    */
@@ -809,7 +892,7 @@ export class Mastra<
    *   }),
    *   logger: new PinoLogger({ name: 'MyApp' }),
    *   observability: new Observability({
-   *     configs: { default: { serviceName: 'mastra', exporters: [new DefaultExporter()] } },
+   *     configs: { default: { serviceName: 'mastra', exporters: [new MastraStorageExporter()] } },
    *   }),
    * });
    * ```
@@ -836,11 +919,7 @@ export class Mastra<
     // Server cache for temporary persistence and durable agent resumable streams
     this.#serverCache = config?.cache ?? new InMemoryServerCache();
 
-    // Set the editor if provided and register this Mastra instance with it
     this.#editor = config?.editor;
-    if (this.#editor && typeof this.#editor.registerWithMastra === 'function') {
-      this.#editor.registerWithMastra(this);
-    }
 
     // Store global version overrides
     this.#versions = config?.versions;
@@ -848,6 +927,9 @@ export class Mastra<
     // Resolve deployment environment: explicit config wins, else fall back to
     // NODE_ENV. Leave undefined if neither is set rather than guessing.
     this.#environment = config?.environment ?? process.env.NODE_ENV;
+    this.#toolPayloadTransform = normalizeToolPayloadTransformPolicy(
+      config?.transform ?? (config as any)?.toolPayloadProjection,
+    );
 
     if (config?.pubsub) {
       this.#pubsub = config.pubsub;
@@ -864,18 +946,60 @@ export class Mastra<
       }
     }
 
-    const workflowEventProcessor = new WorkflowEventProcessor({ mastra: this });
-    const workflowEventCb = async (event: Event, cb?: () => Promise<void>): Promise<void> => {
-      try {
-        await workflowEventProcessor.process(event, cb);
-      } catch (e) {
-        this.getLogger()?.error('Error processing event', e);
-      }
-    };
-    if (this.#events.workflows) {
-      this.#events.workflows.push(workflowEventCb);
+    // Initialize workers based on config.
+    // MASTRA_WORKERS env var:
+    //   - "false": disables all event processing in this instance
+    //   - comma-separated names (e.g. "scheduler,orchestration"): only those
+    //     workers will be started by `startWorkers()` when called without an
+    //     explicit `name` argument. Construction still creates all workers so
+    //     a later explicit `startWorkers('foo')` still works.
+    const rawWorkersEnv = process.env.MASTRA_WORKERS;
+    let workersOption: MastraWorker[] | false | undefined;
+    if (rawWorkersEnv === 'false') {
+      workersOption = false;
     } else {
-      this.#events.workflows = [workflowEventCb];
+      workersOption = config?.workers;
+      if (rawWorkersEnv && rawWorkersEnv !== 'false') {
+        const names = rawWorkersEnv
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean);
+        if (names.length > 0) {
+          this.#workerFilter = new Set(names);
+        }
+      }
+    }
+
+    if (workersOption === false) {
+      // Explicitly disabled — no event processing in this instance.
+      // PubSub still exists for publishing events.
+    } else if (Array.isArray(workersOption)) {
+      this.#workers = workersOption;
+      for (const w of this.#workers) {
+        w.__registerMastra(this);
+      }
+    } else {
+      // Default: auto-create workers based on config.
+      //
+      // Skip OrchestrationWorker when the configured pubsub doesn't support
+      // pull delivery (e.g. EventEmitter, GCP Pub/Sub push) — those transports
+      // don't have a read loop to drive a worker, and Mastra wires
+      // `handleWorkflowEvent` directly to the pubsub during startWorkers().
+      const pubsubModes = this.#pubsub.supportedModes ?? ['pull'];
+      const defaultWorkers: MastraWorker[] = [];
+      if (pubsubModes.includes('pull')) {
+        defaultWorkers.push(new OrchestrationWorker());
+      }
+      // SchedulerWorker is added lazily in startWorkers() rather than here
+      // because workflows (and their schedule configs) are registered after
+      // this block runs, so #hasScheduledWorkflow is not yet set.
+      if (config?.backgroundTasks?.enabled) {
+        defaultWorkers.push(new BackgroundTaskWorker(config.backgroundTasks));
+      }
+      this.#workers = defaultWorkers;
+      for (const w of this.#workers) {
+        w.__registerMastra(this);
+      }
     }
 
     let logger: TLogger;
@@ -909,8 +1033,8 @@ export class Mastra<
       } else {
         this.#logger?.warn(
           'Observability configuration error: Expected an Observability instance, but received a config object. ' +
-            'Import and instantiate: import { Observability, DefaultExporter } from "@mastra/observability"; ' +
-            'then pass: observability: new Observability({ configs: { default: { serviceName: "mastra", exporters: [new DefaultExporter()] } } }). ' +
+            'Import and instantiate: import { Observability, MastraStorageExporter } from "@mastra/observability"; ' +
+            'then pass: observability: new Observability({ configs: { default: { serviceName: "mastra", exporters: [new MastraStorageExporter()] } } }). ' +
             'Observability has been disabled.',
         );
         this.#observability = new NoOpObservability();
@@ -929,10 +1053,31 @@ export class Mastra<
 
     this.#storage = storage;
 
+    // Give storage adapters a back-pointer to this Mastra instance so they
+    // can look up code-defined agents, editor config, etc. when needed
+    // (e.g. filesystem code-mode snapshot filtering).
+    storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
+
+    // Register the editor after storage is assigned so code mode can overlay
+    // filesystem-backed editor storage while preserving app storage domains.
+    if (this.#editor && typeof this.#editor.registerWithMastra === 'function') {
+      this.#editor.registerWithMastra(this);
+    }
+
     this.#backgroundTaskConfig = config?.backgroundTasks;
-    this.#ensureBackgroundTaskManager();
+    // Auto-create the background-task manager only when this Mastra is
+    // running workers. When `workers: false`, the consumer of the
+    // background-tasks topic must live elsewhere — the producer can still
+    // construct its own `BackgroundTaskManager` and call `init()` directly
+    // (see redis-streams cross-process tests for that pattern). Initializing
+    // a worker here would compete with the dedicated worker process for
+    // dispatch events.
+    if (workersOption !== false) {
+      this.#ensureBackgroundTaskManager();
+    }
 
     this.#schedulerConfig = config?.scheduler;
+    this.#notificationDispatchConfig = config?.notifications?.dispatch;
 
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;
@@ -994,6 +1139,12 @@ export class Mastra<
           this.addScorer(scorer, key, { source: 'code' });
         }
       });
+    }
+
+    if (this.#notificationDispatchConfig?.enabled !== false) {
+      const workflow = createNotificationDispatchWorkflow(this.#notificationDispatchConfig);
+      this.addWorkflow(workflow, workflow.id);
+      this.#hiddenWorkflowKeys.add(workflow.id);
     }
 
     if (config?.workflows) {
@@ -1091,8 +1242,6 @@ export class Mastra<
 
     this.setLogger({ logger });
 
-    this.#ensureScheduler();
-
     // Initialize channels asynchronously (auto-provision apps, etc.)
     // This runs after all agents are registered so configs are available
     if (this.#channels) {
@@ -1118,8 +1267,46 @@ export class Mastra<
     const bgManager = new BackgroundTaskManager(this.#backgroundTaskConfig);
     bgManager.__registerMastra(this);
     this.#backgroundTaskManager = bgManager;
+
+    // Wire statically-registered tools into the manager's name-keyed registry
+    // so cross-process workers can resolve dispatched tasks. Tools added later
+    // via `addTool()` are propagated through the same path.
+    const tools = this.#tools as Record<string, ToolAction<any, any, any, any>> | undefined;
+    if (tools) {
+      for (const [name, tool] of Object.entries(tools)) {
+        this.#registerToolWithBackgroundManager(name, tool);
+      }
+    }
+
     void bgManager.init(this.#pubsub).catch(error => {
       this.#logger?.error('Failed to initialize background task manager', error);
+    });
+  }
+
+  /**
+   * Build a `ToolExecutor` adapter for a Mastra-registered tool and stash it
+   * on the background task manager's static registry. Skipped if the tool has
+   * no `execute` (declarative-only tools, e.g. MCP descriptors).
+   */
+  #registerToolWithBackgroundManager(name: string, tool: ToolAction<any, any, any, any>): void {
+    if (!this.#backgroundTaskManager) return;
+    if (typeof tool.execute !== 'function') return;
+    const execute = tool.execute.bind(tool);
+    this.#backgroundTaskManager.registerStaticExecutor(name, {
+      execute: async (args, options) => {
+        // Cross-process workers don't have access to the producer's
+        // request/workspace context. Statically-resolvable tools should
+        // tolerate a minimal context (abortSignal only). Tools that need
+        // closure-captured state must run in-process via TaskContext.
+        return execute(
+          args as any,
+          {
+            toolCallId: '',
+            messages: [],
+            abortSignal: options?.abortSignal,
+          } as any,
+        );
+      },
     });
   }
 
@@ -1158,72 +1345,20 @@ export class Mastra<
     return this.#hasScheduledWorkflow;
   }
 
-  #ensureScheduler(): void {
-    if (this.#scheduler || this.#schedulerInitPromise) return;
-    if (!this.#shouldEnableScheduler()) return;
-    if (!this.#storage) return;
-
-    if (!this.#pubsub) {
-      throw new MastraError({
-        id: 'MASTRA_SCHEDULER_REQUIRES_PUBSUB',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: 'Workflow scheduler requires a pubsub instance. Mastra creates an EventEmitterPubSub by default — this error indicates a misconfiguration.',
-      });
-    }
-
-    this.#schedulerInitPromise = this.#initScheduler().catch(error => {
-      // Drop both the in-flight promise and any partially-constructed
-      // scheduler instance so a future #ensureScheduler() call (e.g. after
-      // setStorage attaches storage, or after a transient pubsub failure)
-      // can retry initialization from a clean slate.
-      this.#scheduler = undefined;
-      this.#schedulerInitPromise = undefined;
-      this.#logger?.error('Failed to initialize workflow scheduler', error);
-    });
+  /**
+   * Find the SchedulerWorker from the workers list (if present).
+   */
+  #findSchedulerWorker(): SchedulerWorker | undefined {
+    return this.#workers.find((w): w is SchedulerWorker => w.name === 'scheduler') as SchedulerWorker | undefined;
   }
 
-  async #initScheduler(): Promise<void> {
-    if (this.#scheduler) return;
-    const storage = this.#storage;
-    if (!storage) return;
-
-    const schedulesStore = await storage.getStore('schedules');
-    if (!schedulesStore) {
-      throw new MastraError({
-        id: 'MASTRA_SCHEDULER_STORAGE_NOT_AVAILABLE',
-        domain: ErrorDomain.MASTRA,
-        category: ErrorCategory.USER,
-        text: 'Workflow scheduler requires a storage adapter implementing the `schedules` domain (e.g. `@mastra/libsql`). The configured storage does not provide one.',
-      });
-    }
-
-    const scheduler = new WorkflowScheduler({
-      schedulesStore,
-      pubsub: this.#pubsub,
-      config: this.#schedulerConfig,
-    });
-    if (this.#logger) {
-      scheduler.__setLogger(this.#logger as IMastraLogger);
-    }
-    this.#scheduler = scheduler;
-
-    try {
-      await this.#registerDeclarativeSchedules(schedulesStore);
-      await scheduler.start();
-    } catch (err) {
-      // Best-effort cleanup of any partially-started scheduler so the catch
-      // handler in #ensureScheduler() can null out #scheduler safely.
-      try {
-        await scheduler.stop();
-      } catch {
-        // ignore secondary errors during cleanup
-      }
-      throw err;
-    }
-  }
-
-  async #registerDeclarativeSchedules(schedulesStore: SchedulesStorage): Promise<void> {
+  /**
+   * Sync code-declared schedule configs to the database. Called by
+   * SchedulerWorker during init and by addWorkflow() for late registrations.
+   *
+   * @internal — public so SchedulerWorker can call it, not part of the user API.
+   */
+  async registerDeclarativeSchedules(schedulesStore: SchedulesStorage): Promise<void> {
     const declared = this.#collectDeclarativeSchedules();
     const declaredIds = new Set(declared.map(d => d.scheduleId));
 
@@ -1295,27 +1430,30 @@ export class Mastra<
       }
     }
 
-    // Orphan deletion: drop any storage rows owned by a registered workflow
-    // (id starts with `wf_<workflowId>` or `wf_<workflowId>__`) but not
-    // present in the current declared set. This keeps the storage in sync
-    // when array-form entries are removed across deploys. We only consider
-    // workflows we actually have registered — schedules belonging to a
-    // removed workflow are left alone (the workflow may be coming back).
-    if (declaredIdsByWorkflow.size > 0) {
-      const allRows = await schedulesStore.listSchedules();
-      for (const row of allRows) {
-        if (declaredIds.has(row.id)) continue;
-        const ownerWorkflowId = ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow);
-        if (!ownerWorkflowId) continue;
-        try {
-          await schedulesStore.deleteSchedule(row.id);
-        } catch (error) {
-          this.#logger?.error('Failed to delete orphaned declarative schedule', {
-            scheduleId: row.id,
-            workflowId: ownerWorkflowId,
-            error,
-          });
-        }
+    // Orphan deletion: drop any Mastra-managed declarative schedule rows
+    // (id starts with `wf_<workflowId>` or `wf_<workflowId>__`) that are no
+    // longer declared in code. This covers two cases:
+    //   1. A registered workflow's array-form entries shrunk across deploys.
+    //   2. The owning workflow itself was deleted from code. Leaving these
+    //      rows behind would have the scheduler keep firing for a workflow
+    //      the processor can't resolve, producing infinite event-redelivery
+    //      loops (see WorkflowEventProcessor#dispatch).
+    // User-created schedules (via the schedules API) don't use the `wf_`
+    // prefix, so they're untouched.
+    const allRows = await schedulesStore.listSchedules();
+    for (const row of allRows) {
+      if (declaredIds.has(row.id)) continue;
+      if (!row.id.startsWith('wf_')) continue;
+      const ownerWorkflowId = ownerWorkflowIdForRow(row.id, declaredIdsByWorkflow) ?? ownerWorkflowIdFromRowId(row.id);
+      if (!ownerWorkflowId) continue;
+      try {
+        await schedulesStore.deleteSchedule(row.id);
+      } catch (error) {
+        this.#logger?.error('Failed to delete orphaned declarative schedule', {
+          scheduleId: row.id,
+          workflowId: ownerWorkflowId,
+          error,
+        });
       }
     }
   }
@@ -2225,17 +2363,12 @@ export class Mastra<
     // Get all workflows with default engine type
     const defaultEngineWorkflows = Object.values(this.#workflows).filter(workflow => workflow.engineType === 'default');
 
-    // Collect all active runs for workflows with default engine type
-    const allRuns: WorkflowRuns['runs'] = [];
-    let allTotal = 0;
+    const activeRunsByWorkflow = await Promise.all(
+      defaultEngineWorkflows.map(workflow => workflow.listActiveWorkflowRuns()),
+    );
 
-    for (const workflow of defaultEngineWorkflows) {
-      const runningRuns = await workflow.listWorkflowRuns({ status: 'running' });
-      const waitingRuns = await workflow.listWorkflowRuns({ status: 'waiting' });
-
-      allRuns.push(...runningRuns.runs, ...waitingRuns.runs);
-      allTotal += runningRuns.total + waitingRuns.total;
-    }
+    const allRuns = activeRunsByWorkflow.flatMap(activeRuns => activeRuns.runs);
+    const allTotal = activeRunsByWorkflow.reduce((total, activeRuns) => total + activeRuns.total, 0);
 
     return {
       runs: allRuns,
@@ -2300,7 +2433,8 @@ export class Mastra<
    * This method allows dynamic registration of scorers after the Mastra instance
    * has been created.
    *
-   * @throws {MastraError} When a scorer with the same key already exists
+   * If a scorer with the same key already exists, this method leaves the existing
+   * scorer registered and returns.
    *
    * @example
    * ```typescript
@@ -2698,6 +2832,14 @@ export class Mastra<
     }
 
     tools[toolKey] = tool;
+
+    // If the background-task manager has already initialized, register the
+    // newly-added tool with its static registry so cross-process workers can
+    // resolve dispatches for it. If init hasn't happened yet, the registry
+    // will be populated wholesale in #ensureBackgroundTaskManager().
+    if (this.#backgroundTaskManager) {
+      this.#registerToolWithBackgroundManager(toolKey, tool);
+    }
   }
 
   /**
@@ -3063,15 +3205,19 @@ export class Mastra<
    * ```
    */
   public listWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
+    const workflows = Object.fromEntries(
+      Object.entries(this.#workflows).filter(([key]) => !this.#hiddenWorkflowKeys.has(key)),
+    ) as Record<string, Workflow>;
+
     if (props.serialized) {
-      return Object.entries(this.#workflows).reduce((acc, [k, v]) => {
+      return Object.entries(workflows).reduce((acc, [k, v]) => {
         return {
           ...acc,
           [k]: { name: v.name },
         };
       }, {});
     }
-    return this.#workflows;
+    return workflows;
   }
 
   /**
@@ -3123,16 +3269,19 @@ export class Mastra<
     }
     workflows[workflowKey] = workflow;
 
-    // If a schedule is declared, mark the flag and either register into the
-    // running scheduler or trigger a lazy ensure.
+    this.registerStaticWorkflowScorers(workflow);
+
+    // If a schedule is declared, mark the flag and register into the
+    // running scheduler worker (if already started).
     if (hasSchedule) {
       this.#hasScheduledWorkflow = true;
-      if (this.#scheduler) {
+      const worker = this.#findSchedulerWorker();
+      if (worker?.scheduler) {
         void (async () => {
           try {
             const schedulesStore = await this.#storage?.getStore('schedules');
             if (!schedulesStore) return;
-            await this.#registerDeclarativeSchedules(schedulesStore);
+            await this.registerDeclarativeSchedules(schedulesStore);
           } catch (error) {
             this.#logger?.error('Failed to register declarative schedule for workflow', {
               workflowId: workflow.id,
@@ -3140,8 +3289,21 @@ export class Mastra<
             });
           }
         })();
-      } else {
-        this.#ensureScheduler();
+      }
+      // If the worker doesn't exist yet (workers not started), schedules
+      // will be registered when SchedulerWorker.init() runs.
+    }
+  }
+
+  private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
+    for (const step of Object.values(workflow.steps ?? {})) {
+      const scorers = step.scorers;
+      if (!scorers || typeof scorers === 'function') {
+        continue;
+      }
+
+      for (const [, entry] of Object.entries(scorers)) {
+        this.addScorer(entry.scorer, undefined, { source: 'code' });
       }
     }
   }
@@ -3168,11 +3330,10 @@ export class Mastra<
    */
   public setStorage(storage: MastraCompositeStore) {
     this.#storage = augmentWithInit(storage);
+    this.#storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
     this.#ensureBackgroundTaskManager();
-    // If storage was attached after construction, the scheduler bootstrap
-    // would have bailed out early in __init(). Retry it now that storage
-    // is available so declarative schedules still get registered + fired.
-    this.#ensureScheduler();
+    // If storage was attached after construction, the SchedulerWorker
+    // will pick it up when startWorkers() is called.
   }
 
   public setLogger({ logger }: { logger: TLogger }) {
@@ -3754,32 +3915,157 @@ export class Mastra<
     await this.#pubsub.unsubscribe(topic, listener);
   }
 
-  public async startEventEngine() {
-    for (const topic in this.#events) {
-      if (!this.#events[topic]) {
-        continue;
-      }
+  /**
+   * Process a single workflow event. Shared entry point used by:
+   * - pull-mode workers (OrchestrationWorker)
+   * - in-process push pubsubs (EventEmitterPubSub) wired during startWorkers()
+   * - HTTP push delivered to `POST /api/workers/events`
+   *
+   * Returns `{ ok: true }` on success; the caller should ack/return 2xx.
+   * Returns `{ ok: false, retry: true }` on transient failure; the caller
+   * should nack/return 5xx so the broker retries.
+   */
+  public async handleWorkflowEvent(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
+    if (!this.#workflowEventProcessor) {
+      this.#workflowEventProcessor = new WorkflowEventProcessor({ mastra: this });
+    }
+    return this.#workflowEventProcessor.handle(event);
+  }
 
-      const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
-      for (const listener of listeners) {
-        await this.#pubsub.subscribe(topic, listener);
+  /**
+   * Initialize and start workers. If `name` is provided, starts only
+   * that worker. Otherwise starts all registered workers and subscribes
+   * user-defined event listeners.
+   */
+  public async startWorkers(name?: string): Promise<void> {
+    // Lazily inject the SchedulerWorker if the scheduler should be enabled
+    // and no scheduler worker is registered yet. This runs after all
+    // workflows have been registered (unlike the constructor's default-workers
+    // block), so #hasScheduledWorkflow is accurate.
+    if (!name && this.#shouldEnableScheduler() && this.#storage && !this.#findSchedulerWorker()) {
+      const sw = new SchedulerWorker(this.#schedulerConfig);
+      sw.__registerMastra(this);
+      this.#workers.push(sw);
+    }
+
+    const deps: WorkerDeps = {
+      pubsub: this.#pubsub,
+      storage: this.#storage!,
+      logger: this.#logger as unknown as IMastraLogger,
+      mastra: this,
+    };
+
+    let targets: MastraWorker[];
+    if (name) {
+      targets = this.#workers.filter(w => w.name === name);
+      if (targets.length === 0) {
+        throw new Error(`Worker "${name}" not found. Available: ${this.#workers.map(w => w.name).join(', ')}`);
+      }
+    } else if (this.#workerFilter) {
+      targets = this.#workers.filter(w => this.#workerFilter!.has(w.name));
+      if (targets.length === 0) {
+        this.#logger?.warn?.(
+          `MASTRA_WORKERS=${[...this.#workerFilter].join(',')} did not match any registered workers (have: ${this.#workers.map(w => w.name).join(', ')})`,
+        );
+      }
+    } else {
+      targets = this.#workers;
+    }
+
+    for (const worker of targets) {
+      await worker.init(deps);
+      await worker.start();
+    }
+
+    // For push-mode pubsubs (e.g. EventEmitterPubSub) there is no
+    // OrchestrationWorker pulling events — wire handleWorkflowEvent directly
+    // to the pubsub so workflow events still get processed in-process.
+    if (!name) {
+      const modes = this.#pubsub.supportedModes ?? ['pull'];
+      const pushOnly = modes.includes('push') && !modes.includes('pull');
+      if (pushOnly && !this.#pushSubscription) {
+        const cb: EventCallback = (event, ack) => {
+          void this.handleWorkflowEvent(event)
+            .then(result => {
+              if (result.ok && ack) {
+                return ack().catch(err =>
+                  this.#logger?.error?.('Error acking workflow event in push subscription', err),
+                );
+              }
+              // Push transports without nack semantics (EventEmitter) treat
+              // a non-ack as a failure signal; we already logged inside handle().
+            })
+            .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
+        };
+        await this.#pubsub.subscribe('workflows', cb);
+        this.#pushSubscription = { topic: 'workflows', cb };
+      }
+    }
+
+    // Subscribe user-defined event listeners (non-workflow topics, or legacy inline WEP)
+    // Only when starting all workers (not when targeting a specific one).
+    // Idempotent: skip pairs we've already subscribed.
+    if (!name) {
+      for (const topic in this.#events) {
+        if (!this.#events[topic]) {
+          continue;
+        }
+
+        const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
+        for (const listener of listeners) {
+          const alreadySubscribed = this.#userEventSubscriptions.some(
+            sub => sub.topic === topic && sub.cb === listener,
+          );
+          if (alreadySubscribed) continue;
+          await this.#pubsub.subscribe(topic, listener);
+          this.#userEventSubscriptions.push({ topic, cb: listener });
+        }
       }
     }
   }
 
-  public async stopEventEngine() {
-    for (const topic in this.#events) {
-      if (!this.#events[topic]) {
-        continue;
-      }
-
-      const listeners = Array.isArray(this.#events[topic]) ? this.#events[topic] : [this.#events[topic]];
-      for (const listener of listeners) {
-        await this.#pubsub.unsubscribe(topic, listener);
+  /**
+   * Stop all running workers and unsubscribe event listeners.
+   */
+  public async stopWorkers(): Promise<void> {
+    // Stop registered workers in reverse order
+    for (const worker of [...this.#workers].reverse()) {
+      if (worker.isRunning) {
+        await worker.stop();
       }
     }
 
+    // Tear down the in-process push subscription wired during startWorkers().
+    if (this.#pushSubscription) {
+      await this.#pubsub.unsubscribe(this.#pushSubscription.topic, this.#pushSubscription.cb);
+      this.#pushSubscription = undefined;
+    }
+
+    // Unsubscribe only the (topic, listener) pairs we actually registered in
+    // startWorkers() — keeps stopWorkers() symmetric with startWorkers() and
+    // avoids unsubscribing listeners that startWorkers never owned.
+    for (const { topic, cb } of this.#userEventSubscriptions) {
+      await this.#pubsub.unsubscribe(topic, cb);
+    }
+    this.#userEventSubscriptions = [];
+
     await this.#pubsub.flush();
+  }
+
+  /**
+   * @deprecated Use {@link Mastra.startWorkers} instead. Will be removed in a
+   * future release.
+   */
+  public async startEventEngine(name?: string): Promise<void> {
+    return this.startWorkers(name);
+  }
+
+  /**
+   * @deprecated Use {@link Mastra.stopWorkers} instead. Will be removed in a
+   * future release.
+   */
+  public async stopEventEngine(): Promise<void> {
+    return this.stopWorkers();
   }
 
   /**
@@ -4023,21 +4309,13 @@ export class Mastra<
    * ```
    */
   async shutdown(): Promise<void> {
-    if (this.#schedulerInitPromise) {
-      try {
-        await this.#schedulerInitPromise;
-      } catch {
-        // init errors are already logged
-      }
+    // SchedulerWorker is stopped as part of stopWorkers().
+    await this.stopWorkers();
+    // Close storage to release OS file handles (critical on Windows: open WAL/shm
+    // handles cause EBUSY when callers try to fs.rm the storage dir after shutdown).
+    if (this.#storage?.close) {
+      await this.#storage.close();
     }
-    if (this.#scheduler) {
-      try {
-        await this.#scheduler.stop();
-      } catch (error) {
-        this.#logger?.error('Failed to stop workflow scheduler', error);
-      }
-    }
-    await this.stopEventEngine();
     // Shutdown observability registry, exporters, etc...
     await this.#observability.shutdown();
 

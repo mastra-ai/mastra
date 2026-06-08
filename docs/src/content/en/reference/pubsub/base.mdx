@@ -1,0 +1,312 @@
+---
+title: "Reference: PubSub | PubSub"
+description: API reference for the PubSub abstract base class that defines the pub/sub contract in Mastra.
+packages:
+  - "@mastra/core"
+---
+
+# PubSub
+
+`PubSub` is the abstract base class for Mastra's event system. It defines the contract that every pub/sub backend implements, so the rest of Mastra can publish and subscribe to events without knowing which transport is in use.
+
+Mastra uses pub/sub internally for workflow event processing, streaming, and cross-component communication. Most applications use the default [`EventEmitterPubSub`](/reference/pubsub/event-emitter) and never construct a `PubSub` directly. Implement this class only when you need a custom transport.
+
+For built-in implementations, see [`EventEmitterPubSub`](/reference/pubsub/event-emitter), [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub), [`CachingPubSub`](/reference/pubsub/caching-pubsub), [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), and [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub).
+
+## Usage example
+
+Extend `PubSub` and implement the four abstract methods to add a custom backend.
+
+```typescript title="src/mastra/pubsub.ts"
+import { PubSub } from '@mastra/core/events'
+import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events'
+
+export class CustomPubSub extends PubSub {
+  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+    // Deliver the event to subscribers of `topic`.
+  }
+
+  async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+    // Register `cb` to receive events published to `topic`.
+  }
+
+  async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    // Remove a previously registered callback.
+  }
+
+  async flush(): Promise<void> {
+    // Wait for any in-flight deliveries to settle.
+  }
+}
+```
+
+Pass the instance to the [Mastra](/reference/core/mastra-class) constructor:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { CustomPubSub } from './pubsub'
+
+export const mastra = new Mastra({
+  pubsub: new CustomPubSub(),
+})
+```
+
+## Delivery modes
+
+A `PubSub` declares which delivery modes it supports through the `supportedModes` property. Mastra reads this to decide whether to run a long-lived worker that pulls events.
+
+| Mode | Description |
+| - | - |
+| `pull` | Consumers actively read from the broker, for example Redis Streams `XREADGROUP`. Mastra runs an orchestration worker to read. |
+| `push` | Events arrive without the consumer asking, either in-process or through an HTTP endpoint. No read loop is required. |
+
+The default is `['pull']` so that custom implementations keep today's behavior unless they opt in to push delivery.
+
+## Methods
+
+### Core methods
+
+#### `publish(topic, event)`
+
+Publishes an event to a topic. The `id` and `createdAt` fields are assigned by the implementation.
+
+```typescript
+await pubsub.publish('my-topic', {
+  type: 'example',
+  data: { value: 1 },
+  runId: 'run-123',
+})
+```
+
+#### `subscribe(topic, cb, options?)`
+
+Registers a callback to receive events published to a topic. When `options.group` is set, subscribers in the same group compete for messages and each event is delivered to one member. Without a group, every subscriber receives every event.
+
+Pass `options.batch` to opt in to batched delivery. The callback signature is unchanged: a batch of N events is delivered as N consecutive `cb(event, ack, nack)` calls in publish order. Batching is honored only when the backend's [`supportsNativeBatching`](#properties) is `true`; other backends ignore the option and deliver events one at a time.
+
+```typescript
+await pubsub.subscribe('my-topic', (event, ack, nack) => {
+  console.log(event)
+})
+```
+
+#### `unsubscribe(topic, cb)`
+
+Removes a previously registered callback from a topic.
+
+```typescript
+await pubsub.unsubscribe('my-topic', callback)
+```
+
+#### `flush()`
+
+Waits for any in-flight deliveries to settle. Call this before shutdown to avoid dropping events.
+
+```typescript
+await pubsub.flush()
+```
+
+### Replay methods
+
+These methods support resuming a stream after a disconnect. The default implementations fall back to a regular `subscribe`, so backends without history support behave as live-only. [`CachingPubSub`](/reference/pubsub/caching-pubsub) overrides them to replay cached events.
+
+#### `getHistory(topic, offset?)`
+
+Returns cached events for a topic, starting at `offset`. Returns an empty array when the backend has no history.
+
+```typescript
+const events = await pubsub.getHistory('my-topic', 0)
+```
+
+Returns: `Promise<Event[]>`
+
+#### `subscribeWithReplay(topic, cb)`
+
+Replays cached events, then subscribes to live events.
+
+```typescript
+await pubsub.subscribeWithReplay('my-topic', event => {
+  console.log(event)
+})
+```
+
+#### `subscribeFromOffset(topic, offset, cb)`
+
+Replays cached events starting at a known position, then subscribes to live events. This is more efficient than a full replay when the client knows its last position.
+
+```typescript
+await pubsub.subscribeFromOffset('my-topic', 42, event => {
+  console.log(event)
+})
+```
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'supportedModes',
+    type: 'ReadonlyArray<"pull" | "push">',
+    description: 'Delivery modes the implementation supports. Defaults to `["pull"]`.',
+  },
+  {
+    name: 'supportsNativeBatching',
+    type: 'boolean',
+    description:
+      'Whether the implementation honors `options.batch` on `subscribe()`. Defaults to `false`. Backends that integrate batching internally override this and return `true`.',
+  },
+]}
+/>
+
+## Types
+
+### `Event`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'type',
+    type: 'string',
+    description: 'Event type identifier.',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique event ID, assigned by the implementation on publish.',
+  },
+  {
+    name: 'data',
+    type: 'any',
+    description: 'Event payload.',
+  },
+  {
+    name: 'runId',
+    type: 'string',
+    description: 'Run the event belongs to.',
+  },
+  {
+    name: 'createdAt',
+    type: 'Date',
+    description: 'Timestamp assigned by the implementation on publish.',
+  },
+  {
+    name: 'index',
+    type: 'number',
+    description: 'Sequential position used to resume from a specific offset.',
+    isOptional: true,
+  },
+  {
+    name: 'deliveryAttempt',
+    type: 'number',
+    description:
+      'Number of times the event has been delivered. Starts at 1. Defaults to 1 when the backend does not track redelivery.',
+    isOptional: true,
+  },
+]}
+/>
+
+### `SubscribeOptions`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'group',
+    type: 'string',
+    description:
+      'When set, subscribers with the same group compete for messages and each event is delivered to one member. When omitted, every subscriber receives every event.',
+    isOptional: true,
+  },
+  {
+    name: 'batch',
+    type: 'SubscribeBatchOptions',
+    description:
+      'Opt in to batched delivery for this subscription. When omitted, events are delivered one at a time. Honored only by backends where `supportsNativeBatching` is `true`.',
+    isOptional: true,
+  },
+]}
+/>
+
+### `SubscribeBatchOptions`
+
+Per-subscription batching policy. The callback signature does not change; a batch of N events becomes N consecutive callback invocations in publish order.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'maxSize',
+    type: 'number',
+    description: 'Maximum events held before forcing a flush.',
+    isOptional: true,
+  },
+  {
+    name: 'maxWaitMs',
+    type: 'number',
+    description:
+      'Maximum time in milliseconds the oldest event may sit in the buffer. The timer starts when the buffer transitions from empty to non-empty.',
+    isOptional: true,
+  },
+  {
+    name: 'minIntervalMs',
+    type: 'number',
+    description:
+      'Minimum time in milliseconds between consecutive batch deliveries. Even when `maxSize` or `maxWaitMs` would fire, the buffer holds until this interval has elapsed since the last delivery.',
+    isOptional: true,
+  },
+  {
+    name: 'isImmediate',
+    type: '(event: Event) => boolean',
+    description:
+      'When it returns `true` for an event, the buffer flushes immediately on publish, subject to `minIntervalMs`. A per-event escape hatch.',
+    isOptional: true,
+  },
+  {
+    name: 'coalesce',
+    type: '(events: Event[]) => Event[]',
+    description:
+      'Applied to the queued batch before delivery to drop superseded events. Must return a subset of its input by reference identity; returning freshly constructed `Event` objects is a contract violation and discards the whole batch. Ordering of kept events is preserved.',
+    isOptional: true,
+  },
+  {
+    name: 'maxBufferSize',
+    type: 'number',
+    description:
+      'Maximum events the buffer may hold before overflow handling kicks in. Events flagged immediate are never dropped on overflow.',
+    isOptional: true,
+    defaultValue: '256',
+  },
+  {
+    name: 'overflow',
+    type: '"drop-oldest" | "drop-newest" | "coalesce-or-drop-oldest"',
+    description:
+      'Overflow strategy when the buffer exceeds `maxBufferSize`. `coalesce-or-drop-oldest` runs `coalesce` first, then drops oldest if still over budget.',
+    isOptional: true,
+    defaultValue: 'coalesce-or-drop-oldest',
+  },
+]}
+/>
+
+### `EventCallback`
+
+The callback signature for subscribers: `(event: Event, ack?: () => Promise<void>, nack?: () => Promise<void>) => void`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'event',
+    type: 'Event',
+    description: 'The delivered event.',
+  },
+  {
+    name: 'ack',
+    type: '() => Promise<void>',
+    description: 'Acknowledge successful processing. The event is removed from the queue.',
+    isOptional: true,
+  },
+  {
+    name: 'nack',
+    type: '() => Promise<void>',
+    description: 'Negative acknowledge. The event is requeued for redelivery after a delay.',
+    isOptional: true,
+  },
+]}
+/>

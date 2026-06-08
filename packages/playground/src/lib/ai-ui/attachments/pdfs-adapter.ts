@@ -25,10 +25,7 @@ export class PDFAttachmentAdapter implements AttachmentAdapter {
   }
 
   async send(attachment: PendingAttachment): Promise<CompleteAttachment> {
-    // Option 1: Extract text from PDF (requires pdf parsing library)
-    // const text = await this.extractTextFromPDF(attachment.file);
-
-    // Option 2: Convert to base64 for API processing
+    // Convert to base64 for API processing.
     const base64Data = await this.fileToBase64(attachment.file);
 
     return {
@@ -58,12 +55,5 @@ export class PDFAttachmentAdapter implements AttachmentAdapter {
       binary += String.fromCharCode(byte);
     });
     return btoa(binary);
-  }
-
-  // Optional: Extract text from PDF using a library like pdf.js
-  private async extractTextFromPDF(): Promise<string> {
-    // Implementation would use pdf.js or similar
-    // This is a placeholder
-    return 'Extracted PDF text content';
   }
 }

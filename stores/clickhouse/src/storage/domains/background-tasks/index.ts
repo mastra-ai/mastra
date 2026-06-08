@@ -15,6 +15,19 @@ function serializeJson(v: unknown): any {
   return v ?? '';
 }
 
+// ClickHouse `DateTime` columns can't be NULL, so the adapter stores
+// "no value" as the epoch sentinel (see `createTask` below). Reading
+// back must convert the sentinel into `undefined` — otherwise an
+// updateTask({ suspendedAt: undefined }) flows in as the sentinel and
+// reads back as `new Date(0)` instead of `undefined`, breaking
+// callers that distinguish "never set" from "set to epoch".
+function readNullableDate(val: unknown): Date | undefined {
+  if (val == null || val === '') return undefined;
+  const d = new Date(val as string | number | Date);
+  if (Number.isNaN(d.getTime()) || d.getTime() === 0) return undefined;
+  return d;
+}
+
 function rowToTask(row: Record<string, any>): BackgroundTask {
   const parseJson = (val: unknown): any => {
     if (val == null || val === '') return undefined;
@@ -39,12 +52,14 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     runId: row.run_id ?? '',
     result: parseJson(row.result),
     error: parseJson(row.error),
+    suspendPayload: parseJson(row.suspend_payload),
     retryCount: Number(row.retry_count ?? 0),
     maxRetries: Number(row.max_retries ?? 0),
     timeoutMs: Number(row.timeout_ms ?? 300_000),
     createdAt: new Date(row.createdAt),
-    startedAt: row.startedAt ? new Date(row.startedAt) : undefined,
-    completedAt: row.completedAt ? new Date(row.completedAt) : undefined,
+    startedAt: readNullableDate(row.startedAt),
+    suspendedAt: readNullableDate(row.suspendedAt),
+    completedAt: readNullableDate(row.completedAt),
   };
 }
 
@@ -61,6 +76,11 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
 
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_BACKGROUND_TASKS, schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS] });
+    await this.#db.alterTable({
+      tableName: TABLE_BACKGROUND_TASKS,
+      schema: TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS],
+      ifNotExists: ['suspend_payload', 'suspendedAt'],
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -83,11 +103,13 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
           args: serializeJson(task.args),
           result: serializeJson(task.result),
           error: serializeJson(task.error),
+          suspend_payload: serializeJson(task.suspendPayload),
           retry_count: task.retryCount,
           max_retries: task.maxRetries,
           timeout_ms: task.timeoutMs,
           createdAt: task.createdAt.toISOString(),
           startedAt: task.startedAt?.toISOString() ?? '1970-01-01T00:00:00.000Z',
+          suspendedAt: task.suspendedAt?.toISOString() ?? '1970-01-01T00:00:00.000Z',
           completedAt: task.completedAt?.toISOString() ?? '1970-01-01T00:00:00.000Z',
         },
       ],
@@ -103,8 +125,10 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
     if ('status' in update) merged.status = update.status!;
     if ('result' in update) merged.result = update.result;
     if ('error' in update) merged.error = update.error;
+    if ('suspendPayload' in update) merged.suspendPayload = update.suspendPayload;
     if ('retryCount' in update) merged.retryCount = update.retryCount!;
     if ('startedAt' in update) merged.startedAt = update.startedAt;
+    if ('suspendedAt' in update) merged.suspendedAt = update.suspendedAt;
     if ('completedAt' in update) merged.completedAt = update.completedAt;
 
     // ClickHouse ReplacingMergeTree — insert replaces by primary key
@@ -147,15 +171,21 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
       conditions.push(`tool_name = {var_tool:String}`);
       params.var_tool = filter.toolName;
     }
+    if (filter.toolCallId) {
+      conditions.push(`tool_call_id = {var_tool_call:String}`);
+      params.var_tool_call = filter.toolCallId;
+    }
 
     // Push date range filtering into SQL so total count and LIMIT/OFFSET
     // agree with the in-memory Date objects `rowToTask` returns.
     const dateCol =
       filter.dateFilterBy === 'startedAt'
         ? 'startedAt'
-        : filter.dateFilterBy === 'completedAt'
-          ? 'completedAt'
-          : 'createdAt';
+        : filter.dateFilterBy === 'suspendedAt'
+          ? 'suspendedAt'
+          : filter.dateFilterBy === 'completedAt'
+            ? 'completedAt'
+            : 'createdAt';
     if (filter.fromDate) {
       conditions.push(`${dateCol} >= parseDateTimeBestEffort({var_from_date:String})`);
       params.var_from_date = filter.fromDate.toISOString();
@@ -183,7 +213,13 @@ export class BackgroundTasksStorageClickhouse extends BackgroundTasksStorage {
     const total = Number(countRows[0]?.count ?? 0);
 
     const orderCol =
-      filter.orderBy === 'startedAt' ? 'startedAt' : filter.orderBy === 'completedAt' ? 'completedAt' : 'createdAt';
+      filter.orderBy === 'startedAt'
+        ? 'startedAt'
+        : filter.orderBy === 'suspendedAt'
+          ? 'suspendedAt'
+          : filter.orderBy === 'completedAt'
+            ? 'completedAt'
+            : 'createdAt';
     const direction = filter.orderDirection === 'desc' ? 'DESC' : 'ASC';
     let sql = `SELECT * FROM ${TABLE_BACKGROUND_TASKS} FINAL ${where} ORDER BY ${orderCol} ${direction}`;
     if (filter.perPage != null) {

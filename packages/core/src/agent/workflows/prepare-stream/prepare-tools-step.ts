@@ -4,7 +4,7 @@ import type { StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
 import { createObservabilityContext } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
-import { createStep } from '../../../workflows';
+import { createStep } from '../../../workflows/workflow';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { AgentMethodType } from '../../types';
 import type { AgentCapabilities } from './schema';
@@ -57,6 +57,7 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
         delegation: options.delegation,
         backgroundTaskEnabled,
         inputProcessors: options.inputProcessors,
+        hooks: options.hooks,
       });
 
       // Update the agent span with available tool names for observability

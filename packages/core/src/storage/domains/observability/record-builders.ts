@@ -304,6 +304,7 @@ export function buildScoreRecord(event: ScoreEvent): CreateScoreRecord {
     traceId: s.traceId ?? s.correlationContext?.traceId ?? null,
     spanId: s.spanId ?? s.correlationContext?.spanId ?? null,
     scorerId: s.scorerId,
+    scorerName: s.scorerName ?? null,
     scorerVersion: s.scorerVersion ?? null,
     scoreSource: s.scoreSource ?? s.source ?? null,
     source: s.scoreSource ?? s.source ?? null,
@@ -314,7 +315,7 @@ export function buildScoreRecord(event: ScoreEvent): CreateScoreRecord {
     experimentId: correlationFields.experimentId ?? s.experimentId ?? null,
     scope: null,
     scoreTraceId: s.scoreTraceId ?? null,
-    metadata: s.scorerName ? { ...(s.metadata ?? {}), scorerName: s.scorerName } : (s.metadata ?? null),
+    metadata: s.metadata ?? null,
   };
 }
 

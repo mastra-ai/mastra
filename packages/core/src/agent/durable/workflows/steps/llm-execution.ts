@@ -2,8 +2,11 @@ import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
+import { mergeProviderOptions } from '../../../../llm/model/provider-options';
+import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, AIModelGenerationSpan, ExportedSpan, IModelSpanTracker } from '../../../../observability';
+import { getStepAvailableToolNames } from '../../../../observability/utils';
 import { ProcessorRunner } from '../../../../processors/runner';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
@@ -34,6 +37,7 @@ const durableLLMInputSchema = z.object({
     specificationVersion: z.string().optional(),
     originalConfig: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
     settings: z.record(z.string(), z.any()).optional(),
+    providerOptions: z.record(z.string(), z.any()).optional(),
   }),
   // Model list for fallback support (when agent configured with array of models)
   modelList: z
@@ -45,6 +49,7 @@ const durableLLMInputSchema = z.object({
           modelId: z.string(),
           specificationVersion: z.string().optional(),
           originalConfig: z.union([z.string(), z.record(z.string(), z.any())]).optional(),
+          providerOptions: z.record(z.string(), z.any()).optional(),
         }),
         maxRetries: z.number(),
         enabled: z.boolean(),
@@ -73,6 +78,7 @@ const durableLLMOutputSchema = z.object({
       toolName: z.string(),
       args: z.record(z.string(), z.any()),
       providerMetadata: z.record(z.string(), z.any()).optional(),
+      activeTools: z.array(z.string()).nullable().optional(),
     }),
   ),
   stepResult: z.object({
@@ -190,7 +196,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             let currentModel = model;
             let currentTools = tools as unknown as ToolSet;
             let currentToolChoice = execOptions.toolChoice as ToolChoice<ToolSet> | undefined;
+            let currentActiveTools = execOptions.activeTools;
             let currentModelSettings = { temperature: execOptions.temperature };
+            let currentProviderOptions: SharedProviderOptions | undefined = mergeProviderOptions(
+              execOptions.providerOptions,
+              modelEntry.config.providerOptions,
+            ) as SharedProviderOptions | undefined;
 
             // 6. Rebuild MODEL_GENERATION span from passed data
             // For durable execution, ONE model_generation span is created BEFORE the workflow starts
@@ -247,6 +258,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 steps: (inputData as any).accumulatedSteps ?? [],
                 tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                 requestContext,
+                memory: registryEntry.memory,
+                resourceId: typedInput.state?.resourceId,
+                threadId: typedInput.state?.threadId,
                 model: currentModel,
                 messageId: currentMessageId,
                 rotateResponseMessageId: () => {
@@ -255,6 +269,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 },
                 tools: currentTools,
                 toolChoice: currentToolChoice,
+                providerOptions: currentProviderOptions,
+                activeTools: currentActiveTools,
                 modelSettings: currentModelSettings,
                 structuredOutput: structuredOutput as any,
                 retryCount: (inputData as any).processorRetryCount ?? 0,
@@ -265,6 +281,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               currentModel = (processInputStepResult.model ?? currentModel) as typeof currentModel;
               currentTools = (processInputStepResult.tools ?? currentTools) as ToolSet;
               currentToolChoice = processInputStepResult.toolChoice as ToolChoice<ToolSet> | undefined;
+              currentProviderOptions = processInputStepResult.providerOptions ?? currentProviderOptions;
+              currentActiveTools = processInputStepResult.activeTools;
               currentModelSettings = {
                 ...currentModelSettings,
                 ...(processInputStepResult.modelSettings ?? {}),
@@ -291,13 +309,34 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // 8. Start MODEL_STEP span at the beginning of LLM execution
             modelSpanTracker?.startStep();
 
+            // Apply post-processor request-side context to MODEL_INFERENCE then
+            // open the inference span immediately before the model call so its
+            // startTime excludes any input processor work and availableTools /
+            // toolChoice reflect per-step mutations. responseFormat tracks the
+            // actual structuredOutput payload sent to execute() — which is
+            // undefined when structuringModelConfig routes through a separate
+            // structuring step instead of asking the model for json_schema.
+            modelSpanTracker?.setInferenceContext?.({
+              parameters: currentModelSettings as Record<string, unknown> | undefined,
+              providerOptions: currentProviderOptions as Record<string, unknown> | undefined,
+              availableTools: getStepAvailableToolNames(
+                currentTools as Record<string, unknown> | undefined,
+                currentActiveTools,
+              ),
+              toolChoice: currentToolChoice,
+              responseFormat: structuredOutput ? 'json_schema' : undefined,
+            });
+            modelSpanTracker?.startInference?.();
+
             // 10. Execute LLM call
             const modelResult = execute({
               runId,
               model: currentModel,
+              providerOptions: currentProviderOptions,
               inputMessages,
               tools: currentTools,
               toolChoice: currentToolChoice,
+              activeTools: currentActiveTools,
               options: { abortSignal: executionAbortSignal },
               modelSettings: {
                 ...currentModelSettings,
@@ -349,12 +388,30 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               for await (const chunk of trackedStream) {
                 if (!chunk) continue;
 
-                // Emit chunk via pubsub for streaming to client
-                // NOTE: Do NOT emit 'finish' chunks - they will be sent as a proper FINISH event
-                // at the end of the agentic loop. Emitting finish chunks here would cause
-                // the client's MastraModelOutput to close prematurely in multi-step workflows.
+                // Emit chunk via pubsub for streaming to client.
+                // Two special transforms:
+                //
+                // - 'finish' chunks are NEVER forwarded as-is. The agent run's
+                //   real terminal signal is the FINISH event published at the
+                //   end of the agentic loop; emitting a CHUNK 'finish' here
+                //   would close the client's MastraModelOutput prematurely in
+                //   multi-step workflows.
+                //
+                // - The inner LLM stream emits 'finish' but never 'step-finish'
+                //   (the non-durable agentic-loop wraps the LLM call and emits
+                //   step-finish itself; the durable workflow bypasses that
+                //   wrapper and calls `execute` directly). Without a step-finish
+                //   chunk, the client's MastraModelOutput never populates its
+                //   bufferedSteps, so `getFullOutput().text` returns ''. Convert
+                //   each inner 'finish' into a 'step-finish' chunk so the client
+                //   sees the same shape it would in the non-durable path.
                 if (pubsub && chunk.type !== 'finish') {
                   await emitChunkEvent(pubsub, runId, chunk);
+                } else if (pubsub && chunk.type === 'finish') {
+                  await emitChunkEvent(pubsub, runId, {
+                    ...chunk,
+                    type: 'step-finish',
+                  } as any);
                 }
 
                 // Process different chunk types
@@ -374,6 +431,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       providerMetadata: payload.providerMetadata as Record<string, unknown> | undefined,
                       providerExecuted: payload.providerExecuted,
                       output: payload.output,
+                      activeTools: currentActiveTools ?? null,
                     });
                     break;
                   }

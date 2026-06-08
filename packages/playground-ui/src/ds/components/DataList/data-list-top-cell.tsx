@@ -1,30 +1,40 @@
-import type { ReactNode } from 'react';
+import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
 import { forwardRef } from 'react';
+import { Checkbox } from '@/ds/components/Checkbox';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
 import { cn } from '@/lib/utils';
 
 export type DataListTopCellProps = {
   children: ReactNode;
   className?: string;
-};
+  /**
+   * HTML element rendered for the top cell. Defaults to `span`. Use `'label'`
+   * when the cell wraps a labelable control (e.g. a select-all Checkbox).
+   */
+  as?: ElementType;
+} & Omit<ComponentPropsWithoutRef<'div'>, 'children' | 'className' | 'ref'>;
 
-export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>(({ children, className }, ref) => {
-  return (
-    <span
-      ref={ref}
-      className={cn(
-        'h-8 py-1 flex items-center uppercase whitespace-nowrap text-neutral2 tracking-widest text-ui-xs',
-        className,
-      )}
-    >
-      {children}
-    </span>
-  );
-});
+export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>(
+  ({ children, className, as, ...rest }, ref) => {
+    const Component = as || 'span';
+    return (
+      <Component
+        ref={ref}
+        className={cn(
+          'h-8 py-1 flex items-center uppercase whitespace-nowrap text-neutral2 tracking-widest text-ui-xs',
+          className,
+        )}
+        {...rest}
+      >
+        {children}
+      </Component>
+    );
+  },
+);
 
 export type DataListTopCellWithTooltipProps = {
   children: ReactNode;
-  tooltip: string;
+  tooltip: ReactNode;
   className?: string;
 };
 
@@ -85,5 +95,25 @@ export function DataListTopCellSmart({
 
   return (
     <DataListTopCell className={cn('flex [&_svg]:w-[1.3em] [&_svg]:h-[1.3em]', className)}>{content}</DataListTopCell>
+  );
+}
+
+export interface DataListTopSelectCellProps {
+  /** Pass `'indeterminate'` when some — but not all — rows are selected. */
+  checked: boolean | 'indeterminate';
+  /** Toggles the global selection. Typically clears when fully selected, otherwise selects all. */
+  onToggle: () => void;
+  'aria-label'?: string;
+}
+
+export function DataListTopSelectCell({ checked, onToggle, ...rest }: DataListTopSelectCellProps) {
+  return (
+    <DataListTopCell
+      as="label"
+      className="cursor-pointer justify-center rounded-lg transition-colors duration-200 hover:bg-surface4 px-4"
+      onClick={e => e.stopPropagation()}
+    >
+      <Checkbox checked={checked} onCheckedChange={() => onToggle()} aria-label={rest['aria-label']} />
+    </DataListTopCell>
   );
 }

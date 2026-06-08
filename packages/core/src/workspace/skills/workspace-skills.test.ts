@@ -288,6 +288,30 @@ describe('WorkspaceSkillsImpl', () => {
       });
     });
 
+    it('should preserve user-invocable metadata in list results', async () => {
+      const filesystem = createMockFilesystem({
+        'skills/test-skill/SKILL.md': `---
+name: test-skill
+description: A test skill for unit testing
+user-invocable: false
+---
+
+# Test Skill
+`,
+      });
+
+      const skills = new WorkspaceSkillsImpl({
+        source: filesystem,
+        skills: ['skills'],
+      });
+
+      const result = await skills.list();
+      expect(result[0]).toMatchObject({
+        name: 'test-skill',
+        'user-invocable': false,
+      });
+    });
+
     it('should discover skills from multiple paths', async () => {
       const filesystem = createMockFilesystem({
         'skills/test-skill/SKILL.md': VALID_SKILL_MD,

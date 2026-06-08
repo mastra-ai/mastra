@@ -12,6 +12,7 @@ import {
   opencodeClaudeMaxProvider,
   promptCacheMiddleware,
 } from '../providers/claude-max.js';
+import { githubCopilotProvider } from '../providers/github-copilot.js';
 import {
   buildOpenAICodexOAuthFetch,
   createCodexMiddleware,
@@ -24,6 +25,7 @@ import type { ThinkingLevel } from '../providers/openai-codex.js';
 const authStorage = new AuthStorage();
 
 const OPENAI_PREFIX = 'openai/';
+const GITHUB_COPILOT_PREFIX = 'github-copilot/';
 const MASTRA_GATEWAY_PREFIX = 'mastra/';
 
 const CODEX_OPENAI_MODEL_REMAPS: Record<string, string> = {
@@ -37,6 +39,7 @@ const CODEX_OPENAI_MODEL_REMAPS: Record<string, string> = {
 type ResolvedModel =
   | ReturnType<typeof openaiCodexProvider>
   | ReturnType<typeof opencodeClaudeMaxProvider>
+  | ReturnType<typeof githubCopilotProvider>
   | ModelRouterLanguageModel
   | ReturnType<ReturnType<typeof createAnthropic>>
   | ReturnType<ReturnType<typeof createOpenAI>>;
@@ -203,9 +206,7 @@ export function resolveModel(
     // OpenAI Codex OAuth: build model directly with middleware (bypasses ModelRouterLanguageModel)
     // Required because createCodexMiddleware injects instructions, store:false, and reasoningEffort
     if (normalizedModelId.startsWith('openai/') && openaiCred?.type === 'oauth') {
-      const resolvedModelId = options?.remapForCodexOAuth
-        ? remapOpenAIModelForCodexOAuth(normalizedModelId)
-        : normalizedModelId;
+      const resolvedModelId = remapOpenAIModelForCodexOAuth(normalizedModelId);
       const resolvedBareModelId = resolvedModelId.substring('openai/'.length);
       const requestedLevel: ThinkingLevel = options?.thinkingLevel ?? 'medium';
       const effectiveLevel = getEffectiveThinkingLevel(resolvedBareModelId, requestedLevel);
@@ -241,6 +242,12 @@ export function resolveModel(
   const isAnthropicModel = normalizedModelId.startsWith('anthropic/');
   const isOpenAIModel = normalizedModelId.startsWith(OPENAI_PREFIX);
   const isMoonshotModel = normalizedModelId.startsWith('moonshotai/');
+  const isGitHubCopilotModel = normalizedModelId.startsWith(GITHUB_COPILOT_PREFIX);
+
+  if (isGitHubCopilotModel) {
+    const bareModelId = normalizedModelId.substring(GITHUB_COPILOT_PREFIX.length);
+    return githubCopilotProvider(bareModelId, { headers });
+  }
 
   if (isMoonshotModel) {
     if (!process.env.MOONSHOT_AI_API_KEY) {
@@ -278,9 +285,7 @@ export function resolveModel(
     const storedCred = authStorage.get('openai-codex');
 
     if (storedCred?.type === 'oauth') {
-      const resolvedModelId = options?.remapForCodexOAuth
-        ? remapOpenAIModelForCodexOAuth(normalizedModelId)
-        : normalizedModelId;
+      const resolvedModelId = remapOpenAIModelForCodexOAuth(normalizedModelId);
       return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
         thinkingLevel: options?.thinkingLevel,
         headers,
@@ -312,5 +317,5 @@ export function getDynamicModel({ requestContext }: { requestContext: RequestCon
 
   const thinkingLevel = harnessContext?.state?.thinkingLevel as ThinkingLevel | undefined;
 
-  return resolveModel(modelId, { thinkingLevel, requestContext });
+  return resolveModel(modelId, { thinkingLevel, remapForCodexOAuth: true, requestContext });
 }

@@ -20,7 +20,7 @@ import type {
   KeyboardEventParams,
 } from '@mastra/core/browser';
 import type { Tool } from '@mastra/core/tools';
-import type { ActInput, ExtractInput, ObserveInput, NavigateInput, TabsInput } from './schemas';
+import type { ActInput, ExtractInput, ObserveInput, NavigateInput, ScreenshotInput, TabsInput } from './schemas';
 import { StagehandThreadManager } from './thread-manager';
 import { createStagehandTools } from './tools';
 import type { StagehandBrowserConfig, StagehandAction } from './types';
@@ -116,6 +116,8 @@ export class StagehandBrowser extends MastraBrowser {
     domSettleTimeoutMs?: number;
     verbose?: 0 | 1 | 2;
     systemPrompt?: string;
+    logger?: StagehandBrowserConfig['logger'];
+    disablePino?: boolean;
     apiKey?: string;
     projectId?: string;
     localBrowserLaunchOptions?: {
@@ -136,6 +138,8 @@ export class StagehandBrowser extends MastraBrowser {
       domSettleTimeoutMs?: number;
       verbose?: 0 | 1 | 2;
       systemPrompt?: string;
+      logger?: StagehandBrowserConfig['logger'];
+      disablePino?: boolean;
       apiKey?: string;
       projectId?: string;
       localBrowserLaunchOptions?: {
@@ -152,8 +156,10 @@ export class StagehandBrowser extends MastraBrowser {
       model: typeof config.model === 'string' ? config.model : config.model?.modelName,
       selfHeal: config.selfHeal ?? true,
       domSettleTimeoutMs: config.domSettleTimeout,
-      verbose: (config.verbose ?? 1) as 0 | 1 | 2,
+      verbose: (config.verbose ?? 0) as 0 | 1 | 2,
       systemPrompt: config.systemPrompt,
+      logger: config.logger ?? (() => {}),
+      disablePino: config.disablePino ?? true,
     };
 
     // Handle Browserbase configuration
@@ -518,7 +524,14 @@ export class StagehandBrowser extends MastraBrowser {
   // ---------------------------------------------------------------------------
 
   override getTools(): Record<string, Tool<any, any>> {
-    return createStagehandTools(this);
+    const tools = createStagehandTools(this);
+    const exclude = this.stagehandConfig.excludeTools;
+    if (exclude?.length) {
+      for (const name of exclude) {
+        delete tools[name];
+      }
+    }
+    return tools;
   }
 
   // ---------------------------------------------------------------------------
@@ -666,6 +679,40 @@ export class StagehandBrowser extends MastraBrowser {
       };
     } catch (error) {
       return this.createErrorFromException(error, 'Navigate');
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Screenshot
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Capture a screenshot of the current page
+   * @param input - Screenshot input
+   * @param threadId - Optional thread ID for thread-safe operation
+   */
+  async screenshot(
+    input: ScreenshotInput,
+    threadId?: string,
+  ): Promise<{ base64: string; url: string; title: string } | BrowserToolError> {
+    const page = this.getPage(threadId);
+
+    if (!page) {
+      return this.createError('browser_error', 'Browser page not available.', 'Ensure the browser is launched.');
+    }
+
+    try {
+      const buffer = await page.screenshot({
+        fullPage: input.fullPage ?? false,
+        type: 'png',
+      });
+      const base64 = Buffer.from(buffer).toString('base64');
+      const url = page.url();
+      const title = await page.title();
+
+      return { base64, url, title };
+    } catch (error) {
+      return this.createErrorFromException(error, 'Screenshot');
     }
   }
 

@@ -732,7 +732,13 @@ export class MemoryStorageClickhouse extends MemoryStorage {
     }
   }
 
-  async getThreadById({ threadId }: { threadId: string }): Promise<StorageThreadType | null> {
+  async getThreadById({
+    threadId,
+    resourceId,
+  }: {
+    threadId: string;
+    resourceId?: string;
+  }): Promise<StorageThreadType | null> {
     try {
       const result = await this.client.query({
         query: `SELECT 
@@ -759,7 +765,7 @@ export class MemoryStorageClickhouse extends MemoryStorage {
       const rows = await result.json();
       const thread = transformRow(rows.data[0]) as StorageThreadType;
 
-      if (!thread) {
+      if (!thread || (resourceId !== undefined && thread.resourceId !== resourceId)) {
         return null;
       }
 

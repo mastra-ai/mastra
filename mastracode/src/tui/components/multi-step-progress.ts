@@ -3,7 +3,7 @@
  * Shows detailed progress with steps, timing, and visual feedback.
  */
 
-import { Container, Text, Spacer } from '@mariozechner/pi-tui';
+import { Container, matchesKey, Text, Spacer } from '@mariozechner/pi-tui';
 import chalk from 'chalk';
 import { theme, mastra } from '../theme.js';
 
@@ -257,7 +257,7 @@ export class MultiStepProgressComponent extends Container {
    * Handle keyboard input for expanding/collapsing.
    */
   handleInput(data: string): boolean {
-    if (data === ' ' || data === '\r') {
+    if (matchesKey(data, 'space') || matchesKey(data, 'enter')) {
       this.toggleCollapsed();
       return true;
     }

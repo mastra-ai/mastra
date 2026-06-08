@@ -11,11 +11,21 @@ const sidebars = {
     { type: 'doc', id: 'configuration', label: 'Configuration' },
     {
       type: 'category',
+      label: 'ACP',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'acp/acp-agent', label: 'AcpAgent' },
+        { type: 'doc', id: 'acp/create-acp-tool', label: 'createACPTool()' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Agents',
       collapsed: true,
       items: [
         { type: 'doc', id: 'agents/agent', label: 'Agent Class' },
         { type: 'doc', id: 'agents/channels', label: 'Channels' },
+        { type: 'doc', id: 'agents/durable-agent', label: 'DurableAgent' },
         { type: 'doc', id: 'agents/generate', label: '.generate()' },
         { type: 'doc', id: 'agents/generateLegacy', label: '.generateLegacy()' },
         {
@@ -33,6 +43,7 @@ const sidebars = {
         { type: 'doc', id: 'agents/getInstructions', label: '.getInstructions()' },
         { type: 'doc', id: 'agents/getLLM', label: '.getLLM()' },
         { type: 'doc', id: 'agents/getMemory', label: '.getMemory()' },
+        { type: 'doc', id: 'agents/getMetadata', label: '.getMetadata()' },
         { type: 'doc', id: 'agents/getModel', label: '.getModel()' },
         { type: 'doc', id: 'agents/getTools', label: '.getTools()' },
         { type: 'doc', id: 'agents/getVoice', label: '.getVoice()' },
@@ -101,6 +112,7 @@ const sidebars = {
       label: 'Client SDK',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'client-js/agent-builder', label: 'Agent Builder API' },
         { type: 'doc', id: 'client-js/agents', label: 'Agents API' },
         { type: 'doc', id: 'client-js/conversations', label: 'Conversations API' },
         { type: 'doc', id: 'client-js/error-handling', label: 'Error Handling' },
@@ -169,8 +181,47 @@ const sidebars = {
       label: 'Editor',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'editor/blob-store-provider', label: 'BlobStoreProvider' },
         { type: 'doc', id: 'editor/mastra-editor', label: 'MastraEditor Class' },
+        { type: 'doc', id: 'editor/processor-provider', label: 'ProcessorProvider' },
         { type: 'doc', id: 'editor/tool-provider', label: 'ToolProvider' },
+        {
+          type: 'category',
+          label: 'Agent Builder',
+          collapsed: true,
+          items: [
+            {
+              type: 'doc',
+              id: 'editor/agent-builder/agent-builder-options',
+              label: 'AgentBuilderOptions',
+            },
+            {
+              type: 'doc',
+              id: 'editor/agent-builder/builder-agent-defaults',
+              label: 'BuilderAgentDefaults',
+            },
+            { type: 'doc', id: 'editor/agent-builder/builder-models', label: 'Models default' },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Browser',
+          collapsed: true,
+          items: [
+            { type: 'doc', id: 'editor/browser-provider', label: 'BrowserProvider' },
+            { type: 'doc', id: 'editor/storage-browser-ref', label: 'StorageBrowserRef' },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Workspace',
+          collapsed: true,
+          items: [
+            { type: 'doc', id: 'editor/filesystem-provider', label: 'FilesystemProvider' },
+            { type: 'doc', id: 'editor/sandbox-provider', label: 'SandboxProvider' },
+            { type: 'doc', id: 'editor/storage-workspace-ref', label: 'StorageWorkspaceRef' },
+          ],
+        },
       ],
     },
     {
@@ -257,7 +308,7 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Mastra Platform',
+      label: 'Mastra platform',
       collapsed: true,
       items: [{ type: 'doc', id: 'mastra-platform/api', label: 'API Reference' }],
     },
@@ -269,6 +320,7 @@ const sidebars = {
         { type: 'doc', id: 'memory/clone-utilities', label: 'Cloned Thread Utilities' },
         { type: 'doc', id: 'memory/memory-class', label: 'Memory Class' },
         { type: 'doc', id: 'memory/observational-memory', label: 'Observational Memory' },
+        { type: 'doc', id: 'memory/serialized-memory-config', label: 'SerializedMemoryConfig' },
         { type: 'doc', id: 'memory/cloneThread', label: '.cloneThread()' },
         { type: 'doc', id: 'memory/createThread', label: '.createThread()' },
         { type: 'doc', id: 'memory/deleteMessages', label: '.deleteMessages()' },
@@ -311,7 +363,11 @@ const sidebars = {
               type: 'category',
               label: 'Bridges',
               items: [
-                { type: 'doc', id: 'observability/tracing/bridges/datadog', label: 'DatadogBridge' },
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/bridges/datadog',
+                  label: 'DatadogBridge',
+                },
                 { type: 'doc', id: 'observability/tracing/bridges/otel', label: 'OtelBridge' },
               ],
             },
@@ -329,7 +385,7 @@ const sidebars = {
                 {
                   type: 'doc',
                   id: 'observability/tracing/exporters/cloud-exporter',
-                  label: 'Cloud',
+                  label: 'CloudExporter (deprecated)',
                 },
                 {
                   type: 'doc',
@@ -340,7 +396,7 @@ const sidebars = {
                 {
                   type: 'doc',
                   id: 'observability/tracing/exporters/default-exporter',
-                  label: 'Default',
+                  label: 'DefaultExporter (deprecated)',
                 },
                 { type: 'doc', id: 'observability/tracing/exporters/laminar', label: 'Laminar' },
                 { type: 'doc', id: 'observability/tracing/exporters/langfuse', label: 'Langfuse' },
@@ -348,6 +404,16 @@ const sidebars = {
                   type: 'doc',
                   id: 'observability/tracing/exporters/langsmith',
                   label: 'LangSmith',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/exporters/mastra-platform-exporter',
+                  label: 'MastraPlatformExporter',
+                },
+                {
+                  type: 'doc',
+                  id: 'observability/tracing/exporters/mastra-storage-exporter',
+                  label: 'MastraStorageExporter',
                 },
                 { type: 'doc', id: 'observability/tracing/exporters/otel', label: 'OpenTelemetry' },
                 { type: 'doc', id: 'observability/tracing/exporters/posthog', label: 'PostHog' },
@@ -389,15 +455,33 @@ const sidebars = {
         },
         { type: 'doc', id: 'processors/provider-history-compat', label: 'ProviderHistoryCompat' },
         { type: 'doc', id: 'processors/regex-filter-processor', label: 'RegexFilterProcessor' },
+        { type: 'doc', id: 'processors/response-cache', label: 'ResponseCache' },
         { type: 'doc', id: 'processors/semantic-recall-processor', label: 'SemanticRecall' },
         { type: 'doc', id: 'processors/skill-search-processor', label: 'SkillSearchProcessor' },
-        { type: 'doc', id: 'processors/stream-error-retry-processor', label: 'StreamErrorRetryProcessor' },
+        {
+          type: 'doc',
+          id: 'processors/stream-error-retry-processor',
+          label: 'StreamErrorRetryProcessor',
+        },
         { type: 'doc', id: 'processors/system-prompt-scrubber', label: 'SystemPromptScrubber' },
         { type: 'doc', id: 'processors/token-limiter-processor', label: 'TokenLimiterProcessor' },
         { type: 'doc', id: 'processors/tool-call-filter', label: 'ToolCallFilter' },
         { type: 'doc', id: 'processors/tool-search-processor', label: 'ToolSearchProcessor' },
         { type: 'doc', id: 'processors/unicode-normalizer', label: 'UnicodeNormalizer' },
         { type: 'doc', id: 'processors/working-memory-processor', label: 'WorkingMemory' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'PubSub',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'pubsub/caching-pubsub', label: 'CachingPubSub' },
+        { type: 'doc', id: 'pubsub/event-emitter', label: 'EventEmitterPubSub' },
+        { type: 'doc', id: 'pubsub/google-cloud-pubsub', label: 'GoogleCloudPubSub' },
+        { type: 'doc', id: 'pubsub/base', label: 'PubSub' },
+        { type: 'doc', id: 'pubsub/redis-streams', label: 'RedisStreamsPubSub' },
+        { type: 'doc', id: 'pubsub/unix-socket-pubsub', label: 'UnixSocketPubSub' },
       ],
     },
     {
@@ -426,14 +510,30 @@ const sidebars = {
         { type: 'doc', id: 'server/fastify-adapter', label: 'Fastify Adapter' },
         { type: 'doc', id: 'server/hono-adapter', label: 'Hono Adapter' },
         { type: 'doc', id: 'server/koa-adapter', label: 'Koa Adapter' },
-        {
-          type: 'doc',
-          id: 'server/mastra-server',
-          label: 'MastraServer',
-        },
+        { type: 'doc', id: 'server/mastra-server', label: 'MastraServer' },
         { type: 'doc', id: 'server/nestjs-adapter', label: 'NestJS Adapter' },
         { type: 'doc', id: 'server/register-api-route', label: 'registerApiRoute()' },
         { type: 'doc', id: 'server/routes', label: 'Server Routes' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Signals',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'signals/create-notification-inbox-tool',
+          label: 'createNotificationInboxTool()',
+          customProps: { tags: ['alpha'] },
+        },
+        { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider', customProps: { tags: ['alpha'] } },
+        {
+          type: 'doc',
+          id: 'signals/webhook-signal-provider',
+          label: 'WebhookSignalProvider',
+          customProps: { tags: ['alpha'] },
+        },
       ],
     },
     {
@@ -442,6 +542,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'storage/overview', label: 'Overview' },
+        { type: 'doc', id: 'storage/dsql', label: 'Aurora DSQL Storage' },
         { type: 'doc', id: 'storage/clickhouse', label: 'ClickHouse Storage' },
         { type: 'doc', id: 'storage/cloudflare-d1', label: 'Cloudflare D1 Storage' },
         { type: 'doc', id: 'storage/cloudflare', label: 'Cloudflare KV Storage' },
@@ -449,6 +550,7 @@ const sidebars = {
         { type: 'doc', id: 'storage/convex', label: 'Convex Storage' },
         { type: 'doc', id: 'storage/duckdb', label: 'DuckDB Storage' },
         { type: 'doc', id: 'storage/dynamodb', label: 'DynamoDB Storage' },
+        { type: 'doc', id: 'storage/spanner', label: 'Google Cloud Spanner Storage' },
         { type: 'doc', id: 'storage/lance', label: 'LanceDB Storage' },
         { type: 'doc', id: 'storage/libsql', label: 'libSQL Storage' },
         { type: 'doc', id: 'storage/mongodb', label: 'MongoDB Storage' },
@@ -501,6 +603,7 @@ const sidebars = {
       label: 'Tools & MCP',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'tools/brightdata', label: 'Bright Data Tools' },
         { type: 'doc', id: 'tools/document-chunker-tool', label: 'createDocumentChunkerTool()' },
         { type: 'doc', id: 'tools/graph-rag-tool', label: 'createGraphRAGTool()' },
         { type: 'doc', id: 'tools/create-tool', label: 'createTool()' },
@@ -549,6 +652,8 @@ const sidebars = {
         { type: 'doc', id: 'voice/voice.events', label: 'Events' },
         { type: 'doc', id: 'voice/google', label: 'Google' },
         { type: 'doc', id: 'voice/google-gemini-live', label: 'Google Gemini Live' },
+        { type: 'doc', id: 'voice/inworld', label: 'Inworld' },
+        { type: 'doc', id: 'voice/inworld-realtime', label: 'Inworld Realtime' },
         { type: 'doc', id: 'voice/mastra-voice', label: 'Mastra Voice' },
         { type: 'doc', id: 'voice/murf', label: 'Murf' },
         { type: 'doc', id: 'voice/openai', label: 'OpenAI' },
@@ -556,6 +661,7 @@ const sidebars = {
         { type: 'doc', id: 'voice/playai', label: 'PlayAI' },
         { type: 'doc', id: 'voice/sarvam', label: 'Sarvam' },
         { type: 'doc', id: 'voice/speechify', label: 'Speechify' },
+        { type: 'doc', id: 'voice/xai-realtime', label: 'xAI Realtime' },
         { type: 'doc', id: 'voice/voice.addInstructions', label: '.addInstructions()' },
         { type: 'doc', id: 'voice/voice.addTools', label: '.addTools()' },
         { type: 'doc', id: 'voice/voice.answer', label: '.answer()' },
@@ -578,6 +684,7 @@ const sidebars = {
         { type: 'doc', id: 'workflows/run', label: 'Run Class' },
         { type: 'doc', id: 'workflows/step', label: 'Step Class' },
         { type: 'doc', id: 'workflows/workflow', label: 'Workflow Class' },
+        { type: 'doc', id: 'workflows/workflow-state-reader', label: 'Workflow State Reader' },
         {
           type: 'category',
           label: 'Methods',
@@ -614,12 +721,18 @@ const sidebars = {
       label: 'Workspaces',
       collapsed: true,
       items: [
+        {
+          type: 'doc',
+          id: 'workspace/agentcore-runtime-sandbox',
+          label: 'AgentCoreRuntimeSandbox',
+        },
         { type: 'doc', id: 'workspace/agentfs-filesystem', label: 'AgentFSFilesystem' },
         { type: 'doc', id: 'workspace/azure-blob-filesystem', label: 'AzureBlobFilesystem' },
         { type: 'doc', id: 'workspace/blaxel-sandbox', label: 'BlaxelSandbox' },
         { type: 'doc', id: 'workspace/daytona-sandbox', label: 'DaytonaSandbox' },
         { type: 'doc', id: 'workspace/docker-sandbox', label: 'DockerSandbox' },
         { type: 'doc', id: 'workspace/e2b-sandbox', label: 'E2BSandbox' },
+        { type: 'doc', id: 'workspace/files-sdk-filesystem', label: 'FilesSDKFilesystem' },
         { type: 'doc', id: 'workspace/gcs-filesystem', label: 'GCSFilesystem' },
         { type: 'doc', id: 'workspace/google-drive-filesystem', label: 'GoogleDriveFilesystem' },
         { type: 'doc', id: 'workspace/local-filesystem', label: 'LocalFilesystem' },
@@ -627,6 +740,7 @@ const sidebars = {
         { type: 'doc', id: 'workspace/modal-sandbox', label: 'ModalSandbox' },
         { type: 'doc', id: 'workspace/s3-filesystem', label: 'S3Filesystem' },
         { type: 'doc', id: 'workspace/process-manager', label: 'SandboxProcessManager' },
+        { type: 'doc', id: 'workspace/vercel-microvm-sandbox', label: 'VercelMicroVMSandbox' },
         { type: 'doc', id: 'workspace/vercel', label: 'VercelSandbox' },
         { type: 'doc', id: 'workspace/workspace-class', label: 'Workspace Class' },
         { type: 'doc', id: 'workspace/filesystem', label: 'WorkspaceFilesystem' },

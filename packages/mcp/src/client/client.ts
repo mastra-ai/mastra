@@ -4,7 +4,7 @@ import type { Stream } from 'node:stream';
 import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import { createTool } from '@mastra/core/tools';
-import type { Tool } from '@mastra/core/tools';
+import type { NeedsApprovalFn, Tool } from '@mastra/core/tools';
 
 import type { JSONSchema7 } from '@mastra/schema-compat';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -74,6 +74,7 @@ export type {
 } from './types';
 
 const DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC = 3000;
+const DEFAULT_INSTRUCTIONS_MAX_LENGTH = 512;
 const require = createRequire(import.meta.url);
 
 // Per MCP spec, only fallback to SSE for these status codes
@@ -198,6 +199,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private exitHookUnsubscribe?: () => void;
   private sigTermHandler?: () => void;
   private sigHupHandler?: () => void;
+  private serverInstructions?: string;
   private _roots: Root[];
   private readonly requireToolApproval: RequireToolApproval | undefined;
 
@@ -493,13 +495,24 @@ export class InternalMastraMCPClient extends MastraBase {
           throw new Error('Server configuration must include either a command or a url.');
         }
 
+        this.refreshServerInstructions();
+
         resolve(true);
 
         // Set up disconnect handler to reset state.
         const originalOnClose = this.client.onclose;
         this.client.onclose = () => {
           this.log('debug', `MCP server connection closed`);
+          // Close the stale transport before any reconnect so its EventSource/session
+          // can't keep retrying and leak server-side sessions (issue #16693). Clear
+          // synchronously first so a concurrent connect() sees a clean slate.
+          const staleTransport = this.transport;
+          this.transport = undefined;
           this.isConnected = null;
+          this.serverInstructions = undefined;
+          if (staleTransport) {
+            void staleTransport.close().catch(() => {});
+          }
           if (typeof originalOnClose === 'function') {
             originalOnClose();
           }
@@ -565,6 +578,22 @@ export class InternalMastraMCPClient extends MastraBase {
     return null;
   }
 
+  get instructions(): string | undefined {
+    return this.serverInstructions;
+  }
+
+  get forwardInstructions(): boolean {
+    return this.serverConfig.forwardInstructions ?? false;
+  }
+
+  get instructionsMaxLength(): number {
+    return this.serverConfig.instructionsMaxLength ?? DEFAULT_INSTRUCTIONS_MAX_LENGTH;
+  }
+
+  private refreshServerInstructions(): void {
+    this.serverInstructions = this.client.getInstructions();
+  }
+
   async disconnect() {
     if (!this.transport) {
       this.log('debug', 'Disconnect called but no transport was connected.');
@@ -582,6 +611,7 @@ export class InternalMastraMCPClient extends MastraBase {
     } finally {
       this.transport = undefined;
       this.isConnected = null;
+      this.serverInstructions = undefined;
 
       // Clean up exit hooks to prevent memory leaks
       if (this.exitHookUnsubscribe) {
@@ -627,6 +657,7 @@ export class InternalMastraMCPClient extends MastraBase {
     // Reset connection state
     this.transport = undefined;
     this.isConnected = null;
+    this.serverInstructions = undefined;
 
     // Reconnect
     await this.connect();
@@ -747,7 +778,12 @@ export class InternalMastraMCPClient extends MastraBase {
       try {
         // Resolve requireToolApproval for this tool
         let requireApproval: boolean | undefined;
-        let needsApprovalFn: ((args: any, ctx: any) => boolean | Promise<boolean>) | undefined;
+        let needsApprovalFn: NeedsApprovalFn | undefined;
+
+        // Capture server-advertised annotations (title, readOnlyHint, destructiveHint, ...).
+        // These are exposed on the tool's `mcp.annotations` field and forwarded to the
+        // requireToolApproval callback so consumers can write annotation-driven policies.
+        const annotations = tool.annotations;
 
         if (typeof this.requireToolApproval === 'function') {
           // Wrap the server-level function to match the per-tool needsApprovalFn signature.
@@ -757,7 +793,12 @@ export class InternalMastraMCPClient extends MastraBase {
           const toolName = tool.name;
           requireApproval = true; // Signal that approval check is needed
           needsApprovalFn = (args: Record<string, unknown>, ctx: Record<string, unknown> = {}) => {
-            return serverApprovalFn({ toolName, args, ...ctx });
+            // Server-supplied annotations are placed AFTER the ctx spread so a
+            // caller can't accidentally (or maliciously) override them by
+            // injecting an `annotations` key into ctx — the value the
+            // requireToolApproval policy sees always reflects what came back
+            // from the MCP server's tools/list response.
+            return serverApprovalFn({ toolName, args, ...ctx, annotations });
           };
         } else if (this.requireToolApproval === true) {
           requireApproval = true;
@@ -769,6 +810,15 @@ export class InternalMastraMCPClient extends MastraBase {
         // Stamp serverId into _meta.ui so consumers can resolve app resources
         // back to the originating MCP server without scanning all servers.
         const toolMeta = rawMeta ? this.stampServerIdInMeta(rawMeta) : undefined;
+        const mcpToolProps =
+          toolMeta || annotations
+            ? {
+                mcp: {
+                  ...(toolMeta ? { _meta: toolMeta } : {}),
+                  ...(annotations ? { annotations } : {}),
+                },
+              }
+            : {};
         const mastraTool = createTool({
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
@@ -776,7 +826,9 @@ export class InternalMastraMCPClient extends MastraBase {
           strict: getMastraToolStrictMeta(toolMeta),
           // Preserve the full _meta from the remote MCP server (including ui.resourceUri
           // for MCP Apps) so downstream consumers (e.g. Studio) can detect app tools.
-          ...(toolMeta ? { mcp: { _meta: toolMeta } } : {}),
+          // Also propagate MCP tool annotations so listTools() / listToolsets() consumers
+          // can read them via `tool.mcp.annotations`.
+          ...mcpToolProps,
           // Don't pass outputSchema to createTool — the MCP SDK's Client.callTool()
           // already validates structuredContent against the tool's outputSchema using AJV.
           // Passing it here causes Zod to strip unrecognized keys from the CallToolResult
@@ -785,6 +837,9 @@ export class InternalMastraMCPClient extends MastraBase {
           mcpMetadata: {
             serverName: this.name,
             serverVersion: this.client.getServerVersion()?.version,
+            serverInstructions: this.serverInstructions,
+            forwardInstructions: this.forwardInstructions,
+            instructionsMaxLength: this.instructionsMaxLength,
           },
           execute: async (
             input: any,
@@ -870,9 +925,9 @@ export class InternalMastraMCPClient extends MastraBase {
         });
 
         // Set needsApprovalFn directly on the tool instance (same pattern as tool-builder).
-        // This is accessed via (tool as any).needsApprovalFn in tool-call-step.ts.
+        // The agent runtime reads it back via the typed `getNeedsApprovalFn` helper.
         if (needsApprovalFn) {
-          (mastraTool as any).needsApprovalFn = needsApprovalFn;
+          mastraTool.needsApprovalFn = needsApprovalFn;
         }
 
         if (tool.name) {

@@ -3,9 +3,14 @@ import type { SlashCommandContext } from './types.js';
 export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> {
   const { state } = ctx;
 
+  // Abort any in-flight stream so events from the old thread don't leak
+  // into the new conversation (mirrors what switchThread does).
+  state.harness.abort();
+
   state.pendingNewThread = true;
   state.chatContainer.clear();
   state.pendingTools.clear();
+  state.pendingTaskToolIds?.clear();
   state.allToolComponents = [];
   state.allSlashCommandComponents = [];
   state.allSystemReminderComponents = [];
@@ -18,7 +23,7 @@ export async function handleNewCommand(ctx: SlashCommandContext): Promise<void> 
   if (state.taskProgress) {
     state.taskProgress.updateTasks([]);
   }
-  state.taskWriteInsertIndex = -1;
+  state.taskToolInsertIndex = -1;
 
   ctx.updateStatusLine();
   state.ui.requestRender();

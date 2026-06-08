@@ -1,6 +1,6 @@
 {
   "name": "@mastra/nestjs",
-  "version": "0.1.3-alpha.3",
+  "version": "0.1.14-alpha.2",
   "description": "Mastra NestJS adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -40,15 +40,15 @@
     "@mastra/observability": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@nestjs/common": "^10.4.15",
-    "@nestjs/core": "^10.4.15",
+    "@nestjs/core": "^11.0.0",
     "@nestjs/platform-express": "^10.4.15",
     "@nestjs/testing": "^10.4.15",
     "@types/express": "^5.0.5",
     "@types/node": "^20.19.30",
-    "@ai-sdk/openai": "^2.0.62",
+    "@ai-sdk/openai": "^2.0.106",
     "cors": "^2.8.5",
     "@types/cors": "^2.8.19",
-    "eslint": "^9.37.0",
+    "eslint": "^9.39.4",
     "express": "^5.1.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
@@ -56,14 +56,15 @@
     "@types/supertest": "^6.0.2",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
-    "vitest": "^3.2.4",
+    "vitest": "^4.0.0",
     "zod": "^3.25.0"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.32.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.34.0-0 <2.0.0-0",
     "@nestjs/common": "^10.0.0 || ^11.0.0",
     "@nestjs/core": "^10.0.0 || ^11.0.0",
-    "express": "^4.0.0 || ^5.0.0"
+    "express": "^4.0.0 || ^5.0.0",
+    "zod": "^3.25.0 || ^4.0.0"
   },
   "engines": {
     "node": ">=22.13.0"

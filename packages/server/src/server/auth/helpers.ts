@@ -1,12 +1,21 @@
 import type { ISessionProvider } from '@mastra/core/auth';
 import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
-import type { ApiRoute, MastraAuthConfig, MastraAuthProvider } from '@mastra/core/server';
-import type { HonoRequest } from 'hono';
+import type { ApiRoute, MastraAuthConfig, MastraAuthProvider, MastraAuthRequest } from '@mastra/core/server';
 
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_AUTH_TOKEN_KEY } from '../constants';
+import {
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_USER_KEY,
+  MASTRA_USER_PERMISSIONS_KEY,
+  MASTRA_USER_ROLES_KEY,
+  MASTRA_AUTH_TOKEN_KEY,
+} from '../constants';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
+
+// Re-export request-context key constants so custom middleware can read namespaced
+// auth state without importing internal paths.
+export { MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY, MASTRA_USER_ROLES_KEY } from '../constants';
 
 /**
  * Check if a route is a registered custom route that requires authentication.
@@ -266,9 +275,11 @@ export interface AuthMiddlewareContext {
   authConfig: MastraAuthConfig;
   customRouteAuthConfig?: Map<string, boolean>;
   requestContext: { get: (key: string) => unknown; set: (key: string, value: unknown) => void };
-  rawRequest: unknown;
+  rawRequest: MastraAuthRequest;
   token: string | null;
   buildAuthorizeContext: () => unknown;
+  /** When true, force authentication even if the path matches a public pattern. */
+  requiresAuth?: boolean;
 }
 
 export type AuthResult =
@@ -277,10 +288,22 @@ export type AuthResult =
 
 const pass: AuthResult = { action: 'next' };
 
+const adaptToMastraAuthRequest = (request: MastraAuthRequest): MastraAuthRequest => {
+  if (!(request instanceof Request)) {
+    return request;
+  }
+
+  return {
+    raw: request,
+    headers: request.headers,
+    header: name => request.headers.get(name) ?? undefined,
+  };
+};
+
 export interface GetAuthenticatedUserOptions {
   mastra: Mastra;
   token: string;
-  request: Request | HonoRequest;
+  request: MastraAuthRequest;
 }
 
 export const getAuthenticatedUser = async <TUser = unknown>({
@@ -298,7 +321,7 @@ export const getAuthenticatedUser = async <TUser = unknown>({
     return null;
   }
 
-  return (await authConfig.authenticateToken(normalizedToken, request as any)) as TUser | null;
+  return (await authConfig.authenticateToken(normalizedToken, request)) as TUser | null;
 };
 
 /**
@@ -321,7 +344,18 @@ export function supportsSessionRefresh(
  * Skip checks (dev playground, unprotected path, public path) are evaluated once.
  */
 export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<AuthResult> => {
-  const { path, method, getHeader, mastra, authConfig, customRouteAuthConfig, requestContext, rawRequest, token } = ctx;
+  const {
+    path,
+    method,
+    getHeader,
+    mastra,
+    authConfig,
+    customRouteAuthConfig,
+    requestContext,
+    rawRequest,
+    token,
+    requiresAuth,
+  } = ctx;
 
   // ── Skip checks (evaluated once) ──
 
@@ -337,7 +371,10 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     return pass;
   }
 
-  if (canAccessPublicly(path, method, authConfig)) {
+  // When a route explicitly requires auth (requiresAuth: true), skip the
+  // public-path bypass so the user is still authenticated and permissions
+  // are injected into the request context.
+  if (!requiresAuth && canAccessPublicly(path, method, authConfig)) {
     return pass;
   }
 
@@ -345,10 +382,11 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
 
   let user: unknown;
   let refreshHeaders: Record<string, string> | undefined;
+  const authRequest = adaptToMastraAuthRequest(rawRequest);
 
   try {
     if (typeof authConfig.authenticateToken === 'function') {
-      user = await authConfig.authenticateToken(token ?? '', rawRequest as any);
+      user = await authConfig.authenticateToken(token ?? '', authRequest);
     } else {
       throw new Error('No token verification method configured');
     }
@@ -383,7 +421,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
               const cookieValue = refreshedCookie.includes('=')
                 ? refreshedCookie.split('=').slice(1).join('=')
                 : refreshedCookie;
-              user = await authConfig.authenticateToken(cookieValue, refreshedRequest as any);
+              user = await authConfig.authenticateToken(cookieValue, adaptToMastraAuthRequest(refreshedRequest));
             }
             if (!user) {
               refreshHeaders = undefined;
@@ -402,6 +440,12 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
       return { action: 'error', status: 401, body: { error: 'Invalid or expired token' }, headers: refreshHeaders };
     }
 
+    requestContext.set(MASTRA_USER_KEY, user);
+    // Backward-compat: also write the legacy `'user'` key so existing
+    // middleware and integrations that read `requestContext.get('user')`
+    // (including built-in FGA route enforcement, memory handlers, and the
+    // documented public surface) keep working. New code should prefer
+    // `MASTRA_USER_KEY` to avoid collisions with caller-supplied keys.
     requestContext.set('user', user);
 
     // Store the raw auth token so downstream code (e.g., editor MCP client
@@ -449,9 +493,13 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
           mastra.getLogger()?.warn('RBAC: authenticated user missing required "id" field, skipping permission loading');
         } else {
           const permissions = await rbacProvider.getPermissions(user as EEUser);
+          requestContext.set(MASTRA_USER_PERMISSIONS_KEY, permissions);
+          // Backward-compat alias for callers reading the legacy key.
           requestContext.set('userPermissions', permissions);
 
           const roles = await rbacProvider.getRoles(user as EEUser);
+          requestContext.set(MASTRA_USER_ROLES_KEY, roles);
+          // Backward-compat alias for callers reading the legacy key.
           requestContext.set('userRoles', roles);
         }
       }
@@ -471,7 +519,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
 
   if ('authorizeUser' in authConfig && typeof authConfig.authorizeUser === 'function') {
     try {
-      const isAuthorized = await authConfig.authorizeUser(user, rawRequest as any);
+      const isAuthorized = await authConfig.authorizeUser(user, authRequest);
 
       if (!isAuthorized) {
         return { action: 'error', status: 403, body: { error: 'Access denied' }, headers: refreshHeaders };

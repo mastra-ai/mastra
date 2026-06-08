@@ -12,6 +12,7 @@ import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { TUI } from '@mariozechner/pi-tui';
 import { safeStringify } from '@mastra/core/utils';
 import { BOX_INDENT, getTermWidth, theme } from '../theme.js';
+import type { ChatSpacingKind } from './chat-spacing.js';
 import type { IToolExecutionComponent } from './tool-execution-interface.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -38,6 +39,8 @@ export interface SubagentExecutionOptions {
   collapseOnComplete?: boolean;
   /** True when this subagent is running on a forked copy of the parent thread. */
   forked?: boolean;
+  /** When true, show full completed content including the final result. Default false. */
+  expandOnComplete?: boolean;
 }
 
 export class SubagentExecutionComponent extends Container implements IToolExecutionComponent {
@@ -55,6 +58,7 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
   private finalResult?: string;
   private expanded = false;
   private collapseOnComplete: boolean;
+  private expandOnComplete: boolean;
   private forked: boolean;
 
   constructor(agentType: string, task: string, ui: TUI, modelId?: string, options?: SubagentExecutionOptions) {
@@ -64,6 +68,7 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
     this.modelId = modelId;
     this.ui = ui;
     this.collapseOnComplete = options?.collapseOnComplete ?? false;
+    this.expandOnComplete = options?.expandOnComplete ?? false;
     this.forked = options?.forked ?? false;
 
     this.rebuild();
@@ -93,7 +98,9 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
     this.isError = isError;
     this.durationMs = durationMs;
     this.finalResult = result;
-    if (this.collapseOnComplete) {
+    if (this.expandOnComplete) {
+      this.expanded = true;
+    } else if (this.collapseOnComplete) {
       this.expanded = false;
     }
     this.rebuild();
@@ -112,6 +119,10 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
   // IToolExecutionComponent interface methods
   updateArgs(_args: unknown): void {}
   updateResult(_result: unknown, _isPartial: boolean): void {}
+
+  getChatSpacingKind(): ChatSpacingKind {
+    return 'normal-tool';
+  }
 
   // ── Rendering ──────────────────────────────────────────────────────────
 
@@ -134,7 +145,8 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
     const durationStr = this.done ? theme.fg('muted', ` ${formatDuration(this.durationMs)}`) : '';
     const footerText = `${theme.bold(theme.fg('toolTitle', 'subagent'))} ${typeLabel}${modelLabel}${durationStr}${statusIcon}`;
 
-    // When collapse-on-complete is enabled, render only the single-line footer summary
+    // When collapse-on-complete is enabled, render only the single-line footer summary.
+    // Quiet mode does not enable this for subagents; it is kept for explicit callers/tests.
     if (this.collapseOnComplete && this.done && !this.expanded) {
       this.addChild(new Text(`${border('╰──')} ${footerText}`, BOX_INDENT, 0));
       this.invalidate();
@@ -258,18 +270,24 @@ function summarizeArgs(args: unknown): string {
   const obj = args as Record<string, unknown>;
   const parts: string[] = [];
 
-  // Special handling for task_write tool
+  // Special handling for task list snapshots.
   if (obj.tasks && Array.isArray(obj.tasks)) {
+    const maxTasksInSummary = 5;
     const tasks = obj.tasks as Array<{
       content?: string;
       status?: string;
       activeForm?: string;
     }>;
-    const taskSummaries = tasks.map(t => {
+    const visibleTasks = tasks.slice(0, maxTasksInSummary);
+    const taskSummaries = visibleTasks.map(t => {
       const icon = t.status === 'completed' ? '✓' : t.status === 'in_progress' ? '→' : '○';
       const content = t.content || t.activeForm || 'task';
       return `${icon} ${content}`;
     });
+    const extraCount = tasks.length - visibleTasks.length;
+    if (extraCount > 0) {
+      taskSummaries.push(`… +${extraCount} more`);
+    }
     return theme.fg('muted', taskSummaries.join(', '));
   }
 

@@ -23,6 +23,6 @@ export default defineConfig({
   sourcemap: true,
   publicDir: true,
   onSuccess: async () => {
-    await generateTypes(process.cwd());
+    await generateTypes(process.cwd(), new Set(['@hono/node-server', '@mastra/hono']));
   },
 });

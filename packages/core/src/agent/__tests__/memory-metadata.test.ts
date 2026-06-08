@@ -186,6 +186,51 @@ function memoryMetadataTests(version: 'v1' | 'v2') {
       expect(thread?.metadata).toEqual({ client: 'updated' });
     });
 
+    it('should merge metadata with existing fields instead of replacing', async () => {
+      const mockMemory = new MockMemory();
+      const initialThread: StorageThreadType = {
+        id: 'thread-1',
+        resourceId: 'user-1',
+        metadata: { existingField: 'should-persist', client: 'initial' },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      await mockMemory.saveThread({ thread: initialThread });
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'test',
+        model: dummyModel,
+        memory: mockMemory,
+      });
+
+      if (version === 'v1') {
+        await agent.generateLegacy('hello', {
+          memory: {
+            resource: 'user-1',
+            thread: {
+              id: 'thread-1',
+              metadata: { client: 'updated' },
+            },
+          },
+        });
+      } else {
+        await agent.generate('hello', {
+          memory: {
+            resource: 'user-1',
+            thread: {
+              id: 'thread-1',
+              metadata: { client: 'updated' },
+            },
+          },
+        });
+      }
+
+      const thread = await mockMemory.getThreadById({ threadId: 'thread-1' });
+      expect(thread?.metadata).toEqual({ existingField: 'should-persist', client: 'updated' });
+    });
+
     it('should not update metadata if it is the same using generate', async () => {
       const mockMemory = new MockMemory();
       const initialThread: StorageThreadType = {
