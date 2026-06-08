@@ -44,11 +44,12 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
 
   return (
     <>
-      <div className="h-full pt-2">
-        <ThreadList aria-label="Workflow runs">
-          <Txt as="p" variant="ui-sm" className="text-neutral3 px-3 pb-2 pt-1">
-            Workflow run history
-          </Txt>
+      <div className="h-full w-full p-2">
+        <div className="h-full min-w-0 w-full overflow-hidden rounded-studio-panel border border-border1/50 bg-surface3">
+          <ThreadList aria-label="Workflow runs" embedded>
+            <Txt as="p" variant="ui-sm" className="text-neutral3 px-3 pb-2 pt-1">
+              Workflow run history
+            </Txt>
           {actualRuns.length === 0 ? (
             <ThreadListEmpty>Your run history will appear here once you run the workflow</ThreadListEmpty>
           ) : (
@@ -91,7 +92,8 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
               </li>
             </ThreadListItems>
           )}
-        </ThreadList>
+          </ThreadList>
+        </div>
       </div>
 
       <DeleteRunDialog

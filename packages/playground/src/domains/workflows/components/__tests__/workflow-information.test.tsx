@@ -156,7 +156,7 @@ describe('WorkflowInformation', () => {
 
       renderInformation();
 
-      expect(await screen.findByText('Demo Workflow')).not.toBeNull();
+      expect(await screen.findByText(WORKFLOW_ID)).not.toBeNull();
       expect(screen.queryByText('New workflow run')).toBeNull();
     });
 
@@ -167,7 +167,7 @@ describe('WorkflowInformation', () => {
 
       renderInformation();
 
-      expect(await screen.findByText('Demo Workflow')).not.toBeNull();
+      expect(await screen.findByText(WORKFLOW_ID)).not.toBeNull();
       expect(screen.queryByText('New workflow run')).toBeNull();
     });
 
@@ -192,12 +192,11 @@ describe('WorkflowInformation', () => {
 
       renderInformation();
 
-      expect(await screen.findByText('Demo Workflow')).not.toBeNull();
+      // Trigger form submit button is visible immediately (no tab interaction required)
+      expect(await screen.findByRole('button', { name: 'Run' })).not.toBeNull();
       // No tab chrome
       expect(screen.queryByRole('tablist')).toBeNull();
       expect(screen.queryByText('Current Run')).toBeNull();
-      // Trigger form submit button is visible immediately (no tab interaction required)
-      expect(screen.getByRole('button', { name: 'Run' })).not.toBeNull();
     });
   });
 
@@ -209,7 +208,7 @@ describe('WorkflowInformation', () => {
 
       renderInformation();
 
-      expect(await screen.findByText('Demo Workflow')).not.toBeNull();
+      expect(await screen.findByText(WORKFLOW_ID)).not.toBeNull();
       expect(screen.queryByRole('button', { name: 'Request Context' })).toBeNull();
     });
 

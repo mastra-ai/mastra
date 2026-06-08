@@ -1,13 +1,11 @@
 import {
   Badge,
   Button,
-  EntityHeader,
   Icon,
   ScrollArea,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-  WorkflowIcon,
   useCopyToClipboard,
   toast,
 } from '@mastra/playground-ui';
@@ -78,38 +76,36 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
 
   return (
     <div className="h-full w-full p-2">
-      <div className="h-full min-w-0 w-full bg-surface2 rounded-studio-panel border border-border2/40 overflow-hidden">
+      <div className="h-full min-w-0 w-full bg-surface3 rounded-studio-panel border border-border1/50 overflow-hidden">
         <ScrollArea className="h-full w-full" viewPortClassName="h-full" mask={{ top: false }}>
-          <div className="sticky top-0 z-10 bg-surface2">
-            <div className="border-b border-border2/40 pb-4">
-              <EntityHeader icon={<WorkflowIcon />} title={workflow?.name || ''} isLoading={isLoading}>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button type="button" onClick={handleCopy} className="h-badge-default">
-                        <Badge icon={<CopyIcon />} variant="default">
-                          {workflowId}
-                        </Badge>
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>Copy Workflow ID for use in code</TooltipContent>
-                  </Tooltip>
+          <div className="sticky top-0 z-10 bg-surface3">
+            <div className="border-b border-border1/50 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" onClick={handleCopy} className="h-badge-default">
+                      <Badge icon={<CopyIcon />} variant="default">
+                        {workflowId}
+                      </Badge>
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Copy Workflow ID for use in code</TooltipContent>
+                </Tooltip>
 
-                  <Badge>
-                    {stepsCount} step{stepsCount > 1 ? 's' : ''}
+                <Badge>
+                  {stepsCount} step{stepsCount > 1 ? 's' : ''}
+                </Badge>
+
+                {workflow?.isProcessorWorkflow && (
+                  <Badge icon={<Cpu className="h-3 w-3" />} className="bg-violet-500/20 text-violet-400">
+                    Processor
                   </Badge>
-
-                  {workflow?.isProcessorWorkflow && (
-                    <Badge icon={<Cpu className="h-3 w-3" />} className="bg-violet-500/20 text-violet-400">
-                      Processor
-                    </Badge>
-                  )}
-                </div>
-              </EntityHeader>
+                )}
+              </div>
             </div>
 
             {showNewRunButton && (
-              <div className="border-b border-border2/40 px-4 py-4">
+              <div className="border-b border-border1/50 px-4 py-4">
                 <Button
                   as={Link}
                   to={paths.workflowLink(workflowId)}

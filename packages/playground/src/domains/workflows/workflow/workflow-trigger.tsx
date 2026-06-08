@@ -1,22 +1,6 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import {
-  Button,
-  CodeEditor,
-  ScrollArea,
-  Skeleton,
-  Txt,
-  Icon,
-  isObjectEmpty,
-  toast,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogHeader,
-  DialogDescription,
-  DialogBody,
-  Switch,
-} from '@mastra/playground-ui';
-import { Braces, Loader2 } from 'lucide-react';
+import { ScrollArea, Skeleton, Txt, Icon, toast, Switch } from '@mastra/playground-ui';
+import { Loader2 } from 'lucide-react';
 import { useState, useEffect, useContext } from 'react';
 import { WorkflowRequestContextDialog } from '../components/workflow-request-context-dialog';
 import { WorkflowRunOptionsDialog } from '../components/workflow-run-options-dialog';
@@ -24,7 +8,6 @@ import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useSuspendedSteps, useWorkflowSchemas } from './use-workflow-trigger';
 import { WorkflowCancelButton } from './workflow-cancel-button';
-import { WorkflowStepsStatus } from './workflow-steps-status';
 import { WorkflowSuspendedSteps } from './workflow-suspended-steps';
 import type { ResumeStepParams } from './workflow-suspended-steps';
 import { WorkflowTriggerForm } from './workflow-trigger-form';
@@ -198,8 +181,6 @@ export function WorkflowTrigger({
   if (!workflow) return null;
 
   const isSuspendedSteps = suspendedSteps.length > 0;
-  const workflowActivePaths = streamResultToUse?.steps ?? {};
-  const hasWorkflowActivePaths = Object.values(workflowActivePaths).length > 0;
 
   return (
     <div className="h-full pt-3 overflow-y-auto">
@@ -264,41 +245,7 @@ export function WorkflowTrigger({
           </div>
         )}
 
-        {hasWorkflowActivePaths && (
-          <WorkflowStepsStatus steps={workflowActivePaths} workflowResult={streamResultToUse} />
-        )}
       </div>
-
-      {result && !isObjectEmpty(result) && (
-        <div className="p-5 border-b border-border1">
-          <WorkflowJsonDialog result={result} />
-        </div>
-      )}
     </div>
   );
 }
-
-const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <>
-      <Button type="button" variant="default" onClick={() => setOpen(true)} className="w-full">
-        <Braces className="text-neutral3" />
-        Workflow Execution
-      </Button>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-6xl">
-          <DialogHeader>
-            <DialogTitle>Workflow Execution (JSON)</DialogTitle>
-            <DialogDescription>JSON view of the workflow execution result</DialogDescription>
-          </DialogHeader>
-          <DialogBody className="max-h-[90vh]">
-            <CodeEditor data={result} className="p-4" />
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-};
