@@ -326,6 +326,12 @@ Destroy the workspace and clean up resources.
 await workspace.destroy()
 ```
 
+`destroy()` closes workspace-owned resources in order: language servers, browsers, sandbox providers, and filesystem providers. It also clears cached sandbox references.
+
+Call `destroy()` when your application is done with a workspace. `mastra.shutdown()` calls it for registered workspaces during shutdown. To remove a workspace from the Mastra registry, use [`mastra.removeWorkspace()`](/reference/core/removeWorkspace).
+
+`LocalFilesystem.destroy()` does not delete files on disk. Resolver-backed filesystem and sandbox providers are owned by your application and must be cleaned up by your application.
+
 ### Search operations
 
 #### `index(path, content, options?)`

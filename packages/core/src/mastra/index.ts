@@ -2208,6 +2208,37 @@ export class Mastra<
   }
 
   /**
+   * Removes a registered workspace by its ID.
+   *
+   * When `destroy` is true, the workspace is destroyed before it is removed from
+   * the registry. If destruction fails, the workspace remains registered and the
+   * error is rethrown.
+   *
+   * @example
+   * ```typescript
+   * await mastra.removeWorkspace('workspace-123', { destroy: true });
+   * ```
+   */
+  public async removeWorkspace(id: string, options?: { destroy?: boolean }): Promise<boolean> {
+    const entry = this.#workspaces[id];
+    if (!entry) {
+      return false;
+    }
+
+    if (options?.destroy) {
+      await entry.workspace.destroy();
+    }
+
+    delete this.#workspaces[id];
+
+    if (this.#workspace === entry.workspace) {
+      this.#workspace = undefined;
+    }
+
+    return true;
+  }
+
+  /**
    * Retrieves a registered workflow by its ID.
    *
    * @template TWorkflowId - The specific workflow ID type from the registered workflows
@@ -4289,6 +4320,7 @@ export class Mastra<
    * This method performs a clean shutdown of all Mastra components, including:
    * - tracing registry and all tracing instances
    * - Event engine and pub/sub system
+   * - registered workspaces (sandbox processes, filesystem handles, LSP, browser)
    * - All registered components and their resources
    *
    * It's important to call this method when your application is shutting down
@@ -4311,6 +4343,19 @@ export class Mastra<
   async shutdown(): Promise<void> {
     // SchedulerWorker is stopped as part of stopWorkers().
     await this.stopWorkers();
+
+    for (const [id, entry] of Object.entries(this.#workspaces)) {
+      try {
+        await entry.workspace.destroy();
+        delete this.#workspaces[id];
+        if (this.#workspace === entry.workspace) {
+          this.#workspace = undefined;
+        }
+      } catch (error) {
+        this.#logger?.error('Failed to destroy workspace during shutdown', { workspaceId: id, error });
+      }
+    }
+
     // Close storage to release OS file handles (critical on Windows: open WAL/shm
     // handles cause EBUSY when callers try to fs.rm the storage dir after shutdown).
     if (this.#storage?.close) {
