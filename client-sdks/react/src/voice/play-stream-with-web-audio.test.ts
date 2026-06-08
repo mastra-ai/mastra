@@ -49,7 +49,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const streamFromChunks = (chunks: Uint8Array[]): ReadableStream => {
+type ReaderMocks = {
+  cancel: ReturnType<typeof vi.fn>;
+  releaseLock: ReturnType<typeof vi.fn>;
+};
+
+const streamFromChunks = (chunks: Uint8Array[], readerMocks?: ReaderMocks): ReadableStream => {
   let i = 0;
   return {
     getReader: () => ({
@@ -59,9 +64,22 @@ const streamFromChunks = (chunks: Uint8Array[]): ReadableStream => {
         }
         return { done: true, value: undefined };
       },
+      cancel: readerMocks?.cancel ?? vi.fn(async () => {}),
+      releaseLock: readerMocks?.releaseLock ?? vi.fn(),
     }),
   } as unknown as ReadableStream;
 };
+
+const failingStream = (error: Error, readerMocks: ReaderMocks): ReadableStream =>
+  ({
+    getReader: () => ({
+      read: async () => {
+        throw error;
+      },
+      cancel: readerMocks.cancel,
+      releaseLock: readerMocks.releaseLock,
+    }),
+  }) as unknown as ReadableStream;
 
 describe('playStreamWithWebAudio', () => {
   it('concatenates chunks and decodes the combined buffer', async () => {
@@ -105,5 +123,30 @@ describe('playStreamWithWebAudio', () => {
     expect(lastSource.onended).toBeNull();
     expect(stopMock).toHaveBeenCalledTimes(1);
     expect(closeMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the context and releases the reader when decoding fails', async () => {
+    const decodeError = new Error('decode failed');
+    decodeAudioDataMock.mockRejectedValueOnce(decodeError);
+    const readerMocks: ReaderMocks = { cancel: vi.fn(async () => {}), releaseLock: vi.fn() };
+    const stream = streamFromChunks([new Uint8Array([1])], readerMocks);
+
+    await expect(playStreamWithWebAudio(stream)).rejects.toBe(decodeError);
+
+    expect(readerMocks.cancel).toHaveBeenCalledTimes(1);
+    expect(closeMock).toHaveBeenCalledTimes(1);
+    expect(readerMocks.releaseLock).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes the context and releases the reader when reading fails', async () => {
+    const readError = new Error('read failed');
+    const readerMocks: ReaderMocks = { cancel: vi.fn(async () => {}), releaseLock: vi.fn() };
+    const stream = failingStream(readError, readerMocks);
+
+    await expect(playStreamWithWebAudio(stream)).rejects.toBe(readError);
+
+    expect(readerMocks.cancel).toHaveBeenCalledTimes(1);
+    expect(closeMock).toHaveBeenCalledTimes(1);
+    expect(readerMocks.releaseLock).toHaveBeenCalledTimes(1);
   });
 });
