@@ -10,7 +10,6 @@ import { InMemoryHarness } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 import z from 'zod';
 import { getDynamicWorkspace } from './agents/workspace';
-import { MastraCodeGateway } from './gateways/mastracode';
 
 // ─── Hash helper (same as mastracode uses) ────────────────────────────────
 function hash(input: string): string {
@@ -109,7 +108,7 @@ const harness = new HarnessV1({
   defaultModeId,
   storage: harnessStorage,
   workspace: getDynamicWorkspace,
-  gateways: [new MastraCodeGateway()],
+
   stateSchema: z.object({
     projectPath: z.string(),
   }),
@@ -170,12 +169,29 @@ async function main() {
 
     try {
       // ─── Subscribe to the session thread for streamed output ────────────
+      console.info('[debug] Subscribing to thread...');
       const subscription = await session.subscribeToThread();
+      console.info('[debug] Subscribed. activeRunId:', subscription.activeRunId());
+
+      // ─── Start the run via queueMessage ─────────────────────────────────
+      console.info('[debug] Queueing message...');
+      const result = await session.queueMessage({ messages: promptText });
+      console.info('[debug] queueMessage result:', result);
+      if (result.accepted) {
+        isRunning = true;
+        console.info('[debug] Run accepted, isRunning = true');
+      }
 
       // ─── Read streamed chunks ───────────────────────────────────────────
+      let chunkCount = 0;
       const streamPromise = (async () => {
+        console.info('[debug] Stream consumer started');
         try {
           for await (const chunk of subscription.stream) {
+            chunkCount++;
+            if (chunkCount === 1) {
+              console.info('[debug] First chunk received');
+            }
             // Handle different chunk types
             if (typeof chunk === 'string') {
               process.stdout.write(chunk);
@@ -189,6 +205,7 @@ async function main() {
             console.error('Stream error:', err);
           }
         }
+        console.info('[debug] Stream consumer ended, chunks received:', chunkCount);
       })();
 
       // ─── While the agent is running, allow follow-up prompts ────────────
@@ -209,34 +226,36 @@ async function main() {
         }
       })();
 
-      // ─── Start the run via queueMessage ─────────────────────────────────
-      const result = await session.queueMessage({ messages: promptText });
-      if (result.accepted) {
-        isRunning = true;
-      }
-
       // ─── Poll activeRunId to detect when the run finishes ───────────────
       const pollPromise = (async () => {
+        console.info('[debug] Poll started, activeRunId:', subscription.activeRunId());
         // Wait a tick for the run to register
         await new Promise<void>(resolve => setTimeout(resolve, 50));
         while (isRunning) {
           const runId = subscription.activeRunId();
+          console.info('[debug] Poll check, activeRunId:', runId);
           if (!runId) {
             // No active run — the stream should finish shortly
+            console.info('[debug] No active run, breaking poll');
             break;
           }
           await new Promise<void>(resolve => setTimeout(resolve, 100));
         }
         isRunning = false;
+        console.info('[debug] Poll ended');
       })();
 
-      // ─── Wait for everything to finish ──────────────────────────────────
-      await streamPromise;
+      // ─── Wait for run completion, then unsubscribe to end the stream ─────
       await pollPromise;
+      console.info('[debug] Poll done, unsubscribing...');
+      subscription.unsubscribe();
+      console.info('[debug] Unsubscribed, awaiting stream...');
+      await streamPromise;
+      console.info('[debug] Stream done, awaiting steer...');
       await steerPromise;
 
+      console.info('[debug] Prompt handling complete');
       console.info();
-      subscription.unsubscribe();
     } catch (err) {
       console.error('Error:', err);
     }
