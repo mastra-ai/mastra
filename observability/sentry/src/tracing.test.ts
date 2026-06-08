@@ -105,8 +105,7 @@ describe('SentryExporter', () => {
       const originalEnv = process.env.SENTRY_DSN;
       delete process.env.SENTRY_DSN;
 
-      // ConsoleLogger uses console.info for warn level logging
-      const mockConsoleInfo = vi.spyOn(console, 'info').mockImplementation(() => {});
+      const mockConsoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       // Clear mock to isolate this test from previous Sentry.init calls
       SentryMock.init.mockClear();
@@ -115,13 +114,13 @@ describe('SentryExporter', () => {
 
       expect(exporterWithoutDsn.name).toBe('sentry');
       // Verify warning was logged about missing DSN
-      expect(mockConsoleInfo).toHaveBeenCalledWith(expect.stringContaining('DSN'));
+      expect(mockConsoleWarn).toHaveBeenCalledWith(expect.stringContaining('DSN'));
       // Verify exporter is disabled
       expect(exporterWithoutDsn.isDisabled).toBe(true);
       // Should not have initialized Sentry without DSN
       expect(SentryMock.init).not.toHaveBeenCalled();
 
-      mockConsoleInfo.mockRestore();
+      mockConsoleWarn.mockRestore();
       process.env.SENTRY_DSN = originalEnv;
     });
 

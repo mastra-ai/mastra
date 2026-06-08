@@ -1,5 +1,195 @@
 # mastracode
 
+## 0.22.3-alpha.3
+
+### Patch Changes
+
+- Added interface-first model gateways while keeping the existing `MastraModelGateway` base class backwards compatible. ([#17608](https://github.com/mastra-ai/mastra/pull/17608))
+
+  Added `MastraModelGatewayInterface` for plain object/custom gateway implementations and optional gateway `resolveAuth` hooks.
+
+  Moved MastraCode gateway-routed OAuth model construction into a custom Mastra gateway so `ModelRouterLanguageModel` can route through gateway `resolveAuth` and provider-specific `resolveLanguageModel` behavior.
+
+  **Usage:**
+
+  ```typescript
+  import { MastraModelGatewayInterface, ModelRouterLanguageModel } from '@mastra/core/llm';
+
+  const myGateway: MastraModelGatewayInterface = {
+    id: 'my-gateway',
+    name: 'My Gateway',
+    async fetchProviders() {
+      return {};
+    },
+    buildUrl() {
+      return 'https://api.example.com';
+    },
+    async getApiKey() {
+      return process.env.API_KEY ?? '';
+    },
+    // Optional: own authentication lookup
+    async resolveAuth(request) {
+      return { apiKey: process.env.API_KEY, source: 'gateway' };
+    },
+    async resolveLanguageModel({ modelId, providerId, apiKey }) {
+      // Return an AI SDK language model instance
+    },
+  };
+
+  // Register and route through the gateway
+  const router = new ModelRouterLanguageModel({ modelId: 'my-gateway/provider/model' }, [myGateway]);
+  ```
+
+  **Additional changes in this release:**
+  - Inline three-tier auth resolution (explicit → gateway.resolveAuth → legacy getApiKey) into `ModelRouterLanguageModel.resolveAuth` and deprecate the standalone `resolveModelAuth` helper.
+  - Fix `defaultGateways` deduplication in the `Mastra` class to use `getGatewayId(gateway)` instead of registry keys.
+  - Remove no-op `resolveModelId` identity function in mastracode in favor of direct usage.
+  - Fix `defaultNameGenerator` regex in `_llm-recorder` to anchor directory matches to path boundaries (prevents false matches like `-auth` suffixes).
+
+- Updated dependencies [[`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`053735a`](https://github.com/mastra-ai/mastra/commit/053735a75c2c18e23ce34d9468007efa4a45f4c4), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`a952852`](https://github.com/mastra-ai/mastra/commit/a952852c971a21fb646cd907c75fcf4443cdc963)]:
+  - @mastra/core@1.42.0-alpha.3
+
+## 0.22.3-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`014e00f`](https://github.com/mastra-ai/mastra/commit/014e00f2b3a597a016b72f9901c6ab27d491f822)]:
+  - @mastra/core@1.42.0-alpha.2
+
+## 0.22.3-alpha.1
+
+### Patch Changes
+
+- Increased TUI chat scroll buffer from 200/100 to 5000/3000 components, so you can scroll back much further in conversation history ([#17633](https://github.com/mastra-ai/mastra/pull/17633))
+
+- Fixed state signal placement in streamed MastraCode output. ([#17631](https://github.com/mastra-ai/mastra/pull/17631))
+
+- Fixed the GitHub PR badge in MastraCode so it animates only while GitHub polling is actively running, instead of restarting whenever the agent processes a user message. ([#17590](https://github.com/mastra-ai/mastra/pull/17590))
+
+- Added agent and workspace tool hooks for applications that need to run logic before and after tool calls execute. Mastra Code now uses agent hooks so hook handlers run for built-in workspace tools as well as dynamic tools. ([#17637](https://github.com/mastra-ai/mastra/pull/17637))
+
+  **Example**
+
+  ```ts
+  const agent = new Agent({
+    name: 'Support Agent',
+    instructions: 'Help users.',
+    model,
+    hooks: {
+      beforeToolCall: ({ toolName, input }) => {
+        console.log(`Running ${toolName}`, input);
+      },
+      afterToolCall: ({ toolName, output, error }) => {
+        console.log(`Finished ${toolName}`, { output, error });
+      },
+    },
+  });
+
+  const workspace = new Workspace({
+    tools: {
+      hooks: {
+        beforeToolCall: ({ toolName, workspaceToolName, input }) => {
+          console.log(`Running ${toolName} from ${workspaceToolName}`, input);
+        },
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`f2ab060`](https://github.com/mastra-ai/mastra/commit/f2ab060162bea81505fda553e2cee29c1979fd04), [`5d302c8`](https://github.com/mastra-ai/mastra/commit/5d302c8eda1a6ac74eab5e442c4f64db6cc97a06), [`f2ab060`](https://github.com/mastra-ai/mastra/commit/f2ab060162bea81505fda553e2cee29c1979fd04)]:
+  - @mastra/core@1.42.0-alpha.1
+  - @mastra/github-signals@0.1.1-alpha.0
+  - @mastra/agent-browser@0.3.1-alpha.0
+
+## 0.22.3-alpha.0
+
+### Patch Changes
+
+- Revert to harness v0 ([#17589](https://github.com/mastra-ai/mastra/pull/17589))
+
+- Updated dependencies [[`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`f86b997`](https://github.com/mastra-ai/mastra/commit/f86b997e63a6ffc3503473835f2cfe0ed2ac8337), [`e9be4e7`](https://github.com/mastra-ai/mastra/commit/e9be4e747ec3d8b65548bff92f9377db06105376), [`d53cfc2`](https://github.com/mastra-ai/mastra/commit/d53cfc2c7f8d78343a4aa84ec4e129ba25f3325e), [`65799d4`](https://github.com/mastra-ai/mastra/commit/65799d4d549e5ebb9c848fbe3f51ac090f64becf), [`c268c89`](https://github.com/mastra-ai/mastra/commit/c268c89f4c63a93ee474d3cffdf3ea60bf00d4f2), [`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`7ef9ebf`](https://github.com/mastra-ai/mastra/commit/7ef9ebf79ec3c90536643ef169c7a306f105fb9d), [`0c72f03`](https://github.com/mastra-ai/mastra/commit/0c72f032abb13254df5a7856d64be2f207b8006d), [`75adfb8`](https://github.com/mastra-ai/mastra/commit/75adfb81e3fca1fe8dc9ab382bed7b714854ba4f), [`4c2158d`](https://github.com/mastra-ai/mastra/commit/4c2158d4c2a86e82105179d4a757cd625dfec9fa), [`3b45ea9`](https://github.com/mastra-ai/mastra/commit/3b45ea95015557a6cb9d70dc5252af54ab1b78ac), [`f084be1`](https://github.com/mastra-ai/mastra/commit/f084be1fcbe33ad7480913e44d6130c421c0976f)]:
+  - @mastra/core@1.42.0-alpha.0
+  - @mastra/pg@1.13.0-alpha.0
+  - @mastra/mcp@1.9.2-alpha.0
+
+## 0.22.2
+
+### Patch Changes
+
+- Fixed thread isolation bug where /new command did not abort the running stream, causing events from the old thread (subagent results, tool approvals, task updates) to leak into the new conversation. ([#17565](https://github.com/mastra-ai/mastra/pull/17565))
+
+- Updated dependencies [[`f82cc72`](https://github.com/mastra-ai/mastra/commit/f82cc72edca0ce636fe18abaf2598d89a0c6bcca), [`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9)]:
+  - @mastra/core@1.41.0
+
+## 0.22.2-alpha.1
+
+### Patch Changes
+
+- Fixed thread isolation bug where /new command did not abort the running stream, causing events from the old thread (subagent results, tool approvals, task updates) to leak into the new conversation. ([#17565](https://github.com/mastra-ai/mastra/pull/17565))
+
+## 0.22.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`f82cc72`](https://github.com/mastra-ai/mastra/commit/f82cc72edca0ce636fe18abaf2598d89a0c6bcca), [`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9)]:
+  - @mastra/core@1.41.0-alpha.0
+
+## 0.22.1
+
+### Patch Changes
+
+- Auto-subscribe to the current branch's PR via GitHub Signals at the end of each agent run. When experimental GitHub Signals are enabled in /settings and the checked-out branch has an open PR, the thread is automatically subscribed (once per thread, fire-and-forget). ([#17538](https://github.com/mastra-ai/mastra/pull/17538))
+
+- Updated dependencies [[`ae1fa3a`](https://github.com/mastra-ai/mastra/commit/ae1fa3a9c40510f1e068ffc2345cf09f9ee32b26)]:
+  - @mastra/core@1.40.0
+
+## 0.22.1-alpha.0
+
+### Patch Changes
+
+- Auto-subscribe to the current branch's PR via GitHub Signals at the end of each agent run. When experimental GitHub Signals are enabled in /settings and the checked-out branch has an open PR, the thread is automatically subscribed (once per thread, fire-and-forget). ([#17538](https://github.com/mastra-ai/mastra/pull/17538))
+
+- Updated dependencies [[`ae1fa3a`](https://github.com/mastra-ai/mastra/commit/ae1fa3a9c40510f1e068ffc2345cf09f9ee32b26)]:
+  - @mastra/core@1.40.0-alpha.0
+
+## 0.22.0
+
+### Minor Changes
+
+- Add a /notify command that opens a modal composer, sends agent notifications from MastraCode, dispatches due notification summaries in the background, and exposes the notification inbox tool to inspect summarized notifications. ([#17241](https://github.com/mastra-ai/mastra/pull/17241))
+
+### Patch Changes
+
+- Added GitHub PR notifications in Mastra Code with subscription management, manual sync, PR status badges, subscription hints, automatic merged PR cleanup, and inbox access. ([#17447](https://github.com/mastra-ai/mastra/pull/17447))
+
+- Fixed mode switching crash when no active thread exists. Previously, pressing Shift+Tab to cycle modes before sending a first message would cause a fatal error. ([#17511](https://github.com/mastra-ai/mastra/pull/17511))
+
+- Updated dependencies [[`c973db4`](https://github.com/mastra-ai/mastra/commit/c973db428df1b564ff0c35d4b2a90e8f4f1e13fd), [`552285e`](https://github.com/mastra-ai/mastra/commit/552285e5af43cfc680a0972032cab8de8776c6a0), [`77e686c`](https://github.com/mastra-ai/mastra/commit/77e686c264e493e99ae5024e4dfe3ea5d5a09718), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`ece8dba`](https://github.com/mastra-ai/mastra/commit/ece8dba7ec1a5089eee8c33167cd762bfa91e509), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`be3f1cd`](https://github.com/mastra-ai/mastra/commit/be3f1cd81f0e2a649e8eac15a024d542d814aef8), [`43dd577`](https://github.com/mastra-ai/mastra/commit/43dd577aa2b056b86b92cb903433f4fc13e69687), [`e2a8380`](https://github.com/mastra-ai/mastra/commit/e2a838017a7657850404c1e94c70d79ffdc6f14a), [`be3f1cd`](https://github.com/mastra-ai/mastra/commit/be3f1cd81f0e2a649e8eac15a024d542d814aef8), [`a34d9db`](https://github.com/mastra-ai/mastra/commit/a34d9dbc39fedb722f271318e9355ecee70489ab)]:
+  - @mastra/core@1.39.0
+  - @mastra/mcp@1.9.1
+  - @mastra/libsql@1.12.1
+  - @mastra/pg@1.12.1
+  - @mastra/memory@1.20.2
+
+## 0.22.0-alpha.0
+
+### Minor Changes
+
+- Add a /notify command that opens a modal composer, sends agent notifications from MastraCode, dispatches due notification summaries in the background, and exposes the notification inbox tool to inspect summarized notifications. ([#17241](https://github.com/mastra-ai/mastra/pull/17241))
+
+### Patch Changes
+
+- Added GitHub PR notifications in Mastra Code with subscription management, manual sync, PR status badges, subscription hints, automatic merged PR cleanup, and inbox access. ([#17447](https://github.com/mastra-ai/mastra/pull/17447))
+
+- Fixed mode switching crash when no active thread exists. Previously, pressing Shift+Tab to cycle modes before sending a first message would cause a fatal error. ([#17511](https://github.com/mastra-ai/mastra/pull/17511))
+
+- Updated dependencies [[`c973db4`](https://github.com/mastra-ai/mastra/commit/c973db428df1b564ff0c35d4b2a90e8f4f1e13fd), [`552285e`](https://github.com/mastra-ai/mastra/commit/552285e5af43cfc680a0972032cab8de8776c6a0), [`77e686c`](https://github.com/mastra-ai/mastra/commit/77e686c264e493e99ae5024e4dfe3ea5d5a09718), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`ece8dba`](https://github.com/mastra-ai/mastra/commit/ece8dba7ec1a5089eee8c33167cd762bfa91e509), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`be3f1cd`](https://github.com/mastra-ai/mastra/commit/be3f1cd81f0e2a649e8eac15a024d542d814aef8), [`43dd577`](https://github.com/mastra-ai/mastra/commit/43dd577aa2b056b86b92cb903433f4fc13e69687), [`e2a8380`](https://github.com/mastra-ai/mastra/commit/e2a838017a7657850404c1e94c70d79ffdc6f14a), [`be3f1cd`](https://github.com/mastra-ai/mastra/commit/be3f1cd81f0e2a649e8eac15a024d542d814aef8), [`a34d9db`](https://github.com/mastra-ai/mastra/commit/a34d9dbc39fedb722f271318e9355ecee70489ab)]:
+  - @mastra/core@1.39.0-alpha.0
+  - @mastra/mcp@1.9.1-alpha.0
+  - @mastra/libsql@1.12.1-alpha.0
+  - @mastra/pg@1.12.1-alpha.0
+  - @mastra/memory@1.20.2-alpha.0
+
 ## 0.21.2
 
 ### Patch Changes

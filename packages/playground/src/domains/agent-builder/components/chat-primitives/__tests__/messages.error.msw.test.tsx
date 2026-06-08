@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { MastraReactProvider } from '@mastra/react';
-import type { MastraUIMessage } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -42,24 +42,42 @@ const Providers = ({ children }: { children: ReactNode }) => {
   );
 };
 
-const userMessage = (text: string): MastraUIMessage => ({
-  id: 'user-1',
-  role: 'user',
-  parts: [{ type: 'text', text, state: 'done' } as MastraUIMessage['parts'][number]],
-});
+const userMessage = (text: string): MastraDBMessage =>
+  ({
+    id: 'user-1',
+    role: 'user',
+    createdAt: new Date(),
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text }],
+    },
+  }) as unknown as MastraDBMessage;
 
-const errorMessage = (text: string): MastraUIMessage => ({
-  id: 'error-1',
-  role: 'assistant',
-  parts: [{ type: 'text', text } as MastraUIMessage['parts'][number]],
-  metadata: { status: 'error' } as MastraUIMessage['metadata'],
-});
+const errorMessage = (text: string): MastraDBMessage =>
+  ({
+    id: 'error-1',
+    role: 'assistant',
+    createdAt: new Date(),
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text }],
+      metadata: { status: 'error' },
+    },
+  }) as unknown as MastraDBMessage;
 
 const openAIServerErrorPayload = JSON.stringify({
   message:
     '{"type":"error","error":{"type":"server_error","code":"server_error","message":"The server had an error while processing your request. Sorry about that! You can retry your request. Please include the request ID req_abc123 in your email."}}',
   name: 'AI_APICallError',
 });
+
+const hasThreadContext = (body: unknown, threadId: string): boolean => {
+  if (!body || typeof body !== 'object') return false;
+  if ('threadId' in body && body.threadId === threadId) return true;
+  if (!('memory' in body)) return false;
+  const { memory } = body;
+  return !!memory && typeof memory === 'object' && 'thread' in memory && memory.thread === threadId;
+};
 
 describe('parseStreamErrorText', () => {
   it('returns a fallback summary for empty input', () => {
@@ -141,10 +159,9 @@ describe('MessageRow error retry against StreamChatProvider', () => {
   });
 
   it('"Try again" resubmits the most recent user prompt against the same thread', async () => {
-    const onSend = vi.fn<(body: any) => void>();
+    const onSend = vi.fn<(body: unknown) => void>();
     server.use(
-      http.post(`${BASE_URL}/api/agents/${AGENT_ID}/stream-until-idle`, async ({ request }) => {
-        onSend(await request.json());
+      http.post(`${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`, () => {
         const stream = new ReadableStream<Uint8Array>({
           start(controller) {
             controller.close();
@@ -152,9 +169,13 @@ describe('MessageRow error retry against StreamChatProvider', () => {
         });
         return new HttpResponse(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } });
       }),
+      http.post(`${BASE_URL}/api/agents/${AGENT_ID}/send-message`, async ({ request }) => {
+        onSend(await request.json());
+        return HttpResponse.json({ accepted: true, runId: 'retry-run' });
+      }),
     );
 
-    const initialMessages: MastraUIMessage[] = [
+    const initialMessages: MastraDBMessage[] = [
       userMessage('build me a standup bot'),
       errorMessage(openAIServerErrorPayload),
     ];
@@ -181,7 +202,7 @@ describe('MessageRow error retry against StreamChatProvider', () => {
 
     await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
     const body = onSend.mock.calls[0][0];
-    expect(body?.memory?.thread).toBe('thread-1');
+    expect(hasThreadContext(body, 'thread-1')).toBe(true);
     // The exact wire shape comes from @mastra/client-js; just assert that the
     // last user prompt is present somewhere in the request body so we know the
     // retry callback resolved to the right message.

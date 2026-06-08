@@ -1,3 +1,4 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import {
   Button,
   Card,
@@ -10,7 +11,15 @@ import {
   Skeleton,
   Txt,
 } from '@mastra/playground-ui';
-import type { MastraUIMessage } from '@mastra/react';
+import { MessageFactory } from '@mastra/react';
+import type {
+  MastraDBMessageMetadata,
+  MessageRenderers,
+  MessageStatusRenderers,
+  DynamicToolPart,
+  ToolInvocationPart,
+  RequireApprovalEntry,
+} from '@mastra/react';
 import {
   AlertTriangle,
   AlignLeft,
@@ -50,14 +59,10 @@ import { SignalBadge } from '@/lib/ai-ui/messages/signal-badge';
 import { isSignalData } from '@/lib/ai-ui/messages/signal-data';
 
 interface MessageRowProps {
-  message: MastraUIMessage;
+  message: MastraDBMessage;
 }
 
-type RequireApprovalMetadata = NonNullable<
-  Extract<MastraUIMessage['metadata'], { requireApprovalMetadata?: unknown }>['requireApprovalMetadata']
->;
-
-type ApprovalEntry = RequireApprovalMetadata[string];
+type RequireApprovalMetadata = NonNullable<MastraDBMessageMetadata['requireApprovalMetadata']>;
 
 const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; toolName: string }) => {
   const { approveToolCall, declineToolCall } = useStreamApproval();
@@ -109,186 +114,121 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
   );
 };
 
-const getRequireApprovalMetadata = (message: MastraUIMessage): RequireApprovalMetadata | undefined => {
-  const metadata = message.metadata;
+const getMessageDisplayRole = (message: MastraDBMessage): MastraDBMessage['role'] | null => {
+  if (message.role === 'assistant' || message.role === 'user' || message.role === 'system') return message.role;
+  if (message.role === 'signal' && message.type === 'user') return 'user';
+  return null;
+};
+
+const getRequireApprovalMetadata = (message: MastraDBMessage): RequireApprovalMetadata | undefined => {
+  const metadata = message.content.metadata as MastraDBMessageMetadata | undefined;
   if (!metadata || typeof metadata !== 'object') return undefined;
-  const mode = (metadata as { mode?: unknown }).mode;
+  const { mode } = metadata;
   if (mode !== 'stream' && mode !== 'network' && mode !== 'generate') return undefined;
-  return (metadata as { requireApprovalMetadata?: RequireApprovalMetadata }).requireApprovalMetadata;
+  return metadata.requireApprovalMetadata;
+};
+
+const getNameFromInput = (input: unknown): string => {
+  if (!input || typeof input !== 'object' || !('name' in input)) return 'unknown';
+  return typeof input.name === 'string' ? input.name : 'unknown';
 };
 
 const findApprovalEntry = (
   approvals: RequireApprovalMetadata | undefined,
   toolName: string | undefined,
   toolCallId: string | undefined,
-): ApprovalEntry | undefined => {
+): RequireApprovalEntry | undefined => {
   if (!approvals) return undefined;
   return (toolName ? approvals[toolName] : undefined) ?? (toolCallId ? approvals[toolCallId] : undefined);
 };
 
-const getMessageStatus = (message: MastraUIMessage): string | undefined => {
-  const metadata = message.metadata as { status?: unknown } | undefined;
-  if (!metadata) return undefined;
-  return typeof metadata.status === 'string' ? metadata.status : undefined;
+/**
+ * Normalize the stored message role for display. The `signal`+`type:'user'`
+ * case is mapped to `role: 'user'` so it renders as a user message. Returns
+ * `null` when the message has no displayable role.
+ */
+const toDisplayMessage = (message: MastraDBMessage): MastraDBMessage | null => {
+  const displayRole = getMessageDisplayRole(message);
+  if (displayRole === null) return null;
+  if (displayRole === message.role) return message;
+  return { ...message, role: displayRole };
 };
 
-const getMessageErrorText = (message: MastraUIMessage): string => {
-  const textPart = message.parts.find(part => part.type === 'text') as { text?: string } | undefined;
-  return textPart?.text ?? '';
+/**
+ * Shared agent-builder tool-card dispatch for both the legacy `tool-invocation`
+ * slot and the runtime `dynamic-tool` / `tool-${string}` slot.
+ */
+const renderToolCard = (toolName: string, input: unknown, output: unknown): ReactNode => {
+  switch (toolName) {
+    case SET_AGENT_NAME_TOOL_NAME:
+      return <MessageSetAgentName />;
+    case SET_AGENT_DESCRIPTION_TOOL_NAME:
+      return <MessageSetAgentDescription />;
+    case SET_AGENT_INSTRUCTIONS_TOOL_NAME:
+      return <MessageSetAgentInstructions />;
+    case SET_AGENT_TOOLS_TOOL_NAME:
+      return <MessageSetAgentTools />;
+    case SET_AGENT_SKILLS_TOOL_NAME:
+      return <MessageSetAgentSkills />;
+    case SET_AGENT_MODEL_TOOL_NAME:
+      return <MessageSetAgentModel />;
+    case SET_AGENT_BROWSER_ENABLED_TOOL_NAME:
+      return <MessageSetAgentBrowserEnabled />;
+    case SET_AGENT_WORKSPACE_ID_TOOL_NAME:
+      return <MessageSetAgentWorkspaceId />;
+    case 'skill':
+      return <SkillTool name={getNameFromInput(input)} />;
+    default:
+      return <GenericTool toolName={toolName} input={input} output={output} />;
+  }
 };
 
 export const MessageRow = ({ message }: MessageRowProps) => {
   const approvals = getRequireApprovalMetadata(message);
   const retry = useStreamRetry();
+  const displayRole = getMessageDisplayRole(message);
 
-  if (getMessageStatus(message) === 'error') {
-    const parsed = parseStreamErrorText(getMessageErrorText(message));
-    return <ErrorMessage error={parsed} onRetry={retry} />;
-  }
+  const dbMessage = toDisplayMessage(message);
+  if (dbMessage === null) return null;
 
-  return (
-    <>
-      {message.parts.map((part, index) => {
-        const key = `${message.id}-${index}`;
+  const renderers: MessageRenderers = {
+    Text: part => <Txtmessage txt={part.text ?? ''} role={displayRole} />,
+    Reasoning: part => {
+      const state = 'state' in part ? part.state : undefined;
+      if (state !== 'streaming') return null;
+      return <ReasoningMessage text="Reasoning..." streaming />;
+    },
+    Data: part => (part.type === 'data-signal' && isSignalData(part.data) ? <SignalBadge signal={part.data} /> : null),
+    ToolInvocation: (part: ToolInvocationPart) => {
+      const inv = part.toolInvocation;
+      const entry = findApprovalEntry(approvals, inv.toolName, inv.toolCallId);
+      if (entry && inv.state !== 'result') {
+        return <ToolApprovalPrompt toolCallId={entry.toolCallId} toolName={entry.toolName} />;
+      }
+      if (inv.state !== 'result') return null;
+      const input = 'args' in inv ? inv.args : undefined;
+      const output = 'result' in inv ? inv.result : undefined;
+      return renderToolCard(inv.toolName, input, output);
+    },
+    DynamicTool: (part: DynamicToolPart) => {
+      const toolName = part.toolName ?? part.type.replace(/^tool-/, '');
+      const entry = findApprovalEntry(approvals, toolName, part.toolCallId);
+      if (entry && part.state !== 'output-available') {
+        return <ToolApprovalPrompt toolCallId={entry.toolCallId} toolName={entry.toolName} />;
+      }
+      if (part.state !== 'output-available') return null;
+      return renderToolCard(toolName, part.input, part.output);
+    },
+  };
 
-        if (
-          approvals &&
-          (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-')))
-        ) {
-          const toolPart = part as { toolName?: string; type: string; toolCallId?: string; state?: string };
-          const toolName =
-            toolPart.toolName ?? (toolPart.type.startsWith('tool-') ? toolPart.type.slice('tool-'.length) : undefined);
-          const entry = findApprovalEntry(approvals, toolName, toolPart.toolCallId);
-          if (entry && toolPart.state !== 'output-available') {
-            return <ToolApprovalPrompt key={key} toolCallId={entry.toolCallId} toolName={entry.toolName} />;
-          }
-        }
+  const status: MessageStatusRenderers = {
+    Error: ({ text }) => <ErrorMessage error={parseStreamErrorText(text)} onRetry={retry} />,
+  };
 
-        switch (part.type) {
-          case 'text':
-            return <Txtmessage key={key} txt={part.text} role={message.role} />;
-
-          case 'reasoning': {
-            if (part.state !== 'streaming') return null;
-
-            return <ReasoningMessage key={key} text="Reasoning..." streaming />;
-          }
-
-          case 'dynamic-tool': {
-            if (part?.state !== 'output-available') return null;
-            switch (part.toolName) {
-              case SET_AGENT_NAME_TOOL_NAME: {
-                return <MessageSetAgentName key={key} />;
-              }
-
-              case SET_AGENT_DESCRIPTION_TOOL_NAME: {
-                return <MessageSetAgentDescription key={key} />;
-              }
-
-              case SET_AGENT_INSTRUCTIONS_TOOL_NAME: {
-                return <MessageSetAgentInstructions key={key} />;
-              }
-
-              case SET_AGENT_TOOLS_TOOL_NAME: {
-                return <MessageSetAgentTools key={key} />;
-              }
-
-              case SET_AGENT_SKILLS_TOOL_NAME: {
-                return <MessageSetAgentSkills key={key} />;
-              }
-
-              case SET_AGENT_MODEL_TOOL_NAME: {
-                return <MessageSetAgentModel key={key} />;
-              }
-
-              case SET_AGENT_BROWSER_ENABLED_TOOL_NAME: {
-                return <MessageSetAgentBrowserEnabled key={key} />;
-              }
-
-              case SET_AGENT_WORKSPACE_ID_TOOL_NAME: {
-                return <MessageSetAgentWorkspaceId key={key} />;
-              }
-
-              default: {
-                if (part.toolName === 'skill') {
-                  return <SkillTool name={(part.input as { name?: string } | undefined)?.name ?? 'unknown'} />;
-                }
-
-                const extra = part as { input?: unknown; output?: unknown };
-                return <GenericTool key={key} toolName={part.toolName} input={extra.input} output={extra.output} />;
-              }
-            }
-          }
-
-          case `tool-${SET_AGENT_NAME_TOOL_NAME}`: {
-            if (part?.state !== 'output-available') return null;
-
-            return <MessageSetAgentName key={key} />;
-          }
-
-          case `tool-${SET_AGENT_DESCRIPTION_TOOL_NAME}`: {
-            if (part?.state !== 'output-available') return null;
-
-            return <MessageSetAgentDescription key={key} />;
-          }
-
-          case `tool-${SET_AGENT_INSTRUCTIONS_TOOL_NAME}`: {
-            if (part?.state !== 'output-available') return null;
-
-            return <MessageSetAgentInstructions key={key} />;
-          }
-          case `tool-${SET_AGENT_TOOLS_TOOL_NAME}`: {
-            if (part?.state !== 'output-available') return null;
-
-            return <MessageSetAgentTools key={key} />;
-          }
-          case `tool-${SET_AGENT_SKILLS_TOOL_NAME}`: {
-            if (part?.state !== 'output-available') return null;
-
-            return <MessageSetAgentSkills key={key} />;
-          }
-          case `tool-${SET_AGENT_MODEL_TOOL_NAME}`: {
-            if (part?.state !== 'output-available') return null;
-
-            return <MessageSetAgentModel key={key} />;
-          }
-          case `tool-${SET_AGENT_BROWSER_ENABLED_TOOL_NAME}`: {
-            if (part?.state !== 'output-available') return null;
-
-            return <MessageSetAgentBrowserEnabled key={key} />;
-          }
-          case `tool-${SET_AGENT_WORKSPACE_ID_TOOL_NAME}`: {
-            if (part?.state !== 'output-available') return null;
-
-            return <MessageSetAgentWorkspaceId key={key} />;
-          }
-
-          default: {
-            if (part.type === 'tool-skill' && part.state === 'output-available') {
-              const input = (part.input as { name?: string } | undefined) ?? {};
-              return <SkillTool name={input.name ?? 'unknown'} />;
-            }
-
-            if (part.type === 'data-signal') {
-              const data = (part as { data?: unknown }).data;
-              return isSignalData(data) ? <SignalBadge key={key} signal={data} /> : null;
-            }
-
-            if (typeof part.type === 'string' && part.type.startsWith('tool-')) {
-              const toolName = part.type.slice('tool-'.length);
-              const extra = part as { input?: unknown; output?: unknown };
-              return <GenericTool key={key} toolName={toolName} input={extra.input} output={extra.output} />;
-            }
-
-            return null;
-          }
-        }
-      })}
-    </>
-  );
+  return <MessageFactory message={dbMessage} {...renderers} status={status} />;
 };
 
-export const Txtmessage = ({ txt, role }: { txt: string; role: MastraUIMessage['role'] }) => {
+export const Txtmessage = ({ txt, role }: { txt: string; role: MastraDBMessage['role'] | null }) => {
   if (role === 'user') {
     return (
       <div className="flex justify-end">
@@ -592,7 +532,7 @@ const MessageSetAgentTools = () => {
 const MessageSetAgentSkills = () => {
   const { availableSkills } = useAgentPrimitives();
   const { watch } = useFormContext<AgentBuilderEditFormValues>();
-  const skillsField = watch('skills') as Record<string, boolean> | undefined;
+  const skillsField = watch('skills');
   const enabled = skillsField ? availableSkills.filter(s => skillsField[s.id] === true) : [];
   const value = enabled.length === 0 ? 'none' : enabled.map(s => s.name).join(', ');
 

@@ -1,8 +1,16 @@
 import type * as http from 'node:http';
-import type { Context } from 'hono';
 import type { ToolsInput, Agent } from '../agent';
 import type { RequestContext } from '../request-context';
 import type { Workflow } from '../workflows';
+
+export interface HonoContextLike {
+  req: {
+    header(name: string): string | undefined;
+    query(name: string): string | undefined;
+    json(): Promise<unknown>;
+  };
+  text(text: string, status?: number, headers?: Record<string, string>): Response;
+}
 
 interface MCPServerSSEOptionsBase {
   /**
@@ -43,7 +51,7 @@ export interface MCPServerHonoSSEOptions extends MCPServerSSEOptionsBase {
   /**
    * Incoming Hono context
    */
-  context: Context;
+  context: HonoContextLike;
 }
 
 export interface MCPServerHTTPOptions {

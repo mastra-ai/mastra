@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 
 interface SchemaFieldProps {
   label: string;
-  schemaType: 'input' | 'output';
+  schemaType: 'input' | 'output' | 'requestContext';
   value: Record<string, unknown> | null | undefined;
   onChange: (schema: Record<string, unknown> | null) => void;
   error?: string;

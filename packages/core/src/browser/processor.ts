@@ -19,12 +19,15 @@
  * ```
  */
 
+import { randomUUID } from 'node:crypto';
 import type {
   ComputeStateSignalArgs,
   ComputeStateSignalResult,
   ProcessInputArgs,
   ProcessInputResult,
 } from '../processors/index';
+
+const BROWSER_PROCESS_ID = randomUUID();
 
 /**
  * Browser context stored in RequestContext.
@@ -52,8 +55,17 @@ export interface BrowserContext {
   /** Whether the browser is currently open/connected. Defaults to true when browser context is present. */
   isOpen?: boolean;
 
+  /**
+   * Reason the browser was closed, when isOpen is false.
+   * Helps differentiate between agent-initiated close, user action, process restart, or error.
+   */
+  closeReason?: 'agent' | 'user' | 'process_restart' | 'error';
+
   /** Number of currently open tabs, when available. */
   tabCount?: number;
+
+  /** Who initiated the most recent active URL change, when known. */
+  activeUrlChangeSource?: 'agent' | 'user';
 
   /** Additional active page metadata exposed by the browser provider. */
   pageMetadata?: Record<string, string | number | boolean | null | undefined>;
@@ -105,9 +117,34 @@ export class BrowserContextProcessor {
     if (!ctx) return;
 
     const refreshedState = await ctx.getState?.();
-    const browserState = getBrowserState(refreshedState ? { ...ctx, ...refreshedState } : ctx);
+    let browserState = getBrowserState(refreshedState ? { ...ctx, ...refreshedState } : ctx);
     const shouldRefreshSnapshot = Boolean(args.lastSnapshot && !args.contextWindow.hasSnapshot);
-    const previousState = getMostRecentBrowserState(args.activeStateSignals);
+    const previousState =
+      getMostRecentBrowserState(args.activeStateSignals) ?? getBrowserStateFromSignal(args.lastSnapshot);
+
+    if (!browserState.open && !browserState.closeReason) {
+      if (!previousState?.open || !previousState.processId) {
+        if (isBareClosedState(browserState)) return;
+      } else {
+        browserState = {
+          ...browserState,
+          closeReason: previousState.processId === browserState.processId ? 'user' : 'process_restart',
+        };
+      }
+    }
+
+    if (
+      previousState?.open &&
+      browserState.open &&
+      previousState.activeUrl &&
+      browserState.activeUrl &&
+      previousState.activeUrl !== browserState.activeUrl &&
+      previousState.processId === browserState.processId &&
+      !browserState.activeUrlChangeSource
+    ) {
+      browserState = { ...browserState, activeUrlChangeSource: 'user' };
+    }
+
     const changed = getChangedBrowserState(previousState, browserState);
     if (previousState && Object.keys(changed).length === 0 && !shouldRefreshSnapshot) return;
 
@@ -132,20 +169,26 @@ export class BrowserContextProcessor {
 }
 
 type BrowserState = {
+  processId: string;
   open: boolean;
   activeUrl?: string;
   pageTitle?: string;
   tabCount?: number;
+  activeUrlChangeSource?: 'agent' | 'user';
   pageMetadata?: Record<string, string | number | boolean | null | undefined>;
+  closeReason?: 'agent' | 'user' | 'process_restart' | 'error';
 };
 
 function getBrowserState(ctx: BrowserContext): BrowserState {
   return {
+    processId: BROWSER_PROCESS_ID,
     open: ctx.isOpen ?? true,
     ...(ctx.currentUrl ? { activeUrl: ctx.currentUrl } : {}),
     ...(ctx.pageTitle ? { pageTitle: ctx.pageTitle } : {}),
     ...(typeof ctx.tabCount === 'number' ? { tabCount: ctx.tabCount } : {}),
+    ...(ctx.activeUrlChangeSource ? { activeUrlChangeSource: ctx.activeUrlChangeSource } : {}),
     ...(ctx.pageMetadata ? { pageMetadata: ctx.pageMetadata } : {}),
+    ...(ctx.closeReason ? { closeReason: ctx.closeReason } : {}),
   };
 }
 
@@ -153,10 +196,21 @@ function getMostRecentBrowserState(
   activeStateSignals: ComputeStateSignalArgs['activeStateSignals'],
 ): BrowserState | undefined {
   for (const signal of [...activeStateSignals].reverse()) {
-    const browser = signal.metadata?.browser;
-    if (browser && typeof browser === 'object' && !Array.isArray(browser)) {
-      return browser as BrowserState;
-    }
+    const browserState = getBrowserStateFromSignal(signal);
+    if (browserState) return browserState;
+  }
+  return undefined;
+}
+
+function getBrowserStateFromSignal(signal?: ComputeStateSignalArgs['lastSnapshot']): BrowserState | undefined {
+  const value = signal?.metadata?.value;
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as BrowserState;
+  }
+
+  const browser = signal?.metadata?.browser;
+  if (browser && typeof browser === 'object' && !Array.isArray(browser)) {
+    return browser as BrowserState;
   }
   return undefined;
 }
@@ -174,20 +228,43 @@ function stableBrowserStateCacheKey(state: BrowserState): string {
   });
 }
 
+function isBareClosedState(state: BrowserState): boolean {
+  return (
+    !state.open &&
+    !state.activeUrl &&
+    !state.pageTitle &&
+    typeof state.tabCount !== 'number' &&
+    !state.closeReason &&
+    (!state.pageMetadata || Object.keys(state.pageMetadata).length === 0)
+  );
+}
+
 function getChangedBrowserState(previous: BrowserState | undefined, current: BrowserState): Partial<BrowserState> {
   if (!previous) return current;
 
   const changed: Partial<BrowserState> = {};
   for (const key of Object.keys(current) as Array<keyof BrowserState>) {
+    if (key === 'processId') continue;
+    if (key === 'activeUrlChangeSource' && previous.activeUrl === current.activeUrl) continue;
     if (JSON.stringify(previous[key]) !== JSON.stringify(current[key])) {
       (changed as Record<string, unknown>)[key] = current[key];
     }
   }
+
+  if (!previous.open && current.open) {
+    if (current.activeUrl) changed.activeUrl = current.activeUrl;
+    if (current.activeUrlChangeSource) changed.activeUrlChangeSource = current.activeUrlChangeSource;
+    if (current.pageTitle) changed.pageTitle = current.pageTitle;
+    if (typeof current.tabCount === 'number') changed.tabCount = current.tabCount;
+    if (current.pageMetadata && Object.keys(current.pageMetadata).length > 0)
+      changed.pageMetadata = current.pageMetadata;
+  }
+
   return changed;
 }
 
 function formatBrowserStateSnapshot(state: BrowserState): string {
-  const parts = [`Browser is ${state.open ? 'open' : 'closed'}.`];
+  const parts = [formatOpenClosedStatus(state)];
   if (state.activeUrl) parts.push(`Active tab URL: ${state.activeUrl}.`);
   if (state.pageTitle) parts.push(`Page title: ${state.pageTitle}.`);
   if (typeof state.tabCount === 'number')
@@ -200,12 +277,60 @@ function formatBrowserStateSnapshot(state: BrowserState): string {
 
 function formatBrowserStateDelta(delta: Partial<BrowserState>): string {
   const parts: string[] = [];
-  if (typeof delta.open === 'boolean') parts.push(`browser ${delta.open ? 'opened' : 'closed'}`);
-  if (delta.activeUrl) parts.push(`active tab URL changed to ${delta.activeUrl}`);
+  if (typeof delta.open === 'boolean') {
+    if (delta.open) {
+      parts.push('browser opened');
+    } else {
+      parts.push(formatCloseReason(delta.closeReason));
+    }
+  }
+  if (delta.activeUrl) parts.push(formatActiveUrlChange(delta.activeUrl, delta.activeUrlChangeSource));
   if (delta.pageTitle) parts.push(`page title changed to ${delta.pageTitle}`);
   if (typeof delta.tabCount === 'number') parts.push(`${delta.tabCount} open ${delta.tabCount === 1 ? 'tab' : 'tabs'}`);
   if (delta.pageMetadata && Object.keys(delta.pageMetadata).length > 0) {
     parts.push(`page metadata changed to ${JSON.stringify(delta.pageMetadata)}`);
   }
   return `changed: ${parts.join('; ')}`;
+}
+
+function formatActiveUrlChange(url: string, source?: 'agent' | 'user'): string {
+  switch (source) {
+    case 'agent':
+      return `agent changed active tab URL to ${url}`;
+    case 'user':
+      return `user changed active tab URL to ${url}`;
+    default:
+      return `active tab URL changed to ${url}`;
+  }
+}
+
+function formatOpenClosedStatus(state: BrowserState): string {
+  if (state.open) return 'Browser is open.';
+  switch (state.closeReason) {
+    case 'process_restart':
+      return 'The browser was closed because the chat process restarted.';
+    case 'user':
+      return 'The browser was closed externally, maybe by the user.';
+    case 'error':
+      return 'Browser closed unexpectedly due to an error.';
+    case 'agent':
+      return 'Browser is closed.';
+    default:
+      return 'Browser is closed.';
+  }
+}
+
+function formatCloseReason(reason?: 'agent' | 'user' | 'process_restart' | 'error'): string {
+  switch (reason) {
+    case 'process_restart':
+      return 'the browser was closed because the chat process restarted';
+    case 'user':
+      return 'the browser was closed externally, maybe by the user';
+    case 'error':
+      return 'browser closed unexpectedly due to an error';
+    case 'agent':
+      return 'browser closed';
+    default:
+      return 'browser closed';
+  }
 }

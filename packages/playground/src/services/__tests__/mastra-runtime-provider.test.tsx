@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { useChat } from '@mastra/react';
 import { act, render, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -9,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   runtimeProps: undefined as any,
   threadRuntimeState: undefined as any,
   sendMessage: vi.fn(),
+  markCycleIdActivated: vi.fn(),
+  setStreamProgress: vi.fn(),
   chatState: {
     isAwaitingToolApproval: false,
     isRunning: false,
@@ -76,10 +79,10 @@ vi.mock('@tanstack/react-query', () => ({
 
 vi.mock('@/domains/agents/context', () => ({
   useObservationalMemoryContext: vi.fn(() => ({
-    markCycleIdActivated: vi.fn(),
+    markCycleIdActivated: mocks.markCycleIdActivated,
     setIsObservingFromStream: vi.fn(),
     setIsReflectingFromStream: vi.fn(),
-    setStreamProgress: vi.fn(),
+    setStreamProgress: mocks.setStreamProgress,
     signalObservationsUpdated: vi.fn(),
   })),
 }));
@@ -135,6 +138,8 @@ describe('MastraRuntimeProvider', () => {
     mocks.chatState.isAwaitingToolApproval = false;
     mocks.chatState.isRunning = false;
     mocks.sendMessage.mockReset();
+    mocks.markCycleIdActivated.mockReset();
+    mocks.setStreamProgress.mockReset();
     delete (window as any).MASTRA_AGENT_SIGNALS;
   });
 
@@ -153,6 +158,22 @@ describe('MastraRuntimeProvider', () => {
 
     render(
       <MastraRuntimeProvider agentId="agent-1" threadId="thread-1" initialMessages={[]} modelVersion="v2">
+        <div />
+      </MastraRuntimeProvider>,
+    );
+
+    expect(useChat).toHaveBeenCalledWith(expect.objectContaining({ enableThreadSignals: false }));
+  });
+
+  it('disables thread signals when the agent does not support memory', () => {
+    render(
+      <MastraRuntimeProvider
+        agentId="agent-1"
+        threadId="thread-1"
+        initialMessages={[]}
+        modelVersion="v2"
+        supportsMemory={false}
+      >
         <div />
       </MastraRuntimeProvider>,
     );
@@ -197,13 +218,73 @@ describe('MastraRuntimeProvider', () => {
 
     expect(mocks.runtimeProps.messages[0]).toMatchObject({
       role: 'assistant',
-      parts: [
+      content: [
         {
           type: 'text',
           text: 'Agent stopped because it reached maxSteps (3) while tool calls were still pending. Increase maxSteps in advanced settings and try again.',
         },
       ],
       metadata: { status: 'error' },
+    });
+  });
+
+  it('restores OM progress when initial messages arrive after mount', async () => {
+    const progress = {
+      windows: {
+        active: {
+          messages: { tokens: 100, threshold: 1000 },
+          observations: { tokens: 50, threshold: 500 },
+        },
+        buffered: {
+          observations: {
+            chunks: 1,
+            messageTokens: 100,
+            projectedMessageRemoval: 80,
+            observationTokens: 20,
+            status: 'complete',
+          },
+          reflection: {
+            inputObservationTokens: 0,
+            observationTokens: 0,
+            status: 'idle',
+          },
+        },
+      },
+      recordId: 'record-1',
+      threadId: 'thread-1',
+      stepNumber: 1,
+      generationCount: 1,
+    };
+    const initialMessages: MastraDBMessage[] = [
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        createdAt: new Date('2026-05-29T00:00:00.000Z'),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'data-om-activation', data: { cycleId: 'cycle-1' } },
+            { type: 'data-om-status', data: progress },
+          ],
+        },
+      },
+    ];
+
+    const { rerender } = render(
+      <MastraRuntimeProvider agentId="agent-1" threadId="thread-1" initialMessages={[]} modelVersion="v2">
+        <div />
+      </MastraRuntimeProvider>,
+    );
+
+    rerender(
+      <MastraRuntimeProvider agentId="agent-1" threadId="thread-1" initialMessages={initialMessages} modelVersion="v2">
+        <div />
+      </MastraRuntimeProvider>,
+    );
+
+    await waitFor(() => {
+      expect(mocks.markCycleIdActivated).toHaveBeenCalledWith('cycle-1');
+      expect(mocks.setStreamProgress).toHaveBeenCalledWith(progress);
     });
   });
 });

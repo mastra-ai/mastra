@@ -1,4 +1,3 @@
-import { isModelAllowed } from '@mastra/core/agent-builder/ee';
 import { Skeleton, Txt } from '@mastra/playground-ui';
 import { LockIcon, TriangleAlertIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
@@ -7,10 +6,9 @@ import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { AgentSearchbar } from '../agent-searchbar';
 import { AgentSelectableCard } from '../agent-selectable-card';
 import { FilterableList } from './filterable-list';
-import { useBuilderFilteredModels, useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/agent-builder';
-import type { ListProvider } from '@/domains/agent-builder/services/to-providers';
-import { toProviders } from '@/domains/agent-builder/services/to-providers';
-import { ProviderLogo, cleanProviderId, useAllModels, useLLMProviders } from '@/domains/llm';
+import { useBuilderModelPolicy } from '@/domains/agent-builder';
+import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
+import { ProviderLogo, cleanProviderId } from '@/domains/llm';
 import type { ModelInfo } from '@/domains/llm/hooks/use-filtered-models';
 
 export interface Modelprops {
@@ -47,14 +45,9 @@ interface ProviderEntry {
 const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
   const { setValue, control } = useFormContext<AgentBuilderEditFormValues>();
   const model = useWatch({ control, name: 'model' });
-  const { data, isLoading } = useLLMProviders();
   const policy = useBuilderModelPolicy();
+  const { models: policyAllowedModels, isLoading } = useAgentBuilderAllowedModels();
 
-  const allProviders = useMemo(() => toProviders((data?.providers as ListProvider[]) || []), [data]);
-  const filteredProviders = useBuilderFilteredProviders(allProviders, policy);
-  const allModels = useAllModels(filteredProviders);
-
-  const policyAllowedModels = useBuilderFilteredModels(allModels, policy);
   const [search, setSearch] = useState('');
   const [selectedProviders, setSelectedProviders] = useState<Set<string> | null>(null);
 
@@ -148,7 +141,8 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
   const modelId = model?.name ?? '';
 
   const isSet = Boolean(provider && modelId);
-  const isStale = isSet && policy.active && !isModelAllowed(policy.allowed, { provider, modelId });
+  const isAllowed = policyAllowedModels.some(m => cleanProviderId(m.provider) === provider && m.model === modelId);
+  const isStale = isSet && policy.active && !isAllowed;
 
   const groups = groupModelsByProvider(policyAllowedModels, selectedProviders, search, provider);
   const allProvidersUnchecked = selectedProviders !== null && selectedProviders.size === 0;

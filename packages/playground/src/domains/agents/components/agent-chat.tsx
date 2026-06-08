@@ -1,6 +1,4 @@
-import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
-import type { MastraUIMessage } from '@mastra/react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAgentSettings } from '../context/agent-context';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
@@ -17,6 +15,7 @@ export const AgentChat = ({
   refreshThreadList,
   modelVersion,
   agentVersionId,
+  supportsMemory,
   modelList,
   messageId,
   isNewThread,
@@ -62,7 +61,6 @@ export const AgentChat = ({
   }
 
   const messages = data?.messages ?? emptyMessagesRef.current.messages;
-  const v5Messages = useMemo(() => toAISdkV5Messages(messages) as MastraUIMessage[], [messages]);
 
   return (
     <MastraRuntimeProvider
@@ -70,8 +68,9 @@ export const AgentChat = ({
       agentName={agentName}
       modelVersion={modelVersion}
       agentVersionId={agentVersionId}
+      supportsMemory={supportsMemory}
       threadId={threadId}
-      initialMessages={v5Messages}
+      initialMessages={messages}
       refreshThreadList={refreshThreadList}
       settings={settings}
       requestContext={requestContext}

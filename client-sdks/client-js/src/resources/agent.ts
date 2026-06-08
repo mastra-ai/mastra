@@ -10,7 +10,7 @@ import type {
 } from '@ai-sdk/ui-utils';
 import { v4 as uuid } from '@lukeed/uuid';
 import type { AgentExecutionOptionsBase, SerializableStructuredOutputOptions } from '@mastra/core/agent';
-import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { AIV5Type, MessageListInput } from '@mastra/core/agent/message-list';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import type { GenerateReturn, CoreMessage } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -709,7 +709,7 @@ export class Agent extends BaseResource {
           const processedClientTools = processClientTools(activeClientTools);
           const processedRequestContext = parseClientRequestContext(activeRequestContext);
 
-          const toolResultMessages: CoreMessage[] = [];
+          const toolResultMessages: AIV5Type.ModelMessage[] = [];
           for (const toolCall of pendingToolCalls) {
             const clientTool = activeClientTools[toolCall.toolName] as Tool | undefined;
             if (!clientTool || typeof clientTool.execute !== 'function') continue;
@@ -741,16 +741,17 @@ export class Agent extends BaseResource {
               result = { error: String(error) };
             }
 
-            const toolResultContent: Record<string, unknown> = {
+            const toolResultContent = {
               type: 'tool-result',
               toolCallId: toolCall.toolCallId,
               toolName: toolCall.toolName,
+              args: toolCall.args,
               result,
+              ...(observability ? { __mastraObservability: observability } : {}),
+            } satisfies Extract<CoreMessage, { role: 'tool' }>['content'][number] & {
+              args?: unknown;
+              __mastraObservability?: ClientToolObservabilityEnvelope;
             };
-
-            if (observability) {
-              toolResultContent.__mastraObservability = observability;
-            }
 
             await onChunk({
               type: 'tool-result',
@@ -758,10 +759,24 @@ export class Agent extends BaseResource {
               payload: toolResultContent,
             } as never);
 
+            const continuationToolCall = {
+              type: 'tool-call',
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              input: toolCall.args,
+            } satisfies AIV5Type.ToolCallPart;
+            const continuationToolResult = {
+              type: 'tool-result',
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              output: { type: 'json', value: result as JSONValue },
+              ...(observability ? { __mastraObservability: observability } : {}),
+            } satisfies AIV5Type.ToolResultPart & { __mastraObservability?: ClientToolObservabilityEnvelope };
+
             toolResultMessages.push({
-              role: 'tool',
-              content: [toolResultContent],
-            } as unknown as CoreMessage);
+              role: 'assistant',
+              content: [continuationToolCall, continuationToolResult],
+            });
           }
 
           if (toolResultMessages.length === 0) {
@@ -769,23 +784,35 @@ export class Agent extends BaseResource {
             return;
           }
 
+          const continuationStreamOptions = {
+            ...activeRuntimeOptions,
+            requestContext: processedRequestContext,
+            memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
+            clientTools: processedClientTools,
+          } as StreamParamsBaseWithoutMessages<any>;
+
+          agent.setSignalRuntimeOptions({
+            resourceId,
+            threadId,
+            streamOptions: continuationStreamOptions,
+          });
+
+          const continuationMessages = (
+            threadId ? toolResultMessages : [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages]
+          ) as MessageListInput;
+
           try {
-            const continuation = await agent.streamUntilIdle(
-              [...(finishPayload.payload?.messages?.nonUser ?? []), ...toolResultMessages] as MessageListInput,
-              {
-                ...activeRuntimeOptions,
-                runId: uuid(),
-                requestContext: processedRequestContext,
-                memory: threadId ? { thread: threadId, resource: resourceId } : undefined,
-                clientTools: processedClientTools,
-              } as never,
-            );
-            try {
-              void continuation.body?.cancel?.();
-            } catch {
-              // ignore
-            }
+            await agent.sendToolApproval({
+              resourceId: resourceId || agent.agentId,
+              threadId,
+              toolCallId: pendingToolCalls[0]!.toolCallId,
+              approved: true,
+              requestContext: processedRequestContext,
+              messages: continuationMessages,
+              streamOptions: continuationStreamOptions,
+            });
           } catch (error) {
+            agent.deleteLatestSignalRuntimeOptions({ resourceId, threadId });
             console.error('Error running client-tool continuation:', error);
           } finally {
             agent.deleteSignalRuntimeOptions(runId);
@@ -2573,6 +2600,9 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
+  /**
+   * @deprecated Use `stream(messages, { untilIdle: true })` instead.
+   */
   async streamUntilIdle<OUTPUT extends {}>(
     messages: MessageListInput,
     streamOptions: StreamParamsBaseWithoutMessages<OUTPUT> & {
@@ -2753,6 +2783,8 @@ export class Agent extends BaseResource {
     toolCallId: string;
     approved: boolean;
     requestContext?: RequestContext | Record<string, any>;
+    messages?: MessageListInput;
+    streamOptions?: StreamParamsBaseWithoutMessages<any>;
   }): Promise<{ accepted: true; runId: string; toolCallId?: string }> {
     const { requestContext, ...rest } = params;
     return this.request<{ accepted: true; runId: string; toolCallId?: string }>(
@@ -2950,6 +2982,8 @@ export class Agent extends BaseResource {
   }
 
   /**
+   * @deprecated Use `resumeStream(resumeData, { untilIdle: true, ... })` instead.
+   *
    * Resumes a suspended agent stream until idle with custom resume data.
    * Used to continue execution after a suspension point (e.g., workflow suspend within an agent).
    */
