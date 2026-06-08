@@ -144,6 +144,7 @@ export class CompositeAuth
     if (!providers.some(isUserProvider)) {
       this.getCurrentUser = undefined as any;
       this.getUser = undefined as any;
+      this.getUsers = undefined as any;
     }
   }
 
@@ -408,6 +409,21 @@ export class CompositeAuth
     }
     return null;
   }
+
+  async getUsers(userIds: string[]): Promise<Array<User | null>> {
+    // Find first provider that has batch capability
+    for (const provider of this.providers) {
+      if (isUserProvider(provider) && typeof provider.getUsers === 'function') {
+        try {
+          return await provider.getUsers(userIds);
+        } catch {
+          // Fall through to next provider
+        }
+      }
+    }
+    // No provider supports getUsers batch, fall back to individual calls
+    return Promise.all(userIds.map(id => this.getUser(id)));
+  }
 }
 
 
@@ -500,6 +516,14 @@ export class SimpleAuth<TUser> extends MastraAuthProvider<TUser> {
   /** Get user by ID. */
   async getUser(userId: string): Promise<TUser | null> {
     return this.userById.get(userId) ?? null;
+  }
+
+  /**
+   * Get multiple users by ID in one call. Returns positionally-aligned
+   * results, with `null` for any unknown ID.
+   */
+  async getUsers(userIds: string[]): Promise<Array<TUser | null>> {
+    return userIds.map(id => this.userById.get(id) ?? null);
   }
 
   /**

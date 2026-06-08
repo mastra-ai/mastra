@@ -11,7 +11,15 @@ import {
   Skeleton,
   Txt,
 } from '@mastra/playground-ui';
-import type { MastraDBMessageMetadata } from '@mastra/react';
+import { MessageFactory } from '@mastra/react';
+import type {
+  MastraDBMessageMetadata,
+  MessageRenderers,
+  MessageStatusRenderers,
+  DynamicToolPart,
+  ToolInvocationPart,
+  RequireApprovalEntry,
+} from '@mastra/react';
 import {
   AlertTriangle,
   AlignLeft,
@@ -50,38 +58,11 @@ import { ProviderLogo } from '@/domains/llm';
 import { SignalBadge } from '@/lib/ai-ui/messages/signal-badge';
 import { isSignalData } from '@/lib/ai-ui/messages/signal-data';
 
-export type UIMessagePart =
-  | { type: 'text'; text: string; state?: string }
-  | { type: 'reasoning'; state?: string }
-  | {
-      type: 'dynamic-tool' | `tool-${string}`;
-      state?: string;
-      toolName?: string;
-      toolCallId?: string;
-      input?: unknown;
-      output?: unknown;
-    }
-  | { type: 'data-signal'; data?: unknown };
-
-export type ChatMessagePart = MastraDBMessage['content']['parts'][number] | UIMessagePart;
-
-export type ChatMessage =
-  | MastraDBMessage
-  | {
-      id: string;
-      role: MastraDBMessage['role'];
-      type?: string;
-      parts: ChatMessagePart[];
-      metadata?: MastraDBMessageMetadata;
-    };
-
 interface MessageRowProps {
-  message: ChatMessage;
+  message: MastraDBMessage;
 }
 
 type RequireApprovalMetadata = NonNullable<MastraDBMessageMetadata['requireApprovalMetadata']>;
-
-type ApprovalEntry = RequireApprovalMetadata[string];
 
 const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; toolName: string }) => {
   const { approveToolCall, declineToolCall } = useStreamApproval();
@@ -133,45 +114,19 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
   );
 };
 
-const getMessageParts = (message: ChatMessage): ChatMessagePart[] => {
-  if ('content' in message) return message.content.parts;
-  return message.parts;
-};
-
-const getMessageMetadata = (message: ChatMessage): MastraDBMessageMetadata | undefined => {
-  if ('content' in message) return message.content.metadata;
-  return message.metadata;
-};
-
-const getMessageDisplayRole = (message: ChatMessage): MastraDBMessage['role'] | null => {
+const getMessageDisplayRole = (message: MastraDBMessage): MastraDBMessage['role'] | null => {
   if (message.role === 'assistant' || message.role === 'user' || message.role === 'system') return message.role;
   if (message.role === 'signal' && message.type === 'user') return 'user';
   return null;
 };
 
-const getRequireApprovalMetadata = (message: ChatMessage): RequireApprovalMetadata | undefined => {
-  const metadata = getMessageMetadata(message);
+const getRequireApprovalMetadata = (message: MastraDBMessage): RequireApprovalMetadata | undefined => {
+  const metadata = message.content.metadata as MastraDBMessageMetadata | undefined;
   if (!metadata || typeof metadata !== 'object') return undefined;
   const { mode } = metadata;
   if (mode !== 'stream' && mode !== 'network' && mode !== 'generate') return undefined;
   return metadata.requireApprovalMetadata;
 };
-
-const isLegacyToolInvocationPart = (
-  part: ChatMessagePart,
-): part is Extract<MastraDBMessage['content']['parts'][number], { type: 'tool-invocation' }> =>
-  part.type === 'tool-invocation' && 'toolInvocation' in part;
-
-const isStreamingReasoningPart = (part: ChatMessagePart): part is Extract<UIMessagePart, { type: 'reasoning' }> =>
-  part.type === 'reasoning' && 'state' in part;
-
-const isOutputToolPart = (
-  part: ChatMessagePart,
-): part is Extract<UIMessagePart, { type: 'dynamic-tool' | `tool-${string}` }> =>
-  (part.type === 'dynamic-tool' || part.type.startsWith('tool-')) && 'state' in part;
-
-const isDataSignalPart = (part: ChatMessagePart): part is Extract<UIMessagePart, { type: 'data-signal' }> =>
-  part.type === 'data-signal';
 
 const getNameFromInput = (input: unknown): string => {
   if (!input || typeof input !== 'object' || !('name' in input)) return 'unknown';
@@ -182,119 +137,95 @@ const findApprovalEntry = (
   approvals: RequireApprovalMetadata | undefined,
   toolName: string | undefined,
   toolCallId: string | undefined,
-): ApprovalEntry | undefined => {
+): RequireApprovalEntry | undefined => {
   if (!approvals) return undefined;
   return (toolName ? approvals[toolName] : undefined) ?? (toolCallId ? approvals[toolCallId] : undefined);
 };
 
-const getMessageStatus = (message: ChatMessage): string | undefined => {
-  const metadata = getMessageMetadata(message);
-  return typeof metadata?.status === 'string' ? metadata.status : undefined;
+/**
+ * Normalize the stored message role for display. The `signal`+`type:'user'`
+ * case is mapped to `role: 'user'` so it renders as a user message. Returns
+ * `null` when the message has no displayable role.
+ */
+const toDisplayMessage = (message: MastraDBMessage): MastraDBMessage | null => {
+  const displayRole = getMessageDisplayRole(message);
+  if (displayRole === null) return null;
+  if (displayRole === message.role) return message;
+  return { ...message, role: displayRole };
 };
 
-const getMessageErrorText = (message: ChatMessage): string => {
-  return getMessageParts(message).find(part => part.type === 'text')?.text ?? '';
+/**
+ * Shared agent-builder tool-card dispatch for both the legacy `tool-invocation`
+ * slot and the runtime `dynamic-tool` / `tool-${string}` slot.
+ */
+const renderToolCard = (toolName: string, input: unknown, output: unknown): ReactNode => {
+  switch (toolName) {
+    case SET_AGENT_NAME_TOOL_NAME:
+      return <MessageSetAgentName />;
+    case SET_AGENT_DESCRIPTION_TOOL_NAME:
+      return <MessageSetAgentDescription />;
+    case SET_AGENT_INSTRUCTIONS_TOOL_NAME:
+      return <MessageSetAgentInstructions />;
+    case SET_AGENT_TOOLS_TOOL_NAME:
+      return <MessageSetAgentTools />;
+    case SET_AGENT_SKILLS_TOOL_NAME:
+      return <MessageSetAgentSkills />;
+    case SET_AGENT_MODEL_TOOL_NAME:
+      return <MessageSetAgentModel />;
+    case SET_AGENT_BROWSER_ENABLED_TOOL_NAME:
+      return <MessageSetAgentBrowserEnabled />;
+    case SET_AGENT_WORKSPACE_ID_TOOL_NAME:
+      return <MessageSetAgentWorkspaceId />;
+    case 'skill':
+      return <SkillTool name={getNameFromInput(input)} />;
+    default:
+      return <GenericTool toolName={toolName} input={input} output={output} />;
+  }
 };
 
 export const MessageRow = ({ message }: MessageRowProps) => {
-  const parts = getMessageParts(message);
   const approvals = getRequireApprovalMetadata(message);
   const retry = useStreamRetry();
   const displayRole = getMessageDisplayRole(message);
 
-  if (getMessageStatus(message) === 'error') {
-    const parsed = parseStreamErrorText(getMessageErrorText(message));
-    return <ErrorMessage error={parsed} onRetry={retry} />;
-  }
+  const dbMessage = toDisplayMessage(message);
+  if (dbMessage === null) return null;
 
-  return (
-    <>
-      {parts.map((part, index) => {
-        const key = `${message.id}-${index}`;
+  const renderers: MessageRenderers = {
+    Text: part => <Txtmessage txt={part.text ?? ''} role={displayRole} />,
+    Reasoning: part => {
+      const state = 'state' in part ? part.state : undefined;
+      if (state !== 'streaming') return null;
+      return <ReasoningMessage text="Reasoning..." streaming />;
+    },
+    Data: part => (part.type === 'data-signal' && isSignalData(part.data) ? <SignalBadge signal={part.data} /> : null),
+    ToolInvocation: (part: ToolInvocationPart) => {
+      const inv = part.toolInvocation;
+      const entry = findApprovalEntry(approvals, inv.toolName, inv.toolCallId);
+      if (entry && inv.state !== 'result') {
+        return <ToolApprovalPrompt toolCallId={entry.toolCallId} toolName={entry.toolName} />;
+      }
+      if (inv.state !== 'result') return null;
+      const input = 'args' in inv ? inv.args : undefined;
+      const output = 'result' in inv ? inv.result : undefined;
+      return renderToolCard(inv.toolName, input, output);
+    },
+    DynamicTool: (part: DynamicToolPart) => {
+      const toolName = part.toolName ?? part.type.replace(/^tool-/, '');
+      const entry = findApprovalEntry(approvals, toolName, part.toolCallId);
+      if (entry && part.state !== 'output-available') {
+        return <ToolApprovalPrompt toolCallId={entry.toolCallId} toolName={entry.toolName} />;
+      }
+      if (part.state !== 'output-available') return null;
+      return renderToolCard(toolName, part.input, part.output);
+    },
+  };
 
-        if (approvals && isLegacyToolInvocationPart(part)) {
-          const { toolInvocation: inv } = part;
-          const entry = findApprovalEntry(approvals, inv.toolName, inv.toolCallId);
-          if (entry && inv.state !== 'result') {
-            return <ToolApprovalPrompt key={key} toolCallId={entry.toolCallId} toolName={entry.toolName} />;
-          }
-        }
+  const status: MessageStatusRenderers = {
+    Error: ({ text }) => <ErrorMessage error={parseStreamErrorText(text)} onRetry={retry} />,
+  };
 
-        if (part.type === 'text') {
-          return <Txtmessage key={key} txt={part.text ?? ''} role={displayRole} />;
-        }
-
-        if (part.type === 'reasoning') {
-          if (!isStreamingReasoningPart(part) || part.state !== 'streaming') return null;
-          return <ReasoningMessage key={key} text="Reasoning..." streaming />;
-        }
-
-        if (isDataSignalPart(part)) {
-          return isSignalData(part.data) ? <SignalBadge key={key} signal={part.data} /> : null;
-        }
-
-        if (isLegacyToolInvocationPart(part)) {
-          const { toolInvocation: inv } = part;
-          if (inv.state !== 'result') return null;
-          const toolName = inv.toolName;
-          const input = 'args' in inv ? inv.args : undefined;
-          const output = 'result' in inv ? inv.result : undefined;
-
-          switch (toolName) {
-            case SET_AGENT_NAME_TOOL_NAME:
-              return <MessageSetAgentName key={key} />;
-            case SET_AGENT_DESCRIPTION_TOOL_NAME:
-              return <MessageSetAgentDescription key={key} />;
-            case SET_AGENT_INSTRUCTIONS_TOOL_NAME:
-              return <MessageSetAgentInstructions key={key} />;
-            case SET_AGENT_TOOLS_TOOL_NAME:
-              return <MessageSetAgentTools key={key} />;
-            case SET_AGENT_SKILLS_TOOL_NAME:
-              return <MessageSetAgentSkills key={key} />;
-            case SET_AGENT_MODEL_TOOL_NAME:
-              return <MessageSetAgentModel key={key} />;
-            case SET_AGENT_BROWSER_ENABLED_TOOL_NAME:
-              return <MessageSetAgentBrowserEnabled key={key} />;
-            case SET_AGENT_WORKSPACE_ID_TOOL_NAME:
-              return <MessageSetAgentWorkspaceId key={key} />;
-            case 'skill':
-              return <SkillTool key={key} name={getNameFromInput(input)} />;
-            default:
-              return <GenericTool key={key} toolName={toolName} input={input} output={output} />;
-          }
-        }
-
-        if (isOutputToolPart(part)) {
-          if (part.state !== 'output-available') return null;
-          const toolName = part.toolName ?? part.type.replace(/^tool-/, '');
-          switch (toolName) {
-            case SET_AGENT_NAME_TOOL_NAME:
-              return <MessageSetAgentName key={key} />;
-            case SET_AGENT_DESCRIPTION_TOOL_NAME:
-              return <MessageSetAgentDescription key={key} />;
-            case SET_AGENT_INSTRUCTIONS_TOOL_NAME:
-              return <MessageSetAgentInstructions key={key} />;
-            case SET_AGENT_TOOLS_TOOL_NAME:
-              return <MessageSetAgentTools key={key} />;
-            case SET_AGENT_SKILLS_TOOL_NAME:
-              return <MessageSetAgentSkills key={key} />;
-            case SET_AGENT_MODEL_TOOL_NAME:
-              return <MessageSetAgentModel key={key} />;
-            case SET_AGENT_BROWSER_ENABLED_TOOL_NAME:
-              return <MessageSetAgentBrowserEnabled key={key} />;
-            case SET_AGENT_WORKSPACE_ID_TOOL_NAME:
-              return <MessageSetAgentWorkspaceId key={key} />;
-            case 'skill':
-              return <SkillTool key={key} name={getNameFromInput(part.input)} />;
-            default:
-              return <GenericTool key={key} toolName={toolName} input={part.input} output={part.output} />;
-          }
-        }
-
-        return null;
-      })}
-    </>
-  );
+  return <MessageFactory message={dbMessage} {...renderers} status={status} />;
 };
 
 export const Txtmessage = ({ txt, role }: { txt: string; role: MastraDBMessage['role'] | null }) => {

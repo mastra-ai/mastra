@@ -1,10 +1,20 @@
-export type { Skill, SkillMetadata } from '../../workspace/skills/types';
+export type SkillSource = 'workspace';
 
-export type SkillSource = 'configured' | 'workspace';
+type JsonPrimitive = string | number | boolean | null;
+export type HarnessSkillMetadata = Record<string, JsonPrimitive | JsonPrimitive[] | { [key: string]: unknown }>;
+
+export interface HarnessSkill {
+  name: string;
+  description: string;
+  instructions: string;
+  category?: string;
+  filePath: string;
+  metadata?: HarnessSkillMetadata;
+}
 
 /**
  * Thrown by `session.useSkill` when the named skill is not present in any
- * configured source.
+ * workspace skill catalog.
  */
 export class HarnessSkillNotFoundError extends Error {
   readonly name = 'HarnessSkillNotFoundError';

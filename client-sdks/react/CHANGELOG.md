@@ -1,5 +1,167 @@
 # @mastra/react
 
+## 0.5.3-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`053735a`](https://github.com/mastra-ai/mastra/commit/053735a75c2c18e23ce34d9468007efa4a45f4c4), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`a952852`](https://github.com/mastra-ai/mastra/commit/a952852c971a21fb646cd907c75fcf4443cdc963)]:
+  - @mastra/client-js@1.24.0-alpha.3
+  - @mastra/core@1.42.0-alpha.3
+
+## 0.5.3-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`014e00f`](https://github.com/mastra-ai/mastra/commit/014e00f2b3a597a016b72f9901c6ab27d491f822)]:
+  - @mastra/core@1.42.0-alpha.2
+  - @mastra/client-js@1.24.0-alpha.2
+
+## 0.5.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`f2ab060`](https://github.com/mastra-ai/mastra/commit/f2ab060162bea81505fda553e2cee29c1979fd04), [`5d302c8`](https://github.com/mastra-ai/mastra/commit/5d302c8eda1a6ac74eab5e442c4f64db6cc97a06)]:
+  - @mastra/core@1.42.0-alpha.1
+  - @mastra/client-js@1.24.0-alpha.1
+
+## 0.5.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`e9be4e7`](https://github.com/mastra-ai/mastra/commit/e9be4e747ec3d8b65548bff92f9377db06105376), [`95482bf`](https://github.com/mastra-ai/mastra/commit/95482bf8a5c2b38022d4e2fee8ee07488c5f6262), [`d53cfc2`](https://github.com/mastra-ai/mastra/commit/d53cfc2c7f8d78343a4aa84ec4e129ba25f3325e), [`65799d4`](https://github.com/mastra-ai/mastra/commit/65799d4d549e5ebb9c848fbe3f51ac090f64becf), [`c268c89`](https://github.com/mastra-ai/mastra/commit/c268c89f4c63a93ee474d3cffdf3ea60bf00d4f2), [`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`0c72f03`](https://github.com/mastra-ai/mastra/commit/0c72f032abb13254df5a7856d64be2f207b8006d), [`3b45ea9`](https://github.com/mastra-ai/mastra/commit/3b45ea95015557a6cb9d70dc5252af54ab1b78ac), [`f084be1`](https://github.com/mastra-ai/mastra/commit/f084be1fcbe33ad7480913e44d6130c421c0976f), [`65d3320`](https://github.com/mastra-ai/mastra/commit/65d3320bade087db166caff07eb461c008590ee8), [`44d2c09`](https://github.com/mastra-ai/mastra/commit/44d2c0989186b7294d624bc6dd17722bdb2dcf72), [`b3e9781`](https://github.com/mastra-ai/mastra/commit/b3e9781a93a18e8e492849040016ddf239c00d9c)]:
+  - @mastra/core@1.42.0-alpha.0
+  - @mastra/client-js@1.24.0-alpha.0
+
+## 0.5.2
+
+### Patch Changes
+
+- The `/agents/:agentId/stream` and `/agents/:agentId/resume-stream` endpoints now accept an `untilIdle` field in the request body. When set, the stream stays open across background-task continuations (same behavior as the `/stream-until-idle` endpoint). The dedicated `/stream-until-idle` and `/resume-stream-until-idle` endpoints remain available but are deprecated. ([#17536](https://github.com/mastra-ai/mastra/pull/17536))
+
+  **Server example:**
+
+  ```ts
+  // POST /api/agents/:agentId/stream
+  fetch(`/api/agents/${agentId}/stream`, {
+    method: 'POST',
+    body: JSON.stringify({
+      messages: [{ role: 'user', content: 'Research solana for me' }],
+      untilIdle: true, // or { maxIdleMs: 60000 }
+    }),
+  });
+  ```
+
+  **Client SDK:** `streamUntilIdle()` and `resumeStreamUntilIdle()` are deprecated — use `stream(messages, { untilIdle: true })` instead.
+
+- Updated dependencies [[`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9), [`f82cc72`](https://github.com/mastra-ai/mastra/commit/f82cc72edca0ce636fe18abaf2598d89a0c6bcca), [`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9)]:
+  - @mastra/client-js@1.23.2
+  - @mastra/core@1.41.0
+
+## 0.5.2-alpha.0
+
+### Patch Changes
+
+- The `/agents/:agentId/stream` and `/agents/:agentId/resume-stream` endpoints now accept an `untilIdle` field in the request body. When set, the stream stays open across background-task continuations (same behavior as the `/stream-until-idle` endpoint). The dedicated `/stream-until-idle` and `/resume-stream-until-idle` endpoints remain available but are deprecated. ([#17536](https://github.com/mastra-ai/mastra/pull/17536))
+
+  **Server example:**
+
+  ```ts
+  // POST /api/agents/:agentId/stream
+  fetch(`/api/agents/${agentId}/stream`, {
+    method: 'POST',
+    body: JSON.stringify({
+      messages: [{ role: 'user', content: 'Research solana for me' }],
+      untilIdle: true, // or { maxIdleMs: 60000 }
+    }),
+  });
+  ```
+
+  **Client SDK:** `streamUntilIdle()` and `resumeStreamUntilIdle()` are deprecated — use `stream(messages, { untilIdle: true })` instead.
+
+- Updated dependencies [[`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9), [`f82cc72`](https://github.com/mastra-ai/mastra/commit/f82cc72edca0ce636fe18abaf2598d89a0c6bcca), [`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9)]:
+  - @mastra/client-js@1.23.2-alpha.0
+  - @mastra/core@1.41.0-alpha.0
+
+## 0.5.1
+
+### Patch Changes
+
+- Updated dependencies [[`ae1fa3a`](https://github.com/mastra-ai/mastra/commit/ae1fa3a9c40510f1e068ffc2345cf09f9ee32b26)]:
+  - @mastra/core@1.40.0
+  - @mastra/client-js@1.23.1
+
+## 0.5.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`ae1fa3a`](https://github.com/mastra-ai/mastra/commit/ae1fa3a9c40510f1e068ffc2345cf09f9ee32b26)]:
+  - @mastra/core@1.40.0-alpha.0
+  - @mastra/client-js@1.23.1-alpha.0
+
+## 0.5.0
+
+### Minor Changes
+
+- Add a type-safe `MessageFactory` component to `@mastra/react` for rendering a `MastraDBMessage` with your own per-part components, and align its tripwire/task-verdict types with `@mastra/core`. ([#17514](https://github.com/mastra-ai/mastra/pull/17514))
+
+  **@mastra/react**
+
+  `MessageFactory` provides optional, fully type-safe render functions for each kind of message part. Only the renderer matching a part's type runs, and each receives correctly narrowed props; missing renderers fall back gracefully. Runtime-only `dynamic-tool` and AI SDK v5 `tool-${string}` parts are covered by a dedicated `DynamicTool` renderer, and optional role wrappers let you frame parts per message role.
+
+  ```tsx
+  import { MessageFactory } from '@mastra/react';
+
+  <MessageFactory
+    message={message}
+    Text={part => <p>{part.text}</p>}
+    ToolInvocation={part => <ToolCard name={part.toolInvocation.toolName} />}
+    DynamicTool={part => <ToolCard name={part.toolName} state={part.state} />}
+    Data={part => <DataView type={part.type} data={part.data} />}
+    roles={{ Signal: ({ children }) => <SignalFrame>{children}</SignalFrame> }}
+  />;
+  ```
+
+  It also accepts an optional `status` prop with four strongly-typed slots that render from a message's metadata while keeping part renderers pure. `Tripwire`, `Warning`, and `Error` are _replacement_ slots (rendered instead of the parts when `metadata.status` matches); `Task` is an _adjacent_ slot (rendered alongside the parts when a task-completion verdict exists). The factory only surfaces metadata to the slots and never filters it (for example, it still invokes `Task` when `suppressFeedback` is true) — the consumer decides what to render or skip. Existing behavior is unchanged when `status` is omitted.
+
+  ```tsx
+  <MessageFactory
+    message={message}
+    status={{
+      Error: ({ text }) => <ErrorNotice>{text}</ErrorNotice>,
+      Task: ({ passed, suppressFeedback }) => (suppressFeedback ? null : <TaskVerdict passed={passed} />),
+    }}
+    {...renderers}
+  />
+  ```
+
+  The narrowed part types used by the renderers are exported so consumers can type their own components: `TextPart`, `ReasoningPart`, `FilePart`, `StepStartPart`, `ToolInvocationPart`, `SourceDocumentPart`, and `SourceUrlPart`, plus `MessageFactoryPart` (the exact union of part shapes `MessageFactory` can dispatch — the typed accumulator parts plus the runtime-only `dynamic-tool` / `tool-${string}` parts) for typing part arrays precisely instead of `unknown[]`.
+
+  `MastraDBMessageMetadata.isTaskCompleteResult` is now typed as the `{ passed?, suppressFeedback? }` completion-verdict shape (matching `completionResult`) instead of `boolean`, so the `Task` slot resolves verdicts from either field without a cast.
+
+  `TripwireMetadata` is now an alias of core's `TripwirePayload`, and the message accumulator persists the canonical shape. Two behavioral changes to persisted `metadata.tripwire`:
+  - The tripwire `reason` is now persisted as `tripwire.reason` (previously it was only stored in the message text part).
+  - The processor metadata field was renamed from `tripwire.tripwirePayload` to `tripwire.metadata` to match the canonical type.
+
+  The `MessageFactory` `Tripwire` slot receives `reason` through `props.tripwire`.
+
+  **@mastra/core**
+
+  Exported the canonical `IsTaskCompletePayload` and `TripwirePayload` types from `@mastra/core/stream` so consumers can type their own task/completion and tripwire UI against them instead of redeclaring the shapes.
+
+  ```ts
+  import type { IsTaskCompletePayload, TripwirePayload } from '@mastra/core/stream';
+  ```
+
+- Use the message-first client helper for user-authored thread input while preserving fallback behavior for older servers that only support the legacy signal route. ([#17238](https://github.com/mastra-ai/mastra/pull/17238))
+
+### Patch Changes
+
+- Improved agent message, stream, and observational-memory type handling across the client SDKs and playground UI. ([#17208](https://github.com/mastra-ai/mastra/pull/17208))
+
+- Updated dependencies [[`e17e5c1`](https://github.com/mastra-ai/mastra/commit/e17e5c1e1f6c7743d9e48ebce740e25cf4f897e0), [`d8a79af`](https://github.com/mastra-ai/mastra/commit/d8a79afe06a6352c90d0fb7bef0f394ad0af8eff), [`c973db4`](https://github.com/mastra-ai/mastra/commit/c973db428df1b564ff0c35d4b2a90e8f4f1e13fd), [`552285e`](https://github.com/mastra-ai/mastra/commit/552285e5af43cfc680a0972032cab8de8776c6a0), [`77e686c`](https://github.com/mastra-ai/mastra/commit/77e686c264e493e99ae5024e4dfe3ea5d5a09718), [`ece8dba`](https://github.com/mastra-ai/mastra/commit/ece8dba7ec1a5089eee8c33167cd762bfa91e509), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`43dd577`](https://github.com/mastra-ai/mastra/commit/43dd577aa2b056b86b92cb903433f4fc13e69687), [`e2a8380`](https://github.com/mastra-ai/mastra/commit/e2a838017a7657850404c1e94c70d79ffdc6f14a), [`be3f1cd`](https://github.com/mastra-ai/mastra/commit/be3f1cd81f0e2a649e8eac15a024d542d814aef8), [`a34d9db`](https://github.com/mastra-ai/mastra/commit/a34d9dbc39fedb722f271318e9355ecee70489ab)]:
+  - @mastra/client-js@1.23.0
+  - @mastra/core@1.39.0
+
 ## 0.5.0-alpha.0
 
 ### Minor Changes

@@ -6,7 +6,7 @@ import type { HarnessRequestContext } from '@mastra/core/harness';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace';
-import type { LSPConfig } from '@mastra/core/workspace';
+import type { LSPConfig, WorkspaceToolsConfig } from '@mastra/core/workspace';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema';
@@ -151,6 +151,10 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
     mastra_workspace_ast_edit: { ...TOOL_NAME_OVERRIDES.mastra_workspace_ast_edit, enabled: false },
   };
 
+  const workspaceTools: WorkspaceToolsConfig = {
+    ...(isPlanMode ? { ...TOOL_NAME_OVERRIDES, ...planModeTools } : TOOL_NAME_OVERRIDES),
+  };
+
   // Reuse existing workspace if already registered (preserves ProcessManager state)
   let existing: Workspace<LocalFilesystem, LocalSandbox> | undefined;
   try {
@@ -161,7 +165,7 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
 
   if (existing) {
     existing.filesystem.setAllowedPaths(allowedPaths);
-    existing.setToolsConfig(isPlanMode ? { ...TOOL_NAME_OVERRIDES, ...planModeTools } : TOOL_NAME_OVERRIDES);
+    existing.setToolsConfig(workspaceTools);
     return existing;
   }
 
@@ -185,7 +189,7 @@ export function getDynamicWorkspace({ requestContext, mastra }: { requestContext
       workingDirectory: projectPath,
       env: buildSandboxEnv(),
     }),
-    tools: isPlanMode ? { ...TOOL_NAME_OVERRIDES, ...planModeTools } : TOOL_NAME_OVERRIDES,
+    tools: workspaceTools,
     ...(skillPaths.length > 0 ? { skills: skillPaths } : {}),
     lsp: lspConfig,
   });
