@@ -28,4 +28,4 @@ const toolSearch = new ToolSearchProcessor({
 });
 ```
 
-Both modes are cache-friendly when loading tools, since loads are append-only and keep the cached prompt prefix stable. Also fixed anonymous requests in `'in-memory'` mode no longer sharing loaded-tool state through a single `'default'` entry.
+Both modes are cache-friendly when loading tools, since loads are append-only and keep the cached prompt prefix stable. The default `'in-memory'` store still shares a single `'default'` entry across anonymous (no thread ID) requests; use `storage: 'context'` to keep anonymous requests isolated and derive loaded tools from the conversation messages.
