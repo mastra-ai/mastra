@@ -19,7 +19,8 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
-import type { MastraModelGateway } from '../llm/model/gateways';
+import type { MastraModelGatewayInterface } from '../llm/model/gateways';
+import { getGatewayId } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/router';
 import { LogLevel, noopLogger, ConsoleLogger, DualLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
@@ -377,7 +378,7 @@ export interface Config<
    * Custom model router gateways for accessing LLM providers.
    * Gateways handle provider-specific authentication, URL construction, and model resolution.
    */
-  gateways?: Record<string, MastraModelGateway>;
+  gateways?: Record<string, MastraModelGatewayInterface>;
 
   /**
    * Event handlers for custom application events.
@@ -580,7 +581,7 @@ export class Mastra<
    * zero cost beyond a boolean check.
    */
   #hasScheduledWorkflow = false;
-  #gateways?: Record<string, MastraModelGateway>;
+  #gateways?: Record<string, MastraModelGatewayInterface>;
   #channels?: TChannels;
   #environment?: string;
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
@@ -1135,7 +1136,7 @@ export class Mastra<
     this.#processors = {} as TProcessors;
     this.#memory = {} as TMemory;
     this.#workflows = {} as TWorkflows;
-    this.#gateways = {} as Record<string, MastraModelGateway>;
+    this.#gateways = {} as Record<string, MastraModelGatewayInterface>;
 
     // Now add primitives - order matters for auto-registration
     // Tools and processors should be added before agents and MCP servers that might use them
@@ -1214,9 +1215,15 @@ export class Mastra<
     // Skip duplicates so user-provided gateways above take precedence.
     // Added directly to #gateways to avoid triggering #syncGatewayRegistry for built-ins.
     for (const gateway of defaultGateways) {
-      const key = gateway.getId();
-      if (!(this.#gateways as Record<string, MastraModelGateway>)[key]) {
-        (this.#gateways as Record<string, MastraModelGateway>)[key] = gateway;
+      const key = getGatewayId(gateway);
+      // Check by logical ID to avoid duplicates when a user-registered gateway
+      // exists under a different registry key but has the same gateway ID.
+      const existingGateways = Object.values(this.#gateways as Record<string, MastraModelGatewayInterface>);
+      const alreadyRegistered = existingGateways.some(
+        existingGateway => existingGateway != null && getGatewayId(existingGateway) === key,
+      );
+      if (!alreadyRegistered) {
+        (this.#gateways as Record<string, MastraModelGatewayInterface>)[key] = gateway;
       }
     }
 
@@ -4203,7 +4210,7 @@ export class Mastra<
    * const gateway = mastra.getGateway('myGateway');
    * ```
    */
-  public getGateway(key: string): MastraModelGateway {
+  public getGateway(key: string): MastraModelGatewayInterface {
     const gateway = this.#gateways?.[key];
     if (!gateway) {
       const error = new MastraError({
@@ -4248,10 +4255,10 @@ export class Mastra<
    * const gateway = mastra.getGatewayById('custom-gateway-v1');
    * ```
    */
-  public getGatewayById(id: string): MastraModelGateway {
+  public getGatewayById(id: string): MastraModelGatewayInterface {
     const gateways = this.#gateways ?? {};
     for (const gateway of Object.values(gateways)) {
-      if (gateway.getId() === id) {
+      if (getGatewayId(gateway) === id) {
         return gateway;
       }
     }
@@ -4265,7 +4272,7 @@ export class Mastra<
         status: 404,
         gatewayId: id,
         availableIds: Object.values(gateways)
-          .map(g => g.getId())
+          .map(g => getGatewayId(g))
           .join(', '),
       },
     });
@@ -4274,22 +4281,43 @@ export class Mastra<
   }
 
   /**
-   * Returns all registered gateways as a record keyed by their names.
+   * Returns all registered gateways as a record keyed by their registration keys.
+   *
+   * Gateways can be plain objects that satisfy `MastraModelGatewayInterface` or
+   * classes that extend `MastraModelGateway`.
    *
    * @example
    * ```typescript
+   * import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
+   * import { MastraModelGateway, type MastraModelGatewayInterface } from '@mastra/core/llm';
+   *
+   * const plainGateway: MastraModelGatewayInterface = {
+   *   id: 'plain-gateway',
+   *   name: 'Plain Gateway',
+   *   async fetchProviders() { return {}; },
+   *   buildUrl() { return undefined; },
+   *   async getApiKey() { return ''; },
+   *   resolveLanguageModel(args) { return createOpenAICompatible({ name: args.providerId, apiKey: args.apiKey }).chatModel(args.modelId); },
+   * };
+   *
+   * class ClassGateway extends MastraModelGateway {
+   *   readonly id = 'class-gateway';
+   *   readonly name = 'Class Gateway';
+   *   // Implement fetchProviders, buildUrl, getApiKey, and resolveLanguageModel.
+   * }
+   *
    * const mastra = new Mastra({
    *   gateways: {
-   *     netlify: new NetlifyGateway(),
-   *     custom: new CustomGateway()
-   *   }
+   *     plain: plainGateway,
+   *     class: new ClassGateway(),
+   *   },
    * });
    *
    * const allGateways = mastra.listGateways();
-   * console.log(Object.keys(allGateways)); // ['netlify', 'custom']
+   * console.log(Object.keys(allGateways ?? {})); // ['plain', 'class']
    * ```
    */
-  public listGateways(): Record<string, MastraModelGateway> | undefined {
+  public listGateways(): Record<string, MastraModelGatewayInterface> | undefined {
     return this.#gateways;
   }
 
@@ -4300,60 +4328,66 @@ export class Mastra<
    * has been created. Gateways enable access to LLM providers through custom
    * authentication and routing logic.
    *
-   * If no key is provided, the gateway's ID (or name if no ID is set) will be used as the key.
+   * If no key is provided, the gateway's ID will be used as the key.
    *
-   * @example
+   * @example Plain object gateway
    * ```typescript
-   * import { MastraModelGateway } from '@mastra/core';
+   * import type { MastraModelGatewayInterface } from '@mastra/core/llm';
    *
-   * class CustomGateway extends MastraModelGateway {
-   *   readonly id = 'custom-gateway-v1';  // Optional, defaults to name
-   *   readonly name = 'custom';
-   *   readonly prefix = 'custom';
-   *
+   * const customGateway: MastraModelGatewayInterface = {
+   *   id: 'custom-gateway-v1',
+   *   name: 'Custom Gateway',
    *   async fetchProviders() {
    *     return {
    *       myProvider: {
    *         name: 'My Provider',
    *         models: ['model-1', 'model-2'],
    *         apiKeyEnvVar: 'MY_API_KEY',
-   *         gateway: 'custom'
-   *       }
+   *         gateway: 'custom-gateway-v1',
+   *       },
    *     };
-   *   }
-   *
-   *   buildUrl(modelId: string) {
+   *   },
+   *   buildUrl() {
    *     return 'https://api.myprovider.com/v1';
-   *   }
-   *
-   *   async getApiKey(modelId: string) {
+   *   },
+   *   async getApiKey() {
    *     return process.env.MY_API_KEY || '';
-   *   }
-   *
+   *   },
    *   async resolveLanguageModel({ modelId, providerId, apiKey }) {
-   *     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
-   *     return createOpenAICompatible({
+   *     const provider = createOpenAICompatible({
    *       name: providerId,
    *       apiKey,
-   *       baseURL,
+   *       baseURL: this.buildUrl(),
    *       supportsStructuredOutputs: true,
-   *     }).chatModel(modelId);
-   *   }
-   * }
+   *     });
+   *     return provider.chatModel(modelId);
+   *   },
+   * };
    *
    * const mastra = new Mastra();
-   * const newGateway = new CustomGateway();
-   * mastra.addGateway(newGateway); // Uses gateway.getId() as key (gateway.id)
-   * // or
-   * mastra.addGateway(newGateway, 'customKey'); // Uses custom key
+   * mastra.addGateway(customGateway);
+   * ```
+   *
+   * @example Convenience base class
+   * ```typescript
+   * import { MastraModelGateway } from '@mastra/core/llm';
+   *
+   * class CustomGateway extends MastraModelGateway {
+   *   readonly id = 'custom-gateway-v1';
+   *   readonly name = 'Custom Gateway';
+   *
+   *   // Implement fetchProviders, buildUrl, getApiKey, and resolveLanguageModel.
+   * }
+   *
+   * mastra.addGateway(new CustomGateway(), 'customKey');
    * ```
    */
-  public addGateway(gateway: MastraModelGateway, key?: string): void {
+  public addGateway(gateway: MastraModelGatewayInterface, key?: string): void {
     if (!gateway) {
       throw createUndefinedPrimitiveError('gateway', gateway, key);
     }
-    const gatewayKey = key || gateway.getId();
-    const gateways = this.#gateways as Record<string, MastraModelGateway>;
+    const gatewayKey = key || getGatewayId(gateway);
+    const gateways = this.#gateways as Record<string, MastraModelGatewayInterface>;
     if (gateways[gatewayKey]) {
       return;
     }
