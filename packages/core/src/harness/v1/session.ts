@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
 
 import { RequestContext } from '@internal/core/request-context';
-import type { Agent, ToolsInput } from '../../agent';
+import type { Agent, AgentMessageInput, QueueAgentMessageOptions, SendAgentMessageOptions, ToolsInput } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
+import type { MastraModelGatewayInterface } from '../../llm';
 import type { MastraMemory, StorageThreadType } from '../../memory';
 import { toStandardSchema } from '../../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../../schema';
@@ -21,10 +22,18 @@ import type { HarnessMode } from './mode';
 import type { PermissionPolicy, ToolCategoryResolver } from './permissions.types';
 import { buildHarnessRequestContext } from './request-context';
 import type { HarnessRequestContext, HarnessRequestContextSource } from './request-context';
-import type { CloneSessionOptions, SessionConfig, SessionSignalOptions } from './session.types';
+import type {
+  CloneSessionOptions,
+  SessionConfig,
+  SessionMessageOptions,
+  SessionQueueMessageResult,
+  SessionSendMessageResult,
+  SessionSubscribeToThreadOptions,
+  SessionThreadSubscription,
+} from './session.types';
 import { HarnessSkillNotFoundError } from './skills.types';
 import type { HarnessSkill, SkillSource } from './skills.types';
-import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
+import type { SubagentRegistryConfig } from './subagents.types';
 import { buildHarnessBuiltInTools, buildSessionToolsets } from './tools';
 
 export class Session<TState = {}> {
@@ -63,7 +72,7 @@ export class Session<TState = {}> {
    */
   #workspaceSkillsPromise?: Promise<HarnessSkill[]>;
   readonly #subagents?: SubagentRegistryConfig;
-  readonly #resolveModel?: ModelResolver;
+  readonly #gateways: Array<MastraModelGatewayInterface>;
   readonly #defaultPermissionPolicy: PermissionPolicy;
   readonly #toolCategoryResolver?: ToolCategoryResolver;
   // readonly parentSessionId?: string;
@@ -102,10 +111,10 @@ export class Session<TState = {}> {
     } as TState;
     this.#workspace = config.workspace;
     this.#subagents = config.subagents;
-    this.#resolveModel = config.resolveModel;
     this.#defaultPermissionPolicy = config.defaultPermissionPolicy ?? 'ask';
     this.#toolCategoryResolver = config.toolCategoryResolver;
     this.#agent = config.agent;
+    this.#gateways = config.gateways;
   }
 
   get id(): string {
@@ -161,7 +170,7 @@ export class Session<TState = {}> {
   }
 
   getCurrentRunId(): string | null {
-    return this.#currentRunId;
+    return this.#getActiveThreadRunId() ?? this.#currentRunId;
   }
 
   getCurrentTraceId(): string | null {
@@ -210,10 +219,6 @@ export class Session<TState = {}> {
     await this.#resolveAgent(definition.agentId);
 
     const modelId = opts.modelId ?? definition.defaultModelId ?? this.#modelId;
-    if (!this.#resolveModel) {
-      throw new Error('Harness subagent spawn requires a resolveModel function');
-    }
-    await this.#resolveModel(modelId);
 
     const now = new Date();
     const record: SessionRecord = {
@@ -353,7 +358,7 @@ export class Session<TState = {}> {
       subagents: this.#subagents,
       resolveAgent: this.#resolveAgent,
       resolveMode: this.#resolveMode,
-      resolveModel: this.#resolveModel,
+      gateways: this.#gateways,
       defaultPermissionPolicy: this.#defaultPermissionPolicy,
       toolCategoryResolver: this.#toolCategoryResolver,
     });
@@ -445,40 +450,153 @@ export class Session<TState = {}> {
     return { tools: this.#mode.tools, additionalTools: this.#mode.additionalTools };
   }
 
-  async signal({ messages, ...options }: SessionSignalOptions): Promise<unknown> {
-    if (!this.#resolveAgent) {
-      throw new Error('Harness session cannot signal because no agent resolver is configured');
+  async subscribeToThread<OUTPUT = unknown>(
+    options: SessionSubscribeToThreadOptions = {},
+  ): Promise<SessionThreadSubscription<OUTPUT>> {
+    const agent = await this.#resolveSessionAgent();
+
+    return agent.subscribeToThread<OUTPUT>({
+      ...options,
+      resourceId: this.#resourceId,
+      threadId: this.#threadId,
+    });
+  }
+
+  async sendMessage<OUTPUT = unknown>({ messages, ...options }: SessionMessageOptions<OUTPUT>): Promise<SessionSendMessageResult> {
+    const agent = await this.#resolveSessionAgent();
+    const target = await this.#buildMessageTarget(agent, options);
+    const result = agent.sendMessage<OUTPUT>(this.#toAgentMessageInput(messages), target);
+    void this.#persistSession({});
+    return result;
+  }
+
+  async queueMessage<OUTPUT = unknown>({ messages, ...options }: SessionMessageOptions<OUTPUT>): Promise<SessionQueueMessageResult> {
+    const agent = await this.#resolveSessionAgent();
+    const target = await this.#buildMessageTarget(agent, options);
+    const result = agent.queueMessage<OUTPUT>(this.#toAgentMessageInput(messages), target);
+    void this.#persistSession({});
+    return result;
+  }
+
+  async #resolveSessionAgent(): Promise<Agent> {
+    return this.#agent;
+  }
+
+  async #buildMessageTarget<OUTPUT>(
+    agent: Agent,
+    options: Omit<SessionMessageOptions<OUTPUT>, 'messages'>,
+  ): Promise<SendAgentMessageOptions<OUTPUT> & QueueAgentMessageOptions<OUTPUT>> {
+    const { ifActive, ifIdle, runId, ...executionOptions } = options;
+    const requestContext = await this.#buildRequestContext();
+    const agentTools = await agent.listTools({ requestContext });
+    const tools = buildSessionToolsets({
+      agentTools,
+      modeOverrides: this.#getToolOverrides(),
+      builtInTools: buildHarnessBuiltInTools(this),
+    });
+    const harnessToolNames = Object.keys(tools);
+    const userStreamOptions = ifIdle?.streamOptions ?? {};
+    const requestedActiveTools = userStreamOptions.activeTools ?? executionOptions.activeTools;
+
+    const target = {
+      runId,
+      resourceId: this.#resourceId,
+      threadId: this.#threadId,
+      ifActive,
+      ifIdle: {
+        ...ifIdle,
+        behavior: ifIdle?.behavior ?? 'wake',
+        streamOptions: {
+          ...executionOptions,
+          ...userStreamOptions,
+          requestContext,
+          toolsets: { harness: tools },
+          activeTools: requestedActiveTools
+            ? [...new Set([...requestedActiveTools, ...harnessToolNames])]
+            : harnessToolNames,
+        },
+      },
+    };
+
+    return target as unknown as SendAgentMessageOptions<OUTPUT> & QueueAgentMessageOptions<OUTPUT>;
+  }
+
+  #toAgentMessageInput(messages: SessionMessageOptions['messages']): AgentMessageInput {
+    if (typeof messages === 'string') {
+      return messages;
     }
 
-    const agent = this.#agent;
-    const runId = options.runId ?? randomUUID();
-    this.#markRunning(runId);
+    if (Array.isArray(messages)) {
+      if (messages.every(part => this.#isSignalPart(part))) {
+        return messages as AgentMessageInput;
+      }
 
-    try {
-      const requestContext = await this.#buildRequestContext();
-      const agentTools = await agent.listTools({ requestContext });
-      const tools = buildSessionToolsets({
-        agentTools,
-        modeOverrides: this.#getToolOverrides(),
-        builtInTools: buildHarnessBuiltInTools(this),
-      });
-      const model = this.#resolveModel ? await this.#resolveModel(this.#modelId) : undefined;
-      const result = await agent.generate(messages, {
-        ...options,
-        runId,
-        requestContext,
-        ...(model ? { model } : {}),
-        toolsets: { harness: tools },
-        activeTools: options.activeTools
-          ? [...new Set([...options.activeTools, ...Object.keys(tools)])]
-          : Object.keys(tools),
-      });
-      this.#markIdle();
-      return result;
-    } catch (error) {
-      this.#markIdle();
-      throw error;
+      const text = messages.map(message => this.#extractMessageText(message)).filter(Boolean).join('\n');
+      if (text) {
+        return text;
+      }
     }
+
+    if (messages && typeof messages === 'object' && 'contents' in messages) {
+      return messages as AgentMessageInput;
+    }
+
+    const text = this.#extractMessageText(messages);
+    if (text) {
+      return text;
+    }
+
+    throw new Error('Harness session messages must be convertible to an agent message signal');
+  }
+
+  #isSignalPart(part: unknown): boolean {
+    return (
+      !!part &&
+      typeof part === 'object' &&
+      'type' in part &&
+      ((part as { type?: unknown }).type === 'text' || (part as { type?: unknown }).type === 'file')
+    );
+  }
+
+  #extractMessageText(message: unknown): string | undefined {
+    if (typeof message === 'string') {
+      return message;
+    }
+
+    if (!message || typeof message !== 'object') {
+      return undefined;
+    }
+
+    if ('text' in message && typeof (message as { text?: unknown }).text === 'string') {
+      return (message as { text: string }).text;
+    }
+
+    if ('content' in message) {
+      return this.#extractContentText((message as { content?: unknown }).content);
+    }
+
+    if ('parts' in message) {
+      return this.#extractContentText((message as { parts?: unknown }).parts);
+    }
+
+    return undefined;
+  }
+
+  #extractContentText(content: unknown): string | undefined {
+    if (typeof content === 'string') {
+      return content;
+    }
+
+    if (Array.isArray(content)) {
+      const text = content.map(part => this.#extractMessageText(part)).filter(Boolean).join('\n');
+      return text || undefined;
+    }
+
+    if (content && typeof content === 'object' && 'parts' in content) {
+      return this.#extractContentText((content as { parts?: unknown }).parts);
+    }
+
+    return undefined;
   }
 
   setMode(mode: HarnessMode) {
@@ -651,11 +769,16 @@ export class Session<TState = {}> {
 
   #isBusySnapshot(): boolean {
     const hasActiveRun =
+      !!this.#getActiveThreadRunId() ||
       this.#runStatus === 'starting' ||
       this.#runStatus === 'running' ||
       this.#runStatus === 'waiting' ||
       this.#runStatus === 'resuming';
     return hasActiveRun || this.#pending.some(item => item.status === 'pending');
+  }
+
+  #getActiveThreadRunId(): string | null {
+    return this.#agent?.getActiveThreadRunId?.({ resourceId: this.#resourceId, threadId: this.#threadId }) ?? null;
   }
 
   #markRunning(runId: string, traceId: string | null = null): void {

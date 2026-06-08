@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { Agent } from '../../agent';
+import { MastraGateway } from '../../llm';
+import type { MastraModelGatewayInterface } from '../../llm';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
 import type { MastraCompositeStore } from '../../storage';
@@ -45,10 +47,10 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
   readonly #workspace?: DynamicArgument<Workspace | undefined>;
   readonly #agent: Agent;
   readonly #subagents?: SubagentRegistryConfig;
-  readonly #resolveModel?: ModelResolver;
   readonly #runtimeCompatibilityGeneration?: string | null;
   readonly #defaultPermissionPolicy: PermissionPolicy;
   readonly #toolCategoryResolver?: ToolCategoryResolver;
+  readonly #gateways: Array<MastraModelGatewayInterface>;
 
   constructor(config: HarnessConfig<MODES, TState>) {
     if (!config.modes.length) {
@@ -79,9 +81,6 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
 
     if (config.subagents) {
       const entries = Object.entries(config.subagents.types ?? {});
-      if (entries.length > 0 && !config.resolveModel) {
-        throw new Error('Harness "subagents" requires a "resolveModel" function to instantiate subagent models');
-      }
       for (const [typeId, def] of entries) {
         if (!def?.agentId) {
           throw new Error(`Subagent "${typeId}" must declare an "agentId"`);
@@ -99,7 +98,11 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       }
       this.#subagents = { ...config.subagents, maxDepth };
     }
-    this.#resolveModel = config.resolveModel;
+    this.#gateways = config.gateways
+      ? config.gateways.length
+        ? config.gateways
+        : [new MastraGateway()]
+      : [new MastraGateway()];
 
     this.#defaultPermissionPolicy = config.defaultPermissionPolicy ?? 'ask';
     if (config.toolCategoryResolver) {
@@ -300,7 +303,7 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       subagents: this.#subagents,
       resolveAgent: agentId => this.#resolveAgent(agentId),
       resolveMode: modeId => this.#resolveMode(modeId),
-      resolveModel: this.#resolveModel,
+      gateways: this.#gateways,
       defaultPermissionPolicy: this.#defaultPermissionPolicy,
       toolCategoryResolver: this.#toolCategoryResolver,
     });

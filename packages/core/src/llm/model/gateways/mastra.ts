@@ -13,8 +13,8 @@ export interface MastraGatewayConfig {
 }
 
 export class MastraGateway extends MastraModelGateway {
-  readonly id = 'mastra';
-  readonly name = 'Memory Gateway';
+  readonly id: string = 'mastra';
+  readonly name: string = 'Memory Gateway';
 
   constructor(private config?: MastraGatewayConfig) {
     super();

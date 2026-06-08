@@ -1,4 +1,5 @@
 import type { Agent } from '../../agent';
+import type { MastraModelGateway, MastraModelGatewayInterface } from '../../llm';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
 import type { PublicSchema } from '../../schema';
@@ -45,6 +46,8 @@ export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
    */
   workspace?: DynamicArgument<Workspace | undefined> | WorkspaceConfig;
 
+  gateways?: Array<MastraModelGatewayInterface>;
+
   /**
    * Session lifecycle policy. `maxSubagentDepth` caps durable child session
    * creation across all subagent entry points and defaults to `1`.
@@ -60,13 +63,6 @@ export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
    * map. Validated at construction.
    */
   subagents?: SubagentRegistryConfig;
-
-  /**
-   * Resolves a model id string to a `LanguageModel`. Required when the
-   * built-in `subagent` tool is exposed (i.e. when {@link subagents} is set)
-   * so that fresh subagent runs can instantiate their model.
-   */
-  resolveModel?: ModelResolver;
 
   /**
    * Default permission policy applied when a tool's resolved category has no

@@ -1,5 +1,16 @@
-import type { Agent, AgentExecutionOptionsBase } from '../../agent';
+import type {
+  Agent,
+  AgentExecutionOptionsBase,
+  AgentMessageInput,
+  AgentSubscribeToThreadOptions,
+  AgentThreadSubscription,
+  QueueAgentMessageOptions,
+  QueueAgentMessageResult,
+  SendAgentMessageOptions,
+  SendAgentMessageResult,
+} from '../../agent';
 import type { MessageListInput } from '../../agent/message-list';
+import type { MastraModelGatewayInterface } from '../../llm';
 import type { MastraMemory } from '../../memory';
 import type { PublicSchema } from '../../schema';
 import type { HarnessPendingItemRecord, HarnessStorage, SessionRecord } from '../../storage/domains/harness';
@@ -8,7 +19,7 @@ import type { Workspace } from '../../workspace';
 import type { EventEmitter } from './events';
 import type { HarnessMode } from './mode';
 import type { PermissionPolicy, ToolCategoryResolver } from './permissions.types';
-import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
+import type { SubagentRegistryConfig } from './subagents.types';
 
 export type CloneSessionOptions = {
   sessionId?: string;
@@ -27,12 +38,36 @@ export type CloneSessionOptions = {
 export type HarnessAgentResolver = (agentId: string) => Agent | Promise<Agent>;
 export type HarnessModeResolver = (modeId: string) => HarnessMode | Promise<HarnessMode>;
 
-export interface SessionSignalOptions extends Omit<
-  AgentExecutionOptionsBase<unknown>,
+type SessionScopedMessageOptions<OUTPUT = unknown> = Omit<
+  Extract<SendAgentMessageOptions<OUTPUT>, { resourceId: string; threadId: string }>,
+  'resourceId' | 'threadId' | 'ifIdle'
+> & {
+  ifIdle?: Omit<
+    NonNullable<Extract<SendAgentMessageOptions<OUTPUT>, { resourceId: string; threadId: string }>['ifIdle']>,
+    'streamOptions'
+  > & {
+    streamOptions?: Omit<AgentExecutionOptionsBase<OUTPUT>, 'requestContext' | 'toolsets' | 'model'>;
+  };
+};
+
+export type SessionSubscribeToThreadOptions = Omit<AgentSubscribeToThreadOptions, 'resourceId' | 'threadId'>;
+export type SessionThreadSubscription<OUTPUT = unknown> = AgentThreadSubscription<OUTPUT>;
+export type SessionSendMessageResult = SendAgentMessageResult;
+export type SessionQueueMessageResult = QueueAgentMessageResult;
+export type SessionQueueMessageOptions<OUTPUT = unknown> = Omit<
+  Extract<QueueAgentMessageOptions<OUTPUT>, { resourceId: string; threadId: string }>,
+  'resourceId' | 'threadId' | 'ifIdle'
+> &
+  Pick<SessionScopedMessageOptions<OUTPUT>, 'ifIdle'>;
+
+export type SessionMessageInput = AgentMessageInput | MessageListInput;
+export type SessionMessageOptions<OUTPUT = unknown> = Omit<
+  AgentExecutionOptionsBase<OUTPUT>,
   'requestContext' | 'toolsets' | 'model'
-> {
-  messages: MessageListInput;
-}
+> &
+  SessionScopedMessageOptions<OUTPUT> & {
+    messages: SessionMessageInput;
+  };
 
 export interface SessionConfig<TState = {}> {
   memory: MastraMemory | DynamicArgument<MastraMemory>;
@@ -43,8 +78,8 @@ export interface SessionConfig<TState = {}> {
   agent: Agent;
   /** Subagent registry the session can spawn through the built-in tool. */
   subagents?: SubagentRegistryConfig;
-  /** Resolves a model id to a `LanguageModel`. Required for subagent spawn. */
-  resolveModel?: ModelResolver;
+  /**  */
+  gateways: Array<MastraModelGatewayInterface>;
   /** Default permission policy applied when no category rule matches. */
   defaultPermissionPolicy?: PermissionPolicy;
   /** Resolves a tool name to its category for permission-gate evaluation. */
