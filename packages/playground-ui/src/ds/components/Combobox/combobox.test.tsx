@@ -84,13 +84,18 @@ describe('Combobox', () => {
     expect(trigger.className).toContain('justify-between');
   });
 
-  it('defaults to the bordered outline variant; ghost drops the visible border', () => {
+  it('defaults to the filled default variant; outline is transparent-bordered; ghost drops the border', () => {
     const { rerender } = render(<Combobox options={options} placeholder="Pick provider" />);
-    // Default === outline: a bordered field.
-    expect(screen.getByRole('combobox').className).toContain('border-border1');
+    // Default === the Button `default`: a filled surface.
+    const defaultClass = screen.getByRole('combobox').className;
+    expect(defaultClass).toContain('bg-surface3');
+    expect(defaultClass).not.toContain('bg-transparent');
 
+    // Outline === a transparent bordered field.
     rerender(<Combobox options={options} placeholder="Pick provider" variant="outline" />);
-    expect(screen.getByRole('combobox').className).toContain('border-border1');
+    const outlineClass = screen.getByRole('combobox').className;
+    expect(outlineClass).toContain('bg-transparent');
+    expect(outlineClass).toContain('border-border1');
 
     // Ghost === borderless: same shape, transparent border instead.
     rerender(<Combobox options={options} placeholder="Pick provider" variant="ghost" />);

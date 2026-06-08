@@ -4,16 +4,18 @@ import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 /**
- * A combobox is a form field, not a call-to-action — so it deliberately exposes
- * only the field-appropriate button looks, mirroring `SelectTrigger`. `outline`
- * (bordered, the default) and `ghost` (borderless, for breadcrumbs/inline
- * pickers). High-emphasis looks like `primary` are intentionally NOT offered.
+ * A combobox is a form field, so it reuses the same button looks as everywhere,
+ * mirroring `SelectTrigger`: `default` (the Button's filled default surface —
+ * the default here too), `outline` (bordered, transparent) and `ghost`
+ * (borderless, for breadcrumbs/inline pickers). Only the high-emphasis `primary`
+ * look is intentionally NOT offered (a field is not a call-to-action).
  */
-export type ComboboxVariant = 'outline' | 'ghost';
+export type ComboboxVariant = 'default' | 'outline' | 'ghost';
 
 // Open-state look ("active" while the popup is open), mirroring each variant's
 // own hover so it stays variant-correct. Same values as `selectTriggerOpenState`.
 const comboboxTriggerOpenState: Record<ComboboxVariant, string> = {
+  default: 'data-[popup-open]:bg-surface5 data-[popup-open]:text-neutral6',
   outline: 'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
   ghost: 'data-[popup-open]:bg-neutral6/5 data-[popup-open]:text-neutral6',
 };

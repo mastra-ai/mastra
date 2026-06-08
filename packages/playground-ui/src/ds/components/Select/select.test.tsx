@@ -113,8 +113,8 @@ describe('Select', () => {
     expect(trigger.className).toContain('focus-visible:border-neutral5/50');
   });
 
-  it('wires the variant prop through to the button recipe (default = outline, field-only variants)', () => {
-    function renderWithVariant(variant?: 'ghost' | 'outline') {
+  it('wires the variant prop through to the button recipe (default = the filled Button default, field-only variants)', () => {
+    function renderWithVariant(variant?: 'default' | 'outline' | 'ghost') {
       const utils = render(
         <Select>
           <SelectTrigger {...(variant ? { variant } : {})}>
@@ -130,11 +130,14 @@ describe('Select', () => {
       return className;
     }
 
-    // Default trigger == the `outline` variant (bordered field, border1).
-    expect(renderWithVariant()).toBe(renderWithVariant('outline'));
-    // `ghost` swaps the bordered field for a borderless look.
+    // Default trigger == the `default` variant (the Button's filled surface).
+    expect(renderWithVariant()).toBe(renderWithVariant('default'));
+    expect(renderWithVariant('default')).toContain('bg-surface3');
+    expect(renderWithVariant('default')).not.toContain('bg-transparent');
+    // `outline` is a transparent bordered field.
+    expect(renderWithVariant('outline')).toContain('bg-transparent');
     expect(renderWithVariant('outline')).toContain('border-border1');
+    // `ghost` is borderless.
     expect(renderWithVariant('ghost')).toContain('border-transparent');
-    expect(renderWithVariant('ghost')).not.toContain('border-border1');
   });
 });

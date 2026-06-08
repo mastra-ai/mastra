@@ -35,7 +35,7 @@ export function MultiCombobox({
   emptyText = 'No option found.',
   className,
   disabled = false,
-  variant = 'outline',
+  variant = 'default',
   size = 'md',
   open,
   onOpenChange,

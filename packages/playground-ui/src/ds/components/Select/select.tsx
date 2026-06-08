@@ -98,12 +98,13 @@ const SelectValue = React.forwardRef<HTMLSpanElement, SelectValueProps>(({ class
 SelectValue.displayName = 'SelectValue';
 
 /**
- * A select is a form field, not a call-to-action — so it deliberately exposes
- * only the field-appropriate button looks. `outline` (bordered, the default)
- * and `ghost` (borderless, for dense toolbars/inline pickers). High-emphasis
- * looks like `primary` are intentionally NOT offered.
+ * A select is a form field, so it reuses the same button looks consumers see
+ * everywhere: `default` (the Button's filled default surface — the default
+ * here too), `outline` (bordered, transparent) and `ghost` (borderless, for
+ * dense toolbars/inline pickers). The high-emphasis `primary` look is the only
+ * one intentionally NOT offered (a field is not a call-to-action).
  */
-export type SelectTriggerVariant = 'outline' | 'ghost';
+export type SelectTriggerVariant = 'default' | 'outline' | 'ghost';
 
 export type SelectTriggerProps = Omit<SelectPrimitive.Trigger.Props, 'className'> & {
   className?: string;
@@ -114,12 +115,13 @@ export type SelectTriggerProps = Omit<SelectPrimitive.Trigger.Props, 'className'
 // Open-state look ("active" while the menu is open), mirroring each variant's own
 // hover so it stays variant-correct.
 const selectTriggerOpenState: Record<SelectTriggerVariant, string> = {
+  default: 'data-[popup-open]:bg-surface5 data-[popup-open]:text-neutral6',
   outline: 'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
   ghost: 'data-[popup-open]:bg-neutral6/5 data-[popup-open]:text-neutral6',
 };
 
 const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
-  ({ className, children, size = 'default', variant = 'outline', ...props }, ref) => {
+  ({ className, children, size = 'default', variant = 'default', ...props }, ref) => {
     return (
       <SelectPrimitive.Trigger
         ref={ref}

@@ -42,7 +42,7 @@ export function Combobox({
   emptyText = 'No option found.',
   className,
   disabled = false,
-  variant = 'outline',
+  variant = 'default',
   size = 'default',
   open,
   onOpenChange,
