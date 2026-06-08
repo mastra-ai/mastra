@@ -74,10 +74,7 @@ describe('localStorageDetector', () => {
       `const example = "storage: new LibSQLStore({ url: 'file:./data.db' })";`,
       '/project/.mastra/.build/@mastra__core__mastra.mjs',
     );
-    plugin.transform(
-      `const example = "url: 'file:./data.db'";`,
-      '/project/.mastra/.build/@mastra__core.mjs',
-    );
+    plugin.transform(`const example = "url: 'file:./data.db'";`, '/project/.mastra/.build/@mastra__core.mjs');
 
     const emitted: Array<{ fileName: string; source: string }> = [];
     const ctx = {
