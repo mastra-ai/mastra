@@ -117,7 +117,11 @@ export class ContextLoadedToolStore implements LoadedToolStore {
     if (!ctx.threadId) return fromMessages;
 
     const supplemental = this.supplemental.get(ctx.threadId);
-    if (!supplemental || supplemental.size === 0) return fromMessages;
+    if (!supplemental || supplemental.size === 0) {
+      // Drop the empty entry so high thread churn does not leak keys.
+      if (supplemental) this.supplemental.delete(ctx.threadId);
+      return fromMessages;
+    }
 
     // Once a name appears in the messages it becomes message-owned, so prune it from
     // the supplemental set. This hands de-loading back to the messages (native
@@ -128,6 +132,8 @@ export class ContextLoadedToolStore implements LoadedToolStore {
       for (const name of [...supplemental]) {
         if (fromMessages.has(name)) supplemental.delete(name);
       }
+      // Once every name is message-owned the entry is dead weight; drop it.
+      if (supplemental.size === 0) this.supplemental.delete(ctx.threadId);
     }
 
     return new Set([...fromMessages, ...supplemental]);

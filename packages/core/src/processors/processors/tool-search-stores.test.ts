@@ -141,4 +141,19 @@ describe('ContextLoadedToolStore', () => {
     store.addLoaded(['weather'], { threadId: undefined, args: emptyArgs });
     expect(store.getLoadedNames({ threadId: undefined, args: emptyArgs }).size).toBe(0);
   });
+
+  it('drops the supplemental entry once it empties, so thread keys do not leak', () => {
+    const store = new ContextLoadedToolStore();
+    const supplemental = (store as unknown as { supplemental: Map<string, Set<string>> }).supplemental;
+
+    // Activated before the messages catch up -> entry created.
+    store.addLoaded(['weather'], { threadId: 'thread-1', args: argsWithMessages([]) });
+    expect(supplemental.has('thread-1')).toBe(true);
+
+    // Once the result appears in the messages, the name is pruned and the now-empty
+    // entry is removed from the map rather than lingering as a dead key.
+    const withResult = argsWithMessages([{ toolName: 'load_tool', result: { loaded: ['weather'] } }]);
+    store.getLoadedNames({ threadId: 'thread-1', args: withResult });
+    expect(supplemental.has('thread-1')).toBe(false);
+  });
 });
