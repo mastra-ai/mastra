@@ -1283,6 +1283,10 @@ export class Workspace<
    * Destroy the workspace and clean up all resources.
    */
   async destroy(): Promise<void> {
+    if (this._status === 'destroyed' || this._status === 'destroying') {
+      return;
+    }
+
     this._status = 'destroying';
 
     try {

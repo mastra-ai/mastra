@@ -46,6 +46,8 @@ await mastra.removeWorkspace('workspace-123', { destroy: true })
 ]}
 />
 
+When `destroy` is `true` and `workspace.destroy()` throws, the call rejects with that error and the workspace remains registered so the caller can retry cleanup.
+
 ## Related
 
 - [Workspace overview](/docs/workspace/overview)

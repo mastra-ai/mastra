@@ -4344,13 +4344,9 @@ export class Mastra<
     // SchedulerWorker is stopped as part of stopWorkers().
     await this.stopWorkers();
 
-    for (const [id, entry] of Object.entries(this.#workspaces)) {
+    for (const id of Object.keys(this.#workspaces)) {
       try {
-        await entry.workspace.destroy();
-        delete this.#workspaces[id];
-        if (this.#workspace === entry.workspace) {
-          this.#workspace = undefined;
-        }
+        await this.removeWorkspace(id, { destroy: true });
       } catch (error) {
         this.#logger?.error('Failed to destroy workspace during shutdown', { workspaceId: id, error });
       }
