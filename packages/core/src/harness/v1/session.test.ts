@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import type { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { MastraMemory } from '../../memory';
 import { MastraCompositeStore } from '../../storage';
@@ -69,20 +70,41 @@ const createMemory = () => {
   } as unknown as MastraMemory;
 };
 
-const createHarness = (memory: MastraMemory, storage = new RecordingHarnessStorage(), ownerId?: string) => ({
+const createAgent = (overrides: Partial<Agent> = {}) =>
+  ({
+    listTools: vi.fn().mockResolvedValue({}),
+    getActiveThreadRunId: vi.fn().mockReturnValue(null),
+    subscribeToThread: vi.fn().mockResolvedValue({
+      activeRunId: () => null,
+      abort: () => false,
+      unsubscribe: () => undefined,
+      stream: (async function* () {})(),
+    }),
+    sendMessage: vi.fn().mockReturnValue({ accepted: true }),
+    queueMessage: vi.fn().mockReturnValue({ accepted: true, queued: true }),
+    ...overrides,
+  }) as unknown as Agent;
+
+const createHarness = (
+  memory: MastraMemory,
+  storage = new RecordingHarnessStorage(),
+  ownerId?: string,
+  agent = createAgent(),
+) => ({
   storage,
   memory,
   harness: new Harness({
-    agents: {},
+    agent,
     ownerId,
     storage,
     memory,
     modes: [
-      { id: 'build', agentId: 'default', defaultModelId: 'test-build-model' },
-      { id: 'plan', agentId: 'default', defaultModelId: 'test-plan-model' },
+      { id: 'build', defaultModelId: 'test-build-model' },
+      { id: 'plan', defaultModelId: 'test-plan-model' },
     ],
     defaultModeId: 'build',
   }),
+  agent,
 });
 
 describe('Harness.session()', () => {
@@ -147,10 +169,10 @@ describe('Harness.session()', () => {
   it('uses top-level storage', async () => {
     const storage = new RecordingHarnessStorage();
     const harness = new Harness({
-      agents: {},
+      agent: createAgent(),
       storage,
       memory: createMemory(),
-      modes: [{ id: 'build', agentId: 'default', defaultModelId: 'test-build-model' }],
+      modes: [{ id: 'build', defaultModelId: 'test-build-model' }],
       defaultModeId: 'build',
     });
 
@@ -339,11 +361,11 @@ describe('Harness.session()', () => {
       lastActivityAt: createdAt,
     });
     const harness = new Harness({
-      agents: {},
+      agent: createAgent(),
       ownerId: 'owner-1',
       storage,
       memory: createMemory(),
-      modes: [{ id: 'build', agentId: 'default', defaultModelId: 'test-build-model' }],
+      modes: [{ id: 'build', defaultModelId: 'test-build-model' }],
       defaultModeId: 'build',
     });
 
@@ -380,13 +402,13 @@ describe('Harness.session()', () => {
     const storage = new RecordingHarnessStorage();
     const memory = createMemory();
     const harness = new Harness({
-      agents: {},
+      agent: createAgent(),
       storage,
       memory,
       runtimeCompatibilityGeneration: 'runtime-v1',
       modes: [
-        { id: 'build', agentId: 'default', defaultModelId: 'test-build-model' },
-        { id: 'plan', agentId: 'default', defaultModelId: 'test-plan-model' },
+        { id: 'build', defaultModelId: 'test-build-model' },
+        { id: 'plan', defaultModelId: 'test-plan-model' },
       ],
       defaultModeId: 'build',
     });
@@ -416,12 +438,12 @@ describe('Harness.session()', () => {
   it('applies pending plan approval mode transitions at the session boundary', async () => {
     const storage = new RecordingHarnessStorage();
     const harness = new Harness({
-      agents: {},
+      agent: createAgent(),
       storage,
       memory: createMemory(),
       modes: [
-        { id: 'build', agentId: 'default', defaultModelId: 'test-build-model' },
-        { id: 'plan', agentId: 'default', defaultModelId: 'test-plan-model', transitionsTo: 'build' },
+        { id: 'build', defaultModelId: 'test-build-model' },
+        { id: 'plan', defaultModelId: 'test-plan-model', transitionsTo: 'build' },
       ],
       defaultModeId: 'plan',
     });
@@ -496,7 +518,7 @@ describe('Harness events', () => {
     events.length = 0;
 
     session.setModelId('model-2');
-    session.setMode({ id: 'plan', agentId: 'default', defaultModelId: 'test-plan-model' });
+    session.setMode({ id: 'plan', defaultModelId: 'test-plan-model' });
 
     expect(events).toEqual([
       expect.objectContaining({
@@ -615,5 +637,66 @@ describe('Harness.ownerId', () => {
 
     expect(session.ownerId).toBe(creator.ownerId);
     expect(session.ownerId).not.toBe(reader.ownerId);
+  });
+
+  it('exposes sendMessage instead of signal', async () => {
+    const { harness } = createHarness(createMemory());
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+    expect(typeof session.sendMessage).toBe('function');
+    expect((session as unknown as { signal?: unknown }).signal).toBeUndefined();
+  });
+
+  it('subscribes to the session thread through the backing agent', async () => {
+    const subscription = {
+      activeRunId: () => null,
+      abort: () => false,
+      unsubscribe: () => undefined,
+      stream: (async function* () {})(),
+    };
+    const agent = createAgent({ subscribeToThread: vi.fn().mockResolvedValue(subscription) });
+    const { harness } = createHarness(createMemory(), new RecordingHarnessStorage(), undefined, agent);
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+    await expect(session.subscribeToThread()).resolves.toBe(subscription);
+    expect(agent.subscribeToThread).toHaveBeenCalledWith({ resourceId: 'resource-1', threadId: 'thread-1' });
+  });
+
+  it('sends messages through the agent thread runtime', async () => {
+    const agent = createAgent({
+      generate: vi.fn(),
+      sendMessage: vi.fn().mockReturnValue({ accepted: true, runId: 'run-1' }),
+    } as Partial<Agent>);
+    const { harness } = createHarness(createMemory(), new RecordingHarnessStorage(), undefined, agent);
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+    await expect(session.sendMessage({ messages: 'hello' })).resolves.toEqual({ accepted: true, runId: 'run-1' });
+
+    expect(agent.sendMessage).toHaveBeenCalledWith(
+      'hello',
+      expect.objectContaining({
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        ifIdle: expect.objectContaining({ behavior: 'wake' }),
+      }),
+    );
+    expect(agent.generate).not.toHaveBeenCalled();
+  });
+
+  it('queues messages through the agent thread runtime', async () => {
+    const agent = createAgent({ queueMessage: vi.fn().mockReturnValue({ accepted: true, queued: true }) });
+    const { harness } = createHarness(createMemory(), new RecordingHarnessStorage(), undefined, agent);
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+    await expect(session.queueMessage({ messages: 'queued' })).resolves.toEqual({ accepted: true, queued: true });
+
+    expect(agent.queueMessage).toHaveBeenCalledWith(
+      'queued',
+      expect.objectContaining({
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        ifIdle: expect.objectContaining({ behavior: 'wake' }),
+      }),
+    );
   });
 });

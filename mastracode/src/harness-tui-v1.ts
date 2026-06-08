@@ -1,11 +1,16 @@
 import { createHash } from 'node:crypto';
+import { appendFile } from 'node:fs/promises';
 import { hostname } from 'node:os';
+import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { Agent } from '@mastra/core/agent';
 import { Harness as HarnessV1 } from '@mastra/core/harness/v1';
-import type { HarnessMode as HarnessModeV1 } from '@mastra/core/harness/v1';
+import type { HarnessEvent, HarnessMode as HarnessModeV1 } from '@mastra/core/harness/v1';
 import { InMemoryHarness } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
+import z from 'zod';
+import { getDynamicWorkspace } from './agents/workspace';
+import { MastraCodeGateway } from './gateways/mastracode';
 
 // ─── Hash helper (same as mastracode uses) ────────────────────────────────
 function hash(input: string): string {
@@ -60,6 +65,41 @@ const cwd = process.cwd();
 const ownerId = `harness-tui-${hash(`${hostname()}\0${cwd}`)}`;
 const resourceId = `resource-${hash(cwd)}`;
 
+// ─── Event log ──────────────────────────────────────────────────────────────
+let activeSessionId: string | undefined;
+const pendingEventLogs: HarnessEvent[] = [];
+const eventLogWrites = new Map<string, Promise<void>>();
+
+function eventLogPath(sessionId: string): string {
+  return join(cwd, `events-${sessionId}.log`);
+}
+
+function queueEventLog(event: HarnessEvent): void {
+  const sessionId = event.sessionId ?? activeSessionId;
+  if (!sessionId) {
+    pendingEventLogs.push(event);
+    return;
+  }
+
+  const path = eventLogPath(sessionId);
+  const line = `${JSON.stringify(event)}\n`;
+  const previousWrite = eventLogWrites.get(path) ?? Promise.resolve();
+  const nextWrite = previousWrite.catch(() => undefined).then(() => appendFile(path, line, 'utf8'));
+  eventLogWrites.set(path, nextWrite);
+  nextWrite.catch(err => console.error(`Failed to write event log ${path}:`, err));
+}
+
+function flushPendingEventLogs(): void {
+  while (pendingEventLogs.length > 0) {
+    const event = pendingEventLogs.shift()!;
+    queueEventLog(event);
+  }
+}
+
+async function flushEventLogWrites(): Promise<void> {
+  await Promise.all([...eventLogWrites.values()].map(write => write.catch(() => undefined)));
+}
+
 // ─── Create HarnessV1 ───────────────────────────────────────────────────────
 const harness = new HarnessV1({
   ownerId,
@@ -68,7 +108,17 @@ const harness = new HarnessV1({
   modes,
   defaultModeId,
   storage: harnessStorage,
+  workspace: getDynamicWorkspace,
+  gateways: [new MastraCodeGateway()],
+  stateSchema: z.object({
+    projectPath: z.string(),
+  }),
+  initialState: {
+    projectPath: process.cwd(),
+  },
 });
+
+harness.subscribe(queueEventLog);
 
 // ─── Session detection ────────────────────────────────────────────────────
 async function detectOrCreateSession() {
@@ -96,7 +146,10 @@ async function main() {
   console.info('Starting HarnessV1 TUI...');
 
   const session = await detectOrCreateSession();
+  activeSessionId = session.id;
+  flushPendingEventLogs();
   console.info(`Session created: ${session.id}`);
+  console.info(`Event log: ${eventLogPath(session.id)}`);
   console.info(`Mode: ${session.getMode().id}, Model: ${session.getModelId()}`);
 
   const rl = createInterface({
@@ -112,12 +165,78 @@ async function main() {
     if (!promptText.trim()) return;
 
     console.info('Sending prompt...');
+
+    let isRunning = false;
+
     try {
-      const stream = await codeAgent.stream([{ role: 'user', content: promptText }], { model: session.getModelId() });
-      for await (const chunk of stream.textStream) {
-        process.stdout.write(chunk);
+      // ─── Subscribe to the session thread for streamed output ────────────
+      const subscription = await session.subscribeToThread();
+
+      // ─── Read streamed chunks ───────────────────────────────────────────
+      const streamPromise = (async () => {
+        try {
+          for await (const chunk of subscription.stream) {
+            // Handle different chunk types
+            if (typeof chunk === 'string') {
+              process.stdout.write(chunk);
+            } else if (chunk && typeof chunk === 'object') {
+              const text = (chunk as { text?: string }).text ?? '';
+              if (text) process.stdout.write(text);
+            }
+          }
+        } catch (err) {
+          if ((err as Error).message !== 'AbortError') {
+            console.error('Stream error:', err);
+          }
+        }
+      })();
+
+      // ─── While the agent is running, allow follow-up prompts ────────────
+      const steerPromise = (async () => {
+        while (isRunning) {
+          // Small delay to avoid blocking the event loop
+          await new Promise<void>(resolve => setTimeout(resolve, 50));
+          if (!isRunning) break;
+
+          const steerText = await ask('\n> ');
+          if (!steerText.trim()) continue;
+
+          try {
+            await session.sendMessage({ messages: steerText });
+          } catch (err) {
+            console.error('Steer error:', err);
+          }
+        }
+      })();
+
+      // ─── Start the run via queueMessage ─────────────────────────────────
+      const result = await session.queueMessage({ messages: promptText });
+      if (result.accepted) {
+        isRunning = true;
       }
+
+      // ─── Poll activeRunId to detect when the run finishes ───────────────
+      const pollPromise = (async () => {
+        // Wait a tick for the run to register
+        await new Promise<void>(resolve => setTimeout(resolve, 50));
+        while (isRunning) {
+          const runId = subscription.activeRunId();
+          if (!runId) {
+            // No active run — the stream should finish shortly
+            break;
+          }
+          await new Promise<void>(resolve => setTimeout(resolve, 100));
+        }
+        isRunning = false;
+      })();
+
+      // ─── Wait for everything to finish ──────────────────────────────────
+      await streamPromise;
+      await pollPromise;
+      await steerPromise;
+
       console.info();
+      subscription.unsubscribe();
     } catch (err) {
       console.error('Error:', err);
     }
@@ -154,6 +273,7 @@ async function main() {
     if (choice === 'q' || choice === 'quit') {
       console.info('Goodbye!');
       rl.close();
+      await flushEventLogWrites();
       process.exit(0);
     } else if (choice === 'p' || choice === 'prompt') {
       await handlePrompt();
