@@ -88,6 +88,31 @@
   --notice-info-fg: oklch(0.97 0.013 224);
   --notice-note: oklch(0.18 0 0);
   --notice-note-fg: oklch(0.99 0.001 230);
+
+  /* Brand green scale (dark). Centered on --notice-success; remaps Tailwind's
+     default green palette via the @theme block below so `green-*` utilities use
+     the Mastra brand green across every consumer. */
+  --brand-green-50: oklch(99% 0.024 138);
+  --brand-green-100: oklch(97.5% 0.055 138);
+  --brand-green-200: oklch(95.5% 0.105 138);
+  --brand-green-300: oklch(94% 0.18 138);
+  --brand-green-400: oklch(93% 0.235 138);
+  --brand-green-500: var(--notice-success);
+  --brand-green-600: oklch(76% 0.22 140);
+  --brand-green-700: oklch(62% 0.19 140);
+  --brand-green-800: oklch(45% 0.13 142);
+  --brand-green-900: oklch(33% 0.09 144);
+  --brand-green-950: oklch(22% 0.06 145);
+  --brand-green-badge-bg: oklch(32.3% 0.04 140);
+  --brand-green-badge-fg: oklch(83.6% 0.126 140);
+
+  /* Chart palette (recharts). Mirrors Tailwind blue-600 / amber-500 / purple-500
+     / red-500 in oklch; --chart-2 follows the brand green. */
+  --chart-1: oklch(0.546 0.245 262.881);
+  --chart-2: var(--color-green-500);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.637 0.237 25.331);
 }
 
 html.light {
@@ -150,6 +175,20 @@ html.light {
   --notice-info-fg: oklch(0.36 0.13 225);
   --notice-note: oklch(0.97 0 0);
   --notice-note-fg: oklch(0.18 0 0);
+
+  /* Brand green scale (light). --brand-green-badge-* and --chart-* are inherited
+     from :root (only the green ramp flips per mode). */
+  --brand-green-50: oklch(97.8% 0.025 140);
+  --brand-green-100: oklch(95.5% 0.055 140);
+  --brand-green-200: oklch(91.5% 0.095 140);
+  --brand-green-300: oklch(84.5% 0.145 140);
+  --brand-green-400: oklch(72.5% 0.18 140);
+  --brand-green-500: var(--notice-success);
+  --brand-green-600: oklch(47% 0.17 142);
+  --brand-green-700: oklch(38% 0.13 144);
+  --brand-green-800: oklch(30% 0.1 145);
+  --brand-green-900: oklch(24% 0.075 146);
+  --brand-green-950: oklch(17% 0.05 147);
 }
 
 @theme {
@@ -334,6 +373,27 @@ html.light {
   --color-notice-info-fg: var(--notice-info-fg);
   --color-notice-note: var(--notice-note);
   --color-notice-note-fg: var(--notice-note-fg);
+
+  /*
+   * Replace Tailwind's default green palette with the Mastra brand green.
+   * `--color-green-*: initial` clears the built-in green first (the native v4
+   * way to override a whole namespace), then each shade maps to the per-mode
+   * --brand-green-* token so `green-*` utilities follow light/dark.
+   */
+  --color-green-*: initial;
+  --color-green-50: var(--brand-green-50);
+  --color-green-100: var(--brand-green-100);
+  --color-green-200: var(--brand-green-200);
+  --color-green-300: var(--brand-green-300);
+  --color-green-400: var(--brand-green-400);
+  --color-green-500: var(--brand-green-500);
+  --color-green-600: var(--brand-green-600);
+  --color-green-700: var(--brand-green-700);
+  --color-green-800: var(--brand-green-800);
+  --color-green-900: var(--brand-green-900);
+  --color-green-950: var(--brand-green-950);
+  --color-green-badge-bg: var(--brand-green-badge-bg);
+  --color-green-badge-fg: var(--brand-green-badge-fg);
 
   /*
    * Role-based font tokens. Components reference --font-display (headlines,
