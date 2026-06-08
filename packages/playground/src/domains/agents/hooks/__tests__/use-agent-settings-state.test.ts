@@ -43,6 +43,12 @@ describe('use-agent-settings-state defaults', () => {
     expect(modelSettings.temperature).toBeUndefined();
     expect(modelSettings.topP).toBeUndefined();
   });
+
+  it('should not set maxSteps by default so agents can run until completion', async () => {
+    const { defaultSettings } = await import('../use-agent-settings-state');
+
+    expect(defaultSettings.modelSettings.maxSteps).toBeUndefined();
+  });
 });
 
 describe('isAnthropicModelWithSamplingRestriction', () => {
