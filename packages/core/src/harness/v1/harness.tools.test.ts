@@ -149,8 +149,16 @@ describe('Harness — tools/skills/subagents config', () => {
   it('creates durable child sessions through the subagent built-in and enforces depth cap', async () => {
     const storage = new MemStore();
     const resolveModel = vi.fn().mockReturnValue({});
+    // Subagents resolve a backing agent per type `agentId`, which the harness looks up through
+    // the parent Mastra. A single-agent inline harness has no per-id resolver, so drive this
+    // through a Mastra-backed harness.
+    const mastra = {
+      getStorage: vi.fn(() => undefined),
+      getAgentById: vi.fn(() => ({})),
+    };
     const harness = new Harness({
-      agents: { default: {} as never },
+      mastra: mastra as never,
+      agent: 'default',
       memory,
       storage,
       runtimeCompatibilityGeneration: 'runtime-v1',
@@ -221,6 +229,7 @@ describe('Harness — tools/skills/subagents config', () => {
     };
     const harness = new Harness({
       mastra: mastra as never,
+      agent: 'default',
       memory,
       storage,
       modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm' }],
