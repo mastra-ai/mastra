@@ -8,7 +8,7 @@
   "types": "dist/index.d.ts",
   "files": [
     "dist",
-    "src/theme.css",
+    "theme.css",
     "CHANGELOG.md"
   ],
   "exports": {
@@ -19,7 +19,7 @@
       }
     },
     "./style.css": "./dist/index.css",
-    "./theme.css": "./src/theme.css",
+    "./theme.css": "./theme.css",
     "./tokens": {
       "import": {
         "types": "./dist/tokens.d.ts",

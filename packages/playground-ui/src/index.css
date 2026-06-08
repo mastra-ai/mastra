@@ -8,9 +8,9 @@
  * block — live in ./theme.css so the same source can also ship raw (uncompiled)
  * as `@mastra/playground-ui/theme.css`, letting a consumer's own Tailwind
  * compiler read `@theme` and generate the DS utilities without redeclaring
- * tokens. Keep token edits in ./theme.css, not here.
+ * tokens. Keep token edits in ../theme.css, not here.
  */
-@import './theme.css';
+@import '../theme.css';
 
 @plugin '@tailwindcss/typography';
 
