@@ -133,7 +133,7 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher }: Compos
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerRuntime = useComposerRuntime();
-  const { isStreaming, canSendWhileStreaming, pendingSignals, hasPendingMessages } = useThreadRuntimeState();
+  const { isStreaming, canSendWhileStreaming } = useThreadRuntimeState();
   const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
@@ -173,19 +173,6 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher }: Compos
       <ComposerPrimitive.Root onSubmit={() => setSendPulseKey(k => k + 1)}>
         <div className="max-w-3xl w-full mx-auto pb-2">
           <ComposerAttachments />
-          {hasPendingMessages ? (
-            <div
-              className="mt-2 flex flex-col gap-1 text-icon-xs leading-icon-xs text-neutral3"
-              data-testid="pending-signal-message"
-            >
-              {pendingSignals.map(signal => (
-                <div key={signal.id} className="flex min-w-0 items-center gap-1 animate-pulse">
-                  <span className="shrink-0">pending:</span>
-                  <span className="truncate">{signal.preview}</span>
-                </div>
-              ))}
-            </div>
-          ) : null}
         </div>
 
         <div

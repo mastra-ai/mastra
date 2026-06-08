@@ -25,6 +25,17 @@ if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
 }
 
+// jsdom does not implement ResizeObserver, which assistant-ui's thread
+// primitives observe during render.
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  class ResizeObserverPolyfill {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+  globalThis.ResizeObserver = ResizeObserverPolyfill as unknown as typeof ResizeObserver;
+}
+
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
