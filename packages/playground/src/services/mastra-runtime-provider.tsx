@@ -29,6 +29,7 @@ import { useMemoryConfig } from '@/domains/memory/hooks';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { useAdapters } from '@/lib/ai-ui/hooks/use-adapters';
 import { ThreadRuntimeStateProvider } from '@/lib/ai-ui/thread-runtime-state';
+import type { PendingSignalMessage } from '@/lib/ai-ui/thread-runtime-state';
 import type { ChatProps } from '@/types';
 
 const getAppendMessageText = (message: AppendMessage) => {
@@ -114,7 +115,18 @@ export function MastraRuntimeProvider({
   // `initialMessages` refreshes after a stream ends. Track them in a parallel
   // state that survives those resets so the chat still surfaces the failure.
   const [streamErrors, setStreamErrors] = useState<MastraDBMessage[]>([]);
-  const [pendingSignals, setPendingSignals] = useState<{ id: string; preview: string }[]>([]);
+  const [pendingSignals, setPendingSignals] = useState<PendingSignalMessage[]>([]);
+  // `onSignalSent` (add, via the send-message HTTP response) and `onSignalEcho`
+  // (remove, via the thread-subscription stream) are independent async channels
+  // with no ordering guarantee. On the idle path the server starts the run and
+  // emits the `data-user-message` echo over the already-open subscription before
+  // the send-message response returns, so the echo can arrive before the pending
+  // signal is added. Decisions are made against these synchronous id mirrors
+  // (not the deferred `setPendingSignals` updater) so add/remove are commutative:
+  // `pendingSignalIdsRef` mirrors the visible badges, and `prematurelyEchoedSignalIdsRef`
+  // remembers echoes that landed before their add so the late add is skipped.
+  const pendingSignalIdsRef = useRef<Set<string>>(new Set());
+  const prematurelyEchoedSignalIdsRef = useRef<Set<string>>(new Set());
   const [threadSignalsUnsupported, setThreadSignalsUnsupported] = useState(false);
   const threadSignalsUnsupportedRef = useRef(false);
   const threadSignalsEnabled =
@@ -122,22 +134,37 @@ export function MastraRuntimeProvider({
     supportsMemory !== false &&
     !settings?.modelSettings?.chatWithLegacyStream;
 
+  const clearPendingSignals = useCallback(() => {
+    pendingSignalIdsRef.current.clear();
+    prematurelyEchoedSignalIdsRef.current.clear();
+    setPendingSignals([]);
+  }, []);
+
   const addPendingSignal = useCallback((signalId: string, preview: string) => {
+    // The echo already arrived before this add — consume it, don't resurrect a badge.
+    if (prematurelyEchoedSignalIdsRef.current.delete(signalId)) return;
+    pendingSignalIdsRef.current.add(signalId);
     setPendingSignals(prev => [...prev.filter(signal => signal.id !== signalId), { id: signalId, preview }]);
   }, []);
 
   const removePendingSignal = useCallback((signalId: string) => {
-    setPendingSignals(prev => prev.filter(signal => signal.id !== signalId));
+    if (pendingSignalIdsRef.current.delete(signalId)) {
+      setPendingSignals(prev => prev.filter(signal => signal.id !== signalId));
+      return;
+    }
+    // The echo beat the add. Remember it so the pending add that follows is
+    // skipped instead of leaving a badge that never clears.
+    prematurelyEchoedSignalIdsRef.current.add(signalId);
   }, []);
 
   // Clear any persisted stream errors when switching threads or agents so they
   // don't leak across conversations.
   useEffect(() => {
     setStreamErrors([]);
-    setPendingSignals([]);
+    clearPendingSignals();
     threadSignalsUnsupportedRef.current = false;
     setThreadSignalsUnsupported(false);
-  }, [agentId, threadId]);
+  }, [agentId, clearPendingSignals, threadId]);
 
   const chatRequestContext = useMemo(() => {
     if (!agentVersionId && !requestContext) return undefined;
@@ -177,7 +204,7 @@ export function MastraRuntimeProvider({
     onThreadSignalsUnsupported: () => {
       threadSignalsUnsupportedRef.current = true;
       setThreadSignalsUnsupported(true);
-      setPendingSignals([]);
+      clearPendingSignals();
     },
   });
 
@@ -522,7 +549,7 @@ export function MastraRuntimeProvider({
   const onCancel = async () => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
-    setPendingSignals([]);
+    clearPendingSignals();
     // Reset OM streaming state in case observation was in progress
     resetObservationalMemoryStreamState();
     cancelRun?.();

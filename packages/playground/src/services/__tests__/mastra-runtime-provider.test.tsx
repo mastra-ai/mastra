@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { useChat } from '@mastra/react';
-import { act, render, waitFor } from '@testing-library/react';
+import { act, cleanup, render, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   cancelRun: vi.fn(),
@@ -143,6 +143,12 @@ describe('MastraRuntimeProvider', () => {
     delete (window as any).MASTRA_AGENT_SIGNALS;
   });
 
+  // This package runs vitest with globals disabled, so @testing-library/react's
+  // auto-cleanup never registers. Unmount between tests explicitly, otherwise
+  // every render() leaks a mounted provider and getSignalCallbacks/threadRuntimeState
+  // (both last-writer-wins sinks) would read a stale instance.
+  afterEach(() => cleanup());
+
   it('opts Playground into thread signals by default', () => {
     render(
       <MastraRuntimeProvider agentId="agent-1" threadId="thread-1" initialMessages={[]} modelVersion="v2">
@@ -226,6 +232,90 @@ describe('MastraRuntimeProvider', () => {
       ],
       metadata: { status: 'error' },
     });
+  });
+
+  const getSignalCallbacks = () => {
+    const calls = vi.mocked(useChat).mock.calls;
+    const lastArgs = calls[calls.length - 1]?.[0] as
+      | { onSignalSent?: (id: string, preview: string) => void; onSignalEcho?: (id: string) => void }
+      | undefined;
+    if (!lastArgs?.onSignalSent || !lastArgs.onSignalEcho) {
+      throw new Error('useChat was not called with signal callbacks — render the provider before reading them');
+    }
+    return { onSignalSent: lastArgs.onSignalSent, onSignalEcho: lastArgs.onSignalEcho };
+  };
+
+  it('shows then clears a pending signal when the echo arrives after the send (normal order)', async () => {
+    render(
+      <MastraRuntimeProvider agentId="agent-1" threadId="thread-1" initialMessages={[]} modelVersion="v2">
+        <div />
+      </MastraRuntimeProvider>,
+    );
+
+    const { onSignalSent, onSignalEcho } = getSignalCallbacks();
+
+    await act(async () => {
+      onSignalSent('signal-1', 'ok');
+    });
+
+    expect(mocks.threadRuntimeState.hasPendingMessages).toBe(true);
+    expect(mocks.threadRuntimeState.pendingSignals).toEqual([{ id: 'signal-1', preview: 'ok' }]);
+
+    await act(async () => {
+      onSignalEcho('signal-1');
+    });
+
+    expect(mocks.threadRuntimeState.pendingSignals).toEqual([]);
+    expect(mocks.threadRuntimeState.hasPendingMessages).toBe(false);
+  });
+
+  it('clears a pending signal even when the echo arrives before the send announces it (race)', async () => {
+    render(
+      <MastraRuntimeProvider agentId="agent-1" threadId="thread-1" initialMessages={[]} modelVersion="v2">
+        <div />
+      </MastraRuntimeProvider>,
+    );
+
+    const { onSignalSent, onSignalEcho } = getSignalCallbacks();
+
+    // On the idle path the server starts the run (and emits the `data-user-message`
+    // echo over the already-open thread subscription) before the send-message HTTP
+    // response returns. So `onSignalEcho` can fire before `onSignalSent` has added
+    // the pending entry. The badge must not linger afterwards.
+    await act(async () => {
+      onSignalEcho('signal-1');
+      onSignalSent('signal-1', 'ok');
+    });
+
+    expect(mocks.threadRuntimeState.pendingSignals).toEqual([]);
+    expect(mocks.threadRuntimeState.hasPendingMessages).toBe(false);
+  });
+
+  it('tracks premature echoes per id without suppressing unrelated signals', async () => {
+    render(
+      <MastraRuntimeProvider agentId="agent-1" threadId="thread-1" initialMessages={[]} modelVersion="v2">
+        <div />
+      </MastraRuntimeProvider>,
+    );
+
+    const { onSignalSent, onSignalEcho } = getSignalCallbacks();
+
+    // signal-1 loses the race (echo first); signal-2 is a normal in-order send.
+    await act(async () => {
+      onSignalEcho('signal-1');
+      onSignalSent('signal-1', 'first');
+      onSignalSent('signal-2', 'second');
+    });
+
+    expect(mocks.threadRuntimeState.pendingSignals).toEqual([{ id: 'signal-2', preview: 'second' }]);
+    expect(mocks.threadRuntimeState.hasPendingMessages).toBe(true);
+
+    await act(async () => {
+      onSignalEcho('signal-2');
+    });
+
+    expect(mocks.threadRuntimeState.pendingSignals).toEqual([]);
+    expect(mocks.threadRuntimeState.hasPendingMessages).toBe(false);
   });
 
   it('restores OM progress when initial messages arrive after mount', async () => {
