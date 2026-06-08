@@ -3,6 +3,7 @@ import { isAgentCompatible } from '@mastra/core/agent';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ClaudeSDKAgent } from './index';
+import type { ClaudeSDKAgentResumeData } from './index';
 
 const queryMock = vi.hoisted(() => vi.fn());
 const TEST_CLAUDE_MODEL = 'claude-sonnet-4-6';
@@ -371,5 +372,25 @@ describe('ClaudeSDKAgent', () => {
         continue: true,
       }),
     });
+  });
+
+  it('rejects mixed Claude resumeData shapes', async () => {
+    const agent = new ClaudeSDKAgent({
+      id: 'claude-agent',
+      description: 'Claude',
+      sdkOptions: {
+        model: TEST_CLAUDE_MODEL,
+      },
+    });
+
+    await expect(
+      agent.resumeGenerate({
+        message: 'Continue prompt',
+        sessionId: 123,
+        continue: true,
+      } as unknown as ClaudeSDKAgentResumeData),
+    ).rejects.toThrow('either sessionId or continue: true, not both');
+
+    expect(queryMock).not.toHaveBeenCalled();
   });
 });

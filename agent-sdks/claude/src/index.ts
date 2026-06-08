@@ -239,10 +239,24 @@ function validateClaudeResumeData(resumeData: ClaudeSDKAgentResumeData): ClaudeS
     throw new Error('ClaudeSDKAgent resumeData must include a message.');
   }
 
-  if (
-    ('sessionId' in resumeData && typeof resumeData.sessionId === 'string') ||
-    ('continue' in resumeData && resumeData.continue === true)
-  ) {
+  const hasSessionId = 'sessionId' in resumeData;
+  const hasContinue = 'continue' in resumeData;
+
+  if (hasSessionId && hasContinue) {
+    throw new Error('ClaudeSDKAgent resumeData must include either sessionId or continue: true, not both.');
+  }
+
+  if (hasSessionId) {
+    if (typeof resumeData.sessionId !== 'string') {
+      throw new Error('ClaudeSDKAgent resumeData.sessionId must be a string.');
+    }
+    return resumeData;
+  }
+
+  if (hasContinue) {
+    if (resumeData.continue !== true) {
+      throw new Error('ClaudeSDKAgent resumeData.continue must be true when provided.');
+    }
     return resumeData;
   }
 
@@ -255,7 +269,7 @@ function createClaudeResumeRunOptions<OUTPUT>(
 ): ClaudeSDKAgentRunOptions<OUTPUT> {
   const sdkOptions: ClaudeSDKOptions = { ...options?.sdkOptions };
 
-  if ('sessionId' in resumeData) {
+  if ('sessionId' in resumeData && typeof resumeData.sessionId === 'string') {
     sdkOptions.resume = resumeData.sessionId;
     if (resumeData.forkSession !== undefined) {
       sdkOptions.forkSession = resumeData.forkSession;

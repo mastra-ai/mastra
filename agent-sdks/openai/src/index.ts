@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 
 import { Agent } from '@mastra/core/agent';
+import type { StructuredOutputOptions } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
@@ -40,6 +41,7 @@ type OpenAIUsageTotals = {
 };
 
 type OpenAIToolTelemetry = Pick<SDKAgentTelemetry, 'startToolCall' | 'endToolCall'>;
+type OpenAIStructuredOutputOption<OUTPUT> = OUTPUT extends {} ? StructuredOutputOptions<OUTPUT> : never;
 
 export type OpenAISDKAgentResumeData = {
   /**
@@ -166,7 +168,7 @@ export class OpenAISDKAgent extends Agent {
       runId,
       provider: PROVIDER,
       result,
-      options: { ...telemetry.outputOptions(), structuredOutput: options?.structuredOutput as any },
+      options: { ...telemetry.outputOptions(), structuredOutput: getStructuredOutputOption(options) },
     });
   }
 
@@ -206,7 +208,7 @@ export class OpenAISDKAgent extends Agent {
       modelId,
       provider: PROVIDER,
       stream: telemetry.wrapStream(runOpenAIAsMastraStream(prompt, sdkAgent, runId, modelId, telemetry, options)),
-      options: { ...telemetry.outputOptions(), structuredOutput: options?.structuredOutput as any },
+      options: { ...telemetry.outputOptions(), structuredOutput: getStructuredOutputOption(options) },
     });
   }
 
@@ -230,6 +232,12 @@ export class OpenAISDKAgent extends Agent {
     this.#createdAgent ??= this.options.agent ?? new OpenAIAgent(toOpenAIAgentOptions(this.options));
     return this.#createdAgent;
   }
+}
+
+function getStructuredOutputOption<OUTPUT>(
+  options?: SDKAgentRunOptions<OUTPUT>,
+): OpenAIStructuredOutputOption<OUTPUT> | undefined {
+  return options?.structuredOutput as OpenAIStructuredOutputOption<OUTPUT> | undefined;
 }
 
 function validateOpenAIResumeData(resumeData: OpenAISDKAgentResumeData): OpenAISDKAgentResumeData {
