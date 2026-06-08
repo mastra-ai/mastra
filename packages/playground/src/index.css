@@ -154,12 +154,101 @@ th:has(header) {
     animation: starter-enter 420ms var(--ease-out-custom) both;
   }
 
+  /*
+   * Agent builder "Your agent is ready" panel — a polished, finite light pass.
+   * A soft ambient aurora gently drifts behind the content, while a bright
+   * specular highlight sweeps diagonally across the surface once on mount
+   * (~2.4s), like a light moving over a car's bodywork, then settles.
+   */
+  .ready-stage {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  /* Ambient aurora — agent-tinted, slow, always present, low contrast. */
+  .ready-stage::before {
+    content: '';
+    position: absolute;
+    inset: -25%;
+    background:
+      radial-gradient(ellipse 50% 45% at 30% 28%, var(--ready-aurora-1, rgba(212, 212, 216, 0.14)), transparent 62%),
+      radial-gradient(ellipse 48% 42% at 72% 74%, var(--ready-aurora-2, rgba(161, 161, 170, 0.1)), transparent 64%);
+    filter: blur(48px);
+    animation: ready-aurora-drift 22s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+    pointer-events: none;
+    z-index: 0;
+    will-change: transform;
+  }
+
+  /* Specular sweep — a single bright pass on mount, then gone. */
+  .ready-stage::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      105deg,
+      transparent 30%,
+      var(--ready-sweep-soft, rgba(255, 255, 255, 0.06)) 44%,
+      var(--ready-sweep-hot, rgba(255, 255, 255, 0.22)) 50%,
+      var(--ready-sweep-soft, rgba(255, 255, 255, 0.06)) 56%,
+      transparent 70%
+    );
+    background-size: 250% 100%;
+    background-position: 180% 0;
+    mix-blend-mode: screen;
+    filter: blur(6px);
+    animation: ready-sweep 2400ms cubic-bezier(0.22, 0.61, 0.36, 1) 120ms 1 both;
+    pointer-events: none;
+    z-index: 1;
+    will-change: background-position, opacity;
+  }
+
+  @keyframes ready-aurora-drift {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+      transform: translate3d(-2%, 2%, 0) scale(1.05);
+    }
+  }
+
+  @keyframes ready-sweep {
+    0% {
+      background-position: 180% 0;
+      opacity: 0;
+    }
+    12% {
+      opacity: 1;
+    }
+    88% {
+      opacity: 1;
+    }
+    100% {
+      background-position: -80% 0;
+      opacity: 0;
+    }
+  }
+
+  .ready-stage-content {
+    position: relative;
+    z-index: 2;
+    animation: starter-enter 560ms var(--ease-out-custom) 200ms both;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .starter-aurora::before,
     .starter-heading,
     .starter-prompt,
-    .starter-chip {
+    .starter-chip,
+    .ready-stage::before,
+    .ready-stage::after,
+    .ready-stage-content {
       animation: none;
+    }
+    .ready-stage::after {
+      opacity: 0;
     }
   }
 }

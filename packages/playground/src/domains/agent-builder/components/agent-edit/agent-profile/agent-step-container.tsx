@@ -12,9 +12,15 @@ export interface AgentStepContainerProps {
   cta: ReactNode;
   title?: ReactNode;
   description?: ReactNode;
+  /**
+   * Extra classes applied to the inner surface panel. Lets a step decorate the
+   * full panel background (e.g. the "ready" step's animated light sweep) without
+   * affecting the shared card chrome.
+   */
+  panelClassName?: string;
 }
 
-export const AgentStepContainer = ({ children, cta, title, description }: AgentStepContainerProps) => {
+export const AgentStepContainer = ({ children, cta, title, description, panelClassName }: AgentStepContainerProps) => {
   const agentColor = useAgentColor();
   const isStreaming = useStreamRunning();
   const { isLast, next, prev, step, steps } = useWizard();
@@ -53,6 +59,7 @@ export const AgentStepContainer = ({ children, cta, title, description }: AgentS
         className={cn(
           'relative h-full overflow-hidden bg-surface3 rounded-2xl grid min-h-0',
           title ? 'grid-rows-[auto_minmax(0,1fr)_auto]' : 'grid-rows-[minmax(0,1fr)_auto]',
+          panelClassName,
         )}
       >
         {title && (

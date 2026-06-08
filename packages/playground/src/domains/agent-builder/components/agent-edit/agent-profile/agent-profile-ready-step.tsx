@@ -21,8 +21,9 @@ export const AgentProfileReadyStep = () => {
 
   return (
     <AgentStepContainer
+      panelClassName="ready-stage"
       cta={
-        <div className="flex items-center justify-center gap-3">
+        <div className="relative z-[2] flex items-center justify-center gap-3">
           <Button variant="outline" onClick={handleReview} data-testid="agent-builder-ready-review">
             Review my agent
           </Button>
@@ -32,13 +33,15 @@ export const AgentProfileReadyStep = () => {
         </div>
       }
     >
-      <div className="relative w-full h-full flex flex-col items-center justify-center gap-4 py-6 px-6 text-center">
-        <h2 className="text-4xl font-semibold text-neutral6" data-testid="agent-builder-ready-heading">
-          Your agent is ready
-        </h2>
-        <p className="text-neutral3 text-lg max-w-md">
-          You can review and fine-tune everything, or jump straight in and try it out.
-        </p>
+      <div className="w-full h-full flex flex-col items-center justify-center py-6 px-6 text-center">
+        <div className="ready-stage-content flex flex-col items-center gap-4">
+          <h2 className="text-4xl font-semibold text-neutral6" data-testid="agent-builder-ready-heading">
+            Your agent is ready
+          </h2>
+          <p className="text-neutral3 text-lg max-w-md">
+            You can review and fine-tune everything, or jump straight in and try it out.
+          </p>
+        </div>
       </div>
     </AgentStepContainer>
   );
