@@ -43,6 +43,9 @@ A numbered list of every source you cited:
 - When answering about a specific version, confirm the version in the search results before citing.
 - Keep answers concise. A good answer is 100–300 words in the Detail section, not 1000.`,
   model: 'mastra/openai/gpt-5-mini',
+  defaultOptions: {
+    maxSteps: 100,
+  },
   tools: {
     web_search: webSearchTool,
   },

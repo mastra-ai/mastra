@@ -92,6 +92,9 @@ export const claw = new Agent({
    - Where the artifacts are (file paths, URLs, etc.).
    - Anything that needs follow-up.`,
   model: 'mastra/openai/gpt-5.4',
+  defaultOptions: {
+    maxSteps: 100,
+  },
   memory: new Memory({
     options: {
       lastMessages: 40,

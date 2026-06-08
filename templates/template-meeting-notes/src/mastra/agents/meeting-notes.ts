@@ -80,6 +80,9 @@ If a user asks to export but no matching tools are available, tell them to confi
 - **Topics:** Group discussion points into logical topics. Each topic gets a title and 2–5 bullet points of notes.
 - **Empty/invalid input:** If the transcript is blank, garbled, or clearly not a meeting (e.g. a podcast, music), say so plainly. Never invent notes from nothing.`,
   model: 'mastra/openai/gpt-5.4',
+  defaultOptions: {
+    maxSteps: 100,
+  },
   tools: {
     ...zoomTools,
     ...mcpTools,

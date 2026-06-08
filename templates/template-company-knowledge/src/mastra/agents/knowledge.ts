@@ -66,6 +66,9 @@ Follow this order strictly — it saves API calls and gives faster answers:
 - If you can't find the answer anywhere, say so. Never invent issue identifiers, page IDs, or URLs.
 - For ambiguous questions, ask one clarifying question rather than guessing.`,
   model: 'mastra/openai/gpt-5.4',
+  defaultOptions: {
+    maxSteps: 100,
+  },
   memory: new Memory({
     options: {
       lastMessages: 20,

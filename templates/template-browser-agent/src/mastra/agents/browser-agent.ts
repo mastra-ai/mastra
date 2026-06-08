@@ -39,6 +39,9 @@ export const browserAgent = new Agent({
 - **Cite URLs.** Always include the URLs you visited in your final answer.
 - **Be concise.** Report what you found and what you did, not a play-by-play of every snapshot.`,
   model: 'mastra/openai/gpt-5-mini',
+  defaultOptions: {
+    maxSteps: 100,
+  },
   browser,
   tools: {
     web_search: openai.tools.webSearch({}),
