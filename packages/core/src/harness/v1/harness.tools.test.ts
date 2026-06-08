@@ -55,7 +55,7 @@ describe('Harness — tools/skills/subagents config', () => {
       },
     };
     const harness = new Harness({
-      agents: { default: {} as never },
+      agent: {} as never,
       memory,
       storage: new MemStore(),
       modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm', tools: { echo: echoTool } }],
@@ -79,7 +79,7 @@ describe('Harness — tools/skills/subagents config', () => {
 
   it('does not expose internal tool override helpers on the Session', async () => {
     const harness = new Harness({
-      agents: {},
+      agent: {} as never,
       memory,
       storage: new MemStore(),
       modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm', tools: { echo: echoTool } }],
@@ -93,7 +93,7 @@ describe('Harness — tools/skills/subagents config', () => {
   it('keeps built-in task tools owned by the calling session', async () => {
     const storage = new MemStore();
     const harness = new Harness({
-      agents: { default: {} as never },
+      agent: {} as never,
       memory,
       storage,
       modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm' }],
@@ -126,7 +126,7 @@ describe('Harness — tools/skills/subagents config', () => {
 
   it('returns a recoverable error when built-in tools execute for a different session', async () => {
     const harness = new Harness({
-      agents: { default: {} as never },
+      agent: {} as never,
       memory,
       storage: new MemStore(),
       modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm' }],
@@ -149,8 +149,16 @@ describe('Harness — tools/skills/subagents config', () => {
   it('creates durable child sessions through the subagent built-in and enforces depth cap', async () => {
     const storage = new MemStore();
     const resolveModel = vi.fn().mockReturnValue({});
+    const mastra = {
+      getStorage: vi.fn(() => undefined),
+      getAgentById: vi.fn((agentId: string) => {
+        if (agentId === 'default') return {};
+        throw new Error(`missing agent ${agentId}`);
+      }),
+    };
     const harness = new Harness({
-      agents: { default: {} as never },
+      mastra: mastra as never,
+      agent: 'default',
       memory,
       storage,
       runtimeCompatibilityGeneration: 'runtime-v1',
@@ -221,6 +229,7 @@ describe('Harness — tools/skills/subagents config', () => {
     };
     const harness = new Harness({
       mastra: mastra as never,
+      agent: 'default',
       memory,
       storage,
       modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm' }],
@@ -249,7 +258,7 @@ describe('Harness — tools/skills/subagents config', () => {
   it('validates subagent depth and runtime compatibility configuration', async () => {
     const storage = new MemStore();
     const harness = new Harness({
-      agents: { default: {} as never },
+      agent: {} as never,
       memory,
       storage,
       runtimeCompatibilityGeneration: 'runtime-v1',
