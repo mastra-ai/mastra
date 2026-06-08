@@ -57,6 +57,7 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
         delegation: options.delegation,
         backgroundTaskEnabled,
         inputProcessors: options.inputProcessors,
+        hooks: options.hooks,
       });
 
       // Update the agent span with available tool names for observability

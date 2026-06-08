@@ -50,7 +50,7 @@ import type { PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { SignalProvider } from '../signals/signal-provider';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { AgentChunkType, MastraOnFinishCallbackArgs, ModelManagerModelConfig } from '../stream/types';
-import type { ToolAction, VercelTool, VercelToolV5 } from '../tools';
+import type { ToolAction, ToolHooks, VercelTool, VercelToolV5 } from '../tools';
 import type { ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import type { MastraVoice } from '../voice';
@@ -459,6 +459,12 @@ interface AgentConfigBase<
    */
   tools?: DynamicArgument<TTools, TRequestContext>;
   /**
+   * Hooks that run before and after any tool call made by this agent.
+   * Per-execution hooks passed to `generate`, `stream`, `generateLegacy`, or `streamLegacy` override matching hooks here.
+   * If a workspace also defines tool hooks, workspace hooks wrap the workspace tool first, then agent hooks wrap the exposed tool call.
+   */
+  hooks?: ToolHooks;
+  /**
    * Workflows that the agent can execute. Can be static or dynamically resolved.
    */
   workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any, any>>, TRequestContext>;
@@ -707,6 +713,8 @@ export type AgentGenerateOptions<
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
+  /** Per-execution hooks that run before and after tool calls, overriding matching agent-level hooks. */
+  hooks?: ToolHooks;
   /** Additional context messages to include */
   context?: CoreMessage[];
   /** New memory options (preferred) */
@@ -798,6 +806,8 @@ export type AgentStreamOptions<
   /** Additional tool sets that can be used for this generation */
   toolsets?: ToolsetsInput;
   clientTools?: ToolsInput;
+  /** Per-execution hooks that run before and after tool calls, overriding matching agent-level hooks. */
+  hooks?: ToolHooks;
   /** Additional context messages to include */
   context?: CoreMessage[];
   /**

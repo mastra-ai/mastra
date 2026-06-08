@@ -18,6 +18,14 @@ vi.mock('@mastra/github-signals', () => ({
     }
     startPolling() {}
     stopAllPolling() {}
+    onSubscriptionsChanged() {}
+    onPollingChanged() {}
+    isPollingThread() {
+      return false;
+    }
+    isPollingThreadRunning() {
+      return false;
+    }
     startPollingForThread() {
       return Promise.resolve(true);
     }
