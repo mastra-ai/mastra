@@ -57,6 +57,7 @@ export interface ThreadListItemProps {
   isActive?: boolean;
   onDelete?: () => void;
   deleteLabel?: string;
+  className?: string;
   children: ReactNode;
 }
 
@@ -67,6 +68,7 @@ export const ThreadListItem = ({
   isActive,
   onDelete,
   deleteLabel = 'delete',
+  className,
   children,
 }: ThreadListItemProps) => {
   return (
@@ -80,6 +82,7 @@ export const ThreadListItem = ({
           'w-full min-w-0 justify-start rounded-xl text-left',
           onDelete && 'pr-9',
           isActive && 'bg-surface4 text-neutral6',
+          className,
         )}
       >
         <span className="min-w-0 flex-1">{children}</span>

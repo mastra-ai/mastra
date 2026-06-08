@@ -108,7 +108,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
   }
 
   return (
-    <div className="h-full w-full py-2 pr-2">
+    <div className="h-full w-full p-2">
       <div className="h-full min-w-0 w-full bg-surface2 rounded-studio-panel border border-border2/40 overflow-hidden">
         <ScrollArea className="h-full w-full" viewPortClassName="h-full" mask={{ top: false }}>
           <Tabs defaultTab="current-run" value={tab} onValueChange={handleTabChange} className="overflow-y-visible">

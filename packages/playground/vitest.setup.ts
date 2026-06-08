@@ -25,6 +25,22 @@ if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
 }
 
+// jsdom does not implement IntersectionObserver, used by useInView (e.g. infinite lists)
+if (typeof globalThis.IntersectionObserver === 'undefined') {
+  class IntersectionObserverStub {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+    takeRecords() {
+      return [];
+    }
+    root = null;
+    rootMargin = '';
+    thresholds = [];
+  }
+  globalThis.IntersectionObserver = IntersectionObserverStub as unknown as typeof IntersectionObserver;
+}
+
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());

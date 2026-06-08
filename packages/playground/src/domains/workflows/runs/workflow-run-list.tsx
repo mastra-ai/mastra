@@ -2,7 +2,7 @@ import { AlertDialog, Icon, Skeleton, Spinner } from '@mastra/playground-ui';
 import { formatDate } from 'date-fns';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
-import { WorkflowRunStatusBadge } from '../components/workflow-run-status-badge';
+import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import {
   ThreadList,
   ThreadListEmpty,
@@ -54,13 +54,17 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
     <>
       <div className="h-full pt-2">
         <ThreadList aria-label="Workflow runs">
-          <ThreadListNewItem as={Link} to={paths.workflowLink(workflowId)}>
-            <Icon>
-              <Plus />
-            </Icon>
-            New workflow run
-          </ThreadListNewItem>
-          <ThreadListSeparator />
+          {(runId || actualRuns.length > 0) && (
+            <>
+              <ThreadListNewItem as={Link} to={paths.workflowLink(workflowId)}>
+                <Icon>
+                  <Plus />
+                </Icon>
+                New workflow run
+              </ThreadListNewItem>
+              <ThreadListSeparator />
+            </>
+          )}
 
           {actualRuns.length === 0 ? (
             <ThreadListEmpty>Your run history will appear here once you run the workflow</ThreadListEmpty>
@@ -74,15 +78,20 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
                   isActive={run.runId === runId}
                   onDelete={canDeleteRun ? () => setDeleteRunId(run.runId) : undefined}
                   deleteLabel="delete run"
+                  className="h-auto min-h-form-default items-stretch py-2"
                 >
-                  <span className="flex w-full min-w-0 flex-col items-start gap-1 text-left">
+                  <span className="flex w-full min-w-0 items-center gap-2 px-1 text-left">
                     {run?.snapshot && typeof run.snapshot === 'object' && (
-                      <WorkflowRunStatusBadge status={run.snapshot.status} />
+                      <WorkflowRunStatusIcon status={run.snapshot.status} />
                     )}
-                    <span className="block max-w-full truncate">{run.runId}</span>
-                    {run?.snapshot && typeof run.snapshot === 'object' && run.snapshot.timestamp && (
-                      <span>{formatDate(run.snapshot.timestamp, 'MMM d, yyyy h:mm a')}</span>
-                    )}
+                    <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+                      <span className="block w-full min-w-0 truncate">{run.runId}</span>
+                      {run?.snapshot && typeof run.snapshot === 'object' && run.snapshot.timestamp && (
+                        <span className="text-neutral3 block w-full max-w-full truncate">
+                          {formatDate(run.snapshot.timestamp, 'MMM d, yyyy h:mm a')}
+                        </span>
+                      )}
+                    </span>
                   </span>
                 </ThreadListItem>
               ))}

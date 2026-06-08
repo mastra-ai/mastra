@@ -246,10 +246,8 @@ const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => 
 
   return (
     <>
-      <Button variant="default" onClick={() => setOpen(true)} className="w-full truncate">
-        <Icon>
-          <Braces className="text-neutral3" />
-        </Icon>
+      <Button variant="default" onClick={() => setOpen(true)} className="w-full">
+        <Braces className="text-neutral3" />
         Open Workflow Execution (JSON)
       </Button>
 

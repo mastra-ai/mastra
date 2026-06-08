@@ -10,7 +10,7 @@ export interface WorkflowLayoutProps {
 
 export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: WorkflowLayoutProps) => {
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
-    id: `workflow-layout-v2-${workflowId}`,
+    id: `workflow-layout-v4-${workflowId}`,
     storage: localStorage,
   });
 
@@ -21,9 +21,9 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: Wo
           <CollapsiblePanel
             direction="left"
             id="left-slot"
-            minSize={200}
-            maxSize={'30%'}
-            defaultSize={200}
+            minSize={300}
+            maxSize={'50%'}
+            defaultSize={300}
             collapsedSize={60}
             collapsible={true}
             className="min-w-0"
@@ -42,9 +42,9 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: Wo
           <CollapsiblePanel
             direction="right"
             id="right-slot"
-            minSize={300}
-            maxSize={'50%'}
-            defaultSize={300}
+            minSize={240}
+            maxSize={'40%'}
+            defaultSize={320}
             collapsedSize={60}
             collapsible={true}
             className="min-w-0"
