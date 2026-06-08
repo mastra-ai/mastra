@@ -83,7 +83,7 @@ function registerMemoryHandlers() {
   );
 }
 
-function renderSidebar(threads: StorageThreadType[]) {
+function renderSidebar(threads: StorageThreadType[], hasMemory = true) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -100,6 +100,7 @@ function renderSidebar(threads: StorageThreadType[]) {
                 threads={threads}
                 isLoading={false}
                 onDelete={vi.fn()}
+                hasMemory={hasMemory}
               />
             </WorkingMemoryProvider>
           </ThreadInputProvider>
@@ -128,25 +129,42 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe('MemorySidebar', () => {
-  it('renders the Memory title and shows the Threads tab content by default', async () => {
+  it('shows the Threads tab content by default with no Memory title/icon', async () => {
     const { container } = renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
-    expect(await screen.findByText('Memory')).not.toBeNull();
     // Threads tab is active by default: the thread list (with New Chat) is visible.
     expect(await screen.findByText('New Chat')).not.toBeNull();
     expect(await screen.findByText('My first chat')).not.toBeNull();
 
-    // The sidebar is a single standalone block (rounded + bordered) containing the Memory header,
-    // and there is exactly one such bordered block on the Threads tab (no nested container).
+    // The "Memory" title/icon header was removed; the tabs are the top of the panel.
+    expect(screen.queryByText('Memory')).toBeNull();
+
+    // The sidebar is still a single standalone block (rounded + bordered) with no nested container.
     const blocks = container.querySelectorAll('.rounded-studio-panel.border-border1\\/50');
     expect(blocks.length).toBe(1);
-    expect(blocks[0].textContent).toContain('Memory');
+  });
+
+  it('replaces the tabs with an empty state and docs CTA when memory is disabled', async () => {
+    renderSidebar([], false);
+
+    // The empty state explains memory is required; the thread list / New Chat is not rendered.
+    expect(await screen.findByText('Memory not enabled')).not.toBeNull();
+    expect(screen.queryByText('New Chat')).toBeNull();
+
+    // The tabs are hidden entirely when memory is off.
+    expect(screen.queryByRole('tab')).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Threads' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Memory Configuration' })).toBeNull();
+
+    // An outline CTA links to the Agent Memory docs.
+    const cta = screen.getByRole('link', { name: /documentation/i });
+    expect(cta.getAttribute('href')).toBe('https://mastra.ai/en/docs/agents/agent-memory');
   });
 
   it('shows the AgentMemory configuration content when the Configuration tab is selected', async () => {
     renderSidebar([thread({ id: THREAD_ID, title: 'My first chat' })]);
 
-    fireEvent.click(await screen.findByRole('tab', { name: 'Configuration' }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Memory Configuration' }));
 
     // AgentMemory renders a "Clone Thread" section whenever a real thread is present.
     const cloneSection = await screen.findByText('Clone Thread');

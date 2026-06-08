@@ -122,4 +122,15 @@ describe('AgentInformation', () => {
     expect(await screen.findByRole('tab', { name: 'Tracing Options' })).not.toBeNull();
     await waitFor(() => expect(screen.queryByRole('tab', { name: 'Memory' })).toBeNull());
   });
+
+  it('no longer renders a Memory section in the Overview metadata', async () => {
+    renderInformation();
+
+    // The Overview metadata has finished loading (the Tools section is present).
+    expect(await screen.findByRole('heading', { name: 'Tools' })).not.toBeNull();
+
+    // The "Agent Memory On/Off" metadata section was removed from the Overview panel.
+    expect(screen.queryByRole('heading', { name: 'Memory' })).toBeNull();
+    expect(screen.queryByText('Memory is enabled')).toBeNull();
+  });
 });
