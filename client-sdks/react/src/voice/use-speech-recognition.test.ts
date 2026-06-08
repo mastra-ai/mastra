@@ -28,9 +28,18 @@ vi.mock('@mastra/client-js', () => ({
 let onFinishCapture: ((file: File) => void) | null = null;
 const recorderStartMock = vi.fn();
 const recorderStopMock = vi.fn();
-const recordMicrophoneToFileMock = vi.fn(async (onFinish: (file: File) => void) => {
+// When set, recordMicrophoneToFile returns a pending promise resolved by the test.
+let deferredResolve: ((recorder: MediaRecorder) => void) | null = null;
+let deferRecorder = false;
+const makeRecorder = () => ({ start: recorderStartMock, stop: recorderStopMock }) as unknown as MediaRecorder;
+const recordMicrophoneToFileMock = vi.fn((onFinish: (file: File) => void) => {
   onFinishCapture = onFinish;
-  return { start: recorderStartMock, stop: recorderStopMock } as unknown as MediaRecorder;
+  if (deferRecorder) {
+    return new Promise<MediaRecorder>(resolve => {
+      deferredResolve = resolve;
+    });
+  }
+  return Promise.resolve(makeRecorder());
 });
 vi.mock('./record-mic-to-file', () => ({
   recordMicrophoneToFile: (onFinish: (file: File) => void) => recordMicrophoneToFileMock(onFinish),
@@ -81,6 +90,8 @@ beforeEach(() => {
   recorderStopMock.mockClear();
   lastGetAgentArgs.length = 0;
   onFinishCapture = null;
+  deferredResolve = null;
+  deferRecorder = false;
 });
 
 afterEach(() => {
@@ -118,6 +129,38 @@ describe('useSpeechRecognition (browser path)', () => {
 
     act(() => result.current.stop());
     expect(lastRecognition.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops recognition and clears handlers on unmount', async () => {
+    installSpeechRecognition();
+    const { unmount } = renderHook(() => useSpeechRecognition({}), { wrapper });
+
+    const recognition = lastRecognition;
+    expect(recognition.onresult).not.toBeNull();
+
+    unmount();
+
+    expect(recognition.stop).toHaveBeenCalledTimes(1);
+    expect(recognition.onstart).toBeNull();
+    expect(recognition.onresult).toBeNull();
+    expect(recognition.onerror).toBeNull();
+    expect(recognition.onend).toBeNull();
+  });
+
+  it('stops the previous recognition when language changes', async () => {
+    installSpeechRecognition();
+    const { rerender } = renderHook(({ language }) => useSpeechRecognition({ language }), {
+      initialProps: { language: 'en-US' },
+      wrapper,
+    });
+
+    const first = lastRecognition;
+    rerender({ language: 'fr-FR' });
+
+    expect(first.stop).toHaveBeenCalledTimes(1);
+    expect(first.onresult).toBeNull();
+    expect(lastRecognition).not.toBe(first);
+    expect(lastRecognition.lang).toBe('fr-FR');
   });
 });
 
@@ -232,5 +275,55 @@ describe('useSpeechRecognition (mastra path)', () => {
     act(() => result.current.start());
     expect(lastRecognition.start).toHaveBeenCalled();
     expect(recordMicrophoneToFileMock).not.toHaveBeenCalled();
+  });
+
+  it('only creates one recorder and one listen call when start() is called twice before resolving', async () => {
+    installSpeechRecognition();
+    deferRecorder = true;
+    const { result } = renderHook(() => useSpeechRecognition({ agentId: 'agent-1' }), { wrapper });
+
+    await waitFor(() => expect(getSpeakersMock).toHaveBeenCalled());
+
+    act(() => result.current.start());
+    act(() => result.current.start());
+
+    // The in-flight guard should have prevented a second recordMicrophoneToFile call.
+    expect(recordMicrophoneToFileMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      deferredResolve?.(makeRecorder());
+    });
+    expect(recorderStartMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      onFinishCapture?.(new File(['audio'], 'rec.webm', { type: 'audio/webm' }));
+    });
+    await waitFor(() => expect(listenMock).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not transcribe when stop() runs before the recorder resolves', async () => {
+    installSpeechRecognition();
+    deferRecorder = true;
+    const { result } = renderHook(() => useSpeechRecognition({ agentId: 'agent-1' }), { wrapper });
+
+    await waitFor(() => expect(getSpeakersMock).toHaveBeenCalled());
+
+    act(() => result.current.start());
+    expect(recordMicrophoneToFileMock).toHaveBeenCalledTimes(1);
+
+    act(() => result.current.stop());
+
+    await act(async () => {
+      deferredResolve?.(makeRecorder());
+    });
+
+    // The stale recorder is stopped, not started, and onstop must not transcribe.
+    expect(recorderStartMock).not.toHaveBeenCalled();
+    expect(recorderStopMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      onFinishCapture?.(new File(['audio'], 'rec.webm', { type: 'audio/webm' }));
+    });
+    expect(listenMock).not.toHaveBeenCalled();
   });
 });

@@ -128,6 +128,15 @@ const useBrowserSpeechRecognition = ({ language = 'en-US' }: { language?: string
     recognition.onend = () => setState(prev => ({ ...prev, isListening: false }));
 
     return () => {
+      try {
+        recognition.stop();
+      } catch {
+        // ignore: recognition may not be running
+      }
+      recognition.onstart = null;
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
       speechRecognitionRef.current = null;
     };
   }, [language]);
@@ -152,16 +161,20 @@ const useMastraSpeechToText = ({
     error: null,
   });
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const sessionRef = useRef(0);
+  const startInFlightRef = useRef(false);
 
   useEffect(() => {
     return () => {
+      sessionRef.current += 1;
+      startInFlightRef.current = false;
       recorderRef.current?.stop();
       recorderRef.current = null;
     };
   }, [agent]);
 
-  const handleFinish = (file: File) => {
-    if (!agent) return;
+  const handleFinish = (session: number) => (file: File) => {
+    if (!agent || session !== sessionRef.current) return;
 
     recorderRef.current = null;
     setState(prev => ({ ...prev, isListening: false }));
@@ -169,30 +182,48 @@ const useMastraSpeechToText = ({
     void agent.voice
       .listen(file, { language })
       .then(res => {
+        if (session !== sessionRef.current) return;
         setState(prev => ({ ...prev, transcript: res.text, error: null }));
       })
       .catch(error => {
+        if (session !== sessionRef.current) return;
         const message = error instanceof Error ? error.message : 'Failed to transcribe speech';
         setState(prev => ({ ...prev, error: message }));
       });
   };
 
   const start = () => {
-    if (!agent) return;
+    if (!agent || startInFlightRef.current || recorderRef.current) return;
 
-    void recordMicrophoneToFile(handleFinish)
+    startInFlightRef.current = true;
+    const session = sessionRef.current;
+
+    void recordMicrophoneToFile(handleFinish(session))
       .then(recorder => {
+        startInFlightRef.current = false;
+        if (session !== sessionRef.current) {
+          try {
+            recorder.stop();
+          } catch {
+            // ignore: recorder was never started
+          }
+          return;
+        }
         recorderRef.current = recorder;
         setState(prev => ({ ...prev, isListening: true, error: null }));
         recorder.start();
       })
       .catch(error => {
+        startInFlightRef.current = false;
+        if (session !== sessionRef.current) return;
         const message = error instanceof Error ? error.message : 'Failed to start speech recording';
         setState(prev => ({ ...prev, isListening: false, error: message }));
       });
   };
 
   const stop = () => {
+    sessionRef.current += 1;
+    startInFlightRef.current = false;
     recorderRef.current?.stop();
     recorderRef.current = null;
     setState(prev => ({ ...prev, isListening: false }));
