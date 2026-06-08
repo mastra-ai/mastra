@@ -203,9 +203,9 @@ export function WorkflowTrigger({
 
   return (
     <div className="h-full pt-3 overflow-y-auto">
-      <div className="space-y-4 px-5 pb-5 border-b border-border1">
+      <div className="space-y-4 pb-5 border-b border-border1">
         {isSuspendedSteps && isStreamingWorkflow && (
-          <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mx-5 -mt-5 border-b border-border1">
+          <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mt-5 border-b border-border1">
             <Icon>
               <Loader2 className="animate-spin text-neutral6" />
             </Icon>
@@ -213,33 +213,35 @@ export function WorkflowTrigger({
           </div>
         )}
 
-        {!isSuspendedSteps && canExecuteWorkflow && (
-          <WorkflowTriggerForm
-            zodSchema={zodSchemaToUse}
-            defaultValues={payload}
-            isStreaming={isStreamingWorkflow}
-            onExecute={data => {
-              setPayload(data);
-              void handleExecuteWorkflow(data);
-            }}
-            isViewingRun={!!paramsRunId}
-            isReadOnly={!!paramsRunId || hasFinished}
-            isProcessorWorkflow={workflow?.isProcessorWorkflow}
-            heading={!paramsRunId && hasFinished ? 'Run input' : undefined}
-            leftActions={!paramsRunId ? <DebugModeSwitch /> : undefined}
-            submitActions={
-              <>
-                {workflow?.requestContextSchema && (
-                  <WorkflowRequestContextDialog requestContextSchema={workflow.requestContextSchema} />
-                )}
-                <WorkflowRunOptionsDialog />
-              </>
-            }
-          />
+        {canExecuteWorkflow && (
+          <div className="px-5">
+            <WorkflowTriggerForm
+              zodSchema={zodSchemaToUse}
+              defaultValues={payload}
+              isStreaming={isStreamingWorkflow}
+              onExecute={data => {
+                setPayload(data);
+                void handleExecuteWorkflow(data);
+              }}
+              isViewingRun={!!paramsRunId}
+              isReadOnly={!!paramsRunId || hasFinished || isSuspendedSteps}
+              isProcessorWorkflow={workflow?.isProcessorWorkflow}
+              heading={(!paramsRunId && hasFinished) || isSuspendedSteps ? 'Run input' : undefined}
+              leftActions={!paramsRunId ? <DebugModeSwitch /> : undefined}
+              submitActions={
+                <>
+                  {workflow?.requestContextSchema && (
+                    <WorkflowRequestContextDialog requestContextSchema={workflow.requestContextSchema} />
+                  )}
+                  <WorkflowRunOptionsDialog />
+                </>
+              }
+            />
+          </div>
         )}
 
-        {!isSuspendedSteps && !canExecuteWorkflow && (
-          <Txt variant="ui-sm" className="text-neutral3 py-2">
+        {!canExecuteWorkflow && (
+          <Txt variant="ui-sm" className="text-neutral3 py-2 px-5">
             You don't have permission to execute workflows.
           </Txt>
         )}
@@ -251,15 +253,21 @@ export function WorkflowTrigger({
           onResume={handleResumeWorkflow}
         />
 
-        <WorkflowCancelButton
-          status={result?.status}
-          cancelMessage={cancelResponse?.message ?? null}
-          isCancelling={isCancellingWorkflowRun}
-          onCancel={handleCancelWorkflowRun}
-        />
+        {result?.status === 'running' && (
+          <div className="px-5">
+            <WorkflowCancelButton
+              status={result?.status}
+              cancelMessage={cancelResponse?.message ?? null}
+              isCancelling={isCancellingWorkflowRun}
+              onCancel={handleCancelWorkflowRun}
+            />
+          </div>
+        )}
 
         {hasWorkflowActivePaths && (
-          <WorkflowStepsStatus steps={workflowActivePaths} workflowResult={streamResultToUse} />
+          <div className="px-5">
+            <WorkflowStepsStatus steps={workflowActivePaths} workflowResult={streamResultToUse} />
+          </div>
         )}
       </div>
 

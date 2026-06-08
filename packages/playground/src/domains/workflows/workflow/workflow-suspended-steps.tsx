@@ -35,7 +35,10 @@ export function WorkflowSuspendedSteps({
   }
 
   return (
-    <>
+    <div className="bg-accent3Dark py-4 space-y-4 border-y-2 border-accent3">
+      <Txt as="p" variant="ui-md" className="text-accent3 pb-4 px-5">
+        Suspended
+      </Txt>
       {suspendedSteps.map(step => {
         const stepDefinition = workflow.allSteps[step.stepId];
         if (!stepDefinition || stepDefinition.isWorkflow) return null;
@@ -45,7 +48,7 @@ export function WorkflowSuspendedSteps({
           : z.record(z.string(), z.any());
 
         return (
-          <div className="flex flex-col px-4" key={step.stepId}>
+          <div className="flex flex-col px-5" key={step.stepId}>
             <Txt variant="ui-xs" className="text-neutral3">
               {step.stepId}
             </Txt>
@@ -72,6 +75,6 @@ export function WorkflowSuspendedSteps({
           </div>
         );
       })}
-    </>
+    </div>
   );
 }
