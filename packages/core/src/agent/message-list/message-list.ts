@@ -1095,18 +1095,30 @@ export class MessageList {
                 } as AIV5Type.ProviderMetadata)
               : undefined;
 
-          msg.content.parts[i] = {
-            ...inputPart,
-            toolInvocation: {
-              ...inputPart.toolInvocation,
-              args: part.toolInvocation.args,
-            },
-            // Preserve providerExecuted from original call if not in result
-            ...(originalPart.providerExecuted !== undefined && inputPartWithMeta.providerExecuted === undefined
-              ? { providerExecuted: originalPart.providerExecuted }
-              : {}),
-            ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
-          };
+          // Do not downgrade a part that already has a result — only merge metadata.
+          // This guards against onExecution (which always passes state:'call') clobbering
+          // an output-available placeholder written by a background-dispatched tool call,
+          // which would make the call disappear from the model prompt and cause re-dispatch.
+          const existingState = part.toolInvocation?.state;
+          const isAlreadySettled =
+            existingState === 'result' ||
+            existingState === 'output-available' ||
+            existingState === 'output-denied' ||
+            existingState === 'output-error';
+          if (!isAlreadySettled) {
+            msg.content.parts[i] = {
+              ...inputPart,
+              toolInvocation: {
+                ...inputPart.toolInvocation,
+                args: part.toolInvocation.args,
+              },
+              // Preserve providerExecuted from original call if not in result
+              ...(originalPart.providerExecuted !== undefined && inputPartWithMeta.providerExecuted === undefined
+                ? { providerExecuted: originalPart.providerExecuted }
+                : {}),
+              ...(mergedProviderMetadata !== undefined ? { providerMetadata: mergedProviderMetadata } : {}),
+            };
+          }
           this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, Date.now());
           this.updateLastCreatedAt(msg);
 
