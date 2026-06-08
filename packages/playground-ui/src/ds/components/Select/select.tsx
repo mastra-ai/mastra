@@ -2,9 +2,8 @@ import { Select as SelectPrimitive } from '@base-ui/react/select';
 import { Check, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 
-import type { ButtonProps } from '../Button';
-import { formElementSizes } from '@/ds/primitives/form-element';
-import type { FormElementSize } from '@/ds/primitives/form-element';
+import { buttonVariants } from '../Button/Button';
+import type { ControlSize } from '@/ds/primitives/control-size';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -98,37 +97,63 @@ const SelectValue = React.forwardRef<HTMLSpanElement, SelectValueProps>(({ class
 ));
 SelectValue.displayName = 'SelectValue';
 
+/**
+ * A select is a form field, not a call-to-action — so it deliberately exposes
+ * only the field-appropriate button looks. `outline` (bordered, the default)
+ * and `ghost` (borderless, for dense toolbars/inline pickers). High-emphasis
+ * looks like `primary` are intentionally NOT offered.
+ */
+export type SelectTriggerVariant = 'outline' | 'ghost';
+
 export type SelectTriggerProps = Omit<SelectPrimitive.Trigger.Props, 'className'> & {
   className?: string;
-  size?: FormElementSize;
-  /** Kept for API compatibility; styling is now intrinsic to the trigger. */
-  variant?: ButtonProps['variant'];
+  size?: ControlSize;
+  variant?: SelectTriggerVariant;
+};
+
+// Open-state look ("active" while the menu is open), mirroring each variant's own
+// hover so it stays variant-correct.
+const selectTriggerOpenState: Record<SelectTriggerVariant, string> = {
+  outline: 'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
+  ghost: 'data-[popup-open]:bg-neutral6/5 data-[popup-open]:text-neutral6',
 };
 
 const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
-  ({ className, children, size = 'default', variant: _variant, ...props }, ref) => {
+  ({ className, children, size = 'default', variant = 'outline', ...props }, ref) => {
     return (
       <SelectPrimitive.Trigger
         ref={ref}
         data-slot="select-trigger"
+        // A select = a button + a trailing chevron: reuse the Button recipe
+        // (variant colors, size = height/text/padding/radius, unified border
+        // focus, disabled) and layer only the select-specific extras.
         className={cn(
-          'inline-flex w-full cursor-pointer select-none items-center justify-between gap-1.5 whitespace-nowrap',
-          formElementSizes[size],
-          'rounded-lg border border-border1 bg-transparent px-2.5 text-ui-smd leading-ui-sm text-neutral4',
-          'outline-none transition-colors duration-normal ease-out-custom',
-          'hover:bg-surface3 hover:text-neutral6 hover:border-border2 active:bg-surface4',
-          'focus:outline-none focus-visible:outline-none focus-visible:border-border2',
-          'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
+          buttonVariants({ variant, size }),
+          // Fill the field and push the value left / chevron right (Button's
+          // base centers its content with `justify-center`).
+          'w-full justify-between',
+          // Read as "active" while the menu is open, per variant (see map above).
+          selectTriggerOpenState[variant],
           'data-[placeholder]:text-neutral3',
-          'disabled:cursor-not-allowed disabled:opacity-50',
           '[&>span]:truncate',
           className,
         )}
         {...props}
       >
         {children}
+        {/* `SelectPrimitive.Icon` renders the provided element in place of its
+            default `<span>`, so the chevron would land as a *direct* `<svg>`
+            child of the trigger — where Button's `TEXT_MODE_ADORNMENTS`
+            `[&>svg]` rules (negative `mx`, forced 50% opacity, 1.1em sizing)
+            would distort and mis-position it. Wrapping it in a `<span>` keeps
+            the svg one level deep so those rules can't reach it, leaving the
+            chevron pinned at the right edge at its intended size and opacity. */}
         <SelectPrimitive.Icon
-          render={<ChevronDown className={cn('h-4 w-4 shrink-0 text-neutral3 opacity-70', transitions.colors)} />}
+          render={
+            <span className="flex shrink-0 items-center">
+              <ChevronDown className={cn('h-4 w-4 opacity-60', transitions.colors)} />
+            </span>
+          }
         />
       </SelectPrimitive.Trigger>
     );

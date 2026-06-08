@@ -73,4 +73,34 @@ describe('Combobox', () => {
       expect(onValueChange).toHaveBeenCalledWith('anthropic');
     });
   });
+
+  it('renders a pill-shaped trigger from the shared buttonVariants recipe', () => {
+    render(<Combobox options={options} placeholder="Pick provider" />);
+
+    const trigger = screen.getByRole('combobox');
+    // Composes the Button recipe: pill radius + full-width field layout.
+    expect(trigger.className).toContain('rounded-full');
+    expect(trigger.className).toContain('w-full');
+    expect(trigger.className).toContain('justify-between');
+  });
+
+  it('defaults to the bordered outline variant; ghost drops the visible border', () => {
+    const { rerender } = render(<Combobox options={options} placeholder="Pick provider" />);
+    // Default === outline: a bordered field.
+    expect(screen.getByRole('combobox').className).toContain('border-border1');
+
+    rerender(<Combobox options={options} placeholder="Pick provider" variant="outline" />);
+    expect(screen.getByRole('combobox').className).toContain('border-border1');
+
+    // Ghost === borderless: same shape, transparent border instead.
+    rerender(<Combobox options={options} placeholder="Pick provider" variant="ghost" />);
+    const ghostClass = screen.getByRole('combobox').className;
+    expect(ghostClass).toContain('border-transparent');
+    expect(ghostClass).not.toContain('border-border1');
+  });
+
+  it('applies the error border when an error is provided', () => {
+    render(<Combobox options={options} placeholder="Pick provider" error="Required" />);
+    expect(screen.getByRole('combobox').className).toContain('border-error');
+  });
 });

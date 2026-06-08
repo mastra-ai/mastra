@@ -42,6 +42,49 @@ export const Experimental: Story = {
   ),
 };
 
+export const Sizes: Story = {
+  render: () => (
+    <div className="flex flex-col items-start gap-3">
+      {(['xs', 'sm', 'md', 'default', 'lg'] as const).map(size => (
+        <Select key={size}>
+          <SelectTrigger className="w-[180px]" size={size}>
+            <SelectValue placeholder={size} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="option1">Option 1</SelectItem>
+            <SelectItem value="option2">Option 2</SelectItem>
+            <SelectItem value="option3">Option 3</SelectItem>
+          </SelectContent>
+        </Select>
+      ))}
+    </div>
+  ),
+};
+
+/**
+ * A select is a field, so it only offers the field-appropriate looks: `outline`
+ * (bordered, the default) and `ghost` (borderless, for dense toolbars). It does
+ * not expose high-emphasis button looks like `primary`.
+ */
+export const Variants: Story = {
+  render: () => (
+    <div className="flex flex-col items-start gap-3">
+      {(['outline', 'ghost'] as const).map(variant => (
+        <Select key={variant}>
+          <SelectTrigger className="w-[180px]" variant={variant}>
+            <SelectValue placeholder={variant} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="option1">Option 1</SelectItem>
+            <SelectItem value="option2">Option 2</SelectItem>
+            <SelectItem value="option3">Option 3</SelectItem>
+          </SelectContent>
+        </Select>
+      ))}
+    </div>
+  ),
+};
+
 export const WithValue: Story = {
   render: () => (
     <Select defaultValue="option2">

@@ -1,11 +1,12 @@
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as React from 'react';
-import { comboboxStyles } from './combobox-styles';
-import { formElementSizes } from '@/ds/primitives/form-element';
-import type { FormElementSize } from '@/ds/primitives/form-element';
+import { comboboxStyles, comboboxTriggerClass } from './combobox-styles';
+import type { ComboboxVariant } from './combobox-styles';
+import type { ControlSize } from '@/ds/primitives/control-size';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
-import { cn } from '@/lib/utils';
+
+export type { ComboboxVariant } from './combobox-styles';
 
 export type ComboboxOption = {
   label: string;
@@ -13,14 +14,6 @@ export type ComboboxOption = {
   description?: string;
   start?: React.ReactNode;
   end?: React.ReactNode;
-};
-
-export type ComboboxVariant = 'default' | 'ghost' | 'link';
-
-const triggerVariantStyles: Record<ComboboxVariant, string> = {
-  default: comboboxStyles.triggerDefault,
-  ghost: comboboxStyles.triggerGhost,
-  link: comboboxStyles.triggerLink,
 };
 
 export type ComboboxProps = {
@@ -33,7 +26,7 @@ export type ComboboxProps = {
   className?: string;
   disabled?: boolean;
   variant?: ComboboxVariant;
-  size?: Exclude<FormElementSize, 'lg'>;
+  size?: Exclude<ControlSize, 'lg'>;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
@@ -49,7 +42,7 @@ export function Combobox({
   emptyText = 'No option found.',
   className,
   disabled = false,
-  variant = 'default',
+  variant = 'outline',
   size = 'default',
   open,
   onOpenChange,
@@ -78,15 +71,7 @@ export function Combobox({
         open={open}
         onOpenChange={onOpenChange}
       >
-        <BaseCombobox.Trigger
-          className={cn(
-            comboboxStyles.trigger,
-            triggerVariantStyles[variant],
-            formElementSizes[size],
-            error && comboboxStyles.triggerError,
-            className,
-          )}
-        >
+        <BaseCombobox.Trigger className={comboboxTriggerClass({ variant, size, error: Boolean(error), className })}>
           {/* Keep truncation off the outer wrapper so start adornments are not clipped. */}
           <span className="flex items-center gap-2 min-w-0 flex-1">
             {selectedOption?.start}
@@ -94,7 +79,12 @@ export function Combobox({
               <BaseCombobox.Value placeholder={placeholder} />
             </span>
           </span>
-          <ChevronsUpDown className={comboboxStyles.chevron} />
+          {/* Wrap the chevron in a `<span>` so the svg is one level deep and
+              escapes Button's `[&>svg]` adornments (negative `mx`, forced
+              opacity/size) — mirrors Select's chevron wrap. */}
+          <span className="flex shrink-0 items-center">
+            <ChevronsUpDown className={comboboxStyles.chevron} />
+          </span>
         </BaseCombobox.Trigger>
 
         <BaseCombobox.Portal container={resolvedContainer}>

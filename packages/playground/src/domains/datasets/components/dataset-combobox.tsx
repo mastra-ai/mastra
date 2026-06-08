@@ -25,7 +25,7 @@ export function DatasetCombobox({
   emptyText = 'No datasets found.',
   className,
   disabled = false,
-  variant = 'default',
+  variant,
 }: DatasetComboboxProps) {
   const { data, isLoading, isError, error } = useDatasets();
   const { navigate, paths } = useLinkComponent();

@@ -1,42 +1,60 @@
+import { buttonVariants } from '../Button/Button';
+import type { ControlSize } from '@/ds/primitives/control-size';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
+
+/**
+ * A combobox is a form field, not a call-to-action — so it deliberately exposes
+ * only the field-appropriate button looks, mirroring `SelectTrigger`. `outline`
+ * (bordered, the default) and `ghost` (borderless, for breadcrumbs/inline
+ * pickers). High-emphasis looks like `primary` are intentionally NOT offered.
+ */
+export type ComboboxVariant = 'outline' | 'ghost';
+
+// Open-state look ("active" while the popup is open), mirroring each variant's
+// own hover so it stays variant-correct. Same values as `selectTriggerOpenState`.
+const comboboxTriggerOpenState: Record<ComboboxVariant, string> = {
+  outline: 'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
+  ghost: 'data-[popup-open]:bg-neutral6/5 data-[popup-open]:text-neutral6',
+};
+
+/**
+ * Single source of truth for both the single- and multi-select combobox
+ * triggers. A combobox = a button + a trailing chevron, so it reuses the Button
+ * recipe (variant colors, size = height/text/padding/radius, unified border
+ * focus, disabled) and layers only the combobox-specific extras — exactly like
+ * `SelectTrigger`.
+ */
+export function comboboxTriggerClass({
+  variant,
+  size,
+  error,
+  className,
+}: {
+  variant: ComboboxVariant;
+  size: ControlSize;
+  error?: boolean;
+  className?: string;
+}): string {
+  return cn(
+    buttonVariants({ variant, size }),
+    // Fill the field and push the value left / chevron right (Button's base
+    // centers its content with `justify-center`).
+    'w-full min-w-32 justify-between',
+    // Read as "active" while the popup is open, per variant (see map above).
+    comboboxTriggerOpenState[variant],
+    'data-[placeholder]:text-neutral3',
+    error && 'border-error hover:border-error focus-visible:border-error',
+    className,
+  );
+}
 
 export const comboboxStyles = {
   /** Root wrapper */
   root: 'flex flex-col gap-1.5',
 
-  /** Trigger base — shared layout/typography for all variants. */
-  trigger: cn(
-    'inline-flex w-full min-w-32 select-none items-center justify-between gap-1.5 whitespace-nowrap cursor-pointer',
-    'rounded-lg border bg-transparent px-2.5 text-ui-smd leading-ui-sm text-neutral4',
-    'outline-none transition-colors duration-normal ease-out-custom',
-    'focus:outline-none focus-visible:outline-none',
-    'disabled:cursor-not-allowed disabled:opacity-50',
-  ),
-
-  /** Variant: default — bordered form input look. */
-  triggerDefault: cn(
-    'border-border1',
-    'hover:bg-surface2 hover:text-neutral6 hover:border-border2 active:bg-surface3',
-    'focus-visible:border-border2',
-    'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
-  ),
-
-  /** Variant: ghost — borderless, hover-only surface. */
-  triggerGhost: cn(
-    'border-transparent',
-    'hover:bg-surface2 hover:text-neutral6 active:bg-surface3',
-    'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6',
-  ),
-
-  /** Variant: link — text-only trigger. */
-  triggerLink: cn('border-transparent px-0', 'hover:text-neutral6', 'data-[popup-open]:text-neutral6'),
-
-  /** Trigger with error state */
-  triggerError: 'border-accent2 hover:border-accent2 focus-visible:border-accent2',
-
-  /** Chevron icon in trigger */
-  chevron: 'ml-2 h-4 w-4 shrink-0 text-neutral3 opacity-70',
+  /** Chevron icon in trigger — inherits the variant's text color via currentColor. */
+  chevron: 'ml-2 h-4 w-4 shrink-0 opacity-60',
 
   /** Placeholder text color */
   placeholder: 'text-neutral3',
