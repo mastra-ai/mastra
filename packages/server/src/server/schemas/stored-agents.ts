@@ -379,6 +379,19 @@ export const exportStoredAgentBodySchema = snapshotConfigUpdateSchema.partial();
 // ============================================================================
 
 /**
+ * Resolved author object — server-side enrichment of `authorId` against the
+ * configured auth provider. Only `id` is required; the other fields mirror
+ * what `/auth/me` exposes and are optional because providers may not return
+ * every field.
+ */
+export const resolvedAuthorSchema = z.object({
+  id: z.string(),
+  name: z.string().optional(),
+  email: z.string().optional(),
+  avatarUrl: z.string().optional(),
+});
+
+/**
  * Stored agent object schema (resolved response: thin record + version config)
  * Represents StorageResolvedAgentType
  */
@@ -388,6 +401,7 @@ export const storedAgentSchema = z.object({
   status: z.string().describe('Agent status: draft or published'),
   activeVersionId: z.string().optional(),
   authorId: z.string().optional(),
+  author: resolvedAuthorSchema.optional().describe('Resolved author identity (when an auth provider is configured)'),
   metadata: z.record(z.string(), z.unknown()).optional(),
   visibility: z.enum(['private', 'public']).optional(),
   favoriteCount: z.number().int().nonnegative().optional().describe('Number of users who have favorited this agent'),
