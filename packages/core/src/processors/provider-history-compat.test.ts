@@ -4,8 +4,10 @@ import { describe, expect, it } from 'vitest';
 import { MessageList } from '../agent/message-list';
 import {
   anthropicStripForeignReasoningContent,
+  azureSystemReminderTransform,
   cerebrasStripReasoningContent,
   isMaybeAnthropic,
+  isMaybeAzure,
   isMaybeCerebras,
   ProviderHistoryCompat,
 } from './provider-history-compat';
@@ -630,5 +632,184 @@ describe('ProcessorRunner.runProcessLLMRequest', () => {
 
     const assistant = result.prompt.find(m => m.role === 'assistant')!;
     expect((assistant.content as any[]).map(p => p.type)).toEqual(['reasoning', 'text']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isMaybeAzure
+// ---------------------------------------------------------------------------
+
+describe('isMaybeAzure', () => {
+  it('matches gateway-prefixed azure model id strings', () => {
+    expect(isMaybeAzure('azure/gpt-4o')).toBe(true);
+    expect(isMaybeAzure('azure:gpt-4o')).toBe(true);
+  });
+
+  it('matches resolved language model objects with azure provider', () => {
+    expect(isMaybeAzure({ provider: 'azure.chat', modelId: 'gpt-4o' })).toBe(true);
+    expect(isMaybeAzure({ provider: 'azure', modelId: 'gpt-4o' })).toBe(true);
+    expect(isMaybeAzure({ provider: 'azure.openai', modelId: 'gpt-4o' })).toBe(true);
+  });
+
+  it('matches object-shaped models with generic providers and azure-prefixed model IDs', () => {
+    expect(isMaybeAzure({ provider: 'openai-compatible.chat', modelId: 'azure/gpt-4o' })).toBe(true);
+  });
+
+  it('does not match non-azure providers', () => {
+    expect(isMaybeAzure('openai/gpt-4o')).toBe(false);
+    expect(isMaybeAzure({ provider: 'openai.chat', modelId: 'gpt-4o' })).toBe(false);
+    expect(isMaybeAzure('azure-foo')).toBe(false);
+  });
+
+  it('returns false for unknown shapes', () => {
+    expect(isMaybeAzure(undefined)).toBe(false);
+    expect(isMaybeAzure(null)).toBe(false);
+    expect(isMaybeAzure(() => 'azure/gpt-4o')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// azureSystemReminderTransform rule
+// ---------------------------------------------------------------------------
+
+const OM_CONTINUATION = '<system-reminder>You are in the middle of an observation, please continue.</system-reminder>';
+const TEMPORAL_GAP = '<system-reminder type="temporal-gap" precedesMessageId="msg-1">2 hours passed.</system-reminder>';
+
+function promptWithSystemReminder(text: string): LanguageModelV2Prompt {
+  return [
+    { role: 'system', content: 'You are a helpful assistant.' },
+    { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+    { role: 'assistant', content: [{ type: 'text', text: 'hi' }] },
+    { role: 'user', content: [{ type: 'text', text: text }] },
+  ];
+}
+
+describe('azureSystemReminderTransform', () => {
+  it('renames <system-reminder> tags to <memory-context> in user message text parts', () => {
+    const result = azureSystemReminderTransform.applyToPrompt!({
+      prompt: promptWithSystemReminder(OM_CONTINUATION),
+      model: { provider: 'azure.chat', modelId: 'gpt-4o' },
+    });
+
+    expect(result).toBeDefined();
+    const lastUser = result!.filter(m => m.role === 'user').at(-1)!;
+    const text = (lastUser.content as any[])[0].text as string;
+    expect(text).toContain('<memory-context>');
+    expect(text).toContain('</memory-context>');
+    expect(text).not.toContain('<system-reminder>');
+    expect(text).not.toContain('</system-reminder>');
+  });
+
+  it('preserves attributes on the opening tag (temporal gap markers)', () => {
+    const result = azureSystemReminderTransform.applyToPrompt!({
+      prompt: promptWithSystemReminder(TEMPORAL_GAP),
+      model: { provider: 'azure.chat', modelId: 'gpt-4o' },
+    });
+
+    expect(result).toBeDefined();
+    const lastUser = result!.filter(m => m.role === 'user').at(-1)!;
+    const text = (lastUser.content as any[])[0].text as string;
+    expect(text).toContain('<memory-context type="temporal-gap" precedesMessageId="msg-1">');
+    expect(text).toContain('</memory-context>');
+    expect(text).not.toContain('system-reminder');
+  });
+
+  it('handles a message with both OM hint and temporal gap in separate user messages', () => {
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'user', content: [{ type: 'text', text: TEMPORAL_GAP }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'ok' }] },
+      { role: 'user', content: [{ type: 'text', text: OM_CONTINUATION }] },
+    ];
+
+    const result = azureSystemReminderTransform.applyToPrompt!({
+      prompt,
+      model: { provider: 'azure.chat', modelId: 'gpt-4o' },
+    });
+
+    expect(result).toBeDefined();
+    const userMessages = result!.filter(m => m.role === 'user');
+    for (const msg of userMessages) {
+      const text = (msg.content as any[])[0].text as string;
+      expect(text).not.toContain('system-reminder');
+      expect(text).toContain('memory-context');
+    }
+  });
+
+  it('does not touch non-user messages (system and assistant)', () => {
+    const systemContent = 'You are a helpful assistant.';
+    const prompt: LanguageModelV2Prompt = [
+      { role: 'system', content: systemContent },
+      { role: 'user', content: [{ type: 'text', text: OM_CONTINUATION }] },
+      { role: 'assistant', content: [{ type: 'text', text: OM_CONTINUATION }] },
+    ];
+
+    const result = azureSystemReminderTransform.applyToPrompt!({
+      prompt,
+      model: { provider: 'azure.chat', modelId: 'gpt-4o' },
+    });
+
+    expect(result).toBeDefined();
+    const sys = result![0]!;
+    expect(sys.content).toBe(systemContent);
+    const asst = result!.find(m => m.role === 'assistant')!;
+    expect((asst.content as any[])[0].text).toBe(OM_CONTINUATION);
+  });
+
+  it('returns undefined when no system-reminder tags are present', () => {
+    const result = azureSystemReminderTransform.applyToPrompt!({
+      prompt: [{ role: 'user', content: [{ type: 'text', text: 'just a normal message' }] }],
+      model: { provider: 'azure.chat', modelId: 'gpt-4o' },
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  it('returns undefined when model is not Azure', () => {
+    const result = azureSystemReminderTransform.applyToPrompt!({
+      prompt: promptWithSystemReminder(OM_CONTINUATION),
+      model: { provider: 'openai.chat', modelId: 'gpt-4o' },
+    });
+
+    expect(result).toBeUndefined();
+  });
+
+  it('does not mutate the original prompt', () => {
+    const original = promptWithSystemReminder(OM_CONTINUATION);
+    const originalJson = JSON.stringify(original);
+
+    azureSystemReminderTransform.applyToPrompt!({
+      prompt: original,
+      model: { provider: 'azure.chat', modelId: 'gpt-4o' },
+    });
+
+    expect(JSON.stringify(original)).toBe(originalJson);
+  });
+});
+
+describe('ProviderHistoryCompat.processLLMRequest (Azure)', () => {
+  it('transforms system-reminder tags on azure models', () => {
+    const handler = new ProviderHistoryCompat();
+    const args = makeRequestArgs(promptWithSystemReminder(OM_CONTINUATION), {
+      provider: 'azure.chat',
+      modelId: 'gpt-4o',
+    });
+
+    const result = handler.processLLMRequest(args);
+
+    expect(result).toBeDefined();
+    const lastUser = (result as { prompt: LanguageModelV2Prompt }).prompt.filter(m => m.role === 'user').at(-1)!;
+    const text = (lastUser.content as any[])[0].text as string;
+    expect(text).toContain('<memory-context>');
+    expect(text).not.toContain('<system-reminder>');
+  });
+
+  it('returns undefined for non-azure models with system-reminder tags', () => {
+    const handler = new ProviderHistoryCompat();
+    const args = makeRequestArgs(promptWithSystemReminder(OM_CONTINUATION), {
+      provider: 'openai.chat',
+      modelId: 'gpt-4o',
+    });
+
+    expect(handler.processLLMRequest(args)).toBeUndefined();
   });
 });
