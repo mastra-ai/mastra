@@ -1,4 +1,3 @@
-import { copyFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
@@ -36,16 +35,6 @@ const libConfig: UserConfig = {
     }),
     libInjectCss(),
     nodeExternals() as PluginOption,
-    // Ship the raw token layer (src/theme.css) verbatim as dist/theme.css. It is
-    // copied — never imported through the CSS graph — so Tailwind/Vite never
-    // compiles it, keeping the `@theme {}` block intact for consumers that import
-    // `@mastra/playground-ui/theme.css` into their own Tailwind build.
-    {
-      name: 'copy-raw-theme-css',
-      writeBundle() {
-        copyFileSync(resolve(__dirname, 'src/theme.css'), resolve(__dirname, 'dist/theme.css'));
-      },
-    },
   ],
   build: {
     lib: {
