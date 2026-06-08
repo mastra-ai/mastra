@@ -177,6 +177,21 @@ async function main() {
         isRunning = true;
       }
 
+      // ─── Poll activeRunId to detect when the run finishes ───────────────
+      const pollPromise = (async () => {
+        // Wait a tick for the run to register
+        await new Promise<void>(resolve => setTimeout(resolve, 50));
+        while (isRunning) {
+          const runId = subscription.activeRunId();
+          if (!runId) {
+            // No active run — the stream should finish shortly
+            break;
+          }
+          await new Promise<void>(resolve => setTimeout(resolve, 100));
+        }
+        isRunning = false;
+      })();
+
       // ─── Read streamed chunks ───────────────────────────────────────────
       const streamPromise = (async () => {
         try {
@@ -222,44 +237,20 @@ async function main() {
         }
       })();
 
-      // ─── While the agent is running, allow follow-up prompts ────────────
-      const steerPromise = (async () => {
-        while (isRunning) {
-          // Small delay to avoid blocking the event loop
-          await new Promise<void>(resolve => setTimeout(resolve, 50));
-          if (!isRunning) break;
-
-          const steerText = await ask('\n  steer: ');
-          if (!steerText.trim()) continue;
-
-          try {
-            await session.sendMessage({ messages: steerText });
-          } catch (err) {
-            console.error('Steer error:', err);
-          }
-        }
-      })();
-
-      // ─── Poll activeRunId to detect when the run finishes ───────────────
-      const pollPromise = (async () => {
-        // Wait a tick for the run to register
-        await new Promise<void>(resolve => setTimeout(resolve, 50));
-        while (isRunning) {
-          const runId = subscription.activeRunId();
-          if (!runId) {
-            // No active run — the stream should finish shortly
-            break;
-          }
-          await new Promise<void>(resolve => setTimeout(resolve, 100));
-        }
-        isRunning = false;
-      })();
-
       // ─── Wait for run completion, then unsubscribe to end the stream ─────
       await pollPromise;
       subscription.unsubscribe();
       await streamPromise;
-      await steerPromise;
+
+      // ─── After the run finishes, allow a follow-up prompt ───────────────
+      const steerText = await ask('\n  steer: ');
+      if (steerText.trim()) {
+        try {
+          await session.sendMessage({ messages: steerText });
+        } catch (err) {
+          console.error('Steer error:', err);
+        }
+      }
 
       console.info('\n');
     } catch (err) {
