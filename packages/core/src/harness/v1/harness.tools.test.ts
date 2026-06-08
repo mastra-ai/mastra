@@ -55,7 +55,7 @@ describe('Harness — tools/skills/subagents config', () => {
       },
     };
     const harness = new Harness({
-      agents: { default: {} as never },
+      agent: {} as never,
       memory,
       storage: new MemStore(),
       modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm', tools: { echo: echoTool } }],
@@ -79,7 +79,7 @@ describe('Harness — tools/skills/subagents config', () => {
 
   it('does not expose internal tool override helpers on the Session', async () => {
     const harness = new Harness({
-      agents: {},
+      agent: {} as never,
       memory,
       storage: new MemStore(),
       modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm', tools: { echo: echoTool } }],
@@ -93,7 +93,7 @@ describe('Harness — tools/skills/subagents config', () => {
   it('keeps built-in task tools owned by the calling session', async () => {
     const storage = new MemStore();
     const harness = new Harness({
-      agents: { default: {} as never },
+      agent: {} as never,
       memory,
       storage,
       modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm' }],
@@ -126,7 +126,7 @@ describe('Harness — tools/skills/subagents config', () => {
 
   it('returns a recoverable error when built-in tools execute for a different session', async () => {
     const harness = new Harness({
-      agents: { default: {} as never },
+      agent: {} as never,
       memory,
       storage: new MemStore(),
       modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm' }],
@@ -149,12 +149,12 @@ describe('Harness — tools/skills/subagents config', () => {
   it('creates durable child sessions through the subagent built-in and enforces depth cap', async () => {
     const storage = new MemStore();
     const resolveModel = vi.fn().mockReturnValue({});
-    // Subagents resolve a backing agent per type `agentId`, which the harness looks up through
-    // the parent Mastra. A single-agent inline harness has no per-id resolver, so drive this
-    // through a Mastra-backed harness.
     const mastra = {
       getStorage: vi.fn(() => undefined),
-      getAgentById: vi.fn(() => ({})),
+      getAgentById: vi.fn((agentId: string) => {
+        if (agentId === 'default') return {};
+        throw new Error(`missing agent ${agentId}`);
+      }),
     };
     const harness = new Harness({
       mastra: mastra as never,
@@ -258,7 +258,7 @@ describe('Harness — tools/skills/subagents config', () => {
   it('validates subagent depth and runtime compatibility configuration', async () => {
     const storage = new MemStore();
     const harness = new Harness({
-      agents: { default: {} as never },
+      agent: {} as never,
       memory,
       storage,
       runtimeCompatibilityGeneration: 'runtime-v1',
