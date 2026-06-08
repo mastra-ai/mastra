@@ -273,6 +273,14 @@ function mapMastraToLangfuseAttributes(
           attributes['langfuse.observation.prompt.version'] = parsed.prompt.version;
         }
       }
+      // Forward all top-level keys (except reserved 'prompt') as langfuse.trace.metadata.*
+      // so users can filter and group traces by custom metadata keys in Langfuse.
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        for (const [key, value] of Object.entries(parsed)) {
+          if (key === 'prompt') continue;
+          attributes[`langfuse.trace.metadata.${key}`] = value as any;
+        }
+      }
     } catch {
       // best effort — invalid JSON is silently ignored
     }
