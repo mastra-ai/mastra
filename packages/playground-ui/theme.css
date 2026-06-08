@@ -1,29 +1,13 @@
 /*
- * Raw design-token layer for @mastra/playground-ui.
- *
- * This file is the single source of truth for the package's design tokens. It
- * ships uncompiled as `@mastra/playground-ui/theme.css` so a consuming app's own
- * Tailwind v4 compiler can read the `@theme {}` block and generate the design-
- * system utility classes (bg-surface1, text-neutral4, …) for the consumer's own
- * markup — without redeclaring every token.
- *
- * It contains ONLY token definitions: the `:root` / `html.light` custom
- * properties and the `@theme {}` block. It deliberately has no
- * `@import 'tailwindcss'`, no `@plugin`, no `@custom-variant`, no `@layer base`,
- * and no `@apply`-based `@utility` rules — those require Tailwind and would break
- * a raw consumer. `src/index.css` `@import`s this file so the package builds from
- * the same source.
- *
- * Color tokens use oklch() — perceptually uniform, wide-gamut (P3) ready,
- * predictable lightness across hues. Do not convert back to hex/rgba.
+ * Raw design tokens for @mastra/playground-ui. Ships uncompiled as
+ * `@mastra/playground-ui/theme.css` so a consumer's Tailwind reads @theme and
+ * generates DS utilities without redeclaring tokens.
+ * Tokens only — no @import 'tailwindcss'/@plugin/@layer/@apply (breaks raw import).
+ * Colors stay oklch.
  */
 
 :root {
-  /*
-   * Backward-compat aliases for legacy raw font-name CSS custom properties.
-   * New code should reference the semantic tokens (--font-display,
-   * --font-body, --font-mono) directly.
-   */
+  /* Legacy font-name aliases. Prefer --font-display / --font-body / --font-mono. */
   --geist-mono: var(--font-mono);
   --font-inter: var(--font-body);
   --tasa-explorer: var(--font-display);
@@ -89,9 +73,7 @@
   --notice-note: oklch(0.18 0 0);
   --notice-note-fg: oklch(0.99 0.001 230);
 
-  /* Brand green scale (dark). Centered on --notice-success; remaps Tailwind's
-     default green palette via the @theme block below so `green-*` utilities use
-     the Mastra brand green across every consumer. */
+  /* Brand green (dark). Remaps Tailwind green-* via @theme below. */
   --brand-green-50: oklch(99% 0.024 138);
   --brand-green-100: oklch(97.5% 0.055 138);
   --brand-green-200: oklch(95.5% 0.105 138);
@@ -106,8 +88,7 @@
   --brand-green-badge-bg: oklch(32.3% 0.04 140);
   --brand-green-badge-fg: oklch(83.6% 0.126 140);
 
-  /* Chart palette (recharts). Mirrors Tailwind blue-600 / amber-500 / purple-500
-     / red-500 in oklch; --chart-2 follows the brand green. */
+  /* Chart palette (recharts). blue-600/amber-500/purple-500/red-500; chart-2 = brand green. */
   --chart-1: oklch(0.546 0.245 262.881);
   --chart-2: var(--color-green-500);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -176,8 +157,7 @@ html.light {
   --notice-note: oklch(0.97 0 0);
   --notice-note-fg: oklch(0.18 0 0);
 
-  /* Brand green scale (light). --brand-green-badge-* and --chart-* are inherited
-     from :root (only the green ramp flips per mode). */
+  /* Brand green (light). badge + chart inherit :root. */
   --brand-green-50: oklch(97.8% 0.025 140);
   --brand-green-100: oklch(95.5% 0.055 140);
   --brand-green-200: oklch(91.5% 0.095 140);
@@ -374,12 +354,7 @@ html.light {
   --color-notice-note: var(--notice-note);
   --color-notice-note-fg: var(--notice-note-fg);
 
-  /*
-   * Replace Tailwind's default green palette with the Mastra brand green.
-   * `--color-green-*: initial` clears the built-in green first (the native v4
-   * way to override a whole namespace), then each shade maps to the per-mode
-   * --brand-green-* token so `green-*` utilities follow light/dark.
-   */
+  /* Replace Tailwind green with brand green. initial clears defaults (native v4), then remap. */
   --color-green-*: initial;
   --color-green-50: var(--brand-green-50);
   --color-green-100: var(--brand-green-100);
@@ -422,10 +397,7 @@ html.light {
   --shadow-card: 0 2px 8px oklch(0 0 0 / 0.4);
   --shadow-elevated: 0 8px 24px oklch(0 0 0 / 0.5);
 
-  /* Drop-shadow only. A previous version added `inset 0 1px 0 0 oklch(100% 0 0deg / 4%)` for
-     a 1px gloss highlight on top, but Tailwind v4 inlines @theme values into utility
-     classes so it can't be themed per-mode via a CSS var override — and the white inset
-     reads as a dirty band on dark surfaces and is invisible on white-ish light surfaces. */
+  /* Drop-shadow only — no white inset: @theme inlines values, so it can't theme per-mode and reads dirty on dark. */
   --shadow-dialog: 0 8px 24px -8px oklch(0% 0 0deg / 28%), 0 24px 56px -16px oklch(0% 0 0deg / 36%);
   --shadow-glow-accent1: 0 0 20px oklch(0.723 0.219 149.579 / 0.25);
   --shadow-glow-accent2: 0 0 20px oklch(0.637 0.237 25.331 / 0.25);

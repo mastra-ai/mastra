@@ -3,13 +3,8 @@
 
 @import '@assistant-ui/react-ui/styles/index.css';
 
-/*
- * Design tokens — the `:root` / `html.light` custom properties and the `@theme`
- * block — live in ./theme.css so the same source can also ship raw (uncompiled)
- * as `@mastra/playground-ui/theme.css`, letting a consumer's own Tailwind
- * compiler read `@theme` and generate the DS utilities without redeclaring
- * tokens. Keep token edits in ../theme.css, not here.
- */
+/* Tokens (:root/html.light + @theme) live in ../theme.css so they also ship raw
+   as @mastra/playground-ui/theme.css. Edit tokens there, not here. */
 @import '../theme.css';
 
 @plugin '@tailwindcss/typography';
