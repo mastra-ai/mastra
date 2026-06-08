@@ -1,5 +1,6 @@
 import { MCPClient } from '@mastra/mcp';
 import { createRequire } from 'node:module';
+import '@notionhq/notion-mcp-server/package.json';
 
 const require = createRequire(import.meta.url);
 const notionMcpServerPath = require.resolve('@notionhq/notion-mcp-server/bin/cli.mjs');
