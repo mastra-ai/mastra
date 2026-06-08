@@ -2,30 +2,18 @@
 '@mastra/playground-ui': minor
 ---
 
-Added a new `xs` size to Button, Input, Select (SelectTrigger), and InputGroup for compact, dense layouts. Use it like any other size:
+**Added an `xs` size** to Button, Input, Select, and InputGroup for compact, dense layouts.
 
 ```tsx
 <Button size="xs">Compact</Button>
-<Input size="xs" placeholder="Search" />
-<SelectTrigger size="xs">…</SelectTrigger>
-<InputGroup size="xs">…</InputGroup>
+<Input size="xs" />
 ```
 
-Unified the focus styling across interactive controls: buttons now use the same border-based focus indicator as inputs (the 1px border brightens on keyboard focus) instead of the previous green accent ring, so buttons, inputs, and selects share one consistent focus language.
+**Unified the keyboard-focus look across controls.** Buttons now show the same subtle border highlight on focus as inputs and selects, instead of a green ring, so a row of buttons, inputs, and selects feels consistent.
 
-Made the Select and Combobox triggers pill-shaped (`rounded-full`) to match the Button and Input shape, so triggers sitting next to buttons and inputs share the same rounded silhouette.
+**Made Select and Combobox triggers match buttons.** They are now pill-shaped and reuse the Button styling, so a select reads like a button with a dropdown arrow. Their `variant` offers `default` (filled, used by default), `outline`, and `ghost` — the same looks as buttons, minus the high-emphasis `primary`. Since `default` is the default, you only pass a `variant` to switch to `outline` or `ghost`. MultiCombobox's `variant` now works (it previously had no effect).
 
-The Select trigger now composes the Button recipe instead of hand-rolling its own chrome, so a select reads as "a button plus a trailing chevron" and shares the button's sizes and unified focus. It exposes the same looks consumers already use elsewhere: `default` (the filled Button surface — and the default here too, so a select and a button read the same out of the box), `outline` (bordered, transparent) and `ghost` (borderless, for dense toolbars). Only the high-emphasis `primary` look is left out, since a field is not a call-to-action:
-
-```tsx
-<SelectTrigger variant="ghost" size="sm">
-  <SelectValue placeholder="Pick one" />
-</SelectTrigger>
-```
-
-Combobox and MultiCombobox triggers now compose that same Button recipe, so every field trigger shares one source of truth for sizing, shape, and focus. Their `variant` offers the same `default` (filled, the default) / `outline` / `ghost` looks as Select; the unused `link` look was removed. MultiCombobox's `variant`, previously inert, now actually styles its trigger. Since `default` is the default, you no longer pass it explicitly — only reach for `outline` or `ghost`.
-
-Deprecated the `asChild` prop on the `DropdownMenu`, `Dialog`, `AlertDialog`, and `Popover` triggers (and `DialogClose`). These wrap Base UI, whose native composition API is the better-typed `render` prop — pass your element there instead. `asChild` still works for now but will be removed:
+**Deprecated `asChild`** on the DropdownMenu, Dialog, AlertDialog, and Popover triggers (and DialogClose). Pass your element to the `render` prop instead. `asChild` still works for now.
 
 ```tsx
 // Before
