@@ -4,27 +4,19 @@ import { useAgent } from '../../hooks/use-agent';
 import { AgentEntityHeader } from '../agent-entity-header';
 import { AgentMetadata } from '../agent-metadata';
 import { BrowserSidebarTab } from '../browser-view/browser-sidebar-tab';
-import { AgentMemory } from './agent-memory';
 import { useAgentInformationTab } from './use-agent-information-tab';
-import { useMemory } from '@/domains/memory/hooks';
 import { TracingRunOptions } from '@/domains/observability/components/tracing-run-options';
 import { RequestContextSchemaForm } from '@/domains/request-context';
 
 export interface AgentInformationProps {
   agentId: string;
-  threadId: string;
 }
 
-export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
+export function AgentInformation({ agentId }: AgentInformationProps) {
   const { data: agent } = useAgent(agentId);
-  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
   const { hasSession, isInSidebar } = useBrowserSession();
-  const hasMemory = !isMemoryLoading && Boolean(memory?.result);
 
-  const { selectedTab, handleTabChange } = useAgentInformationTab({
-    isMemoryLoading,
-    hasMemory,
-  });
+  const { selectedTab, handleTabChange } = useAgentInformationTab();
 
   return (
     <AgentInformationLayout>
@@ -34,7 +26,6 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
             <AgentEntityHeader agentId={agentId} />
             <TabList>
               <Tab value="overview">Overview</Tab>
-              {hasMemory && <Tab value="memory">Memory</Tab>}
               {agent?.requestContextSchema && <Tab value="request-context">Request Context</Tab>}
               <Tab value="tracing-options">Tracing Options</Tab>
             </TabList>
@@ -57,12 +48,6 @@ export function AgentInformation({ agentId, threadId }: AgentInformationProps) {
                 <div className="p-5">
                   <RequestContextSchemaForm requestContextSchema={agent.requestContextSchema} />
                 </div>
-              </TabContent>
-            )}
-
-            {hasMemory && (
-              <TabContent value="memory">
-                <AgentMemory agentId={agentId} threadId={threadId} memoryType={memory?.memoryType} />
               </TabContent>
             )}
 
@@ -92,16 +77,9 @@ export const AgentInformationLayout = ({ children }: AgentInformationLayoutProps
 
 export interface AgentInformationTabLayoutProps {
   children: React.ReactNode;
-  agentId: string;
 }
-export const AgentInformationTabLayout = ({ children, agentId }: AgentInformationTabLayoutProps) => {
-  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
-  const hasMemory = Boolean(memory?.result);
-
-  const { selectedTab, handleTabChange } = useAgentInformationTab({
-    isMemoryLoading,
-    hasMemory,
-  });
+export const AgentInformationTabLayout = ({ children }: AgentInformationTabLayoutProps) => {
+  const { selectedTab, handleTabChange } = useAgentInformationTab();
 
   return (
     <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col min-w-0 w-full">

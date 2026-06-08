@@ -26,8 +26,6 @@ test('overall layout information', async ({ page }) => {
   await expect(page.locator('button:has-text("weather-agent")')).toBeVisible();
   const overviewPane = await page.locator('button:has-text("Overview")');
   await expect(overviewPane).toHaveAttribute('aria-selected', 'true');
-  const memoryPane = await page.locator('button:has-text("Memory")');
-  await expect(memoryPane).toHaveAttribute('aria-selected', 'false');
 });
 
 test.describe('agent panels', () => {
