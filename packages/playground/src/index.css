@@ -13,15 +13,17 @@
 
     /*
      * Override playground-ui semantic font tokens with locally-bundled fonts.
-     * Branded Greed (Mastra Cloud) only ships in the platform repo; here we
-     * keep TasaExplorer as the Studio display font to match prior releases.
+     * Studio uses Inter for both display and body; branded fonts (Greed)
+     * ship only in the platform repo, never in the open-source package.
      */
-    --font-display: 'TasaExplorer', ui-serif, georgia, cambria, 'Times New Roman', times, serif;
+    --font-display:
+      'Inter', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+      'Noto Color Emoji';
     --font-body:
-      'Geist', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+      'Inter', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
       'Noto Color Emoji';
     --font-mono:
-      'GeistMono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
+      'CommitMono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
   }
   html {
     scrollbar-color: var(--color-thumb) var(--color-track);

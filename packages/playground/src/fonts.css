@@ -1,36 +1,36 @@
 /*
  * Local Mastra Studio fonts. Bundled into the public `mastra` CLI build.
- * Geist + GeistMono are SIL OFL — safe to redistribute. TasaExplorer is
- * the legacy Studio display font, preserved here to match prior CLI
- * releases. Branded Greed (Mastra Cloud) lives in the platform repo only.
+ * Inter (display + body) and Commit Mono (code) are both SIL OFL — safe to
+ * redistribute in the open-source package (see OFL-CommitMono.txt). Branded
+ * fonts (Greed, etc.) stay in the platform repo only and are never shipped here.
  */
 
 @font-face {
-  font-family: Geist;
+  font-family: Inter;
   src:
-    local('Geist'),
-    url('./assets/fonts/GeistVariableVF.woff2') format('woff2-variations');
+    local('Inter'),
+    url('./assets/fonts/InterVariableVF.woff2') format('woff2-variations');
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: GeistMono;
+  font-family: CommitMono;
   src:
-    local('GeistMono'),
-    url('./assets/fonts/GeistMonoVariableVF.woff2') format('woff2-variations');
-  font-weight: 100 900;
+    local('Commit Mono'),
+    url('./assets/fonts/CommitMono-400-Regular.woff2') format('woff2');
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
-  font-family: TasaExplorer;
+  font-family: CommitMono;
   src:
-    local('TasaExplorer'),
-    url('./assets/fonts/TASAExplorerVF.woff2') format('woff2-variations');
-  font-weight: 100 900;
+    local('Commit Mono'),
+    url('./assets/fonts/CommitMono-700-Regular.woff2') format('woff2');
+  font-weight: 700;
   font-style: normal;
   font-display: swap;
 }
