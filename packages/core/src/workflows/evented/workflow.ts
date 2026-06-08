@@ -1769,7 +1769,13 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
+    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
+    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
+
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    // Always persist the initial run record regardless of shouldPersistSnapshot.
+    // The evented engine relies on this record for parallel branch result
+    // aggregation (aggregateBranchResults reads stepResults via storage).
     await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -1779,7 +1785,7 @@ export class EventedRun<
         serializedStepGraph: this.serializedStepGraph,
         status: 'running',
         value: {},
-        context: {} as any,
+        context: inputDataToUse != null ? { input: inputDataToUse } as any : {} as any,
         requestContext: requestContext.toJSON(),
         activePaths: [],
         activeStepsPath: {},
@@ -1789,9 +1795,6 @@ export class EventedRun<
         timestamp: Date.now(),
       },
     });
-
-    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
-    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
@@ -1885,7 +1888,13 @@ export class EventedRun<
 
     requestContext = requestContext ?? new RequestContext();
 
+    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
+    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
+
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    // Always persist the initial run record regardless of shouldPersistSnapshot.
+    // The evented engine relies on this record for parallel branch result
+    // aggregation (aggregateBranchResults reads stepResults via storage).
     await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -1895,7 +1904,7 @@ export class EventedRun<
         serializedStepGraph: this.serializedStepGraph,
         status: 'running',
         value: {},
-        context: {} as any,
+        context: inputDataToUse != null ? { input: inputDataToUse } as any : {} as any,
         requestContext: requestContext.toJSON(),
         activePaths: [],
         activeStepsPath: {},
@@ -1905,9 +1914,6 @@ export class EventedRun<
         timestamp: Date.now(),
       },
     });
-
-    const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
-    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
