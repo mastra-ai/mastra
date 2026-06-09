@@ -4,7 +4,6 @@ import { toast } from 'sonner';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { VoiceAttachmentAdapter } from './voice-adapter';
 
-
 vi.mock('@mastra/react', () => ({
   playStreamWithWebAudio: vi.fn(),
 }));
