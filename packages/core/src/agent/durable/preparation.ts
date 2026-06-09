@@ -6,7 +6,7 @@ import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig, MemoryConfig as _MemoryConfig, StorageThreadType } from '../../memory/types';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
-import { RequestContext, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
+import { RequestContext, MASTRA_VERSIONS_KEY, MASTRA_THREAD_ID_KEY, MASTRA_RESOURCE_ID_KEY, mergeVersionOverrides } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
 import type { CoreTool, ToolHooks } from '../../tools/types';
 import type { Workspace } from '../../workspace';
@@ -143,6 +143,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     typeof execOptions?.memory?.thread === 'string' ? { id: execOptions.memory.thread } : execOptions?.memory?.thread;
   const threadId = thread?.id;
   const resourceId = execOptions?.memory?.resource;
+  if (threadId) requestContext.set(MASTRA_THREAD_ID_KEY, threadId);
+  if (resourceId) requestContext.set(MASTRA_RESOURCE_ID_KEY, resourceId);
   let threadObject: StorageThreadType | undefined;
   let threadExists = false;
 

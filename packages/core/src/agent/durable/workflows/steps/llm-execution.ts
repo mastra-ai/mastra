@@ -236,6 +236,16 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             const registryEntry = globalRunRegistry.get(runId);
             const executionAbortSignal = (registryEntry as any)?.abortSignal ?? abortSignal;
+            // Ensure threadId/resourceId are set on the step's requestContext so input
+            // processors (e.g. ToolSearchProcessor) can read MASTRA_THREAD_ID_KEY.
+            // The workflow engine injects a fresh requestContext per step; we mirror
+            // what preparation.ts does before handing off to processors.
+            if (typedInput.state?.threadId && !requestContext.get(MASTRA_THREAD_ID_KEY)) {
+              requestContext.set(MASTRA_THREAD_ID_KEY, typedInput.state.threadId);
+            }
+            if (typedInput.state?.resourceId && !requestContext.get(MASTRA_RESOURCE_ID_KEY)) {
+              requestContext.set(MASTRA_RESOURCE_ID_KEY, typedInput.state.resourceId);
+            }
             if (registryEntry?.inputProcessors?.length) {
               const inputStepWriter = pubsub
                 ? {
