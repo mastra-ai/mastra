@@ -30,19 +30,18 @@ export interface BuildFormSnapshotOptions {
 }
 
 /**
- * Hard cap on the generated `instructions` field. Surfaced to the builder LLM
- * via the empty-instructions directive AND enforced server-side by
- * `useSetAgentInstructionsTool`, so a single `set-agent-instructions` tool call
- * always stays under the stream output cap (`maxTokens` in
- * `stream-chat-provider.tsx`). Anything past the cap is truncated before it
- * lands in the form — the LLM is told this is a strict, not aspirational, limit.
+ * Hard cap on the generated `instructions` field. Enforced by
+ * `useSetAgentInstructionsTool`, which rejects over-limit
+ * `set-agent-instructions` calls without persisting anything. The directive
+ * focuses on a concise target rather than exposing this hard limit to the model.
  *
- * The same cap is used when echoing the already-set instructions block back
- * to the LLM in the snapshot. Using a smaller display cap would clip the
+ * The same cap is reused when echoing already-persisted instructions back in
+ * the snapshot via the `truncate` helper below: this only trims the display
+ * copy, never the stored value. Using a smaller display cap would clip the
  * "persisted, final text" the directive points to and could trick the model
  * into re-calling set-agent-instructions to "restore" the missing tail.
  */
-export const MAX_GENERATED_INSTRUCTIONS_CHARS = 3000;
+export const MAX_GENERATED_INSTRUCTIONS_CHARS = 4000;
 const EMPTY_TEXT = '(empty)';
 const NOT_SET_TEXT = '(not set)';
 
@@ -160,7 +159,7 @@ export function buildFormSnapshotInstructions(
       renderField(
         'Instructions',
         EMPTY_TEXT,
-        `Call set-agent-instructions EXACTLY ONCE with your final, complete system prompt. Do not call it again to revise — write the final version on the first call. Strict ${MAX_GENERATED_INSTRUCTIONS_CHARS.toLocaleString()}-character limit; content past that is truncated server-side and the agent will lose context.`,
+        'Call set-agent-instructions ONCE with your final, complete system prompt. Keep it concise: target 1,200–2,000 characters, usually 2–4 short paragraphs or compact bullet groups. Include the essentials only: trigger, capabilities, source rules, response format, and completion criteria. Avoid worked examples, FAQs, long edge-case lists, or exhaustive policies unless the user explicitly asks for that depth.',
       ),
     );
   }

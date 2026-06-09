@@ -12,6 +12,7 @@ import {
 } from '@mastra/playground-ui';
 import { format } from 'date-fns/format';
 import {
+  BracesIcon,
   EllipsisVerticalIcon,
   FileInputIcon,
   FileOutputIcon,
@@ -73,6 +74,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
   const [groundTruthValue, setGroundTruthValue] = useState('');
   const [metadataValue, setMetadataValue] = useState('');
   const [trajectoryValue, setTrajectoryValue] = useState('');
+  const [requestContextValue, setRequestContextValue] = useState('');
 
   // Validation error state
   const [validationErrors, setValidationErrors] = useState<SchemaValidationError | null>(null);
@@ -87,6 +89,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
       setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
       setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
       setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
+      setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
       setIsEditing(false); // Exit edit mode on item change
       setShowDeleteConfirm(false); // Reset delete state on item change
       setValidationErrors(null); // Reset validation errors on item change
@@ -145,6 +148,17 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
       }
     }
 
+    // Parse requestContext if provided
+    let parsedRequestContext: Record<string, unknown> | undefined;
+    if (requestContextValue.trim()) {
+      try {
+        parsedRequestContext = JSON.parse(requestContextValue);
+      } catch {
+        toast.error('Request Context must be valid JSON');
+        return;
+      }
+    }
+
     try {
       await updateItem.mutateAsync({
         datasetId,
@@ -153,6 +167,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
         groundTruth: parsedGroundTruth,
         metadata: parsedMetadata,
         expectedTrajectory: parsedTrajectory,
+        requestContext: parsedRequestContext,
       });
 
       toast.success('Item updated successfully');
@@ -175,6 +190,7 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
     setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
     setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
     setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
+    setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
     setIsEditing(false);
     setValidationErrors(null);
   };
@@ -268,6 +284,8 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
               setMetadataValue={setMetadataValue}
               trajectoryValue={trajectoryValue}
               setTrajectoryValue={setTrajectoryValue}
+              requestContextValue={requestContextValue}
+              setRequestContextValue={setRequestContextValue}
               validationErrors={validationErrors}
               onSave={handleSave}
               onCancel={handleCancel}
@@ -315,6 +333,13 @@ export function DatasetItemPanel({ datasetId, item, items, onItemChange, onClose
                     title="Expected Trajectory"
                     icon={<RouteIcon />}
                     codeStr={JSON.stringify(item.expectedTrajectory, null, 2)}
+                  />
+                )}
+                {item.requestContext != null && (
+                  <DataPanel.CodeSection
+                    title="Request Context"
+                    icon={<BracesIcon />}
+                    codeStr={JSON.stringify(item.requestContext, null, 2)}
                   />
                 )}
                 <DataPanel.CodeSection

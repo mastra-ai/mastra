@@ -3,6 +3,7 @@ import { X } from 'lucide-react';
 import * as React from 'react';
 
 import { Button } from '@/ds/components/Button';
+import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
 
 import './dialog.css';
@@ -10,15 +11,14 @@ import './dialog.css';
 const Dialog = DialogPrimitive.Root;
 
 type DialogTriggerProps = DialogPrimitive.Trigger.Props & {
+  /** @deprecated Use Base UI's `render` prop instead, e.g. `render={<Button />}`. */
   asChild?: boolean;
 };
 
 const DialogTrigger = React.forwardRef<HTMLButtonElement, DialogTriggerProps>(
   ({ asChild, children, ...props }, ref) => {
-    const renderProps = asChild && React.isValidElement(children) ? { render: children as React.ReactElement } : {};
-
     return (
-      <DialogPrimitive.Trigger ref={ref} {...renderProps} {...props}>
+      <DialogPrimitive.Trigger ref={ref} {...asChildRenderProps(asChild, children)} {...props}>
         {asChild ? undefined : children}
       </DialogPrimitive.Trigger>
     );
@@ -29,14 +29,13 @@ DialogTrigger.displayName = 'DialogTrigger';
 const DialogPortal = DialogPrimitive.Portal;
 
 type DialogCloseProps = DialogPrimitive.Close.Props & {
+  /** @deprecated Use Base UI's `render` prop instead, e.g. `render={<Button />}`. */
   asChild?: boolean;
 };
 
 const DialogClose = React.forwardRef<HTMLButtonElement, DialogCloseProps>(({ asChild, children, ...props }, ref) => {
-  const renderProps = asChild && React.isValidElement(children) ? { render: children as React.ReactElement } : {};
-
   return (
-    <DialogPrimitive.Close ref={ref} {...renderProps} {...props}>
+    <DialogPrimitive.Close ref={ref} {...asChildRenderProps(asChild, children)} {...props}>
       {asChild ? undefined : children}
     </DialogPrimitive.Close>
   );

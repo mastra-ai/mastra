@@ -1,7 +1,6 @@
 import type { ToolCallMessagePartProps } from '@assistant-ui/react';
 import { useAui } from '@assistant-ui/react';
 
-import type { MastraUIMessage } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
@@ -22,9 +21,10 @@ import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result'
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
+import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
-  metadata?: MastraUIMessage['metadata'];
+  metadata?: MessageMetadata;
 }
 
 export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackProps) => {
@@ -143,6 +143,11 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
 
   const isBackgroundTaskResult =
     result && typeof result === 'string' && (result as string)?.toLowerCase()?.includes('background task');
+
+  if (toolName === 'updateWorkingMemory') {
+    // We want to hide the updateWorkingMemory tool call in the UI
+    return null;
+  }
 
   if (isBackgroundTaskResult) {
     return (

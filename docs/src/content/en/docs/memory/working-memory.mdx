@@ -416,6 +416,33 @@ const response = await agent.generate('What do you know about me?', {
 })
 ```
 
+## Opt in to state signals (experimental)
+
+By default, working memory reaches the model as part of the system message. You can opt into delivering it as a [state signal](/docs/agents/signals) instead by setting `useStateSignals: true`:
+
+```typescript
+const memory = new Memory({
+  storage: new LibSQLStore({ url: 'file:./mastra.db' }),
+  options: {
+    workingMemory: {
+      enabled: true,
+      template: '# User\n- name:\n- location:',
+      useStateSignals: true, // experimental: deliver as state signal
+    },
+  },
+})
+```
+
+What changes:
+
+- **Storage is identical.** The same resource/thread `workingMemory` field is read and written.
+- **The tool is the same shape, exposed under a new name.** Writes still flow through the same underlying tool; on this path it is registered as `setWorkingMemory` (instead of `updateWorkingMemory`). The rename keeps legacy strip filters from removing tool-call parts so they persist as a normal audit trail and the next model step picks the new value up automatically.
+- **Delivery only.** Instead of folding into the system prompt, `Memory` auto-attaches a `WorkingMemoryStateProcessor` that emits the current working memory as a `state` signal with `stateId: 'working-memory'`.
+
+You inherit the standard state-signal benefits: thread-scoped tracking metadata, `cacheKey` dedup so identical snapshots are only emitted once, and `contextWindow.hasSnapshot` re-injection when an older snapshot rolls out of the window.
+
+The default (`useStateSignals: false`) keeps the existing system-message behavior unchanged. `useStateSignals` is not supported with template working memory `version: 'vnext'`.
+
 ## Examples
 
 - [Working memory with template](https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-template)

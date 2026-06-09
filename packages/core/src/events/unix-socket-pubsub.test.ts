@@ -260,8 +260,13 @@ describe('UnixSocketPubSub', () => {
     }
 
     expect(subscribeCount).toBe(1);
+    await waitFor(() => {
+      expect(pubsub.isBroker).toBe(true);
+    });
     await pubsub.publish('topic-a', makeEvent({ type: 'after-duplicate-subscribe' }));
-    expect(cb).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(cb).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('promotes another instance after the broker closes', async () => {

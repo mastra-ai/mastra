@@ -153,9 +153,10 @@ The same operations are available over HTTP through the Mastra server. Use these
 | `GET` | `/stored/agents/:storedAgentId` | Get a stored agent by ID. |
 | `PATCH` | `/stored/agents/:storedAgentId` | Update a stored agent. |
 | `DELETE` | `/stored/agents/:storedAgentId` | Delete a stored agent. |
+| `GET` | `/stored/agents/:storedAgentId/dependents` | List agents that reference this agent as a sub-agent. |
 | `POST` | `/stored/agents/:storedAgentId/export` | Export a stored agent's override as a deterministic JSON config. |
 
-The export endpoint returns only the fields the agent's [`editor` config](/reference/agents/agent#editor-overrides) allows, so the output matches the per-agent file the code source writes to disk. The Client SDK wraps these endpoints with `client.listStoredAgents()`, `client.createStoredAgent()`, `client.getStoredAgent()`, and `client.getStoredAgent(id).export()`. Version management endpoints live under `/stored/agents/:storedAgentId/versions`, see [version management](/reference/client-js/agents#version-management) for the full list.
+The dependents endpoint helps warn before deleting or unsharing an agent that other agents depend on: `dependents` lists caller-readable agents by `id` and `name`, while `hiddenCount` aggregates cross-workspace references the caller cannot read (surfaced only when the target is public). The export endpoint returns only the fields the agent's [`editor` config](/reference/agents/agent#editor-overrides) allows, so the output matches the per-agent file the code source writes to disk. The Client SDK wraps these endpoints with `client.listStoredAgents()`, `client.createStoredAgent()`, `client.getStoredAgent()`, `client.getStoredAgent(id).dependents()`, and `client.getStoredAgent(id).export()`. Version management endpoints live under `/stored/agents/:storedAgentId/versions`, see [version management](/reference/client-js/agents#version-management) for the full list.
 
 ### Automated experimentation
 

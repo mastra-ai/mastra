@@ -173,7 +173,7 @@ describe('sendSignal integration through ProcessorRunner', () => {
     expect(chunks).toHaveLength(1);
     expect(chunks[0]).toEqual(
       expect.objectContaining({
-        type: 'data-system-reminder',
+        type: 'data-signal',
         data: expect.objectContaining({
           type: 'reactive',
           tagName: 'system-reminder',

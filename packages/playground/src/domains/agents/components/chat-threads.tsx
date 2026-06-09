@@ -20,9 +20,18 @@ export interface ChatThreadsProps {
   onDelete: (threadId: string) => void;
   resourceId: string;
   resourceType: 'agent' | 'network';
+  embedded?: boolean;
 }
 
-export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId, resourceType }: ChatThreadsProps) => {
+export const ChatThreads = ({
+  threads,
+  isLoading,
+  threadId,
+  onDelete,
+  resourceId,
+  resourceType,
+  embedded = false,
+}: ChatThreadsProps) => {
   const { Link, paths } = useLinkComponent();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const { canDelete } = usePermissions();
@@ -38,7 +47,7 @@ export const ChatThreads = ({ threads, isLoading, threadId, onDelete, resourceId
 
   return (
     <>
-      <ThreadList>
+      <ThreadList embedded={embedded}>
         <ThreadListNewItem as={Link} to={newThreadLink}>
           <Icon>
             <Plus />
@@ -132,11 +141,14 @@ function isDefaultThreadName(name: string): boolean {
 }
 
 function ThreadTitle({ title, id, createdAt }: { title?: string; id?: string; createdAt?: Date }) {
-  if (!title || isDefaultThreadName(title)) {
-    return <span>{createdAt ? formatDay(createdAt) : `Thread ${id ? id.substring(id.length - 5) : ''}`}</span>;
-  }
+  const titleText =
+    title && !isDefaultThreadName(title)
+      ? title
+      : createdAt
+        ? formatDay(createdAt)
+        : `Thread ${id ? id.substring(id.length - 5) : ''}`;
 
-  return <span className="truncate">{title}</span>;
+  return <span className="block truncate">{titleText}</span>;
 }
 
 const formatDay = (date: Date) => {

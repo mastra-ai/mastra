@@ -1,7 +1,3 @@
-import { createHash } from 'node:crypto';
-import { hostname } from 'node:os';
-
-import type * as HarnessV1Module from '@mastra/core/harness/v1';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const gatewayRegistrySyncGateways = vi.fn();
@@ -24,17 +20,18 @@ vi.mock('@mastra/core/agent', () => ({
       agentConstructorMock(config);
     }
   },
+  SignalProvider: class {},
 }));
 
 const agentConstructorMock = vi.fn();
 
 const harnessConstructorMock = vi.fn();
-const harnessV1ConstructorMock = vi.fn();
 const loadSettingsMock = vi.fn();
 const harnessSubscribeMock = vi.fn();
 const detectProjectMock = vi.fn(() => ({
   mode: 'none',
   rootPath: process.cwd(),
+  resourceId: 'project-resource',
   packageManager: 'pnpm',
   hasGit: false,
   contextFiles: [],
@@ -92,6 +89,7 @@ function createMockSettings() {
       stagehand: { env: 'LOCAL' },
     },
     observability: { resources: {}, localTracing: false },
+    signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
   };
 }
 
@@ -125,19 +123,6 @@ vi.mock('@mastra/core/harness', () => ({
   taskWriteTool: {},
   taskCheckTool: {},
 }));
-
-vi.mock('@mastra/core/harness/v1', async importOriginal => {
-  const actual = await importOriginal<typeof HarnessV1Module>();
-  return {
-    ...actual,
-    Harness: class extends actual.Harness {
-      constructor(config: ConstructorParameters<typeof actual.Harness>[0]) {
-        harnessV1ConstructorMock(config);
-        super(config);
-      }
-    },
-  };
-});
 
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {
@@ -183,6 +168,7 @@ vi.mock('./agents/subagents/plan.js', () => ({
 
 vi.mock('./agents/tools.js', () => ({
   createDynamicTools: vi.fn(),
+  createToolHooks: vi.fn(),
 }));
 
 vi.mock('./agents/workspace.js', () => ({
@@ -294,11 +280,11 @@ describe('createMastraCode', () => {
     harnessSetStateMock.mockResolvedValue(undefined);
     harnessSetThreadSettingMock.mockReset();
     harnessSetThreadSettingMock.mockResolvedValue(undefined);
-    harnessV1ConstructorMock.mockReset();
     detectProjectMock.mockReset();
     detectProjectMock.mockReturnValue({
       mode: 'none',
       rootPath: process.cwd(),
+      resourceId: 'project-resource',
       packageManager: 'pnpm',
       hasGit: false,
       contextFiles: [],
@@ -347,7 +333,7 @@ describe('createMastraCode', () => {
     expect(typeof harnessConfig?.memory).toBe('function');
   });
 
-  it('uses the configured default mode when constructing Harness V1', async () => {
+  it('uses the configured default mode when constructing Harness', async () => {
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode({
@@ -368,19 +354,18 @@ describe('createMastraCode', () => {
       ],
     });
 
-    const harnessConfig = harnessV1ConstructorMock.mock.calls[0]?.[0] as
-      | { defaultModeId?: string; modes?: { id: string; defaultModelId: string }[] }
+    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+      | { modes?: { id: string; default?: boolean; defaultModelId: string }[] }
       | undefined;
-    expect(harnessConfig?.defaultModeId).toBe('review');
     expect(harnessConfig?.modes).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: 'review', defaultModelId: '__GATEWAY_OPENAI_MODEL__' }),
+        expect.objectContaining({ id: 'review', default: true, defaultModelId: '__GATEWAY_OPENAI_MODEL__' }),
         expect.objectContaining({ id: 'ship', defaultModelId: '__GATEWAY_ANTHROPIC_MODEL_OPUS__' }),
       ]),
     );
   });
 
-  it('configures Harness V1 ownerId from machine and project path', async () => {
+  it('configures Harness project path from detected project metadata', async () => {
     const projectPath = '/tmp/mastracode-project';
     detectProjectMock.mockReturnValue({
       mode: 'none',
@@ -390,14 +375,14 @@ describe('createMastraCode', () => {
       hasGit: false,
       contextFiles: [],
     });
-    const expectedHash = createHash('sha256').update(`${hostname()}\0${projectPath}`).digest('hex').slice(0, 32);
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode({ cwd: projectPath });
 
-    expect(harnessV1ConstructorMock).toHaveBeenCalled();
-    const harnessConfig = harnessV1ConstructorMock.mock.calls[0]?.[0] as { ownerId?: string } | undefined;
-    expect(harnessConfig?.ownerId).toBe(`mastracode-${expectedHash}`);
+    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+      | { initialState?: Record<string, unknown> }
+      | undefined;
+    expect(harnessConfig?.initialState?.projectPath).toBe(projectPath);
   });
 
   it('rejects cross-process PubSub mode without a PubSub instance', async () => {
@@ -520,5 +505,27 @@ describe('createMastraCode', () => {
       | undefined;
     expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
+  });
+
+  it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      signals: { unixSocketPubSub: false, experimentalGithubSignals: true },
+    });
+    harnessGetCurrentThreadIdMock.mockReturnValue('thread-1');
+    harnessListThreadsMock.mockResolvedValue([{ id: 'thread-1', resourceId: 'thread-resource', metadata: {} }]);
+    const { GithubSignals } = await import('@mastra/github-signals');
+    const startPollingForThread = vi.spyOn(GithubSignals.prototype, 'startPollingForThread').mockResolvedValue(true);
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(agentConstructorMock).toHaveBeenCalled();
+    const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as { signals?: Array<{ id?: string }> } | undefined;
+    expect(agentConfig?.signals?.map(s => s.id)).toContain('github-signals');
+    expect(startPollingForThread).toHaveBeenCalledWith(
+      { threadId: 'thread-1', resourceId: 'thread-resource' },
+      { pollImmediately: true },
+    );
   });
 });
