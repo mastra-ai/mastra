@@ -2,6 +2,7 @@ import { Menu as MenuPrimitive } from '@base-ui/react/menu';
 import { CheckIcon, ChevronDown, Circle } from 'lucide-react';
 import * as React from 'react';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
+import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
 
 const DropdownMenuRoot = MenuPrimitive.Root;
@@ -26,18 +27,17 @@ const popupClass = cn(
 );
 
 type DropdownMenuTriggerProps = MenuPrimitive.Trigger.Props & {
+  /** @deprecated Use Base UI's `render` prop instead, e.g. `render={<Button />}`. */
   asChild?: boolean;
 };
 
 const DropdownMenuTrigger = React.forwardRef<HTMLButtonElement, DropdownMenuTriggerProps>(
   ({ className, asChild, children, ...props }, ref) => {
-    const renderProps = asChild && React.isValidElement(children) ? { render: children as React.ReactElement } : {};
-
     return (
       <MenuPrimitive.Trigger
         ref={ref}
         className={cn('cursor-pointer outline-none', className)}
-        {...renderProps}
+        {...asChildRenderProps(asChild, children)}
         {...props}
       >
         {asChild ? undefined : children}

@@ -1,5 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
+import path from 'node:path';
 
 import { PostHog } from 'posthog-node';
 
@@ -7,9 +9,52 @@ const POSTHOG_API_KEY = 'phc_SBLpZVAB6jmHOct9CABq3PF0Yn5FU3G2FgT4xUr2XrT';
 const POSTHOG_HOST = 'https://us.posthog.com';
 const MASTRA_SOURCE = 'mastracode';
 const TRUTHY_DISABLED_VALUES = new Set(['1', 'true', 'yes', 'on']);
+const ANALYTICS_CONFIG_PATH = path.join(os.homedir(), '.mastracode', 'analytics.json');
 
-export function getMastraAnalyticsDistinctId(hostname = os.hostname()): string {
-  return `mastra-${hostname}`;
+interface AnalyticsConfig {
+  distinctId?: string;
+}
+
+function createMastraAnalyticsDistinctId(): string {
+  return `mastra-${randomUUID()}`;
+}
+
+function isHostnameDerivedDistinctId(distinctId: string, hostname = os.hostname()): boolean {
+  return distinctId === `mastra-${hostname}`;
+}
+
+function isValidMastraAnalyticsDistinctId(distinctId: string): boolean {
+  return /^mastra-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(distinctId);
+}
+
+function writeAnalyticsConfig(distinctId: string, configPath = ANALYTICS_CONFIG_PATH): void {
+  try {
+    mkdirSync(path.dirname(configPath), { recursive: true });
+    writeFileSync(configPath, JSON.stringify({ distinctId }));
+  } catch {
+    // swallow analytics persistence errors
+  }
+}
+
+export function getMastraAnalyticsDistinctId(configPath = ANALYTICS_CONFIG_PATH): string {
+  try {
+    if (existsSync(configPath)) {
+      const config = JSON.parse(readFileSync(configPath, 'utf-8')) as AnalyticsConfig;
+      if (
+        config.distinctId &&
+        isValidMastraAnalyticsDistinctId(config.distinctId) &&
+        !isHostnameDerivedDistinctId(config.distinctId)
+      ) {
+        return config.distinctId;
+      }
+    }
+  } catch {
+    // regenerate below
+  }
+
+  const distinctId = createMastraAnalyticsDistinctId();
+  writeAnalyticsConfig(distinctId, configPath);
+  return distinctId;
 }
 
 function isAnalyticsDebugEnabled(): boolean {

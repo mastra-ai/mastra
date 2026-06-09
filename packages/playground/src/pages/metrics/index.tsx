@@ -46,6 +46,7 @@ import {
 import { MetricsToolbar } from '@/domains/metrics/components/metrics-toolbar';
 import { ModelUsageCostCard } from '@/domains/metrics/components/model-usage-cost-card';
 import { TokenUsageByAgentCard } from '@/domains/metrics/components/token-usage-by-agent-card';
+import { TokenUsageTimelineCard } from '@/domains/metrics/components/token-usage-timeline-card';
 import { TracesVolumeCard } from '@/domains/metrics/components/traces-volume-card';
 
 const ANALYTICS_OBSERVABILITY_TYPES = new Set([
@@ -353,6 +354,7 @@ function MetricsContent() {
           <MetricsFlexGrid>
             <ModelUsageCostCard />
             <TokenUsageByAgentCard />
+            <TokenUsageTimelineCard />
             <MemoryCard />
             <TracesVolumeCard />
             <LatencyCard />

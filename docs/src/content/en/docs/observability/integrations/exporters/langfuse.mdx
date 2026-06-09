@@ -181,6 +181,31 @@ The trace name dropdown in Langfuse evaluator filters lists every distinct value
 
 If you set a custom `traceName` via `mastra.metadata.traceName`, your value takes precedence over the default agent name.
 
+## Custom trace metadata
+
+Langfuse filters and groups traces by top-level metadata only. Nested metadata keys cannot be used for filtering or grouping.
+
+To add your own top-level metadata, set keys under `langfuse` in your span metadata. The exporter forwards each key to `langfuse.trace.metadata.<key>`, where it becomes filterable in Langfuse:
+
+```typescript
+const tracingOptions = {
+  metadata: {
+    langfuse: {
+      customerId: 'cust_123',
+      tier: 'enterprise',
+    },
+  },
+}
+```
+
+This example produces `langfuse.trace.metadata.customerId` and `langfuse.trace.metadata.tier`.
+
+Notes:
+
+- The reserved `prompt` key is used for [prompt linking](#prompt-linking) and is not forwarded as trace metadata.
+- The reserved identity keys `agentId`, `agentName`, `workflowId`, and `workflowName` are set from the root span and take precedence over custom values with the same name.
+- Values are sent as strings, because Langfuse maps trace metadata attributes as strings. Numbers, booleans, and objects are serialized with JSON. Langfuse Cloud restores them to their original types on ingestion.
+
 ## Prompt linking
 
 You can link LLM generations to prompts stored in [Langfuse Prompt Management](https://langfuse.com/docs/prompt-management). This enables version tracking and metrics for your prompts.
