@@ -24,7 +24,7 @@ export interface LLMProvidersProps {
 export const LLMProviders = ({
   value,
   onValueChange,
-  variant = 'default',
+  variant,
   size = 'default',
   className,
   open,

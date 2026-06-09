@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
 import { Agent } from '../agent';
-import { createStep, createWorkflow } from '../workflows/workflow';
+import { createWorkflow } from '../workflows/create';
+import { createStep } from '../workflows/workflow';
 
 import { createTool } from './tool';
 import type { MastraToolInvocationOptions } from './types';

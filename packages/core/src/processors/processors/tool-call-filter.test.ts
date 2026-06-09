@@ -1,8 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { stepCountIs } from '@internal/ai-sdk-v5';
+import { convertArrayToReadableStream, mockValues, mockId } from '@internal/ai-sdk-v5/test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { z } from 'zod/v4';
 
+import { Mastra } from '../..';
 import { MessageList } from '../../agent/message-list';
+import { EventEmitterPubSub } from '../../events';
+import { loop } from '../../loop/loop';
+import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
 import type { MastraDBMessage } from '../../memory/types';
 import { toolCallFilterProvider } from '../../processor-provider/providers';
+import { InMemoryStore } from '../../storage';
 import type { ProcessInputStepArgs } from '../index';
 
 import { ToolCallFilter } from './tool-call-filter';
@@ -1706,13 +1714,19 @@ describe('ToolCallFilter', () => {
   });
 
   describe('integration: multi-step agent loop with ToolCallFilter', () => {
+    let mastra: Mastra;
+    beforeEach(async () => {
+      mastra = new Mastra({
+        logger: false,
+        storage: new InMemoryStore(),
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startWorkers();
+    });
+    afterEach(async () => {
+      await mastra.stopWorkers();
+    });
     it('should filter tool calls older than filterAfterToolSteps in a real agent loop while preserving recent tool results and text', async () => {
-      const { loop } = await import('../../loop/loop');
-      const { stepCountIs } = await import('@internal/ai-sdk-v5');
-      const { convertArrayToReadableStream, mockValues, mockId } = await import('@internal/ai-sdk-v5/test');
-      const { MastraLanguageModelV2Mock } = await import('../../loop/test-utils/MastraLanguageModelV2Mock');
-      const { z } = await import('zod/v4');
-
       const stepInputs: any[] = [];
       let responseCount = 0;
 
@@ -1827,6 +1841,7 @@ describe('ToolCallFilter', () => {
           generateId: mockId({ prefix: 'id' }),
         },
         agentId: 'test-agent',
+        mastra,
       });
 
       await result.consumeStream();
@@ -1875,12 +1890,6 @@ describe('ToolCallFilter', () => {
     });
 
     it('should preserve the last two tool-call steps with filterAfterToolSteps 2', async () => {
-      const { loop } = await import('../../loop/loop');
-      const { stepCountIs } = await import('@internal/ai-sdk-v5');
-      const { convertArrayToReadableStream, mockValues, mockId } = await import('@internal/ai-sdk-v5/test');
-      const { MastraLanguageModelV2Mock } = await import('../../loop/test-utils/MastraLanguageModelV2Mock');
-      const { z } = await import('zod/v4');
-
       const stepInputs: any[] = [];
       let responseCount = 0;
 
@@ -1969,6 +1978,7 @@ describe('ToolCallFilter', () => {
           generateId: mockId({ prefix: 'id' }),
         },
         agentId: 'test-agent',
+        mastra,
       });
 
       await result.consumeStream();
