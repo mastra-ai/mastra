@@ -1,5 +1,5 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
@@ -57,6 +57,10 @@ function createTestAgent(id: string, options?: { channels?: ChannelConfig }) {
     }),
     channels: options?.channels,
   });
+}
+
+function waitForChannelInit() {
+  return new Promise(resolve => setImmediate(resolve));
 }
 
 describe('Mastra Channel Integration', () => {
@@ -136,6 +140,63 @@ describe('Mastra Channel Integration', () => {
       expect(typeof channelLogger.info).toBe('function');
       expect(typeof channelLogger.debug).toBe('function');
       expect(typeof channelLogger.warn).toBe('function');
+    });
+  });
+
+  describe('initialization', () => {
+    it('defers agent channel initialization until the Mastra constructor finishes', async () => {
+      const agent = createTestAgent('bot-1', {
+        channels: { adapters: { discord: createMockAdapter('discord') } },
+      });
+      const channels = agent.getChannels()!;
+      const initializedAfterConstructor: boolean[] = [];
+      let constructorFinished = false;
+
+      vi.spyOn(channels, 'initialize').mockImplementation(async () => {
+        initializedAfterConstructor.push(constructorFinished);
+      });
+
+      new Mastra({
+        logger: false,
+        agents: { 'bot-1': agent },
+        storage: new InMemoryStore(),
+      });
+      constructorFinished = true;
+
+      await waitForChannelInit();
+
+      expect(initializedAfterConstructor).toEqual([true]);
+    });
+
+    it('logs agent channel initialization failures instead of silently swallowing them', async () => {
+      const agent = createTestAgent('bot-1', {
+        channels: { adapters: { discord: createMockAdapter('discord') } },
+      });
+      const channels = agent.getChannels()!;
+      const initError = new Error('channel init failed');
+      const logger = {
+        debug: vi.fn(),
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+        cleanup: vi.fn(),
+        getTransports: vi.fn(() => new Map()),
+        trackException: vi.fn(),
+        listLogs: vi.fn(),
+        listLogsByRunId: vi.fn(),
+      };
+
+      vi.spyOn(channels, 'initialize').mockRejectedValue(initError);
+
+      new Mastra({
+        logger: logger as any,
+        agents: { 'bot-1': agent },
+        storage: new InMemoryStore(),
+      });
+
+      await waitForChannelInit();
+
+      expect(logger.error).toHaveBeenCalledWith('Failed to initialize channels for agent "bot-1":', initError);
     });
   });
 
