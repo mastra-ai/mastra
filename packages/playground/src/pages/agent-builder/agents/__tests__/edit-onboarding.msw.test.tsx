@@ -15,6 +15,7 @@ import {
   buildBuilderSettings,
   currentUser,
 } from '@/domains/agent-builder/components/agent-edit/agent-profile/__tests__/fixtures/builder';
+import { useDebouncedRunning } from '@/domains/agent-builder/hooks/use-debounced-running';
 import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
@@ -36,6 +37,9 @@ vi.mock('@/domains/agent-builder/components/agent-edit/conversation-panel', () =
 const useStreamRunningMock = vi.fn(() => false);
 vi.mock('@/domains/agent-builder/contexts/stream-chat-context', () => ({
   useStreamRunning: () => useStreamRunningMock(),
+  // Delegates to the real (unmocked) debounce hook so the idle-gap grace
+  // period stays under test; only the running flag itself is stubbed.
+  useStreamRunningDebounced: () => useDebouncedRunning(useStreamRunningMock()),
   useStreamSend: () => () => {},
 }));
 

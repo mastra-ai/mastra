@@ -2,7 +2,6 @@ import { Button, Spinner } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useFormState, useWatch } from 'react-hook-form';
 import { Navigate, useNavigate, useParams } from 'react-router';
-import { useDebounce } from 'use-debounce';
 import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu';
 import {
   AgentProfile,
@@ -28,7 +27,7 @@ import { VisibilitySelect } from '@/domains/agent-builder/components/agent-edit/
 import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
 import { AgentPrimitivesProvider, useAgentPrimitives } from '@/domains/agent-builder/contexts/agent-primitives-context';
 import { EditPageProvider, useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
-import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
+import { useStreamRunning, useStreamRunningDebounced } from '@/domains/agent-builder/contexts/stream-chat-context';
 import { useWizard, WizardProvider } from '@/domains/agent-builder/contexts/wizard-context';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
@@ -114,13 +113,9 @@ const EditPageBody = () => {
 const EditPageLayout = () => {
   const { step } = useWizard();
   const features = useBuilderAgentFeatures();
-  const isRunning = useStreamRunning();
-  // The stream flag can briefly drop to false mid-conversation (e.g. between
-  // builder runs), which would flicker the layout between centered and split.
-  // Defer only the true -> false transition by 3s: `isRunning` flips the OR to
-  // true immediately, while going idle waits for the debounced value to settle.
-  const [debouncedIsRunning] = useDebounce(isRunning, 3000);
-  const isStreamRunning = isRunning || debouncedIsRunning;
+  // Debounced so a brief mid-conversation idle gap doesn't flicker the layout
+  // between centered and split. Same signal as the composer.
+  const isStreamRunning = useStreamRunningDebounced();
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const { dirtyFields } = useFormState({ control });
   const name = useWatch({ control, name: 'name' }) ?? '';

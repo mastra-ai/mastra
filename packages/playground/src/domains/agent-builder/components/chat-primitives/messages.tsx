@@ -469,7 +469,7 @@ export const ToolCard = ({
 );
 
 const SkillToolLine = ({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) => (
-  <div className="flex items-start gap-2 min-w-0 max-w-full animate-in fade-in slide-in-from-right-2 duration-300">
+  <div className="flex items-start gap-2 min-w-0 max-w-full animate-in fade-in slide-in-from-right-4 duration-500 ease-out">
     <div className="pt-0.5">
       <Icon>{icon}</Icon>
     </div>
