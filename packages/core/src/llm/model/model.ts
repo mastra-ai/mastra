@@ -257,8 +257,14 @@ export class MastraLLMV1 extends MastraBase {
 
         const remainingTokens = parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'] ?? '', 10);
         if (!isNaN(remainingTokens) && remainingTokens > 0 && remainingTokens < 2000) {
-          this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
+          this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId, remainingTokens });
+          const rateLimitSpan = llmSpan?.createChildSpan({
+            name: 'rate-limit-sleep',
+            type: SpanType.GENERIC,
+            metadata: { remainingTokens, delayMs: 10_000 },
+          });
           await delay(10 * 1000);
+          rateLimitSpan?.end();
         }
       },
       experimental_output: schema
@@ -608,8 +614,14 @@ export class MastraLLMV1 extends MastraBase {
 
         const remainingTokens = parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'] ?? '', 10);
         if (!isNaN(remainingTokens) && remainingTokens > 0 && remainingTokens < 2000) {
-          this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
+          this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId, remainingTokens });
+          const rateLimitSpan = llmSpan?.createChildSpan({
+            name: 'rate-limit-sleep',
+            type: SpanType.GENERIC,
+            metadata: { remainingTokens, delayMs: 10_000 },
+          });
           await delay(10 * 1000);
+          rateLimitSpan?.end();
         }
       },
       onFinish: async props => {

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/claude",
-  "version": "0.1.0",
+  "version": "0.1.1-alpha.0",
   "description": "Claude SDK package for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -25,7 +25,7 @@
   "scripts": {
     "build": "pnpm build:lib",
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "test": "vitest run --passWithNoTests",
     "lint": "eslint ."
@@ -41,8 +41,9 @@
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.1",
     "tsup": "^8.5.1",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

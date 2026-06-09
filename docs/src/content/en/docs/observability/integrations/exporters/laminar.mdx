@@ -1,0 +1,98 @@
+---
+title: "Laminar exporter | Integrations | Observability"
+description: "Send traces to Laminar for LLM observability, evaluation, and analysis"
+packages:
+  - "@mastra/laminar"
+  - "@mastra/observability"
+---
+
+# Laminar exporter
+
+[Laminar](https://laminar.sh/) is an open-source, OpenTelemetry-native observability platform for AI agents. Trace, debug, and monitor every Mastra agent run, model step, tool call, and sub-agent with a single `MastraExporter` wired into your `Observability` config.
+
+## Installation
+
+```bash npm2yarn
+npm install @lmnr-ai/lmnr
+```
+
+## Configuration
+
+### Prerequisites
+
+1. **Laminar Project**: Create/select a project in Laminar
+1. **Project API Key**: Copy from Laminar Project Settings
+1. **Environment Variables**: Set your credentials
+
+```bash title=".env"
+# Required
+LMNR_PROJECT_API_KEY=lmnr_...
+
+# Optional
+LMNR_BASE_URL=https://api.lmnr.ai
+```
+
+### Zero-Config Setup
+
+With environment variables set, use the exporter with no configuration:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { Laminar, MastraExporter } from '@lmnr-ai/lmnr'
+
+Laminar.initialize()
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      laminar: {
+        serviceName: 'my-service',
+        exporters: [new MastraExporter()],
+      },
+    },
+  }),
+})
+```
+
+### Explicit Configuration
+
+You can also pass credentials directly (takes precedence over environment variables):
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+import { Laminar, MastraExporter } from '@lmnr-ai/lmnr'
+
+Laminar.initialize({
+  projectApiKey: process.env.LMNR_PROJECT_API_KEY!,
+  baseUrl: process.env.LMNR_BASE_URL, // Optional
+  // ...other options
+})
+
+export const mastra = new Mastra({
+  observability: new Observability({
+    configs: {
+      laminar: {
+        serviceName: 'my-service',
+        exporters: [
+          new MastraExporter({
+            realtime: process.env.NODE_ENV === 'development', // Optional
+          }),
+        ],
+      },
+    },
+  }),
+})
+```
+
+:::note
+For advanced usage, including the full `MastraExporter` options and multi-agent trace examples, see [Laminar's Mastra integration guide](https://laminar.sh/docs/tracing/integrations/mastra).
+:::
+
+Mastra also ships a standalone [`LaminarExporter`](/reference/observability/tracing/exporters/laminar) in `@mastra/laminar` that sends spans over OTLP/HTTP. It cannot inherit an active OTel context and does not fully map Mastra spans to Laminar's native format, so use the `@lmnr-ai/lmnr` integration above for `observe()` wrappers, multi-agent root spans, and accurate Laminar rendering.
+
+## Related
+
+- [Tracing Overview](/docs/observability/tracing/overview)
+- [Laminar Documentation](https://laminar.sh/docs)

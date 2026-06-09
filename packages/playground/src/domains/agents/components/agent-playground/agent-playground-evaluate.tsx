@@ -83,6 +83,11 @@ function formatDate(dateStr: string | Date | undefined | null): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+function getExperimentStartedAtTime(startedAt: AgentExperiment['startedAt']): number {
+  if (!startedAt) return 0;
+  return startedAt instanceof Date ? startedAt.getTime() : new Date(startedAt).getTime();
+}
+
 const STATUS_VARIANT: Record<string, 'success' | 'warning' | 'error' | 'neutral'> = {
   completed: 'success',
   running: 'warning',
@@ -174,7 +179,8 @@ export function AgentPlaygroundEvaluate({
   });
 
   const datasetExperimentMap = (experiments || []).reduce<Record<string, AgentExperiment>>((acc, exp) => {
-    if (!acc[exp.datasetId] || new Date(exp.startedAt) > new Date(acc[exp.datasetId]!.startedAt)) {
+    const current = acc[exp.datasetId];
+    if (!current || getExperimentStartedAtTime(exp.startedAt) > getExperimentStartedAtTime(current.startedAt)) {
       acc[exp.datasetId] = exp;
     }
     return acc;
@@ -312,8 +318,8 @@ export function AgentPlaygroundEvaluate({
 
   const filteredExperiments = useMemo(() => {
     const exps = [...(experiments || [])].sort((a, b) => {
-      const da = a.startedAt ? new Date(a.startedAt as string).getTime() : 0;
-      const db = b.startedAt ? new Date(b.startedAt as string).getTime() : 0;
+      const da = getExperimentStartedAtTime(a.startedAt);
+      const db = getExperimentStartedAtTime(b.startedAt);
       return db - da;
     });
     if (!experimentsSearch) return exps;

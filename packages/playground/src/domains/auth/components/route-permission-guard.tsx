@@ -1,3 +1,4 @@
+import { Spinner } from '@mastra/playground-ui';
 import { Navigate, useLocation } from 'react-router';
 
 import { usePermissions } from '../hooks/use-permissions';
@@ -16,8 +17,16 @@ export function RoutePermissionGuard({ children }: { children: React.ReactNode }
   const { pathname } = useLocation();
   const { hasPermission, hasAnyPermission, rbacEnabled, isAuthenticated, isLoading } = usePermissions();
 
-  // Don't guard while loading — prevents flash redirects
-  if (isLoading) return <>{children}</>;
+  // While the user's permissions load, be defensive: don't leak protected
+  // content before gating can run. The authoritative permission patterns are
+  // already loaded and validated by RoutePermissionsGate higher in the tree.
+  if (isLoading) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
+  }
 
   // No RBAC or not authenticated — no gating
   if (!rbacEnabled || !isAuthenticated) return <>{children}</>;
@@ -30,7 +39,14 @@ export function RoutePermissionGuard({ children }: { children: React.ReactNode }
   // User has permission — allow through
   if (hasRoutePermission(requiredPermission, hasPermission, hasAnyPermission)) return <>{children}</>;
 
-  // No permission — redirect to first accessible route
+  // No permission — redirect to first accessible route.
   const fallback = getFirstAccessibleRoute(hasPermission, hasAnyPermission);
+
+  // Guard against an infinite redirect loop: if the computed fallback is the
+  // page we're already on (e.g. the user has no accessible gated route and
+  // we're already on the public fallback), render the children instead of
+  // navigating back to ourselves.
+  if (fallback === pathname) return <>{children}</>;
+
   return <Navigate to={fallback} replace />;
 }

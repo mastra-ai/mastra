@@ -2,12 +2,27 @@
   "redirects": [
     {
       "source": "/docs/observability/tracing/exporters/cloud",
-      "destination": "/docs/observability/tracing/exporters/mastra-platform",
+      "destination": "/docs/observability/integrations/exporters/mastra-platform",
       "permanent": true
     },
     {
       "source": "/docs/observability/tracing/exporters/default",
-      "destination": "/docs/observability/tracing/exporters/mastra-storage",
+      "destination": "/docs/observability/integrations/exporters/mastra-storage",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/exporters/:path*",
+      "destination": "/docs/observability/integrations/exporters/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/bridges/:path*",
+      "destination": "/docs/observability/integrations/bridges/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/docs/observability/tracing/processors/:path*",
+      "destination": "/docs/observability/integrations/processors/:path*",
       "permanent": true
     },
     {
