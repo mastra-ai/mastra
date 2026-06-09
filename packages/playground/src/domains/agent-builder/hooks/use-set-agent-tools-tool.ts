@@ -62,24 +62,24 @@ export function useSetAgentToolsTool({ availableAgentTools }: UseSetAgentToolsTo
           formMethods.setValue('agents', agents, { shouldDirty: true });
           formMethods.setValue('workflows', workflows, { shouldDirty: true });
 
-          // Shallow-merge per-provider integration tools into the form's
-          // `toolProviders` state, preserving any existing `connections` map.
-          const fragmentProviderIds = Object.keys(toolProvidersFragment);
-          if (fragmentProviderIds.length > 0) {
-            const currentProviders = (formMethods.getValues('toolProviders') ?? {}) as Record<
-              string,
-              { tools?: Record<string, { toolkit: string; description?: string }>; connections?: unknown }
-            >;
-            const nextProviders = { ...currentProviders };
-            for (const providerId of fragmentProviderIds) {
-              const existing = currentProviders[providerId] ?? { tools: {}, connections: {} };
-              nextProviders[providerId] = {
-                ...existing,
-                tools: { ...(existing.tools ?? {}), ...toolProvidersFragment[providerId] },
-              };
-            }
-            formMethods.setValue('toolProviders', nextProviders as never, { shouldDirty: true });
+          // `set-agent-tools` is a full state set (like `tools`/`agents`/
+          // `workflows` above), so replace each provider's `tools` map with
+          // the fragment's — clearing stale selections for providers the
+          // call omits — while preserving every `connections` map.
+          const currentProviders = (formMethods.getValues('toolProviders') ?? {}) as Record<
+            string,
+            { tools?: Record<string, { toolkit: string; description?: string }>; connections?: unknown }
+          >;
+          const providerIds = new Set([...Object.keys(currentProviders), ...Object.keys(toolProvidersFragment)]);
+          const nextProviders: typeof currentProviders = {};
+          for (const providerId of providerIds) {
+            const existing = currentProviders[providerId] ?? { tools: {}, connections: {} };
+            nextProviders[providerId] = {
+              ...existing,
+              tools: toolProvidersFragment[providerId] ?? {},
+            };
           }
+          formMethods.setValue('toolProviders', nextProviders as never, { shouldDirty: true });
         }
         return { success: true };
       },
