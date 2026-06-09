@@ -204,6 +204,22 @@ describe('buildReplayHooks', () => {
     expect(report.replayedCount).toBe(0);
   });
 
+  it('matches spans recorded under original tool names against agent-formatted hook names', () => {
+    // Spans record the tool's ORIGINAL name; the hook context carries the
+    // agent-formatted name (invalid chars replaced, max 63 chars) — see
+    // Agent.formatTools. Both sides must normalize identically.
+    const events = extractToolReplayEvents([
+      toolSpan('s1', 'my.namespaced.tool', 1000, { input: { a: 1 }, output: { ok: 1 } }),
+      toolSpan('s2', '1starts-with-digit', 2000, { input: { a: 2 }, output: { ok: 2 } }),
+    ]);
+    const state = createReplayState(events, TRACE_ID);
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    expect(callHook(hooks, 'my_namespaced_tool', { a: 1 })).toEqual({ proceed: false, output: { ok: 1 } });
+    expect(callHook(hooks, '_1starts-with-digit', { a: 2 })).toEqual({ proceed: false, output: { ok: 2 } });
+    expect(finalizeReplayReport(state).misses).toEqual([]);
+  });
+
   it('onMiss error throws an abort-style error and notifies onFatalMiss', async () => {
     const state = createReplayState([], TRACE_ID);
     const onFatalMiss = vi.fn();

@@ -445,6 +445,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         while (execResult.error && retryCount < maxRetries) {
           // Don't retry abort errors
           if (execResult.error.message.toLowerCase().includes('abort')) break;
+          // Don't retry deterministic tool replay misses — the recording can't change
+          if (execResult.error.code === 'TOOL_REPLAY_MISS') break;
 
           retryCount++;
           const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 30000);

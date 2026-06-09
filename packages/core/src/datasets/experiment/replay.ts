@@ -1,7 +1,7 @@
-import deepEqual from 'fast-deep-equal';
 import { SpanType } from '../../observability';
 import type { SpanRecord } from '../../storage/domains/observability/tracing';
 import type { ToolHooks } from '../../tools/types';
+import { deepEqual } from '../../utils';
 
 /**
  * Tool replay for dataset experiments.
@@ -80,6 +80,32 @@ export interface ToolReplayState {
 }
 
 const TOOL_SPAN_TYPES: ReadonlySet<SpanType> = new Set([SpanType.TOOL_CALL, SpanType.MCP_TOOL_CALL]);
+
+// Note: the test regex must NOT carry the global flag — a global regex is
+// stateful under .test() (lastIndex) and would alternate results across calls.
+const INVALID_TOOL_NAME_CHAR_TEST_REGEX = /[^a-zA-Z0-9_\-]/;
+const VALID_TOOL_NAME_STARTING_CHAR_REGEX = /^[a-zA-Z_]/;
+
+/**
+ * Mirror of the agent's tool-name formatting (`Agent.formatTools`): the model
+ * (and therefore the hook context) sees formatted names, while tool spans
+ * record the tool's original name. Queue keys and hook lookups are normalized
+ * with the same rule so they match. Idempotent for already-valid names.
+ */
+function formatToolName(name: string): string {
+  if (
+    name.length <= 63 &&
+    VALID_TOOL_NAME_STARTING_CHAR_REGEX.test(name) &&
+    !INVALID_TOOL_NAME_CHAR_TEST_REGEX.test(name)
+  ) {
+    return name;
+  }
+  let formatted = name.replace(new RegExp(INVALID_TOOL_NAME_CHAR_TEST_REGEX, 'g'), '_');
+  if (!VALID_TOOL_NAME_STARTING_CHAR_REGEX.test(formatted)) {
+    formatted = `_${formatted}`;
+  }
+  return formatted.slice(0, 63);
+}
 
 function isToolSpan(span: SpanRecord): boolean {
   return TOOL_SPAN_TYPES.has(span.spanType) && !span.isEvent;
@@ -168,15 +194,21 @@ export function extractToolReplayEvents(spans: SpanRecord[]): ToolReplayEvent[] 
   return events;
 }
 
-/** Fresh per-attempt state: per-tool FIFO queues plus report accumulators. */
+/**
+ * Fresh per-attempt state: per-tool FIFO queues plus report accumulators.
+ * Queue keys are formatted tool names — spans record original tool names while
+ * the hook context carries the agent-formatted name, so both sides normalize
+ * through {@link formatToolName} to match.
+ */
 export function createReplayState(events: ToolReplayEvent[], sourceTraceId: string | null): ToolReplayState {
   const queues = new Map<string, ToolReplayEvent[]>();
   for (const event of events) {
-    const queue = queues.get(event.toolName);
+    const key = formatToolName(event.toolName);
+    const queue = queues.get(key);
     if (queue) {
       queue.push(event);
     } else {
-      queues.set(event.toolName, [event]);
+      queues.set(key, [event]);
     }
   }
   return {
@@ -207,7 +239,7 @@ export function buildReplayHooks(
 ): ToolHooks {
   return {
     beforeToolCall: ({ toolName, input }) => {
-      const event = state.queues.get(toolName)?.shift();
+      const event = state.queues.get(formatToolName(toolName))?.shift();
 
       if (!event) {
         state.misses.push({ toolName, action: options.onMiss, input });
