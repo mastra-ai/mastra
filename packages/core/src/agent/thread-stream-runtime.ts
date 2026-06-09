@@ -753,6 +753,7 @@ export class AgentThreadStreamRuntime {
         runId: pendingIdle.runId,
         error: err instanceof Error ? err.message : String(err),
       });
+      void this.#drainPendingIdleSignals(state, pubsub, key);
     }
   }
 
@@ -815,7 +816,10 @@ export class AgentThreadStreamRuntime {
     await new Promise<void>(resolve => {
       const onEvent: EventCallback = event => {
         const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
-        if ((data?.type === 'run-completed' || data?.type === 'run-aborted') && data.runId === runId) {
+        if (
+          (data?.type === 'run-completed' || data?.type === 'run-aborted' || data?.type === 'run-failed') &&
+          data.runId === runId
+        ) {
           void resolvedPubSub.unsubscribe(topic, onEvent).catch(() => {});
           resolve();
         }
@@ -968,6 +972,7 @@ export class AgentThreadStreamRuntime {
           remoteRun.done = true;
           while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
           while (remoteRun.finishWaiters.length) remoteRun.finishWaiters.shift()?.();
+          remoteRuns.delete(data.runId);
         }
         enqueueRun(errorRun);
         seenRunIds.delete(data.runId);

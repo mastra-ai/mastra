@@ -1,4 +1,4 @@
-import { readdir, rm, mkdir } from 'node:fs/promises';
+import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import { PubSub, UnixSocketPubSub } from '@mastra/core/events';
@@ -14,24 +14,21 @@ const THREAD_STREAM_PREFIX = 'agent.thread-stream.';
  * inspectability and automatic OS cleanup. Each topic gets its own isolated
  * socket so broker election and message routing are per-topic.
  *
- * On construction, stale `.sock` files from previous runs are cleaned up so
- * a new process always becomes the sole broker rather than connecting as a
- * client to a dead socket.
+ * Stale sockets from crashed processes are handled by
+ * {@link UnixSocketPubSub}'s built-in election logic: it detects
+ * ECONNREFUSED on a dead broker socket, unlinks it, and re-elects.
+ * No blanket cleanup is needed here — that would break concurrent
+ * mc instances sharing the same resourceId.
  */
 class SignalsPubSub extends PubSub {
   readonly #resourceId: string;
   readonly #sockets = new Map<string, UnixSocketPubSub>();
   readonly #pending = new Map<string, Promise<UnixSocketPubSub>>();
   #closed = false;
-  /** Resolves once stale socket cleanup from previous runs has completed. */
-  readonly #cleanupDone: Promise<void>;
 
   constructor(resourceId: string) {
     super();
     this.#resourceId = resourceId;
-    // Fire-and-forget cleanup; #getOrCreate awaits this before creating sockets
-    // so new sockets never race with stale file removal.
-    this.#cleanupDone = this.#cleanupStaleSockets();
   }
 
   override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
@@ -71,8 +68,6 @@ class SignalsPubSub extends PubSub {
 
   async #getOrCreate(topic: string): Promise<UnixSocketPubSub> {
     if (this.#closed) throw new Error('SignalsPubSub is closed');
-    // Ensure stale sockets from previous runs are cleaned before creating new ones.
-    await this.#cleanupDone;
     const key = this.#topicKey(topic);
     const existing = this.#sockets.get(key);
     if (existing) return existing;
@@ -126,21 +121,6 @@ class SignalsPubSub extends PubSub {
     // Fallback: use the topic directly (sanitized for filesystem)
     return topic.replace(/[^a-zA-Z0-9_-]/g, '_');
   }
-
-  /**
-   * Remove stale `.sock` files left by previous mc processes. Without this,
-   * a new process would connect as a client to the dead socket (whose broker
-   * no longer exists), causing duplicate or lost event delivery.
-   */
-  async #cleanupStaleSockets(): Promise<void> {
-    const dir = join('/tmp/mc', this.#resourceId);
-    try {
-      const entries = await readdir(dir);
-      await Promise.allSettled(entries.filter(f => f.endsWith('.sock')).map(f => rm(join(dir, f), { force: true })));
-    } catch {
-      // Directory doesn't exist yet — nothing to clean.
-    }
-  }
 }
 
 /**
@@ -148,8 +128,8 @@ class SignalsPubSub extends PubSub {
  * and workflow event coordination within a mastracode resource.
  *
  * Each topic gets its own Unix socket under `/tmp/mc/<resourceId>/`.
- * Stale sockets from previous runs are cleaned on startup so the new
- * process always becomes the sole broker.
+ * Stale sockets from crashed processes are handled by the underlying
+ * {@link UnixSocketPubSub}'s broker election logic.
  */
 export function createSignalsPubSub(resourceId: string): SignalsPubSub {
   return new SignalsPubSub(resourceId);

@@ -2409,13 +2409,11 @@ export class Mastra<
     // 2. Nested workflow — parentWorkflow present means the parent dispatched
     //    this step; let the WEP resolve via the parent's step graph.
     if (parentWorkflow) return true;
-    // 3. Public workflow registry
-    try {
-      this.getWorkflowById(workflowId);
-      return true;
-    } catch {
-      return false;
-    }
+    // 3. Public workflow registry — direct lookup to avoid telemetry noise
+    //    from getWorkflowById() on the expected "foreign workflow" path.
+    const workflows = this.#workflows as Record<string, AnyWorkflow> | undefined;
+    if (workflows?.[workflowId]) return true;
+    return Object.values(workflows ?? {}).some(w => w.id === workflowId);
   }
 
   __getInternalWorkflow(id: string, runId?: string): AnyWorkflow {

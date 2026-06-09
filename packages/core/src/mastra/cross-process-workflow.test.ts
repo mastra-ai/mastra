@@ -88,10 +88,7 @@ describe('cross-process workflow event guard', () => {
     const spyB = vi.spyOn(mastraB, 'handleWorkflowEvent');
 
     await sharedPubSub.publish('workflows', makeStartEvent('execution-workflow', 'run-1'));
-    await new Promise(r => setTimeout(r, 100));
-
-    // Instance A should process events (it owns the workflow)
-    expect(spyA).toHaveBeenCalled();
+    await vi.waitFor(() => expect(spyA).toHaveBeenCalled(), { timeout: 1000, interval: 10 });
     // Instance B should NOT process any events (guard skips all of them)
     expect(spyB).not.toHaveBeenCalled();
 
@@ -125,12 +122,13 @@ describe('cross-process workflow event guard', () => {
     const spyB = vi.spyOn(mastraB, 'handleWorkflowEvent');
 
     await sharedPubSub.publish('workflows', makeStartEvent('my-public-workflow', 'run-pub'));
-    await new Promise(r => setTimeout(r, 100));
-
-    // Both instances should process events for public workflows
-    // (may be called more than once due to cascading step events)
-    expect(spyA).toHaveBeenCalled();
-    expect(spyB).toHaveBeenCalled();
+    await vi.waitFor(
+      () => {
+        expect(spyA).toHaveBeenCalled();
+        expect(spyB).toHaveBeenCalled();
+      },
+      { timeout: 1000, interval: 10 },
+    );
 
     await mastraA.shutdown();
     await mastraB.shutdown();
@@ -164,8 +162,8 @@ describe('cross-process workflow event guard', () => {
     });
 
     await sharedPubSub.publish('workflows', makeStartEvent('execution-workflow', 'run-2'));
-    await new Promise(r => setTimeout(r, 100));
-
+    // Allow async event processing to settle
+    await new Promise(r => setTimeout(r, 50));
     // The non-owning instance should NOT have caused a workflow.fail
     expect(failEvents).toHaveLength(0);
 
@@ -189,15 +187,23 @@ describe('cross-process workflow event guard', () => {
 
     const spy = vi.spyOn(mastra, 'handleWorkflowEvent');
 
-    // Event for run-A: should be processed (owned)
+    // Event for run-A: should be processed (owned). Wait for the terminal
+    // workflow.end event so all cascading events have been delivered before
+    // we clear the spy for the second assertion.
     await sharedPubSub.publish('workflows', makeStartEvent('execution-workflow', 'run-A'));
-    await new Promise(r => setTimeout(r, 100));
-    expect(spy).toHaveBeenCalled();
+    await vi.waitFor(
+      () => {
+        const calls = spy.mock.calls.flat();
+        expect(calls.some((c: any) => c?.type === 'workflow.end' && c?.data?.runId === 'run-A')).toBe(true);
+      },
+      { timeout: 2000, interval: 10 },
+    );
 
     spy.mockClear();
 
     // Event for run-B: should be skipped (not owned — different runId)
     await sharedPubSub.publish('workflows', makeStartEvent('execution-workflow', 'run-B'));
+    // Allow async event processing to settle
     await new Promise(r => setTimeout(r, 100));
     expect(spy).not.toHaveBeenCalled();
 
