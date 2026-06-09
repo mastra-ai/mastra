@@ -1,0 +1,175 @@
+---
+title: "Reference: Rubric scorer | Evals"
+description: Documentation for the Rubric Scorer in Mastra. An LLM-as-judge scorer that grades an agent output against a checklist of criteria and returns a binary verdict with per-criterion feedback, designed to drive isTaskComplete loops.
+packages:
+  - "@mastra/evals"
+---
+
+import PropertiesTable from "@site/src/components/PropertiesTable";
+
+# Rubric scorer
+
+The `createRubricScorer()` function creates an LLM-as-judge scorer that grades an agent's output against a rubric — a checklist of criteria. It returns a **binary** score: `1` only when every required criterion is satisfied, otherwise `0`. The `reason` lists each criterion's verdict so the agent knows exactly what to fix.
+
+This scorer is designed to drop into [`isTaskComplete`](/reference/streaming/agents/stream). Because `isTaskComplete` treats `score === 1` as "task complete" and injects the `reason` back into the conversation as feedback, the agent keeps iterating until the rubric is satisfied (or `maxSteps` is reached).
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'MastraModelConfig',
+    description:
+      'The language model used to grade the output against the rubric. A smaller, cheaper model is usually sufficient for grading.',
+    required: true,
+  },
+  {
+    name: 'criteria',
+    type: 'RubricCriterion[] | string',
+    description:
+      'The rubric to grade against. A string is treated as a newline-delimited checklist (each line becomes a required criterion). If omitted, the rubric is read at run time from a `rubric` value on request/additional context; if none resolves, the scorer is a no-op and returns 1.',
+    required: false,
+    children: [
+      {
+        name: 'description',
+        type: 'string',
+        description: 'What the output must satisfy, e.g. "All tests pass" or "Includes a recommendations section".',
+        required: true,
+      },
+      {
+        name: 'required',
+        type: 'boolean',
+        description:
+          'Whether this criterion must be satisfied for the task to be complete. Defaults to true. Optional criteria are graded and reported but do not gate completion.',
+        required: false,
+      },
+      {
+        name: 'id',
+        type: 'string',
+        description: 'Optional stable identifier for the criterion.',
+        required: false,
+      },
+    ],
+  },
+  {
+    name: 'options',
+    type: 'RubricScorerOptions',
+    description: 'Configuration options for the scorer',
+    required: false,
+    children: [
+      {
+        name: 'scale',
+        type: 'number',
+        description:
+          'Scale factor applied to the score (default: 1). Only relevant for standalone evals — isTaskComplete gates on a score equal to 1.',
+        required: false,
+      },
+    ],
+  },
+]}
+/>
+
+## `.run()` returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'score',
+    type: 'number',
+    description: '1 when every required criterion is satisfied, otherwise 0 (multiplied by scale).',
+  },
+  {
+    name: 'reason',
+    type: 'string',
+    description:
+      'A per-criterion explanation listing which criteria are met or unmet and why. This is the text isTaskComplete injects back into the conversation as feedback.',
+  },
+]}
+/>
+
+## Usage with isTaskComplete
+
+Define the rubric once, attach the scorer to `isTaskComplete`, and the agent self-corrects until the rubric is satisfied:
+
+```typescript
+import { createRubricScorer } from '@mastra/evals/scorers/prebuilt'
+
+const rubricScorer = createRubricScorer({
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  criteria: [
+    { description: 'The response includes an analysis section' },
+    { description: 'The response includes concrete recommendations' },
+  ],
+})
+
+const stream = await supervisor.stream('Research AI in education', {
+  maxSteps: 10,
+  isTaskComplete: {
+    scorers: [rubricScorer],
+    strategy: 'all',
+  },
+})
+```
+
+## String rubric
+
+A newline-delimited string is parsed into criteria, with common list markers (`-`, `*`, `1.`) stripped. Every line becomes a required criterion:
+
+```typescript
+const rubricScorer = createRubricScorer({
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  criteria: `
+- All tests pass in the test suite
+- The function is named find_duplicates and accepts a single list argument
+`,
+})
+```
+
+## Optional criteria
+
+Mark a criterion as optional to have it graded and reported without gating completion:
+
+```typescript
+const rubricScorer = createRubricScorer({
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  criteria: [
+    { description: 'Includes an analysis section', required: true },
+    { description: 'Includes citations', required: false },
+  ],
+})
+```
+
+## Dynamic rubric per run
+
+When no `criteria` is passed to the factory, the scorer resolves a `rubric` value from the run's request context, additional context, or input. This lets a single scorer instance grade different rubrics per run without rebuilding it:
+
+```typescript
+const rubricScorer = createRubricScorer({
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+})
+
+await supervisor.stream('Write find_duplicates', {
+  isTaskComplete: { scorers: [rubricScorer] },
+  requestContext: {
+    rubric: '- All tests pass\n- The function is named find_duplicates',
+  },
+})
+```
+
+If no rubric resolves, the scorer returns `1` and does not gate the loop.
+
+## Scoring details
+
+The scorer runs in two phases:
+
+1. **Grade** — the judge model evaluates each criterion independently and returns a per-criterion verdict (`satisfied` / not) with reasoning.
+1. **Score** — the result is `1` only when every required criterion is `satisfied`, otherwise `0`. If no criteria are marked required, all criteria are treated as required.
+
+The `reason` summarizes the overall result and lists each criterion with its verdict, so a failing grade gives the agent targeted, actionable feedback rather than a generic "try again".
+
+## Related
+
+- [isTaskComplete on stream()](/reference/streaming/agents/stream)
+- [Supervisor agents](/docs/agents/supervisor-agents)
+- [createScorer](/reference/evals/create-scorer)
