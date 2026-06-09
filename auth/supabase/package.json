@@ -28,13 +28,10 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.99.1"
   },
-  "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
-  },
   "devDependencies": {
+    "@internal/auth": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@mastra/core": "workspace:*",
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
