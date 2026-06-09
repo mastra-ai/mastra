@@ -271,6 +271,44 @@ describe('AgentBuilderAgentEdit MSW integration — initial onboarding layout', 
     expect(screen.queryByTestId('agent-builder-ready-heading')).toBeNull();
   });
 
+  it('ready entry: a brief mid-conversation idle gap does not reveal the review panel (no flicker)', async () => {
+    // The stream flag can momentarily drop to false between builder runs. Once the
+    // stream has been running for a while, a short idle gap must NOT flash the
+    // review panel in and out — only a sustained idle (>1s debounce) reveals it.
+    server.use(...baseHandlers(populatedAgent));
+
+    const view = renderPage();
+    await screen.findByTestId('agent-builder-panel-chat');
+
+    await act(async () => {
+      useStreamRunningMock.mockReturnValue(true);
+      view.rerender(view.makeTree());
+    });
+    // Hold the stream running long enough for the debounced running flag to latch.
+    await act(async () => new Promise(resolve => setTimeout(resolve, 1100)));
+
+    // Brief idle gap: the flag drops, the next run starts shortly after.
+    await act(async () => {
+      useStreamRunningMock.mockReturnValue(false);
+      view.rerender(view.makeTree());
+    });
+    await act(async () => new Promise(resolve => setTimeout(resolve, 200)));
+    expect(screen.queryByTestId('agent-builder-ready-heading')).toBeNull();
+
+    await act(async () => {
+      useStreamRunningMock.mockReturnValue(true);
+      view.rerender(view.makeTree());
+    });
+    expect(screen.queryByTestId('agent-builder-ready-heading')).toBeNull();
+
+    // Once the stream is genuinely idle, the panel reveals after the debounce settles.
+    await act(async () => {
+      useStreamRunningMock.mockReturnValue(false);
+      view.rerender(view.makeTree());
+    });
+    await screen.findByTestId('agent-builder-ready-heading', undefined, { timeout: 3000 });
+  });
+
   it('ready entry: "Try my agent" navigates to /view', async () => {
     server.use(...baseHandlers(populatedAgent));
 

@@ -2,6 +2,7 @@ import { Button, Spinner } from '@mastra/playground-ui';
 import { useEffect, useState } from 'react';
 import { FormProvider, useForm, useFormContext, useFormState, useWatch } from 'react-hook-form';
 import { Navigate, useNavigate, useParams } from 'react-router';
+import { useDebounce } from 'use-debounce';
 import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu';
 import {
   AgentProfile,
@@ -114,6 +115,12 @@ const EditPageLayout = () => {
   const { step } = useWizard();
   const features = useBuilderAgentFeatures();
   const isRunning = useStreamRunning();
+  // The stream flag can briefly drop to false mid-conversation (e.g. between
+  // builder runs), which would flicker the layout between centered and split.
+  // Defer only the true -> false transition by 1s: `isRunning` flips the OR to
+  // true immediately, while going idle waits for the debounced value to settle.
+  const [debouncedIsRunning] = useDebounce(isRunning, 1000);
+  const isStreamRunning = isRunning || debouncedIsRunning;
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const { dirtyFields } = useFormState({ control });
   const name = useWatch({ control, name: 'name' }) ?? '';
@@ -140,7 +147,7 @@ const EditPageLayout = () => {
   // panel must only appear once the builder has finished: every mandatory field is
   // populated AND the stream is idle. While it is still running (or before any field
   // is set) we keep the chat centered.
-  const isBuilderReady = hasMandatoryFields && !isRunning;
+  const isBuilderReady = hasMandatoryFields && !isStreamRunning;
 
   // Keep the chat centered (no profile column) until the builder is ready; for the
   // identity step we only require the mandatory fields so editing them back to empty
@@ -158,7 +165,7 @@ const EditPageLayout = () => {
   }, [shouldBeCentered, variant]);
 
   const isCentered = variant === 'centered';
-  const showMobileInitialCtas = step === 'identity' && hasMandatoryFields && !isRunning;
+  const showMobileInitialCtas = step === 'identity' && hasMandatoryFields && !isStreamRunning;
 
   return (
     <AgentBuilderEditLayout
