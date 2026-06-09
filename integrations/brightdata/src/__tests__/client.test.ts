@@ -16,8 +16,7 @@ describe('getBrightDataClient', () => {
     delete process.env.BRIGHTDATA_SERP_ZONE;
     delete process.env.BRIGHTDATA_WEB_UNLOCKER_ZONE;
     fetchMock.mockImplementation(async (_url, init: RequestInit) => {
-      const body =
-        typeof init.body === 'string' ? (JSON.parse(init.body) as { format?: string }) : {};
+      const body = typeof init.body === 'string' ? (JSON.parse(init.body) as { format?: string }) : {};
 
       return body.format === 'json' ? Response.json({}) : new Response('ok');
     });

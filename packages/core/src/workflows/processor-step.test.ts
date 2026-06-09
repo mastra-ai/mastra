@@ -7,7 +7,8 @@ import { TripWire } from '../agent/trip-wire';
 import type { Processor } from '../processors';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema, ProcessorStepSchema } from '../processors/step-schema';
 import { Tool } from '../tools';
-import { createStep, createWorkflow, isProcessor } from './workflow';
+import { createWorkflow } from './create';
+import { createStep, isProcessor } from './workflow';
 
 // Helper to create a mock MessageList
 function createMockMessageList(messages: MastraDBMessage[] = []): MessageList {
