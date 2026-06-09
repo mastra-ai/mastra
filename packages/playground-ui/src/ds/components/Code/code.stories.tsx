@@ -37,7 +37,9 @@ export const PlainFallback: Story = {
 };
 
 export const Json: Story = {
-  render: () => <Code code={`{\n  "name": "weather-agent",\n  "tools": ["weatherTool"],\n  "memory": true\n}`} lang="json" />,
+  render: () => (
+    <Code code={`{\n  "name": "weather-agent",\n  "tools": ["weatherTool"],\n  "memory": true\n}`} lang="json" />
+  ),
 };
 
 export const Python: Story = {
