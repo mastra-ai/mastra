@@ -114,7 +114,6 @@ export function MastraRuntimeProvider({
   // `initialMessages` refreshes after a stream ends. Track them in a parallel
   // state that survives those resets so the chat still surfaces the failure.
   const [streamErrors, setStreamErrors] = useState<MastraDBMessage[]>([]);
-  const [pendingSignals, setPendingSignals] = useState<{ id: string; preview: string }[]>([]);
   const [threadSignalsUnsupported, setThreadSignalsUnsupported] = useState(false);
   const threadSignalsUnsupportedRef = useRef(false);
   const threadSignalsEnabled =
@@ -122,19 +121,10 @@ export function MastraRuntimeProvider({
     supportsMemory !== false &&
     !settings?.modelSettings?.chatWithLegacyStream;
 
-  const addPendingSignal = useCallback((signalId: string, preview: string) => {
-    setPendingSignals(prev => [...prev.filter(signal => signal.id !== signalId), { id: signalId, preview }]);
-  }, []);
-
-  const removePendingSignal = useCallback((signalId: string) => {
-    setPendingSignals(prev => prev.filter(signal => signal.id !== signalId));
-  }, []);
-
   // Clear any persisted stream errors when switching threads or agents so they
   // don't leak across conversations.
   useEffect(() => {
     setStreamErrors([]);
-    setPendingSignals([]);
     threadSignalsUnsupportedRef.current = false;
     setThreadSignalsUnsupported(false);
   }, [agentId, threadId]);
@@ -172,12 +162,9 @@ export function MastraRuntimeProvider({
     initialMessages,
     requestContext: chatRequestContext,
     enableThreadSignals: threadSignalsEnabled,
-    onSignalSent: addPendingSignal,
-    onSignalEcho: removePendingSignal,
     onThreadSignalsUnsupported: () => {
       threadSignalsUnsupportedRef.current = true;
       setThreadSignalsUnsupported(true);
-      setPendingSignals([]);
     },
   });
 
@@ -522,7 +509,6 @@ export function MastraRuntimeProvider({
   const onCancel = async () => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
-    setPendingSignals([]);
     // Reset OM streaming state in case observation was in progress
     resetObservationalMemoryStreamState();
     cancelRun?.();
@@ -585,8 +571,6 @@ export function MastraRuntimeProvider({
           threadSignalsUnsupported,
         }),
         cancelStream: onCancel,
-        pendingSignals,
-        hasPendingMessages: pendingSignals.length > 0,
       }}
     >
       <AssistantRuntimeProvider runtime={runtime}>

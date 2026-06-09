@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -28,7 +29,10 @@ const mockLogger = () => ({
 
 let testStorageCount = 0;
 const createSetup = async (editorConfig?: ConstructorParameters<typeof MastraEditor>[0]) => {
-  const storage = new LibSQLStore({ id: `ws-test-${testStorageCount++}`, url: ':memory:' });
+  const storage = new LibSQLStore({
+    id: `ws-test-${testStorageCount++}`,
+    url: `file:${os.tmpdir()}/mastra-test-${randomUUID()}.db`,
+  });
   const editor = new MastraEditor({ logger: mockLogger() as any, ...editorConfig });
   const mastra = new Mastra({ storage, editor });
   await storage.init();
@@ -705,7 +709,10 @@ describe('editor.agent — workspace execution integration', () => {
   });
 
   const createExecutionSetup = async (extraTools?: Record<string, any>) => {
-    const storage = new LibSQLStore({ id: `ws-exec-${testStorageCount++}`, url: ':memory:' });
+    const storage = new LibSQLStore({
+      id: `ws-exec-${testStorageCount++}`,
+      url: `file:${os.tmpdir()}/mastra-test-${randomUUID()}.db`,
+    });
     const editor = new MastraEditor({ logger: mockLogger() as any });
     const mastra = new Mastra({
       storage,

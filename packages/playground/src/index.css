@@ -13,19 +13,19 @@
 
     /*
      * Override playground-ui semantic font tokens with locally-bundled fonts.
-     * Studio uses Inter for both display and body; branded fonts (Greed)
-     * ship only in the platform repo, never in the open-source package.
+     * Studio uses Mona Sans for both display and body.
      */
     --font-display:
-      'Inter', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+      'Mona Sans', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
       'Noto Color Emoji';
     --font-body:
-      'Inter', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+      'Mona Sans', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
       'Noto Color Emoji';
     --font-mono:
       'CommitMono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
   }
   html {
+    font-feature-settings: 'ss06' on;
     scrollbar-color: var(--color-thumb) var(--color-track);
     scrollbar-width: thin;
   }
