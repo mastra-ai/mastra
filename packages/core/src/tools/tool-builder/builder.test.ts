@@ -178,18 +178,24 @@ describe('CoreToolBuilder FGA', () => {
       },
     });
 
+    const systemActor = { actorKind: 'system', sourceWorkflow: 'nightly-workflow' } as const;
     const builtTool = builder.build();
     await builtTool.execute!(
       { query: 'docs' },
       {
         toolCallId: 'call-1',
         messages: [],
-        systemActor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
+        systemActor,
       },
     );
 
     expect(fgaProvider.require).not.toHaveBeenCalled();
-    expect(execute).toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledWith(
+      { query: 'docs' },
+      expect.objectContaining({
+        systemActor,
+      }),
+    );
   });
 });
 

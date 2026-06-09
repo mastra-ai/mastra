@@ -479,6 +479,8 @@ export interface ToolExecutionContext<
   mastra?: MastraUnion;
   requestContext?: RequestContext<TRequestContext>;
   abortSignal?: AbortSignal;
+  /** Trusted server-side signal forwarded for nested FGA checks. */
+  systemActor?: SystemActorSignal;
 
   /**
    * Workspace available for tool execution. When provided, tools can access:
