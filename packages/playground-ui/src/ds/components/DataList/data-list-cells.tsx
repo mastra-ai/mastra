@@ -4,7 +4,7 @@ import { Checkbox } from '@/ds/components/Checkbox';
 import { cn } from '@/lib/utils';
 
 export type DataListCellProps = {
-  children: ReactNode;
+  children?: ReactNode;
   className?: string;
   height?: 'default' | 'compact';
   /**
@@ -20,7 +20,7 @@ export function DataListCell({ children, className, height = 'default', as, ...r
   return (
     <Component
       className={cn(
-        'relative grid min-w-0 items-center text-ui-md whitespace-nowrap text-neutral3',
+        'relative grid min-w-0 items-center text-ui-md whitespace-nowrap text-neutral3 empty:before:content-["—"] empty:before:text-neutral2',
         height === 'compact' ? 'py-1.5' : 'py-2.5',
         className,
       )}
@@ -38,7 +38,7 @@ export function DataListTextCell({ children, className }: DataListCellProps) {
 export function DataListNameCell({ children, className }: DataListCellProps) {
   return (
     <DataListCell className={cn('text-left text-neutral4', className)}>
-      <span className="truncate">{children}</span>
+      <span className='truncate empty:before:content-["—"] empty:before:text-neutral2'>{children}</span>
     </DataListCell>
   );
 }
@@ -46,7 +46,7 @@ export function DataListNameCell({ children, className }: DataListCellProps) {
 export function DataListDescriptionCell({ children, className }: DataListCellProps) {
   return (
     <DataListCell className={cn('text-neutral2', className)}>
-      <span className="truncate">{children}</span>
+      <span className='truncate empty:before:content-["—"]'>{children}</span>
     </DataListCell>
   );
 }
@@ -115,7 +115,9 @@ export interface DataListMonoCellProps {
 export function DataListMonoCell({ children, className, height = 'compact' }: DataListMonoCellProps) {
   return (
     <DataListCell height={height} className="min-w-0">
-      <span className={cn('block text-ui-smd font-mono text-neutral3 truncate', className)}>{children}</span>
+      <span className={cn('block text-ui-smd font-mono text-neutral3 truncate empty:before:content-["—"]', className)}>
+        {children}
+      </span>
     </DataListCell>
   );
 }
@@ -134,7 +136,7 @@ export function DataListDateCell({ timestamp }: DataListDateCellProps) {
   const date = toDate(timestamp);
   return (
     <DataListCell height="compact" className="text-ui-smd text-neutral2">
-      {date ? (isToday(date) ? 'Today' : format(date, 'MMM dd')) : '-'}
+      {date ? (isToday(date) ? 'Today' : format(date, 'MMM dd')) : null}
     </DataListCell>
   );
 }
@@ -153,9 +155,7 @@ export function DataListTimeCell({ timestamp }: DataListTimeCellProps) {
           {format(date, 'HH:mm:ss')}
           <span className="text-neutral2">.{String(date.getMilliseconds()).padStart(3, '0')}</span>
         </>
-      ) : (
-        '-'
-      )}
+      ) : null}
     </DataListCell>
   );
 }

@@ -88,12 +88,12 @@ export const Default: Story = {
       </DataList.Top>
       {[
         { name: 'Research Agent', description: 'Reads articles and produces summaries.', status: 'active' },
-        { name: 'Writing Agent', description: 'Drafts long-form content from outlines.', status: 'active' },
+        { name: 'Writing Agent', description: '', status: 'active' },
         { name: 'Translation Agent', description: 'Translates text between supported languages.', status: 'idle' },
       ].map(item => (
         <DataList.RowButton key={item.name} onClick={() => {}}>
           <DataList.Cell className="text-neutral6 font-medium">{item.name}</DataList.Cell>
-          <DataList.Cell>{item.description}</DataList.Cell>
+          <DataList.DescriptionCell>{item.description}</DataList.DescriptionCell>
           <DataList.Cell>{item.status}</DataList.Cell>
         </DataList.RowButton>
       ))}

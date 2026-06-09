@@ -93,12 +93,14 @@ export function DatasetsList({
 
         const review = reviewByDataset?.get(ds.id);
         const tags = Array.isArray(ds.tags) ? (ds.tags as string[]) : [];
+        const hasExperimentsAction = ds.experimentCount > 0;
+        const rowLinkColEnd = hasExperimentsAction ? -3 : review ? -2 : -1;
 
         return (
           <EntityList.RowWrapper key={ds.id}>
-            <EntityList.RowLink flushRight colEnd={-3} to={paths.datasetLink(ds.id)} LinkComponent={Link}>
+            <EntityList.RowLink flushRight colEnd={rowLinkColEnd} to={paths.datasetLink(ds.id)} LinkComponent={Link}>
               <EntityList.NameCell>{ds.name}</EntityList.NameCell>
-              <EntityList.DescriptionCell>{ds.description || ''}</EntityList.DescriptionCell>
+              <EntityList.DescriptionCell>{ds.description}</EntityList.DescriptionCell>
               <EntityList.Cell>
                 {tags.length > 0 ? (
                   <div className="flex max-w-48 items-center gap-1 overflow-hidden" title={tags.join(', ')}>
@@ -118,9 +120,11 @@ export function DatasetsList({
                 {ds.targetType ? ds.targetType : <span className="text-neutral2">—</span>}
               </EntityList.TextCell>
               <EntityList.TextCell>{formatDate(ds.updatedAt)}</EntityList.TextCell>
+              {!hasExperimentsAction ? <EntityList.Cell className="justify-center" /> : null}
+              {!review && !hasExperimentsAction ? <EntityList.Cell className="justify-center" /> : null}
             </EntityList.RowLink>
 
-            {ds.experimentCount > 0 ? (
+            {hasExperimentsAction ? (
               <Button
                 as={Link}
                 to={`${paths.datasetLink(ds.id)}?tab=experiments`}
@@ -132,9 +136,7 @@ export function DatasetsList({
                   {ds.experimentCount} ({ds.successPct ?? 0}%)
                 </Chip>
               </Button>
-            ) : (
-              <span />
-            )}
+            ) : null}
 
             {review ? (
               <Button
@@ -150,9 +152,9 @@ export function DatasetsList({
                   <Chip color="green">{review.complete} reviewed</Chip>
                 )}
               </Button>
-            ) : (
-              <span />
-            )}
+            ) : hasExperimentsAction ? (
+              <EntityList.Cell className="justify-center" />
+            ) : null}
           </EntityList.RowWrapper>
         );
       })}
