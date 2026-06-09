@@ -184,7 +184,7 @@ describe('createDynamicTools – extraTools', () => {
       signal: { ...signal, id: 'signal-delivered-1' },
       persisted: Promise.resolve(),
     }));
-    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, undefined, storage as any);
+    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, storage as any);
     const tools = getDynamicTools({ requestContext: makeRequestContext() });
 
     await expect(

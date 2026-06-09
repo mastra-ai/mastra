@@ -1211,6 +1211,8 @@ describe('headless mode — thread control', () => {
       getMode: vi.fn(() => ({ id: 'default', description: 'Default', agentId: 'test-agent' })),
       getModelId: vi.fn(() => 'openai/custom-thread-model'),
       setModelId: vi.fn(),
+      getState: vi.fn(() => ({})),
+      setState: vi.fn(async () => {}),
     };
     const harnessV1 = {
       listSessions: vi.fn(async () => [session]),
@@ -1244,7 +1246,9 @@ describe('headless mode — thread control', () => {
     expect(exitCode).toBe(0);
     expect(harness.getCurrentThreadId()).toBe(thread.id);
     expect(harnessV1.session).toHaveBeenCalledWith({ threadId: thread.id, resourceId: thread.resourceId });
-    expect(session.setModelId).not.toHaveBeenCalled();
+    // Main's #17558 carries the harness's current model onto the session at
+    // switchThread, so the startup model overrides the prefilled session model.
+    expect(session.setModelId).toHaveBeenCalledWith('mock-model');
     const threads = await harness.listThreads();
     const matchingThreads = threads.filter(t => t.id === thread.id);
     expect(matchingThreads).toHaveLength(1);
