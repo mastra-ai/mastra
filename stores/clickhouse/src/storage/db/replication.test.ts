@@ -44,12 +44,14 @@ describe('ClickHouse replication helpers', () => {
     expect(addOnClusterToDDL('CREATE TABLE IF NOT EXISTS mastra_threads (id String)', { cluster: 'cluster-a' })).toBe(
       "CREATE TABLE IF NOT EXISTS mastra_threads ON CLUSTER 'cluster-a' (id String)",
     );
-    expect(addOnClusterToDDL('CREATE MATERIALIZED VIEW IF NOT EXISTS mastra_mv TO mastra_t AS SELECT 1', { cluster: 'cluster-a' })).toBe(
-      "CREATE MATERIALIZED VIEW IF NOT EXISTS mastra_mv ON CLUSTER 'cluster-a' TO mastra_t AS SELECT 1",
-    );
-    expect(addOnClusterToDDL('ALTER TABLE mastra_threads ADD COLUMN IF NOT EXISTS x String', { cluster: 'cluster-a' })).toBe(
-      "ALTER TABLE mastra_threads ON CLUSTER 'cluster-a' ADD COLUMN IF NOT EXISTS x String",
-    );
+    expect(
+      addOnClusterToDDL('CREATE MATERIALIZED VIEW IF NOT EXISTS mastra_mv TO mastra_t AS SELECT 1', {
+        cluster: 'cluster-a',
+      }),
+    ).toBe("CREATE MATERIALIZED VIEW IF NOT EXISTS mastra_mv ON CLUSTER 'cluster-a' TO mastra_t AS SELECT 1");
+    expect(
+      addOnClusterToDDL('ALTER TABLE mastra_threads ADD COLUMN IF NOT EXISTS x String', { cluster: 'cluster-a' }),
+    ).toBe("ALTER TABLE mastra_threads ON CLUSTER 'cluster-a' ADD COLUMN IF NOT EXISTS x String");
     expect(addOnClusterToDDL('DROP TABLE IF EXISTS mastra_threads', { cluster: 'cluster-a' })).toBe(
       "DROP TABLE IF EXISTS mastra_threads ON CLUSTER 'cluster-a'",
     );
@@ -71,7 +73,9 @@ ORDER BY id`;
   });
 
   it('validates configured string values', () => {
-    expect(() => validateReplicationConfig({ cluster: '   ' })).toThrow('replication.cluster must be a non-empty string');
+    expect(() => validateReplicationConfig({ cluster: '   ' })).toThrow(
+      'replication.cluster must be a non-empty string',
+    );
     expect(() => validateReplicationConfig({ zookeeperPath: '' })).toThrow(
       'replication.zookeeperPath must be a non-empty string',
     );

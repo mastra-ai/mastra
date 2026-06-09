@@ -17,7 +17,9 @@ const REPLICATED_ENGINE_NAMES = new Set(['ReplicatedMergeTree', 'ReplicatedRepla
 const SHARED_ENGINE_NAMES = new Set(['SharedMergeTree', 'SharedReplacingMergeTree']);
 const SUPPORTED_ENGINE_NAMES = new Set(['MergeTree', 'ReplacingMergeTree', ...REPLICATED_ENGINE_NAMES]);
 
-export function isReplicationConfigured(replication?: ClickhouseReplicationConfig): replication is ClickhouseReplicationConfig {
+export function isReplicationConfigured(
+  replication?: ClickhouseReplicationConfig,
+): replication is ClickhouseReplicationConfig {
   return replication !== undefined;
 }
 

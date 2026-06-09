@@ -274,7 +274,10 @@ async function assertExistingTablesCompatibleWithReplication(
   }
 }
 
-async function reconcileDiscoveryTables(client: ClickHouseClient, replication?: ClickhouseReplicationConfig): Promise<void> {
+async function reconcileDiscoveryTables(
+  client: ClickHouseClient,
+  replication?: ClickhouseReplicationConfig,
+): Promise<void> {
   let engines: Map<string, string>;
   try {
     const result = await client.query({

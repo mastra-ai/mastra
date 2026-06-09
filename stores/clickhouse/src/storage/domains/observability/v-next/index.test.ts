@@ -2735,7 +2735,9 @@ describe('ObservabilityStorageClickhouseVNext', () => {
           replication: { cluster: 'company_cluster' },
         });
 
-        await expect(replicatedStorage.init()).rejects.toThrow(/existing Mastra tables use non-replicated local engines/);
+        await expect(replicatedStorage.init()).rejects.toThrow(
+          /existing Mastra tables use non-replicated local engines/,
+        );
 
         const tables = (await (
           await scopedClient.query({
