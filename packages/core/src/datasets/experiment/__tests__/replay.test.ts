@@ -110,6 +110,19 @@ describe('extractToolReplayEvents', () => {
     expect(events[1]!.error).toEqual({ name: 'TimeoutError', message: 'timed out' });
     expect(events[2]!.error).toBeNull();
   });
+
+  it('degrades gracefully when a recorded error cannot be serialized', () => {
+    const circular: Record<string, unknown> = { name: 'WeirdError' };
+    circular.self = circular;
+
+    const events = extractToolReplayEvents([
+      toolSpan('e1', 'flaky', 1000, { error: circular }),
+      toolSpan('e2', 'flaky', 2000, { error: { code: 42n as unknown } }),
+    ]);
+
+    expect(events[0]!.error).toEqual({ name: 'WeirdError', message: 'Unknown tool error' });
+    expect(events[1]!.error).toEqual({ message: 'Unknown tool error' });
+  });
 });
 
 describe('buildReplayHooks', () => {

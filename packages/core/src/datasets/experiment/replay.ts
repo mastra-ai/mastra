@@ -110,8 +110,20 @@ function normalizeSpanError(error: unknown): { name?: string; message: string } 
   if (typeof error === 'string') return { message: error };
   if (typeof error === 'object') {
     const err = error as Record<string, unknown>;
-    const message =
-      typeof err.message === 'string' ? err.message : typeof err.text === 'string' ? err.text : JSON.stringify(error);
+    let message: string;
+    if (typeof err.message === 'string') {
+      message = err.message;
+    } else if (typeof err.text === 'string') {
+      message = err.text;
+    } else {
+      // JSON.stringify throws on circular references and BigInt values —
+      // degrade to a generic message instead of failing extraction.
+      try {
+        message = JSON.stringify(error) ?? 'Unknown tool error';
+      } catch {
+        message = 'Unknown tool error';
+      }
+    }
     return {
       ...(typeof err.name === 'string' ? { name: err.name } : {}),
       message,
