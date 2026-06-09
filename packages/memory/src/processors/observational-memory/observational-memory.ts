@@ -1131,7 +1131,18 @@ export class ObservationalMemory {
   }
 
   /**
-   * Persist a marker to the last assistant message in storage.
+   * Persist an OM lifecycle marker to storage on the most recent assistant
+   * message. Marker parts are NEVER attached to user messages: that would
+   * mutate the stored shape of user-authored content and force every
+   * consumer to handle `data-om-*` parts on `role: 'user'` (assistant-ui
+   * refuses to render tool-call parts on user messages, and other
+   * clients/storage consumers would acquire a new special case).
+   *
+   * When no assistant message exists yet — e.g. on step 0 of the very first
+   * turn, before the agent has produced any output — sync observation in
+   * `ObservationStep.prepare()` seeds an empty assistant message keyed by
+   * the active response messageId. That seed surfaces here as the target.
+   *
    * Unlike persistMarkerToMessage, this fetches messages directly from the DB
    * so it works even when no MessageList is available (e.g. async buffering ops).
    * @internal Used by observation strategies. Do not call directly.
@@ -1148,10 +1159,8 @@ export class ObservationalMemory {
         orderBy: { field: 'createdAt', direction: 'DESC' },
       });
       const messages = result?.messages ?? [];
-      // Find the last assistant message
       for (const msg of messages) {
         if (msg?.role === 'assistant' && msg.content?.parts && Array.isArray(msg.content.parts)) {
-          // Only push if the marker isn't already in the parts array.
           const markerData = marker.data as { cycleId?: string } | undefined;
           const alreadyPresent =
             markerData?.cycleId &&
@@ -3351,6 +3360,14 @@ ${formattedMessages}
     threadId: string;
     resourceId?: string;
     messages?: MastraDBMessage[];
+    /**
+     * Live MessageList from the caller. When provided, observation strategies
+     * persist lifecycle markers via persistMarkerToMessage (operating on the
+     * in-memory message) instead of the DB-only persistMarkerToStorage path.
+     * Required for the step-0 seeded marker message flow — see
+     * ObservationStep.prepare().
+     */
+    messageList?: MessageList;
     hooks?: ObserveHooks;
     requestContext?: RequestContext;
     writer?: ProcessorStreamWriter;
@@ -3399,6 +3416,7 @@ ${formattedMessages}
           threadId,
           resourceId,
           messages: unobservedMessages,
+          messageList: opts.messageList,
           reflectionHooks,
           requestContext,
           writer: opts.writer,

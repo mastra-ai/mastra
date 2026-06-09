@@ -119,9 +119,7 @@ export class MessageHistory implements Processor {
       });
 
       // 2. Filter out system messages (they should never be stored in DB)
-      const filteredMessages = result.messages.filter((msg: MastraDBMessage) => {
-        return msg.role !== 'system';
-      });
+      const filteredMessages = result.messages.filter((msg: MastraDBMessage) => msg.role !== 'system');
 
       // 3. Merge with incoming messages and messages already in MessageList (avoiding duplicates by ID)
       // This includes messages added by previous processors like SemanticRecall

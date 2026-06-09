@@ -66,6 +66,18 @@ export class ObservationTurn {
   /** Current actor model for this step. Updated by the processor before prepare(). */
   actorModelContext?: ObservationModelContext;
 
+  /**
+   * Active assistant response message ID for the current step.
+   *
+   * Updated by the processor before each step.prepare() call. Used by step 0
+   * sync observation to seed a real assistant message (with this id) when no
+   * assistant message exists yet, so that lifecycle markers attach to an
+   * assistant-role message AND later streamed response parts merge onto it
+   * via MessageMerger.shouldMerge() (which keys on id equality for
+   * data-only assistant messages).
+   */
+  responseMessageId?: string;
+
   /** Processor-provided hooks for turn/step lifecycle integration. */
   readonly hooks: ObservationTurnHooks;
 

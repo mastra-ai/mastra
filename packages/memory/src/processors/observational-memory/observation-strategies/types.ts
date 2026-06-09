@@ -1,4 +1,4 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
+import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -25,6 +25,16 @@ export interface ObservationRunOpts {
   requestContext?: RequestContext;
   currentModel?: ObservationModelContext;
   observabilityContext?: ObservabilityContext;
+  /**
+   * Live MessageList passed by callers that hold one (e.g. ObservationStep).
+   * When present, lifecycle markers are appended to the in-memory assistant
+   * message (incl. the step-0 seeded marker message) via
+   * persistMarkerToMessage instead of the DB-lookup persistMarkerToStorage
+   * path. This is required so the seed — which has empty parts until markers
+   * land on it — is persisted with marker parts (an empty-parts assistant
+   * message is dropped by filterMessagesForPersistence).
+   */
+  messageList?: MessageList;
 }
 
 /** Output from calling the observer agent. */

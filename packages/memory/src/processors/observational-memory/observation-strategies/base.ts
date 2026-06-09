@@ -159,7 +159,18 @@ export abstract class ObservationStrategy {
     }
 
     const markerThreadId = (marker.data as { threadId?: string } | undefined)?.threadId ?? this.opts.threadId;
-    await this.persistMarkerToStorage(marker, markerThreadId, this.opts.resourceId);
+
+    // Prefer the in-memory MessageList path when the caller passed one
+    // (e.g. ObservationStep). This keeps lifecycle markers attached to the
+    // live assistant message (including the step-0 seed) so later streamed
+    // response parts merge onto the same message via MessageMerger; and
+    // persists the message-with-marker through the normal write filter,
+    // which would otherwise drop a still-empty seeded assistant message.
+    if (this.opts.messageList) {
+      await this.persistMarkerToMessage(marker, this.opts.messageList, markerThreadId, this.opts.resourceId);
+    } else {
+      await this.persistMarkerToStorage(marker, markerThreadId, this.opts.resourceId);
+    }
   }
 
   protected getObservationMarkerConfig(): ObservationMarkerConfig {
@@ -326,9 +337,18 @@ export abstract class ObservationStrategy {
   // ── Marker persistence ──────────────────────────────────────
 
   /**
-   * Persist a marker to the last assistant message in storage.
-   * Fetches messages directly from the DB so it works even when
-   * no MessageList is available (e.g. async buffering ops).
+   * Persist an OM lifecycle marker to storage on the most recent assistant
+   * message. Marker parts are NEVER attached to user messages: that would
+   * mutate the stored shape of user-authored content and force every
+   * consumer to handle `data-om-*` parts on `role: 'user'`.
+   *
+   * When no assistant message exists yet — e.g. on step 0 of the very first
+   * turn, before the agent has produced any output — sync observation in
+   * `ObservationStep.prepare()` seeds an empty assistant message keyed by
+   * the active response messageId. That seed surfaces here as the target.
+   *
+   * Fetches messages directly from the DB so it works even when no
+   * MessageList is available (e.g. async buffering ops).
    */
   protected async persistMarkerToStorage(
     marker: { type: string; data: unknown },

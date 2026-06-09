@@ -8,7 +8,9 @@
  * 4. Observations are properly saved to storage
  *
  * NOTE: All observation logic is now consolidated in processInputStep.
- * Observation happens when the threshold is exceeded on step N > 0.
+ * Observation happens whenever the threshold is exceeded — including step 0
+ * (e.g. a single user message larger than the threshold, or pre-existing
+ * history above threshold with no buffered chunks ready to activate).
  */
 
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
@@ -297,28 +299,18 @@ describe('Mid-Loop Observation', () => {
         rotateResponseMessageId,
       });
 
-      expect(rotateResponseMessageId).not.toHaveBeenCalled();
-
-      await processor.processInputStep({
-        messageList,
-        messages: messageList.get.all.db(),
-        requestContext,
-        stepNumber: 1,
-        state,
-        steps: [],
-        systemMessages: [],
-        model: createMockObserverModel() as any,
-        retryCount: 0,
-        abort: createAbort(),
-        abortSignal: new AbortController().signal,
-        rotateResponseMessageId,
-      });
-
+      // Sync observation now fires on step 0 once threshold is exceeded, so
+      // the seal+rotate hook must fire immediately rather than being deferred
+      // to step 1.
       expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
       expect(sealedAtRotate).toEqual([true]);
     });
 
-    it('should NOT trigger observation on step 0', async () => {
+    it('should trigger observation on step 0 when threshold is exceeded (no tool calls case)', async () => {
+      // Regression for #16523: when a turn finishes at step 0 (no tool calls)
+      // and the message-token threshold is already exceeded, observation must
+      // still fire. Previously gated behind `stepNumber > 0`, which created a
+      // "dead zone" where observations never ran for single-turn requests.
       const requestContext = createRequestContext(threadId, resourceId);
       const state: Record<string, unknown> = {};
 
@@ -339,7 +331,7 @@ describe('Mid-Loop Observation', () => {
         messageList.add(msg, 'memory');
       }
 
-      // Step 0: Should NOT trigger observation (only initializes record)
+      // Step 0 alone, no follow-up step (mirrors a turn with no tool calls)
       await processor.processInputStep({
         messageList,
         messages: messageList.get.all.db(),
@@ -353,11 +345,113 @@ describe('Mid-Loop Observation', () => {
         abort: createAbort(),
       });
 
-      // Check record was created but no observations yet
       const record = await storage.getObservationalMemory(threadId, resourceId);
 
-      // No observations should be saved on step 0
-      expect(record?.activeObservations).toBeFalsy();
+      // Observations must be saved on step 0 once threshold is exceeded
+      expect(record?.activeObservations).toBeTruthy();
+      expect(record?.activeObservations).toContain('*');
+      expect(record?.lastObservedAt).toBeDefined();
+    });
+
+    it('should trigger observation on step 0 for a single user message exceeding threshold', async () => {
+      // Reproduction of #16523 in its purest form: only one user message,
+      // and that message alone is larger than the threshold.
+      const requestContext = createRequestContext(threadId, resourceId);
+      const state: Record<string, unknown> = {};
+
+      const messageList = new MessageList({
+        threadId,
+        resourceId,
+      });
+
+      // A single user message large enough to exceed the 500-token threshold.
+      // ~25 tokens per 100 chars × 5000 chars = ~1250 tokens. Well above 500.
+      const bigUserMessage = createTestMessage(
+        'Please summarise the following document: '.padEnd(5000, 'x'),
+        'user',
+        'big-user-msg',
+      );
+      messageList.add(bigUserMessage, 'input');
+
+      await processor.processInputStep({
+        messageList,
+        messages: messageList.get.all.db(),
+        requestContext,
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: createMockObserverModel() as any,
+        retryCount: 0,
+        abort: createAbort(),
+      });
+
+      // Observation must have fired and produced an active observation
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.activeObservations).toBeTruthy();
+      expect(record?.lastObservedAt).toBeDefined();
+    });
+
+    it('should keep step-0 OM markers on the active response message so later assistant output merges', async () => {
+      const requestContext = createRequestContext(threadId, resourceId);
+      const state: Record<string, unknown> = {};
+      const responseMessageId = 'active-response-message-id';
+      const messageList = new MessageList({ threadId, resourceId });
+
+      messageList.add(
+        createTestMessage('Please summarise the following document: '.padEnd(5000, 'x'), 'user', 'big-user-msg'),
+        'input',
+      );
+
+      await processor.processInputStep({
+        messageList,
+        messages: messageList.get.all.db(),
+        requestContext,
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: createMockObserverModel() as any,
+        retryCount: 0,
+        abort: createAbort(),
+        abortSignal: new AbortController().signal,
+        messageId: responseMessageId,
+      });
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+      expect(record?.activeObservations).toBeTruthy();
+      expect(record?.observedMessageIds).not.toContain(responseMessageId);
+
+      const seededAssistant = messageList.get.all.db().find(message => message.id === responseMessageId);
+      expect(seededAssistant?.role).toBe('assistant');
+      expect(seededAssistant?.content.parts.some(part => part.type.startsWith('data-om-'))).toBe(true);
+      expect(
+        (seededAssistant?.content.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed,
+      ).not.toBe(true);
+
+      for (const userMessage of messageList.get.all.db().filter(message => message.role === 'user')) {
+        expect(userMessage.content.parts.some(part => part.type.startsWith('data-om-'))).toBe(false);
+      }
+
+      const storedMessages = await storage.listMessages({
+        threadId,
+        orderBy: { field: 'createdAt', direction: 'ASC' },
+      });
+      const storedAssistant = storedMessages.messages.find(message => message.id === responseMessageId);
+      expect(storedAssistant?.role).toBe('assistant');
+      expect(storedAssistant?.content.parts.some(part => part.type.startsWith('data-om-'))).toBe(true);
+
+      messageList.add(createTestMessage('Here is the final summary.', 'assistant', responseMessageId), 'response');
+
+      const assistantMessages = messageList.get.all.db().filter(message => message.role === 'assistant');
+      expect(assistantMessages).toHaveLength(1);
+      expect(assistantMessages[0]?.id).toBe(responseMessageId);
+      expect(assistantMessages[0]?.content.parts.some(part => part.type.startsWith('data-om-'))).toBe(true);
+      expect(
+        assistantMessages[0]?.content.parts.some(
+          part => part.type === 'text' && part.text === 'Here is the final summary.',
+        ),
+      ).toBe(true);
     });
 
     it('should activate buffered observations mid-step when threshold is crossed (not defer to next user turn)', async () => {

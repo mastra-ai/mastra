@@ -1,3 +1,4 @@
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
@@ -18,6 +19,14 @@ import type { StepContext } from './types';
 export class ObservationStep {
   private _prepared = false;
   private _context?: StepContext;
+  /**
+   * Set when prepare() created a fresh assistant message in messageList to
+   * carry OM lifecycle markers on step 0 (when no assistant message exists
+   * yet). Used to suppress the `onSyncObservationComplete` rotation hook:
+   * the seeded message is the new response container; rotating to a new id
+   * would orphan the markers in a separate assistant turn.
+   */
+  private _seededMarkerMessage = false;
 
   constructor(
     private readonly turn: ObservationTurn,
@@ -38,8 +47,10 @@ export class ObservationStep {
   /**
    * Prepare this step for agent generation.
    *
-   * For step 0: activates buffered chunks, checks reflection, builds system message, filters observed.
-   * For step > 0: checks thresholds, triggers buffer/observe, saves previous messages,
+   * For step 0: activates buffered chunks, checks reflection, checks thresholds, triggers
+   * buffer/observe (when above threshold), persists the new user input before observation,
+   * builds system message, filters observed.
+   * For step > 0: checks thresholds, triggers buffer/observe, saves previous step's messages,
    * builds system message, filters observed.
    */
   async prepare(): Promise<StepContext> {
@@ -135,7 +146,7 @@ export class ObservationStep {
 
       // Seal, rotate, and persist candidates SYNCHRONOUSLY before the fire-and-forget
       // buffer call. The beforeBuffer callback inside buffer() only runs deep in its
-      // async chain (after multiple awaits). Meanwhile, the step > 0 save below drains
+      // async chain (after multiple awaits). Meanwhile, the save block below drains
       // response messages synchronously. If sealing/rotation happens after that drain,
       // the sealed messages get re-added as memory (unsealed) and all new content keeps
       // appending to the same assistant message — producing the "mega-message" bug.
@@ -184,9 +195,12 @@ export class ObservationStep {
       buffered = true;
     }
 
-    // ── Step > 0: Save messages + threshold observation ──────
-    if (this.stepNumber > 0) {
-      // Save messages from previous step
+    // ── Save messages from previous step (or new user input on step 0
+    // when we're about to observe — needed so the input survives the cleanup
+    // that runs after observation, matching the step > 0 invariant) ──
+    const willObserveNow = statusSnapshot.shouldObserve && !hasIncompleteToolCalls;
+
+    if (this.stepNumber > 0 || willObserveNow) {
       const newInput = messageList.clear.input.db();
       const newOutput = messageList.clear.response.db();
       const messagesToSave = [...newInput, ...newOutput];
@@ -196,44 +210,79 @@ export class ObservationStep {
           messageList.add(msg, 'memory');
         }
       }
+    }
 
-      // Threshold observation (step > 0 only, skip if tool calls pending)
-      if (statusSnapshot.shouldObserve && !hasIncompleteToolCalls) {
-        const preObsGeneration = this.turn.record.generationCount;
-        const obsResult = await this.runThresholdObservation();
-        observerExchange = obsResult.observerExchange;
-        if (obsResult.succeeded) {
-          observed = true;
-          didThresholdCleanup = true;
+    // ── Seed assistant response message on step 0 when no assistant message
+    // exists yet (e.g. fresh thread, single mega user message > threshold) ──
+    // Sync observation will write `data-om-*` lifecycle marker parts. Markers
+    // must land on an assistant-role message, so we create an empty assistant
+    // message keyed by the active response messageId from `processInputStep`.
+    // Seeded *after* the save block so it isn't flushed empty (and dropped by
+    // filterMessagesForPersistence). It lives in the 'response' bucket until
+    // observation appends marker parts via `persistMarkerToMessage` (which
+    // also persists the message-with-markers to storage). Streamed response
+    // parts emitted by the LLM later in this step carry the same messageId,
+    // so MessageMerger.shouldMerge merges them onto the seed (data-only
+    // assistant messages only accept incoming parts when ids match), keeping
+    // markers + real assistant output on a single assistant turn.
+    if (
+      this.stepNumber === 0 &&
+      willObserveNow &&
+      this.turn.responseMessageId &&
+      !messageList.get.all.db().some(m => m?.role === 'assistant')
+    ) {
+      const seed: MastraDBMessage = {
+        id: this.turn.responseMessageId,
+        role: 'assistant',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: { format: 2, parts: [] },
+      };
+      messageList.add(seed, 'response');
+      this._seededMarkerMessage = true;
+    }
 
-          // Cleanup after observation
-          const observedIds = obsResult.activatedMessageIds ?? obsResult.record.observedMessageIds ?? [];
-          const minRemaining = resolveRetentionFloor(
-            om.getObservationConfig().bufferActivation ?? 1,
-            statusSnapshot.threshold,
-          );
+    // ── Threshold observation (all steps, skip if tool calls pending) ──
+    // Previously gated to step > 0. Removed because the activation path on step 0
+    // already removes messages with the same retention-floor contract, and the
+    // step 0 dead zone caused observations to never fire for single-turn requests
+    // with messages above threshold (no tool calls → turn ends at step 0).
+    if (willObserveNow) {
+      const preObsGeneration = this.turn.record.generationCount;
+      const obsResult = await this.runThresholdObservation();
+      observerExchange = obsResult.observerExchange;
+      if (obsResult.succeeded) {
+        observed = true;
+        didThresholdCleanup = true;
 
-          await om.cleanupMessages({
+        // Cleanup after observation
+        const observedIds = obsResult.activatedMessageIds ?? obsResult.record.observedMessageIds ?? [];
+        const minRemaining = resolveRetentionFloor(
+          om.getObservationConfig().bufferActivation ?? 1,
+          statusSnapshot.threshold,
+        );
+
+        await om.cleanupMessages({
+          threadId,
+          resourceId,
+          messages: messageList,
+          observedMessageIds: observedIds,
+          retentionFloor: minRemaining,
+        });
+
+        if (statusSnapshot.asyncObservationEnabled) {
+          await om.resetBufferingState({
             threadId,
             resourceId,
-            messages: messageList,
-            observedMessageIds: observedIds,
-            retentionFloor: minRemaining,
+            recordId: obsResult.record.id,
+            activatedMessageIds: obsResult.activatedMessageIds,
           });
+        }
 
-          if (statusSnapshot.asyncObservationEnabled) {
-            await om.resetBufferingState({
-              threadId,
-              resourceId,
-              recordId: obsResult.record.id,
-              activatedMessageIds: obsResult.activatedMessageIds,
-            });
-          }
-
-          await this.turn.refreshRecord();
-          if (this.turn.record.generationCount > preObsGeneration) {
-            reflected = true;
-          }
+        await this.turn.refreshRecord();
+        if (this.turn.record.generationCount > preObsGeneration) {
+          reflected = true;
         }
       }
 
@@ -362,10 +411,20 @@ export class ObservationStep {
 
     // Sync observation — we've waited for buffering and tried activation,
     // if we're still above threshold we must observe synchronously.
+    const seededResponseMessageId = this._seededMarkerMessage ? this.turn.responseMessageId : undefined;
+    const messagesForObservation = seededResponseMessageId
+      ? messageList.get.all.db().filter(message => message.id !== seededResponseMessageId)
+      : messageList.get.all.db();
     const obsResult = await om.observe({
       threadId,
       resourceId,
-      messages: messageList.get.all.db(),
+      messages: messagesForObservation,
+      // Pass the live MessageList so observation strategies can attach
+      // lifecycle markers to the in-memory assistant message (incl. the
+      // step-0 seed) via persistMarkerToMessage instead of looking up the
+      // DB. Required for the step-0 seed flow because the seed has empty
+      // parts until markers land on it.
+      messageList,
       requestContext: this.turn.requestContext,
       writer: this.turn.writer,
       observabilityContext: this.turn.observabilityContext,
@@ -385,15 +444,22 @@ export class ObservationStep {
       }
 
       const messageToSeal = latestObservedIndex >= 0 ? liveMessages[latestObservedIndex] : undefined;
-      const messagesToSeal = messageToSeal ? [messageToSeal] : [];
+      const shouldSealMessage = !seededResponseMessageId || messageToSeal?.id !== seededResponseMessageId;
+      const messagesToSeal = messageToSeal && shouldSealMessage ? [messageToSeal] : [];
       om.sealMessagesForBuffering(messagesToSeal);
 
-      try {
-        await this.turn.hooks?.onSyncObservationComplete?.();
-      } catch (error) {
-        omDebug(
-          `[OM:observe] onSyncObservationComplete hook failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
+      // Suppress the rotation hook when we just seeded an empty assistant
+      // message for OM markers on step 0. The seed already uses the active
+      // response messageId; rotating to a fresh id would split markers and
+      // later streamed response parts into two separate assistant turns.
+      if (!this._seededMarkerMessage) {
+        try {
+          await this.turn.hooks?.onSyncObservationComplete?.();
+        } catch (error) {
+          omDebug(
+            `[OM:observe] onSyncObservationComplete hook failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
       }
 
       if (messagesToSeal.length > 0) {

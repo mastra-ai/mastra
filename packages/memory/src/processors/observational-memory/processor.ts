@@ -133,6 +133,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       abortSignal,
       abort,
       rotateResponseMessageId,
+      messageId,
     } = args;
     const state = _state ?? ({} as Record<string, unknown>);
 
@@ -259,6 +260,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       state.__omObservabilityContext = observabilityContext;
       this.turn.observabilityContext = observabilityContext;
       this.turn.actorModelContext = actorModelContext;
+      this.turn.responseMessageId = messageId;
 
       // ── Run step preparation (activation, threshold, observation, filtering) ──
       {

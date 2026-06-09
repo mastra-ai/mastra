@@ -10839,11 +10839,12 @@ describe('Full Async Buffering Flow', () => {
     expect(observerCalls.length).toBeGreaterThan(0);
   });
 
-  it('should trigger sync observation at step > 0 even when bufferTokens is set without blockAfter', async () => {
+  it('should trigger sync observation even when bufferTokens is set without blockAfter', async () => {
     // Regression test: when async buffering is enabled (bufferTokens set) but blockAfter
-    // is NOT configured, sync observation at step > 0 must still fire once pending tokens
-    // exceed the threshold. Previously, the blockAfter gate had `if (!blockAfter) return false`
+    // is NOT configured, sync observation must still fire once pending tokens exceed
+    // the threshold. Previously, the blockAfter gate had `if (!blockAfter) return false`
     // which silently disabled ALL sync observation when blockAfter was unset.
+    const observerCallsBefore = 0;
     const { step, waitForAsyncOps, observerCalls, storage, threadId, resourceId } = await setupAsyncBufferingScenario({
       messageTokens: 2000, // Threshold that will be exceeded
       bufferTokens: 500, // Async buffering enabled
@@ -10853,18 +10854,17 @@ describe('Full Async Buffering Flow', () => {
       messageCount: 20, // ~4000 tokens, well above the 2000 threshold
     });
 
-    // Step 0: no observation (step 0 never does sync observation)
+    // With the step-0 dead zone fix, a turn that finishes at step 0 (no tool calls)
+    // must still observe when above threshold. We don't care which step the
+    // observation runs on — just that observations are eventually produced and
+    // the observer was called more times than at the start of the test.
     await step(0);
     await waitForAsyncOps();
-    const callsAfterStep0 = observerCalls.length;
-
-    // Step 1: pending tokens exceed threshold → sync observation MUST fire,
-    // even though bufferTokens is set and blockAfter is not configured.
     await step(1);
     await waitForAsyncOps();
 
-    // The observer must have been called at step 1 (sync observation path)
-    expect(observerCalls.length).toBeGreaterThan(callsAfterStep0);
+    // The observer must have been called for sync observation (path under test)
+    expect(observerCalls.length).toBeGreaterThan(observerCallsBefore);
 
     // Verify observations were actually persisted to the record
     const record = await storage.getObservationalMemory(threadId, resourceId);
@@ -16650,7 +16650,11 @@ describe('Message ordering regressions', () => {
   // ─── Test 1: observation should not produce side effects during processOutputResult ───
 
   it('1 — observation should not produce side effects during processOutputResult', async () => {
-    const s = await setupOrderingScenario({ messageTokens: 1 });
+    // Use a threshold well above the seeded history + this turn's messages so that
+    // step 0 itself does NOT trigger observation. This isolates the invariant under
+    // test: finalize / processOutputResult must not introduce any extra observation
+    // calls or side effects on its own.
+    const s = await setupOrderingScenario({ messageTokens: 100_000 });
 
     s.addUserMessage('Tell me about React');
     await s.runStep(0);
@@ -16667,33 +16671,29 @@ describe('Message ordering regressions', () => {
     expect(omMetadata?.suggestedResponse).toBeUndefined();
   });
 
-  // ─── Test 2: deferred observation should happen at beginning of next turn ───
+  // ─── Test 2: observation fires once threshold is exceeded ───
 
-  it('2 — deferred observation should happen at the beginning of the next turn', async () => {
-    const s = await setupOrderingScenario({ messageTokens: 1 });
+  it('2 — observation fires on first step that exceeds threshold', async () => {
+    // Previously, this test validated the "deferred observation" behavior tied
+    // to the `stepNumber > 0` gate: observation could not fire on step 0 and
+    // would be deferred to the next step or turn. That gate has been removed
+    // (#16523) — observation now fires as soon as the threshold is exceeded,
+    // regardless of step number. We still verify the eventual outcome: after a
+    // turn whose total tokens cross the threshold, an observation has been
+    // produced and lastObservedAt is set.
+    const s = await setupOrderingScenario({ messageTokens: 500 });
 
-    // Turn 1: single step
-    s.addUserMessage('Hello');
-    await s.runStep(0);
-    s.addAssistantMessage('Hi there');
-    await s.finalize();
-
-    // After turn 1: no observation yet
-    let record = await s.getOMRecord();
-    expect(record?.activeObservations ?? '').toBe('');
-    expect(record?.lastObservedAt).toBeUndefined();
-
-    // Turn 2: multi-step (step 0 + step 1 triggers observation)
-    s.resetForNewTurn();
-    s.addUserMessage('Follow-up');
+    // setupOrderingScenario seeds ~2000 tokens of history. Even a small user
+    // message + seed is enough to exceed a 500-token threshold, so observation
+    // should fire on the first prepared step.
+    s.addUserMessage('Tell me about generics');
     await s.runStep(0);
     s.addToolCallMessage('search');
     await s.runStep(1);
     s.addAssistantMessage('Here are results');
     await s.finalize();
 
-    // After turn 2 step 1: observation should have fired
-    record = await s.getOMRecord();
+    const record = await s.getOMRecord();
     expect(record?.activeObservations).toBeTruthy();
     expect(record?.lastObservedAt).toBeDefined();
   });
@@ -16793,7 +16793,10 @@ describe('Message ordering regressions', () => {
       storage,
       scope: 'thread',
       model: failingModel as any,
-      observation: { messageTokens: 1, bufferTokens: false },
+      // Threshold low enough that turn 2 (after seed save) exceeds it, but
+      // high enough that turn 1's tiny messages do not — so the failing observer
+      // is only invoked on turn 2.
+      observation: { messageTokens: 200, bufferTokens: false },
       reflection: { observationTokens: 200_000 },
     });
 
@@ -16807,22 +16810,6 @@ describe('Message ordering regressions', () => {
         metadata: {},
       },
     });
-
-    // Seed messages so OM token threshold is exceeded at step > 0
-    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(80);
-    const seedMessages = Array.from({ length: 2 }, (_, i) => ({
-      id: `seed-${i}`,
-      threadId,
-      resourceId,
-      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-      content: {
-        format: 2 as const,
-        parts: [{ type: 'text' as const, text: `Seed message ${i}: ${filler}` }],
-      },
-      type: 'text',
-      createdAt: new Date(Date.UTC(2025, 0, 1, 8, 30 + i)),
-    }));
-    await storage.saveMessages({ messages: seedMessages });
 
     const state: Record<string, unknown> = {};
     const mockWriter = { custom: async () => {} };
@@ -16895,7 +16882,25 @@ describe('Message ordering regressions', () => {
     expect(result.messages.some(m => m.id === 'fail-user-1')).toBe(true);
     expect(result.messages.some(m => m.id === 'fail-assistant-1')).toBe(true);
 
-    // ── Turn 2: step 0 → step 1 (observation fires, model fails → abort) ──
+    // Seed history (post turn 1) so turn 2's memory provider loads them and pushes
+    // the message-list above the observation threshold. Done after turn 1 so we
+    // don't trip the new step-0 observation path on turn 1 itself.
+    const filler = 'The quick brown fox jumps over the lazy dog. '.repeat(80);
+    const seedMessages = Array.from({ length: 2 }, (_, i) => ({
+      id: `seed-${i}`,
+      threadId,
+      resourceId,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: {
+        format: 2 as const,
+        parts: [{ type: 'text' as const, text: `Seed message ${i}: ${filler}` }],
+      },
+      type: 'text',
+      createdAt: new Date(Date.UTC(2025, 0, 1, 9, 30 + i)),
+    }));
+    await storage.saveMessages({ messages: seedMessages });
+
+    // ── Turn 2: step 0 (observation fires on step 0 once above threshold, model fails → abort) ──
     Object.keys(state).forEach(k => delete state[k]);
     ml = new MessageList({ threadId, resourceId });
     processor = new ObservationalMemoryProcessor(om, createMemoryProvider(om));
@@ -16911,27 +16916,16 @@ describe('Message ordering regressions', () => {
       } as any,
       'input',
     );
-    await processor.processInputStep({
-      messageList: ml,
-      messages: [],
-      requestContext: makeCtx(),
-      stepNumber: 0,
-      state,
-      steps: [],
-      systemMessages: [],
-      model: failingModel as any,
-      retryCount: 0,
-      writer: mockWriter as any,
-      abort,
-    });
 
-    // Step 1: threshold exceeded → sync observation fires → model throws → abort
+    // Step 0: threshold exceeded (seeds + turn 1 messages already in storage and
+    // loaded by the memory provider) → sync observation fires → model throws → abort.
+    // Under the step-0-dead-zone fix, observation no longer waits for step > 0.
     await expect(
       processor.processInputStep({
         messageList: ml,
         messages: [],
         requestContext: makeCtx(),
-        stepNumber: 1,
+        stepNumber: 0,
         state,
         steps: [],
         systemMessages: [],
@@ -16950,14 +16944,17 @@ describe('Message ordering regressions', () => {
     });
     expect(result.messages.some(m => m.id === 'fail-user-1')).toBe(true);
     expect(result.messages.some(m => m.id === 'fail-assistant-1')).toBe(true);
-    // Turn 2's user message was saved at step 1 *before* observation ran
+    // Turn 2's user message was saved *before* observation ran on step 0
     expect(result.messages.some(m => m.id === 'fail-user-2')).toBe(true);
   });
 
   // ─── Test 4: all messages present in storage after processOutputResult ───
 
   it('4 — all messages present in storage immediately after processOutputResult', async () => {
-    const s = await setupOrderingScenario({ messageTokens: 1 });
+    // Threshold high enough that no observation fires during this single turn,
+    // so we can verify the "persist all runtime messages" invariant without
+    // observation-driven cleanup mutating the runtime message list.
+    const s = await setupOrderingScenario({ messageTokens: 100_000 });
 
     s.addUserMessage('Question about testing');
     await s.runStep(0);
