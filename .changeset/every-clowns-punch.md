@@ -2,4 +2,4 @@
 '@mastra/core': minor
 ---
 
-Added shared storage schema support for durable harness sessions.
+Enabled persistent storage for durable harness sessions across storage backends.
