@@ -9,6 +9,7 @@ import {
   MASTRA_USER_PERMISSIONS_KEY,
   MASTRA_USER_ROLES_KEY,
   MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_AUTH_MODE_KEY,
 } from '../constants';
 import { defaultAuthConfig } from './defaults';
 import { parse } from './path-pattern';
@@ -485,8 +486,14 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     }
 
     try {
+      // Determine which RBAC provider to use based on auth mode
+      const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY);
       const serverConfig = mastra.getServer();
-      const rbacProvider = serverConfig?.rbac as IRBACProvider<EEUser> | undefined;
+      const studioConfig = mastra.getStudio?.();
+      // Use studio RBAC if this is a studio request, otherwise use server RBAC
+      const rbacProvider = (
+        authMode === 'studio' ? studioConfig?.rbac ?? serverConfig?.rbac : serverConfig?.rbac
+      ) as IRBACProvider<EEUser> | undefined;
 
       if (rbacProvider) {
         if (!user || typeof user !== 'object' || !('id' in user)) {

@@ -139,7 +139,16 @@ function formatRoute(route: Pick<ServerRoute, 'method' | 'path'>): string {
   return `${route.method} ${route.path}`;
 }
 
-function getFGAProvider(mastra: any): IFGAProvider | undefined {
+function getFGAProvider(mastra: any, requestContext?: RequestContext): IFGAProvider | undefined {
+  // If we have request context, check auth mode to determine which FGA provider to use
+  if (requestContext) {
+    const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY);
+    if (authMode === 'studio') {
+      const studioFga = mastra?.getStudio?.()?.fga;
+      if (studioFga) return studioFga as IFGAProvider;
+    }
+  }
+  // Fall back to server FGA
   return mastra?.getServer?.()?.fga as IFGAProvider | undefined;
 }
 
@@ -707,9 +716,12 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    */
   async validateEELicense(): Promise<void> {
     const serverConfig = this.mastra.getServer();
-    const configuredFeatures = [serverConfig?.rbac ? 'RBAC' : null, serverConfig?.fga ? 'FGA' : null].filter(
-      (feature): feature is string => feature !== null,
-    );
+    const studioConfig = this.mastra.getStudio?.();
+    // Check both server and studio configs for EE features
+    const configuredFeatures = [
+      serverConfig?.rbac || studioConfig?.rbac ? 'RBAC' : null,
+      serverConfig?.fga || studioConfig?.fga ? 'FGA' : null,
+    ].filter((feature): feature is string => feature !== null);
 
     if (configuredFeatures.length === 0) return;
 
@@ -772,7 +784,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    */
   async validateFGAPolicyCoverage(): Promise<void> {
     const serverConfig = this.mastra.getServer();
-    const fgaProvider = serverConfig?.fga;
+    const studioConfig = this.mastra.getStudio?.();
+    // Check both server and studio FGA providers
+    const fgaProvider = serverConfig?.fga ?? studioConfig?.fga;
     if (!fgaProvider) return;
 
     const customRoutes = (this.customApiRoutes ?? serverConfig?.apiRoutes ?? []).filter(
@@ -1154,7 +1168,8 @@ export async function checkRouteFGA(
   requestContext: RequestContext,
   params: Record<string, unknown>,
 ): Promise<{ status: number; error: string; message: string } | null> {
-  const fgaProvider = getFGAProvider(mastra);
+  // Use request context to determine which FGA provider to use (studio vs server)
+  const fgaProvider = getFGAProvider(mastra, requestContext);
   if (!fgaProvider) return null;
 
   const fgaConfig = await resolveRouteFGAConfig(fgaProvider, route, requestContext, params);
