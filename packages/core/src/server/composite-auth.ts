@@ -34,6 +34,9 @@ function isSessionProvider(p: unknown): p is ISessionProvider {
 function isUserProvider(p: unknown): p is IUserProvider {
   return p !== null && typeof p === 'object' && typeof (p as any).getCurrentUser === 'function';
 }
+function isCredentialsProvider(p: unknown): boolean {
+  return p !== null && typeof p === 'object' && typeof (p as any).signIn === 'function';
+}
 
 function isObjectLike(value: unknown): value is object {
   return (typeof value === 'object' && value !== null) || typeof value === 'function';
@@ -78,6 +81,28 @@ export class CompositeAuth
     if (!providers.some(isUserProvider)) {
       this.getCurrentUser = undefined as any;
       this.getUser = undefined as any;
+    }
+    // Proxy credentials provider methods if any inner provider supports them.
+    const credProvider = providers.find(isCredentialsProvider) as any;
+    if (!credProvider) {
+      (this as any).signIn = undefined;
+      (this as any).signUp = undefined;
+      (this as any).requestPasswordReset = undefined;
+      (this as any).resetPassword = undefined;
+      (this as any).isSignUpEnabled = undefined;
+    } else {
+      (this as any).signIn = credProvider.signIn.bind(credProvider);
+      (this as any).signUp = credProvider.signUp.bind(credProvider);
+      if (typeof credProvider.requestPasswordReset === 'function') {
+        (this as any).requestPasswordReset = credProvider.requestPasswordReset.bind(credProvider);
+      }
+      if (typeof credProvider.resetPassword === 'function') {
+        (this as any).resetPassword = credProvider.resetPassword.bind(credProvider);
+      }
+      (this as any).isSignUpEnabled =
+        typeof credProvider.isSignUpEnabled === 'function'
+          ? credProvider.isSignUpEnabled.bind(credProvider)
+          : () => true;
     }
   }
 
