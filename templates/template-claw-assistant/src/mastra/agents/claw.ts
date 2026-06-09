@@ -1,15 +1,11 @@
-import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { AgentBrowser } from '@mastra/agent-browser';
 import { LocalFilesystem, LocalSandbox, Workspace } from '@mastra/core/workspace';
-import { chromium } from 'playwright';
+import 'playwright';
 
-const require = createRequire(import.meta.url);
 const headless = process.env.BROWSER_HEADLESS !== 'false';
 
 function getProjectRoot() {
@@ -27,23 +23,6 @@ function getProjectRoot() {
 }
 
 const workspaceRoot = path.resolve(getProjectRoot(), process.env.CLAW_WORKSPACE_DIR || './workspace');
-
-function getChromiumExecutablePath() {
-  const playwrightCli = path.join(path.dirname(require.resolve('playwright')), 'cli.js');
-
-  if (process.platform === 'linux' && typeof process.getuid === 'function' && process.getuid() === 0) {
-    execFileSync(process.execPath, [playwrightCli, 'install-deps', 'chromium'], { stdio: 'inherit' });
-  }
-
-  let executablePath = chromium.executablePath();
-
-  if (!existsSync(executablePath)) {
-    execFileSync(process.execPath, [playwrightCli, 'install', 'chromium'], { stdio: 'inherit' });
-    executablePath = chromium.executablePath();
-  }
-
-  return executablePath;
-}
 
 const workspace = new Workspace({
   id: 'claw-workspace',
@@ -123,7 +102,10 @@ export const claw = new Agent({
     },
   }),
   workspace,
-  browser: new AgentBrowser({ headless, executablePath: getChromiumExecutablePath() }),
+  browser: new AgentBrowser({
+    headless,
+    ...(process.env.BROWSER_CDP_URL ? { cdpUrl: process.env.BROWSER_CDP_URL, scope: 'shared' as const } : {}),
+  }),
   tools: {
     web_search: openai.tools.webSearch({}),
   },

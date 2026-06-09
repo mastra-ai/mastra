@@ -9,7 +9,7 @@ Claw has resource-scoped observational memory, so it remembers your preferences 
 - Node.js `>= 22.13.0`
 - A Mastra Gateway API key — get one at [gateway.mastra.ai](https://gateway.mastra.ai)
 - (Optional) A Turso database; for local dev, the default `file:./mastra.db` works.
-- Playwright's Chromium browser. The template installs Chromium and its Linux system dependencies on first startup when needed.
+- Playwright's Chromium browser for local runs, or `BROWSER_CDP_URL` for a hosted Chrome/Browserbase/Browserless instance in server deployments.
 
 ## Setup
 
@@ -64,3 +64,4 @@ The agent will pick up new skills on the next request.
 | `TURSO_AUTH_TOKEN`       | Turso auth token (omit for local file DB).                            |
 | `CLAW_WORKSPACE_DIR`     | Override the workspace root directory.                                |
 | `BROWSER_HEADLESS`       | Set to `false` to launch the browser headfully. Defaults to headless. |
+| `BROWSER_CDP_URL`        | Optional hosted browser CDP URL for server deployments.               |

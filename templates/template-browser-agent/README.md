@@ -12,12 +12,13 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 
 - A [Mastra Gateway API key](https://mastra.ai/docs/models/gateways/mastra).
 - A [Turso](https://turso.tech) database URL + auth token (or swap to `:memory:` for ephemeral local runs).
-- Playwright's Chromium browser. The template installs Chromium and its Linux system dependencies on first startup when needed.
+- Playwright's Chromium browser for local runs, or `BROWSER_CDP_URL` for a hosted Chrome/Browserbase/Browserless instance in server deployments.
 
 ## Quickstart 🚀
 
 1. **Add your API keys**
-   - Copy `.env.example` to `.env` and fill it in. Set `BROWSER_HEADLESS=false` if you want to watch the agent click around.
+   - Copy `.env.example` to `.env` and fill it in. Set `BROWSER_HEADLESS=false` if you want to watch the agent click around locally.
+   - For server deployments, set `BROWSER_CDP_URL` to a hosted browser endpoint so the app can start without installing Chromium system packages in the runtime image.
 2. **Start the dev server**
    - Run `npm run dev` and open [localhost:4111](http://localhost:4111).
 
@@ -30,7 +31,10 @@ Ask things like:
 ## How it works
 
 ```ts
-const browser = new AgentBrowser({ headless: true });
+const browser = new AgentBrowser({
+  headless: true,
+  ...(process.env.BROWSER_CDP_URL ? { cdpUrl: process.env.BROWSER_CDP_URL, scope: 'shared' } : {}),
+});
 
 export const browserAgent = new Agent({
   // …
@@ -44,7 +48,7 @@ Passing `browser` to the agent automatically registers the full browser toolset 
 ## Making it yours
 
 - **Add a session profile.** `AgentBrowser({ profile: '/path/to/profile' })` persists cookies, logins, and localStorage between runs.
-- **Use a remote browser.** Pass `cdpUrl` to attach to a Browserbase or hosted Chrome instance instead of launching locally.
+- **Use a remote browser.** Set `BROWSER_CDP_URL` to attach to a Browserbase, Browserless, or hosted Chrome instance instead of launching locally.
 - **Drop tools you don't want.** `AgentBrowser({ excludeTools: ['browser_screenshot'] })` is useful when targeting a text-only model.
 - **Swap the model.** Any `mastra/<provider>/<model>` id works. The browser tools are provider-agnostic.
 

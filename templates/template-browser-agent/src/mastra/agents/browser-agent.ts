@@ -1,35 +1,12 @@
-import { execFileSync } from 'node:child_process';
-import { dirname, join } from 'node:path';
-import { existsSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { AgentBrowser } from '@mastra/agent-browser';
-import { chromium } from 'playwright';
-
-const require = createRequire(import.meta.url);
-
-function getChromiumExecutablePath() {
-  const playwrightCli = join(dirname(require.resolve('playwright')), 'cli.js');
-
-  if (process.platform === 'linux' && typeof process.getuid === 'function' && process.getuid() === 0) {
-    execFileSync(process.execPath, [playwrightCli, 'install-deps', 'chromium'], { stdio: 'inherit' });
-  }
-
-  let executablePath = chromium.executablePath();
-
-  if (!existsSync(executablePath)) {
-    execFileSync(process.execPath, [playwrightCli, 'install', 'chromium'], { stdio: 'inherit' });
-    executablePath = chromium.executablePath();
-  }
-
-  return executablePath;
-}
+import 'playwright';
 
 const browser = new AgentBrowser({
   headless: process.env.BROWSER_HEADLESS !== 'false',
-  executablePath: getChromiumExecutablePath(),
+  ...(process.env.BROWSER_CDP_URL ? { cdpUrl: process.env.BROWSER_CDP_URL, scope: 'shared' as const } : {}),
 });
 
 export const browserAgent = new Agent({
