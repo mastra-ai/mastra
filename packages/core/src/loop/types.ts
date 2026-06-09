@@ -77,7 +77,7 @@ export type StreamInternal = {
   // running tasks to complete. Used by `agent.streamUntilIdle`, which handles
   // continuation from the outside — the inner loop shouldn't also wait.
   skipBgTaskWait?: boolean;
-  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
+  drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   // Signal inputs already stored in the initial message list that still need
   // stream data-part echoes before the first model step.
   initialSignalEchoes?: CreatedAgentSignal[];

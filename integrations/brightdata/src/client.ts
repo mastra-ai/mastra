@@ -135,9 +135,7 @@ function toRequestBody(url: string, zone: string, options: RequestOptions = {}):
 export function getBrightDataClient(config?: BrightDataClientOptions): BrightDataClient {
   const apiKey = config?.apiKey ?? process.env.BRIGHTDATA_API_TOKEN;
   if (!apiKey) {
-    throw new Error(
-      'Bright Data API token is required. Pass { apiKey } or set BRIGHTDATA_API_TOKEN env var.',
-    );
+    throw new Error('Bright Data API token is required. Pass { apiKey } or set BRIGHTDATA_API_TOKEN env var.');
   }
 
   const timeout = config?.timeout;
@@ -152,9 +150,7 @@ export function getBrightDataClient(config?: BrightDataClientOptions): BrightDat
           throw new Error('language must be a two-letter code (e.g. "en", "es")');
         }
 
-        const normalizedOptions = options.language
-          ? { ...options, language: options.language.toLowerCase() }
-          : options;
+        const normalizedOptions = options.language ? { ...options, language: options.language.toLowerCase() } : options;
 
         const url = buildGoogleSearchUrl(query, normalizedOptions);
         return requestBrightData(

@@ -1,6 +1,6 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod/v4';
-import { createWorkflow } from '../workflow';
+import { createWorkflow } from '../create';
 import type { WorkflowScheduleConfig, WorkflowScheduleInput } from './types';
 
 describe('WorkflowScheduleConfig type inference', () => {

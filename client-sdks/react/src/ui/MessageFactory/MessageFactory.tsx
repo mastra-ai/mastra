@@ -217,6 +217,13 @@ const MessageFactoryComponent = ({ message, roles, status, fallback, ...renderer
       </>
     );
 
+    // Wrapping `Pending` slot: when the optimistic user bubble is still
+    // "sending", wrap the parts walk so the consumer can apply a sending style
+    // without the message disappearing from the list.
+    if (metadata?.status === 'pending' && status?.Pending) {
+      content = status.Pending({ children: content, text: joinText(parts), message });
+    }
+
     // Adjacent `Task` slot: when a completion verdict exists it renders after
     // the parts. The factory always invokes `Task` when a verdict is present —
     // it does not filter on `suppressFeedback` (the consumer decides).

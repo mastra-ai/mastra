@@ -266,6 +266,29 @@ describe('toAssistantUIMessage signal messages', () => {
       }),
     ]);
   });
+
+  it('carries a pending status onto user text parts so the bubble can style itself as sending', () => {
+    const pendingUserMessage: MastraDBMessage = {
+      id: 'user-pending-1',
+      role: 'user',
+      createdAt: new Date('2026-05-29T00:00:00.000Z'),
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'optimistic hello' }],
+        metadata: { status: 'pending' },
+      },
+    };
+
+    const converted = toAssistantUIMessage(pendingUserMessage);
+    if (typeof converted.content === 'string') throw new Error('expected structured content parts');
+
+    expect(converted.role).toBe('user');
+    const textPart = converted.content[0];
+    if (textPart?.type !== 'text') throw new Error('expected a text content part');
+    expect(partMetadata(textPart)?.status).toBe('pending');
+  });
 });
 
 describe('toAssistantUIMessage dynamic-tool conversion (via OM pipeline)', () => {
