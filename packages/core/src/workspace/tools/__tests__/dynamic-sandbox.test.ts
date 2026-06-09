@@ -53,10 +53,14 @@ describe('dynamic sandbox tools', () => {
     const workspace = new Workspace({ sandbox: resolver });
     const tools = await createWorkspaceTools(workspace);
 
+    const beforeToolCall = new Date(Date.now() - 1000);
+    workspace.lastAccessedAt = beforeToolCall;
+
     const ctx = { requestContext: new RequestContext() };
     const result = await tools[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND].execute({ command: 'echo hello' }, ctx);
 
     expect(String(result)).toContain('hello');
+    expect(workspace.lastAccessedAt.getTime()).toBeGreaterThan(beforeToolCall.getTime());
   });
 
   it('should resolve different sandboxes per request', async () => {

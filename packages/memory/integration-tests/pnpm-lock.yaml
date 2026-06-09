@@ -107,8 +107,8 @@ importers:
         specifier: ^7.0.15
         version: 7.0.15
       '@types/node':
-        specifier: 22.19.19
-        version: 22.19.19
+        specifier: 22.19.20
+        version: 22.19.20
       ai:
         specifier: ^4.2.2
         version: 4.3.19(react@19.2.5)(zod@3.25.76)
@@ -141,7 +141,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: ^4.1.8
-        version: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@22.19.19)(jsdom@26.1.0)(vite@7.3.1(@types/node@22.19.19))
+        version: 4.1.8(@opentelemetry/api@1.9.0)(@types/node@22.19.20)(jsdom@26.1.0)(vite@7.3.1(@types/node@22.19.20))
 
 packages:
 
@@ -879,8 +879,8 @@ packages:
   '@types/json-schema@7.0.15':
     resolution: {integrity: sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA==}
 
-  '@types/node@22.19.19':
-    resolution: {integrity: sha512-dyh/xO2Fh5bYrfWaaqGrRQQGkNdmYw6AmaAUvYeUMNTWQtvb796ikLdmTchRmOlOiIJ1TDXfWgVx1QkUlQ6Hew==}
+  '@types/node@22.19.20':
+    resolution: {integrity: sha512-6tELRwSDYWW9EdZhbeZmYGZ1/7Djkt+Ah3/ScEYT9cDord7UJzasR/4D3VONg9tQI5CDp+/CZC1AXj2pCFOvpw==}
 
   '@types/tough-cookie@4.0.5':
     resolution: {integrity: sha512-/Ad8+nIOV7Rl++6f1BdKxFSMgmoqEoYbHRpPcx3JEfv8VRsQe9Z4mCXeJBzxs7mbHY/XOZZuXlRNfhpVPbs6ZA==}
@@ -2014,13 +2014,13 @@ snapshots:
 
   '@types/jsdom@27.0.0':
     dependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.20
       '@types/tough-cookie': 4.0.5
       parse5: 7.3.0
 
   '@types/json-schema@7.0.15': {}
 
-  '@types/node@22.19.19':
+  '@types/node@22.19.20':
     dependencies:
       undici-types: 6.21.0
 
@@ -2039,13 +2039,13 @@ snapshots:
       chai: 6.2.2
       tinyrainbow: 3.1.0
 
-  '@vitest/mocker@4.1.8(vite@7.3.1(@types/node@22.19.19))':
+  '@vitest/mocker@4.1.8(vite@7.3.1(@types/node@22.19.20))':
     dependencies:
       '@vitest/spy': 4.1.8
       estree-walker: 3.0.3
       magic-string: 0.30.21
     optionalDependencies:
-      vite: 7.3.1(@types/node@22.19.19)
+      vite: 7.3.1(@types/node@22.19.20)
 
   '@vitest/pretty-format@4.1.8':
     dependencies:
@@ -2539,7 +2539,7 @@ snapshots:
     dependencies:
       react: 19.2.5
 
-  vite@7.3.1(@types/node@22.19.19):
+  vite@7.3.1(@types/node@22.19.20):
     dependencies:
       esbuild: 0.27.7
       fdir: 6.5.0(picomatch@4.0.4)
@@ -2548,13 +2548,13 @@ snapshots:
       rollup: 4.60.4
       tinyglobby: 0.2.16
     optionalDependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.20
       fsevents: 2.3.3
 
-  vitest@4.1.8(@opentelemetry/api@1.9.0)(@types/node@22.19.19)(jsdom@26.1.0)(vite@7.3.1(@types/node@22.19.19)):
+  vitest@4.1.8(@opentelemetry/api@1.9.0)(@types/node@22.19.20)(jsdom@26.1.0)(vite@7.3.1(@types/node@22.19.20)):
     dependencies:
       '@vitest/expect': 4.1.8
-      '@vitest/mocker': 4.1.8(vite@7.3.1(@types/node@22.19.19))
+      '@vitest/mocker': 4.1.8(vite@7.3.1(@types/node@22.19.20))
       '@vitest/pretty-format': 4.1.8
       '@vitest/runner': 4.1.8
       '@vitest/snapshot': 4.1.8
@@ -2571,11 +2571,11 @@ snapshots:
       tinyexec: 1.0.2
       tinyglobby: 0.2.16
       tinyrainbow: 3.1.0
-      vite: 7.3.1(@types/node@22.19.19)
+      vite: 7.3.1(@types/node@22.19.20)
       why-is-node-running: 2.3.0
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
-      '@types/node': 22.19.19
+      '@types/node': 22.19.20
       jsdom: 26.1.0
     transitivePeerDependencies:
       - msw
