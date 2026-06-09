@@ -3,29 +3,10 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 const mocks = vi.hoisted(() => {
   const instances: MockUnixSocketPubSub[] = [];
   let mkdirImpl: () => Promise<void> = async () => {};
+  let readdirImpl: () => Promise<string[]> = async () => [];
+  let rmImpl: () => Promise<void> = async () => {};
 
   class MockPubSub {}
-
-  class MockEventEmitterPubSub {
-    readonly published: Array<{ topic: string; event: unknown }> = [];
-    readonly subscriptions: Map<string, Array<(event: unknown) => void>> = new Map();
-
-    async publish(topic: string, event: unknown): Promise<void> {
-      this.published.push({ topic, event });
-    }
-
-    async subscribe(topic: string, cb: (event: unknown) => void): Promise<void> {
-      const cbs = this.subscriptions.get(topic) ?? [];
-      cbs.push(cb);
-      this.subscriptions.set(topic, cbs);
-    }
-
-    async unsubscribe(): Promise<void> {}
-
-    async flush(): Promise<void> {}
-
-    async close(): Promise<void> {}
-  }
 
   class MockUnixSocketPubSub {
     readonly socketPath: string;
@@ -58,22 +39,30 @@ const mocks = vi.hoisted(() => {
   return {
     instances,
     MockPubSub,
-    MockEventEmitterPubSub,
     MockUnixSocketPubSub,
     mkdir: vi.fn(() => mkdirImpl()),
+    readdir: vi.fn(() => readdirImpl()),
+    rm: vi.fn(() => rmImpl()),
     setMkdirImpl: (impl: () => Promise<void>) => {
       mkdirImpl = impl;
+    },
+    setReaddirImpl: (impl: () => Promise<string[]>) => {
+      readdirImpl = impl;
+    },
+    setRmImpl: (impl: () => Promise<void>) => {
+      rmImpl = impl;
     },
   };
 });
 
 vi.mock('node:fs/promises', () => ({
   mkdir: mocks.mkdir,
+  readdir: mocks.readdir,
+  rm: mocks.rm,
 }));
 
 vi.mock('@mastra/core/events', () => ({
   PubSub: mocks.MockPubSub,
-  EventEmitterPubSub: mocks.MockEventEmitterPubSub,
   UnixSocketPubSub: mocks.MockUnixSocketPubSub,
 }));
 
@@ -94,7 +83,11 @@ describe('SignalsPubSub', () => {
   beforeEach(() => {
     mocks.instances.length = 0;
     mocks.mkdir.mockClear();
+    mocks.readdir.mockClear();
+    mocks.rm.mockClear();
     mocks.setMkdirImpl(async () => {});
+    mocks.setReaddirImpl(async () => []);
+    mocks.setRmImpl(async () => {});
     vi.resetModules();
   });
 
@@ -136,8 +129,9 @@ describe('SignalsPubSub', () => {
     const publishPromise = pubsub.publish(topic, event);
     const subscribePromise = pubsub.subscribe(topic, vi.fn());
 
+    // Wait for cleanup + dedup to settle
     await Promise.resolve();
-    expect(mocks.mkdir).toHaveBeenCalledTimes(1);
+    // mkdir called once for cleanup (readdir), once not yet for socket since mkdir blocks
     expect(mocks.instances).toHaveLength(0);
 
     mkdir.resolve();
@@ -168,7 +162,7 @@ describe('SignalsPubSub', () => {
     expect(pubsub.getSocket(topic)).toBeUndefined();
   });
 
-  it('delegates non-signal topics to in-memory EventEmitterPubSub', async () => {
+  it('routes non-signal topics through Unix sockets', async () => {
     const { createSignalsPubSub } = await import('../signals-pubsub.js');
     const resourceId = '11111111-1111-4111-8111-111111111111';
 
@@ -176,8 +170,39 @@ describe('SignalsPubSub', () => {
     await pubsub.publish('workflows', event);
     await pubsub.publish('workflows-finish', event);
 
-    // No Unix sockets should be created for non-signal topics
-    expect(mocks.instances).toHaveLength(0);
-    expect(mocks.mkdir).not.toHaveBeenCalled();
+    // Non-signal topics should create Unix sockets (no in-memory fallback)
+    expect(mocks.instances).toHaveLength(2);
+    expect(mocks.instances[0]?.socketPath).toBe(`/tmp/mc/${resourceId}/workflows.sock`);
+    expect(mocks.instances[1]?.socketPath).toBe(`/tmp/mc/${resourceId}/workflows-finish.sock`);
+  });
+
+  it('cleans stale .sock files on construction', async () => {
+    mocks.setReaddirImpl(async () => ['workflows.sock', 'workflows-finish.sock', 'some-thread.sock', 'not-a-socket.txt']);
+
+    const { createSignalsPubSub } = await import('../signals-pubsub.js');
+    const resourceId = '11111111-1111-4111-8111-111111111111';
+
+    const pubsub = createSignalsPubSub(resourceId);
+    // Trigger an operation that awaits #cleanupDone
+    await pubsub.publish('workflows', event);
+
+    expect(mocks.readdir).toHaveBeenCalledWith(`/tmp/mc/${resourceId}`);
+    expect(mocks.rm).toHaveBeenCalledTimes(3); // only .sock files
+    expect(mocks.rm).toHaveBeenCalledWith(`/tmp/mc/${resourceId}/workflows.sock`, { force: true });
+    expect(mocks.rm).toHaveBeenCalledWith(`/tmp/mc/${resourceId}/workflows-finish.sock`, { force: true });
+    expect(mocks.rm).toHaveBeenCalledWith(`/tmp/mc/${resourceId}/some-thread.sock`, { force: true });
+  });
+
+  it('handles missing directory during stale socket cleanup gracefully', async () => {
+    mocks.setReaddirImpl(async () => {
+      throw new Error('ENOENT: no such file or directory');
+    });
+
+    const { createSignalsPubSub } = await import('../signals-pubsub.js');
+    const resourceId = '11111111-1111-4111-8111-111111111111';
+
+    const pubsub = createSignalsPubSub(resourceId);
+    // Should not throw — cleanup error is swallowed
+    await expect(pubsub.publish('workflows', event)).resolves.toBeUndefined();
   });
 });

@@ -6308,11 +6308,12 @@ export class Agent<
       const result = await run.start({ ...observabilityContext });
       return result;
     } finally {
-      // Don't unregister here — the WEP's terminal event handler
-      // (workflow.end/workflow.fail on workflows-finish) will clean up
-      // after all events for this run have been processed. This avoids
-      // the race where async transports deliver events after run.start()
-      // resolves but before the registry entry is still needed.
+      // The WEP's terminal event handlers (processWorkflowEnd / processWorkflowFail /
+      // processWorkflowSuspend) unregister the internal workflow after all events for
+      // this run have been fully processed. This safety-net covers the exceptional path
+      // where run.start() throws before a terminal event is published (e.g. subscription
+      // setup failure). In the normal case the WEP already unregistered, so this is a no-op.
+      effectiveMastra.__unregisterInternalWorkflow(executionWorkflow.id, executionRunId);
       // The prepare-stream workflow opts out of persisting via `shouldPersistSnapshot: () => false`,
       // but the evented engine's `EventedRun.start` still writes the initial 'running' row
       // (see issue #17137). Drop it here so this throwaway internal workflow never leaves a
