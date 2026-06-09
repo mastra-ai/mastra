@@ -548,7 +548,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         if (authConfig) {
           const hasPermission = await loadHasPermission();
           if (hasPermission) {
-            const userPermissions = requestContext.get('userPermissions') as string[] | undefined;
+            const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
             const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
 
             if (permissionError) {
@@ -656,7 +656,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           if (authConfig) {
             const hasPermission = await loadHasPermission();
             if (hasPermission) {
-              const userPermissions = requestContext.get('userPermissions') as string[] | undefined;
+              const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
               const permissionError = this.checkRoutePermission(
                 serverRoute,
                 userPermissions,
