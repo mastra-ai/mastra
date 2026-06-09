@@ -189,6 +189,8 @@ async function resolveEffectiveWorkspace(
   context: any,
   targets: ResolveTargets,
 ): Promise<Workspace> {
+  workspace.lastAccessedAt = new Date();
+
   const needsFilesystem = !!(targets.filesystem && !workspace.filesystem && hasFilesystemConfig(workspace));
   const needsSandbox = !!(targets.sandbox && !workspace.sandbox && hasSandboxConfig(workspace));
   if (!needsFilesystem && !needsSandbox) return workspace;

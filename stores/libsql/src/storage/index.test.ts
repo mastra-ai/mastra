@@ -160,3 +160,36 @@ describe('LibSQLStore notifications domain', () => {
     }
   });
 });
+
+describe('LibSQLStore harness domain', () => {
+  it('exposes harness sessions through the composite store', async () => {
+    const client = createTestClient();
+    try {
+      const store = new LibSQLStore({ id: 'libsql-harness-test', client, maxRetries: 1, initialBackoffMs: 10 });
+      await store.init();
+
+      const harness = await store.getStore('harness');
+      expect(harness).toBeDefined();
+
+      await harness!.saveSession({
+        id: 'session-1',
+        ownerId: 'owner-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        origin: 'top-level',
+        modeId: 'mode-1',
+        modelId: '__GATEWAY_OPENAI_MODEL__',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        lastActivityAt: new Date('2026-01-01T00:00:00.000Z'),
+        metadata: { from: 'composite' },
+      });
+
+      await expect(harness!.loadSession('session-1')).resolves.toMatchObject({
+        id: 'session-1',
+        metadata: { from: 'composite' },
+      });
+    } finally {
+      client.close();
+    }
+  });
+});

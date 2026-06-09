@@ -1362,7 +1362,7 @@ describe('DatadogExporter', () => {
           model: 'gpt-4', // Should be excluded (used for modelName)
           provider: 'openai', // Should be excluded (used for modelProvider)
           usage: { inputTokens: 100, outputTokens: 50 }, // Should be excluded (used for metrics)
-          parameters: { temperature: 0.7 }, // Should be excluded
+          parameters: { temperature: 0.7 }, // Should be forwarded to metadata (model settings)
           customLlmAttr: 'preserved', // Should be included
         },
       });
@@ -1405,7 +1405,10 @@ describe('DatadogExporter', () => {
       expect(annotateCall.metadata).not.toHaveProperty('model');
       expect(annotateCall.metadata).not.toHaveProperty('provider');
       expect(annotateCall.metadata).not.toHaveProperty('usage');
-      expect(annotateCall.metadata).not.toHaveProperty('parameters');
+      // parameters carries model settings (temperature, reasoning_effort) and must
+      // be forwarded to metadata so it reaches Datadog.
+      expect(annotateCall.metadata).toHaveProperty('parameters');
+      expect(annotateCall.metadata.parameters).toMatchObject({ temperature: 0.7 });
     });
 
     it('does not emit usage metrics on MODEL_STEP under the current hierarchy', async () => {

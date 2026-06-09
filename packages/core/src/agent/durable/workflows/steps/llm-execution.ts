@@ -72,6 +72,7 @@ const durableLLMInputSchema = z.object({
  */
 const durableLLMOutputSchema = z.object({
   messageListState: z.any(),
+  text: z.string().optional(),
   toolCalls: z.array(
     z.object({
       toolCallId: z.string(),
@@ -545,6 +546,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // 15. Build output
             const output: DurableLLMStepOutput = {
               messageListState: messageList.serialize(),
+              text: textDeltas.join(''),
               toolCalls,
               stepResult: {
                 reason: finishReason as any,
