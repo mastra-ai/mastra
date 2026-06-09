@@ -492,6 +492,7 @@ export class ObservationalMemory {
       activateAfterIdle: parseActivationTTL(observationActivateAfterIdle, observationActivateAfterIdlePath),
       activateOnProviderChange:
         config.observation?.activateOnProviderChange ?? config.activateOnProviderChange ?? false,
+      activateOnSystemChange: config.observation?.activateOnSystemChange ?? config.activateOnSystemChange ?? false,
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -526,6 +527,7 @@ export class ObservationalMemory {
         : (config?.reflection?.bufferActivation ?? OBSERVATIONAL_MEMORY_DEFAULTS.reflection.bufferActivation),
       activateAfterIdle: parseActivationTTL(config.reflection?.activateAfterIdle, 'reflection.activateAfterIdle'),
       activateOnProviderChange: config.reflection?.activateOnProviderChange ?? false,
+      activateOnSystemChange: config.reflection?.activateOnSystemChange ?? false,
       blockAfter: asyncBufferingDisabled
         ? undefined
         : resolveBlockAfter(
@@ -1800,6 +1802,22 @@ ${formattedMessages}
       return hasher.h32ToString(threadId);
     }
     return threadId;
+  }
+
+  /**
+   * Compute an xxhash of the system prompt content, excluding OM-injected observations.
+   * Used for detecting external system prompt changes to trigger early activation.
+   */
+  async computeSystemPromptHash(messageList?: MessageList): Promise<string | undefined> {
+    if (!messageList) return undefined;
+    const untagged = messageList.getSystemMessages();
+    if (!untagged.length) return undefined;
+    const content = untagged
+      .map(msg => (typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)))
+      .join('\n');
+    if (!content) return undefined;
+    const hasher = await this.hasher;
+    return hasher.h64ToString(content);
   }
 
   /**
@@ -3157,13 +3175,37 @@ ${formattedMessages}
       }
     }
 
+    // Compute and persist system prompt hash on every step so we can detect
+    // changes between steps even when no buffered chunks exist yet.
+    let systemPromptChanged = false;
+    let previousSystemPromptHash: string | undefined;
+    let currentSystemPromptHash: string | undefined;
+    if (this.observationConfig.activateOnSystemChange && opts.messageList) {
+      currentSystemPromptHash = await this.computeSystemPromptHash(opts.messageList);
+      if (currentSystemPromptHash) {
+        const storedHash = record.config?._systemPromptHash as string | undefined;
+        if (storedHash && currentSystemPromptHash !== storedHash) {
+          systemPromptChanged = true;
+          previousSystemPromptHash = storedHash;
+        }
+        if (currentSystemPromptHash !== storedHash) {
+          await this.storage
+            .updateObservationalMemoryConfig({
+              id: record.id,
+              config: { _systemPromptHash: currentSystemPromptHash },
+            })
+            .catch(() => {});
+        }
+      }
+    }
+
     // Check for buffered chunks
     const chunks = getBufferedChunks(record);
     if (!chunks.length) {
       return { activated: false, record };
     }
 
-    let activationTriggeredBy: 'threshold' | 'ttl' | 'provider_change' = 'threshold';
+    let activationTriggeredBy: 'threshold' | 'ttl' | 'provider_change' | 'system_change' = 'threshold';
     let activationLastActivityAt: number | undefined;
     let activationActivateAfterIdle: number | undefined;
     let activateAfterIdleExpiredMs: number | undefined;
@@ -3195,6 +3237,8 @@ ${formattedMessages}
         activationTriggeredBy = 'provider_change';
         previousModel = lastModel;
         currentModel = actorModel;
+      } else if (systemPromptChanged) {
+        activationTriggeredBy = 'system_change';
       } else if (ttlExpired) {
         activationTriggeredBy = 'ttl';
         activationLastActivityAt = lastActivityAt;
@@ -3289,6 +3333,8 @@ ${formattedMessages}
           ttlExpiredMs: activateAfterIdleExpiredMs,
           previousModel,
           currentModel,
+          previousSystemPromptHash,
+          currentSystemPromptHash: activationTriggeredBy === 'system_change' ? currentSystemPromptHash : undefined,
           config: {
             ...this.getObservationMarkerConfig(),
             activateAfterIdle: activationActivateAfterIdle ?? this.observationConfig.activateAfterIdle,

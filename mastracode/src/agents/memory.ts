@@ -112,6 +112,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
           scope: omScope,
           activateAfterIdle: 'auto',
           activateOnProviderChange: true,
+          activateOnSystemChange: true,
           observation: {
             bufferTokens: isResourceScope ? false : 1 / 5,
             bufferActivation: isResourceScope ? undefined : 2000,
@@ -124,6 +125,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
             observeAttachments,
           },
           reflection: {
+            activateOnSystemChange: true,
             bufferActivation: isResourceScope ? undefined : 1 / 2,
             blockAfter: 1.1,
             model: getReflectorModel,

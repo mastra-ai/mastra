@@ -87,6 +87,7 @@ export class ObservationStep {
       const record = this.turn.record;
       const preReflectGeneration = record.generationCount;
       const obsTokens = record.observationTokenCount ?? 0;
+      const systemPromptHash = await om.computeSystemPromptHash(messageList);
       await om.reflector.maybeReflect({
         record,
         observationTokens: obsTokens,
@@ -97,6 +98,7 @@ export class ObservationStep {
         requestContext: this.turn.requestContext,
         observabilityContext: this.turn.observabilityContext,
         lastActivityAt: getLastActivityFromMessages(messageList.get.all.db()),
+        currentSystemPromptHash: systemPromptHash,
       });
       await this.turn.refreshRecord();
       if (this.turn.record.generationCount > preReflectGeneration) {
@@ -340,6 +342,7 @@ export class ObservationStep {
         // completed buffered reflection is activated instantly instead of
         // running a redundant sync reflection from scratch.
         const postActivationRecord = activation.record;
+        const thresholdSystemPromptHash = await om.computeSystemPromptHash(messageList);
         await om.reflector.maybeReflect({
           record: postActivationRecord,
           observationTokens: postActivationRecord.observationTokenCount ?? 0,
@@ -350,6 +353,7 @@ export class ObservationStep {
           requestContext: this.turn.requestContext,
           observabilityContext: this.turn.observabilityContext,
           lastActivityAt: getLastActivityFromMessages(messageList.get.all.db()),
+          currentSystemPromptHash: thresholdSystemPromptHash,
         });
 
         return {

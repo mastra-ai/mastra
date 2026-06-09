@@ -166,6 +166,13 @@ export interface ObservationConfig {
   activateOnProviderChange?: boolean;
 
   /**
+   * Force-activate buffered observations when the system prompt changes externally.
+   * Uses xxhash to detect changes in the system prompt (excluding OM-injected observations).
+   * If unset, top-level `activateOnSystemChange` is used for observations.
+   */
+  activateOnSystemChange?: boolean;
+
+  /**
    * Token threshold above which synchronous (blocking) observation is forced.
    * Between `messageTokens` and `blockAfter`, only async buffering/activation is used.
    * Above `blockAfter`, a synchronous observation runs as a last resort.
@@ -297,6 +304,12 @@ export interface ReflectionConfig {
    * Reflections do not inherit top-level `activateOnProviderChange`; set this explicitly to enable.
    */
   activateOnProviderChange?: boolean;
+
+  /**
+   * Force-activate buffered reflections when the system prompt changes externally.
+   * Reflections do not inherit top-level `activateOnSystemChange`; set this explicitly to enable.
+   */
+  activateOnSystemChange?: boolean;
 
   /**
    * Ratio (0-1) controlling when async reflection buffering starts.
@@ -696,8 +709,8 @@ export interface DataOmActivationPart {
     /** The actual observations from activated chunks (for UI display) */
     observations?: string;
 
-    /** Whether activation was triggered by threshold crossing, activateAfterIdle expiry, or a model/provider change */
-    triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
+    /** Whether activation was triggered by threshold crossing, activateAfterIdle expiry, a model/provider change, or a system prompt change */
+    triggeredBy?: 'threshold' | 'ttl' | 'provider_change' | 'system_change';
 
     /** Unix-ms timestamp of the last assistant message part used for TTL checks */
     lastActivityAt?: number;
@@ -710,6 +723,12 @@ export interface DataOmActivationPart {
 
     /** Current actor model identifier that triggered activation, e.g. anthropic/claude-3-7-sonnet */
     currentModel?: string;
+
+    /** Previous system prompt hash before the change that triggered activation */
+    previousSystemPromptHash?: string;
+
+    /** Current system prompt hash that triggered activation */
+    currentSystemPromptHash?: string;
   };
 }
 
@@ -944,6 +963,18 @@ export interface ObservationalMemoryConfig {
    */
   activateOnProviderChange?: boolean;
 
+  /**
+   * Force-activate buffered observations when the system prompt changes externally.
+   * Uses xxhash to detect changes in the system prompt content (excluding OM-injected observations).
+   * Useful when someone has a dynamic system prompt and something external changes it.
+   *
+   * Reflections do not inherit this setting. Use `reflection.activateOnSystemChange`
+   * to opt reflections into system-change activation.
+   *
+   * @default false
+   */
+  activateOnSystemChange?: boolean;
+
   /** @internal Parent Mastra instance for custom gateway model resolution. */
   mastra?: Mastra;
 }
@@ -973,6 +1004,8 @@ export interface ResolvedObservationConfig {
   activateAfterIdle?: ResolvedActivationTTL;
   /** Force-activate buffered observations when the actor model/provider changes */
   activateOnProviderChange?: boolean;
+  /** Force-activate buffered observations when the system prompt changes externally */
+  activateOnSystemChange?: boolean;
   /** Token threshold above which synchronous observation is forced */
   blockAfter?: number;
   /** Optional token budget for observer context optimization (0 = full truncation, false = disabled) */
@@ -1000,6 +1033,8 @@ export interface ResolvedReflectionConfig {
   activateAfterIdle?: ResolvedActivationTTL;
   /** Force-activate buffered reflections when the actor model/provider changes */
   activateOnProviderChange?: boolean;
+  /** Force-activate buffered reflections when the system prompt changes externally */
+  activateOnSystemChange?: boolean;
   /** Token threshold above which synchronous reflection is forced */
   blockAfter?: number;
   /** Custom instructions to append to the Reflector's system prompt */

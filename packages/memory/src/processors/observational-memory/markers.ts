@@ -207,11 +207,13 @@ export function createActivationMarker(params: {
   threadId: string;
   generationCount: number;
   observations?: string;
-  triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
+  triggeredBy?: 'threshold' | 'ttl' | 'provider_change' | 'system_change';
   lastActivityAt?: number;
   ttlExpiredMs?: number;
   previousModel?: string;
   currentModel?: string;
+  previousSystemPromptHash?: string;
+  currentSystemPromptHash?: string;
   config: ObservationMarkerConfig;
 }): DataOmActivationPart {
   return {
@@ -234,6 +236,8 @@ export function createActivationMarker(params: {
       ttlExpiredMs: params.ttlExpiredMs,
       previousModel: params.previousModel,
       currentModel: params.currentModel,
+      previousSystemPromptHash: params.previousSystemPromptHash,
+      currentSystemPromptHash: params.currentSystemPromptHash,
     },
   };
 }
