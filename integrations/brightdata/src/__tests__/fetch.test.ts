@@ -58,9 +58,7 @@ describe('createBrightDataFetchTool', () => {
 
     const tool = createBrightDataFetchTool({ apiKey: 'test-key' });
 
-    await expect(tool.execute!({ url: 'https://example.com' }, {} as any)).rejects.toThrow(
-      'Network unreachable',
-    );
+    await expect(tool.execute!({ url: 'https://example.com' }, {} as any)).rejects.toThrow('Network unreachable');
   });
 
   it('should make one Bright Data request after a successful execute', async () => {
