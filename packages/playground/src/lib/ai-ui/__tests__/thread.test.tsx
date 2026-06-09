@@ -72,11 +72,11 @@ const Wrapper = ({ children }: { children: ReactNode }) => {
   );
 };
 
-const renderThread = (initialMessages: MastraDBMessage[]) =>
+const renderThread = (initialMessages: MastraDBMessage[], props: { hasModelList?: boolean } = { hasModelList: true }) =>
   render(
     <Wrapper>
       <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={initialMessages}>
-        <Thread agentId="agent-1" agentName="Helper" threadId="thread-1" hasModelList />
+        <Thread agentId="agent-1" agentName="Helper" threadId="thread-1" hasModelList={props.hasModelList} />
       </ChatProvider>
     </Wrapper>,
   );
@@ -86,6 +86,13 @@ const userMessage = (text: string): MastraDBMessage => ({
   role: 'user',
   createdAt: new Date(),
   content: { format: 2, parts: [{ type: 'text', text }] },
+});
+
+const assistantMessage = (text: string, metadata?: MastraDBMessage['content']['metadata']): MastraDBMessage => ({
+  id: `a-${text}`,
+  role: 'assistant',
+  createdAt: new Date(),
+  content: { format: 2, parts: [{ type: 'text', text }], metadata },
 });
 
 afterEach(() => {
@@ -118,6 +125,39 @@ describe('Thread', () => {
 
     expect(screen.getByText('previous question')).toBeTruthy();
     expect(screen.queryByText('How can I help you today?')).toBeFalsy();
+  });
+
+  it('shows assistant model attribution when model-list metadata is available', async () => {
+    server.use(...baseHandlers());
+
+    await act(async () => {
+      renderThread([
+        assistantMessage('model-list answer', {
+          custom: { modelMetadata: { modelProvider: 'openai', modelId: 'gpt-4o-mini' } },
+        }),
+      ]);
+    });
+
+    expect(screen.getByText('model-list answer')).toBeTruthy();
+    expect(screen.getByText('openai/gpt-4o-mini')).toBeTruthy();
+  });
+
+  it('hides assistant model attribution outside model-list mode', async () => {
+    server.use(...baseHandlers());
+
+    await act(async () => {
+      renderThread(
+        [
+          assistantMessage('single-model answer', {
+            custom: { modelMetadata: { modelProvider: 'openai', modelId: 'gpt-4o-mini' } },
+          }),
+        ],
+        { hasModelList: false },
+      );
+    });
+
+    expect(screen.getByText('single-model answer')).toBeTruthy();
+    expect(screen.queryByText('openai/gpt-4o-mini')).toBeFalsy();
   });
 
   it('sends the composer text through the agent stream endpoint', async () => {
@@ -209,6 +249,119 @@ describe('Thread', () => {
     await act(async () => {
       resolveStream?.();
       await new Promise(resolve => setTimeout(resolve, 50));
+    });
+  });
+});
+
+const sseChunk = (chunk: unknown) => `data: ${JSON.stringify(chunk)}\n\n`;
+
+describe('Thread signal-path user-message reconciliation', () => {
+  beforeEach(() => {
+    (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'true';
+    server.resetHandlers();
+  });
+
+  it('keeps the same user-row DOM node when the data-user-message echo swaps the message id', async () => {
+    // A subscribe stream we control so we can push the server echo on demand.
+    let subscribeController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const encoder = new TextEncoder();
+    const subscribeStream = () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          subscribeController = controller;
+        },
+      });
+
+    let capturedClientMessageId: string | undefined;
+    const serverSignalId = 'server-signal-id';
+
+    server.use(
+      http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
+      http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () =>
+        HttpResponse.json({
+          workingMemory: null,
+          source: 'thread',
+          workingMemoryTemplate: null,
+          threadExists: false,
+        }),
+      ),
+      http.get(`${BASE_URL}/api/agents/:agentId/voice/speakers`, () => HttpResponse.json([])),
+      http.post(
+        `${BASE_URL}/api/agents/:agentId/threads/subscribe`,
+        () =>
+          new HttpResponse(subscribeStream(), {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      ),
+      http.post(`${BASE_URL}/api/agents/agent-1/send-message`, async ({ request }) => {
+        const body = (await request.json()) as {
+          message?: { metadata?: { clientMessageId?: string } };
+        };
+        capturedClientMessageId = body.message?.metadata?.clientMessageId;
+        return HttpResponse.json({ accepted: true, runId: 'run-1', signal: { id: serverSignalId } });
+      }),
+    );
+
+    await act(async () => {
+      renderThread([]);
+    });
+
+    // Let the mount-time thread subscription establish.
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    const textarea = screen.getByPlaceholderText('Enter your message...');
+    await act(async () => {
+      fireEvent.change(textarea, { target: { value: 'echo reconciliation' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+      await new Promise(resolve => setTimeout(resolve, 80));
+    });
+
+    // The optimistic pending bubble is rendered. Capture its DOM node and the
+    // client-generated correlation id sent to the server.
+    const userRow = await waitFor(() => {
+      const el = document.querySelector('[data-message-pending="true"]');
+      if (!el) throw new Error('pending user row not yet rendered');
+      return el as HTMLElement;
+    });
+    expect(capturedClientMessageId).toBeTruthy();
+    const optimisticId = userRow.getAttribute('data-message-id');
+    expect(optimisticId).toBeTruthy();
+    expect(optimisticId).not.toBe(serverSignalId);
+
+    // Push the server echo carrying the same clientMessageId but a new signal id.
+    await act(async () => {
+      subscribeController?.enqueue(
+        encoder.encode(
+          sseChunk({
+            type: 'data-user-message',
+            data: {
+              type: 'user-message',
+              id: serverSignalId,
+              metadata: { clientMessageId: capturedClientMessageId },
+            },
+          }),
+        ),
+      );
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    // The row must be updated in place (same node instance), not remounted:
+    // its data-message-id now reflects the server id and the pending styling is gone.
+    await waitFor(() => {
+      expect(userRow.getAttribute('data-message-id')).toBe(serverSignalId);
+    });
+    expect(userRow.isConnected).toBe(true);
+    expect(userRow.getAttribute('data-message-pending')).toBeNull();
+    // Still exactly one user bubble for this turn (no duplicate from reconciliation).
+    expect(screen.getByText('echo reconciliation')).toBeTruthy();
+
+    await act(async () => {
+      subscribeController?.close();
+      await new Promise(resolve => setTimeout(resolve, 10));
     });
   });
 });

@@ -16,9 +16,11 @@ import { ToolInvocationPartRenderer } from './renderers/tool-invocation-part-ren
 import { UserFilePartRenderer } from './renderers/user-file-part-renderer';
 import { UserTextPartRenderer } from './renderers/user-text-part-renderer';
 import type { DataMessagePart } from '../tools/tool-card';
+import { ProviderLogo } from '@/domains/llm/components/provider-logo';
 
 export interface MessageRowProps {
   message: MastraDBMessage;
+  hasModelList?: boolean;
   /** Whether the read-aloud voice is currently speaking this message. */
   isSpeaking?: boolean;
   /** Read the assistant message aloud. Receives the message text. */
@@ -89,15 +91,25 @@ const hasVisibleAssistantText = (message: MastraDBMessage, metadata: MessageMeta
     return true;
   });
 
+const getModelMetadata = (metadata: MessageMetadata | undefined) => {
+  const modelMetadata = metadata?.custom?.modelMetadata;
+  const modelId = modelMetadata?.modelId;
+  const modelProvider = modelMetadata?.modelProvider;
+  if (!modelId || !modelProvider) return undefined;
+  return { modelId, modelProvider };
+};
+
 /**
  * Read part-level optimistic `pending` status, stamped onto user text parts.
  */
-const isPendingMessage = (message: MastraDBMessage): boolean =>
-  message.content.parts.some(part => {
+const isPendingMessage = (message: MastraDBMessage): boolean => {
+  if (message.content.metadata?.status === 'pending') return true;
+  return message.content.parts.some(part => {
     const metadata = (part as { metadata?: unknown }).metadata;
     if (!metadata || typeof metadata !== 'object' || !('status' in metadata)) return false;
     return (metadata as { status?: unknown }).status === 'pending';
   });
+};
 
 const CopyButton = ({ text }: { text: string }) => {
   const [copied, setCopied] = useState(false);
@@ -119,16 +131,26 @@ const CopyButton = ({ text }: { text: string }) => {
 
 const AssistantActionBar = ({
   text,
+  modelMetadata,
   isSpeaking,
   onReadAloud,
   onStopSpeaking,
 }: {
   text: string;
+  modelMetadata?: { modelId: string; modelProvider: string };
   isSpeaking?: boolean;
   onReadAloud?: (text: string) => void;
   onStopSpeaking?: () => void;
 }) => (
   <div className="flex gap-1 items-center transition-all relative">
+    {modelMetadata && (
+      <div className="flex items-center gap-1 pr-2 text-icon5 text-ui-xs leading-ui-xs">
+        <ProviderLogo providerId={modelMetadata.modelProvider} size={14} />
+        <span>
+          {modelMetadata.modelProvider}/{modelMetadata.modelId}
+        </span>
+      </div>
+    )}
     {(onReadAloud || onStopSpeaking) &&
       (isSpeaking ? (
         <Button size="icon-md" tooltip="Stop" aria-label="Stop" onClick={() => onStopSpeaking?.()}>
@@ -143,9 +165,10 @@ const AssistantActionBar = ({
   </div>
 );
 
-export const MessageRow = ({ message, isSpeaking, onReadAloud, onStopSpeaking }: MessageRowProps) => {
+export const MessageRow = ({ message, hasModelList, isSpeaking, onReadAloud, onStopSpeaking }: MessageRowProps) => {
   const dbMessage = toDisplayMessage(message);
   const metadata = getMessageMetadata(message);
+  const modelMetadata = hasModelList ? getModelMetadata(metadata) : undefined;
   const dataParts = useMemo(() => getDataParts(message), [message]);
 
   const sharedRenderers = useMemo<MessageRenderers>(
@@ -212,6 +235,7 @@ export const MessageRow = ({ message, isSpeaking, onReadAloud, onStopSpeaking }:
         <div className="h-6 pt-4 flex gap-2 items-center">
           <AssistantActionBar
             text={getTextFromParts(message)}
+            modelMetadata={modelMetadata}
             isSpeaking={isSpeaking}
             onReadAloud={onReadAloud}
             onStopSpeaking={onStopSpeaking}

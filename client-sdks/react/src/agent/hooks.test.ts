@@ -705,6 +705,45 @@ describe('useChat forwards clientTools', () => {
     expect(result.current.messages.map(message => message.id)).toEqual(['msg-was-pending']);
   });
 
+  it('strips a leftover clientMessageId even when the reloaded message is not pending', async () => {
+    // The correlation key is sent to the server with the message and can be
+    // persisted, so a reloaded (non-pending) message may still carry it. It must
+    // never survive into rendered state; the row key falls back to the stable id.
+    const initialMessages = [
+      {
+        id: 'msg-confirmed',
+        role: 'user',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'hello' }],
+          metadata: {
+            mode: 'stream',
+            [CLIENT_MESSAGE_ID_KEY]: 'client-msg-leftover',
+          },
+        },
+      },
+    ] satisfies MastraDBMessage[];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          initialMessages,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      const lastMessage = result.current.messages.at(-1);
+      const metadata = lastMessage?.content?.metadata as MastraDBMessageMetadata | undefined;
+      expect(metadata?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
+    });
+    expect(result.current.messages.map(message => message.id)).toEqual(['msg-confirmed']);
+  });
+
   it('unsubscribes without aborting when thread signals are disabled after subscribing', async () => {
     keepSubscriptionOpen = true;
     const { rerender } = renderHook(

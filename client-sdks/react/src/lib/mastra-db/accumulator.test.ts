@@ -972,7 +972,23 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
     expect(userMessages).toHaveLength(1);
     expect(userMessages[0].id).toBe('server-1');
     expect(userMessages[0].content.metadata?.status).toBeUndefined();
-    expect(userMessages[0].content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
+    // The correlation key is retained through reconciliation so the rendered row
+    // key stays stable across the id swap (no unmount/remount). It is stripped
+    // only later, on reload, by `resolveInitialMessages`.
+    expect(userMessages[0].content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe('corr-1');
+  });
+
+  it('keeps the correlation key but adopts the server id and clears pending on reconciliation', () => {
+    // Regression guard for the streaming layout shift: the rendered row key
+    // prefers `clientMessageId`, so it must survive the id swap unchanged while
+    // the transient pending status is cleared and the server id is adopted.
+    const pending = pendingUserMessage('client-1', 'hello', 'corr-1');
+    const out = reduce([dataUserMessageChunk('server-1', 'hello', 'user', 'corr-1')], streamMeta(), [pending]);
+
+    const user = out.find(m => m.role === 'user');
+    expect(user?.id).toBe('server-1');
+    expect(user?.content.metadata?.status).toBeUndefined();
+    expect(user?.content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe('corr-1');
   });
 
   it('only resolves the optimistic message whose clientMessageId matches the echo', () => {
@@ -986,7 +1002,8 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
     const resolved = out.find(m => m.id === 'server-2');
     const stillPending = out.find(m => m.id === 'client-1');
     expect(resolved?.content.metadata?.status).toBeUndefined();
-    expect(resolved?.content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
+    // Resolved bubble keeps its correlation key for a stable render key.
+    expect(resolved?.content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe('corr-2');
     expect(stillPending?.content.metadata?.status).toBe('pending');
     expect(out.filter(m => m.role === 'user')).toHaveLength(2);
   });

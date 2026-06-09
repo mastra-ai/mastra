@@ -79,18 +79,22 @@ const resolveInitialMessages = (messages: MastraDBMessage[]): MastraDBMessage[] 
     .map(message => {
       const metadata = message.content?.metadata as MastraDBMessageMetadata | undefined;
 
-      // A persisted/refetched thread must never show a stuck "sending" bubble:
-      // the pending status and its `clientMessageId` correlation key are
-      // transient UI state, so strip them on reload.
+      // A persisted/refetched thread must never show a stuck "sending" bubble
+      // and must never carry the optimistic correlation key: the pending status
+      // and its `clientMessageId` are transient UI state. The `clientMessageId`
+      // can survive into storage (it is sent to the server with the message), so
+      // strip it on every reload regardless of pending status; the rendered row
+      // key falls back to the stable server `id`.
       const normalizedMessage =
-        metadata?.status === 'pending'
+        metadata && (metadata.status === 'pending' || CLIENT_MESSAGE_ID_KEY in metadata)
           ? (() => {
-              const { status: _omitStatus, [CLIENT_MESSAGE_ID_KEY]: _omitClientMessageId, ...restMetadata } = metadata;
+              const { [CLIENT_MESSAGE_ID_KEY]: _omitClientMessageId, ...rest } = metadata;
+              const { status: _omitStatus, ...restWithoutStatus } = rest;
               return {
                 ...message,
                 content: {
                   ...message.content,
-                  metadata: restMetadata,
+                  metadata: metadata.status === 'pending' ? restWithoutStatus : rest,
                 },
               };
             })()

@@ -1,7 +1,7 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { Avatar, Button, ButtonsGroup, cn, PendingIndicator, useAutoscroll } from '@mastra/playground-ui';
 import type { MessageFactoryPart } from '@mastra/react';
-import { useSpeechRecognition } from '@mastra/react';
+import { CLIENT_MESSAGE_ID_KEY, useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, EyeIcon, Mic, PlusIcon } from 'lucide-react';
 import { startTransition, useEffect, useRef, useState } from 'react';
 
@@ -104,15 +104,26 @@ export const Thread = ({ agentName, agentId, threadId, hasModelList, hideModelSw
             >
               <BracketOverlay containerRef={messagesContainerRef} />
               <div className="flex flex-col gap-6 py-6">
-                {messages.map(message => (
-                  <MessageRow
-                    key={message.id}
-                    message={message}
-                    isSpeaking={isSpeaking}
-                    onReadAloud={readAloud}
-                    onStopSpeaking={stopSpeaking}
-                  />
-                ))}
+                {messages.map(message => {
+                  // Prefer the optimistic `clientMessageId` as the React key so the
+                  // user row keeps a stable identity when `data-user-message`
+                  // reconciliation swaps `message.id` to the server signal id. A
+                  // changing key would unmount/remount the row and shift the
+                  // trailing pending indicator. Falls back to `message.id` for
+                  // messages without a correlation key (assistant, reloaded).
+                  const messageKey =
+                    (message.content.metadata?.[CLIENT_MESSAGE_ID_KEY] as string | undefined) ?? message.id;
+                  return (
+                    <MessageRow
+                      key={messageKey}
+                      message={message}
+                      hasModelList={hasModelList}
+                      isSpeaking={isSpeaking}
+                      onReadAloud={readAloud}
+                      onStopSpeaking={stopSpeaking}
+                    />
+                  );
+                })}
                 {delayedPending && <PendingIndicator />}
               </div>
 
