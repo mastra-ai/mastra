@@ -291,11 +291,12 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
   }
 
   async #initStorageAdapter(): Promise<void> {
-    if (this.#storageAdapter?.disableInit || process.env.MASTRA_DISABLE_STORAGE_INIT === 'true') {
+    const adapter = this.#storageAdapter;
+    if (!adapter || adapter.disableInit || process.env.MASTRA_DISABLE_STORAGE_INIT === 'true') {
       return;
     }
 
-    this.#storageAdapterInit ??= this.#storageAdapter.init().catch(err => {
+    this.#storageAdapterInit ??= adapter.init().catch(err => {
       this.#storageAdapterInit = undefined;
       throw err;
     });
