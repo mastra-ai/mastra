@@ -305,7 +305,9 @@ describe('AgentBuilderAgentEdit — navigation, header, autosave', () => {
     await waitFor(() => expect(listToolkits).toHaveBeenCalled());
     await waitFor(() => expect(listTools).toHaveBeenCalled());
     await waitFor(() => expect(listConnections).toHaveBeenCalled());
-    await new Promise(resolve => setTimeout(resolve, 700));
+    // Autosave debounce is 600ms (use-autosave-agent); wait well past it so a
+    // wrongly-triggered autosave would reliably fire before this assertion.
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     expect(patchAgent).not.toHaveBeenCalled();
   });
