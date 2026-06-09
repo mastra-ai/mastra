@@ -81,14 +81,14 @@ describe('useTokenUsageTimeSeries', () => {
     });
 
     expect(result.current.data?.interval).toBe('1d');
-    expect(result.current.data?.data).toEqual([
+    const points = result.current.data?.data;
+    expect(points).toMatchObject([
       {
         time: 'Jun 01',
         tsMs: new Date('2026-06-01T00:00:00.000Z').getTime(),
         input: 1200,
         output: 300,
         total: 1500,
-        cost: 0.041999999999999996,
         costUnit: 'usd',
       },
       {
@@ -97,7 +97,6 @@ describe('useTokenUsageTimeSeries', () => {
         input: 800,
         output: 0,
         total: 800,
-        cost: 0.008,
         costUnit: 'usd',
       },
       {
@@ -106,10 +105,12 @@ describe('useTokenUsageTimeSeries', () => {
         input: 0,
         output: 200,
         total: 200,
-        cost: 0.02,
         costUnit: 'usd',
       },
     ]);
+    expect(points?.[0]?.cost).toBeCloseTo(0.042);
+    expect(points?.[1]?.cost).toBeCloseTo(0.008);
+    expect(points?.[2]?.cost).toBeCloseTo(0.02);
   });
 
   it('uses hourly buckets for the 24h preset', async () => {

@@ -1,4 +1,4 @@
-import type { GetMetricTimeSeriesResponse } from '@mastra/core/storage';
+import type { GetMetricTimeSeriesResponse } from '@mastra/client-js';
 
 export const inputTokenSeries: GetMetricTimeSeriesResponse = {
   series: [

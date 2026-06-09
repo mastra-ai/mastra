@@ -51,9 +51,11 @@ export function TokenUsageTimelineCardView({
   const [activeTab, setActiveTab] = useState<TokenUsageTimelineTab>('tokens');
 
   const points = data ?? [];
+  const chartPoints = points.map(point => ({ ...point }));
   const hasData = points.length > 0;
   const totalTokens = points.reduce((sum, point) => sum + point.total, 0);
   const costPoints = points.filter(point => point.cost != null && point.cost > 0);
+  const costChartPoints = costPoints.map(point => ({ ...point }));
   const uniqueCostUnits = new Set(costPoints.map(point => point.costUnit).filter((unit): unit is string => !!unit));
   const hasSingleCostUnit = uniqueCostUnits.size === 1 && costPoints.every(point => point.costUnit != null);
   const costUnit = hasSingleCostUnit ? ([...uniqueCostUnits][0] ?? null) : null;
@@ -104,11 +106,11 @@ export function TokenUsageTimelineCardView({
                 <Tab value="cost">Cost</Tab>
               </TabList>
               <TabContent value="tokens">
-                <MetricsLineChart data={points} series={tokenSeries} />
+                <MetricsLineChart data={chartPoints} series={tokenSeries} />
               </TabContent>
               <TabContent value="cost">
                 {hasCostData ? (
-                  <MetricsLineChart data={costPoints} series={costSeries} />
+                  <MetricsLineChart data={costChartPoints} series={costSeries} />
                 ) : (
                   <MetricsCard.NoData message="No cost data yet" />
                 )}
