@@ -251,6 +251,7 @@ const sidebars = {
             { type: 'doc', id: 'evals/keyword-coverage', label: 'Keyword Coverage Scorer' },
             { type: 'doc', id: 'evals/noise-sensitivity', label: 'Noise Sensitivity Scorer' },
             { type: 'doc', id: 'evals/prompt-alignment', label: 'Prompt Alignment Scorer' },
+            { type: 'doc', id: 'evals/rubric', label: 'Rubric Scorer' },
             { type: 'doc', id: 'evals/textual-difference', label: 'Textual Difference Scorer' },
             { type: 'doc', id: 'evals/tone-consistency', label: 'Tone Consistency Scorer' },
             { type: 'doc', id: 'evals/tool-call-accuracy', label: 'Tool Call Accuracy Scorers' },
