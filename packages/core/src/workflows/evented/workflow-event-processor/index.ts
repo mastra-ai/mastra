@@ -505,6 +505,12 @@ export class WorkflowEventProcessor extends EventProcessor {
       runId,
       data: { ...args, workflow: undefined, state: finalState },
     });
+
+    // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
+    // now that all events for this run have been processed.
+    if (this.mastra.__hasInternalWorkflow(args.workflowId, runId)) {
+      this.mastra.__unregisterInternalWorkflow(args.workflowId, runId);
+    }
   }
 
   protected async processWorkflowSuspend(args: ProcessorArgs) {
@@ -674,6 +680,12 @@ export class WorkflowEventProcessor extends EventProcessor {
       runId,
       data: { ...args, workflow: undefined, state: finalState },
     });
+
+    // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
+    // now that all events for this run have been processed.
+    if (this.mastra.__hasInternalWorkflow(args.workflowId, runId)) {
+      this.mastra.__unregisterInternalWorkflow(args.workflowId, runId);
+    }
   }
 
   protected async processWorkflowStepRun({

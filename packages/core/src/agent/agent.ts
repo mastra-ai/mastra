@@ -6308,16 +6308,11 @@ export class Agent<
       const result = await run.start({ ...observabilityContext });
       return result;
     } finally {
-      // Defer unregistration so in-flight events delivered asynchronously
-      // (e.g. through UnixSocketPubSub) can still resolve the workflow.
-      // With synchronous transports (EventEmitterPubSub) the microtask
-      // fires immediately after; with async transports it gives the event
-      // loop one turn to drain queued callbacks. The sweep mechanism
-      // (#sweepStaleRunScopedWorkflows) acts as a safety net for any
-      // registration that outlives this grace period.
-      queueMicrotask(() => {
-        effectiveMastra.__unregisterInternalWorkflow(executionWorkflow.id, executionRunId);
-      });
+      // Don't unregister here — the WEP's terminal event handler
+      // (workflow.end/workflow.fail on workflows-finish) will clean up
+      // after all events for this run have been processed. This avoids
+      // the race where async transports deliver events after run.start()
+      // resolves but before the registry entry is still needed.
       // The prepare-stream workflow opts out of persisting via `shouldPersistSnapshot: () => false`,
       // but the evented engine's `EventedRun.start` still writes the initial 'running' row
       // (see issue #17137). Drop it here so this throwaway internal workflow never leaves a
