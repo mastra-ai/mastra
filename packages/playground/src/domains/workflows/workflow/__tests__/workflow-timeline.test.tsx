@@ -21,9 +21,7 @@ function stubWorkflow() {
 }
 
 function stubRunById(runId: string, response: GetWorkflowRunByIdResponse) {
-  server.use(
-    http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs/${runId}`, () => HttpResponse.json(response)),
-  );
+  server.use(http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs/${runId}`, () => HttpResponse.json(response)));
 }
 
 function renderTimeline(initialRunId?: string) {
