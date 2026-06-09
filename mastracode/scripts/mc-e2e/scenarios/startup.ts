@@ -1,5 +1,12 @@
+import { execSync } from 'node:child_process';
 import { expect } from '@microsoft/tui-test';
 import type { McE2eScenario } from './types.js';
+
+function currentGitBranchPattern(): RegExp {
+  const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
+  const escaped = branch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`Branch:\\s+${escaped}`, 'i');
+}
 
 export const startupScenario: McE2eScenario = {
   name: 'startup',
@@ -14,7 +21,7 @@ export const startupScenario: McE2eScenario = {
     ).toBeVisible();
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
     await runtime.waitForScreenText(/Resource ID:/i, terminal);
-    await runtime.waitForScreenText(/Branch:\s+tests\/mc/i, terminal);
+    await runtime.waitForScreenText(currentGitBranchPattern(), terminal);
     await runtime.waitForScreenText(/User:\s+mc-e2e/i, terminal);
     runtime.printScreen('after startup', terminal);
 

@@ -111,8 +111,10 @@ describe('HarnessCompat session-derived state', () => {
     const harness = new HarnessCompat({} as never, harnessV1 as never);
     await harness.switchThread({ threadId: 'thread-id' });
 
+    // Legacy state remains the single state owner; the session contributes
+    // only its identity fields (model + mode).
     expect(harness.getState()).toMatchObject({
-      projectPath: '/session-repo',
+      projectPath: '/repo',
       currentModelId: 'session-model',
       modeId: 'build',
     });

@@ -14,7 +14,7 @@ import type {
   HarnessSubagent,
   HarnessRequestContext,
 } from '@mastra/core/harness';
-// import { Harness as HarnessV1 } from '@mastra/core/harness/v1';
+import { Harness as HarnessV1 } from '@mastra/core/harness/v1';
 import type { HarnessMode as HarnessModeV1 } from '@mastra/core/harness/v1';
 import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { LanguageModel, ProviderConfig } from '@mastra/core/llm';
@@ -52,7 +52,7 @@ import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
-import { v1ModeToLegacy } from './HarnessCompat';
+import { HarnessCompat, v1ModeToLegacy } from './HarnessCompat';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
@@ -691,138 +691,146 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     }),
   );
 
-  // const harnessV1 = new HarnessV1({
-  //   ownerId,
-  //   agents: { [CODE_AGENT_ID]: codeAgent },
-  //   memory,
-  //   modes: modesV1,
-  //   defaultModeId,
-  //   storage: harnessStorage,
-  // });
-
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
-  const harness: Harness<MastraCodeState> = new Harness<MastraCodeState>({
-    id: 'mastra-code',
-    resourceId: project.resourceId,
-    storage,
-    observability,
+
+  const initialState: Partial<MastraCodeState> = {
+    projectPath: project.rootPath,
+    projectName: project.name,
+    gitBranch: project.gitBranch,
+    yolo: true,
+    ...globalInitialState,
+    ...config?.initialState,
+    // configDir must always win over initialState spreads to stay in sync
+    // with MCP/hooks/storage which were already initialized with this value.
+    configDir,
+  };
+
+  const harnessV1 = new HarnessV1<HarnessModeV1[], MastraCodeState>({
+    ownerId,
+    agent: codeAgent,
     memory,
-    pubsub: signalsPubSub,
+    modes: modesV1,
+    defaultModeId,
+    storage: harnessStorage,
     stateSchema: typedStateSchema,
-    subagents,
+    initialState,
     resolveModel: modelId => resolveModel(modelId) as LanguageModel,
-    toolCategoryResolver: getToolCategory,
-    initialState: {
-      projectPath: project.rootPath,
-      projectName: project.name,
-      gitBranch: project.gitBranch,
-      yolo: true,
-      ...globalInitialState,
-      ...config?.initialState,
-      // configDir must always win over initialState spreads to stay in sync
-      // with MCP/hooks/storage which were already initialized with this value.
-      configDir,
-    },
-    workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
-    browser: config?.browser,
-    modes,
-    heartbeatHandlers,
-    modelAuthChecker: provider => {
-      // Gateway key only authorizes providers that the Mastra gateway actually serves
-      const gatewayKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
-      if (gatewayKey) {
-        const providerConfig = gatewayRegistry.getProviders()[provider];
-        if (providerConfig?.gateway === 'mastra') return true;
-      }
-      const oauthId = PROVIDER_TO_OAUTH_ID[provider];
-      if (oauthId && authStorage.isLoggedIn(oauthId)) {
-        return true;
-      }
-      // Check for user-entered API keys stored in auth.json
-      if (authStorage.hasStoredApiKey(provider)) {
-        return true;
-      }
-      // Backward-compatible direct credential checks for Anthropic/OpenAI storage keys.
-      if (provider === 'anthropic') {
-        const cred = authStorage.get('anthropic');
-        if (cred?.type === 'api_key' && cred.key.trim().length > 0) {
-          return true;
-        }
-      }
-      if (provider === 'openai') {
-        const cred = authStorage.get('openai-codex');
-        if (cred?.type === 'api_key' && cred.key.trim().length > 0) {
-          return true;
-        }
-      }
-
-      const customProvider = loadSettings().customProviders.find(entry => {
-        return provider === getCustomProviderId(entry.name);
-      });
-      if (customProvider) {
-        return true;
-      }
-      return undefined;
-    },
-    modelUseCountProvider: () => loadSettings().modelUseCounts,
-    modelUseCountTracker: modelId => {
-      try {
-        const settings = loadSettings();
-        settings.modelUseCounts[modelId] = (settings.modelUseCounts[modelId] ?? 0) + 1;
-        saveSettings(settings);
-      } catch (error) {
-        console.error('Failed to persist model usage count', error);
-      }
-    },
-    customModelCatalogProvider: async () => {
-      const settings = loadSettings();
-      const customModels: CustomAvailableModel[] = [];
-      for (const provider of settings.customProviders) {
-        const providerId = getCustomProviderId(provider.name);
-        for (const modelName of provider.models) {
-          customModels.push({
-            id: toCustomProviderModelId(provider.name, modelName),
-            provider: providerId,
-            modelName,
-            hasApiKey: true,
-            apiKeyEnvVar: undefined,
-          });
-        }
-      }
-
-      // GitHub Copilot exposes its model list dynamically via `/models` since the
-      // available models depend on the user's subscription tier and any org policies.
-      // The catalog is cached + refreshed in the background, so steady-state cost is
-      // a single Map lookup.
-      //
-      // The provider uses the generic OpenAI-compatible adapter pointed at
-      // GitHub Copilot's API, so expose the full live model catalog returned by
-      // Copilot instead of filtering by vendor family here.
-      try {
-        const copilotModels = await getCopilotModelCatalog({ authStorage });
-        for (const m of copilotModels) {
-          customModels.push({
-            id: `github-copilot/${m.id}`,
-            provider: 'github-copilot',
-            modelName: m.id,
-            hasApiKey: true,
-            apiKeyEnvVar: undefined,
-          });
-        }
-      } catch (error) {
-        console.warn('Failed to load GitHub Copilot model catalog:', error);
-      }
-
-      return customModels;
-    },
-    threadLock: crossProcessPubSub
-      ? undefined
-      : {
-          acquire: acquireThreadLock,
-          release: releaseThreadLock,
-        },
-    // , harnessV1
   });
+  const harness: Harness<MastraCodeState> = new HarnessCompat<MastraCodeState>(
+    {
+      id: 'mastra-code',
+      resourceId: project.resourceId,
+      storage,
+      observability,
+      memory,
+      pubsub: signalsPubSub,
+      stateSchema: typedStateSchema,
+      subagents,
+      resolveModel: modelId => resolveModel(modelId) as LanguageModel,
+      toolCategoryResolver: getToolCategory,
+      initialState,
+      workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
+      browser: config?.browser,
+      modes,
+      heartbeatHandlers,
+      modelAuthChecker: provider => {
+        // Gateway key only authorizes providers that the Mastra gateway actually serves
+        const gatewayKey =
+          authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+        if (gatewayKey) {
+          const providerConfig = gatewayRegistry.getProviders()[provider];
+          if (providerConfig?.gateway === 'mastra') return true;
+        }
+        const oauthId = PROVIDER_TO_OAUTH_ID[provider];
+        if (oauthId && authStorage.isLoggedIn(oauthId)) {
+          return true;
+        }
+        // Check for user-entered API keys stored in auth.json
+        if (authStorage.hasStoredApiKey(provider)) {
+          return true;
+        }
+        // Backward-compatible direct credential checks for Anthropic/OpenAI storage keys.
+        if (provider === 'anthropic') {
+          const cred = authStorage.get('anthropic');
+          if (cred?.type === 'api_key' && cred.key.trim().length > 0) {
+            return true;
+          }
+        }
+        if (provider === 'openai') {
+          const cred = authStorage.get('openai-codex');
+          if (cred?.type === 'api_key' && cred.key.trim().length > 0) {
+            return true;
+          }
+        }
+
+        const customProvider = loadSettings().customProviders.find(entry => {
+          return provider === getCustomProviderId(entry.name);
+        });
+        if (customProvider) {
+          return true;
+        }
+        return undefined;
+      },
+      modelUseCountProvider: () => loadSettings().modelUseCounts,
+      modelUseCountTracker: modelId => {
+        try {
+          const settings = loadSettings();
+          settings.modelUseCounts[modelId] = (settings.modelUseCounts[modelId] ?? 0) + 1;
+          saveSettings(settings);
+        } catch (error) {
+          console.error('Failed to persist model usage count', error);
+        }
+      },
+      customModelCatalogProvider: async () => {
+        const settings = loadSettings();
+        const customModels: CustomAvailableModel[] = [];
+        for (const provider of settings.customProviders) {
+          const providerId = getCustomProviderId(provider.name);
+          for (const modelName of provider.models) {
+            customModels.push({
+              id: toCustomProviderModelId(provider.name, modelName),
+              provider: providerId,
+              modelName,
+              hasApiKey: true,
+              apiKeyEnvVar: undefined,
+            });
+          }
+        }
+
+        // GitHub Copilot exposes its model list dynamically via `/models` since the
+        // available models depend on the user's subscription tier and any org policies.
+        // The catalog is cached + refreshed in the background, so steady-state cost is
+        // a single Map lookup.
+        //
+        // The provider uses the generic OpenAI-compatible adapter pointed at
+        // GitHub Copilot's API, so expose the full live model catalog returned by
+        // Copilot instead of filtering by vendor family here.
+        try {
+          const copilotModels = await getCopilotModelCatalog({ authStorage });
+          for (const m of copilotModels) {
+            customModels.push({
+              id: `github-copilot/${m.id}`,
+              provider: 'github-copilot',
+              modelName: m.id,
+              hasApiKey: true,
+              apiKeyEnvVar: undefined,
+            });
+          }
+        } catch (error) {
+          console.warn('Failed to load GitHub Copilot model catalog:', error);
+        }
+
+        return customModels;
+      },
+      threadLock: crossProcessPubSub
+        ? undefined
+        : {
+            acquire: acquireThreadLock,
+            release: releaseThreadLock,
+          },
+    },
+    harnessV1,
+  );
 
   // Sync hookManager session ID on thread changes
   if (hookManager) {

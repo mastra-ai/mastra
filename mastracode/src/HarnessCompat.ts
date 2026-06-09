@@ -41,6 +41,11 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     this.#harnessV1 = harnessV1;
   }
 
+  async init(): Promise<void> {
+    await super.init();
+    await this.#harnessV1.init();
+  }
+
   getState(): Readonly<TState> {
     const state = super.getState() as Readonly<TState> & SessionStateFields;
     let session: Session<TState> | undefined;
@@ -54,9 +59,13 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
       return state;
     }
 
+    // Legacy state stays the single state owner for now: session state is a
+    // durability mirror only. Spreading `session.getState()` here would let
+    // schema defaults (e.g. `tasks: []`) shadow legacy values written through
+    // the legacy-private `updateState` path (the #17541 task-drift bug). The
+    // session owns only its identity fields: model and mode.
     return {
       ...state,
-      ...session.getState(),
       currentModelId: session.getModelId(),
       modeId: session.getMode().id,
     } as Readonly<TState>;
@@ -82,7 +91,15 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
 
     if (Object.keys(harnessUpdates).length > 0) {
       if (session) {
-        await session.setState(harnessUpdates as Partial<TState>);
+        // Mirror into the v1 session off the critical path. Legacy state is
+        // still the single owner in this step; awaiting the session write here
+        // adds latency on hot paths (e.g. the thread_changed handler) and
+        // reorders TUI render races. Session.setState serializes internally,
+        // so ordering between mirror writes is preserved.
+        void session.setState(harnessUpdates as Partial<TState>).catch(() => {
+          // Best-effort mirror: legacy state is authoritative in this step, so
+          // a failed session write must not break the user-facing operation.
+        });
       }
       await super.setState(harnessUpdates as Partial<TState>);
     }
@@ -110,6 +127,44 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     }
 
     await super.switchThread({ threadId });
+  }
+
+  async createThread({ title }: { title?: string } = {}): Promise<HarnessThread> {
+    const thread = await super.createThread({ title });
+    await this.#attachSession({ threadId: thread.id, resourceId: thread.resourceId });
+    return thread;
+  }
+
+  async selectOrCreateThread(): Promise<HarnessThread> {
+    const thread = await super.selectOrCreateThread();
+    await this.#attachSession({ threadId: thread.id, resourceId: thread.resourceId });
+    return thread;
+  }
+
+  /**
+   * Bind the active v1 session to a thread. Idempotent — re-attaching the
+   * current thread/resource pair is a no-op so `selectOrCreateThread()`
+   * (which may route through the `createThread` override internally) only
+   * resolves the session once. Carries the currently selected model onto the
+   * session (#17558) and snapshots the current mode for fresh session records.
+   */
+  async #attachSession({ threadId, resourceId }: { threadId: string; resourceId?: string }): Promise<void> {
+    const targetResourceId = resourceId ?? this.getResourceId();
+    if (this.#session && this.#session.threadId === threadId && this.#session.resourceId === targetResourceId) {
+      return;
+    }
+
+    const currentModelId = (this.getState() as SessionStateFields).currentModelId;
+    const session = await this.#harnessV1.session({
+      threadId,
+      resourceId: targetResourceId,
+      modeId: this.getCurrentModeId(),
+    });
+    this.#session = session;
+
+    if (typeof currentModelId === 'string' && currentModelId.length > 0) {
+      session.setModelId(currentModelId);
+    }
   }
 
   async listThreads(options?: { allResources?: boolean; includeForkedSubagents?: boolean }): Promise<HarnessThread[]> {
@@ -238,11 +293,11 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
       throw new Error(`Mode not found: ${modeId}`);
     }
 
-    if (!this.#session) {
-      throw new Error('No active session to switch mode');
+    // Fall back to legacy-only switching when no session is attached yet
+    // (e.g. mode switch before the first thread is selected) — see #17511.
+    if (this.#session) {
+      this.#session.setMode(mode);
     }
-
-    this.#session.setMode(mode);
 
     await super.switchMode({ modeId });
   }

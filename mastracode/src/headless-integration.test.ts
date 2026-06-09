@@ -1215,6 +1215,7 @@ describe('headless mode — thread control', () => {
       setState: vi.fn(async () => {}),
     };
     const harnessV1 = {
+      init: vi.fn(async () => {}),
       listSessions: vi.fn(async () => [session]),
       session: vi.fn(async () => session),
       getMode: vi.fn(() => ({ id: 'default', description: 'Default', agentId: 'test-agent' })),
