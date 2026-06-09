@@ -2,7 +2,8 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { MessageFactoryPart } from '@mastra/react';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { MessageRow, MessagesSkeleton, PendingIndicator } from './messages';
+import { PendingIndicator } from '@mastra/playground-ui';
+import { MessageRow, MessagesSkeleton } from './messages';
 import { useAutoScroll } from '@/domains/agent-builder/hooks/use-auto-scroll';
 
 /**
@@ -76,6 +77,8 @@ export const MessageList = ({
   const lastMessage = messages[messages.length - 1];
   const showPending =
     isRunning && !isLoadingEmpty && (lastMessage?.role !== 'assistant' || !hasStreamingPart(lastMessage));
+  // Defer the pending dot by 300ms so it doesn't flash on fast first tokens.
+  const delayedPending = useDelayedFlag(showPending, SKELETON_DELAY_MS);
 
   return (
     <div
@@ -92,7 +95,7 @@ export const MessageList = ({
           {messages.map(message => (
             <MessageRow key={message.id} message={message} />
           ))}
-          {showPending && <PendingIndicator />}
+          {delayedPending && <PendingIndicator testId="agent-builder-chat-pending" />}
         </div>
       )}
     </div>

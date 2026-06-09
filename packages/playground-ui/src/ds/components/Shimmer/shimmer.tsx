@@ -1,7 +1,13 @@
 import type { ReactNode } from 'react';
+
 import { cn } from '@/lib/utils';
 
-export const Shimmer = ({ children, className }: { children: ReactNode; className?: string }) => {
+export interface ShimmerProps {
+  children: ReactNode;
+  className?: string;
+}
+
+export const Shimmer = ({ children, className }: ShimmerProps) => {
   return (
     <span
       className={cn('inline-block text-transparent', className)}

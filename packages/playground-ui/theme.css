@@ -404,4 +404,13 @@ html.light {
       transform: translateX(100%);
     }
   }
+
+  @keyframes shimmer-text {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
 }

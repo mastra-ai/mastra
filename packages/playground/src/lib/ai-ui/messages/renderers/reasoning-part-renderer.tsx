@@ -9,7 +9,10 @@ export interface ReasoningPartRendererProps {
 /**
  * Renders a `MessageFactory` `Reasoning` slot. Reasoning parts may carry the
  * text under `text` (streamed) or `reasoning` (persisted), so read whichever is
- * present before handing it to the plain `Reasoning` primitive.
+ * present before handing it to the plain `Reasoning` primitive. The `Reasoning`
+ * primitive renders nothing when there is no body, so empty reasoning parts
+ * (e.g. a `reasoning-start` chunk with `reasoning: ''`) do not leave a dangling
+ * "Hide reasoning" toggle over an empty box.
  */
 export const ReasoningPartRenderer = ({ part }: ReasoningPartRendererProps) => {
   const reasoningText =
@@ -19,5 +22,7 @@ export const ReasoningPartRenderer = ({ part }: ReasoningPartRendererProps) => {
         ? part.reasoning
         : '';
 
-  return <Reasoning text={reasoningText} />;
+  const redacted = 'redacted' in part && part.redacted === true;
+
+  return <Reasoning text={reasoningText} redacted={redacted} />;
 };

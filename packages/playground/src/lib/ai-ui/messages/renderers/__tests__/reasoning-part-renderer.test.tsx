@@ -29,11 +29,21 @@ describe('ReasoningPartRenderer', () => {
     expect(screen.getByText('thinking via text')).not.toBeNull();
   });
 
-  it('renders an empty body when reasoning is empty', () => {
+  it('renders nothing when reasoning is empty so there is no dangling toggle', () => {
     const part: ReasoningPart = { type: 'reasoning', reasoning: '' };
 
     const { container } = render(<ReasoningPartRenderer part={part} />);
 
-    expect(container.querySelector('pre')?.textContent).toBe('');
+    expect(container.querySelector('pre')).toBeNull();
+    expect(container.querySelector('button')).toBeNull();
+    expect(container.innerHTML).toBe('');
+  });
+
+  it('surfaces a label for redacted reasoning instead of an empty box', () => {
+    const part: ReasoningPart & { redacted: boolean } = { type: 'reasoning', reasoning: '', redacted: true };
+
+    render(<ReasoningPartRenderer part={part} />);
+
+    expect(screen.getByText('Reasoning was redacted by the provider.')).not.toBeNull();
   });
 });

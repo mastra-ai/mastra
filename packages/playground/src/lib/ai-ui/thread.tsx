@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { MessageFactoryPart } from '@mastra/react';
-import { Avatar, Button, ButtonsGroup, cn, useAutoscroll } from '@mastra/playground-ui';
+import { Avatar, Button, ButtonsGroup, cn, PendingIndicator, useAutoscroll } from '@mastra/playground-ui';
 import { useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, EyeIcon, Mic, PlusIcon } from 'lucide-react';
 import { startTransition, useEffect, useRef, useState } from 'react';
@@ -142,13 +142,6 @@ export const Thread = ({ agentName, agentId, threadId, hasModelList, hideModelSw
   );
 };
 
-const PendingIndicator = () => (
-  <div className="flex items-center gap-2 text-neutral3" data-testid="pending-indicator">
-    <span className="size-2 rounded-full bg-neutral3 animate-pulse" />
-    <span className="size-2 rounded-full bg-neutral3 animate-pulse [animation-delay:150ms]" />
-    <span className="size-2 rounded-full bg-neutral3 animate-pulse [animation-delay:300ms]" />
-  </div>
-);
 
 export interface ThreadWelcomeProps {
   agentName?: string;

@@ -2,13 +2,14 @@ import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import {
   Button,
   Card,
-  cn,
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
+  GenericToolCard,
   Icon,
   MarkdownRenderer,
   Skeleton,
+  ToolCardShell,
   Txt,
 } from '@mastra/playground-ui';
 import { MessageFactory } from '@mastra/react';
@@ -24,7 +25,6 @@ import {
   AlertTriangle,
   AlignLeft,
   Check,
-  ChevronRight,
   FileText,
   Globe,
   Loader2,
@@ -42,7 +42,12 @@ import { useStreamApproval, useStreamRetry } from '../../contexts/stream-chat-co
 import { useAvailableAgentTools } from '../../hooks/use-available-agent-tools';
 import { parseStreamErrorText } from './parse-stream-error';
 import type { ParsedStreamError } from './parse-stream-error';
-import { Shimmer } from './shimmer';
+import { MessageText } from '../../../../lib/ai-ui/messages/renderers/message-text';
+import type { MessageMetadata } from '../../../../lib/ai-ui/messages/message-metadata';
+import {
+  WarningStatusRenderer,
+  TripwireStatusRenderer,
+} from '../../../../lib/ai-ui/messages/renderers/status-renderers';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import {
   SET_AGENT_BROWSER_ENABLED_TOOL_NAME,
@@ -55,6 +60,7 @@ import {
   SET_AGENT_WORKSPACE_ID_TOOL_NAME,
 } from '@/domains/agent-builder/services/tool-constants';
 import { ProviderLogo } from '@/domains/llm';
+import { ReasoningStreamingLine } from '@/lib/ai-ui/messages/reasoning-streaming-line';
 import { SignalBadge } from '@/lib/ai-ui/messages/signal-badge';
 import { isSignalData } from '@/lib/ai-ui/messages/signal-data';
 
@@ -80,7 +86,7 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
   };
 
   return (
-    <ToolCard testId="agent-builder-chat-tool-approval" className="bg-surface4 border-transparent">
+    <ToolCardShell testId="agent-builder-chat-tool-approval" className="bg-surface4 border-transparent">
       <Txt variant="ui-sm" className="text-neutral5 pb-2" as="div">
         Approval required for <span className="font-mono text-neutral6">{toolName}</span>
       </Txt>
@@ -110,7 +116,7 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
           Decline
         </Button>
       </div>
-    </ToolCard>
+    </ToolCardShell>
   );
 };
 
@@ -179,7 +185,7 @@ const renderToolCard = (toolName: string, input: unknown, output: unknown): Reac
     case 'skill':
       return <SkillTool name={getNameFromInput(input)} />;
     default:
-      return <GenericTool toolName={toolName} input={input} output={output} />;
+      return <GenericToolCard toolName={toolName} input={input} output={output} />;
   }
 };
 
@@ -191,12 +197,14 @@ export const MessageRow = ({ message }: MessageRowProps) => {
   const dbMessage = toDisplayMessage(message);
   if (dbMessage === null) return null;
 
+  const metadata = message.content.metadata as MessageMetadata | undefined;
+
   const renderers: MessageRenderers = {
-    Text: part => <Txtmessage txt={part.text ?? ''} role={displayRole} />,
+    Text: part => <Txtmessage txt={part.text ?? ''} role={displayRole} metadata={metadata} />,
     Reasoning: part => {
       const state = 'state' in part ? part.state : undefined;
       if (state !== 'streaming') return null;
-      return <ReasoningMessage text="Reasoning..." streaming />;
+      return <ReasoningStreamingLine text="Reasoning..." />;
     },
     Data: part => (part.type === 'data-signal' && isSignalData(part.data) ? <SignalBadge signal={part.data} /> : null),
     ToolInvocation: (part: ToolInvocationPart) => {
@@ -223,12 +231,22 @@ export const MessageRow = ({ message }: MessageRowProps) => {
 
   const status: MessageStatusRenderers = {
     Error: ({ text }) => <ErrorMessage error={parseStreamErrorText(text)} onRetry={retry} />,
+    Warning: WarningStatusRenderer,
+    Tripwire: TripwireStatusRenderer,
   };
 
   return <MessageFactory message={dbMessage} {...renderers} status={status} />;
 };
 
-export const Txtmessage = ({ txt, role }: { txt: string; role: MastraDBMessage['role'] | null }) => {
+export const Txtmessage = ({
+  txt,
+  role,
+  metadata,
+}: {
+  txt: string;
+  role: MastraDBMessage['role'] | null;
+  metadata?: MessageMetadata;
+}) => {
   if (role === 'user') {
     return (
       <div className="flex justify-end">
@@ -250,7 +268,7 @@ export const Txtmessage = ({ txt, role }: { txt: string; role: MastraDBMessage['
         className="text-neutral4 max-w-[80%] [&_ul]:!space-y-1 [&_ol]:!space-y-1 [&_li]:!my-0 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_li]:!leading-normal"
         as="div"
       >
-        <MarkdownRenderer>{txt}</MarkdownRenderer>
+        <MessageText text={txt} metadata={metadata} />
       </Txt>
     );
   }
@@ -331,43 +349,6 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
   );
 };
 
-export const PendingIndicator = () => {
-  return (
-    <Txt
-      variant="ui-md"
-      className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%] flex items-center gap-2"
-      as="div"
-      data-testid="agent-builder-chat-pending"
-    >
-      <Loader2 className="animate-spin size-4 text-neutral3" />
-      <Shimmer>Thinking…</Shimmer>
-    </Txt>
-  );
-};
-
-export const ReasoningMessage = ({ text, streaming = false }: { text: string; streaming?: boolean }) => {
-  return (
-    <Txt
-      variant="ui-md"
-      className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%] flex items-center gap-2"
-      as="div"
-    >
-      {streaming ? (
-        <>
-          <Loader2 className="animate-spin size-4 text-neutral3" />
-
-          <Shimmer>{text}</Shimmer>
-        </>
-      ) : (
-        <>
-          <Check className="text-neutral3 size-4" />
-
-          {text}
-        </>
-      )}
-    </Txt>
-  );
-};
 
 export const MessagesSkeleton = ({ testId }: { testId?: string }) => {
   return (
@@ -385,88 +366,6 @@ export const MessagesSkeleton = ({ testId }: { testId?: string }) => {
   );
 };
 
-const safeStringify = (value: unknown): string => {
-  if (value === undefined) return '';
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
-};
-
-const GenericTool = ({ toolName, input, output }: { toolName: string; input?: unknown; output?: unknown }) => {
-  const inputJson = safeStringify(input);
-  const outputJson = safeStringify(output);
-  const hasOutput = outputJson.length > 0;
-
-  return (
-    <ToolCard testId="agent-builder-chat-generic-tool">
-      <Collapsible>
-        <CollapsibleTrigger
-          className="flex w-full items-center gap-2 text-left group"
-          data-testid="agent-builder-chat-generic-tool-trigger"
-        >
-          <span className="inline-flex items-center gap-1.5 rounded-md border border-border1/60 bg-surface1 px-2 py-0.5">
-            <Wrench className="size-3.5 shrink-0 text-neutral4" aria-hidden />
-            <Txt variant="ui-sm" className="text-neutral5" as="span">
-              Executing <span className="font-mono text-neutral6">{toolName}</span>
-            </Txt>
-          </span>
-          <ChevronRight
-            className="size-4 shrink-0 text-neutral4 transition-transform group-data-[state=open]:rotate-90"
-            aria-hidden
-          />
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <div className="mt-3 flex flex-col gap-2" data-testid="agent-builder-chat-generic-tool-content">
-            <div className="rounded-md border border-border1/60 bg-surface1 overflow-hidden">
-              <div className="px-2 py-1 border-b border-border1/60">
-                <Txt variant="ui-sm" className="text-neutral3" as="div">
-                  Input
-                </Txt>
-              </div>
-              <pre className="m-0 max-h-[320px] overflow-auto p-3 text-xs leading-relaxed text-neutral5 whitespace-pre-wrap break-words">
-                {inputJson || '{}'}
-              </pre>
-            </div>
-            {hasOutput ? (
-              <div className="rounded-md border border-border1/60 bg-surface1 overflow-hidden">
-                <div className="px-2 py-1 border-b border-border1/60">
-                  <Txt variant="ui-sm" className="text-neutral3" as="div">
-                    Output
-                  </Txt>
-                </div>
-                <pre className="m-0 max-h-[320px] overflow-auto p-3 text-xs leading-relaxed text-neutral5 whitespace-pre-wrap break-words">
-                  {outputJson}
-                </pre>
-              </div>
-            ) : null}
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
-    </ToolCard>
-  );
-};
-
-export const ToolCard = ({
-  children,
-  testId,
-  className,
-}: {
-  children: ReactNode;
-  testId?: string;
-  className?: string;
-}) => (
-  <Card
-    data-testid={testId}
-    className={cn(
-      'max-w-[80%] p-3 bg-surface2/60 border-border1/60 animate-in fade-in slide-in-from-left-2 duration-300',
-      className,
-    )}
-  >
-    {children}
-  </Card>
-);
 
 const SkillToolLine = ({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) => (
   <div className="flex items-start gap-2 min-w-0 max-w-full">
