@@ -8,8 +8,5 @@ export { MemoryCardView, type MemoryCardViewProps, type MemoryTab } from './memo
 export { ModelUsageCostCardView, type ModelUsageCostCardViewProps } from './model-usage-cost-card-view';
 export { ScoresCardView, type ScoresCardViewProps } from './scores-card-view';
 export { TokenUsageByAgentCardView, type TokenUsageByAgentCardViewProps } from './token-usage-by-agent-card-view';
-export {
-  TokenUsageTimelineCardView,
-  type TokenUsageTimelineCardViewProps,
-} from './token-usage-timeline-card-view';
+export { TokenUsageTimelineCardView, type TokenUsageTimelineCardViewProps } from './token-usage-timeline-card-view';
 export { TracesVolumeCardView, type TracesVolumeCardViewProps, type VolumeTab } from './traces-volume-card-view';

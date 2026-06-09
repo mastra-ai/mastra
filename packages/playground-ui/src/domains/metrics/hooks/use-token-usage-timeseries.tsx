@@ -39,7 +39,9 @@ type TokenTimelineAccumulator = {
   hasUnknownCostUnit: boolean;
 };
 
-function chooseTokenUsageInterval(datePreset: ReturnType<typeof useMetricsFilters>['datePreset']): TokenUsageTimeSeriesInterval {
+function chooseTokenUsageInterval(
+  datePreset: ReturnType<typeof useMetricsFilters>['datePreset'],
+): TokenUsageTimeSeriesInterval {
   return datePreset === '24h' ? '1h' : '1d';
 }
 

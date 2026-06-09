@@ -3,10 +3,7 @@ import type { ReactNode } from 'react';
 import { MetricsCard } from '../../../ds/components/MetricsCard';
 import { MetricsLineChart } from '../../../ds/components/MetricsLineChart';
 import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
-import type {
-  TokenTimelinePoint,
-  TokenUsageTimeSeriesInterval,
-} from '../hooks/use-token-usage-timeseries';
+import type { TokenTimelinePoint, TokenUsageTimeSeriesInterval } from '../hooks/use-token-usage-timeseries';
 import { CHART_COLORS, formatCompact, formatCost } from './metrics-utils';
 
 type TokenUsageTimelineTab = 'tokens' | 'cost';
@@ -62,8 +59,7 @@ export function TokenUsageTimelineCardView({
   const costUnit = hasSingleCostUnit ? ([...uniqueCostUnits][0] ?? null) : null;
   const totalCost = hasSingleCostUnit ? costPoints.reduce((sum, point) => sum + (point.cost ?? 0), 0) : 0;
   const hasCostData = hasSingleCostUnit && totalCost > 0;
-  const description =
-    interval === '1h' ? 'Input and output tokens per hour.' : 'Input and output tokens per day.';
+  const description = interval === '1h' ? 'Input and output tokens per hour.' : 'Input and output tokens per day.';
 
   const costSeries = [
     {
@@ -112,10 +108,7 @@ export function TokenUsageTimelineCardView({
               </TabContent>
               <TabContent value="cost">
                 {hasCostData ? (
-                  <MetricsLineChart
-                    data={costPoints as unknown as Record<string, unknown>[]}
-                    series={costSeries}
-                  />
+                  <MetricsLineChart data={costPoints as unknown as Record<string, unknown>[]} series={costSeries} />
                 ) : (
                   <MetricsCard.NoData message="No cost data yet" />
                 )}
