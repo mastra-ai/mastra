@@ -72,18 +72,21 @@ function loadPermissionPatterns(): Promise<Record<string, unknown> | undefined> 
 
 /**
  * Helper to get auth provider from Mastra instance.
- * Checks studio config first when isStudio is true, then falls back to server config.
+ * When isStudio is true, ONLY returns studio auth (no fallback to server auth).
+ * This prevents external API consumers from spoofing the studio header.
  */
 function getAuthProvider(mastra: any, isStudio?: boolean): MastraAuthProvider | null {
-  // If this is a Studio request, try studio auth first
+  // If this is a Studio request, ONLY use studio auth (no fallback)
   if (isStudio) {
     const studioConfig = mastra.getStudio?.();
     if (studioConfig?.auth && typeof studioConfig.auth.authenticateToken === 'function') {
       return studioConfig.auth as MastraAuthProvider;
     }
+    // Studio request but no studio auth configured - return null (will result in 401)
+    return null;
   }
 
-  // Fall back to server auth
+  // Non-studio request: use server auth
   const serverConfig = mastra.getServer?.();
   if (!serverConfig?.auth) return null;
 
