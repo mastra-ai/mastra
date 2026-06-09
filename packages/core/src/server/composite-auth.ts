@@ -92,7 +92,9 @@ export class CompositeAuth
       (this as any).isSignUpEnabled = undefined;
     } else {
       (this as any).signIn = credProvider.signIn.bind(credProvider);
-      (this as any).signUp = credProvider.signUp.bind(credProvider);
+      if (typeof credProvider.signUp === 'function') {
+        (this as any).signUp = credProvider.signUp.bind(credProvider);
+      }
       if (typeof credProvider.requestPasswordReset === 'function') {
         (this as any).requestPasswordReset = credProvider.requestPasswordReset.bind(credProvider);
       }
