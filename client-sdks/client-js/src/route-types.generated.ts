@@ -79993,8 +79993,8 @@ export type PostToolProvidersProviderIdAuthorize_PathParams = {
 export type PostToolProvidersProviderIdAuthorize_Body = {
   /** Toolkit slug being authorized */
   toolkit: string;
-  /** Existing or newly-minted connection bucket id */
-  connectionId: string;
+  /** Existing connection bucket id when re-authorizing; omit for a brand-new connection */
+  connectionId?: string | undefined;
   /** Optional tool slug for tool-scoped authorization */
   toolName?: string | undefined;
   /** Provider-specific user-supplied connection fields (e.g. subdomain) */

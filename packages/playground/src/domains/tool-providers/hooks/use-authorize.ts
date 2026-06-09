@@ -59,7 +59,7 @@ export const useAuthorize = (options: UseAuthorizeOptions = {}) => {
       const integration = client.getToolProvider(providerId);
       const { url, authId } = await integration.authorize({
         toolkit,
-        connectionId: connectionId ?? '',
+        ...(connectionId ? { connectionId } : {}),
         ...(config ? { config } : {}),
         ...(label !== undefined ? { label } : {}),
         ...(scope ? { scope } : {}),
