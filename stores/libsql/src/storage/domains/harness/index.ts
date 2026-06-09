@@ -22,7 +22,7 @@ type HarnessSessionRow = Omit<
   > | null;
 };
 
-const toDate = (value: string | Date): Date => (value instanceof Date ? new Date(value) : new Date(value));
+const toDate = (value: string | Date): Date => new Date(value);
 
 const toOptionalDate = (value: string | Date | null | undefined): Date | undefined => {
   if (value == null) return undefined;
@@ -33,9 +33,7 @@ function cloneJson<T>(value: T | undefined): T | undefined {
   return value === undefined ? undefined : structuredClone(value);
 }
 
-function hydratePendingItem(
-  item: NonNullable<HarnessSessionRow['pending']>[number],
-): HarnessPendingItemRecord {
+function hydratePendingItem(item: NonNullable<HarnessSessionRow['pending']>[number]): HarnessPendingItemRecord {
   const record: HarnessPendingItemRecord = {
     id: item.id,
     kind: item.kind,
