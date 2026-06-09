@@ -712,7 +712,12 @@ export function AgentPlaygroundEvaluate({
     return (
       <>
         {/* Create Dataset Dialog */}
-        <CreateDatasetDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} targetIds={[agentId]} />
+        <CreateDatasetDialog
+          open={showCreateDialog}
+          onOpenChange={setShowCreateDialog}
+          targetType="agent"
+          targetIds={[agentId]}
+        />
 
         {/* Generate Config Dialog */}
         {generateDatasetId && (

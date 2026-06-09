@@ -57,7 +57,8 @@ export function DatasetsList({
       const completed = dsExperiments.filter(e => e.status === 'completed').length;
       const total = dsExperiments.length;
       const successPct = total > 0 ? Math.round((completed / total) * 100) : null;
-      return { ...ds, experimentCount: total, successPct };
+      const effectiveTargetType = ds.targetType ?? dsExperiments.find(e => e.targetType != null)?.targetType ?? null;
+      return { ...ds, targetType: effectiveTargetType, experimentCount: total, successPct };
     });
   }, [datasets, experiments]);
 
