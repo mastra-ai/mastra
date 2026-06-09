@@ -5,9 +5,14 @@
 Added LibSQL storage support for durable harness sessions.
 
 ```ts
-const storage = new LibSQLStore({ id: 'app', url: 'file:./mastra.db' });
-const harnessStore = await storage.getStore('harness');
+const storage = new LibSQLStore({ id: 'mastra-storage', url: 'file:./mastra.db' });
 
-await harnessStore?.saveSession(sessionRecord);
-const session = await harnessStore?.loadSession(sessionId);
+const harness = new Harness({
+  ownerId: 'my-app',
+  agent,
+  memory,
+  storage,
+  modes: [{ id: 'default', defaultModelId: '__GATEWAY_OPENAI_MODEL__' }],
+  defaultModeId: 'default',
+});
 ```

@@ -155,6 +155,29 @@ describe('Harness.session()', () => {
     expect(session.getMode()).toMatchObject({ id: 'build' });
   });
 
+  it('resolves the harness domain from a top-level storage adapter', async () => {
+    const storage = new RecordingHarnessStorage();
+    const storageAdapter = {
+      init: vi.fn().mockResolvedValue(undefined),
+      getStore: vi.fn().mockResolvedValue(storage),
+    };
+    const harness = new Harness({
+      agents: {},
+      storage: storageAdapter,
+      memory: createMemory(),
+      modes: [{ id: 'build', agentId: 'default', defaultModelId: 'test-build-model' }],
+      defaultModeId: 'build',
+    });
+
+    await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+    expect(storageAdapter.init).toHaveBeenCalledTimes(1);
+    expect(storageAdapter.getStore).toHaveBeenCalledWith('harness');
+    expect(storage.records).toHaveLength(1);
+    expect(session.getMode()).toMatchObject({ id: 'build' });
+  });
+
   it('clones a session with a new memory thread', async () => {
     const memory = createMemory();
     const { harness, storage } = createHarness(memory);

@@ -9,6 +9,12 @@ import type { HarnessMode } from './mode';
 import type { PermissionPolicy, ToolCategory, ToolCategoryResolver } from './permissions.types';
 import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
 
+export type HarnessStorageProvider = {
+  getStore(storeName: 'harness'): Promise<HarnessStorage | undefined>;
+  init?(): Promise<void>;
+  disableInit?: boolean;
+};
+
 export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
   /**
    * Operator-managed compatibility token for the configured runtime surface:
@@ -117,10 +123,11 @@ export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
   defaultModeId?: MODES[number]['id'];
 
   /**
-   * Override for where SessionRecords are persisted. Defaults to the harness
-   * domain on the bound Mastra storage.
+   * Override for where SessionRecords are persisted. Accepts either the
+   * harness storage domain or a storage adapter that exposes a harness store
+   * via `getStore('harness')`.
    */
-  storage?: HarnessStorage;
+  storage?: HarnessStorage | HarnessStorageProvider;
 
   /**
    * Memory backing thread state for Sessions. Sessions use this to read/write

@@ -3,13 +3,13 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Agent } from '../../agent';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
-import type { MastraCompositeStore } from '../../storage';
 import type { HarnessStorage, SessionRecord } from '../../storage/domains/harness';
 import type { DynamicArgument } from '../../types';
 import { Workspace } from '../../workspace';
 import { EventEmitter, sessionCreatedPayload } from './events';
 import type { HarnessEventListener, HarnessEventUnsubscribe } from './events';
 import type { HarnessConfig } from './harness.types';
+import type { HarnessStorageProvider } from './harness.types';
 import type { HarnessMode } from './mode';
 import type { PermissionPolicy, ToolCategoryResolver } from './permissions.types';
 import { Session } from './session';
@@ -31,12 +31,17 @@ type SessionByThreadOptions = {
 
 type SessionOptions = SessionByIdOptions | SessionByThreadOptions;
 
+function isHarnessStorage(storage: HarnessStorage | HarnessStorageProvider): storage is HarnessStorage {
+  return typeof (storage as HarnessStorage).loadSession === 'function';
+}
+
 export class Harness<MODES extends HarnessMode[], TState = {}> {
   readonly #ownerId: string;
   readonly #defaultMode: string;
   readonly #modesById = new Map<string, MODES[number]>();
   readonly #storage?: HarnessStorage;
-  readonly #compositeStorage?: MastraCompositeStore;
+  readonly #storageProvider?: HarnessStorageProvider;
+  #storageProviderInit?: Promise<void>;
   readonly #mastra?: Mastra;
   readonly #memory: MastraMemory | DynamicArgument<MastraMemory>;
   readonly #events: EventEmitter;
@@ -57,9 +62,16 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
 
     this.#ownerId = config.ownerId ?? randomUUID();
     this.#defaultMode = config.defaultModeId ?? config.modes[0]!.id;
-    this.#storage = config.storage;
     this.#mastra = config.mastra;
-    this.#compositeStorage = config.mastra?.getStorage();
+    if (config.storage) {
+      if (isHarnessStorage(config.storage)) {
+        this.#storage = config.storage;
+      } else {
+        this.#storageProvider = config.storage;
+      }
+    } else {
+      this.#storageProvider = config.mastra?.getStorage();
+    }
     this.#memory = config.memory;
     this.#events = new EventEmitter();
     if (config.runtimeCompatibilityGeneration !== undefined && config.runtimeCompatibilityGeneration.length === 0) {
@@ -266,11 +278,33 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       return this.#storage;
     }
 
-    const storage = await this.#compositeStorage?.getStore('harness');
+    if (!this.#storageProvider) {
+      throw new Error('Harness session storage is not configured');
+    }
+
+    await this.#initStorageProvider();
+    const storage = await this.#storageProvider.getStore('harness');
     if (!storage) {
       throw new Error('Harness session storage is not configured');
     }
     return storage;
+  }
+
+  async #initStorageProvider(): Promise<void> {
+    if (this.#storageProvider?.disableInit || process.env.MASTRA_DISABLE_STORAGE_INIT === 'true') {
+      return;
+    }
+
+    const init = this.#storageProvider?.init;
+    if (!init) {
+      return;
+    }
+
+    this.#storageProviderInit ??= init.call(this.#storageProvider).catch(err => {
+      this.#storageProviderInit = undefined;
+      throw err;
+    });
+    await this.#storageProviderInit;
   }
 
   #sessionFromRecord(record: SessionRecord, storage: HarnessStorage): Session<TState> {
