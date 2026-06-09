@@ -110,7 +110,7 @@ export function DataListTopSelectCell({ checked, onToggle, ...rest }: DataListTo
   return (
     <DataListTopCell
       as="label"
-      className="w-8 cursor-pointer justify-center px-0 py-0!"
+      className="w-8 cursor-pointer justify-center overflow-visible px-0 py-0!"
       onClick={e => e.stopPropagation()}
     >
       <Checkbox checked={checked} onCheckedChange={() => onToggle()} aria-label={rest['aria-label']} />

@@ -126,7 +126,7 @@ export function DataListSelectCell({ checked, onToggle, ...rest }: DataListSelec
     <DataListCell
       as="label"
       height="compact"
-      className="h-8 w-8 self-center cursor-pointer justify-items-center px-0 py-0!"
+      className="h-8 w-8 self-center cursor-pointer justify-items-center overflow-visible px-0 py-0!"
       onClick={e => e.stopPropagation()}
     >
       <Checkbox
