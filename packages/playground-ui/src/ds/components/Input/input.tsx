@@ -2,8 +2,8 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
+import { controlSizeClasses } from '@/ds/primitives/control-size';
 import {
-  formElementSizes,
   inputOutlineAndFocusStyle,
   inputSurfaceAndFocusStyle,
   sharedFormElementDisabledStyle,
@@ -37,10 +37,11 @@ const inputVariants = cva(
         unstyled: unstyledFormElementStyle,
       },
       size: {
-        sm: `${formElementSizes.sm} text-ui-sm px-[.75em]`,
-        md: `${formElementSizes.md} text-ui-md px-[.75em]`,
-        default: `${formElementSizes.default} text-ui-md px-[.85em]`,
-        lg: `${formElementSizes.lg} text-ui-lg px-[.85em]`,
+        xs: cn(controlSizeClasses.xs, 'px-[.75em]'),
+        sm: cn(controlSizeClasses.sm, 'px-[.75em]'),
+        md: cn(controlSizeClasses.md, 'px-[.75em]'),
+        default: cn(controlSizeClasses.default, 'px-[.85em]'),
+        lg: cn(controlSizeClasses.lg, 'px-[.85em]'),
       },
     },
     defaultVariants: {

@@ -215,7 +215,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -223,19 +222,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -250,17 +245,14 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -274,21 +266,17 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
           "inputTokens": 3,
           "outputTokens": 10,
           "raw": {
-            "cachedInputTokens": undefined,
             "inputTokens": 3,
             "outputTokens": 10,
-            "reasoningTokens": undefined,
             "totalTokens": 13,
           },
           "totalTokens": 13,
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -347,7 +335,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -355,19 +342,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -382,17 +365,14 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -406,21 +386,17 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should filter out empty tex
           "inputTokens": 3,
           "outputTokens": 10,
           "raw": {
-            "cachedInputTokens": undefined,
             "inputTokens": 3,
             "outputTokens": 10,
-            "reasoningTokens": undefined,
             "totalTokens": 13,
           },
           "totalTokens": 13,
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -572,7 +548,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -582,32 +557,24 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
         },
         "modelProvider": "mock-provider",
         "modelVersion": "v2",
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 2024-01-01T00:00:00.000Z,
+        "timestamp": "2024-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
             "finishReason": "error",
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-1",
               "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
-              "timestamp": 2024-01-01T00:00:00.000Z,
+              "timestamp": "2024-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
-            "usage": {
-              "inputTokens": undefined,
-              "outputTokens": undefined,
-              "totalTokens": undefined,
-            },
+            "usage": {},
             "warnings": [],
           },
         ],
@@ -620,7 +587,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -680,7 +646,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -690,32 +655,24 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
         },
         "modelProvider": "mock-provider",
         "modelVersion": "v2",
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 2024-01-01T00:00:00.000Z,
+        "timestamp": "2024-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
             "finishReason": "error",
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-1",
               "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
-              "timestamp": 2024-01-01T00:00:00.000Z,
+              "timestamp": "2024-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
-            "usage": {
-              "inputTokens": undefined,
-              "outputTokens": undefined,
-              "totalTokens": undefined,
-            },
+            "usage": {},
             "warnings": [],
           },
         ],
@@ -728,7 +685,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should maintain conversatio
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -886,7 +842,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -894,19 +849,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -915,7 +866,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
@@ -930,17 +880,14 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -1023,8 +970,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
             "args": {
               "value": "value",
             },
-            "providerExecuted": undefined,
-            "providerMetadata": undefined,
             "toolCallId": "call-1",
             "toolName": "tool1",
           },
@@ -1033,21 +978,17 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           "inputTokens": 3,
           "outputTokens": 10,
           "raw": {
-            "cachedInputTokens": undefined,
             "inputTokens": 3,
             "outputTokens": 10,
-            "reasoningTokens": undefined,
             "totalTokens": 13,
           },
           "totalTokens": 13,
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": true,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -1113,7 +1054,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -1156,7 +1096,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -1206,7 +1145,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -1214,19 +1152,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -1235,7 +1169,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
@@ -1250,17 +1183,14 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -1269,11 +1199,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           },
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -1282,7 +1209,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -1319,17 +1245,14 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -1343,21 +1266,17 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           "inputTokens": 6,
           "outputTokens": 20,
           "raw": {
-            "cachedInputTokens": undefined,
             "inputTokens": 3,
             "outputTokens": 10,
-            "reasoningTokens": undefined,
             "totalTokens": 13,
           },
           "totalTokens": 26,
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -1385,7 +1304,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -1428,7 +1346,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -1478,7 +1395,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -1486,19 +1402,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -1507,7 +1419,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
@@ -1522,17 +1433,14 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -1541,11 +1449,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           },
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -1554,7 +1459,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -1591,17 +1495,14 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -1615,21 +1516,17 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send delayed asynchr
           "inputTokens": 6,
           "outputTokens": 20,
           "raw": {
-            "cachedInputTokens": undefined,
             "inputTokens": 3,
             "outputTokens": 10,
-            "reasoningTokens": undefined,
             "totalTokens": 13,
           },
           "totalTokens": 26,
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -1727,7 +1624,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
             "content": [
               {
                 "data": "data:text/plain;base64,Hello World",
-                "filename": undefined,
                 "mediaType": "text/plain",
                 "providerOptions": undefined,
                 "type": "file",
@@ -1739,7 +1635,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
               },
               {
                 "data": "data:image/jpeg;base64,QkFVRw==",
-                "filename": undefined,
                 "mediaType": "image/jpeg",
                 "providerOptions": undefined,
                 "type": "file",
@@ -1753,7 +1648,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
             "content": [
               {
                 "data": "data:text/plain;base64,Hello World",
-                "filename": undefined,
                 "mediaType": "text/plain",
                 "providerOptions": undefined,
                 "type": "file",
@@ -1765,7 +1659,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
               },
               {
                 "data": "data:image/jpeg;base64,QkFVRw==",
-                "filename": undefined,
                 "mediaType": "image/jpeg",
                 "providerOptions": undefined,
                 "type": "file",
@@ -1788,7 +1681,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -1796,26 +1688,21 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
                   "content": [
                     {
                       "data": "data:text/plain;base64,Hello World",
-                      "filename": undefined,
                       "mediaType": "text/plain",
                       "providerOptions": undefined,
                       "type": "file",
@@ -1827,7 +1714,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                     },
                     {
                       "data": "data:image/jpeg;base64,QkFVRw==",
-                      "filename": undefined,
                       "mediaType": "image/jpeg",
                       "providerOptions": undefined,
                       "type": "file",
@@ -1837,17 +1723,14 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -1861,21 +1744,17 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
           "inputTokens": 3,
           "outputTokens": 10,
           "raw": {
-            "cachedInputTokens": undefined,
             "inputTokens": 3,
             "outputTokens": 10,
-            "reasoningTokens": undefined,
             "totalTokens": 13,
           },
           "totalTokens": 13,
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -1901,7 +1780,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
             "content": [
               {
                 "data": "data:text/plain;base64,Hello World",
-                "filename": undefined,
                 "mediaType": "text/plain",
                 "providerOptions": undefined,
                 "type": "file",
@@ -1913,7 +1791,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
               },
               {
                 "data": "data:image/jpeg;base64,QkFVRw==",
-                "filename": undefined,
                 "mediaType": "image/jpeg",
                 "providerOptions": undefined,
                 "type": "file",
@@ -1927,7 +1804,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
             "content": [
               {
                 "data": "data:text/plain;base64,Hello World",
-                "filename": undefined,
                 "mediaType": "text/plain",
                 "providerOptions": undefined,
                 "type": "file",
@@ -1939,7 +1815,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
               },
               {
                 "data": "data:image/jpeg;base64,QkFVRw==",
-                "filename": undefined,
                 "mediaType": "image/jpeg",
                 "providerOptions": undefined,
                 "type": "file",
@@ -1962,7 +1837,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -1970,26 +1844,21 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
                   "content": [
                     {
                       "data": "data:text/plain;base64,Hello World",
-                      "filename": undefined,
                       "mediaType": "text/plain",
                       "providerOptions": undefined,
                       "type": "file",
@@ -2001,7 +1870,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                     },
                     {
                       "data": "data:image/jpeg;base64,QkFVRw==",
-                      "filename": undefined,
                       "mediaType": "image/jpeg",
                       "providerOptions": undefined,
                       "type": "file",
@@ -2011,17 +1879,14 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -2035,21 +1900,17 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send files 1`] = `
           "inputTokens": 3,
           "outputTokens": 10,
           "raw": {
-            "cachedInputTokens": undefined,
             "inputTokens": 3,
             "outputTokens": 10,
-            "reasoningTokens": undefined,
             "totalTokens": 13,
           },
           "totalTokens": 13,
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -2478,7 +2339,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -2486,19 +2346,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -2558,17 +2414,14 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -2582,21 +2435,17 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
           "inputTokens": 3,
           "outputTokens": 10,
           "raw": {
-            "cachedInputTokens": undefined,
             "inputTokens": 3,
             "outputTokens": 10,
-            "reasoningTokens": undefined,
             "totalTokens": 13,
           },
           "totalTokens": 13,
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -2745,7 +2594,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -2753,19 +2601,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -2825,17 +2669,14 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -2849,21 +2690,17 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send reasoning delta
           "inputTokens": 3,
           "outputTokens": 10,
           "raw": {
-            "cachedInputTokens": undefined,
             "inputTokens": 3,
             "outputTokens": 10,
-            "reasoningTokens": undefined,
             "totalTokens": 13,
           },
           "totalTokens": 13,
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -3010,7 +2847,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -3018,19 +2854,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -3045,17 +2877,14 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -3069,21 +2898,17 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
           "inputTokens": 3,
           "outputTokens": 10,
           "raw": {
-            "cachedInputTokens": undefined,
             "inputTokens": 3,
             "outputTokens": 10,
-            "reasoningTokens": undefined,
             "totalTokens": 13,
           },
           "totalTokens": 13,
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -3142,7 +2967,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -3150,19 +2974,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -3177,17 +2997,14 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -3201,21 +3018,17 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send sources 1`] = `
           "inputTokens": 3,
           "outputTokens": 10,
           "raw": {
-            "cachedInputTokens": undefined,
             "inputTokens": 3,
             "outputTokens": 10,
-            "reasoningTokens": undefined,
             "totalTokens": 13,
           },
           "totalTokens": 13,
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -3313,7 +3126,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -3323,32 +3135,24 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
         },
         "modelProvider": "mock-provider",
         "modelVersion": "v2",
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 2024-01-01T00:00:00.000Z,
+        "timestamp": "2024-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
             "finishReason": "error",
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-1",
               "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
-              "timestamp": 2024-01-01T00:00:00.000Z,
+              "timestamp": "2024-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
-            "usage": {
-              "inputTokens": undefined,
-              "outputTokens": undefined,
-              "totalTokens": undefined,
-            },
+            "usage": {},
             "warnings": [],
           },
         ],
@@ -3361,7 +3165,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -3403,7 +3206,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -3413,32 +3215,24 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
         },
         "modelProvider": "mock-provider",
         "modelVersion": "v2",
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 2024-01-01T00:00:00.000Z,
+        "timestamp": "2024-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
             "finishReason": "error",
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-1",
               "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
-              "timestamp": 2024-01-01T00:00:00.000Z,
+              "timestamp": "2024-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
-            "usage": {
-              "inputTokens": undefined,
-              "outputTokens": undefined,
-              "totalTokens": undefined,
-            },
+            "usage": {},
             "warnings": [],
           },
         ],
@@ -3451,7 +3245,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send text deltas 1`]
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -3669,7 +3462,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -3677,19 +3469,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -3698,7 +3486,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
                       "input": {
                         "value": "Sparkle Day",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": undefined,
                       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
                       "toolName": "test-tool",
@@ -3713,9 +3500,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "cachedInputTokens": 3,
               "inputTokens": 3,
@@ -3739,9 +3525,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
             "args": {
               "value": "Sparkle Day",
             },
-            "dynamic": undefined,
-            "providerExecuted": undefined,
-            "providerMetadata": undefined,
             "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
             "toolName": "test-tool",
           },
@@ -3762,11 +3545,9 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "tool-calls",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -3843,7 +3624,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -3851,19 +3631,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -3872,7 +3648,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
                       "input": {
                         "value": "Sparkle Day",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": undefined,
                       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
                       "toolName": "test-tool",
@@ -3887,9 +3662,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "cachedInputTokens": 3,
               "inputTokens": 3,
@@ -3913,9 +3687,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
             "args": {
               "value": "Sparkle Day",
             },
-            "dynamic": undefined,
-            "providerExecuted": undefined,
-            "providerMetadata": undefined,
             "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
             "toolName": "test-tool",
           },
@@ -3936,11 +3707,9 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool call delta
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "tool-calls",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -4038,7 +3807,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -4048,32 +3816,24 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
         },
         "modelProvider": "mock-provider",
         "modelVersion": "v2",
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 2024-01-01T00:00:00.000Z,
+        "timestamp": "2024-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
             "finishReason": "error",
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-1",
               "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
-              "timestamp": 2024-01-01T00:00:00.000Z,
+              "timestamp": "2024-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
-            "usage": {
-              "inputTokens": undefined,
-              "outputTokens": undefined,
-              "totalTokens": undefined,
-            },
+            "usage": {},
             "warnings": [],
           },
         ],
@@ -4086,7 +3846,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -4128,7 +3887,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -4138,32 +3896,24 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
         },
         "modelProvider": "mock-provider",
         "modelVersion": "v2",
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 2024-01-01T00:00:00.000Z,
+        "timestamp": "2024-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
             "finishReason": "error",
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-1",
               "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
-              "timestamp": 2024-01-01T00:00:00.000Z,
+              "timestamp": "2024-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
-            "usage": {
-              "inputTokens": undefined,
-              "outputTokens": undefined,
-              "totalTokens": undefined,
-            },
+            "usage": {},
             "warnings": [],
           },
         ],
@@ -4176,7 +3926,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool calls 1`] 
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -4235,7 +3984,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           {
             "content": [
               {
-                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -4254,7 +4002,7 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             "role": "user",
           },
         ],
-        "message": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
+        "name": "AssertionError",
         "operator": "deepStrictEqual",
         "showDiff": true,
       },
@@ -4360,7 +4108,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -4368,19 +4115,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -4389,7 +4132,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
@@ -4404,17 +4146,14 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -4497,8 +4236,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
             "args": {
               "value": "value",
             },
-            "providerExecuted": undefined,
-            "providerMetadata": undefined,
             "toolCallId": "call-1",
             "toolName": "tool1",
           },
@@ -4507,21 +4244,17 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           "inputTokens": 3,
           "outputTokens": 10,
           "raw": {
-            "cachedInputTokens": undefined,
             "inputTokens": 3,
             "outputTokens": 10,
-            "reasoningTokens": undefined,
             "totalTokens": 13,
           },
           "totalTokens": 13,
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": true,
         "reason": "tool-calls",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -4587,7 +4320,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -4630,7 +4362,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -4680,7 +4411,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -4688,19 +4418,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -4709,7 +4435,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
@@ -4724,17 +4449,14 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -4743,11 +4465,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           },
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -4756,7 +4475,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -4793,17 +4511,14 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -4817,21 +4532,17 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           "inputTokens": 6,
           "outputTokens": 20,
           "raw": {
-            "cachedInputTokens": undefined,
             "inputTokens": 3,
             "outputTokens": 10,
-            "reasoningTokens": undefined,
             "totalTokens": 13,
           },
           "totalTokens": 26,
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -4859,7 +4570,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -4902,7 +4612,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -4952,7 +4661,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -4960,19 +4668,15 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -4981,7 +4685,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
@@ -4996,17 +4699,14 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -5015,11 +4715,8 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           },
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -5028,7 +4725,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -5065,17 +4761,14 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -5089,21 +4782,17 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should send tool results 1`
           "inputTokens": 6,
           "outputTokens": 20,
           "raw": {
-            "cachedInputTokens": undefined,
             "inputTokens": 3,
             "outputTokens": 10,
-            "reasoningTokens": undefined,
             "totalTokens": 13,
           },
           "totalTokens": 26,
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -5201,7 +4890,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-2000",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -5211,32 +4899,24 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
         },
         "modelProvider": "mock-provider",
         "modelVersion": "v2",
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:02.000Z,
+        "timestamp": "1970-01-01T00:00:02.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
             "finishReason": "error",
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-2000",
               "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
-              "timestamp": 1970-01-01T00:00:02.000Z,
+              "timestamp": "1970-01-01T00:00:02.000Z",
             },
-            "tripwire": undefined,
-            "usage": {
-              "inputTokens": undefined,
-              "outputTokens": undefined,
-              "totalTokens": undefined,
-            },
+            "usage": {},
             "warnings": [],
           },
         ],
@@ -5249,7 +4929,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -5291,7 +4970,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-2000",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -5301,32 +4979,24 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
         },
         "modelProvider": "mock-provider",
         "modelVersion": "v2",
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:02.000Z,
+        "timestamp": "1970-01-01T00:00:02.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
             "finishReason": "error",
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-2000",
               "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
-              "timestamp": 1970-01-01T00:00:02.000Z,
+              "timestamp": "1970-01-01T00:00:02.000Z",
             },
-            "tripwire": undefined,
-            "usage": {
-              "inputTokens": undefined,
-              "outputTokens": undefined,
-              "totalTokens": undefined,
-            },
+            "usage": {},
             "warnings": [],
           },
         ],
@@ -5339,7 +5009,6 @@ exports[`Loop Tests > AISDK v5 > result.fullStream > should use fallback respons
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -5473,7 +5142,7 @@ exports[`Loop Tests > AISDK v5 > result.response > should resolve with response 
     "modelProvider": "mock-provider",
     "modelVersion": "v2",
   },
-  "timestamp": 1970-01-01T00:00:00.000Z,
+  "timestamp": "1970-01-01T00:00:00.000Z",
   "uiMessages": [
     {
       "id": "msg-0",
@@ -5633,14 +5302,12 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
           "role": "assistant",
         },
       ],
-      "headers": undefined,
       "id": "id-0",
       "messages": [
         {
           "content": [
             {
               "data": "data:text/plain;base64,Hello World",
-              "filename": undefined,
               "mediaType": "text/plain",
               "providerOptions": {
                 "mastra": {
@@ -5660,7 +5327,6 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
             },
             {
               "data": "data:image/jpeg;base64,QkFVRw==",
-              "filename": undefined,
               "mediaType": "image/jpeg",
               "providerOptions": {
                 "mastra": {
@@ -5681,7 +5347,7 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
       },
       "modelProvider": "mock-provider",
       "modelVersion": "v2",
-      "timestamp": 1970-01-01T00:00:00.000Z,
+      "timestamp": "1970-01-01T00:00:00.000Z",
       "uiMessages": [
         {
           "id": "msg-0",
@@ -5737,10 +5403,8 @@ exports[`Loop Tests > AISDK v5 > result.steps > should add the files from the mo
       "inputTokens": 3,
       "outputTokens": 10,
       "raw": {
-        "cachedInputTokens": undefined,
         "inputTokens": 3,
         "outputTokens": 10,
-        "reasoningTokens": undefined,
         "totalTokens": 13,
       },
       "totalTokens": 13,
@@ -5904,7 +5568,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -5912,19 +5575,15 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -5933,7 +5592,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": {
                         "mastra": {
                           "createdAt": 1704067200000,
@@ -5952,17 +5610,14 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -6049,8 +5704,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
             "args": {
               "value": "value",
             },
-            "providerExecuted": undefined,
-            "providerMetadata": undefined,
             "toolCallId": "call-1",
             "toolName": "tool1",
           },
@@ -6059,17 +5712,14 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           "inputTokens": 3,
           "outputTokens": 10,
           "raw": {
-            "cachedInputTokens": undefined,
             "inputTokens": 3,
             "outputTokens": 10,
-            "reasoningTokens": undefined,
             "totalTokens": 13,
           },
           "totalTokens": 13,
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": true,
         "reason": "tool-calls",
@@ -6143,7 +5793,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -6190,7 +5839,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -6248,7 +5896,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -6256,19 +5903,15 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -6277,7 +5920,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": {
                         "mastra": {
                           "createdAt": 1704067200000,
@@ -6296,30 +5938,24 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
             },
             "warnings": [],
           },
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-1",
               "messages": [
                 {
@@ -6328,7 +5964,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -6369,17 +6004,14 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -6393,17 +6025,14 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           "inputTokens": 6,
           "outputTokens": 20,
           "raw": {
-            "cachedInputTokens": undefined,
             "inputTokens": 3,
             "outputTokens": 10,
-            "reasoningTokens": undefined,
             "totalTokens": 13,
           },
           "totalTokens": 26,
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -6439,7 +6068,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -6486,7 +6114,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -6544,7 +6171,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -6552,19 +6178,15 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           "modelProvider": "mock-provider",
           "modelVersion": "v2",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -6573,7 +6195,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": {
                         "mastra": {
                           "createdAt": 1704067200000,
@@ -6592,30 +6213,24 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
             },
             "warnings": [],
           },
-          DefaultStepResult {
+          {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-1",
               "messages": [
                 {
@@ -6624,7 +6239,6 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -6665,17 +6279,14 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
-                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
-                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -6689,17 +6300,14 @@ exports[`Loop Tests > AISDK v5 > tool execution errors > should include tool err
           "inputTokens": 6,
           "outputTokens": 20,
           "raw": {
-            "cachedInputTokens": undefined,
             "inputTokens": 3,
             "outputTokens": 10,
-            "reasoningTokens": undefined,
             "totalTokens": 13,
           },
           "totalTokens": 26,
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
@@ -6782,7 +6390,6 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -6792,32 +6399,24 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
         },
         "modelProvider": "mock-provider",
         "modelVersion": "v2",
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 2024-01-01T00:00:00.000Z,
+        "timestamp": "2024-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": "error",
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-1",
               "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
-              "timestamp": 2024-01-01T00:00:00.000Z,
+              "timestamp": "2024-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
-            "usage": {
-              "inputTokens": undefined,
-              "outputTokens": undefined,
-              "totalTokens": undefined,
-            },
+            "usage": {},
             "warnings": [],
           },
         ],
@@ -6830,7 +6429,6 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -6880,7 +6478,6 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -6890,32 +6487,24 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
         },
         "modelProvider": "mock-provider",
         "modelVersion": "v2",
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 2024-01-01T00:00:00.000Z,
+        "timestamp": "2024-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
-          DefaultStepResult {
+          {
             "content": [],
             "finishReason": "error",
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-1",
               "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v2",
-              "timestamp": 2024-01-01T00:00:00.000Z,
+              "timestamp": "2024-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
-            "usage": {
-              "inputTokens": undefined,
-              "outputTokens": undefined,
-              "totalTokens": undefined,
-            },
+            "usage": {},
             "warnings": [],
           },
         ],
@@ -6928,7 +6517,6 @@ exports[`Loop Tests > AISDK v5 > tools with custom schema > should send tool cal
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -7088,7 +6676,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -7096,19 +6683,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -7123,21 +6706,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
                 "inputTokens": {
-                  "cacheRead": undefined,
-                  "cacheWrite": undefined,
                   "noCache": 3,
                   "total": 3,
                 },
                 "outputTokens": {
-                  "reasoning": undefined,
                   "text": 10,
                   "total": 10,
                 },
@@ -7154,13 +6733,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
           "outputTokens": 10,
           "raw": {
             "inputTokens": {
-              "cacheRead": undefined,
-              "cacheWrite": undefined,
               "noCache": 3,
               "total": 3,
             },
             "outputTokens": {
-              "reasoning": undefined,
               "text": 10,
               "total": 10,
             },
@@ -7169,11 +6745,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -7232,7 +6806,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -7240,19 +6813,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -7267,21 +6836,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
                 "inputTokens": {
-                  "cacheRead": undefined,
-                  "cacheWrite": undefined,
                   "noCache": 3,
                   "total": 3,
                 },
                 "outputTokens": {
-                  "reasoning": undefined,
                   "text": 10,
                   "total": 10,
                 },
@@ -7298,13 +6863,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
           "outputTokens": 10,
           "raw": {
             "inputTokens": {
-              "cacheRead": undefined,
-              "cacheWrite": undefined,
               "noCache": 3,
               "total": 3,
             },
             "outputTokens": {
-              "reasoning": undefined,
               "text": 10,
               "total": 10,
             },
@@ -7313,11 +6875,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should filter o
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -7469,7 +7029,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -7479,32 +7038,24 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
         },
         "modelProvider": "mock-provider",
         "modelVersion": "v3",
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 2024-01-01T00:00:00.000Z,
+        "timestamp": "2024-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
             "finishReason": "error",
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-1",
               "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v3",
-              "timestamp": 2024-01-01T00:00:00.000Z,
+              "timestamp": "2024-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
-            "usage": {
-              "inputTokens": undefined,
-              "outputTokens": undefined,
-              "totalTokens": undefined,
-            },
+            "usage": {},
             "warnings": [],
           },
         ],
@@ -7517,7 +7068,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -7577,7 +7127,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -7587,32 +7136,24 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
         },
         "modelProvider": "mock-provider",
         "modelVersion": "v3",
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 2024-01-01T00:00:00.000Z,
+        "timestamp": "2024-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
             "finishReason": "error",
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-1",
               "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v3",
-              "timestamp": 2024-01-01T00:00:00.000Z,
+              "timestamp": "2024-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
-            "usage": {
-              "inputTokens": undefined,
-              "outputTokens": undefined,
-              "totalTokens": undefined,
-            },
+            "usage": {},
             "warnings": [],
           },
         ],
@@ -7625,7 +7166,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should maintain
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -7783,7 +7323,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -7791,19 +7330,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -7812,7 +7347,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
@@ -7827,21 +7361,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
                 "inputTokens": {
-                  "cacheRead": undefined,
-                  "cacheWrite": undefined,
                   "noCache": 3,
                   "total": 3,
                 },
                 "outputTokens": {
-                  "reasoning": undefined,
                   "text": 10,
                   "total": 10,
                 },
@@ -7932,8 +7462,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
             "args": {
               "value": "value",
             },
-            "providerExecuted": undefined,
-            "providerMetadata": undefined,
             "toolCallId": "call-1",
             "toolName": "tool1",
           },
@@ -7943,13 +7471,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           "outputTokens": 10,
           "raw": {
             "inputTokens": {
-              "cacheRead": undefined,
-              "cacheWrite": undefined,
               "noCache": 3,
               "total": 3,
             },
             "outputTokens": {
-              "reasoning": undefined,
               "text": 10,
               "total": 10,
             },
@@ -7958,11 +7483,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": true,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -8028,7 +7551,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -8071,7 +7593,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -8121,7 +7642,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -8129,19 +7649,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -8150,7 +7666,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
@@ -8165,21 +7680,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
                 "inputTokens": {
-                  "cacheRead": undefined,
-                  "cacheWrite": undefined,
                   "noCache": 3,
                   "total": 3,
                 },
                 "outputTokens": {
-                  "reasoning": undefined,
                   "text": 10,
                   "total": 10,
                 },
@@ -8190,11 +7701,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           },
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -8203,7 +7711,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -8240,21 +7747,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
                 "inputTokens": {
-                  "cacheRead": undefined,
-                  "cacheWrite": undefined,
                   "noCache": 3,
                   "total": 3,
                 },
                 "outputTokens": {
-                  "reasoning": undefined,
                   "text": 10,
                   "total": 10,
                 },
@@ -8271,13 +7774,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           "outputTokens": 20,
           "raw": {
             "inputTokens": {
-              "cacheRead": undefined,
-              "cacheWrite": undefined,
               "noCache": 3,
               "total": 3,
             },
             "outputTokens": {
-              "reasoning": undefined,
               "text": 10,
               "total": 10,
             },
@@ -8286,11 +7786,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -8318,7 +7816,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -8361,7 +7858,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -8411,7 +7907,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -8419,19 +7914,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -8440,7 +7931,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
@@ -8455,21 +7945,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
                 "inputTokens": {
-                  "cacheRead": undefined,
-                  "cacheWrite": undefined,
                   "noCache": 3,
                   "total": 3,
                 },
                 "outputTokens": {
-                  "reasoning": undefined,
                   "text": 10,
                   "total": 10,
                 },
@@ -8480,11 +7966,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           },
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -8493,7 +7976,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -8530,21 +8012,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
                 "inputTokens": {
-                  "cacheRead": undefined,
-                  "cacheWrite": undefined,
                   "noCache": 3,
                   "total": 3,
                 },
                 "outputTokens": {
-                  "reasoning": undefined,
                   "text": 10,
                   "total": 10,
                 },
@@ -8561,13 +8039,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
           "outputTokens": 20,
           "raw": {
             "inputTokens": {
-              "cacheRead": undefined,
-              "cacheWrite": undefined,
               "noCache": 3,
               "total": 3,
             },
             "outputTokens": {
-              "reasoning": undefined,
               "text": 10,
               "total": 10,
             },
@@ -8576,11 +8051,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send del
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -8678,7 +8151,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
             "content": [
               {
                 "data": "data:text/plain;base64,Hello World",
-                "filename": undefined,
                 "mediaType": "text/plain",
                 "providerOptions": undefined,
                 "type": "file",
@@ -8690,7 +8162,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
               },
               {
                 "data": "data:image/jpeg;base64,QkFVRw==",
-                "filename": undefined,
                 "mediaType": "image/jpeg",
                 "providerOptions": undefined,
                 "type": "file",
@@ -8704,7 +8175,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
             "content": [
               {
                 "data": "data:text/plain;base64,Hello World",
-                "filename": undefined,
                 "mediaType": "text/plain",
                 "providerOptions": undefined,
                 "type": "file",
@@ -8716,7 +8186,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
               },
               {
                 "data": "data:image/jpeg;base64,QkFVRw==",
-                "filename": undefined,
                 "mediaType": "image/jpeg",
                 "providerOptions": undefined,
                 "type": "file",
@@ -8739,7 +8208,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -8747,26 +8215,21 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
                   "content": [
                     {
                       "data": "data:text/plain;base64,Hello World",
-                      "filename": undefined,
                       "mediaType": "text/plain",
                       "providerOptions": undefined,
                       "type": "file",
@@ -8778,7 +8241,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                     },
                     {
                       "data": "data:image/jpeg;base64,QkFVRw==",
-                      "filename": undefined,
                       "mediaType": "image/jpeg",
                       "providerOptions": undefined,
                       "type": "file",
@@ -8788,21 +8250,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
                 "inputTokens": {
-                  "cacheRead": undefined,
-                  "cacheWrite": undefined,
                   "noCache": 3,
                   "total": 3,
                 },
                 "outputTokens": {
-                  "reasoning": undefined,
                   "text": 10,
                   "total": 10,
                 },
@@ -8819,13 +8277,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
           "outputTokens": 10,
           "raw": {
             "inputTokens": {
-              "cacheRead": undefined,
-              "cacheWrite": undefined,
               "noCache": 3,
               "total": 3,
             },
             "outputTokens": {
-              "reasoning": undefined,
               "text": 10,
               "total": 10,
             },
@@ -8834,11 +8289,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -8864,7 +8317,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
             "content": [
               {
                 "data": "data:text/plain;base64,Hello World",
-                "filename": undefined,
                 "mediaType": "text/plain",
                 "providerOptions": undefined,
                 "type": "file",
@@ -8876,7 +8328,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
               },
               {
                 "data": "data:image/jpeg;base64,QkFVRw==",
-                "filename": undefined,
                 "mediaType": "image/jpeg",
                 "providerOptions": undefined,
                 "type": "file",
@@ -8890,7 +8341,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
             "content": [
               {
                 "data": "data:text/plain;base64,Hello World",
-                "filename": undefined,
                 "mediaType": "text/plain",
                 "providerOptions": undefined,
                 "type": "file",
@@ -8902,7 +8352,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
               },
               {
                 "data": "data:image/jpeg;base64,QkFVRw==",
-                "filename": undefined,
                 "mediaType": "image/jpeg",
                 "providerOptions": undefined,
                 "type": "file",
@@ -8925,7 +8374,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -8933,26 +8381,21 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
                   "content": [
                     {
                       "data": "data:text/plain;base64,Hello World",
-                      "filename": undefined,
                       "mediaType": "text/plain",
                       "providerOptions": undefined,
                       "type": "file",
@@ -8964,7 +8407,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                     },
                     {
                       "data": "data:image/jpeg;base64,QkFVRw==",
-                      "filename": undefined,
                       "mediaType": "image/jpeg",
                       "providerOptions": undefined,
                       "type": "file",
@@ -8974,21 +8416,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
                 "inputTokens": {
-                  "cacheRead": undefined,
-                  "cacheWrite": undefined,
                   "noCache": 3,
                   "total": 3,
                 },
                 "outputTokens": {
-                  "reasoning": undefined,
                   "text": 10,
                   "total": 10,
                 },
@@ -9005,13 +8443,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
           "outputTokens": 10,
           "raw": {
             "inputTokens": {
-              "cacheRead": undefined,
-              "cacheWrite": undefined,
               "noCache": 3,
               "total": 3,
             },
             "outputTokens": {
-              "reasoning": undefined,
               "text": 10,
               "total": 10,
             },
@@ -9020,11 +8455,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send fil
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -9453,7 +8886,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -9461,19 +8893,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -9533,21 +8961,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
                 "inputTokens": {
-                  "cacheRead": undefined,
-                  "cacheWrite": undefined,
                   "noCache": 3,
                   "total": 3,
                 },
                 "outputTokens": {
-                  "reasoning": undefined,
                   "text": 10,
                   "total": 10,
                 },
@@ -9564,13 +8988,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
           "outputTokens": 10,
           "raw": {
             "inputTokens": {
-              "cacheRead": undefined,
-              "cacheWrite": undefined,
               "noCache": 3,
               "total": 3,
             },
             "outputTokens": {
-              "reasoning": undefined,
               "text": 10,
               "total": 10,
             },
@@ -9579,11 +9000,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -9732,7 +9151,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -9740,19 +9158,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -9812,21 +9226,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
                 "inputTokens": {
-                  "cacheRead": undefined,
-                  "cacheWrite": undefined,
                   "noCache": 3,
                   "total": 3,
                 },
                 "outputTokens": {
-                  "reasoning": undefined,
                   "text": 10,
                   "total": 10,
                 },
@@ -9843,13 +9253,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
           "outputTokens": 10,
           "raw": {
             "inputTokens": {
-              "cacheRead": undefined,
-              "cacheWrite": undefined,
               "noCache": 3,
               "total": 3,
             },
             "outputTokens": {
-              "reasoning": undefined,
               "text": 10,
               "total": 10,
             },
@@ -9858,11 +9265,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send rea
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -10009,7 +9414,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -10017,19 +9421,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -10044,21 +9444,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
                 "inputTokens": {
-                  "cacheRead": undefined,
-                  "cacheWrite": undefined,
                   "noCache": 3,
                   "total": 3,
                 },
                 "outputTokens": {
-                  "reasoning": undefined,
                   "text": 10,
                   "total": 10,
                 },
@@ -10075,13 +9471,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
           "outputTokens": 10,
           "raw": {
             "inputTokens": {
-              "cacheRead": undefined,
-              "cacheWrite": undefined,
               "noCache": 3,
               "total": 3,
             },
             "outputTokens": {
-              "reasoning": undefined,
               "text": 10,
               "total": 10,
             },
@@ -10090,11 +9483,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -10153,7 +9544,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -10161,19 +9551,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -10188,21 +9574,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
                 "inputTokens": {
-                  "cacheRead": undefined,
-                  "cacheWrite": undefined,
                   "noCache": 3,
                   "total": 3,
                 },
                 "outputTokens": {
-                  "reasoning": undefined,
                   "text": 10,
                   "total": 10,
                 },
@@ -10219,13 +9601,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
           "outputTokens": 10,
           "raw": {
             "inputTokens": {
-              "cacheRead": undefined,
-              "cacheWrite": undefined,
               "noCache": 3,
               "total": 3,
             },
             "outputTokens": {
-              "reasoning": undefined,
               "text": 10,
               "total": 10,
             },
@@ -10234,11 +9613,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send sou
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -10336,7 +9713,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -10346,32 +9722,24 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
         },
         "modelProvider": "mock-provider",
         "modelVersion": "v3",
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 2024-01-01T00:00:00.000Z,
+        "timestamp": "2024-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
             "finishReason": "error",
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-1",
               "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v3",
-              "timestamp": 2024-01-01T00:00:00.000Z,
+              "timestamp": "2024-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
-            "usage": {
-              "inputTokens": undefined,
-              "outputTokens": undefined,
-              "totalTokens": undefined,
-            },
+            "usage": {},
             "warnings": [],
           },
         ],
@@ -10384,7 +9752,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -10426,7 +9793,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -10436,32 +9802,24 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
         },
         "modelProvider": "mock-provider",
         "modelVersion": "v3",
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 2024-01-01T00:00:00.000Z,
+        "timestamp": "2024-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
             "finishReason": "error",
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-1",
               "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v3",
-              "timestamp": 2024-01-01T00:00:00.000Z,
+              "timestamp": "2024-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
-            "usage": {
-              "inputTokens": undefined,
-              "outputTokens": undefined,
-              "totalTokens": undefined,
-            },
+            "usage": {},
             "warnings": [],
           },
         ],
@@ -10474,7 +9832,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send tex
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -10692,7 +10049,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -10700,19 +10056,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -10721,7 +10073,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                       "input": {
                         "value": "Sparkle Day",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": undefined,
                       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
                       "toolName": "test-tool",
@@ -10736,9 +10087,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "cachedInputTokens": 3,
               "inputTokens": 3,
@@ -10746,7 +10096,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
               "raw": {
                 "inputTokens": {
                   "cacheRead": 3,
-                  "cacheWrite": undefined,
                   "noCache": 0,
                   "total": 3,
                 },
@@ -10768,9 +10117,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "args": {
               "value": "Sparkle Day",
             },
-            "dynamic": undefined,
-            "providerExecuted": undefined,
-            "providerMetadata": undefined,
             "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
             "toolName": "test-tool",
           },
@@ -10782,7 +10128,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           "raw": {
             "inputTokens": {
               "cacheRead": 3,
-              "cacheWrite": undefined,
               "noCache": 0,
               "total": 3,
             },
@@ -10797,11 +10142,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "tool-calls",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -10878,7 +10221,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -10886,19 +10228,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -10907,7 +10245,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                       "input": {
                         "value": "Sparkle Day",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": undefined,
                       "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
                       "toolName": "test-tool",
@@ -10922,9 +10259,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "cachedInputTokens": 3,
               "inputTokens": 3,
@@ -10932,7 +10268,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
               "raw": {
                 "inputTokens": {
                   "cacheRead": 3,
-                  "cacheWrite": undefined,
                   "noCache": 0,
                   "total": 3,
                 },
@@ -10954,9 +10289,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "args": {
               "value": "Sparkle Day",
             },
-            "dynamic": undefined,
-            "providerExecuted": undefined,
-            "providerMetadata": undefined,
             "toolCallId": "call_O17Uplv4lJvD6DVdIvFFeRMw",
             "toolName": "test-tool",
           },
@@ -10968,7 +10300,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           "raw": {
             "inputTokens": {
               "cacheRead": 3,
-              "cacheWrite": undefined,
               "noCache": 0,
               "total": 3,
             },
@@ -10983,11 +10314,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "tool-calls",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -11085,7 +10414,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -11095,32 +10423,24 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         },
         "modelProvider": "mock-provider",
         "modelVersion": "v3",
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 2024-01-01T00:00:00.000Z,
+        "timestamp": "2024-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
             "finishReason": "error",
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-1",
               "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v3",
-              "timestamp": 2024-01-01T00:00:00.000Z,
+              "timestamp": "2024-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
-            "usage": {
-              "inputTokens": undefined,
-              "outputTokens": undefined,
-              "totalTokens": undefined,
-            },
+            "usage": {},
             "warnings": [],
           },
         ],
@@ -11133,7 +10453,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -11175,7 +10494,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-1",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -11185,32 +10503,24 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         },
         "modelProvider": "mock-provider",
         "modelVersion": "v3",
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 2024-01-01T00:00:00.000Z,
+        "timestamp": "2024-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
             "finishReason": "error",
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-1",
               "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v3",
-              "timestamp": 2024-01-01T00:00:00.000Z,
+              "timestamp": "2024-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
-            "usage": {
-              "inputTokens": undefined,
-              "outputTokens": undefined,
-              "totalTokens": undefined,
-            },
+            "usage": {},
             "warnings": [],
           },
         ],
@@ -11223,7 +10533,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -11282,7 +10591,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           {
             "content": [
               {
-                "providerOptions": undefined,
                 "text": "test-input",
                 "type": "text",
               },
@@ -11301,7 +10609,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "role": "user",
           },
         ],
-        "message": "expected [ { role: 'user', …(1) } ] to strictly equal [ { role: 'user', …(1) } ]",
+        "name": "AssertionError",
         "operator": "deepStrictEqual",
         "showDiff": true,
       },
@@ -11407,7 +10715,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -11415,19 +10722,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -11436,7 +10739,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
@@ -11451,21 +10753,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
                 "inputTokens": {
-                  "cacheRead": undefined,
-                  "cacheWrite": undefined,
                   "noCache": 3,
                   "total": 3,
                 },
                 "outputTokens": {
-                  "reasoning": undefined,
                   "text": 10,
                   "total": 10,
                 },
@@ -11556,8 +10854,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
             "args": {
               "value": "value",
             },
-            "providerExecuted": undefined,
-            "providerMetadata": undefined,
             "toolCallId": "call-1",
             "toolName": "tool1",
           },
@@ -11567,13 +10863,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           "outputTokens": 10,
           "raw": {
             "inputTokens": {
-              "cacheRead": undefined,
-              "cacheWrite": undefined,
               "noCache": 3,
               "total": 3,
             },
             "outputTokens": {
-              "reasoning": undefined,
               "text": 10,
               "total": 10,
             },
@@ -11582,11 +10875,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": true,
         "reason": "tool-calls",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -11652,7 +10943,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -11695,7 +10985,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -11745,7 +11034,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -11753,19 +11041,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -11774,7 +11058,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
@@ -11789,21 +11072,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
                 "inputTokens": {
-                  "cacheRead": undefined,
-                  "cacheWrite": undefined,
                   "noCache": 3,
                   "total": 3,
                 },
                 "outputTokens": {
-                  "reasoning": undefined,
                   "text": 10,
                   "total": 10,
                 },
@@ -11814,11 +11093,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           },
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -11827,7 +11103,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -11864,21 +11139,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
                 "inputTokens": {
-                  "cacheRead": undefined,
-                  "cacheWrite": undefined,
                   "noCache": 3,
                   "total": 3,
                 },
                 "outputTokens": {
-                  "reasoning": undefined,
                   "text": 10,
                   "total": 10,
                 },
@@ -11895,13 +11166,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           "outputTokens": 20,
           "raw": {
             "inputTokens": {
-              "cacheRead": undefined,
-              "cacheWrite": undefined,
               "noCache": 3,
               "total": 3,
             },
             "outputTokens": {
-              "reasoning": undefined,
               "text": 10,
               "total": 10,
             },
@@ -11910,11 +11178,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -11942,7 +11208,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -11985,7 +11250,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 "input": {
                   "value": "value",
                 },
-                "providerExecuted": undefined,
                 "toolCallId": "call-1",
                 "toolName": "tool1",
                 "type": "tool-call",
@@ -12035,7 +11299,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-0",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -12043,19 +11306,15 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           "modelProvider": "mock-provider",
           "modelVersion": "v3",
         },
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:00.000Z,
+        "timestamp": "1970-01-01T00:00:00.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -12064,7 +11323,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "providerOptions": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
@@ -12079,21 +11337,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
                 "inputTokens": {
-                  "cacheRead": undefined,
-                  "cacheWrite": undefined,
                   "noCache": 3,
                   "total": 3,
                 },
                 "outputTokens": {
-                  "reasoning": undefined,
                   "text": 10,
                   "total": 10,
                 },
@@ -12104,11 +11358,8 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           },
           {
             "content": [],
-            "finishReason": undefined,
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-0",
               "messages": [
                 {
@@ -12117,7 +11368,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                       "input": {
                         "value": "value",
                       },
-                      "providerExecuted": undefined,
                       "toolCallId": "call-1",
                       "toolName": "tool1",
                       "type": "tool-call",
@@ -12154,21 +11404,17 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
                 },
               ],
               "modelId": "mock-model-id",
-              "timestamp": 1970-01-01T00:00:00.000Z,
+              "timestamp": "1970-01-01T00:00:00.000Z",
             },
-            "tripwire": undefined,
             "usage": {
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
                 "inputTokens": {
-                  "cacheRead": undefined,
-                  "cacheWrite": undefined,
                   "noCache": 3,
                   "total": 3,
                 },
                 "outputTokens": {
-                  "reasoning": undefined,
                   "text": 10,
                   "total": 10,
                 },
@@ -12185,13 +11431,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
           "outputTokens": 20,
           "raw": {
             "inputTokens": {
-              "cacheRead": undefined,
-              "cacheWrite": undefined,
               "noCache": 3,
               "total": 3,
             },
             "outputTokens": {
-              "reasoning": undefined,
               "text": 10,
               "total": 10,
             },
@@ -12200,11 +11443,9 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should send too
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "stop",
-        "warnings": undefined,
       },
     },
     "runId": "test-run-id",
@@ -12302,7 +11543,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-2000",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -12312,32 +11552,24 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
         },
         "modelProvider": "mock-provider",
         "modelVersion": "v3",
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:02.000Z,
+        "timestamp": "1970-01-01T00:00:02.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
             "finishReason": "error",
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-2000",
               "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v3",
-              "timestamp": 1970-01-01T00:00:02.000Z,
+              "timestamp": "1970-01-01T00:00:02.000Z",
             },
-            "tripwire": undefined,
-            "usage": {
-              "inputTokens": undefined,
-              "outputTokens": undefined,
-              "totalTokens": undefined,
-            },
+            "usage": {},
             "warnings": [],
           },
         ],
@@ -12350,7 +11582,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -12392,7 +11623,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
         ],
       },
       "metadata": {
-        "headers": undefined,
         "id": "id-2000",
         "modelId": "mock-model-id",
         "modelMetadata": {
@@ -12402,32 +11632,24 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
         },
         "modelProvider": "mock-provider",
         "modelVersion": "v3",
-        "providerMetadata": undefined,
         "request": {},
-        "timestamp": 1970-01-01T00:00:02.000Z,
+        "timestamp": "1970-01-01T00:00:02.000Z",
       },
       "output": {
         "steps": [
           {
             "content": [],
             "finishReason": "error",
-            "providerMetadata": undefined,
             "request": {},
             "response": {
-              "headers": undefined,
               "id": "id-2000",
               "messages": [],
               "modelId": "mock-model-id",
               "modelProvider": "mock-provider",
               "modelVersion": "v3",
-              "timestamp": 1970-01-01T00:00:02.000Z,
+              "timestamp": "1970-01-01T00:00:02.000Z",
             },
-            "tripwire": undefined,
-            "usage": {
-              "inputTokens": undefined,
-              "outputTokens": undefined,
-              "totalTokens": undefined,
-            },
+            "usage": {},
             "warnings": [],
           },
         ],
@@ -12440,7 +11662,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.fullStream > should use fall
         },
       },
       "processorRetryCount": 0,
-      "processorRetryFeedback": undefined,
       "stepResult": {
         "isContinued": false,
         "reason": "error",
@@ -12574,7 +11795,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.response > should resolve wi
     "modelProvider": "mock-provider",
     "modelVersion": "v3",
   },
-  "timestamp": 1970-01-01T00:00:00.000Z,
+  "timestamp": "1970-01-01T00:00:00.000Z",
   "uiMessages": [
     {
       "id": "msg-0",
@@ -12734,14 +11955,12 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
           "role": "assistant",
         },
       ],
-      "headers": undefined,
       "id": "id-0",
       "messages": [
         {
           "content": [
             {
               "data": "data:text/plain;base64,Hello World",
-              "filename": undefined,
               "mediaType": "text/plain",
               "providerOptions": {
                 "mastra": {
@@ -12761,7 +11980,6 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
             },
             {
               "data": "data:image/jpeg;base64,QkFVRw==",
-              "filename": undefined,
               "mediaType": "image/jpeg",
               "providerOptions": {
                 "mastra": {
@@ -12782,7 +12000,7 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
       },
       "modelProvider": "mock-provider",
       "modelVersion": "v3",
-      "timestamp": 1970-01-01T00:00:00.000Z,
+      "timestamp": "1970-01-01T00:00:00.000Z",
       "uiMessages": [
         {
           "id": "msg-0",
@@ -12839,13 +12057,10 @@ exports[`Loop Tests > AISDK v6 (V3 models) > result.steps > should add the files
       "outputTokens": 10,
       "raw": {
         "inputTokens": {
-          "cacheRead": undefined,
-          "cacheWrite": undefined,
           "noCache": 3,
           "total": 3,
         },
         "outputTokens": {
-          "reasoning": undefined,
           "text": 10,
           "total": 10,
         },

@@ -1,17 +1,88 @@
 import type { SpeechSynthesisAdapter } from '@assistant-ui/react';
 import type { Agent } from '@mastra/core/agent';
+import { playStreamWithWebAudio } from '@mastra/react';
+import { toast } from 'sonner';
+
+/**
+ * Turns a failed `voice.speak()` call into a message that points the user at the
+ * likely cause. Voice generation runs against the agent's configured provider
+ * (e.g. OpenAI), so the common failures are auth/quota/missing-provider issues
+ * that the user can only fix in their own setup.
+ */
+function describeSpeakError(error: unknown): string {
+  const status = (error as { status?: number } | null)?.status;
+  const body = (error as { body?: { error?: string } } | null)?.body;
+  const detail = body?.error ?? (error instanceof Error ? error.message : undefined);
+
+  if (status === 429) {
+    return 'Voice provider quota exceeded. Check your voice provider plan and billing, or use an API key with available credits.';
+  }
+
+  if (detail) {
+    return `Voice generation failed: ${detail}`;
+  }
+
+  return 'Voice generation failed.';
+}
 
 export class VoiceAttachmentAdapter implements SpeechSynthesisAdapter {
   constructor(private readonly agent: Agent) {}
+
   speak(text: string): SpeechSynthesisAdapter.Utterance {
-    let _cleanup = () => {};
+    const subscribers = new Set<() => void>();
+    let cleanup = () => {};
+    let started = false;
+
+    const notify = () => {
+      subscribers.forEach(callback => callback());
+    };
 
     const handleEnd = (reason: 'finished' | 'error' | 'cancelled', error?: unknown) => {
       if (res.status.type === 'ended') return;
 
       res.status = { type: 'ended', reason, error };
 
-      _cleanup();
+      if (reason === 'error') {
+        console.error('Voice playback failed', error);
+        toast.error(describeSpeakError(error));
+      }
+
+      cleanup();
+      notify();
+    };
+
+    const start = () => {
+      if (started) return;
+
+      started = true;
+
+      this.agent.voice
+        .speak(text)
+        .then(response => {
+          if (res.status.type === 'ended') return undefined;
+          return (response as unknown as { body?: ReadableStream }).body;
+        })
+        .then(readableStream => {
+          if (res.status.type === 'ended') return undefined;
+          if (!readableStream) {
+            handleEnd('error', new Error('No audio stream returned from voice.speak()'));
+            return undefined;
+          }
+          return playStreamWithWebAudio(readableStream, () => handleEnd('finished'));
+        })
+        .then(nextCleanup => {
+          if (res.status.type === 'ended') {
+            nextCleanup?.();
+            return;
+          }
+
+          if (nextCleanup) {
+            cleanup = nextCleanup;
+          }
+        })
+        .catch(error => {
+          handleEnd('error', error);
+        });
     };
 
     const res: SpeechSynthesisAdapter.Utterance = {
@@ -20,68 +91,16 @@ export class VoiceAttachmentAdapter implements SpeechSynthesisAdapter {
         handleEnd('cancelled');
       },
       subscribe: callback => {
-        this.agent.voice
-          .speak(text)
-          .then(res => {
-            if (res) {
-              return (res as unknown as { body: ReadableStream }).body;
-            }
-          })
-          .then(readableStream => {
-            if (readableStream) {
-              return playStreamWithWebAudio(readableStream);
-            }
-          })
-          .then(cleanup => {
-            if (cleanup) {
-              _cleanup = cleanup;
-            }
+        subscribers.add(callback);
+        start();
+        callback();
 
-            callback();
-          })
-          .catch(error => {
-            handleEnd('error', error);
-          });
-
-        return () => {};
+        return () => {
+          subscribers.delete(callback);
+        };
       },
     };
+
     return res;
   }
-}
-
-async function playStreamWithWebAudio(stream: ReadableStream) {
-  const audioContext = new window.AudioContext();
-
-  const reader = stream.getReader();
-  const chunks = [];
-
-  // Read all chunks
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-  }
-
-  // Combine chunks into single ArrayBuffer
-  const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-  const combinedBuffer = new Uint8Array(totalLength);
-  let offset = 0;
-
-  for (const chunk of chunks) {
-    combinedBuffer.set(chunk, offset);
-    offset += chunk.length;
-  }
-
-  // Decode and play
-  const audioBuffer = await audioContext.decodeAudioData(combinedBuffer.buffer);
-  const source = audioContext.createBufferSource();
-  source.buffer = audioBuffer;
-  source.connect(audioContext.destination);
-  source.start();
-
-  return () => {
-    source.stop();
-    void audioContext.close();
-  };
 }

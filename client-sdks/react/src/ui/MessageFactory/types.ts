@@ -154,10 +154,24 @@ export type TaskRendererProps = Pick<IsTaskCompletePayload, 'passed'> &
   };
 
 /**
+ * Props passed to the `Pending` status slot. Rendered *wrapping* the parts walk
+ * when `message.content.metadata.status === 'pending'`, so the optimistic user
+ * bubble still renders inline while the consumer applies a "sending" style.
+ */
+export type PendingRendererProps = {
+  children: ReactNode;
+  text: string;
+  message: MastraDBMessage;
+};
+
+/**
  * Optional message-level slots dispatched off `message.content.metadata`.
  *
  * - `Tripwire` / `Warning` / `Error` are *replacement* slots: when
  *   `metadata.status` matches, the slot renders instead of the parts walk.
+ * - `Pending` is a *wrapping* slot: when `metadata.status === 'pending'` the
+ *   slot wraps the parts walk so the optimistic bubble renders with a
+ *   "sending" style.
  * - `Task` is an *adjacent* slot: when a completion verdict exists it renders
  *   alongside the parts.
  *
@@ -169,5 +183,6 @@ export type MessageStatusRenderers = {
   Tripwire?: (props: TripwireRendererProps) => ReactNode;
   Warning?: (props: WarningRendererProps) => ReactNode;
   Error?: (props: ErrorRendererProps) => ReactNode;
+  Pending?: (props: PendingRendererProps) => ReactNode;
   Task?: (props: TaskRendererProps) => ReactNode;
 };

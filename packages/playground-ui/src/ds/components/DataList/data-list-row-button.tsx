@@ -1,6 +1,7 @@
 import { forwardRef } from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
-import { dataListRowStyles } from './shared';
+import { useDataListRowWrapperContext } from './data-list-row-wrapper-context';
+import { dataListRowInteractiveStyles, dataListRowStyles } from './shared';
 import type { DataListRowSharedProps } from './shared';
 import { cn } from '@/lib/utils';
 
@@ -15,6 +16,7 @@ export const DataListRowButton = forwardRef<HTMLButtonElement, DataListRowButton
     { children, className, type = 'button', flushLeft, flushRight, colStart, colEnd, featured, style, ...rest },
     ref,
   ) => {
+    const isWrapped = useDataListRowWrapperContext();
     const hasColumnOverride = colStart !== undefined || colEnd !== undefined;
     const resolvedStyle = hasColumnOverride ? { ...style, gridColumn: `${colStart ?? 1} / ${colEnd ?? -1}` } : style;
     return (
@@ -22,10 +24,10 @@ export const DataListRowButton = forwardRef<HTMLButtonElement, DataListRowButton
         ref={ref}
         type={type}
         className={cn(
-          ...dataListRowStyles,
+          ...(isWrapped ? dataListRowInteractiveStyles : dataListRowStyles),
           'text-left',
-          flushLeft && 'ml-0!',
-          flushRight && 'mr-0!',
+          !isWrapped && flushLeft && 'ml-0!',
+          !isWrapped && flushRight && 'mr-0!',
           featured && 'bg-surface4',
           className,
         )}
