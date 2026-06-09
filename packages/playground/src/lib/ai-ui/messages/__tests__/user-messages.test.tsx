@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { AssistantRuntimeProvider, ThreadPrimitive, useExternalStoreRuntime } from '@assistant-ui/react';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { toAssistantUIMessage } from '@/services/to-assistant-ui-message';
 import { UserMessage } from '../user-messages';
+import { toAssistantUIMessage } from '@/services/to-assistant-ui-message';
 
 const renderUserMessage = (message: MastraDBMessage) => {
   const Harness = () => {
