@@ -64,54 +64,52 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     <div className="h-full w-full p-2">
       <div className="h-full min-w-0 w-full bg-surface3 rounded-studio-panel border border-border1/50 overflow-hidden">
         <ScrollArea className="h-full w-full" viewPortClassName="h-full" mask={{ top: false }}>
-          <div className="sticky top-0 z-10 bg-surface3">
-            {showNewRunButton && (
-              <div className="border-b border-border1/50 px-4 py-4">
-                <Button
-                  as={Link}
-                  to={paths.workflowLink(workflowId)}
-                  variant="default"
-                  className="w-full"
-                  onClick={() => {
-                    closeStreamsAndReset();
-                    clearData();
-                    setRunId('');
-                    setContextRunId('');
-                  }}
-                >
-                  <Icon>
-                    <Plus />
-                  </Icon>
-                  New workflow run
-                </Button>
-              </div>
-            )}
-          </div>
-
           <div className="relative">
             {workflowId ? (
-              initialRunId ? (
-                <WorkflowRunDetail
-                  workflowId={workflowId}
-                  runId={initialRunId}
-                  setRunId={setRunId}
-                  workflow={workflow ?? undefined}
-                  isLoading={isLoading}
-                  createWorkflowRun={createWorkflowRun}
-                  streamWorkflow={streamWorkflow}
-                  resumeWorkflow={resumeWorkflow}
-                  streamResult={streamResult}
-                  isStreamingWorkflow={isStreamingWorkflow}
-                  isCancellingWorkflowRun={isCancellingWorkflowRun}
-                  cancelWorkflowRun={cancelWorkflowRun}
-                  observeWorkflowStream={observeWorkflowStream}
-                />
-              ) : (
-                <>
-                  <div className="border-b border-border1/50 px-4 py-4">
-                    <WorkflowEntityHeader workflowId={workflowId} />
-                  </div>
+              <>
+                <div className="border-b border-border1/50 px-4 py-4">
+                  <WorkflowEntityHeader workflowId={workflowId} />
+                </div>
 
+                {showNewRunButton && (
+                  <div className="border-b border-border1/50 px-4 py-4">
+                    <Button
+                      as={Link}
+                      to={paths.workflowLink(workflowId)}
+                      variant="primary"
+                      className="w-full"
+                      onClick={() => {
+                        closeStreamsAndReset();
+                        clearData();
+                        setRunId('');
+                        setContextRunId('');
+                      }}
+                    >
+                      <Icon>
+                        <Plus />
+                      </Icon>
+                      New workflow run
+                    </Button>
+                  </div>
+                )}
+
+                {initialRunId ? (
+                  <WorkflowRunDetail
+                    workflowId={workflowId}
+                    runId={initialRunId}
+                    setRunId={setRunId}
+                    workflow={workflow ?? undefined}
+                    isLoading={isLoading}
+                    createWorkflowRun={createWorkflowRun}
+                    streamWorkflow={streamWorkflow}
+                    resumeWorkflow={resumeWorkflow}
+                    streamResult={streamResult}
+                    isStreamingWorkflow={isStreamingWorkflow}
+                    isCancellingWorkflowRun={isCancellingWorkflowRun}
+                    cancelWorkflowRun={cancelWorkflowRun}
+                    observeWorkflowStream={observeWorkflowStream}
+                  />
+                ) : (
                   <WorkflowTrigger
                     workflowId={workflowId}
                     setRunId={setRunId}
@@ -125,12 +123,12 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
                     isCancellingWorkflowRun={isCancellingWorkflowRun}
                     cancelWorkflowRun={cancelWorkflowRun}
                   />
+                )}
 
-                  <div className="pt-2">
-                    <WorkflowRecentRuns workflowId={workflowId} />
-                  </div>
-                </>
-              )
+                <div className="pt-2">
+                  <WorkflowRecentRuns workflowId={workflowId} />
+                </div>
+              </>
             ) : null}
           </div>
         </ScrollArea>
