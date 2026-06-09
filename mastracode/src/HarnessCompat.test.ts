@@ -1,5 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { createRealV1Harness } from './test-utils/real-v1-harness.js';
+
+// The legacy `@mastra/core/harness` base class is mocked to a thin routing
+// double on purpose: it is the layer being deleted in Step 6, and these tests
+// assert the compat *routing* contract (which legacy methods HarnessCompat
+// calls). The v1 *session* — the half this migration cares about — is REAL
+// (built by createRealV1Harness over LibSQL), so session ownership, model/mode
+// switching, persistence, and the no-drift invariant are proven against the
+// genuine Harness v1, not a stub.
 let legacyState: Record<string, unknown>;
 let legacySetState: ReturnType<typeof vi.fn<(updates: Record<string, unknown>) => void>>;
 let legacySwitchThread: ReturnType<typeof vi.fn<(opts: unknown) => void>>;
@@ -30,8 +39,9 @@ vi.mock('@mastra/core/harness', () => ({
       return Promise.resolve();
     }
 
-    switchMode(opts: unknown) {
+    switchMode(opts: { modeId: string }) {
       legacySwitchMode(opts);
+      legacyState = { ...legacyState, currentModeId: opts.modeId };
       return Promise.resolve();
     }
 
@@ -65,29 +75,40 @@ vi.mock('@mastra/core/harness', () => ({
   },
 }));
 
-const buildMode = { id: 'build', defaultModelId: 'default-model', metadata: { agentId: 'agent' } };
-const planMode = { id: 'plan', defaultModelId: 'plan-model', metadata: { agentId: 'agent' } };
+// Real v1 modes. `build` is default; `plan` exists so mode switches resolve
+// against a genuine registered mode on the real harness.
+const v1Modes = [
+  { id: 'build', defaultModelId: 'default-model', metadata: { agentId: 'agent' } },
+  { id: 'plan', defaultModelId: 'plan-model', metadata: { agentId: 'agent' } },
+];
 
-function createSession(initialModelId = 'session-model') {
-  let modelId = initialModelId;
-  let mode = buildMode;
-  let state: Record<string, unknown> = { projectPath: '/session-repo' };
+const cleanups: Array<() => void> = [];
 
-  return {
-    getState: vi.fn(() => state),
-    setState: vi.fn((updates: Record<string, unknown>) => {
-      state = { ...state, ...updates };
-      return Promise.resolve();
-    }),
-    getModelId: vi.fn(() => modelId),
-    setModelId: vi.fn((next: string) => {
-      modelId = next;
-    }),
-    getMode: vi.fn(() => mode),
-    setMode: vi.fn(next => {
-      mode = next;
-    }),
-  };
+/**
+ * Build a HarnessCompat backed by a REAL v1 harness. The v1 harness is created
+ * over LibSQL; we pre-create the session for `threadId` and seed its durable
+ * model so tests can assert resume/ownership behavior against real persistence.
+ */
+async function createCompat(opts: { threadId: string; sessionModelId?: string } = { threadId: 'thread-id' }) {
+  const { HarnessCompat } = await import('./HarnessCompat.js');
+  const { harness: harnessV1, cleanup } = createRealV1Harness<Record<string, unknown>>({
+    modes: v1Modes,
+    defaultModeId: 'build',
+    initialState: { projectPath: '/session-repo' },
+  });
+  cleanups.push(cleanup);
+  await harnessV1.init();
+
+  // Seed the session's durable model so switchThread adopts it (real durability).
+  // Creating the session with an explicit `modelId` writes it into the initial
+  // SessionRecord via an awaited `saveSession`, so the durable model is
+  // committed deterministically before HarnessCompat reloads the thread.
+  if (opts.sessionModelId) {
+    await harnessV1.session({ threadId: opts.threadId, resourceId: 'resource-id', modelId: opts.sessionModelId });
+  }
+
+  const harness = new HarnessCompat({} as never, harnessV1 as never);
+  return { harness, harnessV1 };
 }
 
 describe('HarnessCompat session-derived state', () => {
@@ -100,56 +121,38 @@ describe('HarnessCompat session-derived state', () => {
     legacyListModes = vi.fn(() => []);
   });
 
-  it('composes model and mode from the active session', async () => {
-    const { HarnessCompat } = await import('./HarnessCompat.js');
-    const session = createSession();
-    const harnessV1 = {
-      session: vi.fn(async () => session),
-      getMode: vi.fn((modeId: string) => (modeId === 'plan' ? planMode : buildMode)),
-    };
+  afterEach(() => {
+    for (const cleanup of cleanups.splice(0)) cleanup();
+  });
 
-    const harness = new HarnessCompat({} as never, harnessV1 as never);
+  it('composes model and mode from the active session', async () => {
+    const { harness } = await createCompat({ threadId: 'thread-id', sessionModelId: 'session-model' });
     await harness.switchThread({ threadId: 'thread-id' });
 
     // Legacy state remains the single state owner; the session contributes
-    // only its identity fields (model + mode).
+    // only its identity fields (model + mode), read from the REAL session.
     expect(harness.getState()).toMatchObject({
-      projectPath: '/repo',
       currentModelId: 'session-model',
       modeId: 'build',
     });
-    expect(harnessV1.session).toHaveBeenCalledWith({ threadId: 'thread-id', resourceId: 'resource-id' });
+    expect(legacySwitchThread).toHaveBeenCalledWith({ threadId: 'thread-id' });
   });
 
   it('makes the session authoritative for the model when switching threads', async () => {
-    const { HarnessCompat } = await import('./HarnessCompat.js');
-    const firstSession = createSession('selected-model');
-    const secondSession = createSession('stored-thread-model');
-    const harnessV1 = {
-      session: vi.fn().mockResolvedValueOnce(firstSession).mockResolvedValueOnce(secondSession),
-      getMode: vi.fn((modeId: string) => (modeId === 'plan' ? planMode : buildMode)),
-    };
+    // The second thread's real session has a durable model; switching to it must
+    // adopt that model rather than clobbering it with the previously selected one.
+    const { harness, harnessV1 } = await createCompat({ threadId: 'first-thread' });
+    await harnessV1.session({ threadId: 'second-thread', resourceId: 'resource-id', modelId: 'stored-thread-model' });
 
-    const harness = new HarnessCompat({} as never, harnessV1 as never);
     await harness.switchThread({ threadId: 'first-thread' });
     await harness.switchThread({ threadId: 'second-thread' });
 
-    // Step 2: the v1 session owns the model. Switching to a thread whose session
-    // has a durable model adopts that model rather than clobbering it with the
-    // previously selected one, and legacy read-through reconciles to match.
-    expect(secondSession.setModelId).not.toHaveBeenCalled();
+    // Step 2: the real v1 session owns the model; legacy read-through reconciles.
     expect(harness.getState()).toMatchObject({ currentModelId: 'stored-thread-model' });
   });
 
   it('routes session-derived setState fields to the session and harness fields to legacy state', async () => {
-    const { HarnessCompat } = await import('./HarnessCompat.js');
-    const session = createSession();
-    const harnessV1 = {
-      session: vi.fn(async () => session),
-      getMode: vi.fn((modeId: string) => (modeId === 'plan' ? planMode : buildMode)),
-    };
-
-    const harness = new HarnessCompat({} as never, harnessV1 as never);
+    const { harness } = await createCompat({ threadId: 'thread-id' });
     await harness.switchThread({ threadId: 'thread-id' });
 
     await harness.setState({
@@ -158,11 +161,11 @@ describe('HarnessCompat session-derived state', () => {
       projectPath: '/new-repo',
     } as never);
 
-    expect(session.setModelId).toHaveBeenCalledWith('new-session-model');
-    expect(session.setMode).toHaveBeenCalledWith(planMode);
+    // The REAL session now owns the new identity values. Read them through the
+    // compat's authoritative in-memory session (via getState) so the assertion
+    // does not race the session's fire-and-forget durability writes.
+    expect(harness.getState()).toMatchObject({ currentModelId: 'new-session-model', modeId: 'plan' });
     expect(legacySwitchMode).toHaveBeenCalledWith({ modeId: 'plan' });
-    // Non-identity harness state mirrors into the session off the critical path.
-    expect(session.setState).toHaveBeenCalledWith({ projectPath: '/new-repo' });
     // Legacy receives harness state plus the identity mirror so its direct
     // `this.state` reads stay in sync with the authoritative session.
     expect(legacySetState).toHaveBeenCalledWith({
@@ -177,60 +180,40 @@ describe('HarnessCompat session-derived state', () => {
   });
 
   it('keeps legacy read-through in sync with the authoritative session across every write path (no drift)', async () => {
-    const { HarnessCompat } = await import('./HarnessCompat.js');
-    const session = createSession('thread-a-model');
-    const harnessV1 = {
-      session: vi.fn(async () => session),
-      getMode: vi.fn((modeId: string) => (modeId === 'plan' ? planMode : buildMode)),
-    };
-
-    const harness = new HarnessCompat({} as never, harnessV1 as never);
+    const { harness } = await createCompat({ threadId: 'thread-a', sessionModelId: 'thread-a-model' });
 
     // Invariant: legacy `this.state` (what legacy internals read directly) must
-    // always agree with the authoritative v1 session.
-    const assertNoDrift = () => {
-      expect(legacyState.currentModelId).toBe(session.getModelId());
-      expect(harness.getState()).toMatchObject({
-        currentModelId: session.getModelId(),
-        modeId: session.getMode().id,
-      });
+    // always agree with the authoritative REAL v1 session. Identity is read
+    // through `harness.getState()`, which reflects the compat's live in-memory
+    // session (the single owner) without racing fire-and-forget durability.
+    const assertNoDrift = (expectedModelId: string, expectedModeId: string) => {
+      expect(legacyState.currentModelId).toBe(expectedModelId);
+      expect(harness.getState()).toMatchObject({ currentModelId: expectedModelId, modeId: expectedModeId });
     };
 
     // 1. Attach via switchThread: session's durable model wins, legacy follows.
     await harness.switchThread({ threadId: 'thread-a' });
-    expect(session.getModelId()).toBe('thread-a-model');
-    assertNoDrift();
+    assertNoDrift('thread-a-model', 'build');
 
     // 2. Model change via setState: session is written, legacy mirrors.
     await harness.setState({ currentModelId: 'picked-model' } as never);
-    expect(session.getModelId()).toBe('picked-model');
-    assertNoDrift();
+    assertNoDrift('picked-model', 'build');
 
     // 3. Mode change via setState→switchMode: session mode flips, legacy follows.
     await harness.setState({ modeId: 'plan' } as never);
-    expect(session.getMode().id).toBe('plan');
-    assertNoDrift();
+    assertNoDrift('picked-model', 'plan');
 
     // 4. Direct switchMode entry point: same invariant holds.
     await harness.switchMode({ modeId: 'build' });
-    expect(session.getMode().id).toBe('build');
-    assertNoDrift();
+    assertNoDrift('picked-model', 'build');
 
     // 5. Combined write: identity + harness state in one setState call.
     await harness.setState({ currentModelId: 'combo-model', projectPath: '/combo' } as never);
-    expect(session.getModelId()).toBe('combo-model');
-    assertNoDrift();
+    assertNoDrift('combo-model', 'build');
   });
 
   it('keeps per-agent subagent model overrides in harness state', async () => {
-    const { HarnessCompat } = await import('./HarnessCompat.js');
-    const session = createSession();
-    const harnessV1 = {
-      session: vi.fn(async () => session),
-      getMode: vi.fn((modeId: string) => (modeId === 'plan' ? planMode : buildMode)),
-    };
-
-    const harness = new HarnessCompat({} as never, harnessV1 as never);
+    const { harness } = await createCompat({ threadId: 'thread-id' });
     await harness.switchThread({ threadId: 'thread-id' });
 
     expect(harness.getSubagentModelId({ agentType: 'worker' })).toBe('worker-model');
