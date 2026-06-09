@@ -4,7 +4,7 @@ import { useMergedRequestContext } from '@/domains/request-context/context/schem
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 import { Thread } from '@/lib/ai-ui/thread';
 
-import { MastraRuntimeProvider } from '@/services/mastra-runtime-provider';
+import { ChatProvider } from '@/lib/ai-ui/chat/chat-provider';
 import type { ChatProps } from '@/types';
 
 export const AgentChat = ({
@@ -63,7 +63,7 @@ export const AgentChat = ({
   const messages = data?.messages ?? emptyMessagesRef.current.messages;
 
   return (
-    <MastraRuntimeProvider
+    <ChatProvider
       agentId={agentId}
       agentName={agentName}
       modelVersion={modelVersion}
@@ -83,6 +83,6 @@ export const AgentChat = ({
         hasModelList={Boolean(modelList)}
         hideModelSwitcher={hideModelSwitcher}
       />
-    </MastraRuntimeProvider>
+    </ChatProvider>
   );
 };

@@ -1,0 +1,154 @@
+import type { CoreUserMessage } from '@mastra/core/llm';
+import { fileToBase64, getFileContentType } from '@mastra/playground-ui';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+
+/**
+ * Local composer-attachment state, replacing the assistant-ui
+ * `ComposerPrimitive.Attachments` / `AttachmentPrimitive` / `useAttachment` /
+ * `useComposerRuntime` attachment surface.
+ *
+ * `Composer` mounts the provider; the previews row, the add-file dialog, and the
+ * send button all read this single state. On send the attachments are converted
+ * to `CoreUserMessage[]` (image / file / text) exactly like the old
+ * `convertToAIAttachments` in `MastraRuntimeProvider`.
+ */
+
+export type ComposerAttachmentKind = 'image' | 'pdf' | 'text';
+
+export interface ComposerAttachment {
+  id: string;
+  /** The picked file. For URL attachments this is an empty File whose `name` is the URL. */
+  file: File;
+  name: string;
+  contentType: string;
+  kind: ComposerAttachmentKind;
+  /** True when this attachment was added by URL (name is a https:// link). */
+  isUrl: boolean;
+}
+
+interface ComposerAttachmentsContextValue {
+  attachments: ComposerAttachment[];
+  addFiles: (files: File[] | FileList) => void;
+  addUrl: (url: string) => Promise<void>;
+  remove: (id: string) => void;
+  clear: () => void;
+  toCoreUserMessages: () => Promise<CoreUserMessage[]>;
+}
+
+const ComposerAttachmentsContext = createContext<ComposerAttachmentsContextValue | null>(null);
+
+const kindForContentType = (contentType: string): ComposerAttachmentKind => {
+  if (contentType.startsWith('image/')) return 'image';
+  if (contentType === 'application/pdf') return 'pdf';
+  return 'text';
+};
+
+let attachmentCounter = 0;
+const nextId = () => `att-${Date.now()}-${++attachmentCounter}`;
+
+const fileToText = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+    reader.onerror = () => reject(reader.error);
+    reader.readAsText(file);
+  });
+
+const toAttachment = (file: File): ComposerAttachment => {
+  const isUrl = file.name.startsWith('https://');
+  const contentType = file.type || 'text/plain';
+  return {
+    id: nextId(),
+    file,
+    name: file.name,
+    contentType,
+    kind: kindForContentType(contentType),
+    isUrl,
+  };
+};
+
+/**
+ * Convert a single composer attachment into a `CoreUserMessage`, mirroring the
+ * old assistant-ui runtime conversion (image → image part, pdf → file part,
+ * text → plain string content). URL attachments forward the URL as the data.
+ */
+const attachmentToCoreUserMessage = async (att: ComposerAttachment): Promise<CoreUserMessage> => {
+  if (att.kind === 'image') {
+    return {
+      role: 'user',
+      content: [
+        {
+          type: 'image',
+          image: att.isUrl ? att.name : await fileToBase64(att.file),
+          mimeType: att.contentType,
+        },
+      ],
+    } as CoreUserMessage;
+  }
+
+  if (att.kind === 'pdf') {
+    const data = att.isUrl ? att.name : `data:application/pdf;base64,${await fileToBase64(att.file)}`;
+    return {
+      role: 'user',
+      content: [
+        {
+          type: 'file',
+          data,
+          mimeType: att.contentType,
+          filename: att.name,
+        },
+      ],
+    } as CoreUserMessage;
+  }
+
+  const text = await fileToText(att.file);
+  return {
+    role: 'user',
+    content: text,
+  } as CoreUserMessage;
+};
+
+export const ComposerAttachmentsProvider = ({ children }: { children: ReactNode }) => {
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+
+  const addFiles = useCallback((files: File[] | FileList) => {
+    const list = Array.from(files);
+    if (list.length === 0) return;
+    setAttachments(prev => [...prev, ...list.map(toAttachment)]);
+  }, []);
+
+  const addUrl = useCallback(async (url: string) => {
+    const contentType = (await getFileContentType(url)) ?? 'application/octet-stream';
+    // assistant-ui only accepted real files, so the old code passed the URL as
+    // the filename of an empty File. We keep that shape so conversion can detect
+    // URL attachments via the `https://` name prefix.
+    const file = new File([], url, { type: contentType });
+    setAttachments(prev => [...prev, toAttachment(file)]);
+  }, []);
+
+  const remove = useCallback((id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
+  }, []);
+
+  const clear = useCallback(() => setAttachments([]), []);
+
+  const toCoreUserMessages = useCallback(async () => {
+    return Promise.all(attachments.map(attachmentToCoreUserMessage));
+  }, [attachments]);
+
+  const value = useMemo<ComposerAttachmentsContextValue>(
+    () => ({ attachments, addFiles, addUrl, remove, clear, toCoreUserMessages }),
+    [attachments, addFiles, addUrl, remove, clear, toCoreUserMessages],
+  );
+
+  return <ComposerAttachmentsContext.Provider value={value}>{children}</ComposerAttachmentsContext.Provider>;
+};
+
+export const useComposerAttachments = (): ComposerAttachmentsContextValue => {
+  const ctx = useContext(ComposerAttachmentsContext);
+  if (!ctx) {
+    throw new Error('useComposerAttachments must be used within a ComposerAttachmentsProvider');
+  }
+  return ctx;
+};

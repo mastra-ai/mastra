@@ -61,7 +61,6 @@
   "author": "Mastra",
   "license": "Apache-2.0",
   "dependencies": {
-    "@assistant-ui/react-ui": "^0.2.1",
     "@base-ui/react": "^1.5.0",
     "@codemirror/autocomplete": "^6.20.1",
     "@codemirror/lang-javascript": "^6.2.5",
