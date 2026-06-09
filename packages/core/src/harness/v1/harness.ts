@@ -5,6 +5,7 @@ import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
 import type { MastraCompositeStore } from '../../storage';
 import type { HarnessStorage, SessionRecord } from '../../storage/domains/harness';
+import { augmentWithInit } from '../../storage/storageWithInit';
 import type { DynamicArgument } from '../../types';
 import { Workspace } from '../../workspace';
 import { EventEmitter, sessionCreatedPayload } from './events';
@@ -30,6 +31,10 @@ type SessionByThreadOptions = {
 };
 
 type SessionOptions = SessionByIdOptions | SessionByThreadOptions;
+
+function isHarnessStorage(storage: HarnessStorage | MastraCompositeStore): storage is HarnessStorage {
+  return typeof (storage as { loadSession?: unknown }).loadSession === 'function';
+}
 
 export class Harness<MODES extends HarnessMode[], TState = {}> {
   readonly #ownerId: string;
@@ -57,9 +62,16 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
 
     this.#ownerId = config.ownerId ?? randomUUID();
     this.#defaultMode = config.defaultModeId ?? config.modes[0]!.id;
-    this.#storage = config.storage;
     this.#mastra = config.mastra;
-    this.#compositeStorage = config.mastra?.getStorage();
+    if (config.storage) {
+      if (isHarnessStorage(config.storage)) {
+        this.#storage = config.storage;
+      } else {
+        this.#compositeStorage = augmentWithInit(config.storage);
+      }
+    } else {
+      this.#compositeStorage = config.mastra?.getStorage();
+    }
     this.#memory = config.memory;
     this.#events = new EventEmitter();
     if (config.runtimeCompatibilityGeneration !== undefined && config.runtimeCompatibilityGeneration.length === 0) {
@@ -266,7 +278,11 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       return this.#storage;
     }
 
-    const storage = await this.#compositeStorage?.getStore('harness');
+    if (!this.#compositeStorage) {
+      throw new Error('Harness session storage is not configured');
+    }
+
+    const storage = await this.#compositeStorage.getStore('harness');
     if (!storage) {
       throw new Error('Harness session storage is not configured');
     }
