@@ -269,6 +269,8 @@ describe('tool replay integration', () => {
     const result = summary.results[0]!;
     expect(result.error?.code).toBe('TOOL_REPLAY_MISS');
     expect(result.error?.message).toContain("Tool replay miss for 'lookup'");
+    // Failure contract: failed executions have output: null (scorers run against output)
+    expect(result.output).toBeNull();
     // Deterministic failure — the retry loop must not re-run it.
     expect(result.retryCount).toBe(0);
     expect(liveExecute).not.toHaveBeenCalled();

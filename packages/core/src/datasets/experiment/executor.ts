@@ -269,15 +269,15 @@ async function executeAgent(
       : replayAbort.signal
     : signal;
 
-  const fatalMissResult = (): ExecutionResult => {
-    const report = finalizeReplayReport(replayState!);
-    return {
-      output: { toolReplay: report },
-      error: { message: fatalMissError!.message, code: 'TOOL_REPLAY_MISS' },
-      traceId: null,
-      toolReplay: report,
-    };
-  };
+  // Keep the failure contract: failed executions have output: null (scorers
+  // run against output even on errors). The divergence report stays available
+  // on ExecutionResult.toolReplay / ItemResult.toolReplay.
+  const fatalMissResult = (): ExecutionResult => ({
+    output: null,
+    error: { message: fatalMissError!.message, code: 'TOOL_REPLAY_MISS' },
+    traceId: null,
+    toolReplay: finalizeReplayReport(replayState!),
+  });
 
   let rawResult: unknown;
   try {
