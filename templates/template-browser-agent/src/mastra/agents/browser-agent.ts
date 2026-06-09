@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { openai } from '@ai-sdk/openai';
@@ -13,7 +14,7 @@ function getChromiumExecutablePath() {
   let executablePath = chromium.executablePath();
 
   if (!existsSync(executablePath)) {
-    const playwrightCli = require.resolve('playwright/cli');
+    const playwrightCli = join(dirname(require.resolve('playwright')), 'cli.js');
     execFileSync(process.execPath, [playwrightCli, 'install', 'chromium'], { stdio: 'inherit' });
     executablePath = chromium.executablePath();
   }
