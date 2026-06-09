@@ -58,6 +58,9 @@ export function extractFormToolProviders(value: unknown): ToolProvidersFormValue
   const result: NonNullable<ToolProvidersFormValue> = {};
 
   for (const [providerId, config] of Object.entries(staticValue)) {
+    // Persisted configs can be malformed (e.g. `{ composio: null }`); skip
+    // anything that isn't a plain object so hydration never throws.
+    if (typeof config !== 'object' || config === null) continue;
     const connectionsByService: Record<string, StoredToolProviderConnection[]> = config.connections ?? {};
     const services = Object.keys(connectionsByService);
     const findServiceForSlug = (slug: string): string | undefined => {
