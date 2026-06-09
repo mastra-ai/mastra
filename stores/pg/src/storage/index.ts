@@ -12,6 +12,7 @@ import {
   isPoolConfig,
 } from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
+import { buildConnectionStringPoolConfig } from '../shared/pool-config';
 import { PoolAdapter } from './client';
 import type { DbClient } from './client';
 import type { PgDomainClientConfig } from './db';
@@ -38,7 +39,6 @@ import { SkillsPG } from './domains/skills';
 import { ToolProviderConnectionsPG } from './domains/tool-provider-connections';
 import { WorkflowsPG } from './domains/workflows';
 import { WorkspacesPG } from './domains/workspaces';
-import { buildConnectionStringPoolConfig } from './pool-config';
 
 /** Default maximum number of connections in the pool */
 const DEFAULT_MAX_CONNECTIONS = 20;

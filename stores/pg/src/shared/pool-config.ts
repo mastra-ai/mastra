@@ -5,6 +5,9 @@ import { parse } from 'pg-connection-string';
 /**
  * Builds the `pg.Pool` options for a connection-string based config.
  *
+ * Shared by both `PostgresStore` and `PgVector` so connection-string SSL
+ * precedence behaves identically across the storage and vector code paths.
+ *
  * node-postgres re-parses `connectionString` via `pg-connection-string` and
  * `Object.assign`s the parsed result over any explicit options. As a result an
  * `sslmode=` / `ssl=` query param in the URL silently overrides an explicit
