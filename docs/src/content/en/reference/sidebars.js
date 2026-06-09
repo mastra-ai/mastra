@@ -161,6 +161,7 @@ const sidebars = {
         { type: 'doc', id: 'core/listScorers', label: '.listScorers()' },
         { type: 'doc', id: 'core/listVectors', label: '.listVectors()' },
         { type: 'doc', id: 'core/listWorkflows', label: '.listWorkflows()' },
+        { type: 'doc', id: 'core/removeWorkspace', label: '.removeWorkspace()' },
         { type: 'doc', id: 'core/setLogger', label: '.setLogger()' },
         { type: 'doc', id: 'core/setStorage', label: '.setStorage()' },
       ],
