@@ -7,11 +7,6 @@
  */
 
 :root {
-  /* Legacy font-name aliases. Prefer --font-display / --font-body / --font-mono. */
-  --geist-mono: var(--font-mono);
-  --font-inter: var(--font-body);
-  --tasa-explorer: var(--font-display);
-
   /* Dark theme (default) */
   --surface1: oklch(0% 0 0deg);
   --surface2: oklch(16% 0 0deg);
@@ -370,7 +365,7 @@ html.light {
    * Role-based font tokens. Components reference --font-display (headlines,
    * brand) and --font-body (UI, paragraphs). Defaults are system fonts so
    * this package has no font-licensing footprint. Consumers override these
-   * tokens in their own CSS to apply branded fonts (e.g., Greed, Geist).
+   * tokens in their own CSS to apply product fonts.
    */
   --font-display: ui-serif, georgia, cambria, 'Times New Roman', times, serif;
   --font-body:
