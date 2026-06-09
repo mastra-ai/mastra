@@ -23,3 +23,4 @@ export * from './experiments';
 export * from './background-tasks';
 export * from './schedules';
 export * from './tool-provider-connections';
+export * from './notifications';

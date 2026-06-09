@@ -87,6 +87,14 @@ export const myAgent = new Agent({
 })
 ```
 
+## Lifecycle and cleanup
+
+Mastra registers global and agent workspaces so they can be listed and retrieved at runtime. When you call `mastra.shutdown()`, Mastra destroys registered workspaces that it owns. This closes workspace resources such as language servers, browsers, sandbox processes, and filesystem provider handles.
+
+For manual cleanup, use [`mastra.removeWorkspace()`](/reference/core/removeWorkspace). Pass `{ destroy: true }` when the workspace should be destroyed before it is removed from the registry.
+
+Static providers are owned by the workspace. Resolver-backed providers are owned by your application because the workspace creates them at request time. See [dynamic sandbox lifecycle ownership](/docs/workspace/sandbox#lifecycle-ownership) for the resolver cleanup model.
+
 ## Configuration patterns
 
 Workspaces support several configuration patterns depending on what capabilities your agent needs. The two main building blocks are `filesystem` (file tools) and `sandbox` (command execution), with `mounts` as the way to bridge cloud storage into sandboxes.
@@ -182,6 +190,23 @@ const workspace = new Workspace({
 
 One workspace instance serves all requests. The resolver runs at tool execution time, so each request gets its own filesystem. See [dynamic filesystem](/docs/workspace/filesystem#dynamic-filesystem) for details.
 
+### Dynamic sandbox (per-request)
+
+Pass a resolver function to `sandbox` to return a different sandbox per request. This is useful for multi-tenant deployments where each user or role needs an isolated working directory or different execution permissions.
+
+```typescript
+const workspace = new Workspace({
+  sandbox: ({ requestContext }) => {
+    const userId = requestContext.get('user-id') as string
+    return new LocalSandbox({
+      workingDirectory: `/workspaces/${userId}`,
+    })
+  },
+})
+```
+
+The resolver is incompatible with `mounts` and `lsp: true`, since both require a concrete sandbox instance at construction time. See [dynamic sandbox](/docs/workspace/sandbox#dynamic-sandbox) for details.
+
 ### Which pattern should I use?
 
 | Scenario | Pattern |
@@ -192,6 +217,7 @@ One workspace instance serves all requests. The resolver runs at tool execution 
 | Agent reads/writes files, no command execution needed | `filesystem` only |
 | Agent runs commands, no file tools needed | `sandbox` only |
 | Multi-role or multi-tenant agent with per-request storage | `filesystem` with resolver function |
+| Multi-tenant agent with per-request execution scope | `sandbox` with resolver function |
 
 ## Tool configuration
 

@@ -1,6 +1,6 @@
 import type { StreamVNextChunkType } from '@mastra/client-js';
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { mapWorkflowStreamChunkToWatchResult } from '../lib/ai-sdk/utils/toUIMessage';
+import { mapWorkflowStreamChunkToWatchResult } from '../lib/mastra-db';
 import { useMutation } from '../lib/use-mutation';
 import { useMastraClient } from '../mastra-client-context';
 import type {

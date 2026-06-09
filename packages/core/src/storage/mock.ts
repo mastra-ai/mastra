@@ -12,6 +12,7 @@ import { InMemoryDB } from './domains/inmemory-db';
 import { InMemoryMCPClientsStorage } from './domains/mcp-clients/inmemory';
 import { InMemoryMCPServersStorage } from './domains/mcp-servers/inmemory';
 import { InMemoryMemory } from './domains/memory/inmemory';
+import { InMemoryNotificationsStorage } from './domains/notifications';
 import { ObservabilityInMemory } from './domains/observability/inmemory';
 import { InMemoryPromptBlocksStorage } from './domains/prompt-blocks/inmemory';
 import { InMemorySchedulesStorage } from './domains/schedules/inmemory';
@@ -66,6 +67,7 @@ export class InMemoryStore extends MastraCompositeStore {
       observability: new ObservabilityInMemory({ db: this.#db }),
       agents: new InMemoryAgentsStorage({ db: this.#db }),
       channels: new InMemoryChannelsStorage(),
+      notifications: new InMemoryNotificationsStorage(),
       datasets: new DatasetsInMemory({ db: this.#db }),
       experiments: new ExperimentsInMemory({ db: this.#db }),
       promptBlocks: new InMemoryPromptBlocksStorage({ db: this.#db }),
@@ -93,6 +95,7 @@ export class InMemoryStore extends MastraCompositeStore {
     // These domains don't share the InMemoryDB
     void this.stores.channels?.dangerouslyClearAll?.();
     void this.stores.harness?.dangerouslyClearAll?.();
+    void this.stores.notifications?.dangerouslyClearAll?.();
   }
 }
 

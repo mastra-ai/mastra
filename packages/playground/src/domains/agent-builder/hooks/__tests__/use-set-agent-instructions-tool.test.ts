@@ -49,24 +49,21 @@ describe('useSetAgentInstructionsTool', () => {
     expect(form().getValues('instructions')).toBe('');
   });
 
-  it('passes through instructions at or below the hard cap unchanged', async () => {
+  it('rejects overly long instructions without exposing the hard limit in the message', async () => {
     const { tool, form } = renderTool();
-    const body = 'a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS);
-    const result: any = await tool.execute!({ instructions: body } as any);
-    expect(form().getValues('instructions')).toBe(body);
-    expect(result.truncated).toBe(false);
-    expect(result.finalLength).toBe(MAX_GENERATED_INSTRUCTIONS_CHARS);
-  });
+    const seeded = 'Existing valid instructions.';
+    form().setValue('instructions', seeded);
 
-  it('truncates instructions past the hard cap with a notice the LLM can read back', async () => {
-    const { tool, form } = renderTool();
     const body = 'a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS + 500);
     const result: any = await tool.execute!({ instructions: body } as any);
-    const stored = form().getValues('instructions');
-    expect(stored.length).toBeLessThanOrEqual(MAX_GENERATED_INSTRUCTIONS_CHARS);
-    expect(stored).toMatch(/\[…truncated to fit length limit\]$/);
-    expect(result.truncated).toBe(true);
-    expect(result.originalLength).toBe(MAX_GENERATED_INSTRUCTIONS_CHARS + 500);
-    expect(result.finalLength).toBeLessThanOrEqual(MAX_GENERATED_INSTRUCTIONS_CHARS);
+
+    expect(form().getValues('instructions')).toBe(seeded);
+    expect(result.success).toBe(false);
+    expect(result.rejected).toBe(true);
+    expect(result.currentLength).toBe(MAX_GENERATED_INSTRUCTIONS_CHARS + 500);
+    expect(result.limit).toBe(MAX_GENERATED_INSTRUCTIONS_CHARS);
+    expect(result.message).toMatch(/too long/i);
+    expect(result.message).toMatch(/1,200–2,000 characters/i);
+    expect(result.message).not.toContain(String(MAX_GENERATED_INSTRUCTIONS_CHARS));
   });
 });

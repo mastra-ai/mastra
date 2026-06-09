@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { AgentTool } from '../../types/agent-tool';
-import { buildFormSnapshotInstructions } from '../build-form-snapshot';
+import { MAX_GENERATED_INSTRUCTIONS_CHARS, buildFormSnapshotInstructions } from '../build-form-snapshot';
 import type { AvailableWorkspaceLike, BuildFormSnapshotOptions } from '../build-form-snapshot';
 import type { ModelInfo } from '@/domains/llm';
 
@@ -138,10 +138,10 @@ describe('buildFormSnapshotInstructions', () => {
   });
 
   it('truncates instructions beyond the hard cap and appends [truncated]', () => {
-    // Use a length above MAX_GENERATED_INSTRUCTIONS_CHARS (3000) to trip the
-    // snapshot's truncate helper. Below the cap, the full block is echoed so
-    // the LLM sees the same "persisted, final text" the directive points to.
-    const longInstructions = 'a'.repeat(4000);
+    // Use a length above MAX_GENERATED_INSTRUCTIONS_CHARS to trip the snapshot's
+    // truncate helper. Below the cap, the full block is echoed so the LLM sees
+    // the same "persisted, final text" the directive points to.
+    const longInstructions = 'a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS + 1000);
     const values: AgentBuilderEditFormValues = {
       ...baseValues,
       instructions: longInstructions,
@@ -150,8 +150,8 @@ describe('buildFormSnapshotInstructions', () => {
     const result = buildFormSnapshotInstructions(values, buildOptions());
 
     expect(result).toContain('[truncated]');
-    expect(result).not.toContain('a'.repeat(4000));
-    expect(result).toContain('a'.repeat(3000));
+    expect(result).not.toContain('a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS + 1));
+    expect(result).toContain('a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS));
   });
 
   it('echoes instructions verbatim when under the hard cap', () => {
@@ -325,22 +325,17 @@ describe('buildFormSnapshotInstructions', () => {
       expect(result).toContain('Already set. Do not call set-agent-description');
     });
 
-    it('tells the LLM to call set-agent-instructions exactly once when instructions is empty', () => {
+    it('tells the LLM to write set-agent-instructions concisely the first time when empty', () => {
       const result = buildFormSnapshotInstructions(baseValues, buildOptions());
 
       expect(result).toContain('- Instructions: (empty)');
-      expect(result).toContain('Call set-agent-instructions EXACTLY ONCE');
-      expect(result).toMatch(/Do not call it again to revise/);
-    });
-
-    it('caps the generated instructions length so a single tool call serializes safely', () => {
-      const result = buildFormSnapshotInstructions(baseValues, buildOptions());
-
-      // Hard cap surfaced to the LLM AND enforced server-side in
-      // useSetAgentInstructionsTool, so set-agent-instructions args stay
-      // under the stream output token cap.
-      expect(result).toMatch(/[Ss]trict [\d,]+-character limit/);
-      expect(result).toMatch(/truncated server-side/);
+      expect(result).toMatch(/Call set-agent-instructions ONCE/);
+      expect(result).toMatch(/target 1,200–2,000 characters/i);
+      expect(result).toMatch(/2–4 short paragraphs or compact bullet groups/i);
+      expect(result).toMatch(/Avoid worked examples, FAQs, long edge-case lists, or exhaustive policies/i);
+      expect(result).not.toMatch(/HARD limit/i);
+      expect(result).not.toMatch(/COUNT characters before calling/i);
+      expect(result).not.toMatch(/Over-limit calls are REJECTED/i);
     });
 
     it('tells the LLM not to revise instructions once they are filled', () => {
@@ -471,7 +466,7 @@ describe('buildFormSnapshotInstructions', () => {
       const result = buildFormSnapshotInstructions({ ...baseValues, instructions: '   \n  ' }, buildOptions());
 
       expect(result).toContain('- Instructions: (empty)');
-      expect(result).toContain('Call set-agent-instructions EXACTLY ONCE');
+      expect(result).toMatch(/Call set-agent-instructions ONCE/);
     });
 
     it('wraps short-form values in quotes so user input is visually contained', () => {

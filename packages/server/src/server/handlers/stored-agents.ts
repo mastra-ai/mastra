@@ -13,6 +13,7 @@ import {
   createStoredAgentResponseSchema,
   updateStoredAgentResponseSchema,
   deleteStoredAgentResponseSchema,
+  getStoredAgentDependentsResponseSchema,
   exportStoredAgentBodySchema,
   exportStoredAgentResponseSchema,
   previewInstructionsBodySchema,
@@ -22,6 +23,7 @@ import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/r
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 
+import { attachAuthor, prepareAuthorEnrichment } from './author-enrichment';
 import {
   assertReadAccess,
   assertWriteAccess,
@@ -259,8 +261,14 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
         const endIdx = effectivePerPage === 0 ? 0 : startIdx + effectivePerPage;
         const sliced = effectivePerPage === 0 ? [] : visible.slice(startIdx, endIdx);
         const annotated = sliced.map(record => ({ ...record, isFavorited: true }));
+        const authors = await prepareAuthorEnrichment(
+          mastra,
+          requestContext,
+          annotated.map(a => a.authorId),
+        );
+        const withAuthors = authors ? annotated.map(record => attachAuthor(record, authors)) : annotated;
         const hasMore = effectivePerPage > 0 && endIdx < total;
-        return { agents: annotated, total, page, perPage: effectivePerPage, hasMore };
+        return { agents: withAuthors, total, page, perPage: effectivePerPage, hasMore };
       }
 
       const result = await agentsStore.listResolved({
@@ -281,8 +289,16 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       // filter as a view over the caller's scope — an approximation is OK.
       const visibleAgents = result.agents.filter(record => matchesAuthorFilter(record, filter));
 
+      const authors = await prepareAuthorEnrichment(
+        mastra,
+        requestContext,
+        visibleAgents.map(a => a.authorId),
+      );
+
       if (!favoritesEnabled) {
-        return { ...result, agents: visibleAgents.map(stripFavoriteFields) };
+        const stripped = visibleAgents.map(stripFavoriteFields);
+        const withAuthors = authors ? stripped.map(record => attachAuthor(record, authors)) : stripped;
+        return { ...result, agents: withAuthors };
       }
 
       const enrichment = await prepareFavoritesEnrichment(
@@ -294,8 +310,9 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
       const annotated = enrichment
         ? visibleAgents.map(record => ({ ...record, isFavorited: enrichment.starredIds.has(record.id) }))
         : visibleAgents.map(stripFavoriteFields);
+      const withAuthors = authors ? annotated.map(record => attachAuthor(record, authors)) : annotated;
 
-      return { ...result, agents: annotated };
+      return { ...result, agents: withAuthors };
     } catch (error) {
       return handleError(error, 'Error listing stored agents');
     }
@@ -388,7 +405,9 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
       // holder, and the record isn't public/legacy-unowned.
       assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: agent });
 
-      return enrichOrStripFavorites(mastra, requestContext, 'agent', agent);
+      const authors = await prepareAuthorEnrichment(mastra, requestContext, [agent.authorId]);
+      const withFavorite = await enrichOrStripFavorites(mastra, requestContext, 'agent', agent);
+      return attachAuthor(withFavorite, authors);
     } catch (error) {
       return handleError(error, 'Error getting stored agent');
     }
@@ -860,6 +879,108 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
     }
   },
 });
+
+/**
+ * GET /stored/agents/:storedAgentId/dependents - List agents that reference
+ * the target agent as a sub-agent.
+ *
+ * Returns `dependents` for caller-visible references (named) and `hiddenCount`
+ * for references from agents the caller can't read (count only, no leak).
+ * `hiddenCount` is only populated when the target is public — private targets
+ * can't legitimately be referenced from other workspaces.
+ */
+export const GET_STORED_AGENT_DEPENDENTS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/stored/agents/:storedAgentId/dependents',
+  responseType: 'json',
+  pathParamSchema: storedAgentIdPathParams,
+  responseSchema: getStoredAgentDependentsResponseSchema,
+  summary: 'List dependents of a stored agent',
+  description:
+    'Returns agents that reference the target as a sub-agent. Used to warn before deleting or unsharing. Caller-readable references appear in `dependents` (id + name); cross-workspace references the caller cannot read are aggregated in `hiddenCount` and only surfaced when the target is public.',
+  tags: ['Stored Agents'],
+  requiresAuth: true,
+  handler: async ({ mastra, requestContext, storedAgentId }) => {
+    try {
+      const storage = mastra.getStorage();
+      if (!storage) {
+        throw new HTTPException(500, { message: 'Storage is not configured' });
+      }
+
+      const agentsStore = await storage.getStore('agents');
+      if (!agentsStore) {
+        throw new HTTPException(500, { message: 'Agents storage domain is not available' });
+      }
+
+      // Mirrors GET: 404 if the caller can't read the target. Prevents the
+      // dependents endpoint from being usable as a sub-agent reference oracle.
+      const target = await agentsStore.getById(storedAgentId);
+      if (!target) {
+        throw new HTTPException(404, { message: `Stored agent with id ${storedAgentId} not found` });
+      }
+      assertStoredResourceScope(target, await getStoredResourceScope(mastra, requestContext));
+      assertReadAccess({ requestContext, resource: 'stored-agents', resourceId: storedAgentId, record: target });
+
+      // Full scan (no authorId filter) so a public target can detect
+      // cross-workspace private dependents. We split into caller-visible
+      // `dependents` vs `hiddenCount` so private agents owned by other users
+      // are counted but never named.
+      const filter = resolveAuthorFilter({ requestContext, resource: 'stored-agents' });
+      const all = await agentsStore.listResolved({
+        perPage: false,
+        status: 'published',
+      });
+
+      const targetIsPublic = (target as { visibility?: string }).visibility === 'public';
+
+      // Caller-readable dependents are surfaced by name (the caller already
+      // has access to them). Cross-workspace dependents the caller cannot
+      // read are aggregated into hiddenCount, only when the target is public.
+      const dependents: Array<{ id: string; name: string }> = [];
+      let hiddenCount = 0;
+
+      for (const record of all.agents) {
+        if (record.id === storedAgentId) continue;
+        if (!referencesTarget((record as { agents?: unknown }).agents, storedAgentId)) continue;
+
+        if (matchesAuthorFilter(record, filter)) {
+          dependents.push({
+            id: record.id,
+            name: (record as { name?: string }).name ?? record.id,
+          });
+        } else if (targetIsPublic) {
+          hiddenCount += 1;
+        }
+        // Private target: drop hidden refs silently — they shouldn't exist
+        // and surfacing the count would leak cross-workspace structure.
+      }
+
+      return { dependents, hiddenCount };
+    } catch (error) {
+      return handleError(error, 'Error listing stored agent dependents');
+    }
+  },
+});
+
+/**
+ * Does the resolved `agents` snapshot field reference `targetId`?
+ * The field can be either a static `Record<string, toolConfig>` or an array of
+ * conditional variants (`{ value, rules? }`). Match if any variant's value
+ * (or the static object) contains a matching key.
+ */
+function referencesTarget(subAgents: unknown, targetId: string): boolean {
+  if (!subAgents) return false;
+  if (Array.isArray(subAgents)) {
+    return subAgents.some(variant => {
+      const value = (variant as { value?: unknown })?.value;
+      return Boolean(value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, targetId));
+    });
+  }
+  if (typeof subAgents === 'object') {
+    return Object.prototype.hasOwnProperty.call(subAgents, targetId);
+  }
+  return false;
+}
 
 /**
  * POST /stored/agents/preview-instructions - Preview resolved instructions

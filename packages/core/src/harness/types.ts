@@ -974,6 +974,44 @@ export type HarnessMessageContent =
       goalMaxTurns?: number;
       judgeModelId?: string;
     }
+  | {
+      type: 'state_signal';
+      id?: string;
+      stateId: string;
+      mode: 'snapshot' | 'delta';
+      cacheKey?: string;
+      version?: number;
+      message: string;
+    }
+  | {
+      type: 'reactive_signal';
+      id?: string;
+      tagName: string;
+      message: string;
+      attributes?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+    }
+  | {
+      type: 'notification_summary';
+      id?: string;
+      message: string;
+      pending: number;
+      bySource: Record<string, number>;
+      byPriority: Record<string, number>;
+      notificationIds: string[];
+    }
+  | {
+      type: 'notification';
+      id?: string;
+      notificationId?: string;
+      message: string;
+      source?: string;
+      kind?: string;
+      priority?: string;
+      status?: string;
+      attributes?: Record<string, unknown>;
+      metadata?: Record<string, unknown>;
+    }
   | { type: 'image'; data: string; mimeType: string }
   | { type: 'file'; data: string; mediaType: string; filename?: string }
   | {

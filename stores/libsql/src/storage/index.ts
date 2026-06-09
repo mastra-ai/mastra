@@ -13,6 +13,7 @@ import { FavoritesLibSQL } from './domains/favorites';
 import { MCPClientsLibSQL } from './domains/mcp-clients';
 import { MCPServersLibSQL } from './domains/mcp-servers';
 import { MemoryLibSQL } from './domains/memory';
+import { NotificationsLibSQL } from './domains/notifications';
 import { ObservabilityLibSQL } from './domains/observability';
 import { PromptBlocksLibSQL } from './domains/prompt-blocks';
 import { SchedulesLibSQL } from './domains/schedules';
@@ -34,6 +35,7 @@ export {
   MCPClientsLibSQL,
   MCPServersLibSQL,
   MemoryLibSQL,
+  NotificationsLibSQL,
   ObservabilityLibSQL,
   PromptBlocksLibSQL,
   SchedulesLibSQL,
@@ -203,6 +205,7 @@ export class LibSQLStore extends MastraCompositeStore {
     const backgroundTasks = new BackgroundTasksLibSQL(domainConfig);
     const schedules = new SchedulesLibSQL(domainConfig);
     const toolProviderConnections = new ToolProviderConnectionsLibSQL(domainConfig);
+    const notifications = new NotificationsLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -224,6 +227,7 @@ export class LibSQLStore extends MastraCompositeStore {
       backgroundTasks,
       schedules,
       toolProviderConnections,
+      notifications,
     };
   }
 

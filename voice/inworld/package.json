@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-inworld",
-  "version": "0.3.0-alpha.1",
+  "version": "0.3.0",
   "description": "Mastra Inworld AI voice integration — streaming TTS, batch STT, and realtime full-duplex voice",
   "type": "module",
   "files": [
@@ -24,7 +24,7 @@
   },
   "scripts": {
     "build": "tsup --silent --config tsup.config.ts",
-    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsup --watch --silent --config tsup.config.ts",
     "test": "vitest run",
     "lint": "eslint ."
@@ -42,8 +42,9 @@
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.1",
     "tsup": "^8.5.1",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"

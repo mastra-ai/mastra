@@ -381,6 +381,235 @@ describe('AgentChannels', () => {
     });
   });
 
+  describe('resolveResourceId', () => {
+    function makeChatThread(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: false,
+        adapter: undefined as any, // set per-test from the channels instance
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+        ...overrides,
+      } as any;
+    }
+
+    const message = {
+      id: 'message-1',
+      text: 'hi',
+      author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+      attachments: [],
+    } as any;
+
+    function makeMastra() {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      return {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+    }
+
+    it('uses the default `${platform}:${author.userId}` when no resolver is set', async () => {
+      const mockMastra = makeMastra();
+      await agentChannels.initialize(mockMastra);
+      const chatThread = makeChatThread({ adapter: agentChannels.adapters.discord });
+
+      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra);
+
+      expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          resourceId: 'discord:user-1',
+          ifIdle: expect.objectContaining({
+            streamOptions: expect.objectContaining({
+              memory: expect.objectContaining({ resource: 'discord:user-1' }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('uses the resolver return value as the new thread resourceId (DM uses bare SSO id)', async () => {
+      const resolveResourceId = vi.fn(async () => 'sso-user-42');
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveResourceId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord, isDM: true });
+
+      await (channels as any).processChatMessage(chatThread, message, mockMastra);
+
+      expect(resolveResourceId).toHaveBeenCalledWith(
+        expect.objectContaining({
+          platform: 'discord',
+          thread: chatThread,
+          message,
+          defaultResourceId: 'discord:user-1',
+        }),
+      );
+      expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          resourceId: 'sso-user-42',
+          ifIdle: expect.objectContaining({
+            streamOptions: expect.objectContaining({
+              memory: expect.objectContaining({ resource: 'sso-user-42' }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('scopes a group chat to its channelId while keeping the sender as actor', async () => {
+      const resolveResourceId = vi.fn(async ({ thread, defaultResourceId }: any) =>
+        thread.isDM ? defaultResourceId : thread.channelId,
+      );
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveResourceId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord, isDM: false });
+
+      await (channels as any).processChatMessage(chatThread, message, mockMastra);
+
+      expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+        // actor identity stays the sender
+        expect.objectContaining({
+          attributes: expect.objectContaining({ authorId: 'user-1' }),
+        }),
+        // memory owner is the group/channel
+        expect.objectContaining({
+          resourceId: 'channel-1',
+          ifIdle: expect.objectContaining({
+            streamOptions: expect.objectContaining({
+              memory: expect.objectContaining({ resource: 'channel-1' }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('returning defaultResourceId keeps the built-in behavior', async () => {
+      const resolveResourceId = vi.fn(async ({ defaultResourceId }: any) => defaultResourceId);
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveResourceId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+
+      await (channels as any).processChatMessage(chatThread, message, mockMastra);
+
+      expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ resourceId: 'discord:user-1' }),
+      );
+    });
+
+    it('does not run the resolver when reusing an existing thread (keeps stored owner)', async () => {
+      const resolveResourceId = vi.fn(async () => 'should-not-be-used');
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveResourceId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+
+      // Pre-create the mastra thread with a fixed owner, using the same channel metadata
+      // the handler queries on, so getOrCreateThread reuses it instead of creating a new one.
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      await memoryStore.saveThread({
+        thread: {
+          id: 'pre-existing',
+          title: 'discord conversation',
+          resourceId: 'original-owner',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {
+            channel_platform: 'discord',
+            channel_externalThreadId: 'channel-1:thread-1',
+            channel_externalChannelId: 'channel-1',
+          },
+        },
+      });
+
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await (channels as any).processChatMessage(chatThread, message, mockMastra);
+
+      // The reused thread's stored owner drives memory, and the resolver is never
+      // called; existing conversations don't depend on the resolver being available.
+      expect(resolveResourceId).not.toHaveBeenCalled();
+      expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          resourceId: 'original-owner',
+          ifIdle: expect.objectContaining({
+            streamOptions: expect.objectContaining({
+              memory: expect.objectContaining({ resource: 'original-owner' }),
+            }),
+          }),
+        }),
+      );
+    });
+
+    it('does not fail an existing thread when the resolver throws', async () => {
+      const resolveResourceId = vi.fn(async () => {
+        throw new Error('SSO unavailable');
+      });
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveResourceId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+
+      // Pre-create the thread so the handler reuses it instead of creating one.
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      await memoryStore.saveThread({
+        thread: {
+          id: 'pre-existing',
+          title: 'discord conversation',
+          resourceId: 'original-owner',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {
+            channel_platform: 'discord',
+            channel_externalThreadId: 'channel-1:thread-1',
+            channel_externalChannelId: 'channel-1',
+          },
+        },
+      });
+
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+
+      // A flaky resolver must not break message handling on an existing thread.
+      await expect((channels as any).processChatMessage(chatThread, message, mockMastra)).resolves.not.toThrow();
+      expect(resolveResourceId).not.toHaveBeenCalled();
+      expect(mockAgent.sendMessage).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ resourceId: 'original-owner' }),
+      );
+    });
+  });
+
   describe('close', () => {
     it('unsubscribes all cached thread subscriptions', () => {
       const unsubscribeA = vi.fn();
