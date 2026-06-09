@@ -5,6 +5,7 @@ import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
 import type { MastraCompositeStore } from '../../storage';
 import type { HarnessStorage, SessionRecord } from '../../storage/domains/harness';
+import { augmentWithInit } from '../../storage/storageWithInit';
 import type { DynamicArgument } from '../../types';
 import { Workspace } from '../../workspace';
 import { EventEmitter, sessionCreatedPayload } from './events';
@@ -41,7 +42,6 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
   readonly #modesById = new Map<string, MODES[number]>();
   readonly #storage?: HarnessStorage;
   readonly #storageAdapter?: MastraCompositeStore;
-  #storageAdapterInit?: Promise<void>;
   readonly #mastra?: Mastra;
   readonly #memory: MastraMemory | DynamicArgument<MastraMemory>;
   readonly #events: EventEmitter;
@@ -67,7 +67,7 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       if (isHarnessStorage(config.storage)) {
         this.#storage = config.storage;
       } else {
-        this.#storageAdapter = config.storage;
+        this.#storageAdapter = augmentWithInit(config.storage);
       }
     } else {
       this.#storageAdapter = config.mastra?.getStorage();
@@ -282,25 +282,11 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       throw new Error('Harness session storage is not configured');
     }
 
-    await this.#initStorageAdapter();
     const storage = await this.#storageAdapter.getStore('harness');
     if (!storage) {
       throw new Error('Harness session storage is not configured');
     }
     return storage;
-  }
-
-  async #initStorageAdapter(): Promise<void> {
-    const adapter = this.#storageAdapter;
-    if (!adapter || adapter.disableInit || process.env.MASTRA_DISABLE_STORAGE_INIT === 'true') {
-      return;
-    }
-
-    this.#storageAdapterInit ??= adapter.init().catch(err => {
-      this.#storageAdapterInit = undefined;
-      throw err;
-    });
-    await this.#storageAdapterInit;
   }
 
   #sessionFromRecord(record: SessionRecord, storage: HarnessStorage): Session<TState> {
