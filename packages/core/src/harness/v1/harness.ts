@@ -33,7 +33,7 @@ type SessionByThreadOptions = {
 type SessionOptions = SessionByIdOptions | SessionByThreadOptions;
 
 function isHarnessStorage(storage: HarnessStorage | MastraCompositeStore): storage is HarnessStorage {
-  return typeof (storage as HarnessStorage).loadSession === 'function';
+  return typeof (storage as { loadSession?: unknown }).loadSession === 'function';
 }
 
 export class Harness<MODES extends HarnessMode[], TState = {}> {
