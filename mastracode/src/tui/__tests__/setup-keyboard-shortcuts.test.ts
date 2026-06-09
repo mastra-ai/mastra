@@ -144,6 +144,7 @@ describe('setupKeyboardShortcuts', () => {
     expect(githubCommand?.getArgumentCompletions?.('').map(command => command.value)).toEqual([
       'subscribe',
       'unsubscribe',
+      'sync',
       'debug',
     ]);
     expect(githubCommand?.getArgumentCompletions?.('un').map(command => command.value)).toEqual(['unsubscribe']);

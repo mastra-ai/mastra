@@ -1,6 +1,6 @@
 {
   "name": "@mastra/hono",
-  "version": "1.4.24-alpha.0",
+  "version": "1.4.25-alpha.3",
   "description": "Mastra Hono adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -45,7 +45,7 @@
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
     "@types/node": "22.19.15",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.1",
     "hono": "^4.12.8",
     "tsup": "^8.5.1",
     "typescript": "catalog:",

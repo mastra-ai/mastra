@@ -14,6 +14,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import {
   GET_AUTH_CAPABILITIES_ROUTE,
+  GET_PERMISSION_PATTERNS_ROUTE,
   GET_ROLE_PERMISSIONS_ROUTE,
   GET_SSO_LOGIN_ROUTE,
   GET_SSO_CALLBACK_ROUTE,
@@ -365,5 +366,30 @@ describe('GET /auth/roles/:roleId/permissions', () => {
     await expect(GET_ROLE_PERMISSIONS_ROUTE.handler(ctx as any)).rejects.toThrow(
       'RBAC provider does not support role permission resolution',
     );
+  });
+});
+
+describe('GET /auth/permission-patterns', () => {
+  it('returns the authoritative permission-pattern strings from core', async () => {
+    const result = (await GET_PERMISSION_PATTERNS_ROUTE.handler({} as any)) as { patterns: string[] };
+
+    expect(Array.isArray(result.patterns)).toBe(true);
+    expect(result.patterns.length).toBeGreaterThan(0);
+    // Patterns are the keys of core's PERMISSION_PATTERNS; sanity-check a couple
+    // of well-known entries and the wildcard.
+    expect(result.patterns).toContain('*');
+    expect(result.patterns).toContain('agents:read');
+    // Every entry is a plain string (resource:action or wildcard).
+    expect(result.patterns.every(p => typeof p === 'string')).toBe(true);
+  });
+
+  it('requires authentication but no specific permission', () => {
+    expect(GET_PERMISSION_PATTERNS_ROUTE.requiresAuth).toBe(true);
+    expect(GET_PERMISSION_PATTERNS_ROUTE.requiresPermission).toBeUndefined();
+  });
+
+  it('has correct path and method', () => {
+    expect(GET_PERMISSION_PATTERNS_ROUTE.path).toBe('/auth/permission-patterns');
+    expect(GET_PERMISSION_PATTERNS_ROUTE.method).toBe('GET');
   });
 });

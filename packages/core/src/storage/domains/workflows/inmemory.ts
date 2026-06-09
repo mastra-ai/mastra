@@ -35,7 +35,8 @@ import { WorkflowsStorage } from './base';
  * internal slots were never initialized). Null-prototype dictionaries keep
  * their null prototype.
  */
-function cloneRunData<T>(value: T): T {
+/** @internal Exported for testing only. */
+export function cloneRunData<T>(value: T): T {
   return deepCloneForRun(value, new WeakMap()) as T;
 }
 
@@ -110,11 +111,11 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
     // toJSON's stack signal here, not its other fields, to avoid pulling in
     // subclass extras like Chai AssertionError.toJSON's name/ok/stack that
     // the agent-loop snapshot tests don't expect.
-    const errAsAny = value as any;
+    const errRecord = value as unknown as Record<string, unknown>;
     let includeStack = value.stack !== undefined;
-    if (includeStack && typeof errAsAny.toJSON === 'function') {
+    if (includeStack && typeof errRecord.toJSON === 'function') {
       try {
-        const serialized = errAsAny.toJSON();
+        const serialized = (errRecord.toJSON as () => unknown)();
         if (serialized && typeof serialized === 'object' && !('stack' in serialized)) {
           includeStack = false;
         }
@@ -128,9 +129,10 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
     // Register in `seen` BEFORE recursing so cycles (incl. self-referential
     // `cause`) terminate.
     seen.set(value, out);
-    if (value.cause !== undefined) (out as any).cause = deepCloneForRun(value.cause, seen);
+    const outRecord = out as unknown as Record<string, unknown>;
+    if (value.cause !== undefined) outRecord.cause = deepCloneForRun(value.cause, seen);
     for (const key of Object.keys(value)) {
-      (out as any)[key] = deepCloneForRun((value as any)[key], seen);
+      outRecord[key] = deepCloneForRun(errRecord[key], seen);
     }
     return out;
   }
@@ -160,7 +162,7 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
   // `Object.keys` includes keys whose value is `undefined`, so explicitly-undefined
   // properties are preserved (unlike a JSON round-trip).
   for (const key of Object.keys(value as object)) {
-    out[key] = deepCloneForRun((value as any)[key], seen);
+    out[key] = deepCloneForRun((value as Record<string, unknown>)[key], seen);
   }
   return out;
 }

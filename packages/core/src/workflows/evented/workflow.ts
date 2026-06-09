@@ -2,17 +2,19 @@ import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
-import { Agent } from '../../agent/agent';
+import type { Agent } from '../../agent/agent';
 import { MessageList, messagesAreEqual } from '../../agent/message-list';
 import type { MastraDBMessage, MessageInput } from '../../agent/message-list';
 import { isAgentCompatible } from '../../agent/subagent';
 import type { SubAgent } from '../../agent/subagent';
 import { TripWire } from '../../agent/trip-wire';
 import { isSupportedLanguageModel } from '../../agent/utils';
+import type { MastraBase } from '../../base';
 import { RequestContext } from '../../di';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
+import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import {
   EntityType,
@@ -68,7 +70,7 @@ import { validateCron } from '../scheduler/cron';
 import type { WorkflowScheduleConfig } from '../scheduler/types';
 import { forwardAgentStreamChunk } from '../stream-utils';
 import type { StreamChunkWriter } from '../stream-utils';
-import { Workflow, Run, __registerEventedCreateWorkflow } from '../workflow';
+import { Workflow, Run } from '../workflow';
 import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk } from './helpers';
@@ -138,13 +140,23 @@ function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> 
   return input instanceof Tool;
 }
 
+/**
+ * Check if something is an Agent without importing the Agent class
+ * (which would create an ESM init-time cycle with agent.ts).
+ * Uses the `component` discriminator from MastraBase instead of instanceof.
+ */
+function isAgent(input: unknown): boolean {
+  const base = input as MastraBase;
+  return !!base && base.component === RegisteredLogger.AGENT;
+}
+
 function isStepParams(input: unknown): input is StepParams<any, any, any, any, any, any> {
   return (
     input !== null &&
     typeof input === 'object' &&
     'id' in input &&
     'execute' in input &&
-    !(input instanceof Agent) &&
+    !isAgent(input) &&
     !(input instanceof Tool)
   );
 }
@@ -159,7 +171,7 @@ function isProcessor(obj: unknown): obj is Processor {
     typeof obj === 'object' &&
     'id' in obj &&
     typeof (obj as any).id === 'string' &&
-    !(obj instanceof Agent) &&
+    !isAgent(obj) &&
     !(obj instanceof Tool) &&
     (typeof (obj as any).processInput === 'function' ||
       typeof (obj as any).processInputStep === 'function' ||
@@ -1538,13 +1550,6 @@ export function createWorkflow<
   });
 }
 
-// Register this factory with the default `createWorkflow` so that workflows
-// declared with the default factory are auto-promoted to evented when they
-// declare a `schedule`. Done at module-load time; the registration slot is
-// initialized as `undefined` in `../workflow.ts` and is read lazily on user
-// call, so module evaluation order doesn't matter.
-__registerEventedCreateWorkflow(createWorkflow as Parameters<typeof __registerEventedCreateWorkflow>[0]);
-
 export class EventedWorkflow<
   TEngineType = EventedEngineType,
   TSteps extends Step<string, any, any>[] = Step<string, any, any>[],
@@ -1765,8 +1770,12 @@ export class EventedRun<
     requestContext = requestContext ?? new RequestContext();
 
     const inputDataToUse = await this._validateInput(inputData ?? ({} as TInput));
+    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    // Always persist the initial run record regardless of shouldPersistSnapshot.
+    // The evented engine relies on this record for parallel branch result
+    // aggregation (aggregateBranchResults reads stepResults via storage).
     await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -1776,7 +1785,7 @@ export class EventedRun<
         serializedStepGraph: this.serializedStepGraph,
         status: 'running',
         value: {},
-        context: { input: inputDataToUse } as any,
+        context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
         requestContext: requestContext.toJSON(),
         activePaths: [],
         activeStepsPath: {},
@@ -1786,7 +1795,6 @@ export class EventedRun<
         timestamp: Date.now(),
       },
     });
-    const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
@@ -1884,6 +1892,9 @@ export class EventedRun<
     const initialStateToUse = await this._validateInitialState(initialState ?? ({} as TState));
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    // Always persist the initial run record regardless of shouldPersistSnapshot.
+    // The evented engine relies on this record for parallel branch result
+    // aggregation (aggregateBranchResults reads stepResults via storage).
     await workflowsStore?.persistWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
@@ -1893,7 +1904,7 @@ export class EventedRun<
         serializedStepGraph: this.serializedStepGraph,
         status: 'running',
         value: {},
-        context: { input: inputDataToUse } as any,
+        context: inputDataToUse != null ? ({ input: inputDataToUse } as any) : ({} as any),
         requestContext: requestContext.toJSON(),
         activePaths: [],
         activeStepsPath: {},

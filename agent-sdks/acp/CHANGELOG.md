@@ -1,5 +1,14 @@
 # @mastra/acp
 
+## 0.2.1
+
+### Patch Changes
+
+- Fixed ACP tools to keep their default session alive across executions. ([#17516](https://github.com/mastra-ai/mastra/pull/17516))
+
+- Updated dependencies [[`f82cc72`](https://github.com/mastra-ai/mastra/commit/f82cc72edca0ce636fe18abaf2598d89a0c6bcca), [`fcf6027`](https://github.com/mastra-ai/mastra/commit/fcf602747f6771731dda268ff3493b836f9f0ee9)]:
+  - @mastra/core@1.41.0
+
 ## 0.2.1-alpha.0
 
 ### Patch Changes

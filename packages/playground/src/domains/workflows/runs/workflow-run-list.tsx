@@ -75,11 +75,11 @@ export const WorkflowRunList = ({ workflowId, runId }: WorkflowRunListProps) => 
                   onDelete={canDeleteRun ? () => setDeleteRunId(run.runId) : undefined}
                   deleteLabel="delete run"
                 >
-                  <span className="flex flex-col items-start gap-1 text-left">
+                  <span className="flex w-full min-w-0 flex-col items-start gap-1 text-left">
                     {run?.snapshot && typeof run.snapshot === 'object' && (
                       <WorkflowRunStatusBadge status={run.snapshot.status} />
                     )}
-                    <span className="truncate">{run.runId}</span>
+                    <span className="block max-w-full truncate">{run.runId}</span>
                     {run?.snapshot && typeof run.snapshot === 'object' && run.snapshot.timestamp && (
                       <span>{formatDate(run.snapshot.timestamp, 'MMM d, yyyy h:mm a')}</span>
                     )}

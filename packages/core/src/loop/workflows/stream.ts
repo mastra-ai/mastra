@@ -214,7 +214,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // each owning their own agentic-loop instance with distinct controller and
         // agentId closures) don't clobber each other in the global id-keyed registry.
         // __registerInternalWorkflow also calls __registerMastra under the hood.
-        rest.mastra.__registerInternalWorkflow(agenticLoopWorkflow as any, runId);
+        rest.mastra.__registerInternalWorkflow(agenticLoopWorkflow, runId);
       }
 
       // Keep the run-scoped registration alive only when the run suspends — a

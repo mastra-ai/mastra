@@ -1,15 +1,20 @@
 import { createHash, randomUUID } from 'node:crypto';
 
+import type { Agent } from '../../agent';
+import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
 import type { MastraCompositeStore } from '../../storage';
 import type { HarnessStorage, SessionRecord } from '../../storage/domains/harness';
 import type { DynamicArgument } from '../../types';
+import { Workspace } from '../../workspace';
 import { EventEmitter, sessionCreatedPayload } from './events';
 import type { HarnessEventListener, HarnessEventUnsubscribe } from './events';
 import type { HarnessConfig } from './harness.types';
 import type { HarnessMode } from './mode';
+import type { PermissionPolicy, ToolCategoryResolver } from './permissions.types';
 import { Session } from './session';
 import type { CloneSessionOptions } from './session.types';
+import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
 
 type SessionByIdOptions = {
   sessionId: string;
@@ -26,16 +31,26 @@ type SessionByThreadOptions = {
 
 type SessionOptions = SessionByIdOptions | SessionByThreadOptions;
 
-export class Harness<MODES extends HarnessMode[]> {
+export class Harness<MODES extends HarnessMode[], TState = {}> {
   readonly #ownerId: string;
   readonly #defaultMode: string;
   readonly #modesById = new Map<string, MODES[number]>();
   readonly #storage?: HarnessStorage;
   readonly #compositeStorage?: MastraCompositeStore;
+  readonly #mastra?: Mastra;
   readonly #memory: MastraMemory | DynamicArgument<MastraMemory>;
   readonly #events: EventEmitter;
+  readonly #stateSchema?: HarnessConfig<MODES, TState>['stateSchema'];
+  readonly #initialState?: Partial<TState>;
+  readonly #workspace?: DynamicArgument<Workspace | undefined>;
+  readonly #agent: Agent;
+  readonly #subagents?: SubagentRegistryConfig;
+  readonly #resolveModel?: ModelResolver;
+  readonly #runtimeCompatibilityGeneration?: string | null;
+  readonly #defaultPermissionPolicy: PermissionPolicy;
+  readonly #toolCategoryResolver?: ToolCategoryResolver;
 
-  constructor(config: HarnessConfig<MODES>) {
+  constructor(config: HarnessConfig<MODES, TState>) {
     if (!config.modes.length) {
       throw new Error('The harness needs modes to operate.');
     }
@@ -43,9 +58,56 @@ export class Harness<MODES extends HarnessMode[]> {
     this.#ownerId = config.ownerId ?? randomUUID();
     this.#defaultMode = config.defaultModeId ?? config.modes[0]!.id;
     this.#storage = config.storage;
+    this.#mastra = config.mastra;
     this.#compositeStorage = config.mastra?.getStorage();
     this.#memory = config.memory;
     this.#events = new EventEmitter();
+    if (config.runtimeCompatibilityGeneration !== undefined && config.runtimeCompatibilityGeneration.length === 0) {
+      throw new Error('Harness runtimeCompatibilityGeneration must be a non-empty string when configured');
+    }
+    this.#runtimeCompatibilityGeneration = config.runtimeCompatibilityGeneration ?? null;
+    this.#stateSchema = config.stateSchema;
+    this.#initialState = config.initialState;
+
+    if (config.workspace instanceof Workspace || typeof config.workspace === 'function') {
+      this.#workspace = config.workspace;
+    } else if (config.workspace) {
+      this.#workspace = new Workspace(config.workspace);
+    }
+
+    this.#agent = this.#mastra ? this.#mastra.getAgentById(config.agent) : (config.agent as Agent);
+
+    if (config.subagents) {
+      const entries = Object.entries(config.subagents.types ?? {});
+      if (entries.length > 0 && !config.resolveModel) {
+        throw new Error('Harness "subagents" requires a "resolveModel" function to instantiate subagent models');
+      }
+      for (const [typeId, def] of entries) {
+        if (!def?.agentId) {
+          throw new Error(`Subagent "${typeId}" must declare an "agentId"`);
+        }
+        // When using an inline `agents` map, validate eagerly. When backed by
+        // a Mastra instance, the agent registry may grow over time; defer the
+        // check to resolution time.
+        // if (!config.mastra && !this.#agents[def.agentId]) {
+        //   throw new Error(`Subagent "${typeId}" references unknown agent "${def.agentId}"`);
+        // }
+      }
+      const maxDepth = config.sessions?.maxSubagentDepth ?? config.subagents.maxDepth ?? 1;
+      if (!Number.isInteger(maxDepth) || maxDepth < 0) {
+        throw new Error('Harness sessions.maxSubagentDepth must be a non-negative integer');
+      }
+      this.#subagents = { ...config.subagents, maxDepth };
+    }
+    this.#resolveModel = config.resolveModel;
+
+    this.#defaultPermissionPolicy = config.defaultPermissionPolicy ?? 'ask';
+    if (config.toolCategoryResolver) {
+      this.#toolCategoryResolver = config.toolCategoryResolver;
+    } else if (config.toolCategories) {
+      const categories = config.toolCategories;
+      this.#toolCategoryResolver = (toolName: string) => categories[toolName] ?? null;
+    }
 
     const modes = config.modes ?? [];
     for (const mode of modes) {
@@ -72,6 +134,12 @@ export class Harness<MODES extends HarnessMode[]> {
     return this.#events.emit(event);
   }
 
+  async init(): Promise<void> {
+    await this.#requireStorage();
+  }
+
+  async shutdown(): Promise<void> {}
+
   listModes(): HarnessMode[] {
     return [...this.#modesById.values()];
   }
@@ -90,7 +158,7 @@ export class Harness<MODES extends HarnessMode[]> {
     return storage.listSessions();
   }
 
-  async session(opts: SessionOptions): Promise<Session> {
+  async session(opts: SessionOptions): Promise<Session<TState>> {
     const storage = await this.#requireStorage();
 
     if ('threadId' in opts) {
@@ -98,10 +166,10 @@ export class Harness<MODES extends HarnessMode[]> {
     }
 
     const record = await this.#loadSessionRecord(storage, opts.sessionId, opts.resourceId);
-    return this.#sessionFromRecord(record);
+    return this.#sessionFromRecord(record, storage);
   }
 
-  async cloneSession(session: Session, opts: CloneSessionOptions = {}): Promise<Session> {
+  async cloneSession(session: Session<TState>, opts: CloneSessionOptions = {}): Promise<Session<TState>> {
     const storage = await this.#requireStorage();
     const source = await this.#loadSessionRecord(storage, session.id, session.resourceId);
     const modeId = opts.modeId ?? source.modeId;
@@ -116,28 +184,42 @@ export class Harness<MODES extends HarnessMode[]> {
       mode,
       modelId: opts.modelId ?? source.modelId,
     });
+    const parentSessionId = opts.parentSessionId ?? source.id;
+    const cloneModeId = opts.modeId ?? source.modeId;
+    const cloneModelId = opts.modelId ?? source.modelId;
     const record: SessionRecord = {
-      ...source,
       id: clone.id,
       ownerId: this.#ownerId,
       threadId: clone.threadId,
       resourceId: clone.resourceId,
-      parentSessionId: opts.parentSessionId ?? source.id,
+      parentSessionId,
       origin: opts.origin ?? source.origin,
-      modeId: opts.modeId ?? source.modeId,
-      modelId: opts.modelId ?? source.modelId,
+      source: {
+        type: opts.origin ?? source.origin,
+        parentSessionId,
+      },
+      subagentDepth: (source.subagentDepth ?? 0) + 1,
+      runtimeCompatibilityGeneration: this.#runtimeCompatibilityGeneration,
+      modeId: cloneModeId,
+      modelId: cloneModelId,
+      title: opts.title ?? source.title,
+      metadata: opts.metadata ?? source.metadata,
+      state: clone.getState() as Record<string, unknown>,
+      pending: [],
+      createdAt: clone.createdAt,
+      lastActivityAt: clone.lastActivityAt,
     };
 
     await storage.saveSession(record);
     this.#events.emit({ type: 'session_created', ...sessionCreatedPayload(record) });
-    return this.#sessionFromRecord(record);
+    return this.#sessionFromRecord(record, storage);
   }
 
-  async #sessionByThread(storage: HarnessStorage, opts: SessionByThreadOptions): Promise<Session> {
+  async #sessionByThread(storage: HarnessStorage, opts: SessionByThreadOptions): Promise<Session<TState>> {
     const id = this.#sessionIdFor(opts.resourceId, opts.threadId);
     const existing = await storage.loadSession(id);
     if (existing) {
-      return this.#sessionFromRecord(existing);
+      return this.#sessionFromRecord(existing, storage);
     }
 
     const modeId = opts.modeId ?? this.#defaultMode;
@@ -154,13 +236,18 @@ export class Harness<MODES extends HarnessMode[]> {
       origin: 'top-level',
       modeId,
       modelId: opts.modelId ?? mode.defaultModelId,
+      source: { type: 'top-level' },
+      subagentDepth: 0,
+      runtimeCompatibilityGeneration: this.#runtimeCompatibilityGeneration,
+      ...(this.#initialState ? { state: this.#initialState as Record<string, unknown> } : {}),
+      pending: [],
       createdAt: new Date(),
       lastActivityAt: new Date(),
     };
 
     await storage.saveSession(record);
     this.#events.emit({ type: 'session_created', ...sessionCreatedPayload(record) });
-    return this.#sessionFromRecord(record);
+    return this.#sessionFromRecord(record, storage);
   }
 
   async #loadSessionRecord(storage: HarnessStorage, sessionId: string, resourceId?: string): Promise<SessionRecord> {
@@ -186,13 +273,13 @@ export class Harness<MODES extends HarnessMode[]> {
     return storage;
   }
 
-  #sessionFromRecord(record: SessionRecord): Session {
+  #sessionFromRecord(record: SessionRecord, storage: HarnessStorage): Session<TState> {
     const mode = record.modeId ? this.#modesById.get(record.modeId) : this.#modesById.values().next().value;
     if (!mode) {
       throw new Error(`Harness session "${record.id}" references unknown mode "${record.modeId}"`);
     }
 
-    return new Session({
+    return new Session<TState>({
       id: record.id,
       ownerId: record.ownerId,
       threadId: record.threadId,
@@ -201,9 +288,35 @@ export class Harness<MODES extends HarnessMode[]> {
       model: record.modelId,
       createdAt: record.createdAt,
       lastActivityAt: record.lastActivityAt,
+      agent: this.#agent,
       memory: this.#memory,
+      storage,
+      record,
+      runtimeCompatibilityGeneration: this.#runtimeCompatibilityGeneration,
       events: this.#events.scoped({ sessionId: record.id }),
+      stateSchema: this.#stateSchema,
+      initialState: this.#initialState,
+      workspace: this.#workspace,
+      subagents: this.#subagents,
+      resolveAgent: agentId => this.#resolveAgent(agentId),
+      resolveMode: modeId => this.#resolveMode(modeId),
+      resolveModel: this.#resolveModel,
+      defaultPermissionPolicy: this.#defaultPermissionPolicy,
+      toolCategoryResolver: this.#toolCategoryResolver,
     });
+  }
+
+  #resolveAgent(agentId: string): Agent {
+    if (this.#mastra) return this.#mastra.getAgentById(agentId) as Agent;
+    throw new Error(`Harness mode references unknown agent "${agentId}"`);
+  }
+
+  #resolveMode(modeId: string): HarnessMode {
+    const mode = this.#modesById.get(modeId);
+    if (!mode) {
+      throw new Error(`Harness mode "${modeId}" was not found`);
+    }
+    return mode;
   }
 
   #sessionIdFor(resourceId: string, threadId: string): string {

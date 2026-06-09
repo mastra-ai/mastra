@@ -35,15 +35,18 @@ export function CreateDatasetDialog({
   const [description, setDescription] = useState('');
   const [inputSchema, setInputSchema] = useState<Record<string, unknown> | null>(null);
   const [groundTruthSchema, setGroundTruthSchema] = useState<Record<string, unknown> | null>(null);
+  const [requestContextSchema, setRequestContextSchema] = useState<Record<string, unknown> | null>(null);
   const [showCustomSchema, setShowCustomSchema] = useState(!targetType);
   const { createDataset } = useDatasetMutations();
 
   const handleSchemaChange = (schemas: {
     inputSchema: Record<string, unknown> | null;
     outputSchema: Record<string, unknown> | null;
+    requestContextSchema: Record<string, unknown> | null;
   }) => {
     setInputSchema(schemas.inputSchema);
     setGroundTruthSchema(schemas.outputSchema);
+    setRequestContextSchema(schemas.requestContextSchema);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -60,6 +63,7 @@ export function CreateDatasetDialog({
         description: description.trim() || undefined,
         inputSchema,
         groundTruthSchema,
+        requestContextSchema,
         targetType,
         targetIds,
       })) as { id: string };
@@ -71,6 +75,7 @@ export function CreateDatasetDialog({
       setDescription('');
       setInputSchema(null);
       setGroundTruthSchema(null);
+      setRequestContextSchema(null);
       setShowCustomSchema(!targetType);
       onOpenChange(false);
 
@@ -86,6 +91,7 @@ export function CreateDatasetDialog({
     setDescription('');
     setInputSchema(null);
     setGroundTruthSchema(null);
+    setRequestContextSchema(null);
     setShowCustomSchema(!targetType);
     onOpenChange(false);
   };
@@ -131,6 +137,7 @@ export function CreateDatasetDialog({
               <SchemaConfigSection
                 inputSchema={inputSchema}
                 outputSchema={groundTruthSchema}
+                requestContextSchema={requestContextSchema}
                 onChange={handleSchemaChange}
                 disabled={createDataset.isPending}
               />

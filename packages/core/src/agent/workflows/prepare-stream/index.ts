@@ -9,7 +9,7 @@ import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
 import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../../../tools';
-import { createEventedWorkflow as createWorkflow } from '../../../workflows/workflow';
+import { createEventedWorkflow as createWorkflow } from '../../../workflows/create';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
