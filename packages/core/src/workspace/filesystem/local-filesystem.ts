@@ -34,7 +34,15 @@ import type {
   RemoveOptions,
   CopyOptions,
 } from './filesystem';
-import { expandTilde, fsExists, fsStat, isEnoentError, isEexistError, resolveToBasePath } from './fs-utils';
+import {
+  expandTilde,
+  fsExists,
+  fsStat,
+  isEnoentError,
+  isEexistError,
+  resolveToBasePath,
+  resolveUnicodeWhitespaceFallback,
+} from './fs-utils';
 import { MastraFilesystem } from './mastra-filesystem';
 import type { MastraFilesystemOptions } from './mastra-filesystem';
 import type { FilesystemMountConfig } from './mount';
@@ -401,6 +409,18 @@ export class LocalFilesystem extends MastraFilesystem {
     } catch (error: unknown) {
       if (error instanceof IsDirectoryError) throw error;
       if (isEnoentError(error)) {
+        const fallbackPath = await resolveUnicodeWhitespaceFallback(absolutePath);
+        if (fallbackPath) {
+          await this.assertPathContained(fallbackPath);
+          const stats = await fs.stat(fallbackPath);
+          if (stats.isDirectory()) {
+            throw new IsDirectoryError(inputPath);
+          }
+          if (options?.encoding) {
+            return await fs.readFile(fallbackPath, { encoding: options.encoding });
+          }
+          return await fs.readFile(fallbackPath);
+        }
         throw new FileNotFoundError(inputPath);
       }
       throw error;
@@ -776,11 +796,26 @@ export class LocalFilesystem extends MastraFilesystem {
     await this.ensureReady();
     const absolutePath = this.resolvePath(inputPath);
     await this.assertPathContained(absolutePath);
-    const result = await fsStat(absolutePath, inputPath);
-    return {
-      ...result,
-      path: this.toRelativePath(absolutePath),
-    };
+    try {
+      const result = await fsStat(absolutePath, inputPath);
+      return {
+        ...result,
+        path: this.toRelativePath(absolutePath),
+      };
+    } catch (error: unknown) {
+      if (error instanceof FileNotFoundError) {
+        const fallbackPath = await resolveUnicodeWhitespaceFallback(absolutePath);
+        if (fallbackPath) {
+          await this.assertPathContained(fallbackPath);
+          const result = await fsStat(fallbackPath, inputPath);
+          return {
+            ...result,
+            path: this.toRelativePath(fallbackPath),
+          };
+        }
+      }
+      throw error;
+    }
   }
 
   async realpath(inputPath: string): Promise<string> {
