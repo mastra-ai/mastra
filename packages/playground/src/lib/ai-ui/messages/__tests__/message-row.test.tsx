@@ -213,6 +213,57 @@ describe('MessageRow', () => {
     expect(screen.getByText('Decline')).toBeTruthy();
   });
 
+  it('routes a reasoning part through MessageFactory into the reasoning body', () => {
+    renderRow(
+      baseMessage({
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [{ type: 'reasoning', reasoning: 'thinking out loud' } as never],
+        },
+      }),
+    );
+    expect(screen.getByText('thinking out loud')).toBeTruthy();
+  });
+
+  it('routes a dynamic-tool part into ToolCard (generic tool badge)', () => {
+    renderRow(
+      baseMessage({
+        role: 'assistant',
+        content: {
+          format: 2,
+          metadata: { mode: 'stream' },
+          parts: [
+            {
+              type: 'tool-dynamicGenericTool',
+              toolName: 'dynamicGenericTool',
+              toolCallId: 'call-dyn',
+              state: 'output-available',
+              input: { q: 'x' },
+              output: { ok: true },
+            } as never,
+          ],
+        },
+      }),
+    );
+    expect(document.querySelector('[data-testid="tool-badge"]')).toBeTruthy();
+  });
+
+  it('routes a user file part into an in-message attachment preview', () => {
+    const { container } = renderRow(
+      baseMessage({
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [{ type: 'file', mimeType: 'image/png', data: 'https://example.com/a.png' } as never],
+        },
+      }),
+    );
+    const img = container.querySelector('img');
+    expect(img).toBeTruthy();
+    expect(img?.getAttribute('src')).toBe('https://example.com/a.png');
+  });
+
   it('renders a message-level error notice via the status.Error slot', () => {
     renderRow(
       baseMessage({

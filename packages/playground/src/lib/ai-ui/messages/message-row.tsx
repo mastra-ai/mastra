@@ -1,27 +1,20 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { MessageFactory } from '@mastra/react';
-import type { MessageRenderers, MessageStatusRenderers, ToolInvocationPart, DynamicToolPart } from '@mastra/react';
-import { Badge, Button, Icon, MarkdownRenderer, Notice, cn } from '@mastra/playground-ui';
-import {
-  AudioLinesIcon,
-  CheckCircleIcon,
-  CheckIcon,
-  ChevronUpIcon,
-  CopyIcon,
-  StopCircleIcon,
-} from 'lucide-react';
-import { useState } from 'react';
-import type { ReactNode } from 'react';
+import type { MessageRenderers } from '@mastra/react';
+import { Button, cn } from '@mastra/playground-ui';
+import { AudioLinesIcon, CheckIcon, CopyIcon, StopCircleIcon } from 'lucide-react';
+import { useMemo, useState } from 'react';
 
-import { Reasoning } from './reasoning';
-import { SignalBadge } from './signal-badge';
-import { isSignalData } from './signal-data';
-import { SystemReminderBadge } from './system-reminder-badge';
-import { TripwireNotice } from './tripwire-notice';
 import { DatasetSaveAction } from './dataset-save-action';
 import type { MessageMetadata } from './message-metadata';
-import { ImageEntry, PdfEntry, TxtEntry } from '../attachments/attachment-preview-dialog';
-import { ToolCard } from '../tools/tool-card';
+import { AssistantTextPartRenderer } from './renderers/assistant-text-part-renderer';
+import { DataPartRenderer } from './renderers/data-part-renderer';
+import { DynamicToolPartRenderer } from './renderers/dynamic-tool-part-renderer';
+import { ReasoningPartRenderer } from './renderers/reasoning-part-renderer';
+import { messageStatusRenderers } from './renderers/status-renderers';
+import { ToolInvocationPartRenderer } from './renderers/tool-invocation-part-renderer';
+import { UserFilePartRenderer } from './renderers/user-file-part-renderer';
+import { UserTextPartRenderer } from './renderers/user-text-part-renderer';
 import type { DataMessagePart } from '../tools/tool-card';
 
 export interface MessageRowProps {
@@ -100,94 +93,6 @@ const isPendingMessage = (message: MastraDBMessage): boolean =>
     return (metadata as { status?: unknown }).status === 'pending';
   });
 
-const InMessageAttachment = ({
-  type,
-  contentType,
-  src,
-  data,
-}: {
-  type: 'image' | 'document';
-  contentType?: string;
-  src?: string;
-  data?: string;
-}) => (
-  <div className="h-full w-full overflow-hidden rounded-lg">
-    {type === 'image' ? (
-      <ImageEntry src={src ?? ''} />
-    ) : type === 'document' && contentType === 'application/pdf' ? (
-      <PdfEntry data={data ?? ''} url={src} />
-    ) : (
-      <TxtEntry data={data ?? ''} />
-    )}
-  </div>
-);
-
-/**
- * Part-level text renderer. Markdown for normal text, plus the legacy
- * error/completion handling previously in `ErrorAwareText` (which read part
- * metadata). User text renders in a bubble, assistant/system as plain prose.
- */
-const MessageText = ({ text, metadata }: { text: string; metadata: MessageMetadata | undefined }) => {
-  const [collapsedCompletionCheck, setCollapsedCompletionCheck] = useState(false);
-
-  if (metadata?.status === 'tripwire') {
-    return <TripwireNotice reason={text} tripwire={metadata.tripwire} />;
-  }
-  if (metadata?.status === 'warning') {
-    return (
-      <Notice variant="warning" title="Warning">
-        <Notice.Message>{text}</Notice.Message>
-      </Notice>
-    );
-  }
-  if (metadata?.status === 'error') {
-    return (
-      <Notice variant="destructive" title="Error">
-        <Notice.Message>{text}</Notice.Message>
-      </Notice>
-    );
-  }
-
-  const taskCompleteResult = metadata?.completionResult;
-  if (taskCompleteResult) {
-    return (
-      <div className="mb-2 space-y-2">
-        <button onClick={() => setCollapsedCompletionCheck(s => !s)} className="flex items-center gap-2">
-          <Icon>
-            <ChevronUpIcon className={cn('transition-all', collapsedCompletionCheck ? 'rotate-90' : 'rotate-180')} />
-          </Icon>
-          <Badge variant="info" icon={<CheckCircleIcon />}>
-            {collapsedCompletionCheck ? 'Show' : 'Hide'} completion check
-          </Badge>
-        </button>
-        {!collapsedCompletionCheck && (
-          <Notice variant="info" title={taskCompleteResult?.passed ? 'Complete' : 'Not Complete'}>
-            <MarkdownRenderer>{text}</MarkdownRenderer>
-          </Notice>
-        )}
-      </div>
-    );
-  }
-
-  const trimmedText = text.trim();
-  if (trimmedText.startsWith('__ERROR__:')) {
-    return (
-      <Notice variant="destructive" title="Error">
-        <Notice.Message>{trimmedText.substring('__ERROR__:'.length)}</Notice.Message>
-      </Notice>
-    );
-  }
-  if (trimmedText.startsWith('Error:')) {
-    return (
-      <Notice variant="destructive" title="Error">
-        <Notice.Message>{trimmedText.substring('Error:'.length).trim()}</Notice.Message>
-      </Notice>
-    );
-  }
-
-  return <MarkdownRenderer>{text}</MarkdownRenderer>;
-};
-
 const CopyButton = ({ text }: { text: string }) => {
   const [copied, setCopied] = useState(false);
   return (
@@ -234,98 +139,42 @@ const AssistantActionBar = ({
 
 export const MessageRow = ({ message, isSpeaking, onReadAloud, onStopSpeaking }: MessageRowProps) => {
   const dbMessage = toDisplayMessage(message);
+  const metadata = getMessageMetadata(message);
+  const dataParts = useMemo(() => getDataParts(message), [message]);
+
+  const sharedRenderers = useMemo<MessageRenderers>(
+    () => ({
+      Reasoning: part => <ReasoningPartRenderer part={part} />,
+      Data: part => <DataPartRenderer part={part} />,
+      ToolInvocation: part => <ToolInvocationPartRenderer part={part} metadata={metadata} dataParts={dataParts} />,
+      DynamicTool: part => <DynamicToolPartRenderer part={part} metadata={metadata} dataParts={dataParts} />,
+    }),
+    [metadata, dataParts],
+  );
+
+  const userRenderers = useMemo<MessageRenderers>(
+    () => ({
+      ...sharedRenderers,
+      Text: part => <UserTextPartRenderer part={part} metadata={metadata} />,
+      File: part => <UserFilePartRenderer part={part} />,
+    }),
+    [sharedRenderers, metadata],
+  );
+
+  const assistantRenderers = useMemo<MessageRenderers>(
+    () => ({
+      ...sharedRenderers,
+      Text: part => <AssistantTextPartRenderer part={part} metadata={metadata} />,
+    }),
+    [sharedRenderers, metadata],
+  );
+
   if (dbMessage === null) return null;
 
   const displayRole = dbMessage.role;
-  const metadata = getMessageMetadata(message);
-  const dataParts = getDataParts(message);
-
-  const renderToolCard = (
-    toolName: string,
-    input: unknown,
-    output: unknown,
-    toolCallId: string,
-    state: string | undefined,
-  ): ReactNode => (
-    <ToolCard
-      toolName={toolName}
-      input={input}
-      output={output}
-      toolCallId={toolCallId}
-      state={state}
-      metadata={metadata}
-      dataParts={dataParts}
-    />
-  );
-
-  const sharedRenderers: MessageRenderers = {
-    Reasoning: part => {
-      const reasoningText =
-        'text' in part && typeof part.text === 'string'
-          ? part.text
-          : 'reasoning' in part && typeof part.reasoning === 'string'
-            ? part.reasoning
-            : '';
-      return <Reasoning text={reasoningText} />;
-    },
-    Data: part => (part.type === 'data-signal' && isSignalData(part.data) ? <SignalBadge signal={part.data} /> : null),
-    ToolInvocation: (part: ToolInvocationPart) => {
-      const inv = part.toolInvocation;
-      const input = 'args' in inv ? inv.args : undefined;
-      const output = 'result' in inv ? inv.result : undefined;
-      return renderToolCard(inv.toolName, input, output, inv.toolCallId, inv.state);
-    },
-    DynamicTool: (part: DynamicToolPart) => {
-      const toolName = part.toolName ?? part.type.replace(/^tool-/, '');
-      return renderToolCard(toolName, part.input, part.output, part.toolCallId ?? '', part.state);
-    },
-  };
-
-  const status: MessageStatusRenderers = {
-    Error: ({ text }) => (
-      <Notice variant="destructive" title="Error">
-        <Notice.Message>{text}</Notice.Message>
-      </Notice>
-    ),
-    Warning: ({ text }) => (
-      <Notice variant="warning" title="Warning">
-        <Notice.Message>{text}</Notice.Message>
-      </Notice>
-    ),
-    Tripwire: ({ text, tripwire }) => <TripwireNotice reason={text} tripwire={tripwire} />,
-  };
 
   if (displayRole === 'user') {
     const isPending = isPendingMessage(message);
-    const userRenderers: MessageRenderers = {
-      ...sharedRenderers,
-      Text: part => {
-        const text = part.text ?? '';
-        if (text.trimStart().startsWith('<system-reminder')) {
-          return <SystemReminderBadge text={text} />;
-        }
-        if (text.includes('<attachment name=')) {
-          return <InMessageAttachment type="document" contentType="text/plain" data={text} />;
-        }
-        return <MessageText text={text} metadata={metadata} />;
-      },
-      File: part => {
-        const data = part.data;
-        const isUrl = typeof data === 'string' && data.startsWith('https://');
-        const isImage = typeof part.mimeType === 'string' && part.mimeType.startsWith('image/');
-        if (isImage) {
-          return <InMessageAttachment type="image" src={typeof data === 'string' ? data : undefined} />;
-        }
-        return (
-          <InMessageAttachment
-            type="document"
-            contentType={part.mimeType}
-            src={isUrl ? data : undefined}
-            data={typeof data === 'string' ? data : undefined}
-          />
-        );
-      },
-    };
 
     return (
       <div
@@ -340,22 +189,18 @@ export const MessageRow = ({ message, isSpeaking, onReadAloud, onStopSpeaking }:
             isPending && 'opacity-60 animate-pulse',
           )}
         >
-          <MessageFactory message={dbMessage} {...userRenderers} status={status} />
+          <MessageFactory message={dbMessage} {...userRenderers} status={messageStatusRenderers} />
         </div>
       </div>
     );
   }
 
   const showActionBar = hasVisibleAssistantText(message, metadata);
-  const assistantRenderers: MessageRenderers = {
-    ...sharedRenderers,
-    Text: part => <MessageText text={part.text ?? ''} metadata={metadata} />,
-  };
 
   return (
     <div className="max-w-full" data-message-id={message.id}>
       <div className="text-neutral6 text-ui-lg leading-ui-lg pt-2">
-        <MessageFactory message={dbMessage} {...assistantRenderers} status={status} />
+        <MessageFactory message={dbMessage} {...assistantRenderers} status={messageStatusRenderers} />
       </div>
       {showActionBar && (
         <div className="h-6 pt-4 flex gap-2 items-center">
