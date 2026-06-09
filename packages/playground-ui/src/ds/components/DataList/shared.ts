@@ -1,7 +1,7 @@
 /**
- * Row-level styling shared by anything that participates in the row sibling
+ * Row-level styling for the element that participates in the row sibling
  * chain — applied to `DataList.RowButton` / `DataList.RowLink` when used
- * standalone, and to `DataList.RowWrapper` when used as a wrapper around them.
+ * standalone, and to `DataList.RowWrapper` when used as a shell around them.
  *
  * Contains the `.data-list-row` marker class (used by the sibling-aware
  * separator rules), the full-width separator treatment, and rounded corners.
@@ -13,11 +13,15 @@ export const dataListRowOuterStyles = [
   'transition-colors duration-200 rounded-lg',
 ] as const;
 
-export const dataListRowStyles = [
-  'mx-1 grid grid-cols-subgrid gap-8 px-5 outline-none cursor-pointer',
+export const dataListRowInteractiveStyles = [
+  'grid grid-cols-subgrid gap-8 px-5 outline-none cursor-pointer',
   'hover:bg-surface4 focus-visible:bg-surface4 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
-  ...dataListRowOuterStyles,
+  'transition-colors duration-200 rounded-lg',
 ] as const;
+
+export const dataListRowStyles = ['mx-1', ...dataListRowInteractiveStyles, ...dataListRowOuterStyles] as const;
+
+export const dataListRowStaticStyles = ['mx-1 grid grid-cols-subgrid gap-8 px-5', ...dataListRowOuterStyles] as const;
 
 /**
  * Layout/state modifiers shared by interactive row primitives

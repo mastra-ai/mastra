@@ -84,7 +84,7 @@ export function DataListSelectCell({ checked, onToggle, ...rest }: DataListSelec
     <DataListCell
       as="label"
       height="compact"
-      className="cursor-pointer justify-items-center rounded-lg transition-colors duration-200 hover:bg-surface4 px-4"
+      className="h-8 w-8 self-center cursor-pointer justify-items-center px-0 py-0!"
       onClick={e => e.stopPropagation()}
     >
       <Checkbox
