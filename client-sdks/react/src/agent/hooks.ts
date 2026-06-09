@@ -128,6 +128,17 @@ const resolveInitialMessages = (messages: MastraDBMessage[]): MastraDBMessage[] 
       };
     });
 
+const replaceOptimisticMessagesForLegacyFallback = (
+  messages: MastraDBMessage[],
+  optimisticMessages: MastraDBMessage[] | undefined,
+  fallbackMessages: MastraDBMessage[],
+): MastraDBMessage[] => {
+  const optimisticIds = new Set(optimisticMessages?.map(message => message.id) ?? []);
+  if (!optimisticIds.size) return [...messages, ...fallbackMessages];
+
+  return [...messages.filter(message => !optimisticIds.has(message.id)), ...fallbackMessages];
+};
+
 type SignalContinuationOptions = {
   maxSteps?: number;
   modelSettings?: {
@@ -202,6 +213,10 @@ export type StreamArgs = SharedArgs & {
 
 export type NetworkArgs = SharedArgs & {
   onNetworkChunk?: (chunk: NetworkChunkType) => Promise<void>;
+};
+
+type InternalStreamArgs = StreamArgs & {
+  optimisticUserMessages?: MastraDBMessage[];
 };
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
@@ -623,7 +638,8 @@ export const useChat = ({
     clientTools,
     signalId,
     clientMessageId,
-  }: StreamArgs) => {
+    optimisticUserMessages,
+  }: InternalStreamArgs) => {
     const {
       frequencyPenalty,
       presencePenalty,
@@ -791,7 +807,13 @@ export const useChat = ({
           onSignalEcho?.(resolvedSignalId);
           if (isThreadSignalUnsupportedError(signalError)) {
             markThreadSignalsUnsupported();
-            setMessages(prev => [...prev, ...coreUserMessages.map(fromCoreUserMessageToMastraDBMessage)]);
+            setMessages(prev =>
+              replaceOptimisticMessagesForLegacyFallback(
+                prev,
+                optimisticUserMessages,
+                optimisticUserMessages ?? coreUserMessages.map(fromCoreUserMessageToMastraDBMessage),
+              ),
+            );
             await streamWithLegacyRoute();
             return;
           }
@@ -1141,7 +1163,13 @@ export const useChat = ({
     if (mode === 'generate') {
       await generate({ ...args, coreUserMessages });
     } else if (mode === 'stream') {
-      await stream({ ...args, coreUserMessages, signalId, clientMessageId });
+      await stream({
+        ...args,
+        coreUserMessages,
+        signalId,
+        clientMessageId,
+        optimisticUserMessages: signalId ? dbUserMessages : undefined,
+      });
     } else if (mode === 'network') {
       await network({ ...args, coreUserMessages });
     }

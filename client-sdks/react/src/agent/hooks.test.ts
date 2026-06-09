@@ -1116,6 +1116,47 @@ describe('useChat optimistic pending user message', () => {
     expect(second?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
   });
 
+  it('replaces optimistic messages when both signal APIs fall back to the legacy stream path', async () => {
+    sendMessageMock.mockRejectedValueOnce(Object.assign(new Error('sendMessage unavailable'), { status: 404 }));
+    sendSignalMock.mockRejectedValueOnce(Object.assign(new Error('sendSignal unavailable'), { status: 404 }));
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'first',
+        threadId: 'thread-1',
+        coreUserMessages: [{ role: 'user', content: [{ type: 'text', text: 'second' }] }],
+      });
+    });
+
+    expect(sendMessageMock).toHaveBeenCalledTimes(1);
+    expect(sendSignalMock).toHaveBeenCalledTimes(1);
+    expect(streamMock).toHaveBeenCalledTimes(1);
+
+    const userMessages = result.current.messages.filter(m => m.role === 'user');
+    expect(userMessages).toHaveLength(2);
+    expect(userMessages.map(message => message.content.parts[0])).toEqual([
+      { type: 'text', text: 'first' },
+      { type: 'text', text: 'second' },
+    ]);
+    for (const message of userMessages) {
+      const metadata = message.content.metadata as MastraDBMessageMetadata | undefined;
+      expect(metadata?.status).toBeUndefined();
+      expect(metadata?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
+    }
+  });
+
   it('keys two sequential sends as independent pending messages', async () => {
     const { result } = renderHook(
       () =>
