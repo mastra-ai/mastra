@@ -30,4 +30,13 @@ describe('Searchbar', () => {
     expect(wrapperClass).toContain('[&:hover:not(:focus-within)]:border-border2');
     expect(wrapperClass).not.toContain('hover:border-border2');
   });
+
+  it('uses the shared text rhythm for compact sizes', () => {
+    render(<Searchbar size="xs" label="Search" placeholder="Search..." onSearch={() => {}} />);
+
+    const inputClass = screen.getByPlaceholderText('Search...').className;
+    expect(inputClass).toContain('h-form-xs');
+    expect(inputClass).toContain('text-ui-xs');
+    expect(inputClass).not.toContain('text-ui-md');
+  });
 });

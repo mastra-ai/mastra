@@ -172,6 +172,12 @@ export const BlockEndAddon: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="flex flex-col gap-3 w-80">
+      <InputGroup size="xs">
+        <InputGroupAddon>
+          <SearchIcon />
+        </InputGroupAddon>
+        <InputGroupInput placeholder="Extra Small" />
+      </InputGroup>
       <InputGroup size="sm">
         <InputGroupAddon>
           <SearchIcon />
