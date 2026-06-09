@@ -1,6 +1,7 @@
 import type { MessagePrimitive } from '@assistant-ui/react';
 import { ComposerPrimitive, ThreadPrimitive, useComposer, useComposerRuntime } from '@assistant-ui/react';
 import { Avatar, Button, ButtonsGroup, cn, useAutoscroll } from '@mastra/playground-ui';
+import { useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, EyeIcon, Mic, PlusIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
@@ -16,9 +17,8 @@ import { ComposerModelSettings } from '@/domains/agents/components/composer-mode
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
-import { useSpeechRecognition } from '@mastra/react';
-import { usePlaygroundStore } from '@/store/playground-store';
 import { Link } from '@/lib/link';
+import { usePlaygroundStore } from '@/store/playground-store';
 // import { useBackgroundTaskStream } from '@/hooks';
 
 export interface ThreadProps {
