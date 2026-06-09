@@ -9,11 +9,11 @@ import type { AnchorHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { AgentInformation } from '../agent-information';
 import { BrowserSessionProvider } from '../../../context/browser-session-provider';
 import { readOnlyAuthCapabilities } from '../../__tests__/fixtures/auth';
-import { v2Agent } from '../../__tests__/fixtures/composer-model-settings';
 import { systemPackages } from '../../__tests__/fixtures/channels';
+import { v2Agent } from '../../__tests__/fixtures/composer-model-settings';
+import { AgentInformation } from '../agent-information';
 import { LinkComponentProvider } from '@/lib/framework';
 import type { LinkComponentProviderProps } from '@/lib/framework';
 import { server } from '@/test/msw-server';
