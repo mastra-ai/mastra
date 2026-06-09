@@ -414,30 +414,6 @@ function createMastraWithAgentMemoryUsingRootStorage() {
   };
 }
 
-function createMastraWithAgentMemoryWithoutStorage() {
-  const memory = new RootInjectedMockMemory();
-  const agent = new Agent({
-    id: 'agent-without-storage',
-    name: 'agent-without-storage',
-    instructions: 'agent-without-storage instructions',
-    model: {} as never,
-    memory,
-  });
-  const mastra = new Mastra({
-    logger: false,
-    agents: {
-      'agent-without-storage': agent,
-    },
-  });
-
-  mockAgentSpecVersion(agent);
-
-  return {
-    agent,
-    mastra,
-  };
-}
-
 describe('Responses Handlers', () => {
   let storage: InMemoryStore;
   let memory: MockMemory;
@@ -4507,23 +4483,5 @@ describe('Responses Handlers', () => {
     const secondCall = generateSpy.mock.calls[1]?.[1] as { memory?: { thread?: string; resource?: string } };
 
     expect(secondCall.memory).toEqual(firstCall.memory);
-  });
-
-  it('returns 400 when storing a response for an agent with memory but no storage', async () => {
-    const noStorage = createMastraWithAgentMemoryWithoutStorage();
-    vi.spyOn(noStorage.agent, 'generate').mockResolvedValue(createGenerateResult({ text: 'No storage response' }));
-
-    await expect(
-      CREATE_RESPONSE_ROUTE.handler({
-        ...createTestServerContext({ mastra: noStorage.mastra }),
-        model: 'openai/gpt-5',
-        agent_id: 'agent-without-storage',
-        input: 'Hello',
-        store: true,
-        stream: false,
-      }),
-    ).rejects.toMatchObject({
-      status: 400,
-    });
   });
 });

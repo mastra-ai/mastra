@@ -4,6 +4,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { createElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CLIENT_MESSAGE_ID_KEY } from '../lib/mastra-db';
 import type { MastraDBMessageMetadata } from '../lib/mastra-db';
 import type { ClientToolsInput } from './types';
 
@@ -11,7 +12,7 @@ import type { ClientToolsInput } from './types';
 // getAgent(). This lets us assert what the React hook actually forwards to the
 // underlying client-js Agent methods.
 const sendSignalMock = vi.fn(async () => ({ accepted: true, runId: 'run-mock' }));
-const sendMessageMock = vi.fn(async () => ({ accepted: true, runId: 'run-mock' }));
+const sendMessageMock = vi.fn(async (_params?: unknown) => ({ accepted: true, runId: 'run-mock' }));
 let nextApproveToolCallChunks: Array<any> = [];
 const approveToolCallProcessDataStreamMock = vi.fn(
   async ({ onChunk }: { onChunk: (chunk: any) => Promise<void> | void }) => {
@@ -35,7 +36,7 @@ const declineToolCallMock = vi.fn(async () => ({
     /* no chunks */
   },
 }));
-const streamUntilIdleMock = vi.fn(async () => ({
+const streamMock = vi.fn(async () => ({
   body: { cancel: vi.fn() },
   processDataStream: async () => {
     /* no chunks */
@@ -104,7 +105,7 @@ vi.mock('@mastra/client-js', () => ({
         approveToolCall: approveToolCallMock,
         sendToolApproval: sendToolApprovalMock,
         declineToolCall: declineToolCallMock,
-        streamUntilIdle: streamUntilIdleMock,
+        stream: streamMock,
         subscribeToThread: subscribeToThreadMock,
         generate: generateMock,
         network: networkMock,
@@ -151,7 +152,7 @@ describe('useChat forwards clientTools', () => {
     sendToolApprovalMock.mockClear();
     declineToolCallMock.mockClear();
     approveToolCallProcessDataStreamMock.mockClear();
-    streamUntilIdleMock.mockClear();
+    streamMock.mockClear();
     subscribeToThreadMock.mockClear();
     threadSubscriptionAbortMock.mockClear();
     threadSubscriptionUnsubscribeMock.mockClear();
@@ -194,7 +195,7 @@ describe('useChat forwards clientTools', () => {
 
     expect(subscribeToThreadMock).not.toHaveBeenCalled();
     expect(sendSignalMock).not.toHaveBeenCalled();
-    expect(streamUntilIdleMock).toHaveBeenCalledTimes(1);
+    expect(streamMock).toHaveBeenCalledTimes(1);
   });
 
   it('marks subscription streams idle while waiting for tool approval', async () => {
@@ -290,7 +291,14 @@ describe('useChat forwards clientTools', () => {
       });
     });
 
-    expect(sendMessageMock).toHaveBeenCalledWith(expect.objectContaining({ message: 'paris', threadId: 'thread-1' }));
+    expect(sendMessageMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.objectContaining({
+          metadata: expect.objectContaining({ [CLIENT_MESSAGE_ID_KEY]: expect.any(String) }),
+        }),
+        threadId: 'thread-1',
+      }),
+    );
     expect(result.current.isRunning).toBe(false);
     expect(result.current.isAwaitingToolApproval).toBe(true);
   });
@@ -659,6 +667,44 @@ describe('useChat forwards clientTools', () => {
     });
   });
 
+  it('strips transient pending status from initial messages on reload', async () => {
+    const initialMessages = [
+      {
+        id: 'msg-was-pending',
+        role: 'user',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [{ type: 'text', text: 'hello' }],
+          metadata: {
+            mode: 'stream',
+            status: 'pending',
+            [CLIENT_MESSAGE_ID_KEY]: 'client-msg-leftover',
+          },
+        },
+      },
+    ] satisfies MastraDBMessage[];
+
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          initialMessages,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      const lastMessage = result.current.messages.at(-1);
+      const metadata = lastMessage?.content?.metadata as MastraDBMessageMetadata | undefined;
+      expect(metadata?.status).toBeUndefined();
+      expect(metadata?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
+    });
+    expect(result.current.messages.map(message => message.id)).toEqual(['msg-was-pending']);
+  });
+
   it('unsubscribes without aborting when thread signals are disabled after subscribing', async () => {
     keepSubscriptionOpen = true;
     const { rerender } = renderHook(
@@ -755,7 +801,7 @@ describe('useChat forwards clientTools', () => {
 
     expect(subscribeToThreadMock).not.toHaveBeenCalled();
     expect(sendSignalMock).not.toHaveBeenCalled();
-    expect(streamUntilIdleMock).toHaveBeenCalledTimes(1);
+    expect(streamMock).toHaveBeenCalledTimes(1);
   });
 
   it('keeps hook-prop clientTools on sendMessage when threadId is provided', async () => {
@@ -861,10 +907,10 @@ describe('useChat forwards clientTools', () => {
         clientTools: perSendClientTools,
       }),
     );
-    expect(streamUntilIdleMock).not.toHaveBeenCalled();
+    expect(streamMock).not.toHaveBeenCalled();
   });
 
-  it('forwards hook-prop clientTools through the legacy streamUntilIdle path when no threadId is set', async () => {
+  it('forwards hook-prop clientTools through the legacy stream (untilIdle) path when no threadId is set', async () => {
     const { result } = renderHook(
       () =>
         useChat({
@@ -881,8 +927,8 @@ describe('useChat forwards clientTools', () => {
       });
     });
 
-    expect(streamUntilIdleMock).toHaveBeenCalledTimes(1);
-    const calls = streamUntilIdleMock.mock.calls as unknown as Array<[unknown, { clientTools: unknown }]>;
+    expect(streamMock).toHaveBeenCalledTimes(1);
+    const calls = streamMock.mock.calls as unknown as Array<[unknown, { clientTools: unknown }]>;
     expect(calls[0]?.[1].clientTools).toBe(clientTools);
     expect(sendMessageMock).not.toHaveBeenCalled();
     expect(sendSignalMock).not.toHaveBeenCalled();
@@ -985,5 +1031,138 @@ describe('useChat forwards clientTools', () => {
     const firstUserPart = userMessages[0]?.content.parts[0] as Record<string, unknown>;
     expect(firstUserPart.type).toBe('text');
     expect(firstUserPart.text).toBe('what is the weather');
+  });
+});
+
+describe('useChat optimistic pending user message', () => {
+  beforeEach(() => {
+    sendMessageMock.mockClear();
+    streamMock.mockClear();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('appends a pending user message on the signal path', async () => {
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'hello', threadId: 'thread-1' });
+    });
+
+    const userMessages = result.current.messages.filter(m => m.role === 'user');
+    expect(userMessages).toHaveLength(1);
+    const metadata = userMessages[0]?.content.metadata as MastraDBMessageMetadata | undefined;
+    expect(metadata?.status).toBe('pending');
+    expect(metadata?.mode).toBe('stream');
+
+    // The optimistic bubble carries a client correlation id...
+    const clientMessageId = metadata?.[CLIENT_MESSAGE_ID_KEY];
+    expect(typeof clientMessageId).toBe('string');
+
+    // ...and the same id is sent to the server in the outgoing message metadata
+    // so the echo can reconcile the pending bubble.
+    expect(sendMessageMock).toHaveBeenCalledTimes(1);
+    const sendArgs = sendMessageMock.mock.calls[0]?.[0] as
+      | { message?: { metadata?: Record<string, unknown> } }
+      | undefined;
+    expect(sendArgs?.message?.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe(clientMessageId);
+    expect(typeof sendArgs?.message?.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe('string');
+  });
+
+  it('stamps the correlation id and pending status on only the first bubble of a multi-message send', async () => {
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'first',
+        threadId: 'thread-1',
+        coreUserMessages: [{ role: 'user', content: [{ type: 'text', text: 'second' }] }],
+      });
+    });
+
+    const userMessages = result.current.messages.filter(m => m.role === 'user');
+    expect(userMessages).toHaveLength(2);
+
+    // The whole turn is sent as a single signal that echoes back one
+    // `data-user-message`, so only the first bubble carries the correlation id
+    // and pending status. Sharing one id across bubbles would let the echo
+    // adopt the same server id onto multiple messages.
+    const first = userMessages[0]?.content.metadata as MastraDBMessageMetadata | undefined;
+    const second = userMessages[1]?.content.metadata as MastraDBMessageMetadata | undefined;
+    expect(first?.status).toBe('pending');
+    expect(typeof first?.[CLIENT_MESSAGE_ID_KEY]).toBe('string');
+    expect(second?.status).toBeUndefined();
+    expect(second?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
+  });
+
+  it('keys two sequential sends as independent pending messages', async () => {
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'first', threadId: 'thread-1' });
+    });
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'second', threadId: 'thread-1' });
+    });
+
+    const userMessages = result.current.messages.filter(m => m.role === 'user');
+    expect(userMessages).toHaveLength(2);
+    expect(new Set(userMessages.map(m => m.id)).size).toBe(2);
+    for (const message of userMessages) {
+      const metadata = message.content.metadata as MastraDBMessageMetadata | undefined;
+      expect(metadata?.status).toBe('pending');
+    }
+  });
+
+  it('does not mark the user message pending on the legacy stream path', async () => {
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({ mode: 'stream', message: 'hello', threadId: 'thread-1' });
+    });
+
+    const userMessages = result.current.messages.filter(m => m.role === 'user');
+    expect(userMessages).toHaveLength(1);
+    const metadata = userMessages[0]?.content.metadata as MastraDBMessageMetadata | undefined;
+    expect(metadata?.status).toBeUndefined();
+    expect(metadata?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
   });
 });

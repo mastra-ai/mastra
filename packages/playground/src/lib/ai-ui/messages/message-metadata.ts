@@ -11,6 +11,8 @@
  * Fields are intentionally optional and additive — components that don't
  * recognise a key should ignore it.
  */
+import type { TripwireMetadata } from '@mastra/react';
+
 export type MessageMode = 'generate' | 'stream' | 'network';
 
 export interface BackgroundTaskEntry {
@@ -35,12 +37,8 @@ export interface SuspendedToolMetadata {
 
 export interface MessageMetadata {
   mode?: MessageMode;
-  status?: 'warning' | 'error' | 'tripwire';
-  tripwire?: {
-    retry?: boolean;
-    tripwirePayload?: unknown;
-    processorId?: string;
-  };
+  status?: 'warning' | 'error' | 'tripwire' | 'pending';
+  tripwire?: TripwireMetadata;
   selectionReason?: string;
   agentInput?: unknown;
   hasMoreMessages?: boolean;

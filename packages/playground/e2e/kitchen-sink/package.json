@@ -21,8 +21,8 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.20",
     "typescript": "^5.9.3"
   },
-  "packageManager": "pnpm@11.3.0"
+  "packageManager": "pnpm@11.5.1"
 }

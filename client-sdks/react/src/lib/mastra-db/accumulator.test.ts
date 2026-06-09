@@ -2,6 +2,7 @@ import type { MastraDBMessage, MastraToolInvocationPart } from '@mastra/core/age
 import type { ChunkType } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 import { accumulateChunk, finishStreamingAssistantMessage } from './accumulator';
+import { CLIENT_MESSAGE_ID_KEY } from './types';
 import type { BackgroundTaskEntry, MastraDBMessageMetadata, MastraReasoningPart, MastraTextPart } from './types';
 
 const RUN_ID = 'run-1';
@@ -347,13 +348,37 @@ const dataPartChunk = (suffix: string, data: unknown): ChunkType =>
 
 // The live server emits the signal echo with `data.type: 'user'`; default to
 // that real wire value so the fixture cannot drift back to masking the guard.
-const dataUserMessageChunk = (id: string, contents: unknown, dataType: 'user' | 'user-message' = 'user'): ChunkType =>
+const dataUserMessageChunk = (
+  id: string,
+  contents: unknown,
+  dataType: 'user' | 'user-message' = 'user',
+  clientMessageId?: string,
+): ChunkType =>
   ({
     type: 'data-user-message',
     runId: RUN_ID,
     from: 'AGENT',
-    data: { type: dataType, id, contents },
+    data: {
+      type: dataType,
+      id,
+      contents,
+      ...(clientMessageId ? { metadata: { [CLIENT_MESSAGE_ID_KEY]: clientMessageId } } : {}),
+    },
   }) as unknown as ChunkType;
+
+// An optimistically-appended user message awaiting its server echo. Mirrors what
+// `useChat.sendMessage` puts into local state on the signal path: a client-side
+// id plus the transient `clientMessageId` correlation key.
+const pendingUserMessage = (id: string, text: string, clientMessageId = id): MastraDBMessage => ({
+  id,
+  role: 'user',
+  createdAt: new Date(),
+  content: {
+    format: 2,
+    parts: [{ type: 'text', text }],
+    metadata: { mode: 'stream', status: 'pending', [CLIENT_MESSAGE_ID_KEY]: clientMessageId },
+  },
+});
 
 const passthroughChunk = (type: string): ChunkType =>
   ({ type, runId: RUN_ID, from: 'AGENT', payload: {} }) as unknown as ChunkType;
@@ -931,6 +956,51 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
     expect(userMessages[0].id).toBe('sig-1');
   });
 
+  it('reconciles the optimistic message by clientMessageId even when the echoed id differs', () => {
+    // Production reality: the optimistic bubble carries a client-generated id
+    // (`client-1`), but the server mints and echoes its own signal id
+    // (`server-1`). Matching on the `clientMessageId` correlation key keeps the
+    // single bubble and adopts the server id.
+    const pending = pendingUserMessage('client-1', 'hello', 'corr-1');
+    const out = reduce(
+      [startChunk('asst-1'), dataUserMessageChunk('server-1', 'hello', 'user', 'corr-1')],
+      streamMeta(),
+      [pending],
+    );
+
+    const userMessages = out.filter(m => m.role === 'user');
+    expect(userMessages).toHaveLength(1);
+    expect(userMessages[0].id).toBe('server-1');
+    expect(userMessages[0].content.metadata?.status).toBeUndefined();
+    expect(userMessages[0].content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
+  });
+
+  it('only resolves the optimistic message whose clientMessageId matches the echo', () => {
+    const pendingA = pendingUserMessage('client-1', 'first', 'corr-1');
+    const pendingB = pendingUserMessage('client-2', 'second', 'corr-2');
+    const out = reduce([dataUserMessageChunk('server-2', 'second', 'user', 'corr-2')], streamMeta(), [
+      pendingA,
+      pendingB,
+    ]);
+
+    const resolved = out.find(m => m.id === 'server-2');
+    const stillPending = out.find(m => m.id === 'client-1');
+    expect(resolved?.content.metadata?.status).toBeUndefined();
+    expect(resolved?.content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
+    expect(stillPending?.content.metadata?.status).toBe('pending');
+    expect(out.filter(m => m.role === 'user')).toHaveLength(2);
+  });
+
+  it('appends an echo that matches no optimistic bubble (foreign/server-injected message)', () => {
+    const pending = pendingUserMessage('client-1', 'mine', 'corr-1');
+    const out = reduce([dataUserMessageChunk('server-x', 'not mine', 'user', 'corr-other')], streamMeta(), [pending]);
+
+    const userMessages = out.filter(m => m.role === 'user');
+    expect(userMessages).toHaveLength(2);
+    // The optimistic bubble is untouched and still pending.
+    expect(userMessages.find(m => m.id === 'client-1')?.content.metadata?.status).toBe('pending');
+  });
+
   // The server emits the echo with `data.type: 'user'` while the signal input
   // uses `data.type: 'user-message'`. Both must produce a user message; only
   // accepting one of them silently drops the live echo (regression guard).
@@ -976,7 +1046,12 @@ describe('accumulateChunk - tripwire', () => {
     expect(text).toMatchObject({ text: 'blocked by guardrail' });
     expect(msg.content.metadata).toMatchObject({
       status: 'tripwire',
-      tripwire: { retry: false, tripwirePayload: { hint: 'blocked' }, processorId: 'guardrail-1' },
+      tripwire: {
+        reason: 'blocked by guardrail',
+        retry: false,
+        metadata: { hint: 'blocked' },
+        processorId: 'guardrail-1',
+      },
     });
   });
 });

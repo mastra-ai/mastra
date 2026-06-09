@@ -1,4 +1,5 @@
 import type {
+  AIV5Type,
   MastraDBMessage,
   MastraMessagePart,
   MastraMessageContentV2,
@@ -8,6 +9,7 @@ import type {
 import type { AgentChunkType, ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import type { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
 import { formatCompletionFeedback, formatStreamCompletionFeedback } from './formatCompletionFeedback';
+import { CLIENT_MESSAGE_ID_KEY } from './types';
 import type {
   BackgroundTaskEntry,
   MastraDBMessageMetadata,
@@ -56,6 +58,14 @@ const withMetadata = (message: MastraDBMessage, metadata: MastraDBMessageMetadat
     metadata,
   },
 });
+
+// Drops the transient `pending` status and the `clientMessageId` correlation
+// key from an optimistic user message once its server echo confirms it, leaving
+// the rest of the metadata intact.
+const clearPendingStatus = (message: MastraDBMessage): MastraDBMessage => {
+  const { status: _status, [CLIENT_MESSAGE_ID_KEY]: _clientMessageId, ...rest } = message.content.metadata ?? {};
+  return withMetadata(message, rest);
+};
 
 const replaceLast = (conversation: MastraDBMessage[], message: MastraDBMessage): MastraDBMessage[] => [
   ...conversation.slice(0, -1),
@@ -436,8 +446,35 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       ((chunk as any).data?.type === 'user-message' || (chunk as any).data?.type === 'user')
     ) {
       const signalId = (chunk as any).data.id;
+
+      // Preferred reconciliation: the optimistic pending bubble and the outgoing
+      // message both carry a client-generated `clientMessageId`; the server
+      // echoes it back here. Match on it (not the server-assigned signal id) so
+      // the single optimistic bubble adopts the server id and clears its
+      // transient pending state instead of being duplicated.
+      const echoedClientMessageId = (chunk as any).data?.metadata?.[CLIENT_MESSAGE_ID_KEY];
+      if (
+        typeof echoedClientMessageId === 'string' &&
+        result.some(
+          message =>
+            message.content.metadata?.status === 'pending' &&
+            message.content.metadata[CLIENT_MESSAGE_ID_KEY] === echoedClientMessageId,
+        )
+      ) {
+        return result.map(message =>
+          message.content.metadata?.status === 'pending' &&
+          message.content.metadata[CLIENT_MESSAGE_ID_KEY] === echoedClientMessageId
+            ? clearPendingStatus(typeof signalId === 'string' ? { ...message, id: signalId } : message)
+            : message,
+        );
+      }
+
       if (typeof signalId === 'string' && result.some(message => message.id === signalId)) {
-        return result;
+        return result.map(message =>
+          message.id === signalId && message.content.metadata?.status === 'pending'
+            ? clearPendingStatus(message)
+            : message,
+        );
       }
 
       const userMessages = signalContentsToUserMessages((chunk as any).data.contents, metadata);
@@ -477,8 +514,9 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
           ...metadata,
           status: 'tripwire',
           tripwire: {
+            reason: chunk.payload.reason,
             retry: chunk.payload.retry,
-            tripwirePayload: chunk.payload.metadata,
+            metadata: chunk.payload.metadata,
             processorId: chunk.payload.processorId,
           },
         },
@@ -1175,13 +1213,17 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
 
       const parts = [...lastMessage.content.parts];
       if (chunk.payload.sourceType === 'url') {
-        parts.push({
+        // Flat V5 `source-url` shape (see boundary cast policy above). Typed as
+        // the shared `AIV5Type.SourceUrlUIPart` so the literal is shape-checked,
+        // then stored via the storage-boundary cast like the other V5 parts.
+        const sourceUrlPart: AIV5Type.SourceUrlUIPart = {
           type: 'source-url',
           sourceId: chunk.payload.id,
           url: chunk.payload.url || '',
           title: chunk.payload.title,
           providerMetadata: chunk.payload.providerMetadata,
-        } as unknown as MastraMessagePart);
+        };
+        parts.push(sourceUrlPart as unknown as MastraMessagePart);
       } else if (chunk.payload.sourceType === 'document') {
         parts.push({
           type: 'source-document',

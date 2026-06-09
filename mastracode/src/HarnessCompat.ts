@@ -230,9 +230,11 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
       throw new Error(`Mode not found: ${modeId}`);
     }
 
-    if (this.#session) {
-      this.#session.setMode(mode);
+    if (!this.#session) {
+      throw new Error('No active session to switch mode');
     }
+
+    this.#session.setMode(mode);
 
     await super.switchMode({ modeId });
   }
@@ -244,10 +246,10 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
    * string, or throws `HarnessSkillNotFoundError` if the skill is missing.
    * Throws if there is no active session.
    */
-  async useSkill(name: string, opts?: { args?: Record<string, unknown> }): Promise<string> {
+  async useSkill(name: string, _opts?: { args?: Record<string, unknown> }): Promise<string> {
     if (!this.#session) {
       throw new Error('No active session to use skill');
     }
-    return this.#session.useSkill(name, opts);
+    return this.#session.useSkill(name);
   }
 }

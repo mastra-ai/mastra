@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import { z } from 'zod';
 
 import type { MastraMemory } from '../../memory';
 import { HarnessStorage } from '../../storage/domains/harness';
@@ -8,6 +7,7 @@ import type { Workspace } from '../../workspace';
 import type { Skill } from '../../workspace/skills/types';
 import { Harness } from './harness';
 import { HarnessSkillNotFoundError } from './skills.types';
+import type { HarnessSkillMetadata } from './skills.types';
 
 class RecordingHarnessStorage extends HarnessStorage {
   readonly records = new Map<string, SessionRecord>();
@@ -41,7 +41,7 @@ const createSkill = (skill: {
   description: string;
   instructions: string;
   path?: string;
-  metadata?: Record<string, unknown>;
+  metadata?: HarnessSkillMetadata;
 }): Skill => ({
   name: skill.name,
   description: skill.description,
@@ -86,27 +86,27 @@ const createMockWorkspace = ({ skills }: MockWorkspaceOptions) => {
 const openSession = async (harness: Harness<[{ id: 'build'; agentId: 'default'; defaultModelId: string }]>) =>
   harness.session({ threadId: 'thread-1', resourceId: 'resource-1', modeId: 'build', modelId: 'm' });
 
-const createHarness = ({ skills, workspace }: { skills?: Skill[]; workspace?: Workspace } = {}) =>
+const createHarness = ({ workspace }: { workspace?: Workspace } = {}) =>
   new Harness({
     agents: {},
     storage: new RecordingHarnessStorage(),
     memory: createMemory(),
     modes: [{ id: 'build', agentId: 'default', defaultModelId: 'm' } as const],
     defaultModeId: 'build',
-    skills,
     // Use a function form so we don't have to satisfy Workspace's constructor
     // validation when the test only needs a stub.
     workspace: workspace ? () => workspace : undefined,
   });
 
 describe('Session skills', () => {
-  it('returns explicitly configured canonical skills when no workspace is configured', async () => {
-    const harness = createHarness({
+  it('returns workspace skills with required file paths', async () => {
+    const mock = createMockWorkspace({
       skills: [
         createSkill({ name: 'demo', description: 'A demo', instructions: 'do the demo' }),
         createSkill({ name: 'other', description: 'Other', instructions: 'other instructions' }),
       ],
     });
+    const harness = createHarness({ workspace: mock.workspace });
     const session = await openSession(harness);
 
     const list = await session.listSkills();
@@ -114,34 +114,8 @@ describe('Session skills', () => {
     expect(await session.getSkill('demo')).toMatchObject({
       name: 'demo',
       instructions: 'do the demo',
-      references: [],
-      scripts: [],
-      assets: [],
+      filePath: '/skills/demo',
     });
-  });
-
-  it('merges configured and workspace skills with configured skills winning on shadow', async () => {
-    const mock = createMockWorkspace({
-      skills: [
-        createSkill({ name: 'demo', description: 'workspace demo', instructions: 'workspace body' }),
-        createSkill({ name: 'only-workspace', description: 'only ws', instructions: 'ws-only body' }),
-      ],
-    });
-    const harness = createHarness({
-      skills: [createSkill({ name: 'demo', description: 'configured demo', instructions: 'configured body' })],
-      workspace: mock.workspace,
-    });
-    const session = await openSession(harness);
-
-    const list = await session.listSkills();
-    const demo = list.find(s => s.name === 'demo')!;
-    expect(demo.description).toBe('configured demo');
-
-    const wsOnly = list.find(s => s.name === 'only-workspace')!;
-    expect(wsOnly.description).toBe('only ws');
-
-    await expect(session.useSkill('demo')).resolves.toBe('configured body');
-    await expect(session.useSkill('only-workspace')).resolves.toBe('ws-only body');
   });
 
   it('returns null from getSkill for unknown names', async () => {
@@ -151,9 +125,10 @@ describe('Session skills', () => {
   });
 
   it('useSkill throws HarnessSkillNotFoundError when missing', async () => {
-    const harness = createHarness({
+    const mock = createMockWorkspace({
       skills: [createSkill({ name: 'demo', description: 'd', instructions: 'i' })],
     });
+    const harness = createHarness({ workspace: mock.workspace });
     const session = await openSession(harness);
 
     await expect(session.useSkill('missing')).rejects.toBeInstanceOf(HarnessSkillNotFoundError);
@@ -162,26 +137,29 @@ describe('Session skills', () => {
     } catch (err) {
       const e = err as HarnessSkillNotFoundError;
       expect(e.skillName).toBe('missing');
-      expect(e.searchedSources).toContain('configured');
+      expect(e.searchedSources).toEqual(['workspace']);
     }
   });
 
-  it('useSkill validates args via metadata.args schema', async () => {
-    const argsSchema = z.object({ topic: z.string().min(1) });
-    const harness = createHarness({
+  it('does not expose or apply workspace skill args metadata', async () => {
+    const mock = createMockWorkspace({
       skills: [
         createSkill({
           name: 'with-args',
           description: 'with args',
           instructions: 'do the thing',
-          metadata: { args: argsSchema },
+          metadata: { args: { type: 'object', required: ['topic'] }, category: 'writing' },
         }),
       ],
     });
+    const harness = createHarness({ workspace: mock.workspace });
     const session = await openSession(harness);
 
-    await expect(session.useSkill('with-args', { args: { topic: 'good' } })).resolves.toBe('do the thing');
-    await expect(session.useSkill('with-args', { args: { topic: '' } })).rejects.toThrow(/Invalid skill args/);
+    await expect(session.useSkill('with-args')).resolves.toBe('do the thing');
+    await expect(session.getSkill('with-args')).resolves.toMatchObject({
+      category: 'writing',
+      metadata: { category: 'writing' },
+    });
   });
 
   it('refreshSkills clears the workspace discovery cache', async () => {

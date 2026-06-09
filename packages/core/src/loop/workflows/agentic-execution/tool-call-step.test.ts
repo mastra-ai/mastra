@@ -238,7 +238,13 @@ describe('createToolCallStep tool execution error handling', () => {
 
     expect(result).toHaveProperty('error');
     expect(result).not.toHaveProperty('result');
-    expect(result.error).toBeInstanceOf(Error);
+    // The step output crosses the evented engine's pubsub boundary where Error instances
+    // would serialize to `{}`, so the step returns a plain {name,message,stack} shape that
+    // the consumer (`llm-mapping-step`) reifies back into an Error via `deserializeToolError`.
+    expect(result.error).toMatchObject({
+      name: 'Error',
+      message: expect.stringContaining('External API error: 503 Service Unavailable'),
+    });
   });
 });
 

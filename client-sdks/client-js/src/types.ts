@@ -478,6 +478,7 @@ export interface GetAgentResponse {
   provider: string;
   modelId: string;
   modelVersion: string;
+  supportsMemory?: boolean;
   modelList:
     | Array<{
         id: string;
@@ -1246,6 +1247,18 @@ export type ConditionalVariant<T> = StorageConditionalVariant<T>;
 export type ConditionalField<T> = StorageConditionalField<T>;
 
 /**
+ * Resolved author identity. Returned by the server when an auth provider is
+ * configured and the agent's `authorId` could be looked up. All fields except
+ * `id` are optional — providers may not expose every field.
+ */
+export interface ResolvedAuthor {
+  id: string;
+  name?: string;
+  email?: string;
+  avatarUrl?: string;
+}
+
+/**
  * Stored agent data returned from API
  */
 export interface StoredAgentResponse {
@@ -1254,6 +1267,7 @@ export interface StoredAgentResponse {
   status: string;
   activeVersionId?: string;
   authorId?: string;
+  author?: ResolvedAuthor;
   visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   createdAt: string;
@@ -1439,6 +1453,26 @@ export interface UpdateStoredAgentParams {
 export interface DeleteStoredAgentResponse {
   success: boolean;
   message: string;
+}
+
+/**
+ * A single agent that references another agent as a sub-agent. Includes both
+ * public and the caller's own private agents — anything the caller can read.
+ */
+export interface StoredAgentDependent {
+  id: string;
+  name: string;
+}
+
+/**
+ * Response for listing dependents of a stored agent.
+ * `dependents` lists caller-readable references (with names).
+ * `hiddenCount` aggregates dependents the caller cannot read; it is only
+ * non-zero when the target agent is public.
+ */
+export interface StoredAgentDependentsResponse {
+  dependents: StoredAgentDependent[];
+  hiddenCount: number;
 }
 
 // ============================================================================
@@ -3071,6 +3105,29 @@ export interface BuilderSettingsResponse {
    */
   modelPolicyWarnings?: string[];
 }
+
+/**
+ * Response from GET /editor/builder/models/available.
+ *
+ * Same provider shape as {@link ListAgentsModelProvidersResponse}, but each
+ * provider's `models` list is already filtered by the active builder model
+ * policy (the server applies the EE allowlist). Providers with no allowed
+ * models are omitted, so the picker can render this verbatim.
+ */
+export type BuilderAvailableModelsResponse = GeneratedResponse<'GET /editor/builder/models/available'>;
+
+/**
+ * A valid permission-pattern string (e.g. `agents:read`, `*`).
+ *
+ * Kept as a string alias so the Playground can name the type while the
+ * authoritative set is fetched from the server at runtime.
+ */
+export type PermissionPattern = string;
+
+/**
+ * Response from GET /auth/permission-patterns.
+ */
+export type PermissionPatternsResponse = GeneratedResponse<'GET /auth/permission-patterns'>;
 
 /**
  * Resolved picker visibility section returned in {@link BuilderSettingsResponse}.

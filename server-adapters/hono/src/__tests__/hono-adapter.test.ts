@@ -105,6 +105,8 @@ describe('Hono Server Adapter', () => {
       const isStream =
         contentType.includes('text/plain') ||
         contentType.includes('text/event-stream') ||
+        contentType.includes('audio/') ||
+        contentType.includes('application/octet-stream') ||
         response.headers?.get('transfer-encoding') === 'chunked';
 
       // Extract headers
@@ -121,11 +123,14 @@ describe('Hono Server Adapter', () => {
           headers,
         };
       } else {
+        // Read the body exactly once; parsing JSON from text avoids consuming
+        // the body twice when the payload is not valid JSON.
+        const rawText = await response.text();
         let data: unknown;
         try {
-          data = await response.json();
+          data = JSON.parse(rawText);
         } catch {
-          data = await response.text();
+          data = rawText;
         }
 
         return {

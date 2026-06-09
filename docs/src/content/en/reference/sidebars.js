@@ -11,11 +11,21 @@ const sidebars = {
     { type: 'doc', id: 'configuration', label: 'Configuration' },
     {
       type: 'category',
+      label: 'ACP',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'acp/acp-agent', label: 'AcpAgent' },
+        { type: 'doc', id: 'acp/create-acp-tool', label: 'createACPTool()' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Agents',
       collapsed: true,
       items: [
         { type: 'doc', id: 'agents/agent', label: 'Agent Class' },
         { type: 'doc', id: 'agents/channels', label: 'Channels' },
+        { type: 'doc', id: 'agents/durable-agent', label: 'DurableAgent' },
         { type: 'doc', id: 'agents/generate', label: '.generate()' },
         { type: 'doc', id: 'agents/generateLegacy', label: '.generateLegacy()' },
         {
@@ -151,6 +161,7 @@ const sidebars = {
         { type: 'doc', id: 'core/listScorers', label: '.listScorers()' },
         { type: 'doc', id: 'core/listVectors', label: '.listVectors()' },
         { type: 'doc', id: 'core/listWorkflows', label: '.listWorkflows()' },
+        { type: 'doc', id: 'core/removeWorkspace', label: '.removeWorkspace()' },
         { type: 'doc', id: 'core/setLogger', label: '.setLogger()' },
         { type: 'doc', id: 'core/setStorage', label: '.setStorage()' },
       ],
@@ -179,7 +190,6 @@ const sidebars = {
           type: 'category',
           label: 'Agent Builder',
           collapsed: true,
-          customProps: { tags: ['new'] },
           items: [
             {
               type: 'doc',
@@ -505,6 +515,26 @@ const sidebars = {
         { type: 'doc', id: 'server/nestjs-adapter', label: 'NestJS Adapter' },
         { type: 'doc', id: 'server/register-api-route', label: 'registerApiRoute()' },
         { type: 'doc', id: 'server/routes', label: 'Server Routes' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Signals',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'signals/create-notification-inbox-tool',
+          label: 'createNotificationInboxTool()',
+          customProps: { tags: ['alpha'] },
+        },
+        { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider', customProps: { tags: ['alpha'] } },
+        {
+          type: 'doc',
+          id: 'signals/webhook-signal-provider',
+          label: 'WebhookSignalProvider',
+          customProps: { tags: ['alpha'] },
+        },
       ],
     },
     {

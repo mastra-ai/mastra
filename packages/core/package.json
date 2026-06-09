@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.38.0",
+  "version": "1.42.0-alpha.3",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -411,6 +411,16 @@
         "default": "./dist/server/index.cjs"
       }
     },
+    "./signals": {
+      "import": {
+        "types": "./dist/signals/index.d.ts",
+        "default": "./dist/signals/index.js"
+      },
+      "require": {
+        "types": "./dist/signals/index.d.ts",
+        "default": "./dist/signals/index.cjs"
+      }
+    },
     "./storage": {
       "import": {
         "types": "./dist/storage/index.d.ts",
@@ -760,10 +770,10 @@
     "lint": "eslint .",
     "build:lib": "tsup --silent --config tsup.config.ts --no-dts",
     "build:patch-commonjs": "node ../../scripts/commonjs-tsc-fixer.js",
-    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
-    "generate:providers": "pnpx tsx scripts/generate-providers.ts",
-    "generate:model-router": "pnpx tsx scripts/generate-providers.ts && pnpx tsx scripts/generate-model-docs.ts && cd ../.. && pnpm prettier:changed",
+    "generate:providers": "tsx scripts/generate-providers.ts",
+    "generate:model-router": "tsx scripts/generate-providers.ts && tsx scripts/generate-model-docs.ts && cd ../.. && pnpm prettier:changed",
     "test:unit": "vitest run --exclude '**/tool-builder/**'",
     "test": "npm run test:unit"
   },
@@ -845,14 +855,15 @@
     "@types/ws": "^8.18.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.1",
     "fast-deep-equal": "^3.1.3",
     "hono": "^4.12.8",
     "hono-openapi": "^1.3.0",
-    "tinyglobby": "^0.2.16",
     "rollup": "^4.59.0",
+    "tinyglobby": "^0.2.16",
     "ts-morph": "^27.0.2",
     "tsup": "^8.5.1",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "vscode-jsonrpc": "^8.2.1",

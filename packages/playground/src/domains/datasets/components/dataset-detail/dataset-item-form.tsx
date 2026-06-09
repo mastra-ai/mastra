@@ -40,6 +40,8 @@ export interface EditModeContentProps {
   setMetadataValue: (value: string) => void;
   trajectoryValue: string;
   setTrajectoryValue: (value: string) => void;
+  requestContextValue: string;
+  setRequestContextValue: (value: string) => void;
   validationErrors: SchemaValidationError | null;
   onSave: () => void;
   onCancel: () => void;
@@ -55,6 +57,8 @@ export function EditModeContent({
   setMetadataValue,
   trajectoryValue,
   setTrajectoryValue,
+  requestContextValue,
+  setRequestContextValue,
   validationErrors,
   onSave,
   onCancel,
@@ -93,6 +97,16 @@ export function EditModeContent({
           <CodeEditor
             value={trajectoryValue}
             onChange={setTrajectoryValue}
+            showCopyButton={false}
+            className="min-h-[80px]"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Request Context (JSON, optional)</Label>
+          <CodeEditor
+            value={requestContextValue}
+            onChange={setRequestContextValue}
             showCopyButton={false}
             className="min-h-[80px]"
           />

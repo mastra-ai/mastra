@@ -297,7 +297,7 @@ export class ConsoleLogger extends MastraLogger {
       (this.level === LogLevel.WARN || this.level === LogLevel.INFO || this.level === LogLevel.DEBUG) &&
       this.shouldLog(LogLevel.WARN, message, args)
     ) {
-      console.info(`${this.prefix()}${message}`, ...args);
+      console.warn(`${this.prefix()}${message}`, ...args);
     }
   }
 

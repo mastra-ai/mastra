@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AgentBuilderCreate from '../create';
 import {
   emptyAgents,
+  emptyAvailableModels,
   emptyStoredSkills,
   emptyTools,
   emptyWorkflows,
@@ -26,14 +27,18 @@ vi.mock('@/domains/agent-builder/components/agent-starter/agent-builder-starter'
   AgentBuilderStarter: () => <div data-testid="agent-builder-starter" />,
 }));
 
-vi.mock('@mastra/playground-ui', () => ({
-  Button: ({ children, onClick, tooltip, ...rest }: any) => (
-    <button onClick={onClick} aria-label={tooltip} {...rest}>
-      {children}
-    </button>
-  ),
-  usePlaygroundStore: () => ({ requestContext: undefined }),
-}));
+vi.mock('@mastra/playground-ui', async importOriginal => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
+  return {
+    ...actual,
+    Button: ({ children, onClick, tooltip, ...rest }: any) => (
+      <button onClick={onClick} aria-label={tooltip} {...rest}>
+        {children}
+      </button>
+    ),
+    usePlaygroundStore: () => ({ requestContext: undefined }),
+  };
+});
 
 vi.mock('@/domains/auth/hooks/use-permissions', () => ({
   usePermissions: usePermissionsMock,
@@ -81,6 +86,7 @@ interface ListSpies {
   agents: Spy;
   workflows: Spy;
   storedSkills: Spy;
+  availableModels: Spy;
 }
 
 const installListSpies = (): ListSpies => {
@@ -89,6 +95,7 @@ const installListSpies = (): ListSpies => {
     agents: vi.fn<() => void>(),
     workflows: vi.fn<() => void>(),
     storedSkills: vi.fn<() => void>(),
+    availableModels: vi.fn<() => void>(),
   };
   server.use(
     http.get(`${BASE_URL}/api/tools`, () => {
@@ -106,6 +113,10 @@ const installListSpies = (): ListSpies => {
     http.get(`${BASE_URL}/api/stored/skills`, () => {
       spies.storedSkills();
       return HttpResponse.json(emptyStoredSkills);
+    }),
+    http.get(`${BASE_URL}/api/editor/builder/models/available`, () => {
+      spies.availableModels();
+      return HttpResponse.json(emptyAvailableModels);
     }),
   );
   return spies;
@@ -160,6 +171,7 @@ describe('AgentBuilderCreate', () => {
     expect(spies.agents).not.toHaveBeenCalled();
     expect(spies.workflows).not.toHaveBeenCalled();
     expect(spies.storedSkills).not.toHaveBeenCalled();
+    expect(spies.availableModels).not.toHaveBeenCalled();
   });
 
   it('renders the starter and back button and warms every cache when canWrite + all features are on', async () => {
@@ -177,6 +189,8 @@ describe('AgentBuilderCreate', () => {
       expect(spies.agents).toHaveBeenCalledTimes(1);
       expect(spies.workflows).toHaveBeenCalledTimes(1);
       expect(spies.storedSkills).toHaveBeenCalledTimes(1);
+      // The model picker cache is seeded on mount so the picker loads instantly.
+      expect(spies.availableModels).toHaveBeenCalledTimes(1);
     });
   });
 
