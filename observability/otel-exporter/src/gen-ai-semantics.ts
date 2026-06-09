@@ -344,6 +344,11 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     }
   }
 
+  const threadId = span.metadata?.threadId;
+  if (typeof threadId === 'string' && threadId.length > 0) {
+    attributes[ATTR_GEN_AI_CONVERSATION_ID] = threadId;
+  }
+
   return attributes;
 }
 
