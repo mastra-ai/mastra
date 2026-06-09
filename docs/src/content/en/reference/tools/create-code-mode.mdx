@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.38.0`
 
-The `createCodeMode()` function returns a tool and generated instructions that let an agent run multi-tool computations as one TypeScript program. The program runs in a workspace sandbox, and each `external_*` call runs the real tool on the host with validation, request context, and tracing.
+The `createCodeMode()` function returns a tool and generated instructions that let an agent run multi-tool computations as one TypeScript function. The generated code runs in a workspace sandbox, and each `external_*` call runs the real tool on the host with validation, request context, and tracing.
 
 For a conceptual overview, see [Code mode](/docs/agents/code-mode).
 
@@ -66,12 +66,12 @@ export const shopAgent = new Agent({
         {
           name: 'tools',
           type: 'ToolsInput',
-          description: 'Tools exposed to the program as `external_<id>` functions. Only these tools can be called from generated code.',
+          description: 'Tools exposed to the generated code as `external_<id>` functions. Only these tools can be called.',
         },
         {
           name: 'sandbox',
           type: 'WorkspaceSandbox',
-          description: 'Sandbox used to execute the generated program. Required unless the agent runs in a workspace that provides a sandbox. Pass `new LocalSandbox()` to run on the host explicitly.',
+          description: 'Sandbox used to execute the generated code. Required unless the agent runs in a workspace that provides a sandbox. Pass `new LocalSandbox()` to run on the host explicitly.',
           isOptional: true,
         },
         {
@@ -93,7 +93,7 @@ export const shopAgent = new Agent({
     {
       name: 'transport',
       type: 'CodeModeTransport',
-      description: 'Optional transport implementation used to run the program in the sandbox. The default transport uses stdio JSON-RPC over the workspace sandbox process API.',
+      description: 'Optional transport implementation used to run the generated code in the sandbox. The default transport uses stdio JSON-RPC over the workspace sandbox process API.',
       isOptional: true,
     },
   ]}
@@ -147,12 +147,12 @@ interface CodeModeToolResult {
     {
       name: 'success',
       type: 'boolean',
-      description: 'Whether the program ran to completion without throwing.',
+      description: 'Whether the generated code ran to completion without throwing.',
     },
     {
       name: 'result',
       type: 'unknown',
-      description: 'The value returned by the executed program.',
+      description: 'The value returned by the generated code.',
       isOptional: true,
     },
     {
@@ -164,7 +164,7 @@ interface CodeModeToolResult {
     {
       name: 'error',
       type: '{ message: string; name?: string; line?: number }',
-      description: 'Error details when the program throws or fails to execute.',
+      description: 'Error details when the generated code throws or fails to execute.',
       isOptional: true,
       properties: [
         {
