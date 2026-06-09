@@ -471,8 +471,6 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     if (authConfig) {
       const hasPermission = await loadHasPermission();
       if (hasPermission) {
-
-        const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
         const userPermissions = requestContext.get('userPermissions') as string[] | undefined;
         const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
 
@@ -923,11 +921,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
               if (authError.error) {
                 ctx.status = authError.status;
                 ctx.body = { error: authError.error };
-            }
-            if (authError.error) {
-              ctx.status = authError.status;
-              ctx.body = { error: authError.error };
-              return;
+                return;
+              }
             }
           }
 
@@ -950,22 +945,6 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
                   message: permissionError.message,
                 };
                 return;
-              }
-            }
-
-            const authConfig = server.mastra.getServer()?.auth;
-            if (authConfig) {
-              const hasPermission = await loadHasPermission();
-              if (hasPermission) {
-                const permissionError = server.checkRoutePermission(serverRoute, userPermissions, hasPermission);
-                if (permissionError) {
-                  ctx.status = permissionError.status;
-                  ctx.body = {
-                    error: permissionError.error,
-                    message: permissionError.message,
-                  };
-                  return;
-                }
               }
             }
           }
