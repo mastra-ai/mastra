@@ -687,9 +687,10 @@ export class PgDB extends MastraBase {
     client: Pick<DbClient, 'none'> | Pick<TxClient, 'none'>,
     { tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] },
   ): Promise<void> {
-    const preparedRecords = await Promise.all(
-      records.map(record => this.normalizeForInsert(tableName, record)),
-    );
+    const preparedRecords: Awaited<ReturnType<PgDB['normalizeForInsert']>>[] = [];
+    for (const record of records) {
+      preparedRecords.push(await this.normalizeForInsert(tableName, record));
+    }
 
     let pendingColumns: string[] | undefined;
     let pendingConflictKeys = new Set<string>();

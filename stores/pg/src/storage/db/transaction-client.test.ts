@@ -96,6 +96,16 @@ describe('PgDB transaction handling', () => {
       return null;
     });
     const client = createMockDbClient(txClient);
+    client.manyOrNone = vi.fn(async () => [
+      { column_name: 'id' },
+      { column_name: 'resourceId' },
+      { column_name: 'title' },
+      { column_name: 'metadata' },
+      { column_name: 'createdAt' },
+      { column_name: 'createdAtZ' },
+      { column_name: 'updatedAt' },
+      { column_name: 'updatedAtZ' },
+    ]);
     const db = new PgDB({ client });
 
     const records = Array.from({ length: 8192 }, (_, index) => ({
@@ -119,6 +129,7 @@ describe('PgDB transaction handling', () => {
     expect(txStatements[0]!.values).toHaveLength(65_528);
     expect(txStatements[1]!.query).toContain('INSERT INTO "public"."mastra_threads"');
     expect(txStatements[1]!.values).toHaveLength(8);
+    expect(client.manyOrNone).toHaveBeenCalledOnce();
   });
 
   it('splits span batch inserts when duplicate (traceId, spanId) targets appear in the same input batch', async () => {
