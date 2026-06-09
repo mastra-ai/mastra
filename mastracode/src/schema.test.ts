@@ -24,4 +24,22 @@ describe('stateSchema', () => {
       },
     ]);
   });
+
+  // Regression: the legacy Harness validates its state against this schema and
+  // assigns the parsed result back to state. Zod strips unknown keys, so if
+  // currentModelId/modeId are not declared here, the seeded model is silently
+  // discarded and the harness reports "no model selected" for every pack.
+  it('preserves currentModelId through parse', () => {
+    const parsed = stateSchema.parse({
+      currentModelId: 'anthropic/claude-opus-4-8',
+    });
+
+    expect(parsed.currentModelId).toBe('anthropic/claude-opus-4-8');
+  });
+
+  it('preserves modeId through parse', () => {
+    const parsed = stateSchema.parse({ modeId: 'build' });
+
+    expect(parsed.modeId).toBe('build');
+  });
 });

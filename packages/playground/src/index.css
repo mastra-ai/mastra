@@ -1,26 +1,8 @@
+@import './fonts.css';
 @import '../../playground-ui/src/index.css';
 
 /* Scan playground-ui dist for Tailwind classes used by consumed components */
 @source '../../node_modules/@mastra/playground-ui';
-
-@font-face {
-  font-family: 'TasaExplorer';
-  src:
-    local('TasaExplorer'),
-    url('./assets/fonts/TASAExplorerVF.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Inter';
-  src:
-    local('Inter'),
-    url('./assets/fonts/InterVariable.ttf') format('truetype');
-}
-@font-face {
-  font-family: 'GeistMonoVF';
-  src:
-    local('GeistMonoVF'),
-    url('./assets/fonts/GeistMonoVF.woff') format('woff');
-}
 
 @layer base {
   :root {
@@ -28,8 +10,22 @@
     --color-thumb: var(--surface4);
     --color-thumb-hover: var(--surface6);
     --color-track: transparent;
+
+    /*
+     * Override playground-ui semantic font tokens with locally-bundled fonts.
+     * Studio uses Mona Sans for both display and body.
+     */
+    --font-display:
+      'Mona Sans', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+      'Noto Color Emoji';
+    --font-body:
+      'Mona Sans', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+      'Noto Color Emoji';
+    --font-mono:
+      'CommitMono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
   }
   html {
+    font-feature-settings: 'ss06' on;
     scrollbar-color: var(--color-thumb) var(--color-track);
     scrollbar-width: thin;
   }
@@ -88,7 +84,7 @@ html::-webkit-scrollbar-thumb:hover {
 div[class^='language-'],
 pre[class^='language-'],
 code[class^='language-'] {
-  font-family: var(--geist-mono) !important;
+  font-family: var(--font-mono) !important;
 }
 
 th:has(header) {
