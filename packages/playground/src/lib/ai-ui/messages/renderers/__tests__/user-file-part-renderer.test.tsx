@@ -46,4 +46,44 @@ describe('UserFilePartRenderer', () => {
     expect(container.querySelector('img')).toBeNull();
     expect(container.querySelector('button')).not.toBeNull();
   });
+
+  it('renders an image preview for the V5 streaming shape (mediaType/url)', () => {
+    const part = {
+      type: 'file',
+      mediaType: 'image/png',
+      url: 'data:image/png;base64,aGVsbG8=',
+    } as unknown as FilePart;
+
+    const { container } = render(<UserFilePartRenderer part={part} />);
+
+    expect(container.querySelector('img')).not.toBeNull();
+  });
+
+  it('renders a PDF document preview for the V5 streaming shape (mediaType/url)', () => {
+    const part = {
+      type: 'file',
+      mediaType: 'application/pdf',
+      url: 'https://example.com/doc.pdf',
+    } as unknown as FilePart;
+
+    const { container } = render(<UserFilePartRenderer part={part} />);
+
+    expect(container.querySelector('img')).toBeNull();
+    const link = container.querySelector('a');
+    expect(link).not.toBeNull();
+    expect(link?.getAttribute('href')).toBe('https://example.com/doc.pdf');
+  });
+
+  it('falls back to a text document preview for the V5 streaming shape (mediaType/url)', () => {
+    const part = {
+      type: 'file',
+      mediaType: 'text/plain',
+      url: 'just text',
+    } as unknown as FilePart;
+
+    const { container } = render(<UserFilePartRenderer part={part} />);
+
+    expect(container.querySelector('img')).toBeNull();
+    expect(container.querySelector('button')).not.toBeNull();
+  });
 });

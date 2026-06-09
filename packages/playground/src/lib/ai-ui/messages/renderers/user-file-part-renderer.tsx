@@ -12,9 +12,15 @@ export interface UserFilePartRendererProps {
  * is an `https://` link, otherwise the raw data.
  */
 export const UserFilePartRenderer = ({ part }: UserFilePartRendererProps) => {
-  const data = part.data;
+  // The declared `FilePart` type is V4-shaped (`{ mimeType, data }`), but the
+  // `@mastra/react` streaming accumulator emits the V5 shape (`{ mediaType, url }`)
+  // at runtime. Read both, preferring the V5/streaming shape and falling back to
+  // the V4/reload shape, so streamed and reloaded messages render identically.
+  const fileType = part as FilePart & { mediaType?: string; url?: string };
+  const data = fileType.url ?? fileType.data;
+  const mimeType = fileType.mediaType ?? fileType.mimeType;
   const isUrl = typeof data === 'string' && data.startsWith('https://');
-  const isImage = typeof part.mimeType === 'string' && part.mimeType.startsWith('image/');
+  const isImage = typeof mimeType === 'string' && mimeType.startsWith('image/');
 
   if (isImage) {
     return <InMessageAttachment type="image" src={typeof data === 'string' ? data : undefined} />;
@@ -23,7 +29,7 @@ export const UserFilePartRenderer = ({ part }: UserFilePartRendererProps) => {
   return (
     <InMessageAttachment
       type="document"
-      contentType={part.mimeType}
+      contentType={mimeType}
       src={isUrl ? data : undefined}
       data={typeof data === 'string' ? data : undefined}
     />
