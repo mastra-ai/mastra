@@ -78,17 +78,9 @@ Return your judgement as JSON in this shape:
  * `isTaskComplete` injects back into the conversation as feedback, so it must clearly tell the
  * agent which criteria are unmet and why.
  */
-export function formatRubricReason({
-  score,
-  analysis,
-}: {
-  score: number;
-  analysis: RubricAnalysisResult;
-}): string {
+export function formatRubricReason({ score, analysis }: { score: number; analysis: RubricAnalysisResult }): string {
   const complete = score >= 1;
-  const header = complete
-    ? '✅ Rubric satisfied: every required criterion is met.'
-    : '❌ Rubric not yet satisfied.';
+  const header = complete ? '✅ Rubric satisfied: every required criterion is met.' : '❌ Rubric not yet satisfied.';
 
   const lines = analysis.criteria.map(c => {
     const mark = c.satisfied ? '✅' : '❌';

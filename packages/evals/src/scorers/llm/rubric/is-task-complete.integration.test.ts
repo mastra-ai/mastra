@@ -79,12 +79,26 @@ describe('Rubric scorer in isTaskComplete', () => {
       model: sequencedJudge([
         // First grade: required criterion unmet → not complete.
         {
-          criteria: [{ criterion: 'Includes recommendations', satisfied: false, required: true, reasoning: 'no recommendations yet' }],
+          criteria: [
+            {
+              criterion: 'Includes recommendations',
+              satisfied: false,
+              required: true,
+              reasoning: 'no recommendations yet',
+            },
+          ],
           overallAssessment: 'Missing recommendations',
         },
         // Second grade: satisfied → complete.
         {
-          criteria: [{ criterion: 'Includes recommendations', satisfied: true, required: true, reasoning: 'recommendations present' }],
+          criteria: [
+            {
+              criterion: 'Includes recommendations',
+              satisfied: true,
+              required: true,
+              reasoning: 'recommendations present',
+            },
+          ],
           overallAssessment: 'Complete',
         },
       ]),

@@ -81,8 +81,7 @@ function resolveRubric({
 }): RubricCriterion[] {
   if (staticRubric.length > 0) return staticRubric;
 
-  const dynamic =
-    pickRubric(run.requestContext) ?? pickRubric(run.additionalContext) ?? pickRubric(run.input);
+  const dynamic = pickRubric(run.requestContext) ?? pickRubric(run.additionalContext) ?? pickRubric(run.input);
 
   return normalizeRubric(dynamic);
 }
@@ -116,7 +115,11 @@ function getOutputText(run: { output?: unknown; input?: unknown }): string {
   if (fromOutput) return fromOutput;
 
   // `isTaskComplete` passes the in-progress text on `run.input.currentText`.
-  if (run.input && typeof run.input === 'object' && typeof (run.input as Record<string, unknown>).currentText === 'string') {
+  if (
+    run.input &&
+    typeof run.input === 'object' &&
+    typeof (run.input as Record<string, unknown>).currentText === 'string'
+  ) {
     return (run.input as Record<string, unknown>).currentText as string;
   }
 
@@ -125,7 +128,11 @@ function getOutputText(run: { output?: unknown; input?: unknown }): string {
 
 function getTaskText(run: { input?: unknown }): string {
   // `isTaskComplete` passes the original task on `run.input.originalTask`.
-  if (run.input && typeof run.input === 'object' && typeof (run.input as Record<string, unknown>).originalTask === 'string') {
+  if (
+    run.input &&
+    typeof run.input === 'object' &&
+    typeof (run.input as Record<string, unknown>).originalTask === 'string'
+  ) {
     return (run.input as Record<string, unknown>).originalTask as string;
   }
   return getUserMessageFromRunInput(run.input as ScorerRunInputForLLMJudge) ?? '';
@@ -177,7 +184,8 @@ export function createRubricScorer({
   return createScorer<ScorerRunInputForLLMJudge, ScorerRunOutputForLLMJudge>({
     id: 'rubric-scorer',
     name: 'Rubric (LLM)',
-    description: 'Grades an agent output against a rubric of criteria, returning 1 only when every required criterion is satisfied',
+    description:
+      'Grades an agent output against a rubric of criteria, returning 1 only when every required criterion is satisfied',
     judge: {
       model,
       instructions: RUBRIC_INSTRUCTIONS,

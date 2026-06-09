@@ -78,7 +78,12 @@ describe('Rubric Scorer (LLM)', () => {
         model: mockJudge({
           criteria: [
             { criterion: 'Has analysis', satisfied: true, required: true, reasoning: 'present' },
-            { criterion: 'Has recommendations', satisfied: false, required: true, reasoning: 'missing a recommendations section' },
+            {
+              criterion: 'Has recommendations',
+              satisfied: false,
+              required: true,
+              reasoning: 'missing a recommendations section',
+            },
           ],
           overallAssessment: 'Missing recommendations',
         }),
@@ -133,7 +138,12 @@ describe('Rubric Scorer (LLM)', () => {
         model: mockJudge({
           criteria: [
             { criterion: 'All tests pass', satisfied: true, required: true, reasoning: 'green' },
-            { criterion: 'Function is named find_duplicates', satisfied: true, required: true, reasoning: 'named correctly' },
+            {
+              criterion: 'Function is named find_duplicates',
+              satisfied: true,
+              required: true,
+              reasoning: 'named correctly',
+            },
           ],
           overallAssessment: 'Complete',
         }),
