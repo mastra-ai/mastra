@@ -1,8 +1,9 @@
 import { SearchIcon } from 'lucide-react';
 import { useEffect, useId, useRef } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { formElementSizes, inputFocusBorderWithin, inputHoverBorderWithin } from '@/ds/primitives/form-element';
-import type { FormElementSize } from '@/ds/primitives/form-element';
+import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size';
+import type { ControlSize } from '@/ds/primitives/control-size';
+import { inputFocusBorderWithin, inputHoverBorderWithin } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -13,16 +14,9 @@ export type SearchbarProps = {
   label: string;
   placeholder: string;
   debounceMs?: number;
-  size?: FormElementSize;
+  size?: ControlSize;
   variant?: SearchbarVariant;
   className?: string;
-};
-
-const searchbarSizeClasses = {
-  sm: formElementSizes.sm,
-  md: formElementSizes.md,
-  lg: formElementSizes.lg,
-  default: formElementSizes.default,
 };
 
 // `default` and `filled` are the same filled surface on purpose: the default Searchbar
@@ -97,7 +91,7 @@ export const Searchbar = ({
         'border border-border1 flex w-full items-center gap-2 overflow-hidden pl-2 pr-1',
         transitions.all,
         searchbarVariantClasses[variant],
-        searchbarSizeClasses[size],
+        controlHeight[size],
         className,
       )}
     >
@@ -113,8 +107,8 @@ export const Searchbar = ({
           type="text"
           placeholder={placeholder}
           className={cn(
-            'bg-transparent text-ui-md placeholder:text-neutral2 block w-full px-2 outline-hidden',
-            searchbarSizeClasses[size],
+            'bg-transparent placeholder:text-neutral2 block w-full px-2 outline-hidden',
+            controlSizeClasses[size],
           )}
           name={id}
           ref={inputRef}

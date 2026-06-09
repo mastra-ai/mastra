@@ -157,31 +157,12 @@ describe('HarnessCompat session-derived state', () => {
     expect(session.setMode).toHaveBeenCalledWith(planMode);
     expect(legacySwitchMode).toHaveBeenCalledWith({ modeId: 'plan' });
     expect(session.setState).toHaveBeenCalledWith({ projectPath: '/new-repo' });
-    expect(legacySetState).toHaveBeenCalledWith({
-      projectPath: '/new-repo',
-      currentModelId: 'new-session-model',
-      modeId: 'plan',
-    });
+    expect(legacySetState).toHaveBeenCalledWith({ projectPath: '/new-repo' });
     expect(harness.getState()).toMatchObject({
       projectPath: '/new-repo',
       currentModelId: 'new-session-model',
       modeId: 'plan',
     });
-  });
-
-  it('switches mode via legacy fallback when no session is active', async () => {
-    const { HarnessCompat } = await import('./HarnessCompat.js');
-    const harnessV1 = {
-      session: vi.fn(),
-      getMode: vi.fn((modeId: string) => (modeId === 'plan' ? planMode : buildMode)),
-    };
-
-    const harness = new HarnessCompat({} as never, harnessV1 as never);
-    // No switchThread call — #session is undefined
-
-    await harness.switchMode({ modeId: 'plan' });
-
-    expect(legacySwitchMode).toHaveBeenCalledWith({ modeId: 'plan' });
   });
 
   it('keeps per-agent subagent model overrides in harness state', async () => {

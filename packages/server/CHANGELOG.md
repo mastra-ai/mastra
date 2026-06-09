@@ -1,5 +1,43 @@
 # @mastra/server
 
+## 1.42.0-alpha.3
+
+### Minor Changes
+
+- **Added** author enrichment to the stored-agents list and get handlers. When an auth provider is configured, each agent record now includes a resolved `author` object alongside the existing `authorId`: ([#17205](https://github.com/mastra-ai/mastra/pull/17205))
+
+  ```ts
+  {
+    id: 'agent_…',
+    authorId: 'user_…',
+   id, name?, email?, avatarUrl? } // new, optional
+    // …
+  }
+  ```
+
+  Lookups are deduplicated per request and use the provider's `getUsers` batch method when available, falling back to per-id `getUser` calls otherwise. The field is omitted when no auth provider is configured or the ID can't be resolved, so existing clients keep working unchanged.
+
+### Patch Changes
+
+- **Added** optional `getUsers(userIds)` batch lookup method to `IUserProvider`. Auth providers can implement it to resolve multiple users in a single call; providers that don't implement it continue to work via per-id `getUser` fallback. ([#17205](https://github.com/mastra-ai/mastra/pull/17205))
+
+  ```ts
+  // optional batch lookup, returns results positionally aligned to userIds
+  const users = await provider.getUsers?.(['u_1', 'u_2', 'u_3']);
+  ```
+
+- **Added** optional `author` field on `StoredAgentResponse` so consumers can render the resolved author (name, email, avatar) returned by stored-agent list and detail endpoints. ([#17205](https://github.com/mastra-ai/mastra/pull/17205))
+
+- Updated dependencies [[`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`053735a`](https://github.com/mastra-ai/mastra/commit/053735a75c2c18e23ce34d9468007efa4a45f4c4), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`a952852`](https://github.com/mastra-ai/mastra/commit/a952852c971a21fb646cd907c75fcf4443cdc963)]:
+  - @mastra/core@1.42.0-alpha.3
+
+## 1.42.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`014e00f`](https://github.com/mastra-ai/mastra/commit/014e00f2b3a597a016b72f9901c6ab27d491f822)]:
+  - @mastra/core@1.42.0-alpha.2
+
 ## 1.42.0-alpha.1
 
 ### Patch Changes

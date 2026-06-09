@@ -4913,6 +4913,9 @@ importers:
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0(bufferutil@4.1.0)
+      msw:
+        specifier: ^2.12.11
+        version: 2.14.6(@types/node@22.19.15)(typescript@6.0.3)
       react:
         specifier: 'catalog:'
         version: 19.2.6

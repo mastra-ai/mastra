@@ -3,8 +3,10 @@ import { isAgentCompatible } from '@mastra/core/agent';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ClaudeSDKAgent } from './index';
+import type { ClaudeSDKAgentResumeData } from './index';
 
 const queryMock = vi.hoisted(() => vi.fn());
+const TEST_CLAUDE_MODEL = 'claude-sonnet-4-6';
 
 vi.mock('@anthropic-ai/claude-agent-sdk', () => ({
   query: queryMock,
@@ -31,7 +33,7 @@ function createStreamEvent(text: string): SDKMessage {
   } as SDKMessage;
 }
 
-function createResultMessage(result: string): SDKMessage {
+function createResultMessage(result: string, structuredOutput?: unknown): SDKMessage {
   return {
     type: 'result',
     subtype: 'success',
@@ -49,7 +51,7 @@ function createResultMessage(result: string): SDKMessage {
       cache_creation_input_tokens: 3,
     },
     modelUsage: {
-      __GATEWAY_ANTHROPIC_MODEL_SONNET__: {
+      [TEST_CLAUDE_MODEL]: {
         inputTokens: 10,
         outputTokens: 4,
         cacheReadInputTokens: 2,
@@ -61,6 +63,7 @@ function createResultMessage(result: string): SDKMessage {
       },
     },
     permission_denials: [],
+    structured_output: structuredOutput,
     uuid: 'message-uuid',
     session_id: 'session-id',
   } as SDKMessage;
@@ -91,7 +94,7 @@ function createAssistantMessage(id: string, usage: Record<string, number>): SDKM
       type: 'message',
       role: 'assistant',
       content: [],
-      model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+      model: TEST_CLAUDE_MODEL,
       stop_reason: 'end_turn',
       stop_sequence: null,
       usage,
@@ -112,7 +115,7 @@ describe('ClaudeSDKAgent', () => {
       name: 'Claude Agent',
       description: 'Use Claude Agent as a Mastra agent.',
       sdkOptions: {
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
       },
     });
 
@@ -131,7 +134,7 @@ describe('ClaudeSDKAgent', () => {
       description: 'Claude',
       sdkOptions: {
         cwd: '/tmp/project',
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
         maxTurns: 1,
         permissionMode: 'acceptEdits',
         tools: ['Read', 'Bash'],
@@ -151,6 +154,9 @@ describe('ClaudeSDKAgent', () => {
       runId: 'mastra-run',
       abortSignal: abortController.signal,
       maxSteps: 1,
+      sdkOptions: {
+        resume: 'session-id',
+      },
     });
 
     expect(result.text).toBe('generated text');
@@ -165,7 +171,7 @@ describe('ClaudeSDKAgent', () => {
     expect(result.providerMetadata).toMatchObject({
       claude: {
         totalCostUsd: 0.0123,
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
         cwd: '/tmp/project',
         permissionMode: 'acceptEdits',
         maxTurns: 1,
@@ -177,7 +183,7 @@ describe('ClaudeSDKAgent', () => {
       prompt: 'Generate prompt',
       options: expect.objectContaining({
         cwd: '/tmp/project',
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
         maxTurns: 1,
         permissionMode: 'acceptEdits',
         tools: ['Read', 'Bash'],
@@ -190,6 +196,7 @@ describe('ClaudeSDKAgent', () => {
           CLAUDE_AGENT_SDK_CLIENT_APP: 'mastra-test',
         },
         pathToClaudeCodeExecutable: '/usr/local/bin/claude',
+        resume: 'session-id',
         abortController: expect.any(AbortController),
       }),
     });
@@ -211,7 +218,7 @@ describe('ClaudeSDKAgent', () => {
       id: 'claude-agent',
       description: 'Claude',
       sdkOptions: {
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
       },
     });
 
@@ -242,7 +249,7 @@ describe('ClaudeSDKAgent', () => {
       id: 'claude-agent',
       description: 'Claude',
       sdkOptions: {
-        model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+        model: TEST_CLAUDE_MODEL,
       },
     });
 
@@ -265,5 +272,125 @@ describe('ClaudeSDKAgent', () => {
       'step-finish',
       'finish',
     ]);
+  });
+
+  it('uses Claude native structured output and exposes the validated object', async () => {
+    queryMock.mockImplementationOnce(() => createQuery([createResultMessage('', { answer: 'yes' })]));
+    const agent = new ClaudeSDKAgent({
+      id: 'claude-agent',
+      description: 'Claude',
+      sdkOptions: {
+        model: TEST_CLAUDE_MODEL,
+      },
+    });
+
+    const result = await agent.generate<{ answer: string }>('Return a JSON answer', {
+      structuredOutput: {
+        schema: {
+          type: 'object',
+          properties: {
+            answer: { type: 'string' },
+          },
+          required: ['answer'],
+        },
+      },
+    });
+
+    expect(result.object).toEqual({ answer: 'yes' });
+    expect(queryMock).toHaveBeenCalledWith({
+      prompt: 'Return a JSON answer',
+      options: expect.objectContaining({
+        model: TEST_CLAUDE_MODEL,
+        outputFormat: {
+          type: 'json_schema',
+          schema: expect.objectContaining({
+            type: 'object',
+            properties: expect.objectContaining({
+              answer: expect.objectContaining({ type: 'string' }),
+            }),
+          }),
+        },
+      }),
+    });
+  });
+
+  it('resumeGenerate maps resumeData to Claude session resume options', async () => {
+    queryMock.mockImplementationOnce(() => createQuery([createResultMessage('continued text')]));
+    const agent = new ClaudeSDKAgent({
+      id: 'claude-agent',
+      description: 'Claude',
+      sdkOptions: {
+        model: TEST_CLAUDE_MODEL,
+      },
+    });
+
+    const result = await agent.resumeGenerate(
+      {
+        message: 'Continue prompt',
+        sessionId: 'session-id',
+        forkSession: true,
+        resumeSessionAt: 'assistant-message-id',
+      },
+      { runId: 'resume-run' },
+    );
+
+    expect(result.text).toBe('continued text');
+    expect(result.runId).toBe('resume-run');
+    expect(queryMock).toHaveBeenCalledWith({
+      prompt: 'Continue prompt',
+      options: expect.objectContaining({
+        model: TEST_CLAUDE_MODEL,
+        resume: 'session-id',
+        forkSession: true,
+        resumeSessionAt: 'assistant-message-id',
+      }),
+    });
+  });
+
+  it('resumeStream maps resumeData to Claude latest-session continuation', async () => {
+    queryMock.mockImplementationOnce(() =>
+      createQuery([createStreamEvent('continued '), createStreamEvent('text'), createResultMessage('continued text')]),
+    );
+    const agent = new ClaudeSDKAgent({
+      id: 'claude-agent',
+      description: 'Claude',
+      sdkOptions: {
+        model: TEST_CLAUDE_MODEL,
+      },
+    });
+
+    const stream = await agent.resumeStream({ message: 'Continue prompt', continue: true }, { runId: 'resume-run' });
+    for await (const _chunk of stream.fullStream) {
+      // drain
+    }
+
+    expect(await stream.text).toBe('continued text');
+    expect(queryMock).toHaveBeenCalledWith({
+      prompt: 'Continue prompt',
+      options: expect.objectContaining({
+        model: TEST_CLAUDE_MODEL,
+        continue: true,
+      }),
+    });
+  });
+
+  it('rejects mixed Claude resumeData shapes', async () => {
+    const agent = new ClaudeSDKAgent({
+      id: 'claude-agent',
+      description: 'Claude',
+      sdkOptions: {
+        model: TEST_CLAUDE_MODEL,
+      },
+    });
+
+    await expect(
+      agent.resumeGenerate({
+        message: 'Continue prompt',
+        sessionId: 123,
+        continue: true,
+      } as unknown as ClaudeSDKAgentResumeData),
+    ).rejects.toThrow('either sessionId or continue: true, not both');
+
+    expect(queryMock).not.toHaveBeenCalled();
   });
 });

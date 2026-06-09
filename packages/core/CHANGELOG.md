@@ -1,5 +1,99 @@
 # @mastra/core
 
+## 1.42.0-alpha.3
+
+### Minor Changes
+
+- **Added** optional `getUsers(userIds)` batch lookup method to `IUserProvider`. Auth providers can implement it to resolve multiple users in a single call; providers that don't implement it continue to work via per-id `getUser` fallback. ([#17205](https://github.com/mastra-ai/mastra/pull/17205))
+
+  ```ts
+  // optional batch lookup, returns results positionally aligned to userIds
+  const users = await provider.getUsers?.(['u_1', 'u_2', 'u_3']);
+  ```
+
+- Added interface-first model gateways while keeping the existing `MastraModelGateway` base class backwards compatible. ([#17608](https://github.com/mastra-ai/mastra/pull/17608))
+
+  Added `MastraModelGatewayInterface` for plain object/custom gateway implementations and optional gateway `resolveAuth` hooks.
+
+  Moved MastraCode gateway-routed OAuth model construction into a custom Mastra gateway so `ModelRouterLanguageModel` can route through gateway `resolveAuth` and provider-specific `resolveLanguageModel` behavior.
+
+  **Usage:**
+
+  ```typescript
+  import { MastraModelGatewayInterface, ModelRouterLanguageModel } from '@mastra/core/llm';
+
+  const myGateway: MastraModelGatewayInterface = {
+    id: 'my-gateway',
+    name: 'My Gateway',
+    async fetchProviders() {
+      return {};
+    },
+    buildUrl() {
+      return 'https://api.example.com';
+    },
+    async getApiKey() {
+      return process.env.API_KEY ?? '';
+    },
+    // Optional: own authentication lookup
+    async resolveAuth(request) {
+      return { apiKey: process.env.API_KEY, source: 'gateway' };
+    },
+    async resolveLanguageModel({ modelId, providerId, apiKey }) {
+      // Return an AI SDK language model instance
+    },
+  };
+
+  // Register and route through the gateway
+  const router = new ModelRouterLanguageModel({ modelId: 'my-gateway/provider/model' }, [myGateway]);
+  ```
+
+  **Additional changes in this release:**
+  - Inline three-tier auth resolution (explicit → gateway.resolveAuth → legacy getApiKey) into `ModelRouterLanguageModel.resolveAuth` and deprecate the standalone `resolveModelAuth` helper.
+  - Fix `defaultGateways` deduplication in the `Mastra` class to use `getGatewayId(gateway)` instead of registry keys.
+  - Remove no-op `resolveModelId` identity function in mastracode in favor of direct usage.
+  - Fix `defaultNameGenerator` regex in `_llm-recorder` to anchor directory matches to path boundaries (prevents false matches like `-auth` suffixes).
+
+### Patch Changes
+
+- **Added** author enrichment to the stored-agents list and get handlers. When an auth provider is configured, each agent record now includes a resolved `author` object alongside the existing `authorId`: ([#17205](https://github.com/mastra-ai/mastra/pull/17205))
+
+  ```ts
+  {
+    id: 'agent_…',
+    authorId: 'user_…',
+   id, name?, email?, avatarUrl? } // new, optional
+    // …
+  }
+  ```
+
+  Lookups are deduplicated per request and use the provider's `getUsers` batch method when available, falling back to per-id `getUser` calls otherwise. The field is omitted when no auth provider is configured or the ID can't be resolved, so existing clients keep working unchanged.
+
+- Fixed ingestion of client-side tool tracing from AI SDK v6 `toolMetadata` when messages return through chatRoute. ([#17202](https://github.com/mastra-ai/mastra/pull/17202))
+
+- **Added** optional `author` field on `StoredAgentResponse` so consumers can render the resolved author (name, email, avatar) returned by stored-agent list and detail endpoints. ([#17205](https://github.com/mastra-ai/mastra/pull/17205))
+
+## 1.42.0-alpha.2
+
+### Patch Changes
+
+- Improved BM25 tokenization to support CJK (Japanese, Chinese, Korean) and other non-Latin languages. Added `TokenizeOptions.tokenizer` for plugging in custom tokenizers (e.g. n-gram, kuromoji). Workspace `bm25` config now accepts `tokenize` options for full control over how text is split into search tokens. ([#17640](https://github.com/mastra-ai/mastra/pull/17640))
+
+  **Before:** BM25 search returned no results for non-English content — CJK characters were silently stripped during tokenization.
+
+  **After:** Non-Latin characters are preserved by default. Users can also plug in a custom tokenizer:
+
+  ```ts
+  new Workspace({
+    bm25: {
+      tokenize: {
+        tokenizer: myCustomCjkTokenizer,
+      },
+    },
+  });
+  ```
+
+  Fixes #17636
+
 ## 1.42.0-alpha.1
 
 ### Minor Changes
