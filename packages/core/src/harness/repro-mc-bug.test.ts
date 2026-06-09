@@ -13,12 +13,13 @@
  */
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod/v4';
+
 import { Agent } from '../agent';
-import { RequestContext } from '../request-context';
+import type { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 import type { HarnessEvent } from './types';
-import { z } from 'zod/v4';
 
 function createTextStreamModel(responseText: string) {
   return new MockLanguageModelV2({
