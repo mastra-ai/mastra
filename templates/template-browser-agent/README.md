@@ -12,7 +12,7 @@ This demo runs in Mastra Studio, but you can connect this agent to your React, N
 
 - A [Mastra Gateway API key](https://mastra.ai/docs/models/gateways/mastra).
 - A [Turso](https://turso.tech) database URL + auth token (or swap to `:memory:` for ephemeral local runs).
-- Playwright's Chromium browser. The template installs it on first startup if the local Playwright browser cache is empty.
+- Playwright's Chromium browser. The template installs Chromium and its Linux system dependencies on first startup when needed.
 
 ## Quickstart 🚀
 

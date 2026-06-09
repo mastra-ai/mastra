@@ -9,7 +9,7 @@ Claw has resource-scoped observational memory, so it remembers your preferences 
 - Node.js `>= 22.13.0`
 - A Mastra Gateway API key — get one at [gateway.mastra.ai](https://gateway.mastra.ai)
 - (Optional) A Turso database; for local dev, the default `file:./mastra.db` works.
-- Playwright's Chromium browser. The template installs it automatically during `npm install`/`pnpm install`.
+- Playwright's Chromium browser. The template installs Chromium and its Linux system dependencies on first startup when needed.
 
 ## Setup
 

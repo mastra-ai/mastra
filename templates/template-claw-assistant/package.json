@@ -6,8 +6,7 @@
   "scripts": {
     "dev": "mastra dev",
     "build": "mastra build",
-    "start": "mastra start",
-    "postinstall": "playwright install chromium"
+    "start": "mastra start"
   },
   "keywords": [],
   "author": "",

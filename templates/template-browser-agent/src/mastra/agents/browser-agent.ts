@@ -11,10 +11,15 @@ import { chromium } from 'playwright';
 const require = createRequire(import.meta.url);
 
 function getChromiumExecutablePath() {
+  const playwrightCli = join(dirname(require.resolve('playwright')), 'cli.js');
+
+  if (process.platform === 'linux' && typeof process.getuid === 'function' && process.getuid() === 0) {
+    execFileSync(process.execPath, [playwrightCli, 'install-deps', 'chromium'], { stdio: 'inherit' });
+  }
+
   let executablePath = chromium.executablePath();
 
   if (!existsSync(executablePath)) {
-    const playwrightCli = join(dirname(require.resolve('playwright')), 'cli.js');
     execFileSync(process.execPath, [playwrightCli, 'install', 'chromium'], { stdio: 'inherit' });
     executablePath = chromium.executablePath();
   }
