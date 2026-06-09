@@ -8,7 +8,7 @@
   },
   "recordings": [
     {
-      "hash": "ef05717bdc24e1ee",
+      "hash": "a706d4c2e8d1f791",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -17,7 +17,7 @@
           "input": [
             {
               "role": "system",
-              "content": "You are a helpful assistant. When the user asks to look up a user, use the approve-lookup tool. When the user asks to research something, use the research tool. After tool results land, briefly summarize them for the user.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n- approveLookup (default: foreground)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user."
+              "content": "You are a helpful assistant. When the user asks to look up a user, use the approve-lookup tool. When the user asks to research something, use the research tool. After tool results land, briefly summarize them for the user.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n- approveLookup (default: foreground)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
             },
             {
               "role": "user",
@@ -304,7 +304,7 @@
       }
     },
     {
-      "hash": "f97eb40ea5e5e981",
+      "hash": "300f146a24b578a2",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -313,7 +313,7 @@
           "input": [
             {
               "role": "system",
-              "content": "You are a helpful assistant. When the user asks to look up a user, use the approve-lookup tool. When the user asks to research something, use the research tool. After tool results land, briefly summarize them for the user.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n- approveLookup (default: foreground)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user."
+              "content": "You are a helpful assistant. When the user asks to look up a user, use the approve-lookup tool. When the user asks to research something, use the research tool. After tool results land, briefly summarize them for the user.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n- approveLookup (default: foreground)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
             },
             {
               "role": "user",
@@ -638,7 +638,7 @@
       }
     },
     {
-      "hash": "8b5daec59040fe5c",
+      "hash": "5d60a3895005022d",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -647,7 +647,7 @@
           "input": [
             {
               "role": "system",
-              "content": "You are a helpful assistant. When the user asks to look up a user, use the approve-lookup tool. When the user asks to research something, use the research tool. After tool results land, briefly summarize them for the user.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n- approveLookup (default: foreground)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user."
+              "content": "You are a helpful assistant. When the user asks to look up a user, use the approve-lookup tool. When the user asks to research something, use the research tool. After tool results land, briefly summarize them for the user.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n- approveLookup (default: foreground)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
             },
             {
               "role": "user",
@@ -960,7 +960,7 @@
       }
     },
     {
-      "hash": "0db2eb6a27d6e426",
+      "hash": "2cb27a04bd28369d",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -969,7 +969,7 @@
           "input": [
             {
               "role": "system",
-              "content": "You are a helpful assistant. When the user asks to look up a user, use the approve-lookup tool. When the user asks to research something, use the research tool. After tool results land, briefly summarize them for the user.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n- approveLookup (default: foreground)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user."
+              "content": "You are a helpful assistant. When the user asks to look up a user, use the approve-lookup tool. When the user asks to research something, use the research tool. After tool results land, briefly summarize them for the user.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n- approveLookup (default: foreground)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
             },
             {
               "role": "user",
@@ -1314,7 +1314,7 @@
       }
     },
     {
-      "hash": "5357145eb43a91e5",
+      "hash": "7624178e3e0617cc",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1323,7 +1323,7 @@
           "input": [
             {
               "role": "system",
-              "content": "You are a helpful assistant. When the user asks to look up a user, use the approve-lookup tool. When the user asks to research something, use the research tool. After tool results land, briefly summarize them for the user.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n- approveLookup (default: foreground)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user."
+              "content": "You are a helpful assistant. When the user asks to look up a user, use the approve-lookup tool. When the user asks to research something, use the research tool. After tool results land, briefly summarize them for the user.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n- approveLookup (default: foreground)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
             },
             {
               "role": "user",

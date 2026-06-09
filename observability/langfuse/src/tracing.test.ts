@@ -307,6 +307,81 @@ describe('LangfuseExporter', () => {
       expect(attrs['mastra.metadata.langfuse']).toBeUndefined();
     });
 
+    it('forwards custom mastra.metadata.langfuse.* keys to langfuse.trace.metadata.*', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          metadata: {
+            langfuse: {
+              prompt: { name: 'customer-support', version: 2 },
+              customerId: 'abc',
+              tier: 'enterprise',
+              seats: 42,
+              isVip: true,
+              nested: { plan: 'pro' },
+            },
+          },
+        }),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      // prompt linking still works
+      expect(attrs['langfuse.observation.prompt.name']).toBe('customer-support');
+      expect(attrs['langfuse.observation.prompt.version']).toBe(2);
+      // custom top-level keys are forwarded as filterable trace metadata
+      expect(attrs['langfuse.trace.metadata.customerId']).toBe('abc');
+      expect(attrs['langfuse.trace.metadata.tier']).toBe('enterprise');
+      // Langfuse maps trace.metadata.* as string attributes, so numbers,
+      // booleans, and objects are serialized with JSON before export
+      // (Langfuse restores their original types on ingestion).
+      expect(attrs['langfuse.trace.metadata.seats']).toBe('42');
+      expect(attrs['langfuse.trace.metadata.isVip']).toBe('true');
+      expect(attrs['langfuse.trace.metadata.nested']).toBe(JSON.stringify({ plan: 'pro' }));
+      // the prompt key itself is not forwarded as trace metadata
+      expect(attrs['langfuse.trace.metadata.prompt']).toBeUndefined();
+      expect(attrs['mastra.metadata.langfuse']).toBeUndefined();
+    });
+
+    it('forwards custom langfuse metadata even when no prompt is present', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          metadata: {
+            langfuse: { customerId: 'abc' },
+          },
+        }),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.metadata.customerId']).toBe('abc');
+      expect(attrs['langfuse.observation.prompt.name']).toBeUndefined();
+      expect(attrs['mastra.metadata.langfuse']).toBeUndefined();
+    });
+
+    it('lets reserved root-span identity keys take precedence over custom langfuse metadata', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.AGENT_RUN,
+          isRootSpan: true,
+          entityId: 'weather-agent',
+          entityName: 'Weather Agent',
+          metadata: {
+            langfuse: { agentId: 'user-supplied', customerId: 'abc' },
+          },
+        }),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      // root-span identity wins over a user-supplied collision
+      expect(attrs['langfuse.trace.metadata.agentId']).toBe('weather-agent');
+      // non-colliding custom keys are still forwarded
+      expect(attrs['langfuse.trace.metadata.customerId']).toBe('abc');
+    });
+
     it('maps completionStartTime to langfuse.observation.completion_start_time', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       const ttftTime = new Date('2025-01-01T00:00:00.500Z');

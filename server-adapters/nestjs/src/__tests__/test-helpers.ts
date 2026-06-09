@@ -77,7 +77,12 @@ export async function executeExpressRequest(app: Application, req: MockHttpReque
 
     const updateStreamFlag = () => {
       const contentType = String(response.getHeader('content-type') || '').toLowerCase();
-      if (contentType.includes('text/event-stream') || contentType.includes('text/plain')) {
+      if (
+        contentType.includes('text/event-stream') ||
+        contentType.includes('text/plain') ||
+        contentType.includes('audio/') ||
+        contentType.includes('application/octet-stream')
+      ) {
         isStream = true;
       }
     };
