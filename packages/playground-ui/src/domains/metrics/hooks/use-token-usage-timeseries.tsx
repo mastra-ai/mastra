@@ -5,7 +5,6 @@ import { useMetricsFilters } from './use-metrics-filters';
 export type TokenUsageTimeSeriesInterval = '1h' | '1d';
 
 export interface TokenTimelinePoint {
-  [key: string]: string | number | null;
   time: string;
   tsMs: number;
   input: number;
