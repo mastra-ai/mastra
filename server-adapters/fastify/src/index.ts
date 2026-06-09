@@ -634,8 +634,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       // Uses convention-based permission derivation: permissions are auto-derived
       // from route path/method unless explicitly set or route is public
       const requestContext = request.requestContext;
-      const authConfig = this.mastra.getServer()?.auth;
-      if (authConfig) {
+      // Check if any auth is configured (studio or server) for RBAC
+      const hasAuth = this.mastra.getStudio()?.auth || this.mastra.getServer()?.auth;
+      if (hasAuth) {
         const hasPermission = await loadHasPermission();
         if (hasPermission) {
           const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
@@ -769,8 +770,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
 
         const requestContext = request.requestContext;
-        const authConfig = this.mastra.getServer()?.auth;
-        if (authConfig) {
+        // Check if any auth is configured (studio or server) for RBAC
+        const hasAuth = this.mastra.getStudio()?.auth || this.mastra.getServer()?.auth;
+        if (hasAuth) {
           let hasPermission: ((userPerms: string[], required: string) => boolean) | undefined;
           try {
             ({ hasPermission } = await import('@mastra/core/auth/ee'));
