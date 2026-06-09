@@ -1,10 +1,10 @@
-import { useAuiState } from '@assistant-ui/react';
 import { Badge, Button, Icon, cn } from '@mastra/playground-ui';
 import { CheckIcon, ChevronUpIcon, CopyIcon, TerminalSquare } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
+import type { DataMessagePart } from '../tool-card';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 import { useLinkComponent } from '@/lib/framework';
@@ -54,6 +54,7 @@ export interface SandboxExecutionBadgeProps extends Omit<ToolApprovalButtonsProp
   result: any;
   metadata?: MessageMetadata;
   toolCalled?: boolean;
+  dataParts?: ReadonlyArray<DataMessagePart>;
 }
 
 // Hook for live elapsed time while running
@@ -147,13 +148,12 @@ export const SandboxExecutionBadge = ({
   toolApprovalMetadata,
   isNetwork,
   toolCalled: toolCalledProp,
+  dataParts: dataPartsProp,
 }: SandboxExecutionBadgeProps) => {
   // Get sandbox streaming data parts from the message
-  const message = useAuiState(s => s.message);
   const dataParts = useMemo(() => {
-    const content = message.content as ReadonlyArray<{ type: string; name?: string; data?: any }>;
-    return content.filter(part => part.type === 'data');
-  }, [message.content]);
+    return (dataPartsProp ?? []).filter(part => part.type === 'data');
+  }, [dataPartsProp]);
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { isCopied, copyToClipboard } = useCopyToClipboard();

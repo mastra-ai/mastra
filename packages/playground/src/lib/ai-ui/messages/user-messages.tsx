@@ -48,6 +48,15 @@ const InMessageAttachment = ({ type, contentType, nameSlot, src, data }: InMessa
   );
 };
 
+const extractUserText = (content: ReadonlyArray<unknown>): string =>
+  content
+    .filter(
+      (part): part is { type: string; text: string } =>
+        !!part && typeof part === 'object' && 'type' in part && (part as { type: unknown }).type === 'text',
+    )
+    .map(part => part.text)
+    .join('\n');
+
 export const UserMessage = () => {
   const message = useMessage();
   const messageId = message?.id;
@@ -60,7 +69,7 @@ export const UserMessage = () => {
       data-message-index={message?.index}
       data-message-pending={isPending ? 'true' : undefined}
     >
-      <DatasetSaveAction />
+      <DatasetSaveAction messageText={extractUserText(message?.content ?? [])} />
       <div
         className={cn(
           'max-w-[max(366px,70%)] break-words px-4 py-2 text-neutral6 text-ui-lg leading-ui-lg rounded-xl bg-surface3',
