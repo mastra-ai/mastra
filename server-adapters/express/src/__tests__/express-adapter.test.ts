@@ -118,6 +118,8 @@ describe('Express Server Adapter', () => {
         const isStream =
           contentType.includes('text/plain') ||
           contentType.includes('text/event-stream') ||
+          contentType.includes('audio/') ||
+          contentType.includes('application/octet-stream') ||
           transferEncoding === 'chunked';
 
         if (isStream && response.body) {
