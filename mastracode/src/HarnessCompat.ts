@@ -34,6 +34,11 @@ export function v1ModeToLegacy<TState = {}>(mode: HarnessMode, agent: Agent): Ha
 export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
   #session?: Session<TState>;
   #harnessV1: Harness<HarnessMode[], TState>;
+  // When true, `setState` does not route identity fields to the v1 session.
+  // Used while legacy `super.switchThread` restores thread metadata: legacy
+  // writes the metadata model through this overridden `setState`, which would
+  // otherwise clobber the session's authoritative durable model (Step 2).
+  #suppressSessionIdentityWrite = false;
 
   constructor(args: HarnessConfig<TState>, harnessV1: Harness<HarnessMode[], TState>) {
     super(args);
@@ -80,7 +85,13 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
       session = undefined;
     }
 
-    if (session) {
+    if (session && !this.#suppressSessionIdentityWrite) {
+      // Step 2: the v1 session is the authoritative owner of the identity
+      // fields (currentModelId, modeId). Write them to the session first, then
+      // mirror into legacy `this.state` below so legacy internals that still
+      // read `this.state` directly (createThread model metadata, OM getters)
+      // stay consistent. `getState()` already reads identity off the session,
+      // making the session the single source of truth on read.
       if (typeof currentModelId === 'string') {
         session.setModelId(currentModelId);
       }
@@ -89,19 +100,34 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
       }
     }
 
+    // Mirror identity fields into legacy state so legacy read-through stays in
+    // sync with the authoritative session. When no session is attached yet,
+    // legacy is the only store, so these writes still apply.
+    const identityMirror: Partial<TState> & SessionStateFields = {};
+    if (typeof currentModelId === 'string') {
+      identityMirror.currentModelId = currentModelId;
+    }
+    // `modeId` is mirrored by `switchMode` (legacy super.switchMode updates
+    // currentModeId), so it is intentionally not re-applied here.
+
     if (Object.keys(harnessUpdates).length > 0) {
       if (session) {
-        // Mirror into the v1 session off the critical path. Legacy state is
-        // still the single owner in this step; awaiting the session write here
-        // adds latency on hot paths (e.g. the thread_changed handler) and
-        // reorders TUI render races. Session.setState serializes internally,
-        // so ordering between mirror writes is preserved.
+        // Non-identity harness state (tasks, activePlan, sandboxAllowedPaths,
+        // yolo, permissionRules, OM fields, …) is still legacy-owned in Step 2.
+        // It flows through the legacy-private `updateState` path during
+        // execution, which the session does not yet drive. Mirror it into the
+        // session off the critical path for durability; awaiting here adds
+        // latency on hot paths and reorders TUI render races. Ownership of
+        // these fields inverts to the session in Step 4 when `session.signal()`
+        // owns execution.
         void session.setState(harnessUpdates as Partial<TState>).catch(() => {
-          // Best-effort mirror: legacy state is authoritative in this step, so
+          // Best-effort mirror: legacy still owns these fields in this step, so
           // a failed session write must not break the user-facing operation.
         });
       }
-      await super.setState(harnessUpdates as Partial<TState>);
+      await super.setState({ ...harnessUpdates, ...identityMirror } as Partial<TState>);
+    } else if (Object.keys(identityMirror).length > 0) {
+      await super.setState(identityMirror as Partial<TState>);
     }
   }
 
@@ -114,19 +140,25 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
   }
 
   async switchThread({ threadId }: { threadId: string }): Promise<void> {
-    const currentModelId = (this.getState() as SessionStateFields).currentModelId;
-
     const session = await this.#harnessV1.session({
       threadId,
       resourceId: this.getResourceId(),
     });
     this.#session = session;
 
-    if (typeof currentModelId === 'string' && currentModelId.length > 0) {
-      session.setModelId(currentModelId);
+    // Legacy `super.switchThread` runs `loadThreadMetadata`, which restores a
+    // model from thread metadata and writes it through this overridden
+    // `setState`. Suppress session identity routing for that window so the
+    // session's authoritative durable model (Step 2) is not clobbered.
+    this.#suppressSessionIdentityWrite = true;
+    try {
+      await super.switchThread({ threadId });
+    } finally {
+      this.#suppressSessionIdentityWrite = false;
     }
 
-    await super.switchThread({ threadId });
+    // Reconcile legacy read-through to the session's authoritative model.
+    await this.#reconcileLegacyModel(session);
   }
 
   async createThread({ title }: { title?: string } = {}): Promise<HarnessThread> {
@@ -154,17 +186,41 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
       return;
     }
 
+    // Carry the user's currently selected model onto a freshly created session
+    // (#17558). `this.#harnessV1.session()` seeds a new record from the mode
+    // default; passing `modelId` makes the new session adopt the active model.
     const currentModelId = (this.getState() as SessionStateFields).currentModelId;
     const session = await this.#harnessV1.session({
       threadId,
       resourceId: targetResourceId,
       modeId: this.getCurrentModeId(),
+      modelId:
+        typeof currentModelId === 'string' && currentModelId.length > 0 ? currentModelId : undefined,
     });
     this.#session = session;
 
-    if (typeof currentModelId === 'string' && currentModelId.length > 0) {
-      session.setModelId(currentModelId);
+    // The session is now authoritative for the active model; reconcile legacy
+    // read-through to match it.
+    await this.#reconcileLegacyModel(session);
+  }
+
+  /**
+   * Push the v1 session's authoritative model into legacy `this.state` so
+   * legacy internals that still read `this.state` directly (createThread model
+   * metadata, OM getters) stay consistent with the single owner. Writes
+   * directly through `super.setState` to avoid re-entering the session-routing
+   * `setState` override.
+   */
+  async #reconcileLegacyModel(session: Session<TState>): Promise<void> {
+    const sessionModelId = session.getModelId();
+    if (typeof sessionModelId !== 'string' || sessionModelId.length === 0) {
+      return;
     }
+    const legacyModelId = (super.getState() as SessionStateFields).currentModelId;
+    if (legacyModelId === sessionModelId) {
+      return;
+    }
+    await super.setState({ currentModelId: sessionModelId } as Partial<TState> & SessionStateFields);
   }
 
   async listThreads(options?: { allResources?: boolean; includeForkedSubagents?: boolean }): Promise<HarnessThread[]> {

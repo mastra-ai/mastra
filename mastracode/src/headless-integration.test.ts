@@ -1247,9 +1247,12 @@ describe('headless mode — thread control', () => {
     expect(exitCode).toBe(0);
     expect(harness.getCurrentThreadId()).toBe(thread.id);
     expect(harnessV1.session).toHaveBeenCalledWith({ threadId: thread.id, resourceId: thread.resourceId });
-    // Main's #17558 carries the harness's current model onto the session at
-    // switchThread, so the startup model overrides the prefilled session model.
-    expect(session.setModelId).toHaveBeenCalledWith('mock-model');
+    // Step 2: the v1 session is authoritative for the model. Resuming a
+    // prefilled thread by title keeps the session's durable model rather than
+    // clobbering it with the startup model; legacy read-through reconciles to
+    // the session, so switchThread never calls setModelId on resume.
+    expect(session.setModelId).not.toHaveBeenCalled();
+    expect(harness.getState()).toMatchObject({ currentModelId: 'openai/custom-thread-model' });
     const threads = await harness.listThreads();
     const matchingThreads = threads.filter(t => t.id === thread.id);
     expect(matchingThreads).toHaveLength(1);

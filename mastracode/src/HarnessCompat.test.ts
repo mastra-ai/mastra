@@ -121,7 +121,7 @@ describe('HarnessCompat session-derived state', () => {
     expect(harnessV1.session).toHaveBeenCalledWith({ threadId: 'thread-id', resourceId: 'resource-id' });
   });
 
-  it('preserves the current model when switching threads', async () => {
+  it('makes the session authoritative for the model when switching threads', async () => {
     const { HarnessCompat } = await import('./HarnessCompat.js');
     const firstSession = createSession('selected-model');
     const secondSession = createSession('stored-thread-model');
@@ -134,8 +134,11 @@ describe('HarnessCompat session-derived state', () => {
     await harness.switchThread({ threadId: 'first-thread' });
     await harness.switchThread({ threadId: 'second-thread' });
 
-    expect(secondSession.setModelId).toHaveBeenCalledWith('selected-model');
-    expect(harness.getState()).toMatchObject({ currentModelId: 'selected-model' });
+    // Step 2: the v1 session owns the model. Switching to a thread whose session
+    // has a durable model adopts that model rather than clobbering it with the
+    // previously selected one, and legacy read-through reconciles to match.
+    expect(secondSession.setModelId).not.toHaveBeenCalled();
+    expect(harness.getState()).toMatchObject({ currentModelId: 'stored-thread-model' });
   });
 
   it('routes session-derived setState fields to the session and harness fields to legacy state', async () => {
@@ -158,13 +161,65 @@ describe('HarnessCompat session-derived state', () => {
     expect(session.setModelId).toHaveBeenCalledWith('new-session-model');
     expect(session.setMode).toHaveBeenCalledWith(planMode);
     expect(legacySwitchMode).toHaveBeenCalledWith({ modeId: 'plan' });
+    // Non-identity harness state mirrors into the session off the critical path.
     expect(session.setState).toHaveBeenCalledWith({ projectPath: '/new-repo' });
-    expect(legacySetState).toHaveBeenCalledWith({ projectPath: '/new-repo' });
+    // Legacy receives harness state plus the identity mirror so its direct
+    // `this.state` reads stay in sync with the authoritative session.
+    expect(legacySetState).toHaveBeenCalledWith({
+      projectPath: '/new-repo',
+      currentModelId: 'new-session-model',
+    });
     expect(harness.getState()).toMatchObject({
       projectPath: '/new-repo',
       currentModelId: 'new-session-model',
       modeId: 'plan',
     });
+  });
+
+  it('keeps legacy read-through in sync with the authoritative session across every write path (no drift)', async () => {
+    const { HarnessCompat } = await import('./HarnessCompat.js');
+    const session = createSession('thread-a-model');
+    const harnessV1 = {
+      session: vi.fn(async () => session),
+      getMode: vi.fn((modeId: string) => (modeId === 'plan' ? planMode : buildMode)),
+    };
+
+    const harness = new HarnessCompat({} as never, harnessV1 as never);
+
+    // Invariant: legacy `this.state` (what legacy internals read directly) must
+    // always agree with the authoritative v1 session.
+    const assertNoDrift = () => {
+      expect(legacyState.currentModelId).toBe(session.getModelId());
+      expect(harness.getState()).toMatchObject({
+        currentModelId: session.getModelId(),
+        modeId: session.getMode().id,
+      });
+    };
+
+    // 1. Attach via switchThread: session's durable model wins, legacy follows.
+    await harness.switchThread({ threadId: 'thread-a' });
+    expect(session.getModelId()).toBe('thread-a-model');
+    assertNoDrift();
+
+    // 2. Model change via setState: session is written, legacy mirrors.
+    await harness.setState({ currentModelId: 'picked-model' } as never);
+    expect(session.getModelId()).toBe('picked-model');
+    assertNoDrift();
+
+    // 3. Mode change via setState→switchMode: session mode flips, legacy follows.
+    await harness.setState({ modeId: 'plan' } as never);
+    expect(session.getMode().id).toBe('plan');
+    assertNoDrift();
+
+    // 4. Direct switchMode entry point: same invariant holds.
+    await harness.switchMode({ modeId: 'build' });
+    expect(session.getMode().id).toBe('build');
+    assertNoDrift();
+
+    // 5. Combined write: identity + harness state in one setState call.
+    await harness.setState({ currentModelId: 'combo-model', projectPath: '/combo' } as never);
+    expect(session.getModelId()).toBe('combo-model');
+    assertNoDrift();
   });
 
   it('keeps per-agent subagent model overrides in harness state', async () => {
