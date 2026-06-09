@@ -239,6 +239,7 @@ html.light {
   --height-icon-default: 16px;
   --height-icon-lg: 20px;
   --height-icon-sm: 12px;
+  --spacing-form-xs: 1.5rem;
   --spacing-form-sm: 1.75rem;
   --spacing-form-md: 2rem;
   --spacing-form-default: 2.25rem;
