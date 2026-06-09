@@ -103,13 +103,6 @@ export const shopAgent = new Agent({
 
 Returns a `CodeModeResult` object.
 
-```typescript
-interface CodeModeResult {
-  tool: Tool<any, any>
-  instructions: string
-}
-```
-
 <PropertiesTable
   content={[
     {
@@ -128,19 +121,6 @@ interface CodeModeResult {
 ## CodeModeToolResult
 
 The generated tool returns a `CodeModeToolResult`.
-
-```typescript
-interface CodeModeToolResult {
-  success: boolean
-  result?: unknown
-  logs?: string[]
-  error?: {
-    message: string
-    name?: string
-    line?: number
-  }
-}
-```
 
 <PropertiesTable
   content={[
