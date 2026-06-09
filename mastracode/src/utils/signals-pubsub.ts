@@ -1,8 +1,10 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { PubSub, UnixSocketPubSub } from '@mastra/core/events';
+import { EventEmitterPubSub, PubSub, UnixSocketPubSub } from '@mastra/core/events';
 import type { PubSubDeliveryMode, Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
+
+const THREAD_STREAM_PREFIX = 'agent.thread-stream.';
 
 /**
  * A PubSub that manages one Unix socket per thread for cross-process signal
@@ -12,11 +14,19 @@ import type { PubSubDeliveryMode, Event, EventCallback, SubscribeOptions } from 
  * and automatic OS cleanup. Each thread gets its own isolated socket so
  * processes on different threads never exchange data. A solo process on a
  * thread has zero serialization overhead.
+ *
+ * Topics that are NOT `agent.thread-stream.*` (e.g. `workflows`,
+ * `workflows-finish`) are handled by an in-memory {@link EventEmitterPubSub}.
+ * The evented workflow engine relies on in-process publish/subscribe semantics
+ * where the publisher and subscriber share the same process — routing these
+ * through Unix socket IPC breaks execution-workflow resolution because the
+ * socket's broker/client model has different delivery guarantees.
  */
 class SignalsPubSub extends PubSub {
   readonly #resourceId: string;
   readonly #sockets = new Map<string, UnixSocketPubSub>();
   readonly #pending = new Map<string, Promise<UnixSocketPubSub>>();
+  readonly #inMemory = new EventEmitterPubSub();
   #closed = false;
 
   constructor(resourceId: string) {
@@ -29,28 +39,37 @@ class SignalsPubSub extends PubSub {
   }
 
   async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+    if (!topic.startsWith(THREAD_STREAM_PREFIX)) {
+      return this.#inMemory.publish(topic, event);
+    }
     const socket = await this.#getOrCreate(topic);
     await socket.publish(topic, event);
   }
 
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
+    if (!topic.startsWith(THREAD_STREAM_PREFIX)) {
+      return this.#inMemory.subscribe(topic, cb, options);
+    }
     const socket = await this.#getOrCreate(topic);
     await socket.subscribe(topic, cb, options);
   }
 
   async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
+    if (!topic.startsWith(THREAD_STREAM_PREFIX)) {
+      return this.#inMemory.unsubscribe(topic, cb);
+    }
     const socket = this.#sockets.get(topic);
     if (!socket) return;
     await socket.unsubscribe(topic, cb);
   }
 
   async flush(): Promise<void> {
-    await Promise.all([...this.#sockets.values()].map(s => s.flush()));
+    await Promise.all([this.#inMemory.flush(), ...[...this.#sockets.values()].map(s => s.flush())]);
   }
 
   async close(): Promise<void> {
     this.#closed = true;
-    await Promise.allSettled([...this.#sockets.values()].map(s => s.close()));
+    await Promise.allSettled([this.#inMemory.close(), ...[...this.#sockets.values()].map(s => s.close())]);
     this.#sockets.clear();
   }
 
@@ -97,9 +116,8 @@ class SignalsPubSub extends PubSub {
 
   #extractThreadId(topic: string): string {
     // Topic format: agent.thread-stream.<encodeURIComponent(resourceId + '\0' + threadId)>
-    const prefix = 'agent.thread-stream.';
-    if (topic.startsWith(prefix)) {
-      const encoded = topic.slice(prefix.length);
+    if (topic.startsWith(THREAD_STREAM_PREFIX)) {
+      const encoded = topic.slice(THREAD_STREAM_PREFIX.length);
       try {
         const decoded = decodeURIComponent(encoded);
         const separatorIdx = decoded.indexOf('\0');
@@ -122,6 +140,9 @@ class SignalsPubSub extends PubSub {
  * Processes on different threads never exchange data. A solo process on a
  * thread has zero serialization overhead — the broker only serializes when
  * another process joins the same thread's socket.
+ *
+ * Non-signal topics (e.g. `workflows`) use an in-memory EventEmitterPubSub
+ * so that the evented workflow engine's in-process pub/sub works correctly.
  */
 export function createSignalsPubSub(resourceId: string): SignalsPubSub {
   return new SignalsPubSub(resourceId);
