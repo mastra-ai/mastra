@@ -2,6 +2,7 @@
  * @license Mastra Enterprise License - see ee/LICENSE
  */
 import { describe, it, expect, vi } from 'vitest';
+import { RequestContext } from '../../../request-context';
 
 import { checkFGA, FGADeniedError, requireFGA } from '../fga-check';
 import type { IFGAProvider } from '../interfaces/fga';
@@ -117,6 +118,91 @@ describe('checkFGA', () => {
           requestContext,
         },
       },
+    );
+  });
+
+  it('should bypass provider membership resolution for a tenant-scoped system actor', async () => {
+    const provider = createMockFGAProvider(true);
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'org-1');
+
+    await requireFGA({
+      fgaProvider: provider,
+      user: undefined,
+      resource: { type: 'workflow', id: 'nightly-workflow' },
+      permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+      requestContext,
+      systemActor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
+    });
+
+    expect(provider.require).not.toHaveBeenCalled();
+  });
+
+  it('should fail loudly when a system actor has no tenant scope', async () => {
+    const provider = createMockFGAProvider(true);
+
+    await expect(
+      requireFGA({
+        fgaProvider: provider,
+        user: undefined,
+        resource: { type: 'workflow', id: 'nightly-workflow' },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        requestContext: new RequestContext(),
+        systemActor: true,
+      }),
+    ).rejects.toThrow('system actor requires organizationId / tenant scope');
+
+    expect(provider.require).not.toHaveBeenCalled();
+  });
+
+  it.each([{}, { actorKind: 'user' }])(
+    'should not bypass provider checks for malformed system actor value %o',
+    async systemActor => {
+      const provider = createMockFGAProvider(true);
+      const requestContext = new RequestContext();
+      requestContext.set('organizationId', 'org-1');
+
+      await requireFGA({
+        fgaProvider: provider,
+        user: { id: 'user-1' },
+        resource: { type: 'workflow', id: 'nightly-workflow' },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        requestContext,
+        systemActor: systemActor as any,
+      });
+
+      expect(provider.require).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        expect.objectContaining({
+          resource: { type: 'workflow', id: 'nightly-workflow' },
+          permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        }),
+      );
+    },
+  );
+
+  it('should not treat user or request-context data as the trusted system actor signal', async () => {
+    const provider = createMockFGAProvider(true);
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'org-1');
+    requestContext.set('systemActor', true);
+
+    await expect(
+      requireFGA({
+        fgaProvider: provider,
+        user: { id: 'user-controlled', systemActor: true },
+        resource: { type: 'workflow', id: 'nightly-workflow' },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        requestContext,
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(provider.require).toHaveBeenCalledWith(
+      { id: 'user-controlled', systemActor: true },
+      expect.objectContaining({
+        resource: { type: 'workflow', id: 'nightly-workflow' },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+      }),
     );
   });
 });
