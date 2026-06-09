@@ -72,7 +72,7 @@ function loadPermissionPatterns(): Promise<Record<string, unknown> | undefined> 
 
 /**
  * Helper to get auth provider from Mastra instance.
- * 
+ *
  * Dual auth is OPT-IN: if studio.auth is explicitly configured, Studio requests
  * use it exclusively. Otherwise, Studio requests fall back to server.auth for
  * backward compatibility.
