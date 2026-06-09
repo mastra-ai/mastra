@@ -117,9 +117,9 @@ const EditPageLayout = () => {
   const isRunning = useStreamRunning();
   // The stream flag can briefly drop to false mid-conversation (e.g. between
   // builder runs), which would flicker the layout between centered and split.
-  // Defer only the true -> false transition by 1s: `isRunning` flips the OR to
+  // Defer only the true -> false transition by 3s: `isRunning` flips the OR to
   // true immediately, while going idle waits for the debounced value to settle.
-  const [debouncedIsRunning] = useDebounce(isRunning, 1000);
+  const [debouncedIsRunning] = useDebounce(isRunning, 3000);
   const isStreamRunning = isRunning || debouncedIsRunning;
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const { dirtyFields } = useFormState({ control });
@@ -207,12 +207,16 @@ const MobileInitialCtas = () => {
 const EditTopBarSlot = () => {
   const { autosave, onModeToggle } = useEditPage();
   const isRunning = useStreamRunning();
+  const { step } = useWizard();
+  // During onboarding (any step before `end`) the agent is still being composed,
+  // so switching to view mode makes no sense — hide the toggle entirely.
+  const isOnboarding = step !== 'end';
 
   return (
     <EditTopBar
       isLoading={false}
       mode="build"
-      onModeToggle={onModeToggle}
+      onModeToggle={isOnboarding ? undefined : onModeToggle}
       modeToggleDisabled={isRunning}
       rightAside={
         <AutosaveIndicator status={autosave.status} lastError={autosave.lastError} onRetry={autosave.retry} />
