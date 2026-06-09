@@ -475,19 +475,16 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     getHeader: (name: string) => string | undefined,
   ): { authConfig: unknown; authMode: MastraAuthMode } | null {
     const isStudioRequest = isStudioClientTypeHeader(getHeader(MASTRA_CLIENT_TYPE_HEADER));
+    const studioAuth = this.mastra.getStudio()?.auth;
+    const serverAuth = this.mastra.getServer()?.auth;
 
-    if (isStudioRequest) {
-      const studioAuth = this.mastra.getStudio()?.auth;
-      if (studioAuth) {
-        // Studio auth is configured - use it
-        return { authConfig: studioAuth, authMode: 'studio' };
-      }
-      // Studio request but no studio auth configured - development mode, no auth required
-      return null;
+    // Dual auth is opt-in: if studio.auth is configured, Studio requests use it exclusively
+    if (isStudioRequest && studioAuth) {
+      return { authConfig: studioAuth, authMode: 'studio' };
     }
 
-    // Regular API request - use server auth
-    const serverAuth = this.mastra.getServer()?.auth;
+    // Otherwise (non-studio request, OR studio request without studio.auth configured),
+    // fall back to server.auth for backward compatibility
     if (serverAuth) {
       return { authConfig: serverAuth, authMode: 'server' };
     }
