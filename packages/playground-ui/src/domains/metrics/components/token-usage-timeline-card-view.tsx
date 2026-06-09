@@ -104,11 +104,11 @@ export function TokenUsageTimelineCardView({
                 <Tab value="cost">Cost</Tab>
               </TabList>
               <TabContent value="tokens">
-                <MetricsLineChart data={points as unknown as Record<string, unknown>[]} series={tokenSeries} />
+                <MetricsLineChart data={points} series={tokenSeries} />
               </TabContent>
               <TabContent value="cost">
                 {hasCostData ? (
-                  <MetricsLineChart data={costPoints as unknown as Record<string, unknown>[]} series={costSeries} />
+                  <MetricsLineChart data={costPoints} series={costSeries} />
                 ) : (
                   <MetricsCard.NoData message="No cost data yet" />
                 )}
