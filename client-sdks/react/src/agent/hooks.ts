@@ -1119,7 +1119,12 @@ export const useChat = ({
       // Signal path: append the user turn optimistically as `pending` so it
       // renders inline immediately. The server echo (matched by clientMessageId
       // in the accumulator) clears the status to a normal bubble.
-      const pendingMessages = dbUserMessages.map(message => {
+      // All core user messages are sent as a single signal that echoes back one
+      // `data-user-message`, so only the first bubble carries the correlation id
+      // and pending status. Stamping every bubble with the same id would let one
+      // server echo match (and adopt its id onto) multiple messages.
+      const pendingMessages = dbUserMessages.map((message, index) => {
+        if (index > 0) return message;
         const metadata: MastraDBMessageMetadata = {
           ...message.content.metadata,
           mode: 'stream',

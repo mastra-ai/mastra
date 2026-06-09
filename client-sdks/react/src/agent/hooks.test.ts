@@ -1080,6 +1080,42 @@ describe('useChat optimistic pending user message', () => {
     expect(typeof sendArgs?.message?.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe('string');
   });
 
+  it('stamps the correlation id and pending status on only the first bubble of a multi-message send', async () => {
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'first',
+        threadId: 'thread-1',
+        coreUserMessages: [{ role: 'user', content: [{ type: 'text', text: 'second' }] }],
+      });
+    });
+
+    const userMessages = result.current.messages.filter(m => m.role === 'user');
+    expect(userMessages).toHaveLength(2);
+
+    // The whole turn is sent as a single signal that echoes back one
+    // `data-user-message`, so only the first bubble carries the correlation id
+    // and pending status. Sharing one id across bubbles would let the echo
+    // adopt the same server id onto multiple messages.
+    const first = userMessages[0]?.content.metadata as MastraDBMessageMetadata | undefined;
+    const second = userMessages[1]?.content.metadata as MastraDBMessageMetadata | undefined;
+    expect(first?.status).toBe('pending');
+    expect(typeof first?.[CLIENT_MESSAGE_ID_KEY]).toBe('string');
+    expect(second?.status).toBeUndefined();
+    expect(second?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
+  });
+
   it('keys two sequential sends as independent pending messages', async () => {
     const { result } = renderHook(
       () =>
