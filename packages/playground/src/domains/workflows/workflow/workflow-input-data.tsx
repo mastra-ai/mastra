@@ -1,6 +1,9 @@
 import {
   Button,
   CodeEditor,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
   Select,
   SelectContent,
   SelectItem,
@@ -9,13 +12,15 @@ import {
   Txt,
   cn,
 } from '@mastra/playground-ui';
-import { Braces, FormInput, Loader2 } from 'lucide-react';
+import { ChevronRight, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { ZodSchema } from 'zod';
 
+import { WorkflowInputTypeToggle } from './workflow-input-type-toggle';
+import type { WorkflowInputType } from './workflow-input-type-toggle';
 import { DynamicForm } from '@/lib/form';
 
-type InputType = 'simple' | 'form' | 'json';
+type InputType = WorkflowInputType;
 
 export interface WorkflowInputDataProps {
   schema: ZodSchema;
@@ -62,48 +67,33 @@ export const WorkflowInputData = ({
   }
 
   return (
-    <div>
-      <Txt as="p" variant="ui-md" className={cn('text-neutral3 pb-4', headingClassName)}>
-        {heading ?? (withoutSubmit ? 'Run input' : 'Trigger a run')}
-      </Txt>
-      <div className="space-y-2 pb-4">
-        <Txt as="label" htmlFor="workflow-input-format" variant="ui-sm" className="text-neutral3">
-          Input format
+    <Collapsible defaultOpen>
+      <CollapsibleTrigger className="flex w-full items-center gap-2 pb-3 text-left">
+        <ChevronRight className="h-4 w-4 shrink-0 text-neutral3" />
+        <Txt as="span" variant="ui-md" className={cn('text-neutral5 font-semibold', headingClassName)}>
+          {heading ?? (withoutSubmit ? 'Run input' : 'Trigger a run')}
         </Txt>
-        <Select disabled={isSubmitLoading} value={type} onValueChange={value => setType(value as InputType)}>
-          <SelectTrigger id="workflow-input-format" className="w-full" aria-label="Input type">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {isProcessorWorkflow && <SelectItem value="simple">Simple</SelectItem>}
-            <SelectItem value="form">
-              <span className="flex items-center gap-2">
-                <FormInput className="h-4 w-4" />
-                Form
-              </span>
-            </SelectItem>
-            <SelectItem value="json">
-              <span className="flex items-center gap-2">
-                <Braces className="h-4 w-4" />
-                JSON
-              </span>
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      </CollapsibleTrigger>
 
-      <div className="space-y-2 pb-2">
-        <Txt as="p" variant="ui-sm" className="text-neutral3">
-          Input data
-        </Txt>
-      </div>
+      <CollapsibleContent>
+        <div className="space-y-2 pb-4">
+          <Txt as="p" variant="ui-sm" className="text-neutral3">
+            Input
+          </Txt>
+          <WorkflowInputTypeToggle
+            value={type}
+            onChange={setType}
+            disabled={isSubmitLoading}
+            includeSimple={isProcessorWorkflow}
+          />
+        </div>
 
-      <div
-        className={cn({
-          'opacity-50 pointer-events-none': isSubmitLoading,
-        })}
-      >
-        {type === 'simple' && isProcessorWorkflow ? (
+        <div
+          className={cn('pb-4', {
+            'opacity-50 pointer-events-none': isSubmitLoading,
+          })}
+        >
+          {type === 'simple' && isProcessorWorkflow ? (
           <SimpleProcessorInput
             schema={schema}
             defaultValues={defaultValues}
@@ -148,8 +138,9 @@ export const WorkflowInputData = ({
             {children}
           </JSONInput>
         )}
-      </div>
-    </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 };
 
@@ -209,7 +200,12 @@ const JSONInput = ({
         </div>
       )}
 
-      <CodeEditor data={data} onChange={setInputData} editable={!isReadOnly} />
+      <div>
+        <Txt as="label" variant="ui-sm" className="text-neutral3 pb-1 block">
+          Input data
+        </Txt>
+        <CodeEditor data={data} onChange={setInputData} editable={!isReadOnly} />
+      </div>
 
       {children}
 
@@ -218,7 +214,7 @@ const JSONInput = ({
           {leftActions ?? <div />}
           <div className="flex items-center gap-1">
             {submitActions}
-            <Button variant="default" onClick={handleSubmit} size="lg" className={submitButtonClassName}>
+            <Button variant="default" onClick={handleSubmit} className={submitButtonClassName}>
               {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
             </Button>
           </div>
@@ -364,7 +360,7 @@ const SimpleProcessorInput = ({
           {leftActions ?? <div />}
           <div className="flex items-center gap-1">
             {submitActions}
-            <Button variant="default" onClick={handleSubmit} size="lg" className={submitButtonClassName}>
+            <Button variant="default" onClick={handleSubmit} className={submitButtonClassName}>
               {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
             </Button>
           </div>

@@ -184,7 +184,7 @@ export function WorkflowTrigger({
 
   return (
     <div className="h-full pt-3 overflow-y-auto">
-      <div className="space-y-4 pb-5 border-b border-border1">
+      <div className="space-y-4 border-b border-border1/50">
         {isSuspendedSteps && isStreamingWorkflow && (
           <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mt-5 border-b border-border1">
             <Icon>

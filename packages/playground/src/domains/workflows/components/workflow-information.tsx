@@ -4,7 +4,9 @@ import { useState, useEffect, useContext } from 'react';
 
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowRunDetail } from '../runs/workflow-run-details';
+import { WorkflowRecentRuns } from '../runs/workflow-run-list';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
+import { WorkflowEntityHeader } from './workflow-entity-header';
 
 import { useWorkflow } from '@/hooks/use-workflows';
 import { useLinkComponent } from '@/lib/framework';
@@ -105,19 +107,29 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
                   observeWorkflowStream={observeWorkflowStream}
                 />
               ) : (
-                <WorkflowTrigger
-                  workflowId={workflowId}
-                  setRunId={setRunId}
-                  workflow={workflow ?? undefined}
-                  isLoading={isLoading}
-                  createWorkflowRun={createWorkflowRun}
-                  streamWorkflow={streamWorkflow}
-                  resumeWorkflow={resumeWorkflow}
-                  streamResult={streamResult}
-                  isStreamingWorkflow={isStreamingWorkflow}
-                  isCancellingWorkflowRun={isCancellingWorkflowRun}
-                  cancelWorkflowRun={cancelWorkflowRun}
-                />
+                <>
+                  <div className="border-b border-border1/50 px-4 py-4">
+                    <WorkflowEntityHeader workflowId={workflowId} />
+                  </div>
+
+                  <WorkflowTrigger
+                    workflowId={workflowId}
+                    setRunId={setRunId}
+                    workflow={workflow ?? undefined}
+                    isLoading={isLoading}
+                    createWorkflowRun={createWorkflowRun}
+                    streamWorkflow={streamWorkflow}
+                    resumeWorkflow={resumeWorkflow}
+                    streamResult={streamResult}
+                    isStreamingWorkflow={isStreamingWorkflow}
+                    isCancellingWorkflowRun={isCancellingWorkflowRun}
+                    cancelWorkflowRun={cancelWorkflowRun}
+                  />
+
+                  <div className="pt-2">
+                    <WorkflowRecentRuns workflowId={workflowId} />
+                  </div>
+                </>
               )
             ) : null}
           </div>

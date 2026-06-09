@@ -2,7 +2,7 @@
 import type { GetWorkflowResponse, ListWorkflowRunsResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { AnchorHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
@@ -238,18 +238,75 @@ describe('WorkflowInformation', () => {
     });
   });
 
-  describe('input type select', () => {
-    it('renders a select for input type defaulting to Form (no radio buttons)', async () => {
+  describe('input type toggle', () => {
+    it('renders a segmented Form/JSON toggle defaulting to Form (no dropdown)', async () => {
       stubCapabilities();
       stubWorkflow(baseWorkflow);
       stubRuns(emptyWorkflowRuns);
 
       renderInformation();
 
-      const select = await screen.findByRole('combobox', { name: 'Input type' });
-      expect(select.textContent).toContain('Form');
-      // No radio chrome for the input type toggle
-      expect(screen.queryByRole('radiogroup')).toBeNull();
+      const toggle = await screen.findByRole('radiogroup', { name: 'Input type' });
+      const formOption = within(toggle).getByRole('radio', { name: 'Form' });
+      const jsonOption = within(toggle).getByRole('radio', { name: 'JSON' });
+
+      expect(formOption.getAttribute('aria-checked')).toBe('true');
+      expect(jsonOption.getAttribute('aria-checked')).toBe('false');
+      // No dropdown chrome for the input type control
+      expect(screen.queryByRole('combobox', { name: 'Input type' })).toBeNull();
+    });
+
+    it('switches to JSON when the JSON segment is clicked', async () => {
+      stubCapabilities();
+      stubWorkflow(baseWorkflow);
+      stubRuns(emptyWorkflowRuns);
+
+      renderInformation();
+
+      const toggle = await screen.findByRole('radiogroup', { name: 'Input type' });
+      const jsonOption = within(toggle).getByRole('radio', { name: 'JSON' });
+
+      fireEvent.click(jsonOption);
+
+      expect(within(toggle).getByRole('radio', { name: 'JSON' }).getAttribute('aria-checked')).toBe('true');
+      expect(within(toggle).getByRole('radio', { name: 'Form' }).getAttribute('aria-checked')).toBe('false');
+    });
+  });
+
+  describe('collapsible sections', () => {
+    it('renders "Trigger a run" and "Recent runs" expanded by default', async () => {
+      stubCapabilities();
+      stubWorkflow(baseWorkflow);
+      stubRuns(emptyWorkflowRuns);
+
+      renderInformation();
+
+      // Both section triggers exist and report expanded
+      const triggerSection = await screen.findByRole('button', { name: 'Trigger a run' });
+      const recentRunsSection = await screen.findByRole('button', { name: 'Recent runs' });
+      expect(triggerSection.getAttribute('aria-expanded')).toBe('true');
+      expect(recentRunsSection.getAttribute('aria-expanded')).toBe('true');
+
+      // Their content is visible by default
+      expect(await screen.findByRole('radiogroup', { name: 'Input type' })).not.toBeNull();
+    });
+
+    it('collapses the "Trigger a run" section when its header is clicked', async () => {
+      stubCapabilities();
+      stubWorkflow(baseWorkflow);
+      stubRuns(emptyWorkflowRuns);
+
+      renderInformation();
+
+      const triggerSection = await screen.findByRole('button', { name: 'Trigger a run' });
+      expect(await screen.findByRole('radiogroup', { name: 'Input type' })).not.toBeNull();
+
+      fireEvent.click(triggerSection);
+
+      await waitFor(() => {
+        expect(screen.queryByRole('radiogroup', { name: 'Input type' })).toBeNull();
+      });
+      expect(triggerSection.getAttribute('aria-expanded')).toBe('false');
     });
   });
 
@@ -275,6 +332,44 @@ describe('WorkflowInformation', () => {
 
       expect(await screen.findByText('Run input')).not.toBeNull();
       expect(screen.queryByText('Trigger a run')).toBeNull();
+    });
+  });
+
+  describe('Recent runs', () => {
+    it('renders a "Recent runs" section below the trigger form', async () => {
+      stubCapabilities();
+      stubWorkflow(baseWorkflow);
+      stubRuns(oneSuccessfulRun);
+
+      renderInformation();
+
+      expect(await screen.findByRole('button', { name: 'Run' })).not.toBeNull();
+      expect(await screen.findByText('Recent runs')).not.toBeNull();
+    });
+
+    it('renders a recent run row with its status icon linking to the run detail path', async () => {
+      stubCapabilities();
+      stubWorkflow(baseWorkflow);
+      stubRuns(oneSuccessfulRun);
+
+      renderInformation();
+
+      const runLabel = await screen.findByText('run-success-1');
+      expect(screen.getByLabelText('success')).not.toBeNull();
+      const link = runLabel.closest('a');
+      expect(link?.getAttribute('href')).toBe(paths.workflowRunLink(WORKFLOW_ID, 'run-success-1'));
+    });
+
+    it('shows an empty state and no run rows when there are no runs', async () => {
+      stubCapabilities();
+      stubWorkflow(baseWorkflow);
+      stubRuns(emptyWorkflowRuns);
+
+      renderInformation();
+
+      expect(await screen.findByText('Recent runs')).not.toBeNull();
+      expect(screen.queryByText('run-success-1')).toBeNull();
+      expect(screen.getByText('Your run history will appear here once you run the workflow')).not.toBeNull();
     });
   });
 

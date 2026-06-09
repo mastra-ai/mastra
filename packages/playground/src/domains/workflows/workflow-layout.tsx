@@ -7,7 +7,6 @@ import { SchemaRequestContextProvider } from '@/domains/request-context/context/
 import { WorkflowInformation } from '@/domains/workflows/components/workflow-information';
 import { WorkflowLayout as WorkflowLayoutUI } from '@/domains/workflows/components/workflow-layout';
 import { WorkflowRunProvider } from '@/domains/workflows/context/workflow-run-context';
-import { WorkflowRunList } from '@/domains/workflows/runs/workflow-run-list';
 import { useWorkflowRun } from '@/hooks/use-workflow-runs';
 import { useWorkflow } from '@/hooks/use-workflows';
 
@@ -58,7 +57,6 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
             <WorkflowLayoutUI
               workflowId={workflowId!}
               leftSlot={<WorkflowInformation workflowId={workflowId} initialRunId={runId} />}
-              rightSlot={<WorkflowRunList workflowId={workflowId} runId={runId} />}
             >
               {children}
             </WorkflowLayoutUI>
