@@ -7,7 +7,7 @@ description: React performance optimization guidelines from Mastra Engineering. 
 
 ## Overview
 
-Comprehensive performance optimization guide for React applications, containing 12 rules across 6 categories. Rules are prioritized by impact to guide automated refactoring and code generation.
+Comprehensive performance optimization guide for React applications, containing 14 rules across 7 categories. Rules are prioritized by impact to guide automated refactoring and code generation.
 
 ## When to Apply
 
@@ -31,6 +31,7 @@ Rules are prioritized by impact:
 | 4        | Re-render Optimization    | MEDIUM      |
 | 5        | Rendering Performance     | MEDIUM      |
 | 6        | JavaScript Performance    | LOW-MEDIUM  |
+| 7        | Component Structure       | MEDIUM-HIGH (maintainability) |
 
 ## Quick Reference
 
@@ -56,6 +57,11 @@ Rules are prioritized by impact:
 - Use lazy state initialization for expensive values (`rerender-lazy-state-init`)
 - Apply `startTransition` for non-urgent updates (`rerender-transitions`)
 - Minimize `useEffect` function calls (`rerender-useeffect-function-calls`)
+- Never reset state with `useEffect`; lift the discriminant and remount the branch (`rerender-no-useeffect-state-reset`)
+
+**Component Structure:**
+
+- One domain component/hook per file, one responsibility each — split bloated components (`structure-single-responsibility`)
 
 ### Rendering Patterns
 
@@ -88,6 +94,7 @@ grep -l "Tanstack" references/rules/
 - `async-*` - Waterfall elimination (1 rule)
 - `bundle-*` - Bundle size optimization (2 rules)
 - `client-*` - Client-side data fetching (1 rule)
-- `rerender-*` - Re-render optimization (3 rules)
+- `rerender-*` - Re-render optimization (4 rules)
 - `rendering-*` - DOM rendering performance (2 rules)
 - `js-*` - JavaScript micro-optimizations (3 rules)
+- `structure-*` - Component/hook structure (1 rule)
