@@ -154,6 +154,7 @@ const ManageConnectionList = ({
               <EntityContent className="min-w-0">
                 <button
                   type="button"
+                  disabled={disabled}
                   onClick={() => onSelect(connection.connectionId)}
                   data-testid={`${testIdPrefix}-list-item-${connection.connectionId}`}
                   className="flex w-full items-center justify-between gap-2 text-left outline-none after:absolute after:inset-0 after:rounded-lg focus-visible:after:ring-2 focus-visible:after:ring-accent1"
