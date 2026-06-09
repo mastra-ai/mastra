@@ -1,8 +1,8 @@
 import type { StorageThreadType } from '@mastra/core/memory';
 import { Tabs, Tab, TabContent, TabList, EmptyState, Button } from '@mastra/playground-ui';
-import { ChatThreads } from '@/domains/agents/components/chat-threads';
-import { AgentMemory } from '@/domains/agents/components/agent-information/agent-memory';
 import { useMemorySidebarTab } from './use-memory-sidebar-tab';
+import { AgentMemory } from '@/domains/agents/components/agent-information/agent-memory';
+import { ChatThreads } from '@/domains/agents/components/chat-threads';
 
 export interface MemorySidebarProps {
   agentId: string;

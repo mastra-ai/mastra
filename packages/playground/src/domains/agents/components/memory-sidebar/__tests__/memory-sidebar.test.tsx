@@ -8,14 +8,14 @@ import type { AnchorHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
+import { readOnlyAuthCapabilities } from '../../__tests__/fixtures/auth';
+import { MemorySidebar } from '../memory-sidebar';
+import { memoryEnabledStatus, semanticRecallConfig } from './fixtures/memory';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
+import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { LinkComponentProvider } from '@/lib/framework';
 import type { LinkComponentProviderProps } from '@/lib/framework';
 import { server } from '@/test/msw-server';
-import { MemorySidebar } from '../memory-sidebar';
-import { readOnlyAuthCapabilities } from '../../__tests__/fixtures/auth';
-import { memoryEnabledStatus, semanticRecallConfig } from './fixtures/memory';
 
 const BASE_URL = 'http://localhost:4111';
 const AGENT_ID = 'chef-agent';

@@ -1,9 +1,23 @@
 import { MessagePrimitive, useMessage } from '@assistant-ui/react';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui';
+import { Tooltip, TooltipContent, TooltipTrigger, cn } from '@mastra/playground-ui';
 import { TooltipProvider } from '@radix-ui/react-tooltip';
 import { ImageEntry, PdfEntry, TxtEntry } from '../attachments/attachment-preview-dialog';
 import { DatasetSaveAction } from './dataset-save-action';
 import { SystemReminderBadge } from './system-reminder-badge';
+
+/**
+ * The converter stamps `MastraDBMessage.content.metadata` onto every content
+ * part via `getPartMetadata`, and assistant-ui's normalization preserves
+ * part-level `metadata` for user text parts. Read the optimistic `pending`
+ * status from there (not message-level metadata, which is reduced to `custom`).
+ */
+const isPendingMessage = (parts: ReadonlyArray<unknown>): boolean =>
+  parts.some(part => {
+    if (!part || typeof part !== 'object' || !('metadata' in part)) return false;
+    const { metadata } = part;
+    if (!metadata || typeof metadata !== 'object' || !('status' in metadata)) return false;
+    return metadata.status === 'pending';
+  });
 export interface InMessageAttachmentProps {
   type: string;
   contentType?: string;
@@ -37,15 +51,22 @@ const InMessageAttachment = ({ type, contentType, nameSlot, src, data }: InMessa
 export const UserMessage = () => {
   const message = useMessage();
   const messageId = message?.id;
+  const isPending = isPendingMessage(message?.content ?? []);
 
   return (
     <MessagePrimitive.Root
       className="w-full flex items-end pb-4 pt-2 flex-col"
       data-message-id={messageId}
       data-message-index={message?.index}
+      data-message-pending={isPending ? 'true' : undefined}
     >
       <DatasetSaveAction />
-      <div className="max-w-[max(366px,70%)] break-words px-4 py-2 text-neutral6 text-ui-lg leading-ui-lg rounded-xl bg-surface3">
+      <div
+        className={cn(
+          'max-w-[max(366px,70%)] break-words px-4 py-2 text-neutral6 text-ui-lg leading-ui-lg rounded-xl bg-surface3',
+          isPending && 'opacity-60 animate-pulse',
+        )}
+      >
         <MessagePrimitive.Parts
           components={{
             File: p => {
