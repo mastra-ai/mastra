@@ -31,13 +31,12 @@ const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
 /**
  * TTL for the cross-process thread lease acquired in the idle-wake path.
- * Sized to comfortably exceed typical Lambda max durations so a winning
- * run does not lose its lease mid-stream.
- *
- * Leases are released explicitly on run-completed / run-aborted and on
- * stream error, so the TTL is only a safety net for crashes.
+ * Leases are released explicitly on run-completed / run-aborted / stream
+ * error, so the TTL is only a safety net for crashes — it just needs to be
+ * long enough to outlive a typical agent run while still freeing up the
+ * thread reasonably quickly if the owning process dies without releasing.
  */
-const AGENT_THREAD_LEASE_TTL_MS = 15 * 60 * 1000;
+const AGENT_THREAD_LEASE_TTL_MS = 60_000;
 
 export let defaultAgentThreadPubSub: PubSub = new EventEmitterPubSub();
 
