@@ -59,8 +59,8 @@ export function WorkflowTimeline() {
   }
 
   return (
-    <div data-testid="workflow-timeline" className="shrink-0 p-2">
-      <div className="flex max-h-64 w-full min-w-0 flex-col gap-3 overflow-hidden rounded-studio-panel border border-border1/50 bg-surface3 p-4">
+    <div data-testid="workflow-timeline" className="shrink-0 px-2 pb-2">
+      <div className="-ml-2 flex max-h-64 w-full min-w-0 flex-col gap-3 overflow-hidden rounded-studio-panel border border-border1/50 bg-surface3 p-4">
         <div className="flex shrink-0 items-center justify-between gap-3">
           <Txt as="p" variant="ui-md" className="text-neutral3">
             Timeline
@@ -68,31 +68,31 @@ export function WorkflowTimeline() {
           {result && !isObjectEmpty(result) && <WorkflowJsonDialog result={result} />}
         </div>
         <div ref={scrollRef} className="flex min-h-0 flex-col gap-2 overflow-y-auto">
-          {rows.map(row => (
-          <div
-            key={`timeline-item-${row.stepId}`}
-            data-testid="workflow-timeline-row"
-            className="grid grid-cols-[10rem_minmax(0,1fr)_5rem] items-center gap-3"
-          >
-            <div className="flex min-w-0 items-center gap-2">
-              <StepStatusIcon status={row.status} />
-              <Txt as="span" variant="ui-sm" className="min-w-0 truncate text-neutral6">
-                {titleCase(row.stepId)}
+          {rows.map((row, index) => (
+            <div
+              key={`timeline-item-${row.stepId}-${index}`}
+              data-testid="workflow-timeline-row"
+              className="grid grid-cols-[10rem_minmax(0,1fr)_5rem] items-center gap-3"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <StepStatusIcon status={row.status} />
+                <Txt as="span" variant="ui-sm" className="min-w-0 truncate text-neutral6">
+                  {titleCase(row.stepId)}
+                </Txt>
+              </div>
+              <div className="relative h-2 min-w-0 rounded bg-surface4">
+                <div
+                  data-testid="workflow-timeline-bar"
+                  data-offset={String(row.offsetPct)}
+                  data-width={String(row.widthPct)}
+                  className={`absolute top-0 h-full rounded ${BAR_TINT[row.status]}`}
+                  style={{ left: `${row.offsetPct}%`, width: `${row.widthPct}%` }}
+                />
+              </div>
+              <Txt as="span" variant="ui-sm" className="text-right text-neutral3 tabular-nums">
+                {toSigFigs(row.durationMs, 3)}ms
               </Txt>
             </div>
-            <div className="relative h-2 min-w-0 rounded bg-surface4">
-              <div
-                data-testid="workflow-timeline-bar"
-                data-offset={String(row.offsetPct)}
-                data-width={String(row.widthPct)}
-                className={`absolute top-0 h-full rounded ${BAR_TINT[row.status]}`}
-                style={{ left: `${row.offsetPct}%`, width: `${row.widthPct}%` }}
-              />
-            </div>
-            <Txt as="span" variant="ui-sm" className="text-right text-neutral3 tabular-nums">
-              {toSigFigs(row.durationMs, 3)}ms
-            </Txt>
-          </div>
           ))}
         </div>
       </div>

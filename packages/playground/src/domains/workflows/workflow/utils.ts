@@ -492,7 +492,9 @@ export const constructNodesAndEdges = ({
     allPrevNodeIds.push(...prevNodeIds);
   }
 
-  const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges);
+  const dedupedEdges = Array.from(new Map(edges.map(edge => [edge.id, edge])).values());
+
+  const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, dedupedEdges);
 
   return { nodes: layoutedNodes, edges: layoutedEdges };
 };

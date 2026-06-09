@@ -88,3 +88,24 @@ export const runWithOnlyInput: GetWorkflowRunByIdResponse = {
   serializedStepGraph: [],
   steps: {},
 };
+
+/**
+ * A run-by-id response with a single suspended step (`step-1`) waiting on user
+ * input, used to drive the suspended overlay through the real
+ * WorkflowRunProvider. The step id matches `baseWorkflow.allSteps`.
+ */
+export const runWithSuspendedStep: GetWorkflowRunByIdResponse = {
+  runId: 'run-suspended-1',
+  workflowName: WORKFLOW_NAME,
+  status: 'suspended',
+  createdAt: RUN_BASE,
+  updatedAt: RUN_BASE,
+  serializedStepGraph: [],
+  steps: {
+    'step-1': {
+      status: 'suspended',
+      startedAt: RUN_BASE.getTime(),
+      suspendPayload: { reason: 'needs approval' },
+    },
+  },
+};

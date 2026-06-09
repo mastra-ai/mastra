@@ -1,5 +1,7 @@
-import { Button, Label } from '@mastra/playground-ui';
+import { Button, Label, cn } from '@mastra/playground-ui';
+import type { ButtonProps } from '@mastra/playground-ui';
 import { Loader2 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useEffect, useRef, useCallback, useMemo } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
@@ -15,6 +17,10 @@ interface DynamicFormProps {
   isSubmitLoading?: boolean;
   submitButtonLabel?: string;
   submitButtonClassName?: string;
+  submitButtonIcon?: ReactNode;
+  submitButtonVariant?: ButtonProps['variant'];
+  submitButtonFullWidth?: boolean;
+  disableSubmit?: boolean;
   className?: string;
   readOnly?: boolean;
   children?: React.ReactNode;
@@ -48,6 +54,10 @@ export function DynamicForm({
   isSubmitLoading,
   submitButtonLabel,
   submitButtonClassName,
+  submitButtonIcon,
+  submitButtonVariant,
+  submitButtonFullWidth,
+  disableSubmit,
   className,
   readOnly,
   children,
@@ -118,18 +128,40 @@ export function DynamicForm({
     () => ({
       SubmitButton: ({ children: buttonChildren }: { children: React.ReactNode }) =>
         onSubmit ? (
-          <div className="flex items-center justify-between gap-1">
-            {leftActions ?? <div />}
-            <div className="flex items-center gap-1">
+          <div className={cn('flex items-center justify-between gap-1', submitButtonFullWidth && 'block')}>
+            {!submitButtonFullWidth && (leftActions ?? <div />)}
+            <div className={cn('flex items-center gap-1', submitButtonFullWidth && 'w-full')}>
               {submitActions}
-              <Button disabled={isSubmitLoading} className={submitButtonClassName}>
-                {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel || buttonChildren}
+              <Button
+                variant={submitButtonVariant}
+                disabled={isSubmitLoading || disableSubmit}
+                className={cn(submitButtonFullWidth && 'w-full justify-center', submitButtonClassName)}
+              >
+                {isSubmitLoading ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <>
+                    {submitButtonIcon}
+                    {submitButtonLabel || buttonChildren}
+                  </>
+                )}
               </Button>
             </div>
           </div>
         ) : null,
     }),
-    [onSubmit, isSubmitLoading, submitButtonLabel, submitButtonClassName, submitActions, leftActions],
+    [
+      onSubmit,
+      isSubmitLoading,
+      submitButtonLabel,
+      submitButtonClassName,
+      submitButtonIcon,
+      submitButtonVariant,
+      submitButtonFullWidth,
+      submitActions,
+      leftActions,
+      disableSubmit,
+    ],
   );
 
   // Memoize form components to prevent unnecessary re-renders

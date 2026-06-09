@@ -22,6 +22,27 @@ export interface WorkflowRecentRunsProps {
   runId?: string;
 }
 
+function formatRunTitle(snapshot: unknown, fallback: string): string {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return fallback;
+  }
+
+  const input = (snapshot as { context?: { input?: unknown } }).context?.input;
+  if (input === undefined || input === null) {
+    return fallback;
+  }
+
+  if (typeof input === 'string') {
+    return input;
+  }
+
+  try {
+    return JSON.stringify(input);
+  } catch {
+    return fallback;
+  }
+}
+
 export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProps) => {
   const [deleteRunId, setDeleteRunId] = useState<string | null>(null);
   const { canDelete } = usePermissions();
@@ -54,7 +75,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
         <Collapsible defaultOpen>
           <CollapsibleTrigger className="flex w-full items-center gap-2 px-5 pb-2 pt-1 text-left">
             <ChevronRight className="h-4 w-4 shrink-0 text-neutral3" />
-            <Txt as="span" variant="ui-md" className="text-neutral3 font-semibold">
+            <Txt as="span" variant="ui-sm" className="text-neutral3">
               Recent runs
             </Txt>
           </CollapsibleTrigger>
@@ -65,38 +86,40 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
               ) : (
                 <ThreadListItems>
                   {actualRuns.map(run => (
-                <ThreadListItem
-                  key={run.runId}
-                  as={Link}
-                  to={paths.workflowRunLink(workflowId, run.runId)}
-                  isActive={run.runId === runId}
-                  onDelete={canDeleteRun ? () => setDeleteRunId(run.runId) : undefined}
-                  deleteLabel="delete run"
-                  className="h-auto min-h-0 items-stretch py-1"
-                >
-                  <span className="flex w-full min-w-0 items-center gap-2.5 px-1 text-left">
-                    {run?.snapshot && typeof run.snapshot === 'object' && (
-                      <WorkflowRunStatusIcon status={run.snapshot.status} />
-                    )}
-                    <span className="flex min-w-0 flex-1 flex-col items-start gap-0">
-                      <span className="block w-full min-w-0 truncate">{run.runId}</span>
-                      {run?.snapshot && typeof run.snapshot === 'object' && run.snapshot.timestamp && (
-                        <span className="text-neutral3 block w-full max-w-full truncate">
-                          {formatDate(run.snapshot.timestamp, 'MMM d, yyyy h:mm a')}
+                    <ThreadListItem
+                      key={run.runId}
+                      as={Link}
+                      to={paths.workflowRunLink(workflowId, run.runId)}
+                      isActive={run.runId === runId}
+                      onDelete={canDeleteRun ? () => setDeleteRunId(run.runId) : undefined}
+                      deleteLabel="delete run"
+                      className="h-auto min-h-0 items-stretch py-1"
+                    >
+                      <span className="flex w-full min-w-0 items-center gap-2.5 px-1 text-left">
+                        {run?.snapshot && typeof run.snapshot === 'object' && (
+                          <WorkflowRunStatusIcon status={run.snapshot.status} />
+                        )}
+                        <span className="flex min-w-0 flex-1 flex-col items-start gap-0">
+                          <span className="block w-full min-w-0 truncate text-xs">
+                            {formatRunTitle(run.snapshot, run.runId)}
+                          </span>
+                          {run?.snapshot && typeof run.snapshot === 'object' && run.snapshot.timestamp && (
+                            <span className="text-neutral3 block w-full max-w-full truncate text-xs">
+                              {formatDate(run.snapshot.timestamp, 'MMM d, yyyy h:mm a')}
+                            </span>
+                          )}
                         </span>
-                      )}
-                    </span>
-                  </span>
-                </ThreadListItem>
-              ))}
+                      </span>
+                    </ThreadListItem>
+                  ))}
 
-              {isFetchingNextPage && (
-                <li className="flex justify-center items-center py-2">
-                  <Icon>
-                    <Spinner />
-                  </Icon>
-                </li>
-              )}
+                  {isFetchingNextPage && (
+                    <li className="flex justify-center items-center py-2">
+                      <Icon>
+                        <Spinner />
+                      </Icon>
+                    </li>
+                  )}
                   <li>
                     <div ref={setEndOfListElement} />
                   </li>

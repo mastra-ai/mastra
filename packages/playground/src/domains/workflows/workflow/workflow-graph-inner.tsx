@@ -13,6 +13,7 @@ import { WorkflowDefaultNode } from './workflow-default-node';
 import { WorkflowLoopResultNode } from './workflow-loop-result-node';
 import type { NestedNode } from './workflow-nested-node';
 import { WorkflowNestedNode } from './workflow-nested-node';
+import { WorkflowSuspendedOverlay } from './workflow-suspended-overlay';
 import { ZoomSlider } from './zoom-slider';
 
 export interface WorkflowGraphInnerProps {
@@ -55,7 +56,8 @@ export function WorkflowGraphInner({ workflow }: WorkflowGraphInnerProps) {
   };
 
   return (
-    <div className="w-full h-full bg-surface2">
+    <div className="relative w-full h-full bg-surface2">
+      <WorkflowSuspendedOverlay />
       <ReactFlow
         nodes={nodes}
         edges={edges.map(e => ({

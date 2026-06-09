@@ -1,5 +1,5 @@
 import { Button, Icon } from '@mastra/playground-ui';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Play } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ZodSchema } from 'zod';
 
@@ -12,10 +12,13 @@ export interface WorkflowTriggerFormProps {
   defaultValues?: any;
   isViewingRun?: boolean;
   isReadOnly?: boolean;
+  disableSubmit?: boolean;
   isProcessorWorkflow?: boolean;
   submitActions?: ReactNode;
   leftActions?: ReactNode;
   heading?: string;
+  headingSlot?: ReactNode;
+  collapsible?: boolean;
 }
 
 export function WorkflowTriggerForm({
@@ -25,10 +28,13 @@ export function WorkflowTriggerForm({
   defaultValues,
   isViewingRun,
   isReadOnly,
+  disableSubmit,
   isProcessorWorkflow,
   submitActions,
   leftActions,
   heading,
+  headingSlot,
+  collapsible,
 }: WorkflowTriggerFormProps) {
   if (zodSchema) {
     return (
@@ -37,13 +43,22 @@ export function WorkflowTriggerForm({
         defaultValues={defaultValues}
         isSubmitLoading={isStreaming}
         submitButtonLabel="Run"
+        submitButtonVariant="primary"
+        submitButtonIcon={
+          <Icon>
+            <Play />
+          </Icon>
+        }
         onSubmit={onExecute}
         withoutSubmit={isViewingRun}
         isReadOnly={isReadOnly}
+        disableSubmit={disableSubmit}
         isProcessorWorkflow={isProcessorWorkflow}
         submitActions={submitActions}
         leftActions={leftActions}
         heading={heading}
+        headingSlot={headingSlot}
+        collapsible={collapsible}
       />
     );
   }
@@ -57,14 +72,17 @@ export function WorkflowTriggerForm({
       {leftActions ?? <div />}
       <div className="flex items-center gap-1">
         {submitActions}
-        <Button variant="default" disabled={isStreaming} onClick={() => onExecute(null)}>
+        <Button variant="primary" disabled={isStreaming || disableSubmit} onClick={() => onExecute(null)}>
           {isStreaming ? (
             <Icon>
               <Loader2 className="animate-spin" />
             </Icon>
           ) : (
-            'Trigger'
+            <Icon>
+              <Play />
+            </Icon>
           )}
+          Run
         </Button>
       </div>
     </div>

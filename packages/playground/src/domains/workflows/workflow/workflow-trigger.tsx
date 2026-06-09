@@ -1,15 +1,15 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { ScrollArea, Skeleton, Txt, Icon, toast, Switch } from '@mastra/playground-ui';
+import type { WorkflowRunStatus } from '@mastra/core/workflows';
+import { ScrollArea, Skeleton, Txt, Icon, Badge, WorkflowIcon, toast, Switch, CopyButton } from '@mastra/playground-ui';
 import { Loader2 } from 'lucide-react';
 import { useState, useEffect, useContext } from 'react';
 import { WorkflowRequestContextDialog } from '../components/workflow-request-context-dialog';
 import { WorkflowRunOptionsDialog } from '../components/workflow-run-options-dialog';
+import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useSuspendedSteps, useWorkflowSchemas } from './use-workflow-trigger';
 import { WorkflowCancelButton } from './workflow-cancel-button';
-import { WorkflowSuspendedSteps } from './workflow-suspended-steps';
-import type { ResumeStepParams } from './workflow-suspended-steps';
 import { WorkflowTriggerForm } from './workflow-trigger-form';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
@@ -17,6 +17,7 @@ import { useMergedRequestContext } from '@/domains/request-context/context/schem
 export interface WorkflowTriggerProps {
   workflowId: string;
   paramsRunId?: string;
+  paramsRunStatus?: WorkflowRunStatus;
   setRunId?: (runId: string) => void;
   workflow?: GetWorkflowResponse;
   isLoading?: boolean;
@@ -77,11 +78,11 @@ function DebugModeSwitch() {
 export function WorkflowTrigger({
   workflowId,
   paramsRunId,
+  paramsRunStatus,
   setRunId,
   workflow,
   isLoading,
   createWorkflowRun,
-  resumeWorkflow,
   streamWorkflow,
   observeWorkflowStream,
   isStreamingWorkflow,
@@ -128,23 +129,6 @@ export function WorkflowTrigger({
     }
   };
 
-  const handleResumeWorkflow = async (step: ResumeStepParams) => {
-    if (!workflow) return;
-
-    setCancelResponse(null);
-    const { stepId, runId: prevRunId, resumeData } = step;
-
-    const run = await createWorkflowRun({ workflowId, prevRunId });
-
-    await resumeWorkflow({
-      step: stepId,
-      runId: run.runId,
-      resumeData,
-      workflowId,
-      requestContext,
-    });
-  };
-
   const handleCancelWorkflowRun = async () => {
     const response = await cancelWorkflowRun({ workflowId, runId: innerRunId });
     setCancelResponse(response);
@@ -182,6 +166,42 @@ export function WorkflowTrigger({
 
   const isSuspendedSteps = suspendedSteps.length > 0;
 
+  const activeRunId = paramsRunId || innerRunId;
+  const isViewingRun = !!activeRunId;
+  const stepsCount = Object.keys(workflow?.steps ?? {}).length;
+  const runStatus = streamResultToUse?.status ?? paramsRunStatus;
+
+  const triggerHeadingSlot = (
+    <div className="flex w-full items-center gap-2">
+      <Icon className="shrink-0 text-neutral4">
+        <WorkflowIcon />
+      </Icon>
+      <Txt as="span" variant="ui-md" className="text-neutral5 font-semibold truncate">
+        {workflow?.name ?? workflowId}
+      </Txt>
+      <CopyButton content={workflow?.name ?? workflowId} variant="ghost" className="shrink-0" />
+      <Badge className="ml-auto shrink-0">
+        {stepsCount} step{stepsCount > 1 ? 's' : ''}
+      </Badge>
+    </div>
+  );
+
+  const runHeadingSlot = (
+    <div className="flex w-full items-center gap-2">
+      <Icon className="shrink-0 text-neutral4">
+        <WorkflowIcon />
+      </Icon>
+      <Txt as="span" variant="ui-md" className="text-neutral5 font-semibold truncate" title={activeRunId}>
+        {activeRunId}
+      </Txt>
+      {runStatus && (
+        <span className="ml-auto shrink-0">
+          <WorkflowRunStatusIcon status={runStatus} />
+        </span>
+      )}
+    </div>
+  );
+
   return (
     <div className="h-full pt-3 overflow-y-auto">
       <div className="space-y-4 border-b border-border1/50">
@@ -199,15 +219,17 @@ export function WorkflowTrigger({
             <WorkflowTriggerForm
               zodSchema={zodSchemaToUse}
               defaultValues={payload}
-              isStreaming={isStreamingWorkflow}
+              isStreaming={isStreamingWorkflow || isSuspendedSteps}
               onExecute={data => {
                 setPayload(data);
                 void handleExecuteWorkflow(data);
               }}
-              isViewingRun={!!paramsRunId}
+              isViewingRun={!!paramsRunId || hasFinished}
               isReadOnly={!!paramsRunId || hasFinished || isSuspendedSteps}
+              disableSubmit={isSuspendedSteps}
               isProcessorWorkflow={workflow?.isProcessorWorkflow}
-              heading={(!paramsRunId && hasFinished) || isSuspendedSteps ? 'Run input' : undefined}
+              collapsible={false}
+              headingSlot={isViewingRun ? runHeadingSlot : triggerHeadingSlot}
               leftActions={!paramsRunId ? <DebugModeSwitch /> : undefined}
               submitActions={
                 <>
@@ -227,24 +249,17 @@ export function WorkflowTrigger({
           </Txt>
         )}
 
-        <WorkflowSuspendedSteps
-          suspendedSteps={suspendedSteps}
-          workflow={workflow}
-          isStreaming={isStreamingWorkflow}
-          onResume={handleResumeWorkflow}
-        />
-
-        {result?.status === 'running' && (
-          <div className="px-5">
+        {(result?.status === 'running' || isSuspendedSteps) && (
+          <div className="px-5 pb-4 -mt-2">
             <WorkflowCancelButton
-              status={result?.status}
+              status={isSuspendedSteps ? 'suspended' : result?.status}
               cancelMessage={cancelResponse?.message ?? null}
               isCancelling={isCancellingWorkflowRun}
               onCancel={handleCancelWorkflowRun}
+              disabled={isSuspendedSteps}
             />
           </div>
         )}
-
       </div>
     </div>
   );

@@ -1,17 +1,16 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import {
-  Button,
+  Badge,
   CodeEditor,
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+  Icon,
   Txt,
+  cn,
 } from '@mastra/playground-ui';
 import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
-import { CirclePause, FileJson } from 'lucide-react';
+import { ChevronRight, CirclePause, MoveDownLeft, MoveUpRight, Play } from 'lucide-react';
 import { useState } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
@@ -36,6 +35,24 @@ export interface WorkflowSuspendedStepsProps {
   onResume: (step: ResumeStepParams) => void;
 }
 
+function formatPayloadSize(payload: unknown): string {
+  const size = new Blob([JSON.stringify(payload ?? null)]).size;
+  if (size < 1024) {
+    return `${size} B`;
+  }
+  return `${(size / 1024).toFixed(1)} KB`;
+}
+
+function getPayloadLabel(payload: unknown, fallback: string): string {
+  if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+    const keys = Object.keys(payload as Record<string, unknown>);
+    if (keys.length === 1) {
+      return keys[0];
+    }
+  }
+  return fallback;
+}
+
 export function WorkflowSuspendedSteps({
   suspendedSteps,
   workflow,
@@ -47,12 +64,18 @@ export function WorkflowSuspendedSteps({
   }
 
   return (
-    <div className="bg-accent3Dark py-4 space-y-4 border-y-2 border-accent3">
-      <Txt as="p" variant="ui-md" className="flex items-center gap-2 text-accent3 pb-4 px-5">
-        <CirclePause className="h-4 w-4" />
-        A step suspended
-      </Txt>
-      {suspendedSteps.map(step => {
+    <div className="bg-surface4 p-4 space-y-4 border border-border1 rounded-lg">
+      <div className="flex items-center justify-between gap-2">
+        <Txt as="p" variant="ui-md" className="flex items-center gap-2 text-neutral6 font-semibold">
+          <Icon>
+            <CirclePause />
+          </Icon>
+          Step suspended
+        </Txt>
+        <Badge variant="warning">Needs input</Badge>
+      </div>
+
+      {suspendedSteps.map((step, index) => {
         const stepDefinition = workflow.allSteps[step.stepId];
         if (!stepDefinition || stepDefinition.isWorkflow) return null;
 
@@ -62,9 +85,10 @@ export function WorkflowSuspendedSteps({
 
         return (
           <SuspendedStepCard
-            key={step.stepId}
+            key={`${step.runId}-${step.stepId}-${index}`}
             step={step}
             stepSchema={stepSchema}
+            description={stepDefinition.description}
             isStreaming={isStreaming}
             onResume={onResume}
           />
@@ -77,69 +101,90 @@ export function WorkflowSuspendedSteps({
 interface SuspendedStepCardProps {
   step: SuspendedStep;
   stepSchema: z.ZodSchema;
+  description?: string;
   isStreaming: boolean;
   onResume: (step: ResumeStepParams) => void;
 }
 
-function SuspendedStepCard({ step, stepSchema, isStreaming, onResume }: SuspendedStepCardProps) {
+function SuspendedStepCard({ step, stepSchema, description, isStreaming, onResume }: SuspendedStepCardProps) {
   const [isPayloadOpen, setIsPayloadOpen] = useState(false);
 
   return (
-    <div className="flex flex-col gap-3 px-5" key={step.stepId}>
-      <Txt variant="ui-xs" className="text-neutral3">
-        {step.stepId}
-      </Txt>
+    <div className="space-y-4">
+      <div className="space-y-1">
+        <Txt as="p" variant="ui-md" className="text-neutral6 font-medium truncate">
+          {step.stepId}
+        </Txt>
+        {description && (
+          <Txt as="p" variant="ui-sm" className="text-neutral3">
+            {description}
+          </Txt>
+        )}
+      </div>
 
       {step.suspendPayload && (
-        <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setIsPayloadOpen(true)}
-            className="self-start border-accent3/40 text-accent3 hover:bg-accent3/15 hover:text-accent3 hover:border-accent3/60 active:bg-accent3/25"
-          >
-            <FileJson className="h-4 w-4" />
-            Suspension payload
-          </Button>
+        <div className="space-y-2">
+          <Txt as="p" variant="ui-sm" className="flex items-center gap-2 text-neutral3">
+            <Icon>
+              <MoveDownLeft />
+            </Icon>
+            The step is asking
+          </Txt>
 
-          <Dialog open={isPayloadOpen} onOpenChange={setIsPayloadOpen}>
-            <DialogContent className="max-w-3xl">
-              <DialogHeader>
-                <DialogTitle>Suspension payload</DialogTitle>
-                <DialogDescription>{step.stepId}</DialogDescription>
-              </DialogHeader>
-              <DialogBody className="max-h-[70vh]">
-                <div data-testid="suspended-payload">
-                  <CodeEditor
-                    data={step.suspendPayload}
-                    className="w-full overflow-x-auto p-2"
-                    showCopyButton={false}
+          <Collapsible open={isPayloadOpen} onOpenChange={setIsPayloadOpen}>
+            <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 rounded-lg border border-border1 bg-surface3 px-3 py-2.5">
+              <span className="flex items-center gap-2 min-w-0">
+                <Icon>
+                  <ChevronRight
+                    className={cn('transition-transform text-neutral3', { 'transform rotate-90': isPayloadOpen })}
                   />
-                </div>
-              </DialogBody>
-            </DialogContent>
-          </Dialog>
-        </>
+                </Icon>
+                <Txt as="span" variant="ui-md" className="text-neutral6 truncate">
+                  {getPayloadLabel(step.suspendPayload, step.stepId)}
+                </Txt>
+              </span>
+              <Txt as="span" variant="ui-sm" className="text-neutral3 shrink-0">
+                {formatPayloadSize(step.suspendPayload)}
+              </Txt>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div data-testid="suspended-payload" className="pt-2">
+                <CodeEditor data={step.suspendPayload} className="w-full overflow-x-auto p-2" showCopyButton={false} />
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
       )}
 
-      <WorkflowInputData
-        schema={stepSchema}
-        isSubmitLoading={isStreaming}
-        submitButtonLabel="Resume workflow"
-        heading="Expected data"
-        headingClassName="text-accent3"
-        submitButtonClassName="bg-accent3 border-accent3 text-surface1 hover:bg-accent3/90 hover:text-surface1 active:bg-accent3/80"
-        onSubmit={data => {
-          const stepIds = step.stepId?.split('.');
-          onResume({
-            stepId: stepIds,
-            runId: step.runId,
-            suspendPayload: step.suspendPayload,
-            resumeData: data,
-            isLoading: false,
-          });
-        }}
-      />
+      <div className="space-y-2">
+        <Txt as="p" variant="ui-sm" className="flex items-center gap-2 text-neutral3">
+          <Icon>
+            <MoveUpRight />
+          </Icon>
+          Your response
+        </Txt>
+
+        <WorkflowInputData
+          schema={stepSchema}
+          isSubmitLoading={isStreaming}
+          submitButtonLabel="Resume"
+          submitButtonIcon={<Play />}
+          submitButtonFullWidth
+          collapsible={false}
+          hideHeading
+          hideInputTypeLabel
+          onSubmit={data => {
+            const stepIds = step.stepId?.split('.');
+            onResume({
+              stepId: stepIds,
+              runId: step.runId,
+              suspendPayload: step.suspendPayload,
+              resumeData: data,
+              isLoading: false,
+            });
+          }}
+        />
+      </div>
     </div>
   );
 }

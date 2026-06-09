@@ -28,7 +28,7 @@ export const Workflow = () => {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="min-h-0 flex-1 p-2 pb-0">
+      <div className="relative min-h-0 flex-1 p-2 pb-0">
         <WorkflowGraph workflowId={workflowId!} workflow={workflow ?? undefined} isLoading={isLoading} />
       </div>
       <WorkflowTimeline />

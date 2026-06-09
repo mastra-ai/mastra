@@ -6,12 +6,20 @@ export interface WorkflowCancelButtonProps {
   cancelMessage: string | null;
   isCancelling: boolean;
   onCancel: () => void;
+  disabled?: boolean;
 }
 
 const DONE_STATUSES = ['success', 'failed', 'canceled', 'tripwire'];
+const VISIBLE_STATUSES = ['running', 'suspended'];
 
-export function WorkflowCancelButton({ status, cancelMessage, isCancelling, onCancel }: WorkflowCancelButtonProps) {
-  if (status !== 'running') {
+export function WorkflowCancelButton({
+  status,
+  cancelMessage,
+  isCancelling,
+  onCancel,
+  disabled,
+}: WorkflowCancelButtonProps) {
+  if (!status || !VISIBLE_STATUSES.includes(status)) {
     return null;
   }
 
@@ -21,7 +29,7 @@ export function WorkflowCancelButton({ status, cancelMessage, isCancelling, onCa
       variant="default"
       className="w-full"
       onClick={onCancel}
-      disabled={!!cancelMessage || isCancelling || (status && DONE_STATUSES.includes(status))}
+      disabled={disabled || !!cancelMessage || isCancelling || DONE_STATUSES.includes(status)}
     >
       {isCancelling ? (
         <Icon>

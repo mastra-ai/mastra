@@ -4,6 +4,7 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
+  Icon,
   Select,
   SelectContent,
   SelectItem,
@@ -12,7 +13,8 @@ import {
   Txt,
   cn,
 } from '@mastra/playground-ui';
-import { ChevronRight, Loader2 } from 'lucide-react';
+import { ChevronRight, Loader2, Play } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import type { ZodSchema } from 'zod';
 
@@ -30,13 +32,21 @@ export interface WorkflowInputDataProps {
   onSubmit: (data: any) => void;
   withoutSubmit?: boolean;
   isReadOnly?: boolean;
+  disableSubmit?: boolean;
   children?: React.ReactNode;
   isProcessorWorkflow?: boolean;
   submitActions?: React.ReactNode;
   leftActions?: React.ReactNode;
   heading?: string;
+  headingSlot?: ReactNode;
+  collapsible?: boolean;
   headingClassName?: string;
   submitButtonClassName?: string;
+  submitButtonIcon?: ReactNode;
+  submitButtonVariant?: React.ComponentProps<typeof Button>['variant'];
+  submitButtonFullWidth?: boolean;
+  hideInputTypeLabel?: boolean;
+  hideHeading?: boolean;
 }
 
 export const WorkflowInputData = ({
@@ -44,6 +54,7 @@ export const WorkflowInputData = ({
   defaultValues,
   withoutSubmit,
   isReadOnly,
+  disableSubmit,
   isSubmitLoading,
   submitButtonLabel,
   onSubmit,
@@ -52,8 +63,15 @@ export const WorkflowInputData = ({
   submitActions,
   leftActions,
   heading,
+  headingSlot,
+  collapsible = true,
   headingClassName,
   submitButtonClassName,
+  submitButtonIcon,
+  submitButtonVariant,
+  submitButtonFullWidth,
+  hideInputTypeLabel,
+  hideHeading,
 }: WorkflowInputDataProps) => {
   const [type, setType] = useState<InputType>(isProcessorWorkflow ? 'simple' : 'form');
   const [mounted, setMounted] = useState(false);
@@ -66,34 +84,34 @@ export const WorkflowInputData = ({
     return null;
   }
 
-  return (
-    <Collapsible defaultOpen>
-      <CollapsibleTrigger className="flex w-full items-center gap-2 pb-3 text-left">
-        <ChevronRight className="h-4 w-4 shrink-0 text-neutral3" />
-        <Txt as="span" variant="ui-md" className={cn('text-neutral5 font-semibold', headingClassName)}>
-          {heading ?? (withoutSubmit ? 'Run input' : 'Trigger a run')}
-        </Txt>
-      </CollapsibleTrigger>
+  const defaultHeading = (
+    <Txt as="span" variant="ui-md" className={cn('text-neutral5 font-semibold', headingClassName)}>
+      {heading ?? (withoutSubmit ? 'Run input' : 'Trigger a run')}
+    </Txt>
+  );
 
-      <CollapsibleContent>
-        <div className="space-y-2 pb-4">
+  const body = (
+    <>
+      <div className="space-y-2 pb-4">
+        {!hideInputTypeLabel && (
           <Txt as="p" variant="ui-sm" className="text-neutral3">
-            Input
+            Run input
           </Txt>
-          <WorkflowInputTypeToggle
-            value={type}
-            onChange={setType}
-            disabled={isSubmitLoading}
-            includeSimple={isProcessorWorkflow}
-          />
-        </div>
+        )}
+        <WorkflowInputTypeToggle
+          value={type}
+          onChange={setType}
+          disabled={isSubmitLoading}
+          includeSimple={isProcessorWorkflow}
+        />
+      </div>
 
-        <div
-          className={cn('pb-4', {
-            'opacity-50 pointer-events-none': isSubmitLoading,
-          })}
-        >
-          {type === 'simple' && isProcessorWorkflow ? (
+      <div
+        className={cn('pb-4', {
+          'opacity-50 pointer-events-none': isSubmitLoading,
+        })}
+      >
+        {type === 'simple' && isProcessorWorkflow ? (
           <SimpleProcessorInput
             schema={schema}
             defaultValues={defaultValues}
@@ -103,6 +121,7 @@ export const WorkflowInputData = ({
             onSubmit={onSubmit}
             withoutSubmit={withoutSubmit}
             isReadOnly={isReadOnly}
+            disableSubmit={disableSubmit}
             submitActions={submitActions}
             leftActions={leftActions}
           >
@@ -115,8 +134,12 @@ export const WorkflowInputData = ({
             isSubmitLoading={isSubmitLoading}
             submitButtonLabel={submitButtonLabel}
             submitButtonClassName={submitButtonClassName}
+            submitButtonIcon={submitButtonIcon}
+            submitButtonVariant={submitButtonVariant}
+            submitButtonFullWidth={submitButtonFullWidth}
             onSubmit={withoutSubmit ? undefined : onSubmit}
             readOnly={isReadOnly}
+            disableSubmit={disableSubmit}
             submitActions={submitActions}
             leftActions={leftActions}
           >
@@ -132,14 +155,34 @@ export const WorkflowInputData = ({
             onSubmit={onSubmit}
             withoutSubmit={withoutSubmit}
             isReadOnly={isReadOnly}
+            disableSubmit={disableSubmit}
             submitActions={submitActions}
             leftActions={leftActions}
           >
             {children}
           </JSONInput>
         )}
-        </div>
-      </CollapsibleContent>
+      </div>
+    </>
+  );
+
+  if (!collapsible) {
+    return (
+      <div>
+        {!hideHeading && <div className="pb-3">{headingSlot ?? defaultHeading}</div>}
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <Collapsible defaultOpen>
+      <CollapsibleTrigger className="flex w-full items-center gap-2 pb-3 text-left">
+        <ChevronRight className="h-4 w-4 shrink-0 text-neutral3" />
+        {headingSlot ?? defaultHeading}
+      </CollapsibleTrigger>
+
+      <CollapsibleContent>{body}</CollapsibleContent>
     </Collapsible>
   );
 };
@@ -152,10 +195,13 @@ const JSONInput = ({
   onSubmit,
   withoutSubmit,
   isReadOnly,
+  disableSubmit,
   children,
   submitActions,
   leftActions,
   submitButtonClassName,
+  submitButtonIcon,
+  submitButtonVariant,
 }: WorkflowInputDataProps) => {
   const [errors, setErrors] = useState<string[]>([]);
   const [inputData, setInputData] = useState<string>(() => JSON.stringify(defaultValues ?? {}, null, 2));
@@ -214,8 +260,24 @@ const JSONInput = ({
           {leftActions ?? <div />}
           <div className="flex items-center gap-1">
             {submitActions}
-            <Button variant="default" onClick={handleSubmit} className={submitButtonClassName}>
-              {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
+            <Button
+              variant={submitButtonVariant ?? 'primary'}
+              onClick={handleSubmit}
+              disabled={isSubmitLoading || disableSubmit}
+              className={submitButtonClassName}
+            >
+              {isSubmitLoading ? (
+                <Icon>
+                  <Loader2 className="animate-spin" />
+                </Icon>
+              ) : (
+                (submitButtonIcon ?? (
+                  <Icon>
+                    <Play />
+                  </Icon>
+                ))
+              )}
+              {submitButtonLabel}
             </Button>
           </div>
         </div>
@@ -252,10 +314,13 @@ const SimpleProcessorInput = ({
   onSubmit,
   withoutSubmit,
   isReadOnly,
+  disableSubmit,
   children,
   submitActions,
   leftActions,
   submitButtonClassName,
+  submitButtonIcon,
+  submitButtonVariant,
 }: WorkflowInputDataProps) => {
   const [message, setMessage] = useState(() => getDefaultProcessorMessage(defaultValues));
   const [phase, setPhase] = useState(() => getDefaultProcessorPhase(defaultValues));
@@ -360,8 +425,24 @@ const SimpleProcessorInput = ({
           {leftActions ?? <div />}
           <div className="flex items-center gap-1">
             {submitActions}
-            <Button variant="default" onClick={handleSubmit} className={submitButtonClassName}>
-              {isSubmitLoading ? <Loader2 className="animate-spin" /> : submitButtonLabel}
+            <Button
+              variant={submitButtonVariant ?? 'primary'}
+              onClick={handleSubmit}
+              disabled={isSubmitLoading || disableSubmit}
+              className={submitButtonClassName}
+            >
+              {isSubmitLoading ? (
+                <Icon>
+                  <Loader2 className="animate-spin" />
+                </Icon>
+              ) : (
+                (submitButtonIcon ?? (
+                  <Icon>
+                    <Play />
+                  </Icon>
+                ))
+              )}
+              {submitButtonLabel}
             </Button>
           </div>
         </div>

@@ -13,7 +13,7 @@ import { useWorkflow } from '@/hooks/use-workflows';
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();
   const { data: workflow, isLoading: isWorkflowLoading } = useWorkflow(workflowId);
-  const { data: runExecutionResult } = useWorkflowRun(workflowId ?? '', runId ?? '');
+  const { data: runExecutionResult, isLoading: isRunLoading } = useWorkflowRun(workflowId ?? '', runId ?? '');
 
   if (!workflowId) {
     return (
@@ -25,7 +25,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  if (isWorkflowLoading) {
+  if (isWorkflowLoading || (Boolean(runId) && isRunLoading)) {
     return (
       <div className="h-full p-4">
         <Skeleton className="h-full" />

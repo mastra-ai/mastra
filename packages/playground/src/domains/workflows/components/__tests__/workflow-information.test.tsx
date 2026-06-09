@@ -6,7 +6,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { http, HttpResponse } from 'msw';
 import type { AnchorHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { WorkflowRunProvider } from '../../context/workflow-run-context';
 import { emptyWorkflowRuns, oneSuccessfulRun } from '../../runs/__tests__/fixtures/workflow-runs';
@@ -274,55 +274,55 @@ describe('WorkflowInformation', () => {
   });
 
   describe('collapsible sections', () => {
-    it('renders "Trigger a run" and "Recent runs" expanded by default', async () => {
+    it('renders the trigger header non-collapsible with "Recent runs" expanded by default', async () => {
       stubCapabilities();
       stubWorkflow(baseWorkflow);
       stubRuns(emptyWorkflowRuns);
 
       renderInformation();
 
-      // Both section triggers exist and report expanded
-      const triggerSection = await screen.findByRole('button', { name: 'Trigger a run' });
+      // The trigger header is no longer a collapsible section; it shows the workflow name.
+      expect(await screen.findByText('Demo Workflow')).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Trigger a run' })).toBeNull();
+
+      // Recent runs remains a collapsible section, expanded by default.
       const recentRunsSection = await screen.findByRole('button', { name: 'Recent runs' });
-      expect(triggerSection.getAttribute('aria-expanded')).toBe('true');
       expect(recentRunsSection.getAttribute('aria-expanded')).toBe('true');
 
-      // Their content is visible by default
+      // The trigger input content is visible.
       expect(await screen.findByRole('radiogroup', { name: 'Input type' })).not.toBeNull();
     });
 
-    it('collapses the "Trigger a run" section when its header is clicked', async () => {
+    it('keeps the trigger input content visible (the header does not collapse)', async () => {
       stubCapabilities();
       stubWorkflow(baseWorkflow);
       stubRuns(emptyWorkflowRuns);
 
       renderInformation();
 
-      const triggerSection = await screen.findByRole('button', { name: 'Trigger a run' });
+      // Clicking the workflow name does not collapse the input content.
+      const triggerHeader = await screen.findByText('Demo Workflow');
       expect(await screen.findByRole('radiogroup', { name: 'Input type' })).not.toBeNull();
 
-      fireEvent.click(triggerSection);
+      fireEvent.click(triggerHeader);
 
-      await waitFor(() => {
-        expect(screen.queryByRole('radiogroup', { name: 'Input type' })).toBeNull();
-      });
-      expect(triggerSection.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.getByRole('radiogroup', { name: 'Input type' })).not.toBeNull();
     });
   });
 
   describe('input section heading', () => {
-    it('shows "Trigger a run" when there is no active run', async () => {
+    it('shows the workflow name and "Run input" label when there is no active run', async () => {
       stubCapabilities();
       stubWorkflow(baseWorkflow);
       stubRuns(emptyWorkflowRuns);
 
       renderInformation();
 
-      expect(await screen.findByText('Trigger a run')).not.toBeNull();
-      expect(screen.queryByText('Run input')).toBeNull();
+      expect(await screen.findByText('Demo Workflow')).not.toBeNull();
+      expect(await screen.findByText('Run input')).not.toBeNull();
     });
 
-    it('shows "Run input" (not "Trigger a run") when viewing a specific run', async () => {
+    it('shows the run ID and "Run input" label when viewing a specific run', async () => {
       stubCapabilities();
       stubWorkflow(baseWorkflow);
       stubRuns(oneSuccessfulRun);
@@ -331,7 +331,23 @@ describe('WorkflowInformation', () => {
       renderInformation('run-success-1');
 
       expect(await screen.findByText('Run input')).not.toBeNull();
-      expect(screen.queryByText('Trigger a run')).toBeNull();
+      expect((await screen.findAllByText('run-success-1')).length).toBeGreaterThan(0);
+    });
+
+    it('copies the workflow name to the clipboard via the copy button', async () => {
+      const writeText = vi.fn<(text: string) => Promise<void>>().mockResolvedValue(undefined);
+      Object.assign(navigator, { clipboard: { writeText } });
+
+      stubCapabilities();
+      stubWorkflow(baseWorkflow);
+      stubRuns(emptyWorkflowRuns);
+
+      renderInformation();
+
+      const copyButton = await screen.findByRole('button', { name: 'Copy to clipboard' });
+      fireEvent.click(copyButton);
+
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith('Demo Workflow'));
     });
   });
 
@@ -423,5 +439,4 @@ describe('WorkflowInformation', () => {
       });
     });
   });
-
 });
