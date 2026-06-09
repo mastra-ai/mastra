@@ -322,7 +322,10 @@ export interface Config<
    * - `server.auth` handles API authentication (external customers)
    * - `studio.auth` handles Studio authentication (internal team)
    *
-   * If not configured, Studio falls back to development mode (no auth required).
+   * **Dual auth is opt-in:** If `studio.auth` is not configured, Studio requests
+   * fall back to `server.auth` for backward compatibility. To enable strict
+   * separation between Studio and API auth, configure both `studio.auth` and
+   * `server.auth`.
    *
    * @example
    * ```typescript

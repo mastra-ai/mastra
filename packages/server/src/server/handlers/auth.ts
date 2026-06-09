@@ -20,7 +20,7 @@ import type { MastraAuthProvider } from '@mastra/core/server';
 
 import { z } from 'zod/v4';
 import { supportsSessionRefresh } from '../auth/helpers';
-import { MASTRA_USER_PERMISSIONS_KEY } from '../constants';
+import { MASTRA_USER_PERMISSIONS_KEY, MASTRA_CLIENT_TYPE_HEADER, isStudioClientTypeHeader } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   capabilitiesResponseSchema,
@@ -105,7 +105,7 @@ function getAuthProvider(mastra: any, isStudio?: boolean): MastraAuthProvider | 
  * Check if the request is from Studio (via x-mastra-client-type header).
  */
 function isStudioRequest(request: Request): boolean {
-  return request.headers.get('x-mastra-client-type') === 'studio';
+  return isStudioClientTypeHeader(request.headers.get(MASTRA_CLIENT_TYPE_HEADER) ?? undefined);
 }
 
 /**
