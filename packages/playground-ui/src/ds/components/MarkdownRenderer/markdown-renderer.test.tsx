@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '../Tooltip';
 import { MarkdownRenderer } from './markdown-renderer';
 
-vi.mock('@/ds/components/CodeEditor', () => ({
+vi.mock('@/ds/components/CodeEditor/highlight', () => ({
   highlight: vi.fn(async () => [
     [
       {
@@ -24,7 +24,7 @@ afterEach(() => {
 });
 
 describe('MarkdownRenderer', () => {
-  it('renders fenced code blocks', async () => {
+  it('renders fenced code blocks through the shared Code renderer', async () => {
     render(
       <TooltipProvider>
         <MarkdownRenderer>{'```typescript\nconst ok = true;\n```'}</MarkdownRenderer>
@@ -36,5 +36,21 @@ describe('MarkdownRenderer', () => {
     expect(token.classList.contains('shiki-token')).toBe(true);
     expect(token.style.getPropertyValue('--shiki-light')).toBe('#24292f');
     expect(token.style.getPropertyValue('--shiki-dark')).toBe('#c9d1d9');
+    expect(token.closest('pre')).not.toBeNull();
+  });
+
+  it('renders inline code as a plain non-copyable <code> element', () => {
+    render(
+      <TooltipProvider>
+        <MarkdownRenderer>{'Use the `MASTRA_API_KEY` env var.'}</MarkdownRenderer>
+      </TooltipProvider>,
+    );
+
+    const inline = screen.getByText('MASTRA_API_KEY');
+
+    expect(inline.tagName).toBe('CODE');
+    expect(inline.closest('pre')).toBeNull();
+    expect(inline.querySelector('.shiki-token')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Copy to clipboard' })).toBeNull();
   });
 });

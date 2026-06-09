@@ -1,10 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import Markdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { ThemedToken } from 'shiki/core';
 
-import { highlight } from '@/ds/components/CodeEditor';
+import { Code } from '@/ds/components/Code';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { cn } from '@/lib/utils';
 
@@ -22,76 +21,6 @@ export function MarkdownRenderer({ children }: MarkdownRendererProps) {
   );
 }
 
-interface HighlightedPre extends React.HTMLAttributes<HTMLPreElement> {
-  children: string;
-  language: string;
-}
-
-function tokenStyle(token: ThemedToken): React.CSSProperties | undefined {
-  if (token.htmlStyle && typeof token.htmlStyle === 'object') {
-    return token.htmlStyle as React.CSSProperties;
-  }
-
-  return token.color ? { color: token.color } : undefined;
-}
-
-const HighlightedPre = React.memo(({ children, language, ...props }: HighlightedPre) => {
-  const [tokens, setTokens] = useState<ThemedToken[][]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void highlight(children, language)
-      .then(result => {
-        if (!cancelled) setTokens(result ?? []);
-      })
-      .catch(() => {
-        if (!cancelled) setTokens([]);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [children, language]);
-
-  if (!tokens.length) {
-    return <pre {...props}>{children}</pre>;
-  }
-
-  let codeOffset = 0;
-
-  return (
-    <pre {...props}>
-      <code>
-        {tokens.map((line, lineIndex) => {
-          const lineOffset = codeOffset;
-          let tokenOffset = lineOffset;
-          const tokenSpans = line.map(token => {
-            const key = tokenOffset;
-            tokenOffset += token.content.length;
-
-            return (
-              <span key={key} className="shiki-token" style={tokenStyle(token)}>
-                {token.content}
-              </span>
-            );
-          });
-
-          codeOffset = tokenOffset + 1;
-
-          return (
-            <React.Fragment key={lineOffset}>
-              <span>{tokenSpans}</span>
-              {lineIndex !== tokens.length - 1 && '\n'}
-            </React.Fragment>
-          );
-        })}
-      </code>
-    </pre>
-  );
-});
-HighlightedPre.displayName = 'HighlightedCode';
-
 interface CodeBlockProps extends React.HTMLAttributes<HTMLPreElement> {
   children: React.ReactNode;
   className?: string;
@@ -108,9 +37,7 @@ const CodeBlock = ({ children, className, language, ...restProps }: CodeBlockPro
 
   return (
     <div className="group/code relative mb-4">
-      <HighlightedPre language={language} className={preClass} {...restProps}>
-        {code}
-      </HighlightedPre>
+      <Code code={code} lang={language} className={preClass} {...restProps} />
 
       <div className="invisible absolute right-2 top-2 flex gap-1 rounded-lg p-1 opacity-0 transition-all duration-200 group-hover/code:visible group-hover/code:opacity-100">
         <CopyButton content={code} copyMessage="Copied code to clipboard" />
