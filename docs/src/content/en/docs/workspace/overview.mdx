@@ -310,6 +310,32 @@ const workspace = new Workspace({
 
 The agent sees `view`, `search_content`, `find_files`, `execute_command`, and `lsp_inspect` instead of the default `mastra_workspace_*` names. Tool names must be unique — duplicate names or conflicts with other default names throw an error.
 
+### Tool hooks
+
+Set `tools.hooks` to run logic before and after every enabled workspace tool call. Hooks run after name remapping, so the hook context includes both the exposed `toolName` and the original `workspaceToolName`:
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  tools: {
+    hooks: {
+      beforeToolCall: ({ toolName, workspaceToolName, input }) => {
+        console.log(`Running ${toolName} (${workspaceToolName})`, input)
+      },
+      afterToolCall: ({ toolName, output, error }) => {
+        console.log(`Finished ${toolName}`, { output, error })
+      },
+    },
+  },
+})
+```
+
+Return `{ proceed: false, output }` from `beforeToolCall` to skip the tool call and use `output` as its result.
+
+If the owning agent also defines [tool hooks](/docs/agents/using-tools#run-logic-around-tool-calls), workspace hooks run inside the agent hook wrapper: agent `beforeToolCall` first, then workspace `beforeToolCall`, then the tool, then workspace `afterToolCall`, then agent `afterToolCall`.
+
 ## LSP inspection
 
 Enable `lsp` on a workspace to add semantic code inspection through language servers. This adds the `mastra_workspace_lsp_inspect` tool by default, which can return hover information, definition locations, and implementations for a symbol at a specific cursor position.

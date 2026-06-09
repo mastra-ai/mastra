@@ -115,6 +115,7 @@ export * from './ds/icons/index';
 export * from './ds/tokens';
 
 // DS Primitives
+export * from './ds/primitives/control-size';
 export * from './ds/primitives/form-element';
 export * from './ds/primitives/transitions';
 

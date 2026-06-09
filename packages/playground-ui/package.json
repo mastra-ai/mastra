@@ -127,6 +127,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "eslint-plugin-storybook": "^10.4.2",
     "jsdom": "^26.1.0",
+    "msw": "^2.12.11",
     "react": "catalog:",
     "react-dom": "catalog:",
     "rollup-plugin-node-externals": "^8.1.2",
