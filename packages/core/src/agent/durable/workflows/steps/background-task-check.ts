@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import type { PubSub } from '../../../../events/pubsub';
 import { ChunkFrom } from '../../../../stream/types';
-import { createStep } from '../../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
+import { createStep } from '../../../../workflows/workflow';
 import { DurableStepIds } from '../../constants';
 import { globalRunRegistry } from '../../run-registry';
 import { emitChunkEvent } from '../../stream-adapter';

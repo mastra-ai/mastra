@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { createStep } from '../../../../workflows';
+import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
 import type { MastraDBMessage } from '../../../message-list';
 import { DurableStepIds } from '../../constants';
