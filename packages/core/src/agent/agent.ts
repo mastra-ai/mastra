@@ -6308,9 +6308,16 @@ export class Agent<
       const result = await run.start({ ...observabilityContext });
       return result;
     } finally {
-      // Prepare-stream is single-shot per #execute call — no resume path that
-      // would need the registration to outlive this scope, so always unregister.
-      effectiveMastra.__unregisterInternalWorkflow(executionWorkflow.id, executionRunId);
+      // Defer unregistration so in-flight events delivered asynchronously
+      // (e.g. through UnixSocketPubSub) can still resolve the workflow.
+      // With synchronous transports (EventEmitterPubSub) the microtask
+      // fires immediately after; with async transports it gives the event
+      // loop one turn to drain queued callbacks. The sweep mechanism
+      // (#sweepStaleRunScopedWorkflows) acts as a safety net for any
+      // registration that outlives this grace period.
+      queueMicrotask(() => {
+        effectiveMastra.__unregisterInternalWorkflow(executionWorkflow.id, executionRunId);
+      });
       // The prepare-stream workflow opts out of persisting via `shouldPersistSnapshot: () => false`,
       // but the evented engine's `EventedRun.start` still writes the initial 'running' row
       // (see issue #17137). Drop it here so this throwaway internal workflow never leaves a

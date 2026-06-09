@@ -6,6 +6,27 @@ const mocks = vi.hoisted(() => {
 
   class MockPubSub {}
 
+  class MockEventEmitterPubSub {
+    readonly published: Array<{ topic: string; event: unknown }> = [];
+    readonly subscriptions: Map<string, Array<(event: unknown) => void>> = new Map();
+
+    async publish(topic: string, event: unknown): Promise<void> {
+      this.published.push({ topic, event });
+    }
+
+    async subscribe(topic: string, cb: (event: unknown) => void): Promise<void> {
+      const cbs = this.subscriptions.get(topic) ?? [];
+      cbs.push(cb);
+      this.subscriptions.set(topic, cbs);
+    }
+
+    async unsubscribe(): Promise<void> {}
+
+    async flush(): Promise<void> {}
+
+    async close(): Promise<void> {}
+  }
+
   class MockUnixSocketPubSub {
     readonly socketPath: string;
     readonly published: Array<{ topic: string; event: unknown }> = [];
@@ -37,6 +58,7 @@ const mocks = vi.hoisted(() => {
   return {
     instances,
     MockPubSub,
+    MockEventEmitterPubSub,
     MockUnixSocketPubSub,
     mkdir: vi.fn(() => mkdirImpl()),
     setMkdirImpl: (impl: () => Promise<void>) => {
@@ -51,6 +73,7 @@ vi.mock('node:fs/promises', () => ({
 
 vi.mock('@mastra/core/events', () => ({
   PubSub: mocks.MockPubSub,
+  EventEmitterPubSub: mocks.MockEventEmitterPubSub,
   UnixSocketPubSub: mocks.MockUnixSocketPubSub,
 }));
 
@@ -143,5 +166,18 @@ describe('SignalsPubSub', () => {
     await expect(publishPromise).rejects.toThrow('SignalsPubSub is closed');
     expect(mocks.instances).toHaveLength(0);
     expect(pubsub.getSocket(topic)).toBeUndefined();
+  });
+
+  it('delegates non-signal topics to in-memory EventEmitterPubSub', async () => {
+    const { createSignalsPubSub } = await import('../signals-pubsub.js');
+    const resourceId = '11111111-1111-4111-8111-111111111111';
+
+    const pubsub = createSignalsPubSub(resourceId);
+    await pubsub.publish('workflows', event);
+    await pubsub.publish('workflows-finish', event);
+
+    // No Unix sockets should be created for non-signal topics
+    expect(mocks.instances).toHaveLength(0);
+    expect(mocks.mkdir).not.toHaveBeenCalled();
   });
 });
