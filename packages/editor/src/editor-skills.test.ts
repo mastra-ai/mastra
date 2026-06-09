@@ -3,6 +3,7 @@ import { z } from 'zod';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { LibSQLStore } from '@mastra/libsql';
@@ -28,7 +29,10 @@ const mockLogger = () => ({
 
 let testStorageCount = 0;
 const createSetup = async () => {
-  const storage = new LibSQLStore({ id: `skill-test-${testStorageCount++}`, url: ':memory:' });
+  const storage = new LibSQLStore({
+    id: `skill-test-${testStorageCount++}`,
+    url: `file:${os.tmpdir()}/mastra-test-${randomUUID()}.db`,
+  });
   const editor = new MastraEditor({ logger: mockLogger() as any });
   const mastra = new Mastra({ storage, editor });
   await storage.init();
@@ -667,7 +671,10 @@ describe('editor.skill — agent resolution strategies', () => {
   });
 
   const createAgentSetup = async () => {
-    const storage = new LibSQLStore({ id: `skill-agent-${testStorageCount++}`, url: ':memory:' });
+    const storage = new LibSQLStore({
+      id: `skill-agent-${testStorageCount++}`,
+      url: `file:${os.tmpdir()}/mastra-test-${randomUUID()}.db`,
+    });
     const editor = new MastraEditor({ logger: mockLogger() as any });
     const mastra = new Mastra({
       storage,
@@ -861,7 +868,10 @@ describe('editor.skill — end-to-end: publish → agent → skill discovery', (
   });
 
   const createE2ESetup = async () => {
-    const storage = new LibSQLStore({ id: `skill-e2e-${testStorageCount++}`, url: ':memory:' });
+    const storage = new LibSQLStore({
+      id: `skill-e2e-${testStorageCount++}`,
+      url: `file:${os.tmpdir()}/mastra-test-${randomUUID()}.db`,
+    });
     const editor = new MastraEditor({ logger: mockLogger() as any });
     const mastra = new Mastra({
       storage,
@@ -1110,7 +1120,10 @@ describe('editor.skill — agent execution integration', () => {
   });
 
   const createExecSetup = async (extraTools?: Record<string, any>) => {
-    const storage = new LibSQLStore({ id: `skill-exec-${testStorageCount++}`, url: ':memory:' });
+    const storage = new LibSQLStore({
+      id: `skill-exec-${testStorageCount++}`,
+      url: `file:${os.tmpdir()}/mastra-test-${randomUUID()}.db`,
+    });
     const editor = new MastraEditor({ logger: mockLogger() as any });
     const mastra = new Mastra({
       storage,
@@ -1666,7 +1679,10 @@ describe('editor.skill — live strategy execution', () => {
   });
 
   const createLiveSetup = async () => {
-    const storage = new LibSQLStore({ id: `live-skill-${testStorageCount++}`, url: ':memory:' });
+    const storage = new LibSQLStore({
+      id: `live-skill-${testStorageCount++}`,
+      url: `file:${os.tmpdir()}/mastra-test-${randomUUID()}.db`,
+    });
     const editor = new MastraEditor({ logger: mockLogger() as any });
     const mastra = new Mastra({
       storage,

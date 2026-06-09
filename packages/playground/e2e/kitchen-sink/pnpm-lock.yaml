@@ -48,14 +48,14 @@ importers:
         version: link:../../../cli
       msw:
         specifier: ^2.13.6
-        version: 2.14.6(@types/node@22.19.19)(typescript@5.9.3)
+        version: 2.14.6(@types/node@22.19.20)(typescript@5.9.3)
       zod:
         specifier: ^4.3.6
         version: 4.4.3
     devDependencies:
       '@types/node':
-        specifier: 22.19.19
-        version: 22.19.19
+        specifier: 22.19.20
+        version: 22.19.20
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
@@ -136,8 +136,8 @@ packages:
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
 
-  '@types/node@22.19.19':
-    resolution: {integrity: sha512-dyh/xO2Fh5bYrfWaaqGrRQQGkNdmYw6AmaAUvYeUMNTWQtvb796ikLdmTchRmOlOiIJ1TDXfWgVx1QkUlQ6Hew==}
+  '@types/node@22.19.20':
+    resolution: {integrity: sha512-6tELRwSDYWW9EdZhbeZmYGZ1/7Djkt+Ah3/ScEYT9cDord7UJzasR/4D3VONg9tQI5CDp+/CZC1AXj2pCFOvpw==}
 
   '@types/set-cookie-parser@2.4.10':
     resolution: {integrity: sha512-GGmQVGpQWUe5qglJozEjZV/5dyxbOOZ0LHe/lqyWssB88Y4svNfst0uqBVscdDeIKl5Jy5+aPSvy7mI9tYRguw==}
@@ -346,30 +346,30 @@ snapshots:
 
   '@inquirer/ansi@2.0.7': {}
 
-  '@inquirer/confirm@6.1.1(@types/node@22.19.19)':
+  '@inquirer/confirm@6.1.1(@types/node@22.19.20)':
     dependencies:
-      '@inquirer/core': 11.2.1(@types/node@22.19.19)
-      '@inquirer/type': 4.0.7(@types/node@22.19.19)
+      '@inquirer/core': 11.2.1(@types/node@22.19.20)
+      '@inquirer/type': 4.0.7(@types/node@22.19.20)
     optionalDependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.20
 
-  '@inquirer/core@11.2.1(@types/node@22.19.19)':
+  '@inquirer/core@11.2.1(@types/node@22.19.20)':
     dependencies:
       '@inquirer/ansi': 2.0.7
       '@inquirer/figures': 2.0.7
-      '@inquirer/type': 4.0.7(@types/node@22.19.19)
+      '@inquirer/type': 4.0.7(@types/node@22.19.20)
       cli-width: 4.1.0
       fast-wrap-ansi: 0.2.2
       mute-stream: 3.0.0
       signal-exit: 4.1.0
     optionalDependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.20
 
   '@inquirer/figures@2.0.7': {}
 
-  '@inquirer/type@4.0.7(@types/node@22.19.19)':
+  '@inquirer/type@4.0.7(@types/node@22.19.20)':
     optionalDependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.20
 
   '@mswjs/interceptors@0.41.9':
     dependencies:
@@ -395,13 +395,13 @@ snapshots:
 
   '@standard-schema/spec@1.1.0': {}
 
-  '@types/node@22.19.19':
+  '@types/node@22.19.20':
     dependencies:
       undici-types: 6.21.0
 
   '@types/set-cookie-parser@2.4.10':
     dependencies:
-      '@types/node': 22.19.19
+      '@types/node': 22.19.20
 
   '@types/statuses@2.0.6': {}
 
@@ -468,9 +468,9 @@ snapshots:
 
   json-schema@0.4.0: {}
 
-  msw@2.14.6(@types/node@22.19.19)(typescript@5.9.3):
+  msw@2.14.6(@types/node@22.19.20)(typescript@5.9.3):
     dependencies:
-      '@inquirer/confirm': 6.1.1(@types/node@22.19.19)
+      '@inquirer/confirm': 6.1.1(@types/node@22.19.20)
       '@mswjs/interceptors': 0.41.9
       '@open-draft/deferred-promise': 3.0.0
       '@types/statuses': 2.0.6

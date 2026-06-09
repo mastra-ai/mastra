@@ -8,3 +8,4 @@ export * from './filesystem-versioned';
 export * from './git-history';
 export * from './domains';
 export * from './utils';
+export * from './workflow-snapshot';
