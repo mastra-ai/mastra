@@ -132,9 +132,7 @@ describe('mc send-message reproduction', () => {
 
     // With the fix, the error should propagate through the subscription stream
     // and the harness should emit an error event instead of silently completing
-    const errorEvent = events.find(
-      (e): e is Extract<HarnessEvent, { type: 'error' }> => e.type === 'error',
-    );
+    const errorEvent = events.find((e): e is Extract<HarnessEvent, { type: 'error' }> => e.type === 'error');
     expect(errorEvent).toBeDefined();
     expect(errorEvent!.error.message).toContain('No model selected');
   }, 30000);
