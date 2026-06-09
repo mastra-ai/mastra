@@ -29,6 +29,15 @@ import type {
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
+/**
+ * TTL for the cross-process thread lease acquired in the idle-wake path.
+ * Sized to comfortably exceed typical Lambda max durations so a winning
+ * run does not lose its lease mid-stream.
+ *
+ * Leases are released explicitly on run-completed / run-aborted and on
+ * stream error, so the TTL is only a safety net for crashes.
+ */
+const AGENT_THREAD_LEASE_TTL_MS = 15 * 60 * 1000;
 
 export let defaultAgentThreadPubSub: PubSub = new EventEmitterPubSub();
 
@@ -130,6 +139,18 @@ export class AgentThreadStreamRuntime {
   #getSourceId(): string {
     this.#id ??= randomUUID();
     return this.#id;
+  }
+
+  /**
+   * Fire-and-forget release of the cross-process thread lease held by
+   * this owner. Safe to call when no lease was ever acquired — the
+   * pubsub's `releaseLease` is a no-op for non-owners (Lua-guarded
+   * GET+DEL on Redis), and the default in-memory implementation is
+   * identical.
+   */
+  #releaseThreadLease(pubsub: PubSub | undefined, key: string, runId: string): void {
+    const resolved = this.#getPubSub(pubsub);
+    void resolved.releaseLease(key, runId).catch(() => {});
   }
 
   #getState(pubsub?: PubSub): AgentThreadRuntimeState {
@@ -348,6 +369,7 @@ export class AgentThreadStreamRuntime {
 
     const key = state.threadKeysByRunId.get(runId);
     if (key) {
+      this.#releaseThreadLease(pubsub, key, runId);
       this.#publish(pubsub, key, { type: 'run-aborted', runId });
     }
 
@@ -485,6 +507,7 @@ export class AgentThreadStreamRuntime {
         if (state.activeThreadRunIds.get(key) === runId) {
           state.activeThreadRunIds.delete(key);
         }
+        this.#releaseThreadLease(pubsub, key, runId);
         this.#publish(pubsub, key, { type: 'run-completed', runId });
       }, 0);
     });
@@ -563,6 +586,7 @@ export class AgentThreadStreamRuntime {
       if (state.activeThreadRunIds.get(key) === record.runId) {
         state.activeThreadRunIds.delete(key);
       }
+      this.#releaseThreadLease(pubsub, key, record.runId);
       this.#publish(pubsub, key, { type: 'run-completed', runId: record.runId });
       void this.#drainPendingSignals(state, pubsub, key, record);
     });
@@ -1121,8 +1145,8 @@ export class AgentThreadStreamRuntime {
     message: AgentMessageInput,
     target: SendAgentMessageOptions<OUTPUT>,
     pubsub?: PubSub,
-  ): SendAgentMessageResult {
-    return this.sendSignal(agent, createMessageSignal(message, { acceptedAt: new Date() }), target, pubsub);
+  ): SendAgentMessageResult<OUTPUT> {
+    return this.sendSignal<OUTPUT>(agent, createMessageSignal(message, { acceptedAt: new Date() }), target, pubsub);
   }
 
   queueMessage<OUTPUT = unknown>(
@@ -1130,7 +1154,7 @@ export class AgentThreadStreamRuntime {
     message: AgentMessageInput,
     target: QueueAgentMessageOptions<OUTPUT>,
     pubsub?: PubSub,
-  ): QueueAgentMessageResult {
+  ): QueueAgentMessageResult<OUTPUT> {
     const state = this.#getState(pubsub);
     const signal = createMessageSignal(message, { acceptedAt: new Date() });
     let key: string | undefined;
@@ -1173,7 +1197,7 @@ export class AgentThreadStreamRuntime {
       return { accepted: true, runId: queuedRunId, signal };
     }
 
-    return this.sendSignal(
+    return this.sendSignal<OUTPUT>(
       agent,
       signal,
       { ...target, runId, resourceId, threadId, ifIdle: { ...target.ifIdle, behavior: 'wake' } },
@@ -1186,7 +1210,7 @@ export class AgentThreadStreamRuntime {
     stateInput: AgentStateSignalInput,
     target: SendAgentStateSignalOptions<OUTPUT>,
     pubsub?: PubSub,
-  ): Promise<SendAgentStateSignalResult> {
+  ): Promise<SendAgentStateSignalResult<OUTPUT>> {
     if (!target.resourceId || !target.threadId) {
       throw new Error('resourceId and threadId are required to send a state signal');
     }
@@ -1228,7 +1252,7 @@ export class AgentThreadStreamRuntime {
       return { accepted: true, skipped: true, reason: 'unchanged' };
     }
 
-    return this.sendSignal(agent, applied.signal, target, pubsub);
+    return this.sendSignal<OUTPUT>(agent, applied.signal, target, pubsub);
   }
 
   /**
@@ -1248,7 +1272,7 @@ export class AgentThreadStreamRuntime {
     signalInput: AgentSignal,
     target: SendAgentSignalOptions<OUTPUT>,
     pubsub?: PubSub,
-  ): SendAgentSignalResult {
+  ): SendAgentSignalResult<OUTPUT> {
     const state = this.#getState(pubsub);
     let signal = createSignal({ ...signalInput, acceptedAt: new Date() });
     let key: string | undefined;
@@ -1396,27 +1420,73 @@ export class AgentThreadStreamRuntime {
     // the idle stream so concurrent callers do not launch duplicate runs.
     state.activeThreadRunIds.set(key, runId);
     state.threadKeysByRunId.set(runId, key);
-    void agent
-      .stream(signal, {
-        ...(target.ifIdle?.streamOptions as any),
-        runId,
-        memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
-      })
-      .catch(err => {
-        state.threadKeysByRunId.delete(runId);
-        this.#cleanupPreparedRun(state, runId);
-        if (state.activeThreadRunIds.get(key) === runId) {
-          state.activeThreadRunIds.delete(key);
-        }
-        this.#publish(pubsub, key, {
-          type: 'run-failed',
-          runId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        void this.#drainPendingIdleSignals(state, pubsub, key);
-      });
+    const reservedKey = key;
+    const reservedRunId = runId;
+    const resolvedPubSub = this.#getPubSub(pubsub);
+    // First acquire the cross-process lease via pubsub; on win, kick off the stream. On
+    // loss, hand the user signal off to the winning process via signal-enqueued and
+    // resolve ownerStream to undefined so the caller skips local consumption.
+    const ownerStream: Promise<MastraModelOutput<OUTPUT> | undefined> = (async () => {
+      const lease = await resolvedPubSub
+        .acquireLease(reservedKey, reservedRunId, AGENT_THREAD_LEASE_TTL_MS)
+        .catch(() => ({ acquired: true as boolean, owner: reservedRunId as string | undefined }));
 
-    return { accepted: true, runId, signal };
+      if (!lease.acquired) {
+        // Lost the wake race to another process. Roll back our optimistic local reservation
+        // so we don't trip our own activeThreadRunIds check on a follow-up.
+        if (state.activeThreadRunIds.get(reservedKey) === reservedRunId) {
+          state.activeThreadRunIds.delete(reservedKey);
+        }
+        state.threadKeysByRunId.delete(reservedRunId);
+
+        // Forward the user signal to the winning runId so the message is not dropped.
+        const winnerRunId = lease.owner;
+        if (winnerRunId) {
+          this.#publish(pubsub, reservedKey, {
+            type: 'signal-enqueued',
+            runId: winnerRunId,
+            signal: this.#serializeSignal(signal),
+            sourceId: this.#getSourceId(),
+          });
+        }
+        return undefined;
+      }
+
+      // We own the lease. Start the stream.
+      try {
+        const stream = await agent.stream(signal, {
+          ...(target.ifIdle?.streamOptions as any),
+          runId: reservedRunId,
+          memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
+        });
+        return stream;
+      } catch (error) {
+        state.threadKeysByRunId.delete(reservedRunId);
+        this.#cleanupPreparedRun(state, reservedRunId);
+        if (state.activeThreadRunIds.get(reservedKey) === reservedRunId) {
+          state.activeThreadRunIds.delete(reservedKey);
+        }
+        this.#releaseThreadLease(pubsub, reservedKey, reservedRunId);
+        this.#publish(pubsub, reservedKey, {
+          type: 'run-failed',
+          runId: reservedRunId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        void this.#drainPendingIdleSignals(state, pubsub, reservedKey);
+        throw error;
+      }
+    })();
+    // Always attach a no-op catch to the promise we keep internally so an unawaited
+    // ownerStream cannot surface as an unhandled rejection. Callers that opt in to
+    // `ownerStream` will see the rejection via their own await/catch.
+    void ownerStream.catch(() => {});
+
+    return {
+      accepted: true,
+      runId,
+      signal,
+      ownerStream,
+    };
   }
 }
 
