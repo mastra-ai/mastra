@@ -64,29 +64,34 @@ export const shopAgent = new Agent({
       description: 'Configuration for the code mode tool and generated instructions.',
       properties: [
         {
-          name: 'tools',
-          type: 'ToolsInput',
-          description: 'Tools exposed to the generated code as `external_<id>` functions. Only these tools can be called.',
-        },
-        {
-          name: 'sandbox',
-          type: 'WorkspaceSandbox',
-          description: 'Sandbox used to execute the generated code. Required unless the agent runs in a workspace that provides a sandbox. Pass `new LocalSandbox()` to run on the host explicitly.',
-          isOptional: true,
-        },
-        {
-          name: 'timeout',
-          type: 'number',
-          description: 'Execution timeout in milliseconds.',
-          isOptional: true,
-          defaultValue: '30000',
-        },
-        {
-          name: 'id',
-          type: 'string',
-          description: 'The generated tool id.',
-          isOptional: true,
-          defaultValue: 'execute_typescript',
+          type: 'CodeModeConfig',
+          parameters: [
+            {
+              name: 'tools',
+              type: 'ToolsInput',
+              description: 'Tools exposed to the generated code as `external_<id>` functions. Only these tools can be called.',
+            },
+            {
+              name: 'sandbox',
+              type: 'WorkspaceSandbox',
+              description: 'Sandbox used to execute the generated code. Required unless the agent runs in a workspace that provides a sandbox. Pass `new LocalSandbox()` to run on the host explicitly.',
+              isOptional: true,
+            },
+            {
+              name: 'timeout',
+              type: 'number',
+              description: 'Execution timeout in milliseconds.',
+              isOptional: true,
+              defaultValue: '30000',
+            },
+            {
+              name: 'id',
+              type: 'string',
+              description: 'The generated tool id.',
+              isOptional: true,
+              defaultValue: 'execute_typescript',
+            },
+          ],
         },
       ],
     },
@@ -148,21 +153,26 @@ The generated tool returns a `CodeModeToolResult`.
       isOptional: true,
       properties: [
         {
-          name: 'message',
-          type: 'string',
-          description: 'Error message.',
-        },
-        {
-          name: 'name',
-          type: 'string',
-          description: 'Error name, when available.',
-          isOptional: true,
-        },
-        {
-          name: 'line',
-          type: 'number',
-          description: 'Line number associated with the failure, when available.',
-          isOptional: true,
+          type: '{ message: string; name?: string; line?: number }',
+          parameters: [
+            {
+              name: 'message',
+              type: 'string',
+              description: 'Error message.',
+            },
+            {
+              name: 'name',
+              type: 'string',
+              description: 'Error name, when available.',
+              isOptional: true,
+            },
+            {
+              name: 'line',
+              type: 'number',
+              description: 'Line number associated with the failure, when available.',
+              isOptional: true,
+            },
+          ],
         },
       ],
     },
