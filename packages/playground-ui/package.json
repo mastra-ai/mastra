@@ -6,6 +6,9 @@
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
   "types": "dist/index.d.ts",
+  "sideEffects": [
+    "**/*.css"
+  ],
   "files": [
     "dist",
     "theme.css",
@@ -38,6 +41,12 @@
       "require": {
         "types": "./dist/utils.d.ts",
         "default": "./dist/utils.cjs.js"
+      }
+    },
+    "./components/*": {
+      "import": {
+        "types": "./dist/components/*.d.ts",
+        "default": "./dist/components/*.es.js"
       }
     },
     "./package.json": "./package.json"
