@@ -13,12 +13,6 @@ export interface HarnessMode {
   /** Unique within `HarnessConfig.modes`. Validated at construction. */
   id: string;
 
-  /**
-   * Backing agent. Must reference a key in `HarnessConfig.agents`.
-   * Validated at construction — unknown id throws `HarnessConfigError`.
-   */
-  agentId: string;
-
   /** bootstrap model default when a session enters this mode. */
   defaultModelId: string;
 

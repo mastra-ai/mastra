@@ -1,5 +1,106 @@
 # mastracode
 
+## 0.22.3-alpha.3
+
+### Patch Changes
+
+- Added interface-first model gateways while keeping the existing `MastraModelGateway` base class backwards compatible. ([#17608](https://github.com/mastra-ai/mastra/pull/17608))
+
+  Added `MastraModelGatewayInterface` for plain object/custom gateway implementations and optional gateway `resolveAuth` hooks.
+
+  Moved MastraCode gateway-routed OAuth model construction into a custom Mastra gateway so `ModelRouterLanguageModel` can route through gateway `resolveAuth` and provider-specific `resolveLanguageModel` behavior.
+
+  **Usage:**
+
+  ```typescript
+  import { MastraModelGatewayInterface, ModelRouterLanguageModel } from '@mastra/core/llm';
+
+  const myGateway: MastraModelGatewayInterface = {
+    id: 'my-gateway',
+    name: 'My Gateway',
+    async fetchProviders() {
+      return {};
+    },
+    buildUrl() {
+      return 'https://api.example.com';
+    },
+    async getApiKey() {
+      return process.env.API_KEY ?? '';
+    },
+    // Optional: own authentication lookup
+    async resolveAuth(request) {
+      return { apiKey: process.env.API_KEY, source: 'gateway' };
+    },
+    async resolveLanguageModel({ modelId, providerId, apiKey }) {
+      // Return an AI SDK language model instance
+    },
+  };
+
+  // Register and route through the gateway
+  const router = new ModelRouterLanguageModel({ modelId: 'my-gateway/provider/model' }, [myGateway]);
+  ```
+
+  **Additional changes in this release:**
+  - Inline three-tier auth resolution (explicit → gateway.resolveAuth → legacy getApiKey) into `ModelRouterLanguageModel.resolveAuth` and deprecate the standalone `resolveModelAuth` helper.
+  - Fix `defaultGateways` deduplication in the `Mastra` class to use `getGatewayId(gateway)` instead of registry keys.
+  - Remove no-op `resolveModelId` identity function in mastracode in favor of direct usage.
+  - Fix `defaultNameGenerator` regex in `_llm-recorder` to anchor directory matches to path boundaries (prevents false matches like `-auth` suffixes).
+
+- Updated dependencies [[`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`053735a`](https://github.com/mastra-ai/mastra/commit/053735a75c2c18e23ce34d9468007efa4a45f4c4), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`a952852`](https://github.com/mastra-ai/mastra/commit/a952852c971a21fb646cd907c75fcf4443cdc963)]:
+  - @mastra/core@1.42.0-alpha.3
+
+## 0.22.3-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`014e00f`](https://github.com/mastra-ai/mastra/commit/014e00f2b3a597a016b72f9901c6ab27d491f822)]:
+  - @mastra/core@1.42.0-alpha.2
+
+## 0.22.3-alpha.1
+
+### Patch Changes
+
+- Increased TUI chat scroll buffer from 200/100 to 5000/3000 components, so you can scroll back much further in conversation history ([#17633](https://github.com/mastra-ai/mastra/pull/17633))
+
+- Fixed state signal placement in streamed MastraCode output. ([#17631](https://github.com/mastra-ai/mastra/pull/17631))
+
+- Fixed the GitHub PR badge in MastraCode so it animates only while GitHub polling is actively running, instead of restarting whenever the agent processes a user message. ([#17590](https://github.com/mastra-ai/mastra/pull/17590))
+
+- Added agent and workspace tool hooks for applications that need to run logic before and after tool calls execute. Mastra Code now uses agent hooks so hook handlers run for built-in workspace tools as well as dynamic tools. ([#17637](https://github.com/mastra-ai/mastra/pull/17637))
+
+  **Example**
+
+  ```ts
+  const agent = new Agent({
+    name: 'Support Agent',
+    instructions: 'Help users.',
+    model,
+    hooks: {
+      beforeToolCall: ({ toolName, input }) => {
+        console.log(`Running ${toolName}`, input);
+      },
+      afterToolCall: ({ toolName, output, error }) => {
+        console.log(`Finished ${toolName}`, { output, error });
+      },
+    },
+  });
+
+  const workspace = new Workspace({
+    tools: {
+      hooks: {
+        beforeToolCall: ({ toolName, workspaceToolName, input }) => {
+          console.log(`Running ${toolName} from ${workspaceToolName}`, input);
+        },
+      },
+    },
+  });
+  ```
+
+- Updated dependencies [[`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`2bccba4`](https://github.com/mastra-ai/mastra/commit/2bccba4c03cadc815c2d54cbf4dd43a922140a8d), [`f2ab060`](https://github.com/mastra-ai/mastra/commit/f2ab060162bea81505fda553e2cee29c1979fd04), [`5d302c8`](https://github.com/mastra-ai/mastra/commit/5d302c8eda1a6ac74eab5e442c4f64db6cc97a06), [`f2ab060`](https://github.com/mastra-ai/mastra/commit/f2ab060162bea81505fda553e2cee29c1979fd04)]:
+  - @mastra/core@1.42.0-alpha.1
+  - @mastra/github-signals@0.1.1-alpha.0
+  - @mastra/agent-browser@0.3.1-alpha.0
+
 ## 0.22.3-alpha.0
 
 ### Patch Changes

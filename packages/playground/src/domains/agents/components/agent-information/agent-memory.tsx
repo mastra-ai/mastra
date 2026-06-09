@@ -102,7 +102,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
   }
 
   return (
-    <div className="flex flex-col h-full min-w-0 overflow-hidden">
+    <div className="flex flex-col min-w-0">
       {/* Clone Thread Section */}
       {threadId && (
         <div className="p-4 border-b border-border1">
@@ -176,7 +176,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
 
       {/* Working Memory & Config Section - hidden for gateway memory */}
       {!isGatewayMemory && (
-        <div className="flex-1 overflow-y-auto">
+        <div>
           <AgentWorkingMemory agentId={agentId} />
           <div className="border-t border-border1">
             <AgentMemoryConfig agentId={agentId} />

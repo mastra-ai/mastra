@@ -14,24 +14,6 @@
   size-adjust: 107.1194%;
 }
 
-/*
-@font-face {
-  font-family: 'Greed';
-  src: url('/fonts/GreedVF.woff2') format('woff2');
-  font-display: swap;
-  font-weight: 400 900;
-}
-
-@font-face {
-  font-family: 'Greed Fallback';
-  src: local('Arial'), local('ArialMT');
-  ascent-override: 96.0022%;
-  descent-override: 20.3123%;
-  size-adjust: 93.5395%;
-  line-gap-override: 0%;
-}
-*/
-
 @font-face {
   font-family: 'Geist Mono';
   src: url('/fonts/GeistMonoVF.woff2') format('woff2');
