@@ -177,7 +177,12 @@ describe('SignalsPubSub', () => {
   });
 
   it('cleans stale .sock files on construction', async () => {
-    mocks.setReaddirImpl(async () => ['workflows.sock', 'workflows-finish.sock', 'some-thread.sock', 'not-a-socket.txt']);
+    mocks.setReaddirImpl(async () => [
+      'workflows.sock',
+      'workflows-finish.sock',
+      'some-thread.sock',
+      'not-a-socket.txt',
+    ]);
 
     const { createSignalsPubSub } = await import('../signals-pubsub.js');
     const resourceId = '11111111-1111-4111-8111-111111111111';

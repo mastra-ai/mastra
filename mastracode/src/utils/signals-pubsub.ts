@@ -136,9 +136,7 @@ class SignalsPubSub extends PubSub {
     const dir = join('/tmp/mc', this.#resourceId);
     try {
       const entries = await readdir(dir);
-      await Promise.allSettled(
-        entries.filter(f => f.endsWith('.sock')).map(f => rm(join(dir, f), { force: true })),
-      );
+      await Promise.allSettled(entries.filter(f => f.endsWith('.sock')).map(f => rm(join(dir, f), { force: true })));
     } catch {
       // Directory doesn't exist yet — nothing to clean.
     }
