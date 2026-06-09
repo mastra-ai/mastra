@@ -9,7 +9,7 @@ import { InternalSpans } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { MastraModelOutput } from '../../../stream';
 import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../../../tools';
-import { createEventedWorkflow as createWorkflow } from '../../../workflows/create';
+import { createEventedWorkflow, createWorkflow as createDirectWorkflow } from '../../../workflows/create';
 import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
@@ -163,7 +163,17 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     runScope,
   });
 
-  return createWorkflow({
+  // Internal toggle: when MASTRA_DIRECT_EXECUTION=true, bypass the evented
+  // workflow engine and run steps directly in-process. This avoids the
+  // requestContext serialisation cycle (toJSON → reconstruct) which drops
+  // non-serialisable values (functions, circular-ref objects like the harness
+  // context). The evented engine is the default because it enables cross-process
+  // coordination via pubsub; the direct path is a safe fallback for environments
+  // where serialisation loss causes tool failures (e.g. "no harness context").
+  const useDirectExecution = process.env.MASTRA_DIRECT_EXECUTION === 'true';
+  const factory = useDirectExecution ? createDirectWorkflow : createEventedWorkflow;
+
+  return factory({
     id: 'execution-workflow',
     inputSchema: z.object({}),
     outputSchema: z.instanceof(MastraModelOutput<OUTPUT>),
