@@ -27,6 +27,53 @@ import {
 import type { ChatProps } from '@/types';
 
 /**
+ * The OM/error stream chunks this provider reacts to are not part of the
+ * typed `useChat` chunk union (the SDK surfaces them with an opaque `data`
+ * payload), so we narrow them locally. Each variant only declares the `data`
+ * fields the OM handlers actually read.
+ */
+type OmStreamChunk =
+  | { type: 'data-om-observation-start'; data?: { operationType?: string } }
+  | { type: 'data-om-observation-end'; data?: { operationType?: string } }
+  | { type: 'data-om-observation-failed'; data?: { operationType?: string } }
+  | {
+      type: 'data-om-status';
+      data?: {
+        windows?: unknown;
+        recordId?: string;
+        threadId?: string;
+        stepNumber?: number;
+        generationCount?: number;
+      };
+    }
+  | { type: 'data-om-activation'; data?: { operationType?: string; cycleId?: string } };
+
+type ErrorStreamChunk = { type: 'error'; runId?: string; payload?: { error?: unknown } };
+
+type HandledStreamChunk = OmStreamChunk | ErrorStreamChunk;
+
+/**
+ * Narrow an arbitrary stream/network chunk to the OM/error variants this
+ * provider handles. Returns the typed chunk when its `type` matches, else
+ * `undefined`. Centralises the single boundary cast so the call sites stay
+ * fully typed.
+ */
+const asHandledStreamChunk = (chunk: unknown): HandledStreamChunk | undefined => {
+  const type = (chunk as { type?: unknown }).type;
+  if (
+    type === 'error' ||
+    type === 'data-om-observation-start' ||
+    type === 'data-om-observation-end' ||
+    type === 'data-om-observation-failed' ||
+    type === 'data-om-status' ||
+    type === 'data-om-activation'
+  ) {
+    return chunk as HandledStreamChunk;
+  }
+  return undefined;
+};
+
+/**
  * Runtime + dispatch context for the main agent chat.
  *
  * Replaces the assistant-ui `MastraRuntimeProvider` (`useExternalStoreRuntime`)
@@ -287,24 +334,25 @@ export function ChatProvider({
               if (chunk.type === 'network-execution-event-step-finish') {
                 refreshThreadList?.();
               }
-              if ((chunk as any).type === 'error') {
-                setStreamErrors(prev => [...prev, buildStreamErrorMessage(chunk as any)]);
+              const handled = asHandledStreamChunk(chunk);
+              if (handled?.type === 'error') {
+                setStreamErrors(prev => [...prev, buildStreamErrorMessage(handled)]);
               }
-              if ((chunk as any).type === 'data-om-observation-start') {
-                handleObservationStart((chunk as any).data?.operationType);
+              if (handled?.type === 'data-om-observation-start') {
+                handleObservationStart(handled.data?.operationType);
               }
-              if ((chunk as any).type === 'data-om-status') {
-                handleProgressUpdate((chunk as any).data);
+              if (handled?.type === 'data-om-status') {
+                handleProgressUpdate(handled.data);
               }
               if (
-                (chunk as any).type === 'data-om-observation-end' ||
-                (chunk as any).type === 'data-om-observation-failed' ||
-                (chunk as any).type === 'data-om-activation'
+                handled?.type === 'data-om-observation-end' ||
+                handled?.type === 'data-om-observation-failed' ||
+                handled?.type === 'data-om-activation'
               ) {
-                refreshObservationalMemory((chunk as any).data?.operationType);
+                refreshObservationalMemory(handled.data?.operationType);
               }
-              if ((chunk as any).type === 'data-om-activation') {
-                handleActivation((chunk as any).data);
+              if (handled?.type === 'data-om-activation') {
+                handleActivation(handled.data);
               }
             },
           });
@@ -349,21 +397,22 @@ export function ChatProvider({
               ) {
                 void refreshWorkingMemory?.();
               }
-              if (chunk.type === 'data-om-observation-start') {
-                handleObservationStart((chunk as any).data?.operationType);
+              const handled = asHandledStreamChunk(chunk);
+              if (handled?.type === 'data-om-observation-start') {
+                handleObservationStart(handled.data?.operationType);
               }
-              if (chunk.type === 'data-om-status') {
-                handleProgressUpdate((chunk as any).data);
+              if (handled?.type === 'data-om-status') {
+                handleProgressUpdate(handled.data);
               }
               if (
-                chunk.type === 'data-om-observation-end' ||
-                chunk.type === 'data-om-observation-failed' ||
-                chunk.type === 'data-om-activation'
+                handled?.type === 'data-om-observation-end' ||
+                handled?.type === 'data-om-observation-failed' ||
+                handled?.type === 'data-om-activation'
               ) {
-                refreshObservationalMemory((chunk as any).data?.operationType);
+                refreshObservationalMemory(handled.data?.operationType);
               }
-              if (chunk.type === 'data-om-activation') {
-                handleActivation((chunk as any).data);
+              if (handled?.type === 'data-om-activation') {
+                handleActivation(handled.data);
               }
             },
             signal: controller.signal,

@@ -23,7 +23,7 @@ export interface MessagesContextValue {
 }
 
 export interface RunningContextValue {
-  /** True while streaming OR awaiting a tool approval. Feeds ThreadRuntimeState. */
+  /** True while streaming OR awaiting a tool approval. Gates composer send/cancel state. */
   isRunning: boolean;
   /** Cancels the in-flight run (abort + OM reset + cancelRun). */
   cancelRun: () => void | Promise<void>;

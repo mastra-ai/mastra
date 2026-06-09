@@ -76,37 +76,37 @@ const toAttachment = (file: File): ComposerAttachment => {
 const attachmentToCoreUserMessage = async (att: ComposerAttachment): Promise<CoreUserMessage> => {
   if (att.kind === 'image') {
     return {
-      role: 'user',
+      role: 'user' as const,
       content: [
         {
-          type: 'image',
+          type: 'image' as const,
           image: att.isUrl ? att.name : await fileToBase64(att.file),
           mimeType: att.contentType,
         },
       ],
-    } as CoreUserMessage;
+    };
   }
 
   if (att.kind === 'pdf') {
     const data = att.isUrl ? att.name : `data:application/pdf;base64,${await fileToBase64(att.file)}`;
     return {
-      role: 'user',
+      role: 'user' as const,
       content: [
         {
-          type: 'file',
+          type: 'file' as const,
           data,
           mimeType: att.contentType,
           filename: att.name,
         },
       ],
-    } as CoreUserMessage;
+    };
   }
 
   const text = await fileToText(att.file);
   return {
-    role: 'user',
+    role: 'user' as const,
     content: text,
-  } as CoreUserMessage;
+  };
 };
 
 export const ComposerAttachmentsProvider = ({ children }: { children: ReactNode }) => {

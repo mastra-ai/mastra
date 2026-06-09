@@ -16,11 +16,10 @@ import { resetStorage } from '../../__utils__/reset-storage';
  * candidate was incorrectly submitting the chat. Issue #16464 — the original
  * fix tracked composition state in a ref that got stuck `true` when users
  * switched input methods mid-composition (Caps Lock / Cmd+Space), permanently
- * killing Enter. The current implementation delegates IME handling to
- * `@assistant-ui/react`'s ComposerPrimitive.Input, which reads the
- * browser-owned `event.isComposing` flag directly on each keydown and only
- * tracks composition state via the live `compositionstart` / `compositionend`
- * events — so there is no ref state that can get stuck.
+ * killing Enter. The current implementation uses a plain `<textarea>` whose
+ * `onKeyDown` reads the browser-owned `event.isComposing` flag (plus the
+ * `keyCode === 229` fallback) directly on each keydown — so there is no ref
+ * state that can get stuck.
  */
 
 let page: Page;
@@ -130,7 +129,7 @@ test('Enter after IME switch (no compositionend) still submits — #16464 regres
   // …and deliberately DO NOT fire compositionend, mimicking the IME-switch case.
 
   // Wait until the composer is idle with text queued (Send enabled). The
-  // assistant-ui keydown handler short-circuits before preventDefault when the
+  // textarea keydown handler short-circuits before preventDefault when the
   // thread is still running, so without this the synthetic Enter below can
   // racily observe a running composer and leave defaultPrevented false.
   await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled({ timeout: 10000 });

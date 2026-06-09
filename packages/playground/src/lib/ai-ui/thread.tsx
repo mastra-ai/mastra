@@ -226,6 +226,10 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher }: Compos
                 setThreadInput?.(e.target.value);
               }}
               onKeyDown={e => {
+                // Ignore Enter while an IME composition is active (e.g. committing a
+                // CJK/pinyin candidate). `isComposing` is the browser-owned flag; the
+                // `keyCode === 229` fallback covers browsers that fire keydown without it.
+                if (e.nativeEvent.isComposing || e.keyCode === 229) return;
                 if (e.key === 'Enter' && !e.shiftKey) {
                   if (sendBlocked) return;
                   e.preventDefault();

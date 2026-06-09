@@ -157,7 +157,7 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   const toolCalled = metadata?.mode === 'network' && metadata?.hasMoreMessages ? true : undefined;
 
   const isBackgroundTaskResult =
-    result && typeof result === 'string' && (result as string)?.toLowerCase()?.includes('background task');
+    result && typeof result === 'string' && result.toLowerCase().includes('background task');
 
   if (toolName === 'updateWorkingMemory') {
     // Hide the updateWorkingMemory tool call in the UI.

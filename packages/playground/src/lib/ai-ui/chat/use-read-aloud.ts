@@ -59,7 +59,7 @@ export const useReadAloud = (agentId?: string, requestContext?: VoiceRequestCont
       if (agentId && hasAgentVoice) {
         try {
           const agent = client.getAgent(agentId);
-          const response = (await agent.voice.speak(text)) as unknown as { body?: ReadableStream };
+          const response = await agent.voice.speak(text);
           if (!response.body) {
             throw new Error('No audio stream returned from voice.speak()');
           }
