@@ -119,27 +119,27 @@ Tips:
 
 - For nested objects, put `parameters` inside a typed entry in `properties`:
 
-    ```mdx
-    <PropertiesTable
-      content={[
-        {
-          name: 'options',
-          type: 'RunOptions',
-          description: 'Options for the run.',
-          properties: [
-            {
-              type: 'RunOptions',
-              parameters: [
-                {
-                  name: 'timeout',
-                  type: 'number',
-                  description: 'Timeout in milliseconds.',
-                  isOptional: true,
-                },
-              ],
-            },
-          ],
-        },
-      ]}
-    />
-    ```
+  ```mdx
+  <PropertiesTable
+    content={[
+      {
+        name: 'options',
+        type: 'RunOptions',
+        description: 'Options for the run.',
+        properties: [
+          {
+            type: 'RunOptions',
+            parameters: [
+              {
+                name: 'timeout',
+                type: 'number',
+                description: 'Timeout in milliseconds.',
+                isOptional: true,
+              },
+            ],
+          },
+        ],
+      },
+    ]}
+  />
+  ```

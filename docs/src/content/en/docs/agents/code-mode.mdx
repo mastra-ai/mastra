@@ -30,7 +30,7 @@ Use code mode when an agent touches multiple tools to answer a user query or per
 
 ## How it works
 
-Without code mode, multi-tool queries can run the agentic loop several times: the model chooses a tool, reads the result, chooses again, and repeats. Each turn can add the full tool response to the agent's context window.
+Without code mode, multi-tool queries can run the agentic loop several times: the model chooses a tool, reads the result, chooses again, and repeats. Each turn adds the full tool response to the agent's context window which can lead to poorer reasoning and increased token usage.
 
 With code mode, your tools keep running on the host with full validation, request context, and tracing. Only the model's orchestration code runs in the sandbox. Each `external_*` call is bridged back to the real tool on the host, and the function can reduce or aggregate results before returning one response to the agent.
 
