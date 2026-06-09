@@ -7,7 +7,7 @@
  * separator rules), the full-width separator treatment, and rounded corners.
  */
 export const dataListRowOuterStyles = [
-  'data-list-row col-span-full relative mt-1 mb-[3px]',
+  'data-list-row col-span-full relative mt-[3px] mb-1',
   'after:absolute after:inset-x-[-0.25rem] after:bottom-[-0.25rem] after:h-px after:bg-border1 after:content-[""] after:pointer-events-none',
   '[&:has(+.data-list-subheader)]:after:hidden [&:not(:has(~.data-list-row))]:after:hidden',
   'transition-colors duration-200 rounded-lg',
