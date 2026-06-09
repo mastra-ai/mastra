@@ -468,3 +468,64 @@ export type ServerConfig = {
    */
   onValidationError?: ValidationErrorHook;
 };
+
+/**
+ * Configuration for Mastra Studio authentication and authorization.
+ *
+ * Studio authentication is independent from server (API) authentication,
+ * allowing you to use different providers for internal team members (Studio)
+ * vs external customers (API).
+ *
+ * @example Using separate providers for Studio and API
+ * ```typescript
+ * const mastra = new Mastra({
+ *   server: {
+ *     // API authentication for external customers
+ *     auth: new MastraAuthWorkos({ ... }),
+ *     rbac: new MastraRBACWorkos({ ... }),
+ *   },
+ *   studio: {
+ *     // Studio authentication for internal team
+ *     auth: new MastraAuthOkta({ ... }),
+ *     rbac: new StaticRBACProvider({
+ *       roles: DEFAULT_ROLES,
+ *       getUserRoles: (user) => [user.role],
+ *     }),
+ *   },
+ * });
+ * ```
+ */
+export type StudioConfig = {
+  /**
+   * Authentication provider for Studio UI.
+   *
+   * Handles WHO can access Studio (authentication only).
+   * For authorization (WHAT users can do in Studio), use the `rbac` option.
+   *
+   * When not configured, Studio operates without authentication (development mode).
+   */
+  auth?: MastraAuthConfig<any> | MastraAuthProvider<any>;
+
+  /**
+   * Role-based access control (RBAC) provider for Studio.
+   *
+   * Handles WHAT authenticated Studio users can do.
+   * Controls access to Studio features like team management, user listing, etc.
+   *
+   * @example
+   * ```typescript
+   * rbac: new StaticRBACProvider({
+   *   roles: DEFAULT_ROLES,
+   *   getUserRoles: (user) => [user.role],
+   * }),
+   * ```
+   */
+  rbac?: IRBACProvider<any>;
+
+  /**
+   * FGA provider for fine-grained authorization in Studio.
+   *
+   * Enables relationship-based access control for Studio resources.
+   */
+  fga?: IFGAProvider<any>;
+};

@@ -466,12 +466,15 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     // Check route permission requirement (EE feature)
     // Uses convention-based permission derivation: permissions are auto-derived
     // from route path/method unless explicitly set or route is public
+    const requestContext = ctx.state.requestContext;
     const authConfig = this.mastra.getServer()?.auth;
     if (authConfig) {
       const hasPermission = await loadHasPermission();
       if (hasPermission) {
-        const userPermissions = ctx.state.requestContext.get('mastra__userPermissions') as string[] | undefined;
+
         const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+        const userPermissions = requestContext.get('userPermissions') as string[] | undefined;
+        const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
 
         if (permissionError) {
           ctx.status = permissionError.status;
@@ -485,7 +488,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     }
 
     // Check FGA authorization (EE feature)
-    const fgaError = await checkRouteFGA(this.mastra, route, ctx.state.requestContext, {
+    const fgaError = await checkRouteFGA(this.mastra, route, requestContext, {
       ...params.urlParams,
       ...params.queryParams,
       ...(typeof params.body === 'object' ? params.body : {}),
@@ -916,9 +919,36 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
                   ctx.set(key, value);
                 }
               }
+
               if (authError.error) {
                 ctx.status = authError.status;
                 ctx.body = { error: authError.error };
+            }
+            if (authError.error) {
+              ctx.status = authError.status;
+              ctx.body = { error: authError.error };
+              return;
+            }
+          }
+
+          const requestContext = ctx.state.requestContext;
+          const authConfig = server.mastra.getServer()?.auth;
+          if (authConfig) {
+            const hasPermission = await loadHasPermission();
+            if (hasPermission) {
+              const userPermissions = requestContext.get('userPermissions') as string[] | undefined;
+              const permissionError = server.checkRoutePermission(
+                serverRoute,
+                userPermissions,
+                hasPermission,
+                requestContext,
+              );
+              if (permissionError) {
+                ctx.status = permissionError.status;
+                ctx.body = {
+                  error: permissionError.error,
+                  message: permissionError.message,
+                };
                 return;
               }
             }
@@ -927,7 +957,6 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
             if (authConfig) {
               const hasPermission = await loadHasPermission();
               if (hasPermission) {
-                const userPermissions = ctx.state.requestContext.get('mastra__userPermissions') as string[] | undefined;
                 const permissionError = server.checkRoutePermission(serverRoute, userPermissions, hasPermission);
                 if (permissionError) {
                   ctx.status = permissionError.status;
