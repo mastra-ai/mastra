@@ -41,7 +41,7 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
   readonly #defaultMode: string;
   readonly #modesById = new Map<string, MODES[number]>();
   readonly #storage?: HarnessStorage;
-  readonly #storageAdapter?: MastraCompositeStore;
+  readonly #compositeStorage?: MastraCompositeStore;
   readonly #mastra?: Mastra;
   readonly #memory: MastraMemory | DynamicArgument<MastraMemory>;
   readonly #events: EventEmitter;
@@ -67,10 +67,10 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       if (isHarnessStorage(config.storage)) {
         this.#storage = config.storage;
       } else {
-        this.#storageAdapter = augmentWithInit(config.storage);
+        this.#compositeStorage = augmentWithInit(config.storage);
       }
     } else {
-      this.#storageAdapter = config.mastra?.getStorage();
+      this.#compositeStorage = config.mastra?.getStorage();
     }
     this.#memory = config.memory;
     this.#events = new EventEmitter();
@@ -278,11 +278,11 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       return this.#storage;
     }
 
-    if (!this.#storageAdapter) {
+    if (!this.#compositeStorage) {
       throw new Error('Harness session storage is not configured');
     }
 
-    const storage = await this.#storageAdapter.getStore('harness');
+    const storage = await this.#compositeStorage.getStore('harness');
     if (!storage) {
       throw new Error('Harness session storage is not configured');
     }
