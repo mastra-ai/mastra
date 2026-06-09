@@ -83,14 +83,8 @@ export class CompositeAuth
       this.getUser = undefined as any;
     }
     // Proxy credentials provider methods if any inner provider supports them.
-    const credProvider = providers.find(isCredentialsProvider) as any;
-    if (!credProvider) {
-      (this as any).signIn = undefined;
-      (this as any).signUp = undefined;
-      (this as any).requestPasswordReset = undefined;
-      (this as any).resetPassword = undefined;
-      (this as any).isSignUpEnabled = undefined;
-    } else {
+    const credProvider = this.findProvider(isCredentialsProvider as (p: unknown) => p is MastraAuthProvider) as any;
+    if (credProvider) {
       (this as any).signIn = credProvider.signIn.bind(credProvider);
       if (typeof credProvider.signUp === 'function') {
         (this as any).signUp = credProvider.signUp.bind(credProvider);
@@ -105,6 +99,12 @@ export class CompositeAuth
         typeof credProvider.isSignUpEnabled === 'function'
           ? credProvider.isSignUpEnabled.bind(credProvider)
           : () => true;
+    } else {
+      (this as any).signIn = undefined;
+      (this as any).signUp = undefined;
+      (this as any).requestPasswordReset = undefined;
+      (this as any).resetPassword = undefined;
+      (this as any).isSignUpEnabled = undefined;
     }
   }
 
