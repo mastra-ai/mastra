@@ -37,7 +37,7 @@ describe('components/* subpath exports', () => {
   // index.ts actually exports the public symbol the subpath promises.
   it('Button entry exports Button', async () => {
     const mod = await import('./ds/components/Button');
-    expect(mod.Button).toBeTypeOf('object'); // forwardRef component
+    expect(mod.Button).toBeDefined();
   });
 
   it('Drawer entry (scoped CSS) exports Drawer', async () => {

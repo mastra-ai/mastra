@@ -84,7 +84,7 @@ const libConfig: UserConfig = {
         // otherwise attach it to an arbitrary shared chunk (and an arbitrary
         // .css filename), breaking the export.
         manualChunks(id) {
-          if (id.includes('src/index.css')) return 'index';
+          if (id === resolve(__dirname, 'src/index.css')) return 'index';
         },
       },
     },
