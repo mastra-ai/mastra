@@ -78,20 +78,6 @@ export const API_ROUTE_METADATA = {
       "kind": "array"
     }
   },
-  "GET /agents/:agentId/speakers": {
-    "method": "GET",
-    "path": "/agents/:agentId/speakers",
-    "pathParams": [
-      "agentId"
-    ],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "array"
-    }
-  },
   "POST /agents/:agentId/generate": {
     "method": "POST",
     "path": "/agents/:agentId/generate",
@@ -122,6 +108,7 @@ export const API_ROUTE_METADATA = {
       "toolChoice",
       "toolsets",
       "tracingOptions",
+      "untilIdle",
       "versions"
     ],
     "hasQuery": false,
@@ -160,8 +147,37 @@ export const API_ROUTE_METADATA = {
       "toolChoice",
       "toolsets",
       "tracingOptions",
+      "untilIdle",
       "versions"
     ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/send-message": {
+    "method": "POST",
+    "path": "/agents/:agentId/send-message",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/queue-message": {
+    "method": "POST",
+    "path": "/agents/:agentId/queue-message",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
     "hasQuery": false,
     "hasBody": true,
     "responseShape": {
@@ -182,6 +198,23 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/threads/abort": {
+    "method": "POST",
+    "path": "/agents/:agentId/threads/abort",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "resourceId",
+      "threadId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/tools/:toolId/execute": {
     "method": "POST",
     "path": "/agents/:agentId/tools/:toolId/execute",
@@ -193,6 +226,29 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "data",
       "requestContext"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agents/:agentId/send-tool-approval": {
+    "method": "POST",
+    "path": "/agents/:agentId/send-tool-approval",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "approved",
+      "format",
+      "messages",
+      "requestContext",
+      "resourceId",
+      "streamOptions",
+      "threadId",
+      "toolCallId"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -370,23 +426,6 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "POST /agents/:agentId/listen": {
-    "method": "POST",
-    "path": "/agents/:agentId/listen",
-    "pathParams": [
-      "agentId"
-    ],
-    "queryParams": [],
-    "bodyParams": [
-      "audio",
-      "options"
-    ],
-    "hasQuery": false,
-    "hasBody": true,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
   "GET /agents/:agentId/voice/listener": {
     "method": "GET",
     "path": "/agents/:agentId/voice/listener",
@@ -423,6 +462,34 @@ export const API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "single"
+    }
+  },
+  "GET /auth/roles/:roleId/permissions": {
+    "method": "GET",
+    "path": "/auth/roles/:roleId/permissions",
+    "pathParams": [
+      "roleId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "permissions"
+    }
+  },
+  "GET /auth/permission-patterns": {
+    "method": "GET",
+    "path": "/auth/permission-patterns",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "patterns"
     }
   },
   "GET /workflows": {
@@ -578,6 +645,29 @@ export const API_ROUTE_METADATA = {
   "POST /workflows/:workflowId/resume-async": {
     "method": "POST",
     "path": "/workflows/:workflowId/resume-async",
+    "pathParams": [
+      "workflowId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [
+      "forEachIndex",
+      "perStep",
+      "requestContext",
+      "resumeData",
+      "step",
+      "tracingOptions"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /workflows/:workflowId/resume-no-wait": {
+    "method": "POST",
+    "path": "/workflows/:workflowId/resume-no-wait",
     "pathParams": [
       "workflowId"
     ],
@@ -1543,6 +1633,7 @@ export const API_ROUTE_METADATA = {
     "path": "/observability/traces",
     "pathParams": [],
     "queryParams": [
+      "after",
       "dateRange",
       "direction",
       "endedAt",
@@ -1554,7 +1645,9 @@ export const API_ROUTE_METADATA = {
       "experimentId",
       "field",
       "hasChildError",
+      "limit",
       "metadata",
+      "mode",
       "name",
       "organizationId",
       "page",
@@ -1649,6 +1742,7 @@ export const API_ROUTE_METADATA = {
     "path": "/observability/branches",
     "pathParams": [],
     "queryParams": [
+      "after",
       "direction",
       "endedAt",
       "entityId",
@@ -1658,7 +1752,9 @@ export const API_ROUTE_METADATA = {
       "environment",
       "experimentId",
       "field",
+      "limit",
       "metadata",
+      "mode",
       "organizationId",
       "page",
       "parentEntityId",
@@ -1806,11 +1902,64 @@ export const API_ROUTE_METADATA = {
       "paginationProperty": "pagination"
     }
   },
+  "GET /observability/metrics": {
+    "method": "GET",
+    "path": "/observability/metrics",
+    "pathParams": [],
+    "queryParams": [
+      "after",
+      "costUnit",
+      "direction",
+      "entityName",
+      "entityType",
+      "entityVersionId",
+      "environment",
+      "executionSource",
+      "experimentId",
+      "field",
+      "labels",
+      "limit",
+      "mode",
+      "model",
+      "name",
+      "organizationId",
+      "page",
+      "parentEntityName",
+      "parentEntityType",
+      "parentEntityVersionId",
+      "perPage",
+      "provider",
+      "requestId",
+      "resourceId",
+      "rootEntityName",
+      "rootEntityType",
+      "rootEntityVersionId",
+      "runId",
+      "serviceName",
+      "sessionId",
+      "source",
+      "spanId",
+      "tags",
+      "threadId",
+      "timestamp",
+      "traceId",
+      "userId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "metrics",
+      "paginationProperty": "pagination"
+    }
+  },
   "GET /observability/logs": {
     "method": "GET",
     "path": "/observability/logs",
     "pathParams": [],
     "queryParams": [
+      "after",
       "direction",
       "entityName",
       "entityType",
@@ -1820,6 +1969,8 @@ export const API_ROUTE_METADATA = {
       "experimentId",
       "field",
       "level",
+      "limit",
+      "mode",
       "organizationId",
       "page",
       "parentEntityName",
@@ -1856,6 +2007,7 @@ export const API_ROUTE_METADATA = {
     "path": "/observability/scores",
     "pathParams": [],
     "queryParams": [
+      "after",
       "direction",
       "entityName",
       "entityType",
@@ -1864,6 +2016,8 @@ export const API_ROUTE_METADATA = {
       "executionSource",
       "experimentId",
       "field",
+      "limit",
+      "mode",
       "organizationId",
       "page",
       "parentEntityName",
@@ -2006,6 +2160,7 @@ export const API_ROUTE_METADATA = {
     "path": "/observability/feedback",
     "pathParams": [],
     "queryParams": [
+      "after",
       "direction",
       "entityName",
       "entityType",
@@ -2017,6 +2172,8 @@ export const API_ROUTE_METADATA = {
       "feedbackType",
       "feedbackUserId",
       "field",
+      "limit",
+      "mode",
       "organizationId",
       "page",
       "parentEntityName",
@@ -2929,6 +3086,7 @@ export const API_ROUTE_METADATA = {
       "toolChoice",
       "toolsets",
       "tracingOptions",
+      "untilIdle",
       "versions"
     ],
     "hasQuery": false,
@@ -3055,11 +3213,14 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [
       "authorId",
+      "favoritedOnly",
       "metadata",
       "orderBy",
       "page",
       "perPage",
-      "status"
+      "pinFavoritedFor",
+      "status",
+      "visibility"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -3078,6 +3239,55 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "blocks",
       "context"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /stored/agents/:storedAgentId/dependents": {
+    "method": "GET",
+    "path": "/stored/agents/:storedAgentId/dependents",
+    "pathParams": [
+      "storedAgentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "dependents"
+    }
+  },
+  "POST /stored/agents/:storedAgentId/export": {
+    "method": "POST",
+    "path": "/stored/agents/:storedAgentId/export",
+    "pathParams": [
+      "storedAgentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "agents",
+      "browser",
+      "defaultOptions",
+      "description",
+      "inputProcessors",
+      "instructions",
+      "integrationTools",
+      "mcpClients",
+      "memory",
+      "model",
+      "name",
+      "outputProcessors",
+      "requestContextSchema",
+      "scorers",
+      "skills",
+      "toolProviders",
+      "tools",
+      "workflows",
+      "workspace"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -3109,6 +3319,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "agents",
       "authorId",
+      "browser",
       "defaultOptions",
       "description",
       "id",
@@ -3124,7 +3335,9 @@ export const API_ROUTE_METADATA = {
       "requestContextSchema",
       "scorers",
       "skills",
+      "toolProviders",
       "tools",
+      "visibility",
       "workflows",
       "workspace"
     ],
@@ -3144,6 +3357,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "agents",
       "authorId",
+      "browser",
       "changeMessage",
       "defaultOptions",
       "description",
@@ -3159,7 +3373,9 @@ export const API_ROUTE_METADATA = {
       "requestContextSchema",
       "scorers",
       "skills",
+      "toolProviders",
       "tools",
+      "visibility",
       "workflows",
       "workspace"
     ],
@@ -3287,6 +3503,34 @@ export const API_ROUTE_METADATA = {
     "pathParams": [
       "agentId",
       "versionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PUT /stored/agents/:storedAgentId/favorite": {
+    "method": "PUT",
+    "path": "/stored/agents/:storedAgentId/favorite",
+    "pathParams": [
+      "storedAgentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /stored/agents/:storedAgentId/favorite": {
+    "method": "DELETE",
+    "path": "/stored/agents/:storedAgentId/favorite",
+    "pathParams": [
+      "storedAgentId"
     ],
     "queryParams": [],
     "bodyParams": [],
@@ -3987,7 +4231,6 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
-      "authorId",
       "autoSync",
       "description",
       "filesystem",
@@ -4026,10 +4269,14 @@ export const API_ROUTE_METADATA = {
     "pathParams": [],
     "queryParams": [
       "authorId",
+      "favoritedOnly",
       "metadata",
       "orderBy",
       "page",
-      "perPage"
+      "perPage",
+      "pinFavoritedFor",
+      "status",
+      "visibility"
     ],
     "bodyParams": [],
     "hasQuery": true,
@@ -4064,6 +4311,7 @@ export const API_ROUTE_METADATA = {
       "authorId",
       "compatibility",
       "description",
+      "files",
       "id",
       "instructions",
       "license",
@@ -4071,7 +4319,8 @@ export const API_ROUTE_METADATA = {
       "name",
       "references",
       "scripts",
-      "source"
+      "source",
+      "visibility"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -4091,13 +4340,15 @@ export const API_ROUTE_METADATA = {
       "authorId",
       "compatibility",
       "description",
+      "files",
       "instructions",
       "license",
       "metadata",
       "name",
       "references",
       "scripts",
-      "source"
+      "source",
+      "visibility"
     ],
     "hasQuery": false,
     "hasBody": true,
@@ -4131,6 +4382,34 @@ export const API_ROUTE_METADATA = {
     ],
     "hasQuery": false,
     "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PUT /stored/skills/:storedSkillId/favorite": {
+    "method": "PUT",
+    "path": "/stored/skills/:storedSkillId/favorite",
+    "pathParams": [
+      "storedSkillId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /stored/skills/:storedSkillId/favorite": {
+    "method": "DELETE",
+    "path": "/stored/skills/:storedSkillId/favorite",
+    "pathParams": [
+      "storedSkillId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
     "responseShape": {
       "kind": "single"
     }
@@ -4198,6 +4477,164 @@ export const API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "record"
+    }
+  },
+  "POST /tool-providers/:providerId/authorize": {
+    "method": "POST",
+    "path": "/tool-providers/:providerId/authorize",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "config",
+      "connectionId",
+      "label",
+      "scope",
+      "toolName",
+      "toolkit"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /tool-providers/:providerId/auth-status/:authId": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/auth-status/:authId",
+    "pathParams": [
+      "providerId",
+      "authId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /tool-providers/:providerId/connection-status": {
+    "method": "POST",
+    "path": "/tool-providers/:providerId/connection-status",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "items"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /tool-providers/:providerId/connections": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/connections",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [
+      "authorId",
+      "page",
+      "perPage",
+      "scope",
+      "toolkit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "items",
+      "paginationProperty": "pagination"
+    }
+  },
+  "GET /tool-providers/:providerId/connection-fields": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/connection-fields",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [
+      "toolkit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "fields"
+    }
+  },
+  "DELETE /tool-providers/:providerId/connections/:connectionId": {
+    "method": "DELETE",
+    "path": "/tool-providers/:providerId/connections/:connectionId",
+    "pathParams": [
+      "providerId",
+      "connectionId"
+    ],
+    "queryParams": [
+      "force",
+      "toolkit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /tool-providers/:providerId/connections/:connectionId": {
+    "method": "PATCH",
+    "path": "/tool-providers/:providerId/connections/:connectionId",
+    "pathParams": [
+      "providerId",
+      "connectionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "label"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /tool-providers/:providerId/connections/:connectionId/usage": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/connections/:connectionId/usage",
+    "pathParams": [
+      "providerId",
+      "connectionId"
+    ],
+    "queryParams": [
+      "toolkit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "agents"
+    }
+  },
+  "GET /tool-providers/:providerId/health": {
+    "method": "GET",
+    "path": "/tool-providers/:providerId/health",
+    "pathParams": [
+      "providerId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
     }
   },
   "GET /processor-providers": {
@@ -4737,6 +5174,341 @@ export const API_ROUTE_METADATA = {
     "path": "/background-tasks/:backgroundTaskId",
     "pathParams": [
       "backgroundTaskId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/builder/settings": {
+    "method": "GET",
+    "path": "/editor/builder/settings",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/builder/models/available": {
+    "method": "GET",
+    "path": "/editor/builder/models/available",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "providers"
+    }
+  },
+  "GET /editor/builder/infrastructure": {
+    "method": "GET",
+    "path": "/editor/builder/infrastructure",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/builder/registries": {
+    "method": "GET",
+    "path": "/editor/builder/registries",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "registries"
+    }
+  },
+  "GET /editor/builder/registries/:registryId/search": {
+    "method": "GET",
+    "path": "/editor/builder/registries/:registryId/search",
+    "pathParams": [
+      "registryId"
+    ],
+    "queryParams": [
+      "limit",
+      "q"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/builder/registries/:registryId/popular": {
+    "method": "GET",
+    "path": "/editor/builder/registries/:registryId/popular",
+    "pathParams": [
+      "registryId"
+    ],
+    "queryParams": [
+      "limit",
+      "offset"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /editor/builder/registries/:registryId/preview": {
+    "method": "GET",
+    "path": "/editor/builder/registries/:registryId/preview",
+    "pathParams": [
+      "registryId"
+    ],
+    "queryParams": [
+      "owner",
+      "path",
+      "repo"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /editor/builder/registries/:registryId/install": {
+    "method": "POST",
+    "path": "/editor/builder/registries/:registryId/install",
+    "pathParams": [
+      "registryId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "owner",
+      "repo",
+      "skillName",
+      "visibility"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /agent-builder": {
+    "method": "GET",
+    "path": "/agent-builder",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "record"
+    }
+  },
+  "GET /agent-builder/:actionId": {
+    "method": "GET",
+    "path": "/agent-builder/:actionId",
+    "pathParams": [
+      "actionId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /agent-builder/:actionId/runs": {
+    "method": "GET",
+    "path": "/agent-builder/:actionId/runs",
+    "pathParams": [
+      "actionId"
+    ],
+    "queryParams": [
+      "fromDate",
+      "limit",
+      "offset",
+      "page",
+      "perPage",
+      "resourceId",
+      "status",
+      "toDate"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "runs"
+    }
+  },
+  "GET /agent-builder/:actionId/runs/:runId": {
+    "method": "GET",
+    "path": "/agent-builder/:actionId/runs/:runId",
+    "pathParams": [
+      "actionId",
+      "runId"
+    ],
+    "queryParams": [
+      "fields",
+      "withNestedWorkflows"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agent-builder/:actionId/create-run": {
+    "method": "POST",
+    "path": "/agent-builder/:actionId/create-run",
+    "pathParams": [
+      "actionId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agent-builder/:actionId/start-async": {
+    "method": "POST",
+    "path": "/agent-builder/:actionId/start-async",
+    "pathParams": [
+      "actionId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [
+      "initialState",
+      "inputData",
+      "perStep",
+      "requestContext",
+      "resourceId",
+      "tracingOptions"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agent-builder/:actionId/start": {
+    "method": "POST",
+    "path": "/agent-builder/:actionId/start",
+    "pathParams": [
+      "actionId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [
+      "initialState",
+      "inputData",
+      "perStep",
+      "requestContext",
+      "resourceId",
+      "tracingOptions"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agent-builder/:actionId/resume-async": {
+    "method": "POST",
+    "path": "/agent-builder/:actionId/resume-async",
+    "pathParams": [
+      "actionId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [
+      "forEachIndex",
+      "perStep",
+      "requestContext",
+      "resumeData",
+      "step",
+      "tracingOptions"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agent-builder/:actionId/resume-no-wait": {
+    "method": "POST",
+    "path": "/agent-builder/:actionId/resume-no-wait",
+    "pathParams": [
+      "actionId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [
+      "forEachIndex",
+      "perStep",
+      "requestContext",
+      "resumeData",
+      "step",
+      "tracingOptions"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agent-builder/:actionId/resume": {
+    "method": "POST",
+    "path": "/agent-builder/:actionId/resume",
+    "pathParams": [
+      "actionId"
+    ],
+    "queryParams": [
+      "runId"
+    ],
+    "bodyParams": [
+      "forEachIndex",
+      "perStep",
+      "requestContext",
+      "resumeData",
+      "step",
+      "tracingOptions"
+    ],
+    "hasQuery": true,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /agent-builder/:actionId/runs/:runId/cancel": {
+    "method": "POST",
+    "path": "/agent-builder/:actionId/runs/:runId/cancel",
+    "pathParams": [
+      "actionId",
+      "runId"
     ],
     "queryParams": [],
     "bodyParams": [],

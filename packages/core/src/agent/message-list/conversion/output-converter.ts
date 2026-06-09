@@ -286,6 +286,92 @@ export function aiV4UIMessagesToAIV4CoreMessages(messages: UIMessageV4[]): CoreM
 }
 
 /**
+ * Converts MCP-style tool results (`{ content: [...] }`) to model-native
+ * multimodal tool result output without persisting a duplicate modelOutput copy.
+ */
+function convertMcpContentToolResultOutput(output: unknown): unknown {
+  if (!output || typeof output !== 'object') return undefined;
+
+  const content = (output as Record<string, unknown>).content;
+  if (!Array.isArray(content)) return undefined;
+
+  const hasValidMultimodal = content.some(part => {
+    if (!part || typeof part !== 'object') return false;
+    const typedPart = part as Record<string, unknown>;
+    return (typedPart.type === 'image' || typedPart.type === 'audio') && typeof typedPart.data === 'string';
+  });
+  if (!hasValidMultimodal) return undefined;
+
+  const value = content
+    .map(part => {
+      if (!part || typeof part !== 'object') return null;
+      const typedPart = part as Record<string, unknown>;
+      switch (typedPart.type) {
+        case 'text':
+          return { type: 'text', text: String(typedPart.text ?? '') };
+        case 'image':
+          return typeof typedPart.data === 'string'
+            ? { type: 'image-data', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'image/png') }
+            : { type: 'text', text: JSON.stringify(typedPart) };
+        case 'audio':
+          return typeof typedPart.data === 'string'
+            ? { type: 'file-data', data: typedPart.data, mediaType: String(typedPart.mimeType ?? 'audio/wav') }
+            : { type: 'text', text: JSON.stringify(typedPart) };
+        default:
+          return { type: 'text', text: JSON.stringify(typedPart) };
+      }
+    })
+    .filter(Boolean);
+
+  return value.length > 0 ? { type: 'content', value } : undefined;
+}
+
+function collectRawToolResultOutputs(dbMessages: MastraDBMessage[]): Map<string, unknown> {
+  const outputs = new Map<string, unknown>();
+  for (const message of dbMessages) {
+    if (message.content?.format !== 2 || !message.content.parts) continue;
+
+    for (const part of message.content.parts) {
+      if (part.type !== 'tool-invocation' || part.toolInvocation?.state !== 'result') continue;
+      outputs.set(part.toolInvocation.toolCallId, part.toolInvocation.result);
+    }
+  }
+  return outputs;
+}
+
+function isDefaultToolResultOutput(output: unknown, rawOutput: unknown): boolean {
+  if (!output || typeof output !== 'object') return false;
+  const typedOutput = output as Record<string, unknown>;
+  if (typedOutput.type !== 'json') return false;
+  return JSON.stringify(typedOutput.value) === JSON.stringify(rawOutput);
+}
+
+function applyMcpContentToolResultOutputs(
+  modelMessages: AIV5Type.ModelMessage[],
+  dbMessages: MastraDBMessage[],
+): AIV5Type.ModelMessage[] {
+  const rawOutputs = collectRawToolResultOutputs(dbMessages);
+  if (rawOutputs.size === 0) return modelMessages;
+
+  return modelMessages.map(message => {
+    if (message.role !== 'tool' || !Array.isArray(message.content)) return message;
+
+    let modified = false;
+    const content = message.content.map(part => {
+      if (part.type !== 'tool-result' || !rawOutputs.has(part.toolCallId)) return part;
+      const rawOutput = rawOutputs.get(part.toolCallId);
+      if (!isDefaultToolResultOutput(part.output, rawOutput)) return part;
+      const converted = convertMcpContentToolResultOutput(rawOutput);
+      if (!converted) return part;
+      modified = true;
+      return { ...part, output: converted } as typeof part;
+    });
+
+    return modified ? ({ ...message, content } as AIV5Type.ModelMessage) : message;
+  });
+}
+
+/**
  * Restores `providerOptions` on assistant file parts after `convertToModelMessages`.
  *
  * The vendored AI SDK v5 `convertToModelMessages` drops `providerMetadata` from
@@ -380,9 +466,10 @@ export function aiV5UIMessagesToAIV5ModelMessages(
   }
 
   const withFileMetadata = restoreAssistantFileProviderMetadata(converted, preprocessed);
+  const withMcpContentOutputs = applyMcpContentToolResultOutputs(withFileMetadata, dbMessages);
 
   // Add input field to tool-result parts for Anthropic API compatibility (fixes issue #11376)
-  const anthropicCompat = ensureAnthropicCompatibleMessages(withFileMetadata, dbMessages);
+  const anthropicCompat = ensureAnthropicCompatibleMessages(withMcpContentOutputs, dbMessages);
 
   return filterIncompleteToolCalls ? sanitizeOrphanedToolPairs(anthropicCompat) : anthropicCompat;
 }

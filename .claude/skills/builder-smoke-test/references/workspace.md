@@ -6,6 +6,8 @@ Test stored workspace create, read, update, and delete via API.
 
 > **Auth-on session header.** Under `--auth on`, prepend `-H "Cookie: $COOKIE"` to every `curl` in this file (exported from `references/auth.md` step 0). Snippets below omit it for readability so they read cleanly under `--auth off`; an authenticated run without the cookie returns `401` before the intended assertion fires.
 
+> **Visibility asymmetry.** Stored workspaces (and the other stored entities) have a `visibility` field that differs between modes. Under `--auth off`, the server coerces `visibility` to `"public"` on every create — there is no caller to scope ownership against, so private wouldn't be meaningful. Under `--auth on`, the field is left as whatever was sent (or `null` when omitted, **not** `"public"`). Don't assert `visibility === "public"` on freshly created workspaces under auth on — assert `null` or whatever you explicitly sent. Visibility behavior is covered in detail by `references/auth.md`.
+
 Resolve the builder workspace ID (used in steps 2 and 6):
 
 ```bash

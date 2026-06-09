@@ -30,6 +30,7 @@ const durableToolCallInputSchema = z.object({
   providerMetadata: z.record(z.string(), z.any()).optional(),
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
+  activeTools: z.array(z.string()).nullable().optional(),
 });
 
 /**
@@ -123,7 +124,7 @@ export function createDurableToolCallStep() {
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
 
       const typedInput = inputData as DurableToolCallInput;
-      const { toolCallId, toolName, args, providerExecuted, output } = typedInput;
+      const { toolCallId, toolName, args, providerExecuted, output, activeTools } = typedInput;
 
       // Get context from init data (the parent workflow input)
       const initData = getInitData<{
@@ -157,10 +158,20 @@ export function createDurableToolCallStep() {
         tool = resolveTool(toolName, mastra as Mastra);
       }
 
-      if (!tool) {
+      const toolKey = registryEntry?.tools?.[toolName]
+        ? toolName
+        : Object.entries(registryEntry?.tools ?? {}).find(([, registeredTool]) => registeredTool === tool)?.[0];
+      const effectiveActiveTools = activeTools === null ? undefined : (activeTools ?? agentOptions.activeTools);
+      const activeToolKey = toolKey ?? toolName;
+      const isHiddenByActiveTools = effectiveActiveTools !== undefined && !effectiveActiveTools.includes(activeToolKey);
+
+      if (!tool || isHiddenByActiveTools) {
+        const availableToolNames = effectiveActiveTools ?? Object.keys(registryEntry?.tools ?? {});
+        const availableToolsStr =
+          availableToolNames.length > 0 ? ` Available tools: ${availableToolNames.join(', ')}` : '';
         const error = {
           name: 'ToolNotFoundError',
-          message: `Tool ${toolName} not found`,
+          message: `Tool "${toolName}" not found.${availableToolsStr}. Call tools by their exact name only — never add prefixes, namespaces, or colons.`,
         };
         if (pubsub) {
           await emitChunkEvent(pubsub, runId, {

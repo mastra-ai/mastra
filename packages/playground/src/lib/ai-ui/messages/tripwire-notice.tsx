@@ -10,7 +10,7 @@ export interface TripwireNoticeProps {
 export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const hasMetadata = tripwire && (tripwire.retry !== undefined || tripwire.tripwirePayload || tripwire.processorId);
+  const hasMetadata = tripwire && (tripwire.retry !== undefined || tripwire.metadata || tripwire.processorId);
 
   return (
     <div className="rounded-lg border border-amber-500/30 bg-amber-950/20 overflow-hidden">
@@ -65,11 +65,11 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
               )}
 
               {/* Custom metadata */}
-              {tripwire.tripwirePayload !== undefined && tripwire.tripwirePayload !== null && (
+              {tripwire.metadata !== undefined && tripwire.metadata !== null && (
                 <div className="pt-1">
                   <p className="text-xs text-amber-400/60 mb-1.5">Metadata:</p>
                   <pre className="text-xs text-amber-200/80 bg-amber-900/30 rounded p-2 overflow-x-auto font-mono">
-                    {String(JSON.stringify(tripwire.tripwirePayload, null, 2))}
+                    {String(JSON.stringify(tripwire.metadata, null, 2))}
                   </pre>
                 </div>
               )}

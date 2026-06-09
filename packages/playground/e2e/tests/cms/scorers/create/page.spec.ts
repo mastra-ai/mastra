@@ -60,9 +60,9 @@ async function fillScorerFields(
 
   if (options.samplingType !== undefined) {
     if (options.samplingType === 'ratio') {
-      await page.getByLabel('Ratio').click();
+      await page.getByRole('radio', { name: 'Ratio' }).click();
     } else {
-      await page.getByLabel('None').click();
+      await page.getByRole('radio', { name: 'None' }).click();
     }
   }
 

@@ -6,7 +6,7 @@
  *   /goal             Open goal actions
  *   /goal status      Show current goal status
  *   /goal pause       Pause the continuation loop
- *   /goal resume      Resume (resets turn counter)
+ *   /goal resume      Resume without resetting the turn counter
  *   /goal clear       Drop the goal
  *   /judge            Set global judge model and max-attempt defaults
  */
@@ -15,8 +15,10 @@ import type { SelectItem } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
+import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
+import { GradientAnimator } from '../components/obi-loader.js';
 import { DEFAULT_MAX_TURNS } from '../goal-manager.js';
 import type { GoalState } from '../goal-manager.js';
 import { showModalOverlay } from '../overlay.js';
@@ -74,8 +76,19 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
       ctx.showInfo('Goal is already done. Use /goal <text> to set a new goal.');
       return;
     }
+
+    const wasJudgeFailure = goal.lastPauseWasJudgeFailure;
     goalManager.resume();
     await goalManager.saveToThread(state);
+
+    if (wasJudgeFailure) {
+      // The goal was paused because the judge failed — retrigger the judge
+      // evaluation instead of prompting the main agent.
+      ctx.showInfo(`Goal resumed: "${goal.objective}" — retriggering judge evaluation...`);
+      triggerGoalJudge(ctx, { requireAssistantMessage: true });
+      return;
+    }
+
     ctx.showInfo(
       `Goal resumed: "${goal.objective}" — ${goal.turnsUsed}/${goal.maxTurns} turns used. Sending continuation...`,
     );
@@ -96,6 +109,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
   // /goal clear
   if (subCommand === 'clear') {
     goalManager.clear();
+    state.planStartedGoalId = undefined;
     await goalManager.saveToThread(state);
     ctx.showInfo('Goal cleared.');
     return;
@@ -290,6 +304,125 @@ async function promptForJudgeDefaults(ctx: SlashCommandContext, cancelMessage: s
   });
 }
 
+/**
+ * Trigger a goal judge evaluation from the command context (e.g. after /goal resume
+ * following a judge failure). Mirrors the UI setup from maybeGoalContinuation in
+ * agent-lifecycle.ts but skips queue draining since there's no agent turn to follow up.
+ */
+function triggerGoalJudge(ctx: SlashCommandContext, options: { requireAssistantMessage?: boolean } = {}): void {
+  const { state } = ctx;
+  const goal = state.goalManager.getGoal();
+  if (!goal) return;
+  const evaluatedGoalId = goal.id;
+
+  if (!state.gradientAnimator) {
+    state.gradientAnimator = new GradientAnimator(() => {
+      ctx.updateStatusLine();
+    });
+  }
+  const abortController = new AbortController();
+  const judgeComponent = new JudgeDisplayComponent(null, goal.turnsUsed, goal.maxTurns);
+  const activeGoalJudge = { modelId: goal.judgeModelId, abortController, component: judgeComponent };
+  state.activeGoalJudge = activeGoalJudge;
+  state.chatContainer.addChild(judgeComponent);
+  state.gradientAnimator.start();
+  ctx.updateStatusLine();
+  state.ui.requestRender();
+
+  state.goalManager
+    .evaluateAfterTurn(state, {
+      abortSignal: abortController.signal,
+      requireAssistantMessage: options.requireAssistantMessage,
+      onActivity: line => {
+        if (state.activeGoalJudge === activeGoalJudge) {
+          judgeComponent.addActivity(line);
+          state.ui.requestRender();
+        }
+      },
+    })
+    .then(async ({ continuation, judgeResult }) => {
+      if (state.activeGoalJudge !== activeGoalJudge) return;
+
+      const currentGoal = state.goalManager.getGoal();
+      if (!currentGoal || currentGoal.id !== evaluatedGoalId) return;
+
+      if (judgeResult) {
+        judgeComponent.setResult(judgeResult, currentGoal.turnsUsed, currentGoal.maxTurns);
+        state.ui.requestRender();
+      }
+
+      if (abortController.signal.aborted) {
+        state.userInitiatedAbort = false;
+        return;
+      }
+
+      if (continuation) {
+        if (currentGoal.status !== 'active') return;
+        try {
+          await state.harness.sendSignal({
+            type: 'system-reminder',
+            contents: continuation,
+            attributes: { type: 'goal-judge' },
+            metadata: {
+              goalId: currentGoal.id,
+              turnsUsed: currentGoal.turnsUsed,
+              maxTurns: currentGoal.maxTurns,
+              judgeModelId: currentGoal.judgeModelId,
+            },
+          }).accepted;
+        } catch (error) {
+          state.goalManager.pause();
+          await state.goalManager.saveToThread(state);
+          ctx.showError(`Failed to send goal continuation: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      } else {
+        // Persist the final judge response so the conversation history survives reloads.
+        if (judgeResult) {
+          const harness = state.harness as typeof state.harness & {
+            saveSystemReminderMessage?: (args: { reminderType: string; message: string }) => Promise<unknown>;
+          };
+          try {
+            await harness.saveSystemReminderMessage?.({
+              reminderType: 'goal-judge',
+              message: `${judgeResult.decision} (${currentGoal.turnsUsed}/${currentGoal.maxTurns})\n${judgeResult.reason}`,
+            });
+          } catch (error) {
+            ctx.showError(
+              `Failed to persist goal judge result: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        }
+        if (currentGoal.status === 'paused') {
+          ctx.showInfo(
+            `Goal paused (attempt ${currentGoal.turnsUsed}/${currentGoal.maxTurns}). Use /goal resume to continue.`,
+          );
+        }
+
+        if (judgeResult?.decision === 'done' && currentGoal.id === state.planStartedGoalId) {
+          const goalId = state.planStartedGoalId;
+          state.planStartedGoalId = undefined;
+          try {
+            await state.harness.switchMode({ modeId: 'plan' });
+          } catch (error) {
+            ctx.showError(`Failed to switch to Plan mode: ${error instanceof Error ? error.message : String(error)}`);
+            state.planStartedGoalId = goalId;
+          }
+        }
+      }
+    })
+    .catch(() => {
+      // Goal evaluation failed — don't block the TUI
+    })
+    .finally(() => {
+      if (state.activeGoalJudge === activeGoalJudge) {
+        state.activeGoalJudge = undefined;
+      }
+      state.gradientAnimator?.fadeOut();
+      ctx.updateStatusLine();
+      state.ui.requestRender();
+    });
+}
+
 async function startGoal(
   ctx: SlashCommandContext,
   objective: string,
@@ -307,6 +440,12 @@ async function startGoal(
 
   const shouldPersistToCreatedThread = !state.harness.getCurrentThreadId();
   const goal = goalManager.setGoal(objective, judgeModelId, maxTurns);
+
+  state.planStartedGoalId = undefined;
+  if (options.trigger === 'none') {
+    goal.activeStartedAt = undefined;
+    goal.activeDurationMs = 0;
+  }
   if (shouldPersistToCreatedThread) {
     goalManager.persistOnNextThreadCreate();
   }

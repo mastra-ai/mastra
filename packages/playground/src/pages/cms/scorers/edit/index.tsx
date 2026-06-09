@@ -127,7 +127,7 @@ function CmsScorersEditForm({
       // Fetch latest version after save and activate it
       const versionsResponse = await client
         .getStoredScorer(scorerId)
-        .listVersions({ sortDirection: 'DESC', perPage: 1 });
+        .listVersions({ orderBy: { direction: 'DESC' }, perPage: 1 });
       const latestVersion = versionsResponse.versions[0];
       if (latestVersion) {
         await client.getStoredScorer(scorerId).activateVersion(latestVersion.id);
@@ -212,7 +212,7 @@ function CmsScorersEditPage() {
   const { data: scorer, isLoading } = useStoredScorer(scorerId, { status: 'draft' });
   const { data: versionsData } = useScorerVersions({
     scorerId: scorerId ?? '',
-    params: { sortDirection: 'DESC' },
+    params: { orderBy: { direction: 'DESC' } },
   });
 
   const activeVersionId = scorer?.activeVersionId;

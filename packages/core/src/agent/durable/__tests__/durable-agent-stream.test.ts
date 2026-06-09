@@ -7,7 +7,7 @@
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { createTool } from '../../../tools';
@@ -148,6 +148,221 @@ describe('DurableAgent streaming execution', () => {
   });
 
   describe('basic streaming', () => {
+    it('should pass activeTools through to the LLM request', async () => {
+      const doStream = vi.fn(async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'Done' },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }));
+
+      const mockModel = new MockLanguageModelV2({ doStream });
+      const allowedTool = createTool({
+        id: 'allowedTool',
+        description: 'Allowed tool',
+        inputSchema: z.object({}),
+        execute: async () => 'allowed',
+      });
+      const hiddenTool = createTool({
+        id: 'hiddenTool',
+        description: 'Hidden tool',
+        inputSchema: z.object({}),
+        execute: async () => 'hidden',
+      });
+
+      const baseAgent = new Agent({
+        id: 'active-tools-agent',
+        name: 'Active Tools Agent',
+        instructions: 'Use only enabled tools',
+        model: mockModel as LanguageModelV2,
+        tools: { allowedTool, hiddenTool },
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { output, cleanup } = await durableAgent.stream('Use the allowed tool', {
+        activeTools: ['allowedTool'],
+      });
+
+      await output.consumeStream();
+
+      expect(doStream).toHaveBeenCalledTimes(1);
+      expect(doStream.mock.calls[0]?.[0].tools.map((tool: { name: string }) => tool.name)).toEqual(['allowedTool']);
+
+      cleanup();
+    });
+
+    it('should allow input processors to clear activeTools for LLM request and tool execution', async () => {
+      let callCount = 0;
+      const doStream = vi.fn(async () => {
+        callCount++;
+        return {
+          stream: convertArrayToReadableStream(
+            callCount === 1
+              ? [
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-1',
+                    toolName: 'hiddenTool',
+                    input: JSON.stringify({}),
+                    providerExecuted: false,
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  },
+                ]
+              : [
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'Done' },
+                  { type: 'text-end', id: 'text-1' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  },
+                ],
+          ),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      });
+
+      const mockModel = new MockLanguageModelV2({ doStream });
+      const hiddenExecute = vi.fn(async () => 'hidden');
+      const allowedTool = createTool({
+        id: 'allowedTool',
+        description: 'Allowed tool',
+        inputSchema: z.object({}),
+        execute: async () => 'allowed',
+      });
+      const hiddenTool = createTool({
+        id: 'hiddenTool',
+        description: 'Hidden tool',
+        inputSchema: z.object({}),
+        execute: hiddenExecute,
+      });
+
+      const baseAgent = new Agent({
+        id: 'active-tools-clear-agent',
+        name: 'Active Tools Clear Agent',
+        instructions: 'Use available tools',
+        model: mockModel as LanguageModelV2,
+        tools: { allowedTool, hiddenTool },
+        inputProcessors: [
+          {
+            id: 'clear-active-tools',
+            name: 'Clear Active Tools',
+            processInputStep: async () => ({ activeTools: undefined }),
+          },
+        ],
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { output, cleanup } = await durableAgent.stream('Use tools', {
+        activeTools: ['allowedTool'],
+      });
+
+      await output.consumeStream();
+
+      expect(doStream).toHaveBeenCalledTimes(2);
+      expect(doStream.mock.calls[0]?.[0].tools.map((tool: { name: string }) => tool.name)).toEqual([
+        'allowedTool',
+        'hiddenTool',
+      ]);
+      expect(hiddenExecute).toHaveBeenCalledOnce();
+
+      cleanup();
+    });
+
+    it('should not execute tool calls outside activeTools', async () => {
+      const hiddenExecute = vi.fn(async () => 'hidden');
+      let callCount = 0;
+      const doStream = vi.fn(async () => {
+        callCount++;
+        return {
+          stream: convertArrayToReadableStream(
+            callCount === 1
+              ? [
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                  {
+                    type: 'tool-call',
+                    toolCallId: 'call-1',
+                    toolName: 'hiddenTool',
+                    input: JSON.stringify({}),
+                    providerExecuted: false,
+                  },
+                  {
+                    type: 'finish',
+                    finishReason: 'tool-calls',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  },
+                ]
+              : [
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+                  { type: 'text-start', id: 'text-1' },
+                  { type: 'text-delta', id: 'text-1', delta: 'Done' },
+                  { type: 'text-end', id: 'text-1' },
+                  {
+                    type: 'finish',
+                    finishReason: 'stop',
+                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                  },
+                ],
+          ),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      });
+
+      const mockModel = new MockLanguageModelV2({ doStream });
+      const allowedTool = createTool({
+        id: 'allowedTool',
+        description: 'Allowed tool',
+        inputSchema: z.object({}),
+        execute: async () => 'allowed',
+      });
+      const hiddenTool = createTool({
+        id: 'hiddenTool',
+        description: 'Hidden tool',
+        inputSchema: z.object({}),
+        execute: hiddenExecute,
+      });
+
+      const baseAgent = new Agent({
+        id: 'active-tools-enforcement-agent',
+        name: 'Active Tools Enforcement Agent',
+        instructions: 'Use only enabled tools',
+        model: mockModel as LanguageModelV2,
+        tools: { allowedTool, hiddenTool },
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { output, cleanup } = await durableAgent.stream('Try a hidden tool', {
+        activeTools: ['allowedTool'],
+      });
+
+      await output.consumeStream();
+
+      expect(hiddenExecute).not.toHaveBeenCalled();
+      expect(doStream).toHaveBeenCalledTimes(2);
+
+      cleanup();
+    });
+
     it('should stream text response and invoke onChunk callback', async () => {
       const mockModel = createTextStreamModel('Hello, world!');
       const chunks: any[] = [];

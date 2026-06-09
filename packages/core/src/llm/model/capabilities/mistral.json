@@ -1,0 +1,14 @@
+{
+  "attachment": [
+    "mistral-large-2512",
+    "mistral-large-latest",
+    "mistral-medium-2505",
+    "mistral-medium-2508",
+    "mistral-medium-2604",
+    "mistral-medium-latest",
+    "mistral-small-2603",
+    "mistral-small-latest",
+    "pixtral-12b",
+    "pixtral-large-latest"
+  ]
+}

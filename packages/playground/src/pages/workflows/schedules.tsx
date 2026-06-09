@@ -33,7 +33,7 @@ export default function SchedulesPage() {
 
   return (
     <PageLayout>
-      <div className="h-full pt-6">
+      <div className="h-full">
         <SchedulesPageContent workflowId={workflowId} />
       </div>
     </PageLayout>

@@ -38,7 +38,7 @@ import type {
   StreamChunkType,
   StreamTransportRef,
 } from '../stream/types';
-import type { ToolPayloadTransformPolicy } from '../tools';
+import type { RequireToolApproval, ToolPayloadTransformPolicy } from '../tools';
 import type { MastraIdGenerator } from '../types';
 import type { OutputWriter } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
@@ -77,7 +77,7 @@ export type StreamInternal = {
   // running tasks to complete. Used by `agent.streamUntilIdle`, which handles
   // continuation from the outside — the inner loop shouldn't also wait.
   skipBgTaskWait?: boolean;
-  drainPendingSignals?: (runId: string) => CreatedAgentSignal[];
+  drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   // Signal inputs already stored in the initial message list that still need
   // stream data-part echoes before the first model step.
   initialSignalEchoes?: CreatedAgentSignal[];
@@ -148,7 +148,7 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
   downloadRetries?: number;
   downloadConcurrency?: number;
   modelSpanTracker?: IModelSpanTracker;
-  requireToolApproval?: boolean;
+  requireToolApproval?: RequireToolApproval;
   autoResumeSuspendedTools?: boolean;
   agentId: string;
   toolCallConcurrency?: number;

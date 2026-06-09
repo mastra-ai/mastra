@@ -5,7 +5,7 @@ import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceKeysAndValues } from './trace-keys-and-values';
 import { TraceTimeline } from './trace-timeline';
-import { Button, ButtonWithTooltip } from '@/ds/components/Button';
+import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
@@ -41,6 +41,14 @@ export interface TraceDataPanelViewProps {
    * `spans`. When omitted, the span with no parent is used (trace case).
    */
   anchorSpanId?: string;
+  /**
+   * Whether to render the "Evaluating traces and saving them as dataset items is
+   * available in Mastra Studio" info notice when neither `onEvaluateTrace` nor
+   * `onSaveAsDatasetItem` is provided. Defaults to `true`. Pass `false` when this
+   * panel is rendered inside Studio in a context that intentionally omits those
+   * handlers (e.g. inline below an experiment result).
+   */
+  showUnavailableFeaturesMsg?: boolean;
 }
 
 export function TraceDataPanelView({
@@ -61,6 +69,7 @@ export function TraceDataPanelView({
   LinkComponent,
   traceHref,
   anchorSpanId,
+  showUnavailableFeaturesMsg = true,
 }: TraceDataPanelViewProps) {
   const isOnTracePage = placement === 'trace-page';
   const [internalCollapsed, setInternalCollapsed] = useState(false);
@@ -135,30 +144,32 @@ export function TraceDataPanelView({
             </DataPanel.Heading>
             <ButtonsGroup className="ml-auto shrink-0">
               {onCollapsedChange && (
-                <ButtonWithTooltip
+                <Button
                   size="md"
-                  tooltipContent={collapsed ? 'Expand panel' : 'Collapse panel'}
+                  tooltip={collapsed ? 'Expand panel' : 'Collapse panel'}
                   onClick={() => setCollapsed(!collapsed)}
                 >
                   {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
-                </ButtonWithTooltip>
+                </Button>
               )}
-              <DataPanel.NextPrevNav
-                onPrevious={onPrevious}
-                onNext={onNext}
-                previousLabel="Previous trace"
-                nextLabel="Next trace"
-              />
+              {(onPrevious || onNext) && (
+                <DataPanel.NextPrevNav
+                  onPrevious={onPrevious}
+                  onNext={onNext}
+                  previousLabel="Previous trace"
+                  nextLabel="Next trace"
+                />
+              )}
               {showOpenTracePageLink && (
-                <ButtonWithTooltip
+                <Button
                   as={LinkComponent}
                   href={traceHref}
                   size="md"
-                  tooltipContent="Open trace page"
+                  tooltip="Open trace page"
                   aria-label="Open trace page"
                 >
                   <Link2Icon />
-                </ButtonWithTooltip>
+                </Button>
               )}
               <DataPanel.CloseButton onClick={onClose} />
             </ButtonsGroup>
@@ -196,7 +207,7 @@ export function TraceDataPanelView({
               </div>
             )}
 
-            {!isOnTracePage && !onEvaluateTrace && !onSaveAsDatasetItem && (
+            {!isOnTracePage && !onEvaluateTrace && !onSaveAsDatasetItem && showUnavailableFeaturesMsg && (
               <Notice variant="info" className="mb-6">
                 <Notice.Message>
                   Evaluating traces and saving them as dataset items is available in Mastra Studio (local or deployed).

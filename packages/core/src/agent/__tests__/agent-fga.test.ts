@@ -72,7 +72,17 @@ describe('Agent FGA checks', () => {
 
       expect(fgaProvider.require).toHaveBeenCalledWith(
         { id: 'user-1', organizationMembershipId: 'om-1' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
+        {
+          resource: { type: 'agent', id: 'test-agent' },
+          permission: 'agents:execute',
+          context: expect.objectContaining({
+            requestContext,
+            metadata: expect.objectContaining({
+              agentId: 'test-agent',
+              agentName: 'test-agent',
+            }),
+          }),
+        },
       );
     });
 
@@ -89,12 +99,26 @@ describe('Agent FGA checks', () => {
       await expect(agent.generate('test', { requestContext: requestContext as any })).rejects.toThrow(FGADeniedError);
     });
 
+    it('should fail closed when FGA is configured and no user is available', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      const mastra = createMockMastra(fgaProvider);
+
+      const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: {} as any });
+      (agent as any).__registerMastra(mastra);
+
+      await expect(agent.generate('test', { requestContext: new RequestContext() as any })).rejects.toThrow(
+        FGADeniedError,
+      );
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+    });
+
     it('should not call FGA check when no FGA provider configured', async () => {
-      const mastra = createMockMastra();
       const model = createMockModel();
 
+      // No Mastra is registered, so the agent runs on its ephemeral Mastra,
+      // which has no FGA provider — exercising the "FGA not configured" path
+      // while still giving the evented loop the pubsub/workers it needs.
       const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model });
-      (agent as any).__registerMastra(mastra);
 
       const requestContext = new RequestContext();
       requestContext.set('user', { id: 'user-1' });
@@ -124,7 +148,17 @@ describe('Agent FGA checks', () => {
 
       expect(fgaProvider.require).toHaveBeenCalledWith(
         { id: 'user-1', organizationMembershipId: 'om-1' },
-        { resource: { type: 'agent', id: 'test-agent' }, permission: 'agents:execute' },
+        {
+          resource: { type: 'agent', id: 'test-agent' },
+          permission: 'agents:execute',
+          context: expect.objectContaining({
+            requestContext,
+            metadata: expect.objectContaining({
+              agentId: 'test-agent',
+              agentName: 'test-agent',
+            }),
+          }),
+        },
       );
     });
 

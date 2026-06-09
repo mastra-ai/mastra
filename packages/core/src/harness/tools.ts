@@ -452,12 +452,27 @@ function hasMultipleInProgress(tasks: TaskItemSnapshot[]): boolean {
   return tasks.filter(task => task.status === 'in_progress').length > 1;
 }
 
-function multipleInProgressError(tasks: TaskItemSnapshot[]) {
+function multipleInProgressError(tasks: TaskItemSnapshot[]): TaskToolResult {
   return {
     content: 'Only one task can be in_progress at a time.',
     tasks,
     isError: true,
   };
+}
+
+function demoteExtraInProgress(tasks: TaskItemSnapshot[], preferredIndex?: number): TaskItemSnapshot[] {
+  const inProgressIndices = tasks.reduce<number[]>((acc, t, i) => {
+    if (t.status === 'in_progress') acc.push(i);
+    return acc;
+  }, []);
+  if (inProgressIndices.length <= 1) return tasks;
+  const keepIndex =
+    preferredIndex !== undefined && inProgressIndices.includes(preferredIndex)
+      ? preferredIndex
+      : inProgressIndices[inProgressIndices.length - 1]!;
+  return tasks.map((t, i) =>
+    t.status === 'in_progress' && i !== keepIndex ? { ...t, status: 'pending' as const } : t,
+  );
 }
 
 async function writeTasks(
@@ -622,19 +637,19 @@ Usage:
           };
         }
 
-        const updatedTasks = tasks.map((task, index) =>
-          index === taskIndex
-            ? {
-                ...task,
-                ...(content !== undefined ? { content } : {}),
-                ...(status !== undefined ? { status } : {}),
-                ...(activeForm !== undefined ? { activeForm } : {}),
-              }
-            : task,
+        const updatedTasks = demoteExtraInProgress(
+          tasks.map((task, index) =>
+            index === taskIndex
+              ? {
+                  ...task,
+                  ...(content !== undefined ? { content } : {}),
+                  ...(status !== undefined ? { status } : {}),
+                  ...(activeForm !== undefined ? { activeForm } : {}),
+                }
+              : task,
+          ),
+          taskIndex,
         );
-        if (hasMultipleInProgress(updatedTasks)) {
-          return multipleInProgressError(tasks);
-        }
 
         return {
           content: formatTaskListResult(updatedTasks),

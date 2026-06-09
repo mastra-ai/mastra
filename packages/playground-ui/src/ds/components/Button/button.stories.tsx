@@ -4,7 +4,7 @@ import { TooltipProvider } from '../Tooltip';
 import type { ButtonVariant } from './Button';
 import { Button } from './Button';
 
-const ALL_VARIANTS: ButtonVariant[] = ['default', 'primary', 'cta', 'outline', 'ghost', 'link'];
+const ALL_VARIANTS: ButtonVariant[] = ['default', 'primary', 'outline', 'ghost'];
 
 const meta: Meta<typeof Button> = {
   title: 'Elements/Button',
@@ -26,7 +26,7 @@ const meta: Meta<typeof Button> = {
     },
     size: {
       control: { type: 'select' },
-      options: ['sm', 'md', 'default', 'lg', 'icon-sm', 'icon-md', 'icon-lg'],
+      options: ['xs', 'sm', 'md', 'default', 'lg', 'icon-xs', 'icon-sm', 'icon-md', 'icon-lg'],
     },
     disabled: {
       control: { type: 'boolean' },
@@ -58,6 +58,7 @@ export const Variants: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="flex items-center gap-4">
+      <Button size="xs">Extra Small</Button>
       <Button size="sm">Small</Button>
       <Button size="md">Medium</Button>
       <Button size="default">Default</Button>
@@ -99,7 +100,7 @@ export const WithTooltip: Story = {
 export const IconAutoDetect: Story = {
   render: () => (
     <div className="flex items-center gap-4">
-      {(['sm', 'md', 'default', 'lg'] as const).map(size => (
+      {(['xs', 'sm', 'md', 'default', 'lg'] as const).map(size => (
         <Button key={size} size={size}>
           <Settings />
         </Button>
@@ -132,6 +133,9 @@ export const IconButtonVariants: Story = {
 export const IconButtonSizes: Story = {
   render: () => (
     <div className="flex items-center gap-2">
+      <Button size="icon-xs" tooltip="Extra Small">
+        <Settings />
+      </Button>
       <Button size="icon-sm" tooltip="Small">
         <Settings />
       </Button>
@@ -160,6 +164,9 @@ export const VariantSizeMatrix: Story = {
       {ALL_VARIANTS.map(variant => (
         <div key={variant} className="flex flex-wrap items-center gap-3">
           <span className="text-ui-sm text-neutral3 w-24">{variant}</span>
+          <Button variant={variant} size="xs">
+            xs
+          </Button>
           <Button variant={variant} size="sm">
             sm
           </Button>

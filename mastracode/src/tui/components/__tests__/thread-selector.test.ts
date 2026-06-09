@@ -66,12 +66,12 @@ vi.mock('@mariozechner/pi-tui', () => {
     Text,
     fuzzyFilter: (threads: HarnessThread[], query: string, getText: (thread: HarnessThread) => string) =>
       threads.filter(thread => getText(thread).toLowerCase().includes(query.toLowerCase())),
-    getEditorKeybindings: () => ({
+    getKeybindings: () => ({
       matches: (keyData: string, action: string) => {
-        if (action === 'selectUp') return keyData === 'UP';
-        if (action === 'selectDown') return keyData === 'DOWN';
-        if (action === 'selectConfirm') return keyData === '\r';
-        if (action === 'selectCancel') return keyData === 'ESC';
+        if (action === 'tui.select.up') return keyData === 'UP';
+        if (action === 'tui.select.down') return keyData === 'DOWN';
+        if (action === 'tui.select.confirm') return keyData === '\r';
+        if (action === 'tui.select.cancel') return keyData === 'ESC';
         return false;
       },
     }),

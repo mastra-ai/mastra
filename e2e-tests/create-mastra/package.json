@@ -18,8 +18,5 @@
   },
   "dependencies": {
     "form-data": "^2.5.5"
-  },
-  "resolutions": {
-    "ssri": ">=6.0.2"
   }
 }

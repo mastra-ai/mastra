@@ -8,7 +8,7 @@ import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skil
 import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
 import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
-import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-context';
+import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
@@ -104,6 +104,7 @@ function AgentSession() {
                 key={`session-${agentId}-${actualThreadId}`}
                 agentId={agentId!}
                 threadId={actualThreadId}
+                enabled={Boolean(agent?.browserTools?.length)}
               >
                 <ThreadInputProvider>
                   <ObservationalMemoryProvider>
@@ -116,6 +117,7 @@ function AgentSession() {
                             agentId={agentId!}
                             agentName={agent?.name}
                             modelVersion={agent?.modelVersion}
+                            supportsMemory={agent?.supportsMemory}
                             threadId={actualThreadId}
                             memory={hasMemory}
                             refreshThreadList={handleRefreshThreadList}

@@ -1,4 +1,4 @@
-import type { VoiceEventMap } from '@mastra/core/voice';
+import type { VoiceEventMap } from '@internal/voice';
 
 export type XAIRealtimeModel = 'grok-voice-think-fast-1.0' | 'grok-voice-fast-1.0' | (string & {});
 

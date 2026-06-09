@@ -28,6 +28,7 @@ export type SubAgentGenerateResult = Pick<FullOutput, 'text' | 'finishReason' | 
   toolResults?: SubAgentToolResult[];
   suspendPayload?: unknown;
   resumeSchema?: unknown;
+  usage?: FullOutput['usage'];
 };
 
 export type SubAgentStreamResult = {

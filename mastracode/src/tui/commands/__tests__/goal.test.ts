@@ -29,6 +29,20 @@ vi.mock('@mariozechner/pi-tui', () => ({
       this.children.push(child);
     }
   },
+  Container: class {
+    children: unknown[] = [];
+    constructor() {}
+    addChild(child: unknown) {
+      this.children.push(child);
+    }
+    removeChildren() {
+      this.children = [];
+    }
+    clear() {
+      this.children = [];
+    }
+    invalidate() {}
+  },
   SelectList: class {
     onSelect?: (item: { value: string; label: string }) => void;
     onCancel?: () => void;
@@ -57,6 +71,7 @@ vi.mock('../../overlay.js', () => ({
 
 vi.mock('@mastra/core/agent', () => ({
   Agent: vi.fn(),
+  SignalProvider: class {},
 }));
 
 vi.mock('@mastra/core/processors', () => ({
@@ -201,6 +216,184 @@ describe('handleGoalCommand', () => {
       `Goal resumed: "finish the task" — 3/${DEFAULT_MAX_TURNS} turns used. Sending continuation...`,
     );
     expect(sendMessage).toHaveBeenCalledWith({ content: 'Continue working toward the goal: finish the task' });
+  });
+
+  it('retriggers judge evaluation instead of main agent when resume follows a judge failure', async () => {
+    const goal = {
+      id: 'goal-1',
+      objective: 'finish the task',
+      status: 'paused',
+      turnsUsed: 3,
+      maxTurns: DEFAULT_MAX_TURNS,
+      judgeModelId: 'openai/gpt-5.5',
+      lastPauseWasJudgeFailure: true,
+    };
+    const goalManager = new GoalManager();
+    // Inject the goal state directly
+    (goalManager as any).goal = goal;
+    const evaluateAfterTurn = vi.spyOn(goalManager, 'evaluateAfterTurn').mockResolvedValue({
+      continuation: null,
+      judgeResult: { decision: 'paused', reason: 'Judge returned no structured decision.' },
+    });
+    const sendMessage = vi.fn();
+    const showInfo = vi.fn();
+    const ctx = {
+      state: {
+        goalManager,
+        harness: { sendMessage },
+        chatContainer: { addChild: vi.fn(), children: [] },
+        gradientAnimator: { start: vi.fn(), fadeOut: vi.fn() },
+        activeGoalJudge: undefined,
+        ui: { requestRender: vi.fn() },
+      },
+      showInfo,
+      showError: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['resume']);
+
+    // Should NOT send a main-agent continuation
+    expect(sendMessage).not.toHaveBeenCalled();
+    // Should show the judge retrigger message
+    expect(showInfo).toHaveBeenCalledWith(expect.stringContaining('retriggering judge evaluation'));
+    // evaluateAfterTurn should have been called (via triggerGoalJudge)
+    expect(evaluateAfterTurn).toHaveBeenCalled();
+  });
+
+  it('does not send a goal continuation when judge-failure resume has no assistant response to evaluate', async () => {
+    const goal = {
+      id: 'goal-1',
+      objective: 'finish the task',
+      status: 'paused',
+      turnsUsed: 3,
+      maxTurns: DEFAULT_MAX_TURNS,
+      judgeModelId: 'openai/gpt-5.5',
+      lastPauseWasJudgeFailure: true,
+    };
+    const goalManager = new GoalManager();
+    (goalManager as any).goal = goal;
+    const sendSignal = vi.fn();
+    const saveSystemReminderMessage = vi.fn().mockResolvedValue(null);
+    const ctx = {
+      state: {
+        goalManager,
+        harness: {
+          sendSignal,
+          saveSystemReminderMessage,
+          listMessages: vi.fn().mockResolvedValue([{ role: 'user', content: [{ type: 'text', text: 'resume goal' }] }]),
+          setThreadSetting: vi.fn(),
+          getCurrentThreadId: vi.fn(() => 'thread-1'),
+          getResourceId: vi.fn(() => 'resource-1'),
+        },
+        chatContainer: { addChild: vi.fn(), children: [] },
+        gradientAnimator: { start: vi.fn(), fadeOut: vi.fn() },
+        activeGoalJudge: undefined,
+        ui: { requestRender: vi.fn() },
+      },
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['resume']);
+
+    await vi.waitFor(() => {
+      expect(saveSystemReminderMessage).toHaveBeenCalledWith({
+        reminderType: 'goal-judge',
+        message: 'paused (3/50)\nJudge could not evaluate this turn: no assistant response.',
+      });
+    });
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect(goalManager.getGoal()).toMatchObject({ status: 'paused', lastPauseWasJudgeFailure: true });
+  });
+
+  it('pauses and saves the goal when judge continuation signal fails', async () => {
+    const goal = {
+      id: 'goal-1',
+      objective: 'finish the task',
+      status: 'paused',
+      turnsUsed: 3,
+      maxTurns: DEFAULT_MAX_TURNS,
+      judgeModelId: 'openai/gpt-5.5',
+      lastPauseWasJudgeFailure: true,
+    };
+    const goalManager = new GoalManager();
+    (goalManager as any).goal = goal;
+    vi.spyOn(goalManager, 'evaluateAfterTurn').mockResolvedValue({
+      continuation: 'Continue working toward the goal: finish the task',
+      judgeResult: { decision: 'continue', reason: 'Keep going.' },
+    });
+    const saveToThread = vi.spyOn(goalManager, 'saveToThread').mockResolvedValue(undefined);
+    const sendSignal = vi.fn(() => ({ accepted: Promise.reject(new Error('signal failed')) }));
+    const showError = vi.fn();
+    const ctx = {
+      state: {
+        goalManager,
+        harness: { sendSignal },
+        chatContainer: { addChild: vi.fn(), children: [] },
+        gradientAnimator: { start: vi.fn(), fadeOut: vi.fn() },
+        activeGoalJudge: undefined,
+        ui: { requestRender: vi.fn() },
+      },
+      showInfo: vi.fn(),
+      showError,
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['resume']);
+
+    await vi.waitFor(() => {
+      expect(showError).toHaveBeenCalledWith('Failed to send goal continuation: signal failed');
+    });
+    expect(goalManager.getGoal()).toMatchObject({ status: 'paused' });
+    expect(saveToThread).toHaveBeenCalledTimes(2);
+  });
+
+  it('continues goal judge completion handling when judge-result persistence fails', async () => {
+    const goal = {
+      id: 'goal-1',
+      objective: 'finish the task',
+      status: 'paused',
+      turnsUsed: 3,
+      maxTurns: DEFAULT_MAX_TURNS,
+      judgeModelId: 'openai/gpt-5.5',
+      lastPauseWasJudgeFailure: true,
+    };
+    const goalManager = new GoalManager();
+    (goalManager as any).goal = goal;
+    vi.spyOn(goalManager, 'evaluateAfterTurn').mockImplementation(async () => {
+      const currentGoal = goalManager.getGoal();
+      if (currentGoal) currentGoal.status = 'done';
+      return { continuation: null, judgeResult: { decision: 'done', reason: 'Complete.' } };
+    });
+    const switchMode = vi.fn().mockResolvedValue(undefined);
+    const showError = vi.fn();
+    const ctx = {
+      state: {
+        goalManager,
+        planStartedGoalId: 'goal-1',
+        harness: {
+          saveSystemReminderMessage: vi.fn().mockRejectedValue(new Error('persist failed')),
+          switchMode,
+        },
+        chatContainer: { addChild: vi.fn(), children: [] },
+        gradientAnimator: { start: vi.fn(), fadeOut: vi.fn() },
+        activeGoalJudge: undefined,
+        ui: { requestRender: vi.fn() },
+      },
+      showInfo: vi.fn(),
+      showError,
+      updateStatusLine: vi.fn(),
+    } as any;
+
+    await handleGoalCommand(ctx, ['resume']);
+
+    await vi.waitFor(() => {
+      expect(showError).toHaveBeenCalledWith('Failed to persist goal judge result: persist failed');
+      expect(switchMode).toHaveBeenCalledWith({ modeId: 'plan' });
+    });
+    expect(ctx.state.planStartedGoalId).toBeUndefined();
   });
 
   it('creates the pending new thread before saving a new goal', async () => {
@@ -374,6 +567,8 @@ describe('handleGoalCommand', () => {
   });
 
   it('can activate goal mode without sending a trigger so plan approval can inject through the TUI', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T10:00:00.000Z'));
     const goalManager = new GoalManager();
     const sendMessage = vi.fn().mockResolvedValue(undefined);
 
@@ -392,9 +587,12 @@ describe('handleGoalCommand', () => {
     } as any;
 
     await startGoalWithDefaults(ctx, '# Ship it\n\n1. Build\n2. Test', 'Goal cancelled.', { trigger: 'none' });
+    vi.setSystemTime(new Date('2026-05-15T15:00:00.000Z'));
 
     expect(goalManager.isActive()).toBe(true);
+    expect(goalManager.getGoal()).toMatchObject({ activeDurationMs: 0, activeStartedAt: undefined });
     expect(sendMessage).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it('updates the current goal when judge defaults change', async () => {
@@ -473,5 +671,67 @@ describe('handleGoalCommand', () => {
     expect(goalManager.resume).not.toHaveBeenCalled();
     expect(goalManager.saveToThread).not.toHaveBeenCalled();
     expect(sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('clears planStartedGoalId when /goal clear is called', async () => {
+    const goalManager = {
+      clear: vi.fn(),
+      saveToThread: vi.fn(),
+    };
+    const state = {
+      goalManager,
+      planStartedGoalId: 'plan-goal-123',
+    };
+    const showInfo = vi.fn();
+    const ctx = {
+      state,
+      showInfo,
+    } as any;
+
+    await handleGoalCommand(ctx, ['clear']);
+
+    expect(goalManager.clear).toHaveBeenCalled();
+    expect(goalManager.saveToThread).toHaveBeenCalledWith(state);
+    expect(state.planStartedGoalId).toBeUndefined();
+    expect(showInfo).toHaveBeenCalledWith('Goal cleared.');
+  });
+
+  it('clears planStartedGoalId when starting a new manual goal', async () => {
+    const goal = {
+      id: 'manual-goal-456',
+      objective: 'new manual objective',
+      status: 'active' as const,
+      turnsUsed: 0,
+      maxTurns: 50,
+      judgeModelId: 'openai/gpt-5.5',
+      startedAt: new Date().toISOString(),
+    };
+    const goalManager = {
+      getGoal: vi.fn(() => null),
+      setGoal: vi.fn(() => goal),
+      persistOnNextThreadCreate: vi.fn(),
+      saveToThread: vi.fn().mockResolvedValue(undefined),
+    };
+    const sendSignal = vi.fn().mockResolvedValue({ accepted: Promise.resolve() });
+    const state = {
+      goalManager,
+      harness: {
+        getCurrentThreadId: vi.fn(() => 'thread-1'),
+        sendSignal,
+      },
+      planStartedGoalId: 'plan-goal-xyz',
+    };
+    const showInfo = vi.fn();
+    const showError = vi.fn();
+    const ctx = {
+      state,
+      showInfo,
+      showError,
+    } as any;
+
+    await handleGoalCommand(ctx, ['new', 'manual', 'objective']);
+
+    expect(goalManager.setGoal).toHaveBeenCalledWith('new manual objective', expect.any(String), expect.any(Number));
+    expect(state.planStartedGoalId).toBeUndefined();
   });
 });

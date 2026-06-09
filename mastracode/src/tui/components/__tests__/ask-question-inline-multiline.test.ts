@@ -52,7 +52,7 @@ vi.mock('@mariozechner/pi-tui', async importOriginal => {
     Text: StubText,
     Spacer: StubSpacer,
     SelectList: StubSelectList,
-    getEditorKeybindings: () => ({ matches: () => false }),
+    getKeybindings: () => ({ matches: () => false }),
     matchesKey: (_data: string, _key: string) => false,
   };
 });

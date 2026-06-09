@@ -1,14 +1,81 @@
 import { z } from 'zod';
-import { DEFAULT_OM_MODEL_ID } from './constants';
+import { DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID } from './constants';
+
+export type PermissionPolicy = 'allow' | 'ask' | 'deny';
+
+export type MastraCodeSessionState = {
+  currentModelId: string;
+  modeId: string;
+};
+
+export type MastraCodeComposedState = MastraCodeState & MastraCodeSessionState;
+
+export interface MastraCodeState {
+  [key: string]: unknown;
+  [key: `subagentModelId_${string}`]: string | undefined;
+  subagentModelId?: string;
+  projectPath?: string;
+  projectName?: string;
+  configDir: string;
+  gitBranch?: string;
+  lastCommand?: string;
+  observerModelId: string;
+  reflectorModelId: string;
+  observationThreshold: number;
+  reflectionThreshold: number;
+  cavemanObservations: boolean;
+  observeAttachments: 'auto' | boolean;
+  omScope?: 'thread' | 'resource';
+  thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh';
+  yolo: boolean;
+  permissionRules: {
+    categories: Record<string, PermissionPolicy>;
+    tools: Record<string, PermissionPolicy>;
+  };
+  smartEditing: boolean;
+  notifications: 'bell' | 'system' | 'both' | 'off';
+  tasks: Array<{
+    id?: string;
+    content: string;
+    status: 'pending' | 'in_progress' | 'completed';
+    activeForm: string;
+  }>;
+  sandboxAllowedPaths: string[];
+  activePlan: {
+    title: string;
+    plan: string;
+    approvedAt: string;
+  } | null;
+  activeBrowserSettings?: {
+    enabled: boolean;
+    provider: 'stagehand' | 'agent-browser';
+    headless?: boolean;
+    viewport?: {
+      width: number;
+      height: number;
+    };
+    cdpUrl?: string;
+    stagehand?: {
+      env: 'LOCAL' | 'BROWSERBASE';
+      apiKey?: string;
+      projectId?: string;
+    };
+  };
+}
 
 export const stateSchema = z.object({
+  // Session-scoped selection. The legacy Harness stores these in its state and
+  // validates state against this schema, so they MUST be declared here — Zod
+  // strips unknown keys on parse, which would otherwise silently discard the
+  // seeded model and leave the harness with no model selected.
+  currentModelId: z.string().optional(),
+  modeId: z.string().optional(),
+  subagentModelId: z.string().optional(),
   projectPath: z.string().optional(),
   projectName: z.string().optional(),
+  configDir: z.string().default(DEFAULT_CONFIG_DIR),
   gitBranch: z.string().optional(),
   lastCommand: z.string().optional(),
-  currentModelId: z.string().default(''),
-  // Subagent model settings (per-thread/per-mode)
-  subagentModelId: z.string().optional(), // Thread-level default for subagents
   // Observational Memory model settings
   observerModelId: z.string().default(DEFAULT_OM_MODEL_ID),
   reflectorModelId: z.string().default(DEFAULT_OM_MODEL_ID),
@@ -19,6 +86,10 @@ export const stateSchema = z.object({
   // Off by default — caveman style is opt-in via `/om` settings; observers and
   // reflectors fall back to their built-in (prose) behavior unless enabled.
   cavemanObservations: z.boolean().default(false),
+  // Whether OM forwards image/file attachment parts to the Observer LLM.
+  // 'auto' (default) checks the provider capabilities registry to decide.
+  // true/false forces the setting regardless of model capabilities.
+  observeAttachments: z.union([z.literal('auto'), z.boolean()]).default('auto'),
   // Observational Memory scope — 'thread' (per-conversation) or 'resource' (shared across threads)
   omScope: z.enum(['thread', 'resource']).optional(),
   // Thinking level for model reasoning effort

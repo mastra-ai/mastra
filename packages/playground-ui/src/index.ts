@@ -22,14 +22,17 @@ export * from './ds/components/Checkbox';
 export * from './ds/components/Collapsible';
 export * from './ds/components/Combobox';
 export * from './ds/components/Command';
+export * from './ds/components/ContextMenu';
 export * from './ds/components/CodeBlock';
 export * from './ds/components/CopyButton';
 export * from './ds/components/DashboardCard';
 export * from './ds/components/Dialog';
+export * from './ds/components/Drawer';
 export * from './ds/components/DropdownMenu';
 export * from './ds/components/Entry';
 export * from './ds/components/EntityHeader';
 export * from './ds/components/FormFieldBlocks';
+export * from './ds/components/HoverCard';
 export * from './ds/components/Input';
 export * from './ds/components/InputGroup';
 export * from './ds/components/Kbd';
@@ -61,14 +64,12 @@ export * from './ds/components/Sections';
 
 // DS Components - Migrated Complex Elements
 export * from './ds/components/DateTimePicker';
-export * from './ds/components/EntryList';
 export * from './ds/components/JSONSchemaForm';
 export * from './ds/components/KeyValueList';
 export * from './ds/components/MainSidebar';
 export * from './ds/components/PageHeader';
 export * from './ds/components/Section';
 export * from './ds/components/SectionCard';
-export * from './ds/components/SelectElement';
 export * from './ds/components/SettingsRow';
 export * from './ds/components/SideDialog';
 export * from './ds/components/Steps';
@@ -85,9 +86,7 @@ export * from './ds/components/Chip';
 export * from './ds/components/Tree';
 export * from './ds/components/DataFilter';
 export * from './ds/components/DataList';
-export * from './ds/components/EntityList';
 export * from './ds/components/LogsDataList';
-export * from './ds/components/EntityListPageLayout';
 export * from './ds/components/PageLayout';
 export * from './ds/components/ListSearch';
 export * from './ds/components/ErrorBoundary';
@@ -113,6 +112,7 @@ export * from './ds/icons/index';
 export * from './ds/tokens';
 
 // DS Primitives
+export * from './ds/primitives/control-size';
 export * from './ds/primitives/form-element';
 export * from './ds/primitives/transitions';
 

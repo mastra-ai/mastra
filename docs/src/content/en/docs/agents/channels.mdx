@@ -30,7 +30,7 @@ export const supportAgent = new Agent({
   id: 'support-agent',
   name: 'Support Agent',
   instructions: 'You are a helpful support assistant.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   channels: {
     adapters: {
       slack: createSlackAdapter(),
@@ -95,6 +95,8 @@ When a user mentions the agent mid-conversation in a channel thread, the agent m
 
 Set `threadContext: { maxMessages: 0 }` to disable this behavior. This only applies to non-DM threads.
 
+Mastra also adds a short system message telling the agent which channel and platform the request came from (DM vs public channel, platform name, bot display name). Set `threadContext: { addSystemMessage: false }` to skip it.
+
 ## Tool approval
 
 Tools with `requireApproval: true` render as interactive cards with Approve and Deny buttons:
@@ -119,7 +121,7 @@ const deleteFile = createTool({
 
 When the agent calls this tool, users see a card with the tool name, arguments, and Approve/Deny buttons. The tool only executes after approval.
 
-Set `cards: false` on an adapter to render tool calls as plain text instead of interactive cards. When cards are disabled and a tool requires approval, the agent uses `autoResumeSuspendedTools` to let the LLM decide based on the conversation context.
+Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. In `'hidden'` mode the agent uses `autoResumeSuspendedTools` to let the LLM decide based on the conversation context, since hidden mode does not post approval buttons.
 
 ## Multi-user awareness
 

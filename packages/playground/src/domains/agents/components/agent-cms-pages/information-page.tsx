@@ -26,7 +26,7 @@ export function InformationPage() {
           <Input
             id="agent-name"
             placeholder="My Agent"
-            className="bg-surface2"
+            variant="outline"
             {...register('name')}
             error={!!errors.name}
             disabled={readOnly}
@@ -41,7 +41,7 @@ export function InformationPage() {
           <Textarea
             id="agent-description"
             placeholder="Describe what this agent does"
-            className="bg-surface2"
+            variant="outline"
             {...register('description')}
             error={!!errors.description}
             disabled={readOnly}

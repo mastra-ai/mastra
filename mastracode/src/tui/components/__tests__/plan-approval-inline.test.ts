@@ -49,6 +49,29 @@ describe('PlanApprovalInlineComponent', () => {
     expect(rendered).toContain('╰');
   });
 
+  it('forces a full redraw when entering feedback mode', () => {
+    const ui = { requestRender: vi.fn() };
+    const component = new PlanApprovalInlineComponent(
+      {
+        planId: 'plan-1',
+        title: 'Ship it',
+        plan: 'Build the feature',
+        onApprove: vi.fn(),
+        onGoal: vi.fn(),
+        onReject: vi.fn(),
+      },
+      ui as any,
+    );
+
+    (component as any).handleSelection('edit');
+    component.handleInput('a');
+    const rendered = component.render(80).join('\n');
+
+    expect(ui.requestRender).toHaveBeenCalledWith(true);
+    expect(rendered).toContain('Provide feedback for revision:');
+    expect(rendered).toContain('a');
+  });
+
   it('renders requested changes below the plan after feedback is submitted', () => {
     const onReject = vi.fn();
     const component = new PlanApprovalInlineComponent(

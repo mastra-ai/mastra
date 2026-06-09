@@ -13,11 +13,13 @@ import { Agent } from '../agent';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
+import { RequestContext } from '../request-context';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools/tool';
 import { PUBSUB_SYMBOL } from './constants';
+import { createWorkflow } from './create';
 import type { Workflow } from './types';
-import { createStep, createWorkflow } from './workflow';
+import { createStep } from './workflow';
 
 // ============================================================================
 // Shared Test Suite (Default Engine)
@@ -677,6 +679,109 @@ describe('Workflow (Default Engine Specifics)', () => {
       expect(childRuns?.runs.length).toBe(1);
       // Regression guard for #15246: child workflow snapshots must inherit the parent's resourceId.
       expect(childRuns?.runs[0]?.resourceId).toBe('workspace-1');
+    });
+  });
+
+  describe('FGA checks', () => {
+    function createFGAWorkflow() {
+      const step = createStep({
+        id: 'fga-step',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        execute: async ({ inputData }) => inputData,
+      });
+
+      return createWorkflow({
+        id: 'fga-workflow',
+        inputSchema: z.object({ value: z.string() }),
+        outputSchema: z.object({ value: z.string() }),
+        steps: [step],
+      })
+        .then(step)
+        .commit();
+    }
+
+    it('checks internal workflow execution FGA with request context metadata', async () => {
+      const fgaProvider = {
+        require: vi.fn().mockResolvedValue(undefined),
+        check: vi.fn(),
+        filterAccessible: vi.fn(),
+      };
+      const workflow = createFGAWorkflow();
+      const mastra = new Mastra({
+        logger: false,
+        server: { fga: fgaProvider },
+      });
+      workflow.__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+
+      const result = await (workflow as any).execute({
+        runId: 'run-1',
+        resourceId: 'tenant-1',
+        inputData: { value: 'ok' },
+        state: {},
+        setState: vi.fn(),
+        suspend: vi.fn(),
+        [PUBSUB_SYMBOL]: new EventEmitterPubSub(),
+        mastra,
+        requestContext,
+        abort: vi.fn(),
+        abortSignal: new AbortController().signal,
+        engine: 'default',
+        bail: vi.fn(),
+      });
+
+      expect(result).toEqual({ value: 'ok' });
+      expect(fgaProvider.require).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        {
+          resource: { type: 'workflow', id: 'fga-workflow' },
+          permission: 'workflows:execute',
+          context: expect.objectContaining({
+            resourceId: 'tenant-1',
+            requestContext,
+            metadata: expect.objectContaining({
+              workflowId: 'fga-workflow',
+              runId: 'run-1',
+              resourceId: 'tenant-1',
+            }),
+          }),
+        },
+      );
+    });
+
+    it('fails closed when internal workflow FGA is configured and no user is available', async () => {
+      const fgaProvider = {
+        require: vi.fn().mockResolvedValue(undefined),
+        check: vi.fn(),
+        filterAccessible: vi.fn(),
+      };
+      const workflow = createFGAWorkflow();
+      const mastra = new Mastra({
+        logger: false,
+        server: { fga: fgaProvider },
+      });
+      workflow.__registerMastra(mastra);
+
+      await expect(
+        (workflow as any).execute({
+          runId: 'run-2',
+          inputData: { value: 'ok' },
+          state: {},
+          setState: vi.fn(),
+          suspend: vi.fn(),
+          [PUBSUB_SYMBOL]: new EventEmitterPubSub(),
+          mastra,
+          requestContext: new RequestContext(),
+          abort: vi.fn(),
+          abortSignal: new AbortController().signal,
+          engine: 'default',
+          bail: vi.fn(),
+        }),
+      ).rejects.toThrow('authenticated user is required');
+      expect(fgaProvider.require).not.toHaveBeenCalled();
     });
   });
 

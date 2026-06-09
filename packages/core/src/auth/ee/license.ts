@@ -5,6 +5,8 @@
 /**
  * License information.
  */
+import { hashTelemetryValue } from '../../telemetry/posthog';
+
 export interface LicenseInfo {
   /** Whether the license is valid */
   valid: boolean;
@@ -15,6 +17,15 @@ export interface LicenseInfo {
   /** Organization name */
   organization?: string;
   /** License tier */
+  tier?: 'standard' | 'enterprise';
+}
+
+export interface SafeLicenseSummary {
+  valid: boolean;
+  isDevEnvironment: boolean;
+  licenseHash?: string;
+  anonymousId?: string;
+  features?: string[];
   tier?: 'standard' | 'enterprise';
 }
 
@@ -113,6 +124,21 @@ export function isFeatureEnabled(feature: string): boolean {
  */
 export function getLicenseInfo(): LicenseInfo | null {
   return cachedLicense;
+}
+
+export function getSafeLicenseSummary(): SafeLicenseSummary {
+  const key = process.env['MASTRA_EE_LICENSE'];
+  const info = cachedLicense ?? validateLicense(key);
+  const licenseHash = key ? hashTelemetryValue(key) : undefined;
+
+  return {
+    valid: info.valid,
+    isDevEnvironment: isDevEnvironment(),
+    licenseHash: licenseHash ? licenseHash.slice(0, 16) : undefined,
+    anonymousId: licenseHash ? `${licenseHash.slice(0, 16)}-anonymous` : undefined,
+    features: info.features,
+    tier: info.tier,
+  };
 }
 
 /**

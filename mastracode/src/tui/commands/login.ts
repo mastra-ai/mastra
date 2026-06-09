@@ -89,6 +89,14 @@ export async function handleLoginCommand(ctx: SlashCommandContext, mode: 'login'
     return;
   }
 
+  if (mode === 'login') {
+    ctx.analytics?.trackInteractivePrompt('login_provider_selector', {
+      threadId: ctx.state.harness.getCurrentThreadId(),
+      resourceId: ctx.state.harness.getResourceId(),
+      mode: ctx.state.harness.getCurrentModeId(),
+    });
+  }
+
   return new Promise<void>(resolve => {
     const selector = new LoginSelectorComponent(
       mode,

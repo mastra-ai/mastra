@@ -28,7 +28,8 @@ describe('create mastra', () => {
           stdio: ['inherit', 'inherit', 'inherit'],
           env: {
             ...process.env,
-            npm_config_registry: registry,
+            pnpm_config_registry: registry,
+            pnpm_config_minimum_release_age: '0',
           },
         },
       );
@@ -149,6 +150,7 @@ describe('create mastra', () => {
               "provider": "openai",
               "skills": [],
               "source": "code",
+              "supportsMemory": true,
               "tools": {
                 "weatherTool": {
                   "description": "Get current weather for a location",

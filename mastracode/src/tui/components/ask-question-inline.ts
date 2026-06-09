@@ -14,26 +14,38 @@
 
 import {
   Container,
-  getEditorKeybindings,
+  getKeybindings,
   Input,
-  SelectList,
   Spacer,
+  truncateToWidth,
   visibleWidth,
   wrapTextWithAnsi,
 } from '@mariozechner/pi-tui';
 import type { Focusable, SelectItem, TUI } from '@mariozechner/pi-tui';
 import { BOX_INDENT_STR, theme, getSelectListTheme, getEditorTheme } from '../theme.js';
 import { MultilineInput } from './multiline-input.js';
+import { WrappingSelectList } from './wrapping-select-list.js';
+
+/**
+ * Selection mode for option prompts. `single_select` selects one option on Enter
+ * (the default). `multi_select` lets the user toggle several options with Space and
+ * confirm them together with Enter, returning all selected labels as an array.
+ */
+export type AskQuestionSelectionMode = 'single_select' | 'multi_select';
 
 export interface AskQuestionInlineOptions {
   question: string;
   options?: Array<{ label: string; description?: string }>;
+  /** Controls whether options are single- or multi-select. Defaults to single_select. */
+  selectionMode?: AskQuestionSelectionMode;
   /** Format the text shown after an answer is selected. Defaults to `question → answer`. */
   formatResult?: (answer: string) => string;
   /** If provided, determines whether an answer should be shown with error styling (red ✗). */
   isNegativeAnswer?: (answer: string) => boolean;
   /** Allow submitting an empty string in free-text mode. */
   allowEmptyInput?: boolean;
+  /** Show the "Custom response..." option in select mode. Defaults to true. */
+  allowCustomResponse?: boolean;
   /**
    * Use a multiline editor for free-text input (Shift+Enter / \+Enter for new lines).
    * Defaults to false — most prompts ask for short answers like names, paths, or yes/no.
@@ -41,6 +53,11 @@ export interface AskQuestionInlineOptions {
    */
   multiline?: boolean;
   onSubmit: (answer: string) => void;
+  /**
+   * Called instead of `onSubmit` when the prompt is multi-select, with every selected
+   * option label. Falls back to `onSubmit` with a comma-joined string when omitted.
+   */
+  onSubmitMulti?: (answers: string[]) => void;
   onCancel: () => void;
 }
 
@@ -50,13 +67,15 @@ export interface AskQuestionInlineOptions {
  */
 class AskQuestionBorderedBox {
   questionLines: string[];
-  private selectList?: SelectList;
+  private selectList?: WrappingSelectList;
   private input?: Input | MultilineInput;
   private hintText: string;
   items: Array<{ label: string; description?: string }>;
   private answered = false;
   private cancelled = false;
   private selectedValue?: string;
+  /** Selected option labels when the box was answered in multi-select mode. */
+  private selectedValues?: string[];
   private answerIsNegative = false;
   /** True when created during streaming, before activate() is called */
   private streaming = false;
@@ -65,7 +84,7 @@ class AskQuestionBorderedBox {
     questionLines: string[],
     hintText: string,
     items: Array<{ label: string; description?: string }>,
-    selectList?: SelectList,
+    selectList?: WrappingSelectList,
     input?: Input | MultilineInput,
     streaming?: boolean,
   ) {
@@ -81,7 +100,7 @@ class AskQuestionBorderedBox {
     this.selectList?.invalidate();
   }
 
-  setInteractive(selectList?: SelectList, input?: Input | MultilineInput, hintText?: string) {
+  setInteractive(selectList?: WrappingSelectList, input?: Input | MultilineInput, hintText?: string) {
     this.streaming = false;
     this.selectList = selectList;
     this.input = input;
@@ -93,6 +112,13 @@ class AskQuestionBorderedBox {
     this.answered = true;
     this.selectedValue = selectedValue;
     this.answerIsNegative = isNegative;
+  }
+
+  setAnsweredMulti(selectedValues: string[]) {
+    this.streaming = false;
+    this.answered = true;
+    this.selectedValues = selectedValues;
+    this.answerIsNegative = false;
   }
 
   setCancelled() {
@@ -126,10 +152,16 @@ class AskQuestionBorderedBox {
     // Top border: ╭──...──╮
     lines.push(BOX_INDENT_STR + border(`╭${'─'.repeat(boxWidth - 2)}╮`));
 
-    // Helper to add a bordered line
+    // Helper to add a bordered line (truncates content that exceeds innerWidth)
     const addLine = (content: string, contentVisWidth: number) => {
-      const pad = Math.max(0, innerWidth - contentVisWidth);
-      lines.push(BOX_INDENT_STR + border('│') + ' ' + content + ' '.repeat(pad) + ' ' + border('│'));
+      let finalContent = content;
+      let finalWidth = contentVisWidth;
+      if (finalWidth > innerWidth) {
+        finalContent = truncateToWidth(content, innerWidth);
+        finalWidth = visibleWidth(finalContent);
+      }
+      const pad = Math.max(0, innerWidth - finalWidth);
+      lines.push(BOX_INDENT_STR + border('│') + ' ' + finalContent + ' '.repeat(pad) + ' ' + border('│'));
     };
 
     // Question header
@@ -148,37 +180,51 @@ class AskQuestionBorderedBox {
     // Empty separator
     addLine('', 0);
 
+    // Wrap a labelled option line so long labels don't overflow the bordered box.
+    // Mirrors the free-text answered branch below: first wrapped line keeps the
+    // styled prefix (icon/spaces), continuation lines indent 3 spaces.
+    const continuationPrefix = '   ';
+    const addWrappedOptionLine = (prefix: string, label: string, style: (s: string) => string) => {
+      const prefixVis = visibleWidth(prefix);
+      const wrapped = wrapTextWithAnsi(label, Math.max(1, innerWidth - prefixVis));
+      wrapped.forEach((line, index) => {
+        const linePrefix = index === 0 ? prefix : continuationPrefix;
+        const content = `${linePrefix}${style(line)}`;
+        addLine(content, visibleWidth(linePrefix) + visibleWidth(line));
+      });
+    };
+
     if (this.streaming) {
       // Streaming: show option labels as they arrive (dimmed, no interactivity)
+      const dim = (s: string) => theme.fg('dim', s);
       for (const item of this.items) {
-        const line = theme.fg('dim', `   ${item.label}`);
-        addLine(line, visibleWidth(line));
+        addWrappedOptionLine(continuationPrefix, item.label, dim);
       }
       // Waiting indicator
       const waiting = theme.fg('dim', '…');
       addLine(waiting, visibleWidth(waiting));
     } else if (this.answered && this.items.length > 0) {
       // Render frozen item list
+      const dim = (s: string) => theme.fg('dim', s);
       if (this.cancelled) {
         // All items dimmed, cancelled notice
         for (const item of this.items) {
-          const line = theme.fg('dim', `   ${item.label}`);
-          addLine(line, visibleWidth(line));
+          addWrappedOptionLine(continuationPrefix, item.label, dim);
         }
         const cancelLine = `${theme.fg('error', '✗')}  ${theme.fg('dim', '(cancelled)')}`;
         addLine(cancelLine, visibleWidth(cancelLine));
       } else {
         // ✓/✗ on selected, dimmed unselected
+        const text = (s: string) => theme.fg('text', s);
         for (const item of this.items) {
-          const isSelected = item.label === this.selectedValue;
+          const isSelected = this.selectedValues
+            ? this.selectedValues.includes(item.label)
+            : item.label === this.selectedValue;
           if (isSelected) {
             const icon = this.answerIsNegative ? theme.fg('error', '✗') : theme.fg('success', '✓');
-            const label = theme.fg('text', item.label);
-            const line = `${icon}  ${label}`;
-            addLine(line, visibleWidth(line));
+            addWrappedOptionLine(`${icon}  `, item.label, text);
           } else {
-            const line = theme.fg('dim', `   ${item.label}`);
-            addLine(line, visibleWidth(line));
+            addWrappedOptionLine(continuationPrefix, item.label, dim);
           }
         }
       }
@@ -228,14 +274,17 @@ class AskQuestionBorderedBox {
 
 export class AskQuestionInlineComponent extends Container implements Focusable {
   private borderedBox: AskQuestionBorderedBox;
-  private selectList?: SelectList;
+  private selectList?: WrappingSelectList;
   private input?: Input | MultilineInput;
   private tui?: TUI;
   private onSubmit?: (answer: string) => void;
+  private onSubmitMulti?: (answers: string[]) => void;
   private onCancel?: () => void;
   private isNegativeAnswer?: (answer: string) => boolean;
   private allowEmptyInput = false;
   private multiline = false;
+  private allowCustomResponse = true;
+  private multiSelect = false;
   private answered = false;
 
   /**
@@ -304,16 +353,19 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     if (options) {
       // Full construction with interactive elements
       this.onSubmit = options.onSubmit;
+      this.onSubmitMulti = options.onSubmitMulti;
       this.onCancel = options.onCancel;
       this.isNegativeAnswer = options.isNegativeAnswer;
       this.allowEmptyInput = Boolean(options.allowEmptyInput);
       this.multiline = Boolean(options.multiline);
+      this.allowCustomResponse = options.allowCustomResponse ?? true;
+      this.multiSelect = options.selectionMode === 'multi_select';
 
       const questionLines = options.question.split('\n');
 
       let hintText: string;
       if (options.options && options.options.length > 0) {
-        hintText = '↑↓ to navigate · Enter to select · Esc to skip';
+        hintText = this.selectHintText();
         this.buildSelectMode(options.options);
       } else {
         hintText = this.useMultiline()
@@ -364,20 +416,26 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
   activate(options: {
     question: string;
     options?: Array<{ label: string; description?: string }>;
+    selectionMode?: AskQuestionSelectionMode;
     isNegativeAnswer?: (answer: string) => boolean;
     allowEmptyInput?: boolean;
+    allowCustomResponse?: boolean;
     multiline?: boolean;
     tui?: TUI;
     onSubmit: (answer: string) => void;
+    onSubmitMulti?: (answers: string[]) => void;
     onCancel: () => void;
   }): void {
     if (this.answered) return;
     if (options.tui) this.tui = options.tui;
     this.onSubmit = options.onSubmit;
+    this.onSubmitMulti = options.onSubmitMulti;
     this.onCancel = options.onCancel;
     this.isNegativeAnswer = options.isNegativeAnswer;
     this.allowEmptyInput = Boolean(options.allowEmptyInput);
+    this.allowCustomResponse = options.allowCustomResponse ?? true;
     this.multiline = Boolean(options.multiline);
+    this.multiSelect = options.selectionMode === 'multi_select';
 
     // Update question text and items to final values
     this.borderedBox.questionLines = options.question.split('\n');
@@ -386,7 +444,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     // Build interactive elements
     let hintText: string;
     if (options.options && options.options.length > 0) {
-      hintText = '↑↓ to navigate · Enter to select · Esc to skip';
+      hintText = this.selectHintText();
       this.buildSelectMode(options.options);
     } else {
       hintText = this.useMultiline()
@@ -401,27 +459,43 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
 
   private static readonly CUSTOM_RESPONSE_VALUE = '__custom_response__';
 
+  /** Hint line shown under an option list, tailored to single- vs multi-select. */
+  private selectHintText(): string {
+    return this.multiSelect
+      ? 'Space to toggle · Enter to confirm · Esc to skip'
+      : '↑↓ to navigate · Enter to select · Esc to skip';
+  }
+
   private buildSelectMode(opts: Array<{ label: string; description?: string }>): void {
     const items: SelectItem[] = opts.map(opt => ({
       value: opt.label,
-      label: opt.description ? `  ${opt.label}  ${theme.fg('dim', opt.description)}` : `  ${opt.label}`,
+      label: opt.description ? `${opt.label}  ${theme.fg('dim', opt.description)}` : opt.label,
     }));
 
-    // Append a "Custom response..." option so the user can type a free-text answer
-    items.push({
-      value: AskQuestionInlineComponent.CUSTOM_RESPONSE_VALUE,
-      label: `  ${theme.fg('dim', '✎ Custom response...')}`,
-    });
+    // "Custom response..." only applies to single-select: it switches to free-text.
+    // Multi-select toggles a fixed option set, so the escape hatch doesn't apply.
+    if (this.allowCustomResponse && !this.multiSelect) {
+      items.push({
+        value: AskQuestionInlineComponent.CUSTOM_RESPONSE_VALUE,
+        label: theme.fg('dim', '✎ Custom response...'),
+      });
+    }
 
-    this.selectList = new SelectList(items, Math.min(items.length, 8), getSelectListTheme());
+    this.selectList = new WrappingSelectList(items, Math.min(items.length, 8), getSelectListTheme(), this.multiSelect);
 
-    this.selectList.onSelect = (item: SelectItem) => {
-      if (item.value === AskQuestionInlineComponent.CUSTOM_RESPONSE_VALUE) {
-        this.switchToCustomInput();
-        return;
-      }
-      this.handleAnswer(item.value);
-    };
+    if (this.multiSelect) {
+      this.selectList.onConfirmMulti = (selected: SelectItem[]) => {
+        this.handleMultiAnswer(selected.map(item => item.value));
+      };
+    } else {
+      this.selectList.onSelect = (item: SelectItem) => {
+        if (item.value === AskQuestionInlineComponent.CUSTOM_RESPONSE_VALUE) {
+          this.switchToCustomInput();
+          return;
+        }
+        this.handleAnswer(item.value);
+      };
+    }
     this.selectList.onCancel = () => {
       this.handleCancel();
     };
@@ -473,7 +547,7 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
           this.handleAnswer(trimmed);
         }
       };
-      (this.input as any).keybindings = getEditorKeybindings();
+      (this.input as any).keybindings = getKeybindings();
     }
 
     // Carry focus over so callers (constructor, activate, switchToCustomInput)
@@ -496,6 +570,20 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     this.onSubmit?.(answer);
   }
 
+  private handleMultiAnswer(answers: string[]): void {
+    if (this.answered) return;
+    this.answered = true;
+    this.borderedBox.setAnsweredMulti(answers);
+
+    // Prefer the array-shaped callback; fall back to a comma-joined string so
+    // single-select-only callers still receive a usable answer.
+    if (this.onSubmitMulti) {
+      this.onSubmitMulti(answers);
+    } else {
+      this.onSubmit?.(answers.join(', '));
+    }
+  }
+
   private handleCancel(): void {
     if (this.answered) return;
     this.answered = true;
@@ -511,8 +599,8 @@ export class AskQuestionInlineComponent extends Container implements Focusable {
     if (this.selectList) {
       this.selectList.handleInput(data);
     } else if (this.input) {
-      const kb = getEditorKeybindings();
-      if (kb.matches(data, 'selectCancel')) {
+      const kb = getKeybindings();
+      if (kb.matches(data, 'tui.select.cancel')) {
         this.handleCancel();
         return;
       }

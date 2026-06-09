@@ -1,4 +1,3 @@
-import type { HonoRequest } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 import { MastraAuthProvider } from './auth';
 import { CompositeAuth } from './composite-auth';
@@ -23,23 +22,19 @@ class MockAuthProvider extends MastraAuthProvider {
     this._user = user;
   }
 
-  async authenticateToken(_token: string, _request: HonoRequest): Promise<any | null> {
+  async authenticateToken(_token: string, _request: Request): Promise<any | null> {
     if (this._shouldThrow) {
       throw new Error('Authentication failed');
     }
     return this._shouldAuthenticate ? this._user : null;
   }
 
-  async authorizeUser(_user: any, _request: HonoRequest): Promise<boolean> {
+  async authorizeUser(_user: any, _request: Request): Promise<boolean> {
     return this._shouldAuthorize;
   }
 }
 
-// Mock HonoRequest
-const mockRequest = {
-  url: 'http://localhost/test',
-  method: 'GET',
-} as HonoRequest;
+const mockRequest = new Request('http://localhost/test', { method: 'GET' });
 
 describe('Composite auth', () => {
   describe('CompositeAuth', () => {

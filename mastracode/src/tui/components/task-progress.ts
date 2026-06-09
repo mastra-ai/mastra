@@ -4,16 +4,19 @@
  * Hidden when no tasks exist OR when all tasks are completed.
  * Renders between status and editor.
  */
-import { Container, Text, Spacer } from '@mariozechner/pi-tui';
+import { Container, Text, Spacer, visibleWidth } from '@mariozechner/pi-tui';
 import type { TaskItemInput } from '@mastra/core/harness';
 import chalk from 'chalk';
-import { theme } from '../theme.js';
+import { getTermWidth, theme } from '../theme.js';
+import { truncateAnsi } from './ansi.js';
 
 export class TaskProgressComponent extends Container {
   private tasks: TaskItemInput[] = [];
+  private quietMode = false;
 
   constructor() {
     super();
+    this.rebuildDisplay();
   }
 
   /**
@@ -21,6 +24,11 @@ export class TaskProgressComponent extends Container {
    */
   updateTasks(tasks: TaskItemInput[]): void {
     this.tasks = tasks;
+    this.rebuildDisplay();
+  }
+
+  setQuietMode(enabled: boolean): void {
+    this.quietMode = enabled;
     this.rebuildDisplay();
   }
 
@@ -34,24 +42,82 @@ export class TaskProgressComponent extends Container {
   private rebuildDisplay(): void {
     this.clear();
 
-    // No tasks = no render (component takes zero vertical space)
-    if (this.tasks.length === 0) return;
-
-    // Progress header
     const completed = this.tasks.filter(t => t.status === 'completed').length;
     const total = this.tasks.length;
+    const hasVisibleTasks = total > 0 && completed !== total;
 
-    // Hide the component when all tasks are completed
-    if (completed === total) return;
+    if (!hasVisibleTasks) {
+      this.addChild(new Spacer(1));
+      return;
+    }
+
+    this.addChild(new Spacer(1));
+
+    if (this.quietMode) {
+      for (const line of this.formatQuietTaskLines(completed, total)) {
+        this.addChild(new Text(line, 0, 0));
+      }
+      return;
+    }
+
+    // Progress header
     const headerText =
       '  ' + theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${completed}/${total} completed]`);
 
-    this.addChild(new Spacer(1));
     this.addChild(new Text(headerText, 0, 0));
 
     // Render each task
     for (const task of this.tasks) {
       this.addChild(new Text(this.formatTaskLine(task), 0, 0));
+    }
+  }
+
+  private formatQuietTaskLines(completed: number, total: number): string[] {
+    const prefix = '  ' + theme.fg('muted', `${completed}/${total}`);
+    const prefixWidth = visibleWidth(prefix);
+    const continuationPrefix = ' '.repeat(prefixWidth);
+    const maxWidth = Math.max(20, getTermWidth());
+    const itemSeparator = '  ';
+    const separatorWidth = itemSeparator.length;
+    const lines: string[] = [prefix];
+
+    for (const task of this.tasks) {
+      const item = this.formatQuietTaskItem(task);
+      const currentLine = lines[lines.length - 1]!;
+      const currentWidth = visibleWidth(currentLine);
+      const separator = currentWidth === 0 ? '' : itemSeparator;
+      const sepWidth = currentWidth === 0 ? 0 : separatorWidth;
+      const candidateWidth = currentWidth + sepWidth + visibleWidth(item);
+
+      if (candidateWidth <= maxWidth) {
+        lines[lines.length - 1] = `${currentLine}${separator}${item}`;
+        continue;
+      }
+
+      const itemLineWidth = maxWidth - prefixWidth - separatorWidth;
+      lines.push(`${continuationPrefix}${itemSeparator}${truncateAnsi(item, itemLineWidth)}`);
+    }
+
+    return lines;
+  }
+
+  private formatQuietTaskItem(task: TaskItemInput): string {
+    switch (task.status) {
+      case 'completed': {
+        const icon = theme.fg('dim', '✓');
+        const text = chalk.strikethrough(theme.fg('dim', task.content));
+        return `${icon} ${text}`;
+      }
+      case 'in_progress': {
+        const icon = theme.fg('warning', '▶');
+        const text = theme.bold(theme.fg('warning', task.activeForm));
+        return `${icon} ${text}`;
+      }
+      case 'pending': {
+        const icon = theme.fg('dim', '○');
+        const text = theme.fg('muted', task.content);
+        return `${icon} ${text}`;
+      }
     }
   }
 

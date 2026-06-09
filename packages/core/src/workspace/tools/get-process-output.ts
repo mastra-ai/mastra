@@ -2,7 +2,7 @@ import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
-import { emitWorkspaceMetadata, requireSandbox } from './helpers';
+import { emitWorkspaceMetadata, getDynamicSandboxCacheKeyHint, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
 
@@ -47,7 +47,7 @@ Use this after starting a background command with execute_command (background: t
       const handle = await sandbox.processes.get(pid);
       if (!handle) {
         span.end({ success: false });
-        return `No background process found with PID ${pid}.`;
+        return `No background process found with PID ${pid}.${getDynamicSandboxCacheKeyHint(workspace)}`;
       }
 
       // Emit process info so the UI can display the command

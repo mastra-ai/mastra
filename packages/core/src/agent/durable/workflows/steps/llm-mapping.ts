@@ -124,10 +124,12 @@ export function createDurableLLMMappingStep() {
       }
 
       // 3. Determine if we should continue
-      // Preserve the LLM step's isContinued (which respects finishReason),
-      // but force-stop if all tools errored (no point re-calling LLM)
+      // Preserve the LLM step's isContinued (which respects finishReason).
+      // Keep ToolNotFoundError recoverable so the model can see the error and
+      // retry with one of the currently available tool names.
       const allToolsErrored = toolResults.length > 0 && toolResults.every(r => r.error !== undefined);
-      const isContinued = llmOutput.stepResult.isContinued && !allToolsErrored;
+      const allToolsNotFound = allToolsErrored && toolResults.every(r => r.error?.name === 'ToolNotFoundError');
+      const isContinued = llmOutput.stepResult.isContinued && (!allToolsErrored || allToolsNotFound);
 
       // 4. Build the output
       const output: DurableAgenticExecutionOutput = {

@@ -10,6 +10,12 @@ export const MASTRA_RESOURCE_ID_KEY = 'mastra__resourceId';
 
 export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
 
+export const MASTRA_USER_KEY = 'mastra__user';
+
+export const MASTRA_USER_PERMISSIONS_KEY = 'mastra__userPermissions';
+
+export const MASTRA_USER_ROLES_KEY = 'mastra__userRoles';
+
 export const MASTRA_AUTH_TOKEN_KEY = 'mastra__authToken';
 
 export const MASTRA_IS_STUDIO_KEY = 'mastra__isStudio';
@@ -21,6 +27,9 @@ export const MASTRA_STUDIO_CLIENT_TYPE = 'studio';
 const RESERVED_CONTEXT_KEYS = new Set([
   MASTRA_RESOURCE_ID_KEY,
   MASTRA_THREAD_ID_KEY,
+  MASTRA_USER_KEY,
+  MASTRA_USER_PERMISSIONS_KEY,
+  MASTRA_USER_ROLES_KEY,
   MASTRA_AUTH_TOKEN_KEY,
   MASTRA_IS_STUDIO_KEY,
 ]);

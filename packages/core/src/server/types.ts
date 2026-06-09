@@ -1,4 +1,4 @@
-import type { Handler, MiddlewareHandler, HonoRequest, Context } from 'hono';
+import type { Handler, MiddlewareHandler, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import type { ZodError } from 'zod/v4';
@@ -8,6 +8,7 @@ import type { IRBACProvider } from '../auth/ee/interfaces/rbac';
 import type { Mastra } from '../mastra';
 import type { RequestContext } from '../request-context';
 import type { MastraAuthProvider } from './auth';
+import type { AuthenticateTokenFn } from './request-types';
 
 type RouteFGAConfig = FGARouteConfig;
 
@@ -20,8 +21,9 @@ export type ApiRoute =
       handler: Handler;
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
+      cors?: CorsOptions;
       requiresAuth?: boolean;
-      requiresPermission?: MastraFGAPermissionInput;
+      requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
       fga?: RouteFGAConfig;
       /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
       _mastraInternal?: true;
@@ -32,14 +34,17 @@ export type ApiRoute =
       createHandler: ({ mastra }: { mastra: Mastra }) => Promise<Handler>;
       middleware?: MiddlewareHandler | MiddlewareHandler[];
       openapi?: DescribeRouteOptions;
+      cors?: CorsOptions;
       requiresAuth?: boolean;
-      requiresPermission?: MastraFGAPermissionInput;
+      requiresPermission?: MastraFGAPermissionInput | MastraFGAPermissionInput[];
       fga?: RouteFGAConfig;
       /** Framework-generated route. Bypasses the apiPrefix collision check. Mastra-internal — do not use. */
       _mastraInternal?: true;
     };
 
 export type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
+
+export type CorsOptions = Parameters<typeof cors>[0];
 
 export type ContextWithMastra = Context<{
   Variables: {
@@ -63,7 +68,7 @@ export type MastraAuthConfig<TUser = unknown> = {
   /**
    * Public paths for the server
    */
-  authenticateToken?: (token: string, request: HonoRequest) => Promise<TUser>;
+  authenticateToken?: AuthenticateTokenFn<TUser, Promise<TUser>>;
 
   /**
    * Maps the authenticated user to a resource ID for memory/thread scoping.
@@ -172,6 +177,39 @@ export type ValidationErrorHook = (
   context: ValidationErrorContext,
 ) => ValidationErrorResponse | undefined | void;
 
+export type StoredResourceScopeConfig =
+  | boolean
+  | {
+      /**
+       * Metadata key used to persist the resolved stored-resource scope.
+       *
+       * @default 'mastra.resourceId'
+       */
+      metadataKey?: string;
+      /**
+       * Resolve the stored-resource scope for the current request. When omitted,
+       * Mastra uses MASTRA_RESOURCE_ID_KEY from the request context.
+       */
+      resolve?: (context: {
+        requestContext?: RequestContext;
+        user?: unknown;
+      }) => string | undefined | null | Promise<string | undefined | null>;
+      /**
+       * When true, scoped stored-resource routes fail if no scope can be resolved.
+       *
+       * @default true
+       */
+      requireScope?: boolean;
+    };
+
+export type StoredResourcesConfig = {
+  /**
+   * Opt-in tenant/resource scoping for stored resources. When enabled, stored
+   * resource handlers persist and filter a scope value in record metadata.
+   */
+  scope?: StoredResourceScopeConfig;
+};
+
 export type ServerConfig = {
   /**
    * Port for the server
@@ -227,10 +265,10 @@ export type ServerConfig = {
    */
   middleware?: Middleware | Middleware[];
   /**
-   * CORS configuration for the server
-   * @default { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false }
+   * CORS configuration for the server.
+   * @default { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'x-mastra-client-type', 'x-mastra-dev-playground'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false }
    */
-  cors?: Parameters<typeof cors>[0] | false;
+  cors?: CorsOptions | false;
   /**
    * Build configuration for the server
    */
@@ -356,6 +394,11 @@ export type ServerConfig = {
    * on THIS specific resource).
    */
   fga?: IFGAProvider<any>;
+
+  /**
+   * Stored-resource route and handler behavior.
+   */
+  storedResources?: StoredResourcesConfig;
 
   /**
    * If you want to run `mastra dev` with HTTPS, you can run it with the `--https` flag and provide the key and cert files here.

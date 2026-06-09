@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Create mocks BEFORE vi.mock using vi.hoisted so they're available in the mock
-const { mockPage, mockContext, mockStagehand, mockCdpSession } = vi.hoisted(() => {
+const { mockPage, mockContext, mockStagehand, mockCdpSession, mockStagehandConstructor } = vi.hoisted(() => {
+  const mockStagehandConstructor = vi.fn();
   const mockCdpSession = {
     send: vi.fn().mockResolvedValue({}),
     on: vi.fn(),
@@ -44,11 +45,15 @@ const { mockPage, mockContext, mockStagehand, mockCdpSession } = vi.hoisted(() =
     ]),
   };
 
-  return { mockPage, mockContext, mockStagehand, mockCdpSession };
+  return { mockPage, mockContext, mockStagehand, mockCdpSession, mockStagehandConstructor };
 });
 
 vi.mock('@browserbasehq/stagehand', () => ({
   Stagehand: class MockStagehand {
+    constructor(options: unknown) {
+      mockStagehandConstructor(options);
+    }
+
     init = mockStagehand.init;
     close = mockStagehand.close;
     context = mockStagehand.context;
@@ -177,6 +182,45 @@ describe('StagehandBrowser', () => {
       await browser.launch();
       expect(browser.status).toBe('ready');
       expect(mockStagehand.init).toHaveBeenCalled();
+    });
+
+    it('creates Stagehand with TUI-safe logging defaults', async () => {
+      await browser.launch();
+
+      expect(mockStagehandConstructor).toHaveBeenCalledWith(
+        expect.objectContaining({
+          verbose: 0,
+          disablePino: true,
+          logger: expect.any(Function),
+        }),
+      );
+    });
+
+    it('preserves explicit verbose level and custom logger', async () => {
+      const logger = vi.fn();
+      const customBrowser = new StagehandBrowser({ scope: 'shared', verbose: 2, logger });
+      await customBrowser.launch();
+      await customBrowser.close();
+
+      expect(mockStagehandConstructor).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          verbose: 2,
+          disablePino: true,
+          logger,
+        }),
+      );
+    });
+
+    it('preserves explicit disablePino override', async () => {
+      const customBrowser = new StagehandBrowser({ scope: 'shared', disablePino: false });
+      await customBrowser.launch();
+      await customBrowser.close();
+
+      expect(mockStagehandConstructor).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          disablePino: false,
+        }),
+      );
     });
 
     it('should close successfully', async () => {

@@ -1,0 +1,8 @@
+{
+  "attachment": [
+    "qwen/qwen2.5-vl-72b-instruct",
+    "google/gemma-3-27b-it",
+    "moonshotai/kimi-k2.5",
+    "moonshotai/kimi-k2.5-fast"
+  ]
+}

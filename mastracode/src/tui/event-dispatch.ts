@@ -3,7 +3,7 @@
  */
 import type { HarnessEvent, HarnessThread, TaskItemSnapshot } from '@mastra/core/harness';
 
-import { getCurrentGitBranch } from '../utils/project.js';
+import { getCurrentGitBranchAsync } from '../utils/project.js';
 import {
   handleAgentStart,
   handleAgentEnd,
@@ -40,10 +40,19 @@ import {
 } from './handlers/index.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import type { TUIState } from './state.js';
+import { getGithubPrSubscriptionsFromMetadata } from './state.js';
 
 /**
  * Dispatch a HarnessEvent to the appropriate handler.
  */
+function trackInteractivePrompt(
+  ectx: EventHandlerContext,
+  promptType: string,
+  properties?: Record<string, unknown>,
+): void {
+  ectx.analytics?.trackInteractivePrompt(promptType, properties);
+}
+
 export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerContext, state: TUIState): Promise<void> {
   switch (event.type) {
     case 'agent_start':
@@ -77,6 +86,11 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
 
     case 'tool_approval_required':
+      trackInteractivePrompt(ectx, 'tool_approval_required', {
+        toolName: event.toolName,
+        threadId: state.harness.getCurrentThreadId(),
+        resourceId: state.harness.getResourceId(),
+      });
       handleToolApprovalRequired(ectx, event.toolCallId, event.toolName, event.args);
       break;
 
@@ -89,6 +103,13 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
 
     case 'tool_input_start':
+      if (event.toolName === 'ask_user' || event.toolName === 'request_access' || event.toolName === 'submit_plan') {
+        trackInteractivePrompt(ectx, event.toolName, {
+          toolName: event.toolName,
+          threadId: state.harness.getCurrentThreadId(),
+          resourceId: state.harness.getResourceId(),
+        });
+      }
       handleToolInputStart(ectx, event.toolCallId, event.toolName);
       break;
 
@@ -132,18 +153,24 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       state.taskToolInsertIndex = -1;
       await ectx.renderExistingMessages();
       await state.harness.loadOMProgress();
-      // Refresh git branch so TUI status line reflects the current branch
-      const freshBranch = getCurrentGitBranch(state.projectInfo.rootPath);
-      if (freshBranch) {
-        state.projectInfo.gitBranch = freshBranch;
-      }
+      // Refresh git branch async so TUI status line reflects the current branch
+      getCurrentGitBranchAsync(state.projectInfo.rootPath).then(freshBranch => {
+        if (freshBranch) {
+          state.projectInfo.gitBranch = freshBranch;
+          ectx.updateStatusLine();
+        }
+      });
       // Update current thread title for status line display
       const threads = await state.harness.listThreads();
       const currentThread = threads.find((t: HarnessThread) => t.id === event.threadId);
       if (currentThread) {
         state.currentThreadTitle = currentThread.title;
+        const metadata = currentThread.metadata as Record<string, unknown> | undefined;
+        state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
+        state.githubPrPollingActive = false;
+        state.githubPrGradientAnimator?.stop();
         // Load goal state from thread metadata
-        state.goalManager?.loadFromThreadMetadata(currentThread.metadata as Record<string, unknown> | undefined);
+        state.goalManager?.loadFromThreadMetadata(metadata);
       }
       break;
     }
@@ -152,6 +179,11 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       // Update current thread title for status line display
       state.currentThreadTitle = event.thread.title;
+      state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(
+        event.thread.metadata as Record<string, unknown> | undefined,
+      );
+      state.githubPrPollingActive = false;
+      state.githubPrGradientAnimator?.stop();
       // If /goal started without an existing thread, save that pending goal to the
       // newly-created thread. Otherwise load the thread's own goal metadata so goals
       // do not bleed into unrelated new threads.
@@ -340,7 +372,7 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
     }
 
     case 'ask_question':
-      await handleAskQuestion(ectx, event.questionId, event.question, event.options);
+      await handleAskQuestion(ectx, event.questionId, event.question, event.options, event.selectionMode);
       break;
 
     case 'sandbox_access_request':

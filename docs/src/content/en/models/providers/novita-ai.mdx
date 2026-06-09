@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "novita-ai/Sao10K/L3-8B-Stheno-v3.2"
+  model: "novita-ai/baichuan/baichuan-m2-32b"
 });
 
 // Generate a response
@@ -1054,7 +1054,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3.6
   },
   {
-    "model": "novita-ai/sao10k/l3-70b-euryale-v2.1",
+    "model": "novita-ai/sao10K/l3-70b-euryale-v2.1",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -1066,7 +1066,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.48
   },
   {
-    "model": "novita-ai/sao10k/l3-8b-lunaris",
+    "model": "novita-ai/sao10K/l3-8b-lunaris",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -1078,7 +1078,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.05
   },
   {
-    "model": "novita-ai/Sao10K/L3-8B-Stheno-v3.2",
+    "model": "novita-ai/sao10K/L3-8B-stheno-v3.2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -1090,7 +1090,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.05
   },
   {
-    "model": "novita-ai/sao10k/l31-70b-euryale-v2.2",
+    "model": "novita-ai/sao10K/l31-70b-euryale-v2.2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
@@ -1246,7 +1246,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.novita.ai/openai",
-    id: "novita-ai/Sao10K/L3-8B-Stheno-v3.2",
+    id: "novita-ai/baichuan/baichuan-m2-32b",
     apiKey: process.env.NOVITA_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -1265,7 +1265,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "novita-ai/zai-org/glm-5.1"
-      : "novita-ai/Sao10K/L3-8B-Stheno-v3.2";
+      : "novita-ai/baichuan/baichuan-m2-32b";
   }
 });
 ```

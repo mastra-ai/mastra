@@ -577,3 +577,24 @@ export function cleanStepResult(stepResult: unknown): unknown {
 
   return cleaned;
 }
+
+const RESUME_SNAPSHOT_POLL_INTERVAL_MS = 25;
+const RESUME_SNAPSHOT_POLL_TIMEOUT_MS = 2000;
+
+export async function waitForSuspendedSnapshot(
+  workflowsStore:
+    | { loadWorkflowSnapshot: (args: { workflowName: string; runId: string }) => Promise<WorkflowRunState | null> }
+    | undefined,
+  workflowName: string,
+  runId: string,
+): Promise<WorkflowRunState | null> {
+  if (!workflowsStore) return null;
+
+  const deadline = Date.now() + RESUME_SNAPSHOT_POLL_TIMEOUT_MS;
+  let snapshot = (await workflowsStore.loadWorkflowSnapshot({ workflowName, runId })) ?? null;
+  while ((!snapshot || snapshot.status !== 'suspended') && Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_INTERVAL_MS));
+    snapshot = (await workflowsStore.loadWorkflowSnapshot({ workflowName, runId })) ?? null;
+  }
+  return snapshot;
+}

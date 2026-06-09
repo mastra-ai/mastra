@@ -91,19 +91,37 @@ export class Deps extends MastraBase {
   }
 
   private async writePnpmConfig(dir: string, options: ArchitectureOptions) {
-    const packageJsonPath = path.join(dir, 'package.json');
-    const packageJson = await readJSON(packageJsonPath);
+    const workspaceYamlPath = path.join(dir, 'pnpm-workspace.yaml');
 
-    packageJson.pnpm = {
-      ...packageJson.pnpm,
-      supportedArchitectures: {
-        os: options.os || [],
-        cpu: options.cpu || [],
-        libc: options.libc || [],
-      },
-    };
+    const lines: string[] = [
+      'packages:',
+      "  - '.'",
+      'allowBuilds:',
+      '  bcrypt: true',
+      '  esbuild: true',
+      '  sharp: true',
+      '  protobufjs: true',
+      '  workerd: true',
+      '  bufferutil: true',
+      '  utf-8-validate: true',
+      'minimumReleaseAge: 0',
+    ];
+    if (options.os?.length || options.cpu?.length || options.libc?.length) {
+      lines.push('');
+      lines.push('supportedArchitectures:');
+      if (options.os?.length) {
+        lines.push(`  os: ${JSON.stringify(options.os)}`);
+      }
+      if (options.cpu?.length) {
+        lines.push(`  cpu: ${JSON.stringify(options.cpu)}`);
+      }
+      if (options.libc?.length) {
+        lines.push(`  libc: ${JSON.stringify(options.libc)}`);
+      }
+    }
+    lines.push('');
 
-    await writeJSON(packageJsonPath, packageJson, { spaces: 2 });
+    await fsPromises.writeFile(workspaceYamlPath, lines.join('\n'), 'utf-8');
   }
 
   /**

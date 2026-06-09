@@ -1,0 +1,131 @@
+/* Drawer motion.
+ *
+ * Only the *advanced* motion lives here — the swipe/stack transforms are long
+ * calc() expressions that are unreadable as escaped Tailwind arbitrary values
+ * (`[transform:translateY(calc(..._-_...))]`). Everything native (layout, colour,
+ * sizing, borders, the `after:` dim overlay) stays as inline Tailwind in drawer.tsx.
+ *
+ * Base UI drives the gesture through CSS custom properties set on the popup:
+ *   --drawer-swipe-movement-x/y   finger tracking
+ *   --drawer-swipe-progress       0..1 dismiss progress (fades the backdrop)
+ *   --drawer-swipe-strength       0.1..1 release-velocity scalar
+ *   --drawer-snap-point-offset    bottom-sheet snap offset
+ *   --nested-drawers              stack depth (frontmost = 0)
+ *   --drawer-height               measured popup height
+ *   --drawer-frontmost-height     height of the frontmost drawer in the stack
+ *
+ * The 3rem bleed mirrors `-mb-12`/`pb-12` (and `-mt-12`/`pt-12`) on the popup in
+ * drawer.tsx — keep the two in sync. */
+
+.drawer-popup {
+  --bleed: 3rem;
+  --peek: 1rem;
+  --stack-step: 0.05;
+
+  /* For an unnested drawer `--nested-drawers` is 0, so peek/shrink collapse to 0
+   * and scale to 1 — the transforms below reduce to a plain slide. */
+  --stack-progress: clamp(0, var(--drawer-swipe-progress, 0), 1);
+  --stack-peek-offset: max(0px, calc((var(--nested-drawers, 0) - var(--stack-progress)) * var(--peek)));
+  --stack-scale: calc(
+    max(0, calc(1 - (var(--nested-drawers, 0) * var(--stack-step)))) + (var(--stack-step) * var(--stack-progress))
+  );
+  --stack-shrink: calc(1 - var(--stack-scale));
+  --stack-height: max(0px, calc(var(--drawer-frontmost-height, var(--drawer-height, 0px)) - var(--bleed)));
+
+  /* Combined push-back applied to a stacked drawer (peek lift + scale shrink),
+   * folded into one var so the per-side transforms stay on a single line. */
+  --stack-offset: calc(var(--stack-peek-offset) + (var(--stack-shrink) * var(--stack-height)));
+
+  transition:
+    transform 450ms cubic-bezier(0.32, 0.72, 0, 1),
+    height 450ms cubic-bezier(0.32, 0.72, 0, 1),
+    opacity 450ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Track the finger 1:1 — no easing while a drag (own or nested) is in progress. */
+.drawer-popup[data-swiping],
+.drawer-popup[data-nested-drawer-swiping] {
+  transition-duration: 0ms;
+}
+
+/* Release after a swipe: scale the settle duration by the gesture velocity. */
+.drawer-popup[data-ending-style] {
+  transition-duration: calc(var(--drawer-swipe-strength, 1) * 400ms);
+}
+
+/* ---- Bottom sheet (swipe down) ---------------------------------------------- */
+
+.drawer-popup[data-swipe-direction='down'] {
+  --live-y: calc(var(--drawer-snap-point-offset, 0px) + var(--drawer-swipe-movement-y, 0px));
+
+  transform-origin: 50% calc(100% - var(--bleed));
+  transform: translateY(calc(var(--live-y) - var(--stack-offset))) scale(var(--stack-scale));
+}
+
+.drawer-popup[data-swipe-direction='down'][data-starting-style],
+.drawer-popup[data-swipe-direction='down'][data-ending-style] {
+  transform: translateY(calc(100% - var(--bleed) + 2px));
+}
+
+/* ---- Top sheet (swipe up) --------------------------------------------------- */
+
+.drawer-popup[data-swipe-direction='up'] {
+  transform-origin: 50% var(--bleed);
+  transform: translateY(calc(var(--drawer-swipe-movement-y, 0px) + var(--stack-offset))) scale(var(--stack-scale));
+}
+
+.drawer-popup[data-swipe-direction='up'][data-starting-style],
+.drawer-popup[data-swipe-direction='up'][data-ending-style] {
+  transform: translateY(calc(-100% + var(--bleed) - 2px));
+}
+
+/* Collapse a stacked top/bottom parent to the frontmost drawer's height. */
+.drawer-popup[data-swipe-direction='down'][data-nested-drawer-open],
+.drawer-popup[data-swipe-direction='up'][data-nested-drawer-open] {
+  height: calc(var(--stack-height) + var(--bleed));
+  overflow: hidden;
+}
+
+/* ---- Side drawers (swipe left / right) -------------------------------------- */
+
+.drawer-popup[data-swipe-direction='left'],
+.drawer-popup[data-swipe-direction='right'] {
+  transform: translateX(var(--drawer-swipe-movement-x, 0px));
+}
+
+.drawer-popup[data-swipe-direction='right'][data-starting-style],
+.drawer-popup[data-swipe-direction='right'][data-ending-style] {
+  transform: translateX(100%);
+}
+
+.drawer-popup[data-swipe-direction='left'][data-starting-style],
+.drawer-popup[data-swipe-direction='left'][data-ending-style] {
+  transform: translateX(-100%);
+}
+
+/* ---- Backdrop --------------------------------------------------------------- */
+
+.drawer-backdrop {
+  opacity: calc(1 - var(--drawer-swipe-progress, 0));
+  transition: opacity 450ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.drawer-backdrop[data-starting-style],
+.drawer-backdrop[data-ending-style] {
+  opacity: 0;
+}
+
+.drawer-backdrop[data-swiping] {
+  transition-duration: 0ms;
+}
+
+.drawer-backdrop[data-ending-style] {
+  transition-duration: calc(var(--drawer-swipe-strength, 1) * 400ms);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawer-popup,
+  .drawer-backdrop {
+    transition-duration: 0ms;
+  }
+}

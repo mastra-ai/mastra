@@ -1,4 +1,4 @@
-import { getMainContentContentClassName, CollapsiblePanel, PanelSeparator } from '@mastra/playground-ui';
+import { CollapsiblePanel, PanelSeparator } from '@mastra/playground-ui';
 import { Panel, useDefaultLayout, Group } from 'react-resizable-panels';
 
 export interface WorkflowLayoutProps {
@@ -14,14 +14,8 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: Wo
     storage: localStorage,
   });
 
-  const computedClassName = getMainContentContentClassName({
-    isCentered: false,
-    isDivided: true,
-    hasLeftServiceColumn: Boolean(leftSlot),
-  });
-
   return (
-    <Group className={computedClassName} defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
+    <Group className="h-full min-h-0 w-full min-w-0" defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
       {leftSlot && (
         <>
           <CollapsiblePanel
@@ -32,13 +26,16 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: Wo
             defaultSize={200}
             collapsedSize={60}
             collapsible={true}
+            className="min-w-0"
           >
             {leftSlot}
           </CollapsiblePanel>
           <PanelSeparator />
         </>
       )}
-      <Panel id="main-slot">{children}</Panel>
+      <Panel id="main-slot" className="min-w-0 overflow-y-auto">
+        {children}
+      </Panel>
       {rightSlot && (
         <>
           <PanelSeparator />
@@ -50,6 +47,7 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: Wo
             defaultSize={300}
             collapsedSize={60}
             collapsible={true}
+            className="min-w-0"
           >
             {rightSlot}
           </CollapsiblePanel>

@@ -74,6 +74,19 @@ async function initializePackageJson(pm: PackageManager): Promise<void> {
     node: '>=22.13.0',
   };
 
+  // pnpm v11+ writes devEngines.packageManager with a semver range (e.g.
+  // "^11.3.0"). Corepack ≤0.35.0 (bundled with Node 22) reads this field
+  // too and rejects ranges, so we must remove both the legacy packageManager
+  // field and devEngines.packageManager to avoid the error:
+  //   "Invalid package manager specification in package.json (pnpm@^11.3.0)"
+  delete packageJson.packageManager;
+  if (packageJson.devEngines?.packageManager) {
+    delete packageJson.devEngines.packageManager;
+    if (Object.keys(packageJson.devEngines).length === 0) {
+      delete packageJson.devEngines;
+    }
+  }
+
   await fs.writeFile(packageJsonPath, JSON.stringify(packageJson, null, 2));
 }
 
@@ -256,6 +269,22 @@ export const createMastraProject = async ({
     } catch (error) {
       throw new Error(
         `Failed to initialize project structure: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+
+    // Write pnpm workspace config for pnpm v11
+    if (pm === 'pnpm') {
+      await fs.writeFile(
+        'pnpm-workspace.yaml',
+        `packages:
+  - '.'
+allowBuilds:
+  esbuild: true
+  sharp: true
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
+`,
       );
     }
 

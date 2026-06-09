@@ -1,5 +1,5 @@
 import type { GetScorerResponse } from '@mastra/client-js';
-import { Badge, Chip, EntityList, EntityListSkeleton, AgentIcon } from '@mastra/playground-ui';
+import { Chip, DataList as EntityList, DataListSkeleton as EntityListSkeleton, AgentIcon } from '@mastra/playground-ui';
 import { WorkflowIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
@@ -82,7 +82,9 @@ export function ScorersList({ scorers, isLoading, search = '', sourceFilter = 'a
             </EntityList.NameCell>
             <EntityList.DescriptionCell>{description}</EntityList.DescriptionCell>
             <EntityList.Cell className="py-0">
-              <Badge variant={scorer.source === 'code' ? 'info' : 'default'}>{scorer.source}</Badge>
+              <Chip size="small" color={scorer.source === 'code' ? 'blue' : 'gray'}>
+                {scorer.source}
+              </Chip>
             </EntityList.Cell>
             <EntityList.TextCell className="text-center">{agentCount || ''}</EntityList.TextCell>
             <EntityList.TextCell className="text-center">{workflowCount || ''}</EntityList.TextCell>

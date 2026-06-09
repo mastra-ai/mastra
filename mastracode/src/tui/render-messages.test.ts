@@ -1,12 +1,18 @@
 import { Container } from '@mariozechner/pi-tui';
 import type { HarnessMessage } from '@mastra/core/harness';
+import stripAnsi from 'strip-ansi';
 import { describe, expect, it, vi } from 'vitest';
 
+import { isChatBoundarySpacer } from './components/chat-boundary-spacer.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
 import { UserMessageComponent } from './components/user-message.js';
-import { addUserMessage, renderExistingMessages } from './render-messages.js';
+import { addUserMessage, renderCompletedTasksInline, renderExistingMessages } from './render-messages.js';
 import type { TUIState } from './state.js';
+
+function visibleChildren(state: TUIState) {
+  return state.chatContainer.children.filter(child => !isChatBoundarySpacer(child));
+}
 
 function createRestoreDisplayTasks(displayState: { tasks?: unknown[]; previousTasks?: unknown[] }) {
   return vi.fn((tasks: unknown[]) => {
@@ -58,6 +64,31 @@ function createReminderMessage(
   } as HarnessMessage;
 }
 
+describe('renderCompletedTasksInline', () => {
+  it('inserts boundary spacing immediately after a user message', () => {
+    const state = createState();
+
+    addUserMessage(state, createUserMessage('mark the rest done'));
+    renderCompletedTasksInline(
+      state,
+      [
+        { id: 'one', content: 'One', activeForm: 'Doing one', status: 'completed' },
+        { id: 'two', content: 'Two', activeForm: 'Doing two', status: 'completed' },
+      ],
+      -1,
+      true,
+    );
+
+    const rendered = state.chatContainer.render(120).map(line => stripAnsi(line).trimEnd());
+    const userLineIndex = rendered.findIndex(line => line.includes('mark the rest done'));
+    const tasksLineIndex = rendered.findIndex(line => line.includes('Tasks [2/2 completed]'));
+
+    expect(userLineIndex).toBeGreaterThanOrEqual(0);
+    expect(tasksLineIndex).toBeGreaterThan(userLineIndex);
+    expect(rendered.slice(userLineIndex + 1, tasksLineIndex)).toContain('');
+  });
+});
+
 describe('addUserMessage', () => {
   it('renders a persisted temporal-gap marker from canonical system reminder content', () => {
     const state = createState();
@@ -95,10 +126,11 @@ describe('addUserMessage', () => {
       }),
     );
 
-    expect(state.chatContainer.children).toHaveLength(2);
-    expect(state.chatContainer.children[0]).toBeInstanceOf(TemporalGapComponent);
-    expect(state.chatContainer.children[1]).toBeInstanceOf(UserMessageComponent);
-    expect(state.messageComponentsById.get('user-1')).toBe(state.chatContainer.children[1]);
+    const children = visibleChildren(state);
+    expect(children).toHaveLength(2);
+    expect(children[0]).toBeInstanceOf(TemporalGapComponent);
+    expect(children[1]).toBeInstanceOf(UserMessageComponent);
+    expect(state.messageComponentsById.get('user-1')).toBe(children[1]);
   });
 
   it('renders a legacy persisted temporal-gap marker from whole-message XML', () => {
@@ -151,9 +183,29 @@ describe('renderExistingMessages startup history loading', () => {
     await renderExistingMessages(state);
 
     expect(listMessages).toHaveBeenCalledWith({ limit: 40 });
-    expect(state.chatContainer.children).toHaveLength(2);
-    expect(state.messageComponentsById.get('user-1')).toBe(state.chatContainer.children[0]);
-    expect(state.messageComponentsById.get('user-2')).toBe(state.chatContainer.children[1]);
+    const children = visibleChildren(state);
+    expect(children).toHaveLength(2);
+    expect(state.messageComponentsById.get('user-1')).toBe(children[0]);
+    expect(state.messageComponentsById.get('user-2')).toBe(children[1]);
+  });
+
+  it('tracks the latest rendered message timestamp for startup idle state', async () => {
+    const latest = new Date('2026-05-15T13:30:00.000Z');
+    const messages = [
+      { ...createUserMessage('first', 'user-1'), createdAt: new Date('2026-05-15T13:00:00.000Z') },
+      { ...createUserMessage('second', 'user-2'), createdAt: latest },
+    ] as HarnessMessage[];
+    const state = createState();
+    state.harness = {
+      listMessages: vi.fn().mockResolvedValue(messages),
+      getDisplayState: () => ({ isRunning: false }),
+      setState: vi.fn().mockResolvedValue(undefined),
+      restoreDisplayTasks: vi.fn(),
+    } as unknown as TUIState['harness'];
+
+    await renderExistingMessages(state);
+
+    expect(state.lastRenderedMessageAt).toBe(latest.getTime());
   });
 
   it('does not clear existing task display state when the bounded startup window has no task snapshot', async () => {
@@ -586,7 +638,7 @@ describe('renderExistingMessages task tools', () => {
     expect(listMessages).toHaveBeenCalledWith({ limit: 40 });
     expect(updateTasks).toHaveBeenCalledWith(expectedTasks);
     expect(setState).toHaveBeenCalledWith({ tasks: expectedTasks });
-    expect(state.chatContainer.children).toHaveLength(39);
+    expect(visibleChildren(state)).toHaveLength(39);
   });
 
   it('renders the completed task list once when replaying repeated complete patches', async () => {

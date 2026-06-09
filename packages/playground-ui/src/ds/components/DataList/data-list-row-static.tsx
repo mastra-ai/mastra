@@ -1,0 +1,37 @@
+import { forwardRef } from 'react';
+import type { ComponentPropsWithoutRef } from 'react';
+import { dataListRowOuterStyles } from './shared';
+import type { DataListRowSharedProps } from './shared';
+import { cn } from '@/lib/utils';
+
+export type DataListRowStaticProps = ComponentPropsWithoutRef<'div'> & DataListRowSharedProps;
+
+/**
+ * Non-interactive row. Use when a row should *display* like a regular row but
+ * has no link target or click handler
+ */
+export const DataListRowStatic = forwardRef<HTMLDivElement, DataListRowStaticProps>(
+  ({ children, className, flushLeft, flushRight, colStart, colEnd, featured, style, ...rest }, ref) => {
+    const hasColumnOverride = colStart !== undefined || colEnd !== undefined;
+    const resolvedStyle = hasColumnOverride ? { ...style, gridColumn: `${colStart ?? 1} / ${colEnd ?? -1}` } : style;
+    return (
+      <div
+        ref={ref}
+        className={cn(
+          'mx-1 grid grid-cols-subgrid gap-8 px-5',
+          ...dataListRowOuterStyles,
+          flushLeft && 'ml-0!',
+          flushRight && 'mr-0!',
+          featured && 'bg-surface4',
+          className,
+        )}
+        style={resolvedStyle}
+        {...rest}
+      >
+        {children}
+      </div>
+    );
+  },
+);
+
+DataListRowStatic.displayName = 'DataListRowStatic';

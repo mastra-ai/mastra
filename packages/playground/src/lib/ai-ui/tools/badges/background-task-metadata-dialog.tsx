@@ -78,7 +78,7 @@ const BackgroundTaskMetadata = ({
     typeof suspendPayload === 'string' ? (
       <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
     ) : (
-      <CodeEditor data={suspendPayload} />
+      <CodeEditor data={suspendPayload as Record<string, unknown> | Record<string, unknown>[] | undefined} />
     );
 
   return (

@@ -193,7 +193,7 @@ const { webSearch, webFetch } = createBrightDataTools()
 const agent = new Agent({
   id: 'research-agent',
   name: 'Research Agent',
-  model: 'anthropic/claude-sonnet-4-6',
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
   instructions:
     'You are a research assistant. Use the search tool to find relevant pages, then use the fetch tool to read full Markdown content from the best results.',
   tools: {
