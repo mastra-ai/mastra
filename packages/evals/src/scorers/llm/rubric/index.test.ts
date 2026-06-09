@@ -176,5 +176,17 @@ describe('Rubric Scorer (LLM)', () => {
       expect(result.score).toBe(1);
       expect(result.reason).toContain('passed by default');
     });
+
+    it('returns exactly 1 even with a custom scale so it never gates isTaskComplete', async () => {
+      const scorer = createRubricScorer({
+        model: mockJudge({ criteria: [], overallAssessment: 'No rubric provided; nothing to grade.' }),
+        // No static criteria and no dynamic rubric.
+        options: { scale: 10 },
+      });
+
+      const result = await scorer.run(run('anything'));
+
+      expect(result.score).toBe(1);
+    });
   });
 });

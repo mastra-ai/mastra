@@ -213,9 +213,10 @@ export function createRubricScorer({
     .generateScore(({ results }) => {
       const analysis = results.analyzeStepResult as RubricAnalysisResult | undefined;
 
-      // No analysis or empty rubric → no-op pass.
+      // No analysis or empty rubric → no-op pass. Return exactly 1 (not scaled) so the no-op
+      // never gates isTaskComplete, which requires score === 1.
       if (!analysis || analysis.criteria.length === 0) {
-        return 1 * scale;
+        return 1;
       }
 
       const requiredCriteria = analysis.criteria.filter(c => c.required);
