@@ -35,6 +35,7 @@ import type {
   ObservabilityInstance,
   LoggerContext,
   MetricsContext,
+  TracingContext,
 } from '../observability';
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
@@ -42,7 +43,11 @@ import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
 import type { ApiRoute, Middleware, ServerConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
+import { InMemoryStore } from '../storage';
+import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inmemory';
+import { InMemoryDB } from '../storage/domains/inmemory-db';
 import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/domains/schedules/base';
+import { WorkflowsInMemory } from '../storage/domains/workflows/inmemory';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
@@ -601,7 +606,18 @@ export class Mastra<
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
-  #internalMastraWorkflows: Record<string, Workflow> = {};
+  #internalMastraWorkflows: Record<string, AnyWorkflow> = {};
+  // Tracks registration timestamps for run-scoped internal workflows so a lazy
+  // TTL sweep can evict entries from abandoned suspended runs that were never
+  // resumed. Unscoped (singleton) entries are not tracked — they live forever.
+  #runScopedWorkflowTimestamps: Map<string, number> = new Map();
+  // Run-scoped internal workflows older than this TTL (ms) are evicted during
+  // the lazy sweep that runs on each new registration.
+  static readonly INTERNAL_WORKFLOW_TTL_MS = 30 * 60 * 1000; // 30 minutes
+  // Per-run tracing context for evented workflow runs. `currentSpan` is a
+  // non-serializable AISpan, so it cannot ride the engine's pubsub events —
+  // the event processor reads it from here, keyed by runId, instead.
+  #runTracingContexts: Map<string, TracingContext> = new Map();
   // Server cache for temporary persistence and durable agent resumable streams
   #serverCache: MastraServerCache;
   // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
@@ -1019,10 +1035,40 @@ export class Mastra<
 
     this.#idGenerator = config?.idGenerator;
 
-    let storage = config?.storage;
+    // Default to an in-memory store when none is configured. The evented
+    // workflow engine uses storage as the source of truth for cross-branch
+    // coordination in parallel/foreach steps, so a missing store would cause
+    // parallel branches to silently fail to aggregate. In-memory is the safe
+    // default for `new Mastra({})` / tests; production callers always override.
+    let storage: MastraCompositeStore;
+    if (config?.storage) {
+      storage = config.storage;
+    } else {
+      storage = new InMemoryStore();
+      this.#logger?.warn(
+        'No `storage` configured on Mastra — falling back to an in-memory store. ' +
+          'In-memory storage is not durable: all data is lost on restart, and it is not safe for production. ' +
+          'Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare).',
+      );
+    }
+    storage = augmentWithInit(storage);
 
-    if (storage) {
-      storage = augmentWithInit(storage);
+    // The evented workflow engine (used internally by the agentic loop) requires
+    // `workflows` and `backgroundTasks` storage domains. When a user provides a
+    // MastraCompositeStore with only specific domains (e.g. just `notifications`),
+    // these infrastructure domains may be missing. Patch them in with lightweight
+    // in-memory defaults so the engine works transparently without requiring users
+    // to configure internal implementation details.
+    if (storage.stores) {
+      if (!storage.stores.workflows || !storage.stores.backgroundTasks) {
+        const fallbackDb = new InMemoryDB();
+        if (!storage.stores.workflows) {
+          storage.stores.workflows = new WorkflowsInMemory({ db: fallbackDb });
+        }
+        if (!storage.stores.backgroundTasks) {
+          storage.stores.backgroundTasks = new BackgroundTasksInMemory({ db: fallbackDb });
+        }
+      }
     }
 
     // Validate and assign observability instance
@@ -2215,6 +2261,37 @@ export class Mastra<
   }
 
   /**
+   * Removes a registered workspace by its ID.
+   *
+   * When `destroy` is true, the workspace is destroyed before it is removed from
+   * the registry. If destruction fails, the workspace remains registered and the
+   * error is rethrown.
+   *
+   * @example
+   * ```typescript
+   * await mastra.removeWorkspace('workspace-123', { destroy: true });
+   * ```
+   */
+  public async removeWorkspace(id: string, options?: { destroy?: boolean }): Promise<boolean> {
+    const entry = this.#workspaces[id];
+    if (!entry) {
+      return false;
+    }
+
+    if (options?.destroy) {
+      await entry.workspace.destroy();
+    }
+
+    delete this.#workspaces[id];
+
+    if (this.#workspace === entry.workspace) {
+      this.#workspace = undefined;
+    }
+
+    return true;
+  }
+
+  /**
    * Retrieves a registered workflow by its ID.
    *
    * @template TWorkflowId - The specific workflow ID type from the registered workflows
@@ -2269,20 +2346,57 @@ export class Mastra<
     return workflow;
   }
 
-  __registerInternalWorkflow(workflow: Workflow) {
+  /**
+   * Register a workflow under an internal-only registry.
+   *
+   * - Without `runId`: stored at the bare `${id}` slot. Used by single-instance
+   *   internal workflows (background tasks, score-traces) that are looked up
+   *   without a runId.
+   * - With `runId`: stored *only* at `${id}:${runId}`. Concurrent or nested
+   *   invocations that share a workflow id (e.g. a parent and a sub-agent both
+   *   registering their `agentic-loop`) each get their own closure-bound
+   *   instance keyed by run, and the bare `${id}` slot is never overwritten by
+   *   a run-scoped registration — so a run-scoped lookup can never resolve a
+   *   *different* run's instance via an id scan.
+   */
+  __registerInternalWorkflow(workflow: AnyWorkflow, runId?: string) {
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
       logger: this.getLogger(),
     });
-    this.#internalMastraWorkflows[workflow.id] = workflow;
+    if (runId) {
+      const key = `${workflow.id}:${runId}`;
+      this.#internalMastraWorkflows[key] = workflow;
+      this.#runScopedWorkflowTimestamps.set(key, Date.now());
+      this.#sweepStaleRunScopedWorkflows();
+    } else {
+      this.#internalMastraWorkflows[workflow.id] = workflow;
+    }
   }
 
-  __hasInternalWorkflow(id: string): boolean {
-    return Object.values(this.#internalMastraWorkflows).some(workflow => workflow.id === id);
+  /**
+   * Remove a runId-scoped registration. The unscoped `${id}` entry is left intact
+   * so single-instance callers (background tasks, score-traces) continue to resolve.
+   */
+  __unregisterInternalWorkflow(id: string, runId: string) {
+    const key = `${id}:${runId}`;
+    delete this.#internalMastraWorkflows[key];
+    this.#runScopedWorkflowTimestamps.delete(key);
   }
 
-  __getInternalWorkflow(id: string): Workflow {
-    const workflow = Object.values(this.#internalMastraWorkflows).find(a => a.id === id);
+  __hasInternalWorkflow(id: string, runId?: string): boolean {
+    if (runId) {
+      // Only the exact run-scoped entry or the genuinely-unscoped slot — never
+      // another run's `${id}:${otherRunId}` registration.
+      return !!this.#internalMastraWorkflows[`${id}:${runId}`] || !!this.#internalMastraWorkflows[id];
+    }
+    return !!this.#internalMastraWorkflows[id];
+  }
+
+  __getInternalWorkflow(id: string, runId?: string): AnyWorkflow {
+    const workflow = runId
+      ? (this.#internalMastraWorkflows[`${id}:${runId}`] ?? this.#internalMastraWorkflows[id])
+      : this.#internalMastraWorkflows[id];
     if (!workflow) {
       throw new MastraError({
         id: 'MASTRA_GET_INTERNAL_WORKFLOW_BY_ID_NOT_FOUND',
@@ -2297,6 +2411,42 @@ export class Mastra<
     }
 
     return workflow;
+  }
+
+  /**
+   * @internal Records the tracing context for an evented workflow run so the
+   * event processor can nest step spans under the run's parent span. The
+   * `currentSpan` is non-serializable, so it is held here rather than passed
+   * through the engine's pubsub events.
+   */
+  __registerRunTracingContext(runId: string, tracingContext: TracingContext) {
+    this.#runTracingContexts.set(runId, tracingContext);
+  }
+
+  /** @internal Returns the tracing context recorded for an evented workflow run. */
+  __getRunTracingContext(runId: string): TracingContext | undefined {
+    return this.#runTracingContexts.get(runId);
+  }
+
+  /** @internal Clears the tracing context once an evented workflow run finishes. */
+  __unregisterRunTracingContext(runId: string) {
+    this.#runTracingContexts.delete(runId);
+  }
+
+  /**
+   * Lazily evict run-scoped internal workflow entries that have exceeded
+   * {@link Mastra.INTERNAL_WORKFLOW_TTL_MS}. Called on every new run-scoped
+   * registration so cleanup is proportional to activity — zero overhead when
+   * the system is idle.
+   */
+  #sweepStaleRunScopedWorkflows() {
+    const now = Date.now();
+    for (const [key, registeredAt] of this.#runScopedWorkflowTimestamps) {
+      if (now - registeredAt > Mastra.INTERNAL_WORKFLOW_TTL_MS) {
+        delete this.#internalMastraWorkflows[key];
+        this.#runScopedWorkflowTimestamps.delete(key);
+      }
+    }
   }
 
   /**
@@ -4323,6 +4473,7 @@ export class Mastra<
    * This method performs a clean shutdown of all Mastra components, including:
    * - tracing registry and all tracing instances
    * - Event engine and pub/sub system
+   * - registered workspaces (sandbox processes, filesystem handles, LSP, browser)
    * - All registered components and their resources
    *
    * It's important to call this method when your application is shutting down
@@ -4345,6 +4496,20 @@ export class Mastra<
   async shutdown(): Promise<void> {
     // SchedulerWorker is stopped as part of stopWorkers().
     await this.stopWorkers();
+
+    const workspaceIds = Object.keys(this.#workspaces);
+    const teardownResults = await Promise.allSettled(
+      workspaceIds.map(id => this.removeWorkspace(id, { destroy: true })),
+    );
+    teardownResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.#logger?.error('Failed to destroy workspace during shutdown', {
+          workspaceId: workspaceIds[index],
+          error: result.reason,
+        });
+      }
+    });
+
     // Close storage to release OS file handles (critical on Windows: open WAL/shm
     // handles cause EBUSY when callers try to fs.rm the storage dir after shutdown).
     if (this.#storage?.close) {
