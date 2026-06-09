@@ -639,10 +639,7 @@ describe('CoreToolBuilder requestContext merge', () => {
     });
 
     const builtTool = builder.build();
-    await builtTool.execute!(
-      { tasks: ['a'] },
-      { toolCallId: 'call-1', messages: [], requestContext: execRC },
-    );
+    await builtTool.execute!({ tasks: ['a'] }, { toolCallId: 'call-1', messages: [], requestContext: execRC });
 
     const merged = receivedCtx.requestContext!;
     // Non-serializable key from closure is preserved
