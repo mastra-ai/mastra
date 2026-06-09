@@ -46,7 +46,7 @@ const SAMPLE_RUNS = [
 ];
 
 const COMPACT_COLUMNS = 'auto minmax(0,1fr) auto auto auto';
-const DEFAULT_COLUMNS = 'auto minmax(0,1fr) auto';
+const DEFAULT_COLUMNS = 'minmax(0,1fr) minmax(0,2fr) auto';
 const WIDE_COLUMNS =
   'minmax(12rem,14rem) minmax(18rem,24rem) minmax(16rem,20rem) minmax(10rem,12rem) minmax(12rem,14rem) minmax(9rem,11rem) minmax(12rem,14rem) minmax(11rem,13rem) minmax(10rem,12rem) minmax(12rem,14rem)';
 const VERY_LONG_BADGE =
@@ -89,10 +89,17 @@ export const Default: Story = {
       {[
         { name: 'Research Agent', description: 'Reads articles and produces summaries.', status: 'active' },
         { name: 'Writing Agent', description: '', status: 'active' },
+        {
+          name: 'Answer Relevancy Scorer With A Very Long Display Name That Must Truncate',
+          description: 'Evaluates whether generated answers stay aligned with the retrieved evidence.',
+          status: 'active',
+        },
         { name: 'Translation Agent', description: 'Translates text between supported languages.', status: 'idle' },
       ].map(item => (
         <DataList.RowButton key={item.name} onClick={() => {}}>
-          <DataList.Cell className="text-neutral6 font-medium">{item.name}</DataList.Cell>
+          <DataList.NameCell className="font-medium">
+            <span className="flex items-center">{item.name}</span>
+          </DataList.NameCell>
           <DataList.DescriptionCell>{item.description}</DataList.DescriptionCell>
           <DataList.Cell>{item.status}</DataList.Cell>
         </DataList.RowButton>

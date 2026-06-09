@@ -21,7 +21,7 @@ export const DataListTopCell = forwardRef<HTMLSpanElement, DataListTopCellProps>
       <Component
         ref={ref}
         className={cn(
-          'h-8 py-1 flex items-center uppercase whitespace-nowrap text-neutral2 tracking-widest text-ui-xs',
+          'h-8 min-w-0 max-w-full overflow-hidden py-1 flex items-center uppercase whitespace-nowrap text-neutral2 tracking-widest text-ui-xs',
           className,
         )}
         {...rest}

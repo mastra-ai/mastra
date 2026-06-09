@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Improved DataList pagination controls, separators, overflow handling, and empty-cell rendering.
+Improved DataList pagination controls, separators, overflow handling, truncation, and empty-cell rendering.

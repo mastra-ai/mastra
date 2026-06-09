@@ -1,4 +1,5 @@
 import { format, isToday } from 'date-fns';
+import { Children, cloneElement, isValidElement } from 'react';
 import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { cn } from '@/lib/utils';
@@ -20,7 +21,7 @@ export function DataListCell({ children, className, height = 'default', as, ...r
   return (
     <Component
       className={cn(
-        'relative grid min-w-0 items-center text-ui-md whitespace-nowrap text-neutral3 empty:before:content-["—"] empty:before:text-neutral2',
+        'relative grid min-w-0 max-w-full items-center overflow-hidden text-ui-md whitespace-nowrap text-neutral3 empty:before:content-["—"] empty:before:text-neutral2',
         height === 'compact' ? 'py-1.5' : 'py-2.5',
         className,
       )}
@@ -31,14 +32,53 @@ export function DataListCell({ children, className, height = 'default', as, ...r
   );
 }
 
-export function DataListTextCell({ children, className }: DataListCellProps) {
-  return <DataListCell className={className}>{children}</DataListCell>;
+const dataListTruncateContentStyles =
+  'block min-w-0 max-w-full truncate empty:before:content-["—"] empty:before:text-neutral2 [&>*]:min-w-0 [&>*]:max-w-full [&>*]:overflow-hidden [&>*]:text-ellipsis [&>*]:whitespace-nowrap';
+const dataListInlineTextTruncateStyles = 'min-w-0 flex-1 truncate';
+
+function DataListInlineText({ children }: { children: string | number }) {
+  return <span className={dataListInlineTextTruncateStyles}>{children}</span>;
+}
+
+function DataListTruncatedTextNodes({ children }: { children: ReactNode }) {
+  return Children.map(children, child => {
+    if (typeof child === 'string' || typeof child === 'number') {
+      return <DataListInlineText>{child}</DataListInlineText>;
+    }
+
+    return child;
+  });
+}
+
+function DataListTruncatedCellContent({ children }: { children: ReactNode }) {
+  return Children.map(children, child => {
+    if (!isValidElement<{ children?: ReactNode; className?: string }>(child) || typeof child.type !== 'string') {
+      return child;
+    }
+
+    return cloneElement(child, {
+      className: cn('min-w-0 max-w-full overflow-hidden', child.props.className),
+      children: <DataListTruncatedTextNodes>{child.props.children}</DataListTruncatedTextNodes>,
+    });
+  });
+}
+
+export function DataListTextCell({ children, className, ...rest }: DataListCellProps) {
+  return (
+    <DataListCell className={className} {...rest}>
+      <span className={dataListTruncateContentStyles}>
+        <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
+      </span>
+    </DataListCell>
+  );
 }
 
 export function DataListNameCell({ children, className }: DataListCellProps) {
   return (
     <DataListCell className={cn('text-left text-neutral4', className)}>
-      <span className='truncate empty:before:content-["—"] empty:before:text-neutral2'>{children}</span>
+      <span className={dataListTruncateContentStyles}>
+        <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
+      </span>
     </DataListCell>
   );
 }
@@ -46,7 +86,9 @@ export function DataListNameCell({ children, className }: DataListCellProps) {
 export function DataListDescriptionCell({ children, className }: DataListCellProps) {
   return (
     <DataListCell className={cn('text-neutral2', className)}>
-      <span className='truncate empty:before:content-["—"]'>{children}</span>
+      <span className={dataListTruncateContentStyles}>
+        <DataListTruncatedCellContent>{children}</DataListTruncatedCellContent>
+      </span>
     </DataListCell>
   );
 }
@@ -114,8 +156,13 @@ export interface DataListMonoCellProps {
  */
 export function DataListMonoCell({ children, className, height = 'compact' }: DataListMonoCellProps) {
   return (
-    <DataListCell height={height} className="min-w-0">
-      <span className={cn('block text-ui-smd font-mono text-neutral3 truncate empty:before:content-["—"]', className)}>
+    <DataListCell height={height}>
+      <span
+        className={cn(
+          'block min-w-0 max-w-full text-ui-smd font-mono text-neutral3 truncate empty:before:content-["—"]',
+          className,
+        )}
+      >
         {children}
       </span>
     </DataListCell>

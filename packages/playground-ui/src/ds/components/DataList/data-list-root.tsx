@@ -18,7 +18,7 @@ export function DataListRoot({ children, columns, className, scrollRef }: DataLi
     <div
       ref={scrollRef}
       className={cn(
-        'grid bg-surface2 border max-h-full border-border1 rounded-xl overflow-auto content-start [&>.data-list-top+.data-list-row]:mt-[3px]',
+        'grid min-w-0 max-w-full bg-surface2 border max-h-full border-border1 rounded-xl overflow-auto content-start [&>.data-list-top+.data-list-row]:mt-[3px]',
         className,
       )}
       style={{ gridTemplateColumns: columns }}
