@@ -100,18 +100,47 @@ describe('Select', () => {
     expect(screen.getByRole('combobox').classList.contains('custom-trigger')).toBe(true);
   });
 
-  it('accepts the legacy size and variant props on the trigger without throwing', () => {
-    expect(() =>
-      render(
+  it('composes the Button recipe on the trigger (unified text size + border focus)', () => {
+    renderSelect();
+
+    const trigger = screen.getByRole('combobox');
+    // The trigger now inherits the button-native text size (`text-ui-md`) for
+    // its default size, not the legacy `text-ui-smd`.
+    expect(trigger.classList.contains('text-ui-md')).toBe(true);
+    expect(trigger.classList.contains('text-ui-smd')).toBe(false);
+    // Focus is the unified neutral border (from `buttonVariants`), not the old
+    // bespoke `focus-visible:border-border2`.
+    expect(trigger.className).toContain('focus-visible:border-neutral5/50');
+  });
+
+  it('wires the variant prop through to the button recipe (default = the filled Button default, field-only variants)', () => {
+    function renderWithVariant(variant?: 'default' | 'outline' | 'ghost' | 'primary') {
+      const utils = render(
         <Select>
-          <SelectTrigger size="sm" variant="ghost">
+          <SelectTrigger {...(variant ? { variant } : {})}>
             <SelectValue placeholder="Pick one" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="apple">Apple</SelectItem>
           </SelectContent>
         </Select>,
-      ),
-    ).not.toThrow();
+      );
+      const className = screen.getByRole('combobox').className;
+      utils.unmount();
+      return className;
+    }
+
+    // Default trigger == the `default` variant (the Button's filled surface).
+    expect(renderWithVariant()).toBe(renderWithVariant('default'));
+    expect(renderWithVariant('default')).toContain('bg-surface3');
+    expect(renderWithVariant('default')).not.toContain('bg-transparent');
+    // Legacy `primary` is still accepted for source compatibility, but renders
+    // as the field-safe default look.
+    expect(renderWithVariant('primary')).toBe(renderWithVariant('default'));
+    // `outline` is a transparent bordered field.
+    expect(renderWithVariant('outline')).toContain('bg-transparent');
+    expect(renderWithVariant('outline')).toContain('border-border1');
+    // `ghost` is borderless.
+    expect(renderWithVariant('ghost')).toContain('border-transparent');
   });
 });

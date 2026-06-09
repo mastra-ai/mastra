@@ -37,7 +37,7 @@ export interface SuspendedToolMetadata {
 
 export interface MessageMetadata {
   mode?: MessageMode;
-  status?: 'warning' | 'error' | 'tripwire';
+  status?: 'warning' | 'error' | 'tripwire' | 'pending';
   tripwire?: TripwireMetadata;
   selectionReason?: string;
   agentInput?: unknown;
