@@ -25,3 +25,11 @@ export const controlSizeClasses: Record<ControlSize, string> = {
   default: 'h-form-default text-ui-md',
   lg: 'h-form-lg text-ui-lg',
 };
+
+export type ControlTriggerVisualVariant = 'default' | 'outline' | 'ghost';
+
+export const controlTriggerOpenState: Record<ControlTriggerVisualVariant, string> = {
+  default: 'data-[popup-open]:bg-surface5 data-[popup-open]:text-neutral6',
+  outline: 'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
+  ghost: 'data-[popup-open]:bg-neutral6/5 data-[popup-open]:text-neutral6',
+};

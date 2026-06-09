@@ -1,7 +1,7 @@
 import { SearchIcon } from 'lucide-react';
 import { useEffect, useId, useRef } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { controlHeight } from '@/ds/primitives/control-size';
+import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import { inputFocusBorderWithin, inputHoverBorderWithin } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
@@ -107,8 +107,8 @@ export const Searchbar = ({
           type="text"
           placeholder={placeholder}
           className={cn(
-            'bg-transparent text-ui-md placeholder:text-neutral2 block w-full px-2 outline-hidden',
-            controlHeight[size],
+            'bg-transparent placeholder:text-neutral2 block w-full px-2 outline-hidden',
+            controlSizeClasses[size],
           )}
           name={id}
           ref={inputRef}

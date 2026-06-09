@@ -3,6 +3,7 @@ import { Check, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 
 import { buttonVariants } from '../Button/Button';
+import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
@@ -105,23 +106,24 @@ SelectValue.displayName = 'SelectValue';
  * one intentionally NOT offered (a field is not a call-to-action).
  */
 export type SelectTriggerVariant = 'default' | 'outline' | 'ghost';
+type SelectTriggerLegacyVariant = 'primary';
 
 export type SelectTriggerProps = Omit<SelectPrimitive.Trigger.Props, 'className'> & {
   className?: string;
   size?: ControlSize;
-  variant?: SelectTriggerVariant;
+  variant?: SelectTriggerVariant | SelectTriggerLegacyVariant;
 };
 
-// Open-state look ("active" while the menu is open), mirroring each variant's own
-// hover so it stays variant-correct.
-const selectTriggerOpenState: Record<SelectTriggerVariant, string> = {
-  default: 'data-[popup-open]:bg-surface5 data-[popup-open]:text-neutral6',
-  outline: 'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
-  ghost: 'data-[popup-open]:bg-neutral6/5 data-[popup-open]:text-neutral6',
-};
+function normalizeSelectTriggerVariant(
+  variant: SelectTriggerVariant | SelectTriggerLegacyVariant,
+): SelectTriggerVariant {
+  return variant === 'primary' ? 'default' : variant;
+}
 
 const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
   ({ className, children, size = 'default', variant = 'default', ...props }, ref) => {
+    const visualVariant = normalizeSelectTriggerVariant(variant);
+
     return (
       <SelectPrimitive.Trigger
         ref={ref}
@@ -130,12 +132,12 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
         // (variant colors, size = height/text/padding/radius, unified border
         // focus, disabled) and layer only the select-specific extras.
         className={cn(
-          buttonVariants({ variant, size }),
+          buttonVariants({ variant: visualVariant, size }),
           // Fill the field and push the value left / chevron right (Button's
           // base centers its content with `justify-center`).
           'w-full justify-between',
           // Read as "active" while the menu is open, per variant (see map above).
-          selectTriggerOpenState[variant],
+          controlTriggerOpenState[visualVariant],
           'data-[placeholder]:text-neutral3',
           '[&>span]:truncate',
           className,

@@ -26,7 +26,7 @@ export type ComboboxProps = {
   className?: string;
   disabled?: boolean;
   variant?: ComboboxVariant;
-  size?: Exclude<ControlSize, 'lg'>;
+  size?: ControlSize;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;

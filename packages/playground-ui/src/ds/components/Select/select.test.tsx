@@ -114,7 +114,7 @@ describe('Select', () => {
   });
 
   it('wires the variant prop through to the button recipe (default = the filled Button default, field-only variants)', () => {
-    function renderWithVariant(variant?: 'default' | 'outline' | 'ghost') {
+    function renderWithVariant(variant?: 'default' | 'outline' | 'ghost' | 'primary') {
       const utils = render(
         <Select>
           <SelectTrigger {...(variant ? { variant } : {})}>
@@ -134,6 +134,9 @@ describe('Select', () => {
     expect(renderWithVariant()).toBe(renderWithVariant('default'));
     expect(renderWithVariant('default')).toContain('bg-surface3');
     expect(renderWithVariant('default')).not.toContain('bg-transparent');
+    // Legacy `primary` is still accepted for source compatibility, but renders
+    // as the field-safe default look.
+    expect(renderWithVariant('primary')).toBe(renderWithVariant('default'));
     // `outline` is a transparent bordered field.
     expect(renderWithVariant('outline')).toContain('bg-transparent');
     expect(renderWithVariant('outline')).toContain('border-border1');

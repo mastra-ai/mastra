@@ -1,5 +1,6 @@
 import { buttonVariants } from '../Button/Button';
-import type { ControlSize } from '@/ds/primitives/control-size';
+import { controlTriggerOpenState } from '@/ds/primitives/control-size';
+import type { ControlSize, ControlTriggerVisualVariant } from '@/ds/primitives/control-size';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -10,15 +11,13 @@ import { cn } from '@/lib/utils';
  * (borderless, for breadcrumbs/inline pickers). Only the high-emphasis `primary`
  * look is intentionally NOT offered (a field is not a call-to-action).
  */
-export type ComboboxVariant = 'default' | 'outline' | 'ghost';
+export type ComboboxVisualVariant = ControlTriggerVisualVariant;
+export type ComboboxLegacyVariant = 'link';
+export type ComboboxVariant = ComboboxVisualVariant | ComboboxLegacyVariant;
 
-// Open-state look ("active" while the popup is open), mirroring each variant's
-// own hover so it stays variant-correct. Same values as `selectTriggerOpenState`.
-const comboboxTriggerOpenState: Record<ComboboxVariant, string> = {
-  default: 'data-[popup-open]:bg-surface5 data-[popup-open]:text-neutral6',
-  outline: 'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
-  ghost: 'data-[popup-open]:bg-neutral6/5 data-[popup-open]:text-neutral6',
-};
+function normalizeComboboxVariant(variant: ComboboxVariant): ComboboxVisualVariant {
+  return variant === 'link' ? 'ghost' : variant;
+}
 
 /**
  * Single source of truth for both the single- and multi-select combobox
@@ -38,13 +37,15 @@ export function comboboxTriggerClass({
   error?: boolean;
   className?: string;
 }): string {
+  const visualVariant = normalizeComboboxVariant(variant);
+
   return cn(
-    buttonVariants({ variant, size }),
+    buttonVariants({ variant: visualVariant, size }),
     // Fill the field and push the value left / chevron right (Button's base
     // centers its content with `justify-center`).
     'w-full min-w-32 justify-between',
     // Read as "active" while the popup is open, per variant (see map above).
-    comboboxTriggerOpenState[variant],
+    controlTriggerOpenState[visualVariant],
     'data-[placeholder]:text-neutral3',
     error && 'border-error hover:border-error focus-visible:border-error',
     className,

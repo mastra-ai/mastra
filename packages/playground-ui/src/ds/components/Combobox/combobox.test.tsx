@@ -102,6 +102,11 @@ describe('Combobox', () => {
     const ghostClass = screen.getByRole('combobox').className;
     expect(ghostClass).toContain('border-transparent');
     expect(ghostClass).not.toContain('border-border1');
+
+    // Legacy `link` is still accepted for source compatibility, but renders as
+    // the closest field-safe look.
+    rerender(<Combobox options={options} placeholder="Pick provider" variant="link" />);
+    expect(screen.getByRole('combobox').className).toContain('border-transparent');
   });
 
   it('applies the error border when an error is provided', () => {
