@@ -25,26 +25,88 @@ type ContentPart = { metadata?: Record<string, unknown> } & (Exclude<
  * stored under `content.metadata.signal.type`, falling back to the top-level
  * `message.type`.
  */
-const getSignalType = (message: MastraDBMessage): string | undefined => {
+const getSignalMetadata = (message: MastraDBMessage): Record<string, unknown> | undefined => {
   const signal = message.content.metadata?.signal;
-  if (signal && typeof signal === 'object' && !Array.isArray(signal)) {
-    const type = (signal as Record<string, unknown>).type;
-    return typeof type === 'string' ? type : message.type;
-  }
-  return message.type;
+  return signal && typeof signal === 'object' && !Array.isArray(signal)
+    ? (signal as Record<string, unknown>)
+    : undefined;
+};
+
+const getSignalType = (message: MastraDBMessage): string | undefined => {
+  const type = getSignalMetadata(message)?.type;
+  return typeof type === 'string' ? type : message.type;
 };
 
 /**
  * User-message signals (the persisted echo of a user turn sent via `sendSignal`)
- * use `type: 'user'` or `'user-message'`. They must render as a user bubble on
- * reload, matching core's adapters; all other signals stay `system`.
+ * use `type: 'user'` or `'user-message'`. They render as user text on reload.
+ * Every other signal mirrors the old streaming accumulator's `data-*` behavior:
+ * a signal data part on an assistant message.
  */
 const isUserSignalType = (type: string | undefined): boolean => type === 'user' || type === 'user-message';
+
+const toAssistantUIRole = (message: MastraDBMessage): ThreadMessageLike['role'] => {
+  if (message.role !== 'signal') return message.role;
+  return isUserSignalType(getSignalType(message)) ? 'user' : 'assistant';
+};
 
 const getPartMetadata = (message: MastraDBMessage, part: MastraMessagePart) => ({
   ...message.content.metadata,
   ...('providerMetadata' in part && part.providerMetadata ? { providerMetadata: part.providerMetadata } : {}),
 });
+
+type SignalContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'file'; data: string; mediaType: string; filename?: string };
+
+const signalPartsToContents = (parts: MastraMessagePart[]): unknown => {
+  const contents: SignalContentPart[] = [];
+  for (const part of parts) {
+    if (part.type === 'text') {
+      contents.push({ type: 'text', text: part.text });
+      continue;
+    }
+
+    if (part.type === 'file') {
+      const data = 'data' in part ? part.data : undefined;
+      if (typeof data !== 'string') continue;
+      contents.push({
+        type: 'file',
+        data,
+        mediaType:
+          ('mediaType' in part && typeof part.mediaType === 'string' ? part.mediaType : undefined) ??
+          ('mimeType' in part && typeof part.mimeType === 'string' ? part.mimeType : undefined) ??
+          'application/octet-stream',
+        ...('filename' in part && typeof part.filename === 'string' ? { filename: part.filename } : {}),
+      });
+    }
+  }
+
+  return contents.length === 1 && contents[0]?.type === 'text' ? contents[0].text : contents;
+};
+
+const toSignalDataContentPart = (message: MastraDBMessage): ContentPart => {
+  const signal = getSignalMetadata(message) ?? {};
+  return {
+    type: 'data',
+    name: 'signal',
+    data: {
+      id: typeof signal.id === 'string' ? signal.id : message.id,
+      type: getSignalType(message),
+      tagName: typeof signal.tagName === 'string' ? signal.tagName : message.type,
+      contents: signalPartsToContents(message.content.parts),
+      createdAt: typeof signal.createdAt === 'string' ? signal.createdAt : message.createdAt.toISOString(),
+      ...(typeof signal.acceptedAt === 'string' ? { acceptedAt: signal.acceptedAt } : {}),
+      ...(signal.attributes && typeof signal.attributes === 'object' && !Array.isArray(signal.attributes)
+        ? { attributes: signal.attributes }
+        : {}),
+      ...(signal.metadata && typeof signal.metadata === 'object' && !Array.isArray(signal.metadata)
+        ? { metadata: signal.metadata }
+        : {}),
+    },
+    metadata: message.content.metadata,
+  };
+};
 
 const getToolArgs = (toolInvocation: MastraToolInvocationPart['toolInvocation']) => {
   const invocation = toolInvocation as MastraToolInvocationPart['toolInvocation'] & {
@@ -338,6 +400,14 @@ const toContentPart = (message: MastraDBMessage, part: MastraMessagePart): Conte
   return { type: 'text', text: '', metadata: getPartMetadata(message, part) };
 };
 
+const toContent = (message: MastraDBMessage): ThreadMessageLike['content'] => {
+  if (message.role === 'signal' && !isUserSignalType(getSignalType(message))) {
+    return [toSignalDataContentPart(message)];
+  }
+
+  return message.content.parts.map(part => toContentPart(message, part));
+};
+
 const toStatus = (message: MastraDBMessage): MessageStatus | undefined => {
   if (message.role !== 'assistant' || message.content.parts.length === 0) return undefined;
 
@@ -364,8 +434,8 @@ const toStatus = (message: MastraDBMessage): MessageStatus | undefined => {
 export const toAssistantUIMessage = (message: MastraDBMessage): ThreadMessageLike =>
   ({
     id: message.id,
-    role: message.role === 'signal' ? (isUserSignalType(getSignalType(message)) ? 'user' : 'system') : message.role,
-    content: message.content.parts.map(part => toContentPart(message, part)),
+    role: toAssistantUIRole(message),
+    content: toContent(message),
     status: toStatus(message),
     createdAt: message.createdAt,
     metadata: {
@@ -375,3 +445,32 @@ export const toAssistantUIMessage = (message: MastraDBMessage): ThreadMessageLik
       createdAt: message.createdAt,
     } as ThreadMessageLike['metadata'],
   }) as ThreadMessageLike;
+
+const hasSignalDataPart = (message: ThreadMessageLike): boolean =>
+  Array.isArray(message.content) && message.content.some(part => part.type === 'data' && part.name === 'signal');
+
+const shouldMergeAssistantMessages = (previous: ThreadMessageLike, next: ThreadMessageLike): boolean =>
+  previous.role === 'assistant' &&
+  next.role === 'assistant' &&
+  (hasSignalDataPart(previous) || hasSignalDataPart(next));
+
+export const toAssistantUIMessages = (messages: MastraDBMessage[]): ThreadMessageLike[] =>
+  messages.map(toAssistantUIMessage).reduce<ThreadMessageLike[]>((result, message) => {
+    const previous = result.at(-1);
+    if (
+      previous &&
+      shouldMergeAssistantMessages(previous, message) &&
+      Array.isArray(previous.content) &&
+      Array.isArray(message.content)
+    ) {
+      result[result.length - 1] = {
+        ...previous,
+        content: [...previous.content, ...message.content],
+        status: message.status ?? previous.status,
+      };
+      return result;
+    }
+
+    result.push(message);
+    return result;
+  }, []);

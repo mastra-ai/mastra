@@ -465,6 +465,37 @@ describe('MessageFactory', () => {
       expect(screen.getByTestId('task').getAttribute('data-suppressed')).toBe('true');
     });
 
+    it('wraps the parts walk with the Pending slot when status is pending', () => {
+      const { calls, renderers } = makeSpyRenderers();
+      const status: MessageStatusRenderers = {
+        Pending: props => <div data-testid="pending">{props.children}</div>,
+      };
+      render(
+        <MessageFactory
+          message={makeMessageWithMetadata([textPart('sending this')], { status: 'pending' })}
+          status={status}
+          {...renderers}
+        />,
+      );
+
+      const pending = screen.getByTestId('pending');
+      expect(pending.querySelector('[data-testid="text"]')?.textContent).toBe('sending this');
+      expect(calls.Text).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls through to the bare parts walk when status is pending but no Pending slot is provided', () => {
+      const { calls, renderers } = makeSpyRenderers();
+      render(
+        <MessageFactory
+          message={makeMessageWithMetadata([textPart('sending this')], { status: 'pending' })}
+          {...renderers}
+        />,
+      );
+
+      expect(screen.getByTestId('text').textContent).toBe('sending this');
+      expect(calls.Text).toHaveBeenCalledTimes(1);
+    });
+
     it('wraps a replacement slot with a matching role wrapper', () => {
       const { renderers } = makeSpyRenderers();
       const roles: MessageRoleRenderers = {

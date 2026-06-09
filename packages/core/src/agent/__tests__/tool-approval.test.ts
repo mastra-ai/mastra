@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { EventEmitterPubSub } from '../../events';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory';
 import { InMemoryStore } from '../../storage';
@@ -126,37 +127,44 @@ export function toolApprovalAndSuspensionTests(version: 'v1' | 'v2') {
           agents: { userAgent },
           logger: false,
           storage: mockStorage,
+          pubsub: new EventEmitterPubSub(),
         });
 
-        const agentOne = mastra.getAgent('userAgent');
-        const memory = {
-          thread: randomUUID(),
-          resource: randomUUID(),
-        };
+        await mastra.startWorkers();
 
-        const stream = await agentOne.stream('Find the user with name - Dero Israel', { memory });
-        let toolName = '';
-        for await (const _chunk of stream.fullStream) {
-          if (_chunk.type === 'tool-call-approval') {
-            toolName = _chunk.payload.toolName;
+        try {
+          const agentOne = mastra.getAgent('userAgent');
+          const memory = {
+            thread: randomUUID(),
+            resource: randomUUID(),
+          };
+
+          const stream = await agentOne.stream('Find the user with name - Dero Israel', { memory });
+          let toolName = '';
+          for await (const _chunk of stream.fullStream) {
+            if (_chunk.type === 'tool-call-approval') {
+              toolName = _chunk.payload.toolName;
+            }
           }
-        }
-        if (toolName) {
-          const resumeStream = await agentOne.stream('Approve', {
-            memory,
-          });
-          for await (const _chunk of resumeStream.fullStream) {
+          if (toolName) {
+            const resumeStream = await agentOne.stream('Approve', {
+              memory,
+            });
+            for await (const _chunk of resumeStream.fullStream) {
+            }
+
+            const toolResults = await resumeStream.toolResults;
+
+            const toolCall = toolResults?.find((result: any) => result.payload.toolName === 'findUserTool')?.payload;
+
+            const name = (toolCall?.result as any)?.name;
+
+            expect(mockFindUser).toHaveBeenCalled();
+            expect(name).toBe('Dero Israel');
+            expect(toolName).toBe('findUserTool');
           }
-
-          const toolResults = await resumeStream.toolResults;
-
-          const toolCall = toolResults?.find((result: any) => result.payload.toolName === 'findUserTool')?.payload;
-
-          const name = (toolCall?.result as any)?.name;
-
-          expect(mockFindUser).toHaveBeenCalled();
-          expect(name).toBe('Dero Israel');
-          expect(toolName).toBe('findUserTool');
+        } finally {
+          await mastra.stopWorkers();
         }
       }, 500000);
 

@@ -113,11 +113,12 @@ describe('Agent FGA checks', () => {
     });
 
     it('should not call FGA check when no FGA provider configured', async () => {
-      const mastra = createMockMastra();
       const model = createMockModel();
 
+      // No Mastra is registered, so the agent runs on its ephemeral Mastra,
+      // which has no FGA provider — exercising the "FGA not configured" path
+      // while still giving the evented loop the pubsub/workers it needs.
       const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model });
-      (agent as any).__registerMastra(mastra);
 
       const requestContext = new RequestContext();
       requestContext.set('user', { id: 'user-1' });

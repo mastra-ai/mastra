@@ -1,8 +1,9 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
-const { visibleWidthMock, chalkRgbMock } = vi.hoisted(() => ({
+const { visibleWidthMock, chalkRgbMock, applyGradientSweepMock } = vi.hoisted(() => ({
   visibleWidthMock: vi.fn((value: string) => value.length),
   chalkRgbMock: vi.fn(),
+  applyGradientSweepMock: vi.fn((value: string) => value),
 }));
 
 vi.mock('@mariozechner/pi-tui', () => ({
@@ -32,7 +33,7 @@ vi.mock('chalk', () => {
 });
 
 vi.mock('../components/obi-loader.js', () => ({
-  applyGradientSweep: (value: string) => value,
+  applyGradientSweep: applyGradientSweepMock,
 }));
 
 vi.mock('../components/om-progress.js', () => ({
@@ -90,6 +91,8 @@ function createState() {
     memoryStatusLine: { setText: memorySetText },
     editor: {},
     gradientAnimator: undefined,
+    githubPrGradientAnimator: undefined,
+    githubPrPollingActive: false,
     modelAuthStatus: { hasAuth: true, apiKeyEnvVar: undefined },
     projectInfo: {
       rootPath: '/Users/tylerbarnes/code/mastra-ai/mastra--feat-mc-queueing-ux',
@@ -108,6 +111,7 @@ describe('updateStatusLine', () => {
   beforeEach(() => {
     visibleWidthMock.mockClear();
     chalkRgbMock.mockClear();
+    applyGradientSweepMock.mockClear();
     process.stdout.columns = 200;
   });
 
@@ -148,7 +152,6 @@ describe('updateStatusLine', () => {
         lastNotificationPriority: 'medium',
       },
     ];
-    state.options = { githubSignals: { isPollingThread: vi.fn(() => true) } };
 
     updateStatusLine(state);
 
@@ -156,6 +159,40 @@ describe('updateStatusLine', () => {
     expect(rendered).toContain('PR#17439');
     expect(rendered).not.toContain('polling');
     expect(rendered).not.toContain('updated');
+  });
+
+  it('does not animate the GitHub PR subscription during unrelated agent activity', () => {
+    const state = createState();
+    state.activeGithubPrSubscriptions = [{ prNumber: 17439 }];
+    state.gradientAnimator = {
+      isRunning: vi.fn(() => true),
+      getOffset: vi.fn(() => 0.5),
+      getFadeProgress: vi.fn(() => 0),
+    };
+
+    updateStatusLine(state);
+
+    expect(applyGradientSweepMock).not.toHaveBeenCalledWith(
+      'PR#17439',
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    );
+  });
+
+  it('animates the GitHub PR subscription while GitHub polling is running', () => {
+    const state = createState();
+    state.activeGithubPrSubscriptions = [{ prNumber: 17439 }];
+    state.githubPrPollingActive = true;
+    state.githubPrGradientAnimator = {
+      isRunning: vi.fn(() => true),
+      getOffset: vi.fn(() => 0.5),
+      getFadeProgress: vi.fn(() => 0),
+    };
+
+    updateStatusLine(state);
+
+    expect(applyGradientSweepMock).toHaveBeenCalledWith('PR#17439', 0.5, '#0ea5e9', 0);
   });
 
   it('does not show GitHub PR status for unsubscribed threads', () => {

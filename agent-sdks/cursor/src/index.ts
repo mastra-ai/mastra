@@ -54,7 +54,22 @@ type CursorToolTelemetry = Pick<SDKAgentTelemetry, 'startToolCall' | 'endToolCal
 export type CursorAgentFactory = (options: CursorCreateOptions) => SDKAgent | Promise<SDKAgent>;
 export type CursorAgentInput = SDKAgent | Promise<SDKAgent> | CursorAgentFactory;
 
-export type CursorAgentOptions = {
+export type CursorSDKAgentResumeData = {
+  /**
+   * Message to send while continuing the Cursor SDK agent.
+   */
+  message: MessageListInput;
+  /**
+   * Cursor SDK agent id to resume. If omitted, the wrapped SDK agent is reused.
+   */
+  agentId?: string;
+  /**
+   * Cursor SDK options used only when `agentId` is provided.
+   */
+  sdkOptions?: Partial<CursorCreateOptions>;
+};
+
+type CursorSDKAgentBaseOptions = {
   /**
    * Mastra agent id used when registering this wrapper with Mastra.
    */
@@ -67,26 +82,35 @@ export type CursorAgentOptions = {
    * Description surfaced by Mastra when listing or selecting agents.
    */
   description: string;
-  /**
-   * Cursor SDK agent or factory. Pass a pre-created SDK agent when you manage
-   * its lifecycle elsewhere. Omit this option to let this wrapper call
-   * `CursorAgent.create()` with `sdkOptions`.
-   *
-   * If you pass `CursorAgent.create({...})`, that promise has already been
-   * created by the Cursor SDK and wrapper-level create options cannot be
-   * merged into it. Put all Cursor create options in that call, or pass the
-   * factory itself as `agent: CursorAgent.create`.
-   *
-   * The factory path allows Mastra to hydrate defaults such as `apiKey`.
-   */
-  agent?: CursorAgentInput;
-  /**
-   * Cursor SDK options used when `agent` is omitted or when `agent` is a
-   * factory. Defaults `apiKey` to `process.env.CURSOR_API_KEY` when not
-   * provided.
-   */
-  sdkOptions?: CursorCreateOptions;
 };
+
+export type CursorAgentOptions = CursorSDKAgentBaseOptions &
+  (
+    | {
+        /**
+         * Pre-created Cursor SDK agent. Pass this when you manage the SDK
+         * agent lifecycle yourself.
+         */
+        agent: SDKAgent | Promise<SDKAgent>;
+        sdkOptions?: never;
+      }
+    | {
+        /**
+         * Cursor SDK agent factory. The wrapper calls it with `sdkOptions`,
+         * including defaults such as `process.env.CURSOR_API_KEY`.
+         */
+        agent: CursorAgentFactory;
+        sdkOptions?: CursorCreateOptions;
+      }
+    | {
+        agent?: never;
+        /**
+         * Cursor SDK options used to create an SDK agent. Defaults `apiKey` to
+         * `process.env.CURSOR_API_KEY` when not provided.
+         */
+        sdkOptions: CursorCreateOptions;
+      }
+  );
 
 export class CursorSDKAgent extends Agent {
   readonly options: CursorAgentOptions;
@@ -120,9 +144,18 @@ export class CursorSDKAgent extends Agent {
     messages: MessageListInput,
     options?: SDKAgentRunOptions<OUTPUT>,
   ): Promise<FullOutput<OUTPUT>> {
+    assertStructuredOutputUnsupported(options);
+    const sdkAgent = await this.resolveCursorAgent();
+    return this.generateWithAgent(messages, sdkAgent, options);
+  }
+
+  private async generateWithAgent<OUTPUT = undefined>(
+    messages: MessageListInput,
+    sdkAgent: SDKAgent,
+    options?: SDKAgentRunOptions<OUTPUT>,
+  ): Promise<FullOutput<OUTPUT>> {
     const prompt = promptToText(messages);
     const runId = options?.runId ?? randomUUID();
-    const sdkAgent = await this.resolveCursorAgent();
     const modelId = getCursorModelId(this.options, sdkAgent);
     const requestContext = options?.requestContext ?? new RequestContext();
     const instructions = options?.instructions ? promptToText(options.instructions) : undefined;
@@ -167,9 +200,18 @@ export class CursorSDKAgent extends Agent {
     messages: MessageListInput,
     options?: SDKAgentRunOptions<OUTPUT>,
   ): Promise<MastraModelOutput<OUTPUT>> {
+    assertStructuredOutputUnsupported(options);
+    const sdkAgent = await this.resolveCursorAgent();
+    return this.streamWithAgent(messages, sdkAgent, options);
+  }
+
+  private async streamWithAgent<OUTPUT = undefined>(
+    messages: MessageListInput,
+    sdkAgent: SDKAgent,
+    options?: SDKAgentRunOptions<OUTPUT>,
+  ): Promise<MastraModelOutput<OUTPUT>> {
     const runId = options?.runId ?? randomUUID();
     const prompt = promptToText(messages);
-    const sdkAgent = await this.resolveCursorAgent();
     const modelId = getCursorModelId(this.options, sdkAgent);
     const requestContext = options?.requestContext ?? new RequestContext();
     const instructions = options?.instructions ? promptToText(options.instructions) : undefined;
@@ -203,12 +245,64 @@ export class CursorSDKAgent extends Agent {
     });
   }
 
+  async resumeGenerate<OUTPUT = undefined>(
+    resumeData: CursorSDKAgentResumeData,
+    options?: SDKAgentRunOptions<OUTPUT>,
+  ): Promise<FullOutput<OUTPUT>> {
+    assertStructuredOutputUnsupported(options);
+    const data = validateCursorResumeData(resumeData);
+    const sdkAgent = await this.resolveResumeCursorAgent(data);
+    return this.generateWithAgent(data.message, sdkAgent, options);
+  }
+
+  async resumeStream<OUTPUT = undefined>(
+    resumeData: CursorSDKAgentResumeData,
+    options?: SDKAgentRunOptions<OUTPUT>,
+  ): Promise<MastraModelOutput<OUTPUT>> {
+    assertStructuredOutputUnsupported(options);
+    const data = validateCursorResumeData(resumeData);
+    const sdkAgent = await this.resolveResumeCursorAgent(data);
+    return this.streamWithAgent(data.message, sdkAgent, options);
+  }
+
   private resolveCursorAgent(): Promise<SDKAgent> {
     this.#createdAgent ??= resolveCursorAgent(this.options.agent, this.options).catch(error => {
       this.#createdAgent = undefined;
       throw error;
     });
     return this.#createdAgent;
+  }
+
+  private async resolveResumeCursorAgent(resumeData: CursorSDKAgentResumeData): Promise<SDKAgent> {
+    if (!resumeData.agentId) {
+      return this.resolveCursorAgent();
+    }
+
+    return CursorAgent.resume(resumeData.agentId, {
+      ...toCursorCreateOptions(this.options),
+      ...resumeData.sdkOptions,
+    });
+  }
+}
+
+function validateCursorResumeData(resumeData: CursorSDKAgentResumeData): CursorSDKAgentResumeData {
+  if (!toRecord(resumeData) || !('message' in resumeData)) {
+    throw new Error('CursorSDKAgent resumeData must include a message.');
+  }
+
+  if (resumeData.agentId !== undefined && typeof resumeData.agentId !== 'string') {
+    throw new Error('CursorSDKAgent resumeData.agentId must be a string when provided.');
+  }
+
+  return resumeData;
+}
+
+function assertStructuredOutputUnsupported(options?: unknown): void {
+  const structuredOutput = toRecord(toRecord(options)?.structuredOutput);
+  if (structuredOutput && 'schema' in structuredOutput) {
+    throw new Error(
+      'CursorSDKAgent does not support structuredOutput because the Cursor TypeScript SDK does not expose a schema-constrained output API.',
+    );
   }
 }
 

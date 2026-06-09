@@ -2,9 +2,9 @@ import { Select as SelectPrimitive } from '@base-ui/react/select';
 import { Check, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 
-import type { ButtonProps } from '../Button';
-import { formElementSizes } from '@/ds/primitives/form-element';
-import type { FormElementSize } from '@/ds/primitives/form-element';
+import { buttonVariants } from '../Button/Button';
+import { controlTriggerOpenState } from '@/ds/primitives/control-size';
+import type { ControlSize } from '@/ds/primitives/control-size';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -98,37 +98,66 @@ const SelectValue = React.forwardRef<HTMLSpanElement, SelectValueProps>(({ class
 ));
 SelectValue.displayName = 'SelectValue';
 
+/**
+ * A select is a form field, so it reuses the same button looks consumers see
+ * everywhere: `default` (the Button's filled default surface — the default
+ * here too), `outline` (bordered, transparent) and `ghost` (borderless, for
+ * dense toolbars/inline pickers). The high-emphasis `primary` look is the only
+ * one intentionally NOT offered (a field is not a call-to-action).
+ */
+export type SelectTriggerVariant = 'default' | 'outline' | 'ghost';
+type SelectTriggerLegacyVariant = 'primary';
+
 export type SelectTriggerProps = Omit<SelectPrimitive.Trigger.Props, 'className'> & {
   className?: string;
-  size?: FormElementSize;
-  /** Kept for API compatibility; styling is now intrinsic to the trigger. */
-  variant?: ButtonProps['variant'];
+  size?: ControlSize;
+  variant?: SelectTriggerVariant | SelectTriggerLegacyVariant;
 };
 
+function normalizeSelectTriggerVariant(
+  variant: SelectTriggerVariant | SelectTriggerLegacyVariant,
+): SelectTriggerVariant {
+  return variant === 'primary' ? 'default' : variant;
+}
+
 const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
-  ({ className, children, size = 'default', variant: _variant, ...props }, ref) => {
+  ({ className, children, size = 'default', variant = 'default', ...props }, ref) => {
+    const visualVariant = normalizeSelectTriggerVariant(variant);
+
     return (
       <SelectPrimitive.Trigger
         ref={ref}
         data-slot="select-trigger"
+        // A select = a button + a trailing chevron: reuse the Button recipe
+        // (variant colors, size = height/text/padding/radius, unified border
+        // focus, disabled) and layer only the select-specific extras.
         className={cn(
-          'inline-flex w-full cursor-pointer select-none items-center justify-between gap-1.5 whitespace-nowrap',
-          formElementSizes[size],
-          'rounded-lg border border-border1 bg-transparent px-2.5 text-ui-smd leading-ui-sm text-neutral4',
-          'outline-none transition-colors duration-normal ease-out-custom',
-          'hover:bg-surface3 hover:text-neutral6 hover:border-border2 active:bg-surface4',
-          'focus:outline-none focus-visible:outline-none focus-visible:border-border2',
-          'data-[popup-open]:bg-surface3 data-[popup-open]:text-neutral6 data-[popup-open]:border-border2',
+          buttonVariants({ variant: visualVariant, size }),
+          // Fill the field and push the value left / chevron right (Button's
+          // base centers its content with `justify-center`).
+          'w-full justify-between',
+          // Read as "active" while the menu is open, per variant (see map above).
+          controlTriggerOpenState[visualVariant],
           'data-[placeholder]:text-neutral3',
-          'disabled:cursor-not-allowed disabled:opacity-50',
           '[&>span]:truncate',
           className,
         )}
         {...props}
       >
         {children}
+        {/* `SelectPrimitive.Icon` renders the provided element in place of its
+            default `<span>`, so the chevron would land as a *direct* `<svg>`
+            child of the trigger — where Button's `TEXT_MODE_ADORNMENTS`
+            `[&>svg]` rules (negative `mx`, forced 50% opacity, 1.1em sizing)
+            would distort and mis-position it. Wrapping it in a `<span>` keeps
+            the svg one level deep so those rules can't reach it, leaving the
+            chevron pinned at the right edge at its intended size and opacity. */}
         <SelectPrimitive.Icon
-          render={<ChevronDown className={cn('h-4 w-4 shrink-0 text-neutral3 opacity-70', transitions.colors)} />}
+          render={
+            <span className="flex shrink-0 items-center">
+              <ChevronDown className={cn('h-4 w-4 opacity-60', transitions.colors)} />
+            </span>
+          }
         />
       </SelectPrimitive.Trigger>
     );
@@ -158,10 +187,9 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
   ) => {
     // Default to the nearest SideDialog/Drawer popup so the dropdown stays
     // interactive inside a modal drawer; an explicit `container` still wins.
-    const portalContainer = usePortalContainer();
-    const resolvedContainer = container ?? portalContainer;
+    const resolvedContainer = usePortalContainer(container);
     return (
-      <SelectPrimitive.Portal container={resolvedContainer ?? undefined}>
+      <SelectPrimitive.Portal container={resolvedContainer}>
         <SelectPrimitive.Positioner
           className="z-50 outline-none"
           side={side}

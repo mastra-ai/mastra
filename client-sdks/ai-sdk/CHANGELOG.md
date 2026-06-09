@@ -1,5 +1,14 @@
 # @mastra/ai-sdk
 
+## 1.4.5-alpha.0
+
+### Patch Changes
+
+- Fixed client-side tool tracing for useChat by carrying observability context through AI SDK v6 `toolMetadata` on `tool-input-available` stream chunks. ([#17202](https://github.com/mastra-ai/mastra/pull/17202))
+
+- Updated dependencies [[`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`053735a`](https://github.com/mastra-ai/mastra/commit/053735a75c2c18e23ce34d9468007efa4a45f4c4), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`34839c1`](https://github.com/mastra-ai/mastra/commit/34839c1910b6964bf59ed0cee58844efebbb684e), [`a952852`](https://github.com/mastra-ai/mastra/commit/a952852c971a21fb646cd907c75fcf4443cdc963)]:
+  - @mastra/core@1.42.0-alpha.3
+
 ## 1.4.4
 
 ### Patch Changes

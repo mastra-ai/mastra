@@ -7,6 +7,7 @@ export type {
   TripwireRendererProps,
   WarningRendererProps,
   ErrorRendererProps,
+  PendingRendererProps,
   TaskRendererProps,
   DynamicToolPart,
   MessageFactoryPart,

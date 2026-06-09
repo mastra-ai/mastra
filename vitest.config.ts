@@ -24,7 +24,9 @@ const PROJECT_GLOBS = [
   'auth/*/vitest.config.ts',
   'observability/*/vitest.config.ts',
   'pubsub/*/vitest.config.ts',
+  'signals/*/vitest.config.ts',
   'workflows/*/vitest.config.ts',
+  'mastracode/vitest.config.ts',
 ];
 
 /**

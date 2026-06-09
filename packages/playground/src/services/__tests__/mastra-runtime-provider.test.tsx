@@ -165,6 +165,38 @@ describe('MastraRuntimeProvider', () => {
     expect(useChat).toHaveBeenCalledWith(expect.objectContaining({ enableThreadSignals: false }));
   });
 
+  it('no longer wires composer pending-signal callbacks or exposes pending widget state', () => {
+    render(
+      <MastraRuntimeProvider agentId="agent-1" threadId="thread-1" initialMessages={[]} modelVersion="v2">
+        <div />
+      </MastraRuntimeProvider>,
+    );
+
+    const chatArgs = vi.mocked(useChat).mock.calls.at(-1)?.[0];
+    expect(chatArgs?.onSignalSent).toBeUndefined();
+    expect(chatArgs?.onSignalEcho).toBeUndefined();
+    expect(typeof chatArgs?.onThreadSignalsUnsupported).toBe('function');
+
+    expect(mocks.threadRuntimeState).not.toHaveProperty('pendingSignals');
+    expect(mocks.threadRuntimeState).not.toHaveProperty('hasPendingMessages');
+  });
+
+  it('disables thread signals when the agent does not support memory', () => {
+    render(
+      <MastraRuntimeProvider
+        agentId="agent-1"
+        threadId="thread-1"
+        initialMessages={[]}
+        modelVersion="v2"
+        supportsMemory={false}
+      >
+        <div />
+      </MastraRuntimeProvider>,
+    );
+
+    expect(useChat).toHaveBeenCalledWith(expect.objectContaining({ enableThreadSignals: false }));
+  });
+
   it('persists a visible error when a vNext stream finishes with pending tool calls', async () => {
     mocks.sendMessage.mockImplementation(async ({ onChunk }) => {
       await onChunk({

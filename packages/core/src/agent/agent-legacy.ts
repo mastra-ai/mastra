@@ -32,7 +32,7 @@ import {
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { ChunkType } from '../stream/types';
-import type { CoreTool } from '../tools/types';
+import type { CoreTool, ToolHooks } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import type { OutputWriter } from '../workflows';
 import { MessageList } from './message-list';
@@ -105,6 +105,7 @@ export interface AgentLegacyCapabilities {
       methodType: AgentMethodType;
       memoryConfig?: MemoryConfigInternal;
       inputProcessors?: InputProcessorOrWorkflow[];
+      hooks?: ToolHooks;
     } & ObservabilityContext,
   ): Promise<Record<string, CoreTool>>;
 
@@ -246,6 +247,7 @@ export class AgentLegacyHandler {
     tracingOptions,
     inputProcessors,
     providerOptions,
+    hooks,
     ...rest
   }: {
     instructions: AgentInstructions;
@@ -263,6 +265,7 @@ export class AgentLegacyHandler {
     tracingOptions?: TracingOptions;
     inputProcessors?: InputProcessorOrWorkflow[];
     providerOptions?: ProviderOptions;
+    hooks?: ToolHooks;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     return {
@@ -314,6 +317,7 @@ export class AgentLegacyHandler {
           methodType: methodType === 'generate' ? 'generateLegacy' : 'streamLegacy',
           memoryConfig,
           inputProcessors,
+          hooks,
         });
 
         let messageList = new MessageList({
@@ -729,6 +733,7 @@ export class AgentLegacyHandler {
     messages: MessageListInput,
     options: (AgentGenerateOptions<Output, ExperimentalOutput> | AgentStreamOptions<Output, ExperimentalOutput>) & {
       writableStream?: WritableStream<ChunkType>;
+      hooks?: ToolHooks;
     } & Record<string, any>,
     methodType: 'generate' | 'stream',
   ): Promise<{
@@ -774,6 +779,7 @@ export class AgentLegacyHandler {
       savePerStep,
       writableStream,
       inputProcessors,
+      hooks,
       ...args
     } = options;
 
@@ -830,6 +836,7 @@ export class AgentLegacyHandler {
       tracingOptions,
       inputProcessors,
       providerOptions: args.providerOptions,
+      hooks,
       ...resolveObservabilityContext(args as Partial<ObservabilityContext>),
     });
 
