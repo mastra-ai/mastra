@@ -19,6 +19,8 @@ export interface WorkflowTriggerFormProps {
   heading?: string;
   headingSlot?: ReactNode;
   collapsible?: boolean;
+  inputTypeLabel?: string;
+  inputTypeBordered?: boolean;
 }
 
 export function WorkflowTriggerForm({
@@ -35,6 +37,8 @@ export function WorkflowTriggerForm({
   heading,
   headingSlot,
   collapsible,
+  inputTypeLabel,
+  inputTypeBordered,
 }: WorkflowTriggerFormProps) {
   if (zodSchema) {
     return (
@@ -59,6 +63,8 @@ export function WorkflowTriggerForm({
         heading={heading}
         headingSlot={headingSlot}
         collapsible={collapsible}
+        inputTypeLabel={inputTypeLabel}
+        inputTypeBordered={inputTypeBordered}
       />
     );
   }

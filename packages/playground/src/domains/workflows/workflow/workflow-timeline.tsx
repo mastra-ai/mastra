@@ -1,11 +1,9 @@
-import { CheckIcon, CrossIcon, Icon, isObjectEmpty, toSigFigs, Txt, useAutoscroll } from '@mastra/playground-ui';
+import { CheckIcon, CrossIcon, Icon, toSigFigs, Txt, useAutoscroll } from '@mastra/playground-ui';
 import { CirclePause, HourglassIcon, Loader2 } from 'lucide-react';
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useCurrentRun } from '../context/use-current-run';
 import type { Step } from '../context/use-current-run';
-import { WorkflowRunContext } from '../context/workflow-run-context';
-import { WorkflowJsonDialog } from './workflow-json-dialog';
 import { buildTimeline } from './workflow-timeline-utils';
 
 const StepStatusIcon = ({ status }: { status: Step['status'] }) => (
@@ -36,7 +34,6 @@ function titleCase(stepId: string): string {
 
 export function WorkflowTimeline() {
   const { steps } = useCurrentRun();
-  const { result } = useContext(WorkflowRunContext);
   const [now, setNow] = useState(() => Date.now());
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -65,7 +62,6 @@ export function WorkflowTimeline() {
           <Txt as="p" variant="ui-md" className="text-neutral3">
             Timeline
           </Txt>
-          {result && !isObjectEmpty(result) && <WorkflowJsonDialog result={result} />}
         </div>
         <div ref={scrollRef} className="flex min-h-0 flex-col gap-2 overflow-y-auto">
           {rows.map((row, index) => (

@@ -82,10 +82,17 @@ function stubRuns(response: ListWorkflowRunsResponse) {
   server.use(http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs`, () => HttpResponse.json(response)));
 }
 
-function stubRunById(runId: string) {
+function stubRunById(runId: string, result?: unknown) {
   server.use(
     http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs/${runId}`, () =>
-      HttpResponse.json({ runId, workflowName: WORKFLOW_ID, status: 'success', steps: {}, serializedStepGraph: [] }),
+      HttpResponse.json({
+        runId,
+        workflowName: WORKFLOW_ID,
+        status: 'success',
+        steps: {},
+        serializedStepGraph: [],
+        ...(result !== undefined ? { result } : {}),
+      }),
     ),
   );
 }
@@ -322,7 +329,7 @@ describe('WorkflowInformation', () => {
       expect(await screen.findByText('Run input')).not.toBeNull();
     });
 
-    it('shows the run ID and "Run input" label when viewing a specific run', async () => {
+    it('shows the run ID and "Input" label when viewing a specific run', async () => {
       stubCapabilities();
       stubWorkflow(baseWorkflow);
       stubRuns(oneSuccessfulRun);
@@ -330,8 +337,33 @@ describe('WorkflowInformation', () => {
 
       renderInformation('run-success-1');
 
-      expect(await screen.findByText('Run input')).not.toBeNull();
+      expect(await screen.findByText('Input')).not.toBeNull();
       expect((await screen.findAllByText('run-success-1')).length).toBeGreaterThan(0);
+    });
+
+    it('shows both finished-run dialog buttons when the run has a result', async () => {
+      stubCapabilities();
+      stubWorkflow(baseWorkflow);
+      stubRuns(oneSuccessfulRun);
+      stubRunById('run-success-1', { greeting: 'done' });
+
+      renderInformation('run-success-1');
+
+      expect(await screen.findByRole('button', { name: 'Entire workflow execution' })).not.toBeNull();
+      expect(await screen.findByRole('button', { name: 'Workflow result' })).not.toBeNull();
+      expect(await screen.findByText('Output')).not.toBeNull();
+    });
+
+    it('shows only the entire-execution button when the run has no result', async () => {
+      stubCapabilities();
+      stubWorkflow(baseWorkflow);
+      stubRuns(oneSuccessfulRun);
+      stubRunById('run-success-1');
+
+      renderInformation('run-success-1');
+
+      expect(await screen.findByRole('button', { name: 'Entire workflow execution' })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Workflow result' })).toBeNull();
     });
 
     it('copies the workflow name to the clipboard via the copy button', async () => {
@@ -431,7 +463,7 @@ describe('WorkflowInformation', () => {
 
       renderInformation('run-success-1');
 
-      expect(await screen.findByText('Run input')).not.toBeNull();
+      expect(await screen.findByText('Input')).not.toBeNull();
       expect(screen.queryByRole('switch', { name: 'Toggle debug' })).toBeNull();
     });
 

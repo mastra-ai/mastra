@@ -46,6 +46,8 @@ export interface WorkflowInputDataProps {
   submitButtonVariant?: React.ComponentProps<typeof Button>['variant'];
   submitButtonFullWidth?: boolean;
   hideInputTypeLabel?: boolean;
+  inputTypeLabel?: string;
+  inputTypeBordered?: boolean;
   hideHeading?: boolean;
 }
 
@@ -71,6 +73,8 @@ export const WorkflowInputData = ({
   submitButtonVariant,
   submitButtonFullWidth,
   hideInputTypeLabel,
+  inputTypeLabel = 'Run input',
+  inputTypeBordered,
   hideHeading,
 }: WorkflowInputDataProps) => {
   const [type, setType] = useState<InputType>(isProcessorWorkflow ? 'simple' : 'form');
@@ -92,76 +96,78 @@ export const WorkflowInputData = ({
 
   const body = (
     <>
-      <div className="space-y-2 pb-4">
-        {!hideInputTypeLabel && (
-          <Txt as="p" variant="ui-sm" className="text-neutral3">
-            Run input
-          </Txt>
-        )}
-        <WorkflowInputTypeToggle
-          value={type}
-          onChange={setType}
-          disabled={isSubmitLoading}
-          includeSimple={isProcessorWorkflow}
-        />
-      </div>
+      {!hideInputTypeLabel && (
+        <Txt as="p" variant="ui-sm" className="text-neutral3 pb-3">
+          {inputTypeLabel}
+        </Txt>
+      )}
+      <div className={cn({ 'pl-3 border-l border-dashed border-border1': inputTypeBordered })}>
+        <div className="pb-4">
+          <WorkflowInputTypeToggle
+            value={type}
+            onChange={setType}
+            disabled={isSubmitLoading}
+            includeSimple={isProcessorWorkflow}
+          />
+        </div>
 
-      <div
-        className={cn('pb-4', {
-          'opacity-50 pointer-events-none': isSubmitLoading,
-        })}
-      >
-        {type === 'simple' && isProcessorWorkflow ? (
-          <SimpleProcessorInput
-            schema={schema}
-            defaultValues={defaultValues}
-            isSubmitLoading={isSubmitLoading}
-            submitButtonLabel={submitButtonLabel}
-            submitButtonClassName={submitButtonClassName}
-            onSubmit={onSubmit}
-            withoutSubmit={withoutSubmit}
-            isReadOnly={isReadOnly}
-            disableSubmit={disableSubmit}
-            submitActions={submitActions}
-            leftActions={leftActions}
-          >
-            {children}
-          </SimpleProcessorInput>
-        ) : type === 'form' ? (
-          <DynamicForm
-            schema={schema}
-            defaultValues={defaultValues}
-            isSubmitLoading={isSubmitLoading}
-            submitButtonLabel={submitButtonLabel}
-            submitButtonClassName={submitButtonClassName}
-            submitButtonIcon={submitButtonIcon}
-            submitButtonVariant={submitButtonVariant}
-            submitButtonFullWidth={submitButtonFullWidth}
-            onSubmit={withoutSubmit ? undefined : onSubmit}
-            readOnly={isReadOnly}
-            disableSubmit={disableSubmit}
-            submitActions={submitActions}
-            leftActions={leftActions}
-          >
-            {children}
-          </DynamicForm>
-        ) : (
-          <JSONInput
-            schema={schema}
-            defaultValues={defaultValues}
-            isSubmitLoading={isSubmitLoading}
-            submitButtonLabel={submitButtonLabel}
-            submitButtonClassName={submitButtonClassName}
-            onSubmit={onSubmit}
-            withoutSubmit={withoutSubmit}
-            isReadOnly={isReadOnly}
-            disableSubmit={disableSubmit}
-            submitActions={submitActions}
-            leftActions={leftActions}
-          >
-            {children}
-          </JSONInput>
-        )}
+        <div
+          className={cn('pb-4', {
+            'opacity-50 pointer-events-none': isSubmitLoading,
+          })}
+        >
+          {type === 'simple' && isProcessorWorkflow ? (
+            <SimpleProcessorInput
+              schema={schema}
+              defaultValues={defaultValues}
+              isSubmitLoading={isSubmitLoading}
+              submitButtonLabel={submitButtonLabel}
+              submitButtonClassName={submitButtonClassName}
+              onSubmit={onSubmit}
+              withoutSubmit={withoutSubmit}
+              isReadOnly={isReadOnly}
+              disableSubmit={disableSubmit}
+              submitActions={submitActions}
+              leftActions={leftActions}
+            >
+              {children}
+            </SimpleProcessorInput>
+          ) : type === 'form' ? (
+            <DynamicForm
+              schema={schema}
+              defaultValues={defaultValues}
+              isSubmitLoading={isSubmitLoading}
+              submitButtonLabel={submitButtonLabel}
+              submitButtonClassName={submitButtonClassName}
+              submitButtonIcon={submitButtonIcon}
+              submitButtonVariant={submitButtonVariant}
+              submitButtonFullWidth={submitButtonFullWidth}
+              onSubmit={withoutSubmit ? undefined : onSubmit}
+              readOnly={isReadOnly}
+              disableSubmit={disableSubmit}
+              submitActions={submitActions}
+              leftActions={leftActions}
+            >
+              {children}
+            </DynamicForm>
+          ) : (
+            <JSONInput
+              schema={schema}
+              defaultValues={defaultValues}
+              isSubmitLoading={isSubmitLoading}
+              submitButtonLabel={submitButtonLabel}
+              submitButtonClassName={submitButtonClassName}
+              onSubmit={onSubmit}
+              withoutSubmit={withoutSubmit}
+              isReadOnly={isReadOnly}
+              disableSubmit={disableSubmit}
+              submitActions={submitActions}
+              leftActions={leftActions}
+            >
+              {children}
+            </JSONInput>
+          )}
+        </div>
       </div>
     </>
   );

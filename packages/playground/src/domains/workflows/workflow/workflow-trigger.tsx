@@ -10,6 +10,7 @@ import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useSuspendedSteps, useWorkflowSchemas } from './use-workflow-trigger';
 import { WorkflowCancelButton } from './workflow-cancel-button';
+import { WorkflowJsonDialog } from './workflow-json-dialog';
 import { WorkflowTriggerForm } from './workflow-trigger-form';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
@@ -225,6 +226,8 @@ export function WorkflowTrigger({
                 void handleExecuteWorkflow(data);
               }}
               isViewingRun={!!paramsRunId || hasFinished}
+              inputTypeLabel={!!paramsRunId || hasFinished ? 'Input' : undefined}
+              inputTypeBordered={!!paramsRunId || hasFinished}
               isReadOnly={!!paramsRunId || hasFinished || isSuspendedSteps}
               disableSubmit={isSuspendedSteps}
               isProcessorWorkflow={workflow?.isProcessorWorkflow}
@@ -247,6 +250,38 @@ export function WorkflowTrigger({
           <Txt variant="ui-sm" className="text-neutral3 py-2 px-5">
             You don't have permission to execute workflows.
           </Txt>
+        )}
+
+        {hasFinished && result && (
+          <div className="px-5 pb-4 pt-2 space-y-3">
+            <Txt as="p" variant="ui-sm" className="text-neutral3">
+              Output
+            </Txt>
+            <div className="flex flex-col gap-2 pl-3 border-l border-dashed border-border1">
+              <WorkflowJsonDialog
+                className="w-full justify-start"
+                variant="ghost"
+                size="sm"
+                triggerIcon={null}
+                data={result}
+                triggerLabel="Entire workflow execution"
+                title="Entire workflow execution (JSON)"
+                description="JSON view of the full workflow execution"
+              />
+              {'result' in result && result.result !== undefined && (
+                <WorkflowJsonDialog
+                  className="w-full justify-start"
+                  variant="ghost"
+                  size="sm"
+                  triggerIcon={null}
+                  data={{ result: result.result }}
+                  triggerLabel="Workflow result"
+                  title="Workflow result (JSON)"
+                  description="JSON view of the final workflow result"
+                />
+              )}
+            </div>
+          </div>
         )}
 
         {(result?.status === 'running' || isSuspendedSteps) && (

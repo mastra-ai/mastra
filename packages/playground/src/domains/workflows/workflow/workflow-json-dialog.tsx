@@ -9,30 +9,47 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui';
 import { Braces } from 'lucide-react';
+import type { ComponentProps, ReactNode } from 'react';
 import { useState } from 'react';
 
 export interface WorkflowJsonDialogProps {
-  result: Record<string, unknown>;
+  data: Record<string, unknown>;
+  triggerLabel: string;
+  title: string;
+  description: string;
+  triggerIcon?: ReactNode;
+  variant?: ComponentProps<typeof Button>['variant'];
+  size?: ComponentProps<typeof Button>['size'];
+  className?: string;
 }
 
-export const WorkflowJsonDialog = ({ result }: WorkflowJsonDialogProps) => {
+export const WorkflowJsonDialog = ({
+  data,
+  triggerLabel,
+  title,
+  description,
+  triggerIcon = <Braces className="shrink-0 text-neutral3" />,
+  variant = 'default',
+  size = 'default',
+  className,
+}: WorkflowJsonDialogProps) => {
   const [open, setOpen] = useState(false);
 
   return (
     <>
-      <Button type="button" variant="default" onClick={() => setOpen(true)}>
-        <Braces className="text-neutral3" />
-        Workflow Execution
+      <Button type="button" variant={variant} size={size} className={className} onClick={() => setOpen(true)}>
+        {triggerIcon}
+        <span className="truncate">{triggerLabel}</span>
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-6xl">
           <DialogHeader>
-            <DialogTitle>Workflow Execution (JSON)</DialogTitle>
-            <DialogDescription>JSON view of the workflow execution result</DialogDescription>
+            <DialogTitle>{title}</DialogTitle>
+            <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
           <DialogBody className="max-h-[90vh]">
-            <CodeEditor data={result} className="p-4" />
+            <CodeEditor data={data} className="p-4" />
           </DialogBody>
         </DialogContent>
       </Dialog>
