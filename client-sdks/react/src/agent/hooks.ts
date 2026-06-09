@@ -12,7 +12,7 @@ import {
   accumulateNetworkChunk,
   CLIENT_MESSAGE_ID_KEY,
   finishStreamingAssistantMessage,
-  fromCoreUserMessageToMastraDBMessage,
+  fromCoreUserMessagesToMastraDBMessage,
 } from '../lib/mastra-db';
 import type { MastraDBMessageMetadata } from '../lib/mastra-db';
 import { useMastraClient } from '../mastra-client-context';
@@ -791,7 +791,7 @@ export const useChat = ({
           onSignalEcho?.(resolvedSignalId);
           if (isThreadSignalUnsupportedError(signalError)) {
             markThreadSignalsUnsupported();
-            setMessages(prev => [...prev, ...coreUserMessages.map(fromCoreUserMessageToMastraDBMessage)]);
+            setMessages(prev => [...prev, fromCoreUserMessagesToMastraDBMessage(coreUserMessages)]);
             await streamWithLegacyRoute();
             return;
           }
@@ -1105,10 +1105,13 @@ export const useChat = ({
       coreUserMessages.push(...args.coreUserMessages);
     }
 
-    const dbUserMessages = coreUserMessages.map(fromCoreUserMessageToMastraDBMessage);
+    // The whole user turn (text + any attachments) is merged into a single
+    // optimistic message so streaming renders one bubble, matching how
+    // memory/reload resolves the persisted multi-part user message.
+    const dbUserMessage = fromCoreUserMessagesToMastraDBMessage(coreUserMessages);
     const signalId =
       mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current && !threadSignalsDisabled
-        ? dbUserMessages[0]?.id
+        ? dbUserMessage.id
         : undefined;
     // Client-generated correlation id for the signal path: stamped on the
     // optimistic pending bubble and on the outgoing message metadata so the
@@ -1119,23 +1122,16 @@ export const useChat = ({
       // Signal path: append the user turn optimistically as `pending` so it
       // renders inline immediately. The server echo (matched by clientMessageId
       // in the accumulator) clears the status to a normal bubble.
-      // All core user messages are sent as a single signal that echoes back one
-      // `data-user-message`, so only the first bubble carries the correlation id
-      // and pending status. Stamping every bubble with the same id would let one
-      // server echo match (and adopt its id onto) multiple messages.
-      const pendingMessages = dbUserMessages.map((message, index) => {
-        if (index > 0) return message;
-        const metadata: MastraDBMessageMetadata = {
-          ...message.content.metadata,
-          mode: 'stream',
-          status: 'pending',
-          [CLIENT_MESSAGE_ID_KEY]: clientMessageId,
-        };
-        return { ...message, content: { ...message.content, metadata } };
-      });
-      setMessages(s => [...s, ...pendingMessages]);
+      const metadata: MastraDBMessageMetadata = {
+        ...dbUserMessage.content.metadata,
+        mode: 'stream',
+        status: 'pending',
+        [CLIENT_MESSAGE_ID_KEY]: clientMessageId,
+      };
+      const pendingMessage = { ...dbUserMessage, content: { ...dbUserMessage.content, metadata } };
+      setMessages(s => [...s, pendingMessage]);
     } else {
-      setMessages(s => [...s, ...dbUserMessages]);
+      setMessages(s => [...s, dbUserMessage]);
     }
 
     if (mode === 'generate') {

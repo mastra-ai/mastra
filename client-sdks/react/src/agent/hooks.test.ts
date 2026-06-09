@@ -1080,7 +1080,7 @@ describe('useChat optimistic pending user message', () => {
     expect(typeof sendArgs?.message?.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe('string');
   });
 
-  it('stamps the correlation id and pending status on only the first bubble of a multi-message send', async () => {
+  it('merges a multi-message send (text + attachment) into a single pending bubble', async () => {
     const { result } = renderHook(
       () =>
         useChat({
@@ -1095,25 +1095,29 @@ describe('useChat optimistic pending user message', () => {
     await act(async () => {
       await result.current.sendMessage({
         mode: 'stream',
-        message: 'first',
+        message: 'look at this',
         threadId: 'thread-1',
-        coreUserMessages: [{ role: 'user', content: [{ type: 'text', text: 'second' }] }],
+        coreUserMessages: [
+          { role: 'user', content: [{ type: 'image', image: 'https://example.com/cat.png', mimeType: 'image/png' }] },
+        ],
       });
     });
 
+    // The whole user turn (text + attachment) renders as one bubble, matching
+    // how memory/reload resolves the persisted multi-part user message. The
+    // single bubble carries the correlation id and pending status so the server
+    // echo reconciles the whole turn.
     const userMessages = result.current.messages.filter(m => m.role === 'user');
-    expect(userMessages).toHaveLength(2);
+    expect(userMessages).toHaveLength(1);
 
-    // The whole turn is sent as a single signal that echoes back one
-    // `data-user-message`, so only the first bubble carries the correlation id
-    // and pending status. Sharing one id across bubbles would let the echo
-    // adopt the same server id onto multiple messages.
-    const first = userMessages[0]?.content.metadata as MastraDBMessageMetadata | undefined;
-    const second = userMessages[1]?.content.metadata as MastraDBMessageMetadata | undefined;
-    expect(first?.status).toBe('pending');
-    expect(typeof first?.[CLIENT_MESSAGE_ID_KEY]).toBe('string');
-    expect(second?.status).toBeUndefined();
-    expect(second?.[CLIENT_MESSAGE_ID_KEY]).toBeUndefined();
+    const parts = userMessages[0]?.content.parts ?? [];
+    expect(parts.map(p => p.type)).toEqual(['text', 'file']);
+    expect(parts[0]).toMatchObject({ type: 'text', text: 'look at this' });
+    expect(parts[1]).toMatchObject({ type: 'file', data: 'https://example.com/cat.png' });
+
+    const metadata = userMessages[0]?.content.metadata as MastraDBMessageMetadata | undefined;
+    expect(metadata?.status).toBe('pending');
+    expect(typeof metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe('string');
   });
 
   it('keys two sequential sends as independent pending messages', async () => {
