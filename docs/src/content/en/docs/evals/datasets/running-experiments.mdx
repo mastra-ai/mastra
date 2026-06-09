@@ -212,6 +212,7 @@ The report also persists inside the item result's `output`, so it is available f
 - Tool replay supports agent targets only. Workflow targets and inline `task` functions are rejected at setup.
 - Tools run inside sub-agents (agent-as-tool) or workflow-as-tool internals are not intercepted. The top-level call replays as a single recorded output.
 - Replayed calls do not execute the real tool, so replay runs produce no tool spans in their own traces. Use the divergence report to inspect replay behavior.
+- Replay uses per-execution tool hooks, which override agent-level `hooks` (such as a configured `beforeToolCall`) for the replayed runs.
 
 :::note
 
