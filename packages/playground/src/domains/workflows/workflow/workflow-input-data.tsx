@@ -66,9 +66,12 @@ export const WorkflowInputData = ({
       <Txt as="p" variant="ui-md" className={cn('text-neutral3 pb-4', headingClassName)}>
         {heading ?? (withoutSubmit ? 'Run input' : 'Trigger a run')}
       </Txt>
-      <div className="pb-4">
+      <div className="space-y-2 pb-4">
+        <Txt as="label" htmlFor="workflow-input-format" variant="ui-sm" className="text-neutral3">
+          Input format
+        </Txt>
         <Select disabled={isSubmitLoading} value={type} onValueChange={value => setType(value as InputType)}>
-          <SelectTrigger className="w-full" aria-label="Input type">
+          <SelectTrigger id="workflow-input-format" className="w-full" aria-label="Input type">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -87,6 +90,12 @@ export const WorkflowInputData = ({
             </SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="space-y-2 pb-2">
+        <Txt as="p" variant="ui-sm" className="text-neutral3">
+          Input data
+        </Txt>
       </div>
 
       <div

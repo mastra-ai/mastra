@@ -42,9 +42,9 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: Wo
           <CollapsiblePanel
             direction="right"
             id="right-slot"
-            minSize={240}
+            minSize={300}
             maxSize={'40%'}
-            defaultSize={320}
+            defaultSize={340}
             collapsedSize={60}
             collapsible={true}
             className="min-w-0"

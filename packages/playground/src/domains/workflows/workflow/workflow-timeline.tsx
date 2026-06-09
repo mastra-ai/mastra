@@ -1,6 +1,6 @@
-import { CheckIcon, CrossIcon, Icon, isObjectEmpty, toSigFigs, Txt } from '@mastra/playground-ui';
+import { CheckIcon, CrossIcon, Icon, isObjectEmpty, toSigFigs, Txt, useAutoscroll } from '@mastra/playground-ui';
 import { CirclePause, HourglassIcon, Loader2 } from 'lucide-react';
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 
 import { useCurrentRun } from '../context/use-current-run';
 import type { Step } from '../context/use-current-run';
@@ -38,6 +38,9 @@ export function WorkflowTimeline() {
   const { steps } = useCurrentRun();
   const { result } = useContext(WorkflowRunContext);
   const [now, setNow] = useState(() => Date.now());
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useAutoscroll(scrollRef, { enabled: true });
 
   const rows = buildTimeline(steps, now);
   const hasRunning = rows.some(row => row.isRunning);
@@ -64,18 +67,20 @@ export function WorkflowTimeline() {
           </Txt>
           {result && !isObjectEmpty(result) && <WorkflowJsonDialog result={result} />}
         </div>
-        <div className="flex min-h-0 flex-col gap-2 overflow-y-auto">
+        <div ref={scrollRef} className="flex min-h-0 flex-col gap-2 overflow-y-auto">
           {rows.map(row => (
           <div
-            key={row.stepId}
+            key={`timeline-item-${row.stepId}`}
             data-testid="workflow-timeline-row"
-            className="flex items-center gap-3"
+            className="grid grid-cols-[10rem_minmax(0,1fr)_5rem] items-center gap-3"
           >
-            <StepStatusIcon status={row.status} />
-            <Txt as="span" variant="ui-sm" className="w-32 min-w-0 shrink-0 truncate text-neutral6">
-              {titleCase(row.stepId)}
-            </Txt>
-            <div className="relative h-2 min-w-0 flex-1 rounded bg-surface4">
+            <div className="flex min-w-0 items-center gap-2">
+              <StepStatusIcon status={row.status} />
+              <Txt as="span" variant="ui-sm" className="min-w-0 truncate text-neutral6">
+                {titleCase(row.stepId)}
+              </Txt>
+            </div>
+            <div className="relative h-2 min-w-0 rounded bg-surface4">
               <div
                 data-testid="workflow-timeline-bar"
                 data-offset={String(row.offsetPct)}
@@ -84,7 +89,7 @@ export function WorkflowTimeline() {
                 style={{ left: `${row.offsetPct}%`, width: `${row.widthPct}%` }}
               />
             </div>
-            <Txt as="span" variant="ui-sm" className="shrink-0 text-neutral3 tabular-nums">
+            <Txt as="span" variant="ui-sm" className="text-right text-neutral3 tabular-nums">
               {toSigFigs(row.durationMs, 3)}ms
             </Txt>
           </div>

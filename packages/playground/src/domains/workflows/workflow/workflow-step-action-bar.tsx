@@ -1,4 +1,4 @@
-import type { WorkflowRunStatus } from '@mastra/core/workflows';
+import type { SerializedStepFlowEntry, WorkflowRunStatus } from '@mastra/core/workflows';
 import {
   Button,
   cn,
@@ -12,8 +12,9 @@ import {
 import { useContext, useMemo, useState } from 'react';
 import type { TripwireData } from '../context/use-current-run';
 import { WorkflowRunContext } from '../context/workflow-run-context';
-import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { CodeDialogContent } from './workflow-code-dialog-content';
+import { WorkflowMapConfigDialog } from './workflow-map-config-dialog';
+import { WorkflowNestedGraphDialog } from './workflow-nested-graph-dialog';
 import { WorkflowTimeTravelForm } from './workflow-time-travel-form';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 
@@ -25,9 +26,8 @@ export interface WorkflowStepActionBarProps {
   error?: any;
   tripwire?: TripwireData;
   stepName: string;
-  stepId?: string;
   mapConfig?: string;
-  onShowNestedGraph?: () => void;
+  nestedGraph?: { label: string; fullStep: string; stepGraph: SerializedStepFlowEntry[] };
   status?: WorkflowRunStatus;
   stepKey?: string;
   stepsFlow?: Record<string, string[]>;
@@ -42,8 +42,7 @@ export const WorkflowStepActionBar = ({
   tripwire,
   mapConfig,
   stepName,
-  stepId,
-  onShowNestedGraph,
+  nestedGraph,
   status,
   stepKey,
   stepsFlow,
@@ -67,7 +66,6 @@ export const WorkflowStepActionBar = ({
     workflowId,
     setDebugMode,
   } = useContext(WorkflowRunContext);
-  const { showMapConfig, stepDetail, closeStepDetail } = useWorkflowStepDetail();
   const requestContext = useMergedRequestContext();
 
   const workflowStatus = result?.status ?? runSnapshot?.status;
@@ -112,28 +110,6 @@ export const WorkflowStepActionBar = ({
 
   const showDebugMode = inDebugMode && stepPayload && !result?.steps?.[stepKey];
 
-  // Check if this step's detail is currently open
-  const isMapConfigOpen = stepDetail?.type === 'map-config' && stepDetail?.stepName === stepName;
-  const isNestedGraphOpen = stepDetail?.type === 'nested-graph' && stepDetail?.stepName === stepName;
-
-  const activeButtonClass = 'ring-2 ring-accent1 ring-offset-1 ring-offset-transparent';
-
-  const handleMapConfigClick = () => {
-    if (isMapConfigOpen) {
-      closeStepDetail();
-    } else {
-      showMapConfig({ stepName, stepId, mapConfig: mapConfig! });
-    }
-  };
-
-  const handleNestedGraphClick = () => {
-    if (isNestedGraphOpen) {
-      closeStepDetail();
-    } else {
-      onShowNestedGraph?.();
-    }
-  };
-
   const handleRunMapStep = (isContinueRun?: boolean) => {
     const payload = {
       runId: prevRunId,
@@ -172,7 +148,7 @@ export const WorkflowStepActionBar = ({
         tripwire ||
         mapConfig ||
         resumeData ||
-        onShowNestedGraph ||
+        nestedGraph ||
         showTimeTravel ||
         showDebugMode) && (
         <div
@@ -186,15 +162,12 @@ export const WorkflowStepActionBar = ({
             status === 'running' && 'bg-accent6Dark',
           )}
         >
-          {onShowNestedGraph && (
-            <Button
-              type="button"
-              onClick={handleNestedGraphClick}
-              className={cn(isNestedGraphOpen && activeButtonClass)}
-              size="sm"
-            >
-              View nested graph
-            </Button>
+          {nestedGraph && (
+            <WorkflowNestedGraphDialog
+              stepName={nestedGraph.label}
+              fullStep={nestedGraph.fullStep}
+              stepGraph={nestedGraph.stepGraph}
+            />
           )}
           {showTimeTravel && (
             <>
@@ -279,16 +252,7 @@ export const WorkflowStepActionBar = ({
               </Dialog>
             </>
           )}
-          {mapConfig && (
-            <Button
-              type="button"
-              onClick={handleMapConfigClick}
-              className={cn(isMapConfigOpen && activeButtonClass)}
-              size="sm"
-            >
-              Map config
-            </Button>
-          )}
+          {mapConfig && <WorkflowMapConfigDialog stepName={stepName} mapConfig={mapConfig} />}
           {input && (
             <>
               <Button type="button" onClick={() => setIsInputOpen(true)} size="sm">

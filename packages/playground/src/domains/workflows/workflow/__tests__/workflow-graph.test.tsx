@@ -5,7 +5,6 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { WorkflowRunContext } from '../../context/workflow-run-context';
-import { WorkflowStepDetailProvider } from '../../context/workflow-step-detail-context';
 import { WorkflowGraph } from '../workflow-graph';
 
 afterEach(() => cleanup());
@@ -31,9 +30,7 @@ function Harness({ snapshot }: { snapshot: WorkflowRunState }) {
   // mirroring how WorkflowLayout builds the snapshot from useParams().runId.
   return (
     <WorkflowRunContext.Provider value={{ snapshot } as never}>
-      <WorkflowStepDetailProvider>
-        <WorkflowGraph workflowId="wf" workflow={workflow} />
-      </WorkflowStepDetailProvider>
+      <WorkflowGraph workflowId="wf" workflow={workflow} />
     </WorkflowRunContext.Provider>
   );
 }

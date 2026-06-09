@@ -9,7 +9,6 @@ import { forwardRef } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { WorkflowRunProvider } from '../../context/workflow-run-context';
-import { useWorkflowStepDetail } from '../../context/workflow-step-detail-context';
 import { emptyWorkflowRuns, oneSuccessfulRun } from '../../runs/__tests__/fixtures/workflow-runs';
 import { WorkflowInformation } from '../workflow-information';
 import { fullAccessAuthCapabilities } from './fixtures/auth';
@@ -113,38 +112,6 @@ function renderInformation(initialRunId?: string) {
   );
 }
 
-function StepDetailDriver() {
-  const { showMapConfig } = useWorkflowStepDetail();
-  return (
-    <button onClick={() => showMapConfig({ stepName: 'mapStep', mapConfig: '{"mapped":true}' })}>
-      open step detail
-    </button>
-  );
-}
-
-function renderInformationWithStepDriver() {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-
-  return render(
-    <MastraReactProvider baseUrl={BASE_URL}>
-      <QueryClientProvider client={queryClient}>
-        <LinkComponentProvider Link={StubLink} navigate={() => {}} paths={paths}>
-          <TracingSettingsProvider entityId={WORKFLOW_ID} entityType="workflow">
-            <SchemaRequestContextProvider>
-              <WorkflowRunProvider workflowId={WORKFLOW_ID}>
-                <WorkflowInformation workflowId={WORKFLOW_ID} />
-                <StepDetailDriver />
-              </WorkflowRunProvider>
-            </SchemaRequestContextProvider>
-          </TracingSettingsProvider>
-        </LinkComponentProvider>
-      </QueryClientProvider>
-    </MastraReactProvider>,
-  );
-}
-
 afterEach(cleanup);
 
 describe('WorkflowInformation', () => {
@@ -156,7 +123,7 @@ describe('WorkflowInformation', () => {
 
       renderInformation();
 
-      expect(await screen.findByText(WORKFLOW_ID)).not.toBeNull();
+      expect(await screen.findByRole('button', { name: 'Run' })).not.toBeNull();
       expect(screen.queryByText('New workflow run')).toBeNull();
     });
 
@@ -167,7 +134,7 @@ describe('WorkflowInformation', () => {
 
       renderInformation();
 
-      expect(await screen.findByText(WORKFLOW_ID)).not.toBeNull();
+      expect(await screen.findByRole('button', { name: 'Run' })).not.toBeNull();
       expect(screen.queryByText('New workflow run')).toBeNull();
     });
 
@@ -208,7 +175,7 @@ describe('WorkflowInformation', () => {
 
       renderInformation();
 
-      expect(await screen.findByText(WORKFLOW_ID)).not.toBeNull();
+      expect(await screen.findByRole('button', { name: 'Run' })).not.toBeNull();
       expect(screen.queryByRole('button', { name: 'Request Context' })).toBeNull();
     });
 
@@ -362,31 +329,4 @@ describe('WorkflowInformation', () => {
     });
   });
 
-  describe('step detail in-place swap', () => {
-    it('swaps in the step detail panel and returns to the run view via the close control', async () => {
-      stubCapabilities();
-      stubWorkflow(baseWorkflow);
-      stubRuns(emptyWorkflowRuns);
-
-      renderInformationWithStepDriver();
-
-      // Run view shows the trigger form initially
-      expect(await screen.findByRole('button', { name: 'Run' })).not.toBeNull();
-
-      fireEvent.click(screen.getByRole('button', { name: 'open step detail' }));
-
-      // Step detail content swaps in, replacing the run view
-      const close = await screen.findByRole('button', { name: 'Close' });
-      expect(screen.getByText('mapStep Config')).not.toBeNull();
-      expect(screen.queryByRole('button', { name: 'Run' })).toBeNull();
-
-      fireEvent.click(close);
-
-      // Back to the run view
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Run' })).not.toBeNull();
-      });
-      expect(screen.queryByText('mapStep Config')).toBeNull();
-    });
-  });
 });

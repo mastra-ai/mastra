@@ -5,7 +5,6 @@ import type { NodeProps, Node } from '@xyflow/react';
 import { CircleDashed, HourglassIcon, Loader2, PauseIcon, ShieldAlert } from 'lucide-react';
 
 import { useCurrentRun } from '../context/use-current-run';
-import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { Clock } from './workflow-clock';
 import { BADGE_COLORS, BADGE_ICONS, getNodeBadgeInfo } from './workflow-node-badges';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
@@ -38,7 +37,6 @@ export function WorkflowNestedNode({
   stepsFlow,
 }: NodeProps<NestedNode> & WorkflowNestedNodeProps) {
   const { steps } = useCurrentRun();
-  const { showNestedGraph } = useWorkflowStepDetail();
 
   const {
     label,
@@ -161,7 +159,6 @@ export function WorkflowNestedNode({
 
         <WorkflowStepActionBar
           stepName={label}
-          stepId={stepId}
           input={step?.input}
           resumeData={step?.resumeData}
           output={step?.output}
@@ -169,7 +166,7 @@ export function WorkflowNestedNode({
           error={step?.error}
           tripwire={isTripwire ? step?.tripwire : undefined}
           mapConfig={mapConfig}
-          onShowNestedGraph={() => showNestedGraph({ label, fullStep: fullLabel, stepGraph })}
+          nestedGraph={{ label, fullStep: fullLabel, stepGraph }}
           status={displayStatus}
           stepKey={stepKey}
           stepsFlow={stepsFlow}

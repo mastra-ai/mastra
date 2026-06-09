@@ -6,7 +6,6 @@ import { createContext, useEffect, useMemo, useState } from 'react';
 import type { Dispatch, SetStateAction, ReactNode } from 'react';
 import { convertWorkflowRunStateToStreamResult } from '../utils';
 import type { WorkflowTriggerProps } from '../workflow/workflow-trigger';
-import { WorkflowStepDetailProvider } from './workflow-step-detail-context';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { useWorkflow, useWorkflowRun } from '@/hooks';
 
@@ -185,7 +184,7 @@ export function WorkflowRunProvider({
         setDebugMode,
       }}
     >
-      <WorkflowStepDetailProvider>{children}</WorkflowStepDetailProvider>
+      {children}
     </WorkflowRunContext.Provider>
   );
 }

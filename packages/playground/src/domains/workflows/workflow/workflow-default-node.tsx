@@ -180,7 +180,6 @@ export function WorkflowDefaultNode({
 
         <WorkflowStepActionBar
           stepName={label}
-          stepId={stepId}
           input={step?.input}
           resumeData={step?.resumeData}
           output={step?.output}

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { ListWorkflowRunsResponse } from '@mastra/client-js';
+import type { GetWorkflowResponse, ListWorkflowRunsResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
@@ -8,6 +8,7 @@ import type { AnchorHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { baseWorkflow } from '../../components/__tests__/fixtures/workflow';
 import { WorkflowRunList } from '../workflow-run-list';
 import { oneSuccessfulRun } from './fixtures/workflow-runs';
 import { readOnlyAuthCapabilities } from '@/domains/agents/components/__tests__/fixtures/auth';
@@ -90,11 +91,16 @@ function stubRuns(response: ListWorkflowRunsResponse) {
   server.use(http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs`, () => HttpResponse.json(response)));
 }
 
+function stubWorkflow(workflow: GetWorkflowResponse) {
+  server.use(http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}`, () => HttpResponse.json(workflow)));
+}
+
 afterEach(cleanup);
 
 describe('WorkflowRunList', () => {
   it('never renders the "New workflow run" button (it lives in the left panel now)', async () => {
     stubCapabilities();
+    stubWorkflow(baseWorkflow);
     stubRuns(oneSuccessfulRun);
 
     renderRunList('run-success-1');
@@ -105,6 +111,7 @@ describe('WorkflowRunList', () => {
 
   it('renders the status as an icon with the status exposed via aria-label/tooltip', async () => {
     stubCapabilities();
+    stubWorkflow(baseWorkflow);
     stubRuns(oneSuccessfulRun);
 
     renderRunList();
@@ -118,6 +125,7 @@ describe('WorkflowRunList', () => {
 
   it('renders the "Workflow run history" panel title', async () => {
     stubCapabilities();
+    stubWorkflow(baseWorkflow);
     stubRuns(oneSuccessfulRun);
 
     renderRunList();
@@ -125,8 +133,24 @@ describe('WorkflowRunList', () => {
     expect(await screen.findByText('Workflow run history')).not.toBeNull();
   });
 
+  it('renders the workflow metadata header with title and badges above the run history', async () => {
+    stubCapabilities();
+    stubWorkflow(baseWorkflow);
+    stubRuns(oneSuccessfulRun);
+
+    renderRunList();
+
+    // Workflow name as the header title
+    expect(await screen.findByRole('heading', { name: baseWorkflow.name })).not.toBeNull();
+    // Copy-ID badge exposes the workflow id
+    expect(screen.getByText(WORKFLOW_ID)).not.toBeNull();
+    // Step count badge derived from the workflow's steps (baseWorkflow has a single step)
+    expect(screen.getByText('1 step')).not.toBeNull();
+  });
+
   it('links each run row to its run detail path', async () => {
     stubCapabilities();
+    stubWorkflow(baseWorkflow);
     stubRuns(oneSuccessfulRun);
 
     renderRunList();
