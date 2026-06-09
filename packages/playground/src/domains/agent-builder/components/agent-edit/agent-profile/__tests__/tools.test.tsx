@@ -185,7 +185,7 @@ describe('Tools', () => {
 
     fireEvent.click(getByTestId('tools-only-selected-filter-checkbox'));
 
-    await findByText('No selected tools match "unchecked"');
+    await findByText('No selected tools match unchecked');
   });
 
   it('uses the small-size classes matching the provider-filter checkbox in models.tsx', () => {

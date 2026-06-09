@@ -34,11 +34,11 @@ export function getEmptyStateDetails(args: {
     return 'No tools selected yet';
   }
   if (args.onlySelected) {
-    return <>No selected tools match "{trimmedSearch}"</>;
+    return <>No selected tools match {trimmedSearch}</>;
   }
   return (
     <>
-      No tools match <strong>"${trimmedSearch}"</strong>
+      No tools match <strong>{trimmedSearch}</strong>
     </>
   );
 }
