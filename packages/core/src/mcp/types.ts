@@ -1,5 +1,6 @@
 import type * as http from 'node:http';
 import type { ToolsInput, Agent } from '../agent';
+import type { FGAResourceMappingEntry } from '../auth/ee/interfaces/fga';
 import type { RequestContext } from '../request-context';
 import type { Workflow } from '../workflows';
 
@@ -214,6 +215,12 @@ export type MCPAuthInfoToUserMapper<TUser = unknown> = (args: {
   requestContext: RequestContext;
 }) => TUser | null | undefined | Promise<TUser | null | undefined>;
 
+export interface MCPServerFGAConfig {
+  resourceType?: string;
+  resourceMapping?: Record<string, FGAResourceMappingEntry>;
+  permissionMapping?: Record<string, string>;
+}
+
 // +++ Authoritative MCPServerConfig +++
 /** Configuration options for creating an MCPServer instance. */
 export interface MCPServerConfig<TId extends string = string> {
@@ -253,6 +260,7 @@ export interface MCPServerConfig<TId extends string = string> {
    * already put a `user` value in the request context.
    */
   mapAuthInfoToUser?: MCPAuthInfoToUserMapper;
+  fga?: MCPServerFGAConfig;
   /** Optional repository information for the server's source code. */
   repository?: Repository;
   /**

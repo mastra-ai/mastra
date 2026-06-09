@@ -23,6 +23,7 @@ import type {
 import { FGADeniedError } from '@mastra/core/auth/ee';
 import { WorkOS } from '@workos-inc/node';
 
+import type { FGAProviderConfigOverrides } from '@mastra/core/auth/ee';
 import type { MastraFGAWorkosOptions, FGAResourceMappingEntry, WorkOSUser } from './types';
 
 const FILTER_ACCESSIBLE_CHECK_CONCURRENCY = 5;
@@ -112,6 +113,8 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
   readonly resolveRouteFGA?: MastraFGAWorkosOptions['resolveRouteFGA'];
   readonly validatePermissions?: MastraFGAWorkosOptions['validatePermissions'];
 
+  private readonly options: MastraFGAWorkosOptions;
+
   constructor(options: MastraFGAWorkosOptions) {
     const apiKey = options.apiKey ?? process.env.WORKOS_API_KEY;
     const clientId = options.clientId ?? process.env.WORKOS_CLIENT_ID;
@@ -123,6 +126,7 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
       );
     }
 
+    this.options = options;
     this.workos = new WorkOS(apiKey, { clientId });
     this.organizationId = options.organizationId;
     this.resourceMapping = options.resourceMapping ?? {};
@@ -131,6 +135,20 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
     this.auditProtectedRoutes = options.auditProtectedRoutes;
     this.resolveRouteFGA = options.resolveRouteFGA;
     this.validatePermissions = options.validatePermissions;
+  }
+
+  withConfigOverrides(overrides: FGAProviderConfigOverrides): MastraFGAWorkos {
+    return new MastraFGAWorkos({
+      ...this.options,
+      resourceMapping: {
+        ...this.resourceMapping,
+        ...overrides.resourceMapping,
+      },
+      permissionMapping: {
+        ...this.permissionMapping,
+        ...overrides.permissionMapping,
+      },
+    });
   }
 
   // ──────────────────────────────────────────────────────────────
@@ -537,7 +555,9 @@ export class MastraFGAWorkos implements IFGAManager<WorkOSUser> {
           ? ['workflow', 'workflows']
           : resourceType === 'tool'
             ? ['tool', 'tools']
-            : resourceType === 'thread'
+            : resourceType === 'mcpTool'
+              ? ['mcpTool', 'mcpTools']
+              : resourceType === 'thread'
               ? ['thread', 'threads', 'memory']
               : [resourceType];
 

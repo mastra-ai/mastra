@@ -7,6 +7,7 @@ import { MCPServerBase } from '@mastra/core/mcp';
 import type {
   MCPAuthInfoToUserMapper,
   MCPServerConfig,
+  MCPServerFGAConfig,
   ServerInfo,
   ServerDetailInfo,
   MCPServerHonoSSEOptions,
@@ -104,6 +105,7 @@ export class MCPServer extends MCPServerBase {
   private promptOptions?: MCPServerPrompts;
   private jsonSchemaValidator?: jsonSchemaValidator;
   private mapAuthInfoToUser?: MCPAuthInfoToUserMapper;
+  private fgaConfig?: MCPServerFGAConfig;
   private subscriptions: Set<string> = new Set();
   private currentLoggingLevel: LoggingLevel | undefined;
 
@@ -312,6 +314,7 @@ export class MCPServer extends MCPServerBase {
     this.promptOptions = opts.prompts;
     this.jsonSchemaValidator = opts.jsonSchemaValidator;
     this.mapAuthInfoToUser = opts.mapAuthInfoToUser;
+    this.fgaConfig = opts.fga;
 
     const capabilities: ServerCapabilities = {
       tools: {},
@@ -2254,23 +2257,35 @@ export class MCPServer extends MCPServerBase {
   }
 
   private async enforceToolExecutionFGA(toolId: string, requestContext?: RequestContext): Promise<void> {
-    const fgaProvider = this.mastra?.getServer?.()?.fga;
-    if (!fgaProvider) {
+    const instanceFgaProvider = this.mastra?.getServer?.()?.fga;
+    if (!instanceFgaProvider) {
       return;
     }
 
-    const { getMCPToolFGAResourceId, requireFGA, FGADeniedError, MastraFGAPermissions } =
-      await import('@mastra/core/auth/ee');
+    const {
+      getMCPToolFGAResourceId,
+      getMCPServerToolFGAResourceType,
+      resolveMCPServerFGAProvider,
+      requireFGA,
+      FGADeniedError,
+      MastraFGAPermissions,
+    } = await import('@mastra/core/auth/ee');
+    const fgaProvider = resolveMCPServerFGAProvider(instanceFgaProvider, this.fgaConfig);
+    const resourceType = getMCPServerToolFGAResourceType(this.fgaConfig);
     const resourceId = getMCPToolFGAResourceId(this.id, toolId);
     const user = await this.resolveMappedFGAUser(requestContext);
     if (!user) {
-      throw new FGADeniedError({ id: 'unknown' }, { type: 'tool', id: resourceId }, MastraFGAPermissions.TOOLS_EXECUTE);
+      throw new FGADeniedError(
+        { id: 'unknown' },
+        { type: resourceType, id: resourceId },
+        MastraFGAPermissions.TOOLS_EXECUTE,
+      );
     }
 
     await requireFGA({
       fgaProvider,
       user,
-      resource: { type: 'tool', id: resourceId },
+      resource: { type: resourceType, id: resourceId },
       permission: MastraFGAPermissions.TOOLS_EXECUTE,
       requestContext,
       context: {

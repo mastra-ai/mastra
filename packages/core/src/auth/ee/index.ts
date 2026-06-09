@@ -36,6 +36,9 @@ export {
   getStandaloneToolFGAResourceId,
   getAgentToolFGAResourceId,
   getMCPToolFGAResourceId,
+  getMCPServerToolFGAResourceType,
+  resolveMCPServerFGAProvider,
+  MCP_SERVER_TOOL_FGA_RESOURCE_TYPE,
   type CheckFGAOptions,
   type RequireFGAOptions,
 } from './fga-check';
