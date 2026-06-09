@@ -384,6 +384,85 @@ function buildTripWireBailResponse<OUTPUT = undefined, TOOLS extends ToolSet = T
   };
 }
 
+/**
+ * Default idle timeout for model stream reads (5 minutes).
+ * Long enough for extended thinking but prevents indefinite hangs.
+ */
+const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+
+/**
+ * Wraps a ReadableStream so that:
+ * 1. An AbortSignal cancels any pending read immediately.
+ * 2. An idle timeout errors the stream if no chunk arrives within the limit.
+ *
+ * Without this, `for await (… of stream)` blocks indefinitely when the
+ * underlying source stalls and no more chunks arrive.
+ */
+function withAbortSignal<T>(
+  stream: ReadableStream<T>,
+  signal?: AbortSignal,
+  idleTimeoutMs: number = DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+): ReadableStream<T> {
+  if (!signal && !idleTimeoutMs) return stream;
+  const reader = stream.getReader();
+  let abortCleanup: (() => void) | undefined;
+  return new ReadableStream<T>({
+    async pull(controller) {
+      if (signal?.aborted) {
+        controller.close();
+        await reader.cancel().catch(() => {});
+        return;
+      }
+      const onAbort = () => {
+        reader.cancel().catch(() => {});
+      };
+      if (signal) {
+        signal.addEventListener('abort', onAbort, { once: true });
+        abortCleanup = () => signal.removeEventListener('abort', onAbort);
+      }
+      try {
+        const readWithTimeout = async (): Promise<{ done: boolean; value?: T }> => {
+          if (idleTimeoutMs > 0) {
+            let timerId: ReturnType<typeof setTimeout> | undefined;
+            const timeout = new Promise<never>((_, reject) => {
+              timerId = setTimeout(
+                () => reject(new Error(`Model stream idle timeout: no data received for ${idleTimeoutMs / 1000}s`)),
+                idleTimeoutMs,
+              );
+              if (typeof timerId === 'object' && 'unref' in timerId) timerId.unref();
+            });
+            try {
+              return await Promise.race([reader.read(), timeout]);
+            } finally {
+              clearTimeout(timerId);
+            }
+          }
+          return reader.read();
+        };
+        const { done, value } = await readWithTimeout();
+        abortCleanup?.();
+        abortCleanup = undefined;
+        if (done) {
+          controller.close();
+        } else {
+          controller.enqueue(value!);
+        }
+      } catch (err) {
+        abortCleanup?.();
+        abortCleanup = undefined;
+        // On timeout or abort, cancel the underlying reader so the
+        // HTTP connection is torn down instead of leaking.
+        await reader.cancel().catch(() => {});
+        controller.error(err);
+      }
+    },
+    cancel() {
+      abortCleanup?.();
+      return reader.cancel();
+    },
+  });
+}
+
 async function processOutputStream<OUTPUT = undefined>({
   tools,
   messageId,
@@ -515,7 +594,14 @@ async function processOutputStream<OUTPUT = undefined>({
     return { toolDef, inferredProviderExecuted };
   };
 
-  for await (let chunk of outputStream._getBaseStream()) {
+  // Wrap the base stream so abort cancels a pending reader.read().
+  // A plain `for await` blocks indefinitely when the model stream stalls
+  // (e.g. gpt-5.5 stops sending data after tool results) and the abort
+  // check inside the loop body is never reached.  The wrapper wires the
+  // AbortSignal to reader.cancel() so a stalled read resolves immediately.
+  const abortableBaseStream = withAbortSignal(outputStream._getBaseStream(), options?.abortSignal);
+
+  for await (let chunk of abortableBaseStream) {
     // Stop processing chunks if the abort signal has fired.
     // Some LLM providers continue streaming data after abort (e.g. due to buffering),
     // so we must check the signal on each iteration to avoid accumulating the full
