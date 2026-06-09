@@ -73,7 +73,7 @@ describe('TaskProgressComponent', () => {
     expect(lines[1].indexOf('Implementing quiet tasks')).toBeLessThan(lines[1].indexOf('Verify quiet tasks'));
   });
 
-  it('wraps quiet summaries between tasks without wrapping individual task items', () => {
+  it('wraps quiet tasks into a grid with vertical alignment', () => {
     const component = new TaskProgressComponent();
     component.setQuietMode(true);
 
@@ -93,12 +93,39 @@ describe('TaskProgressComponent', () => {
       },
     ]);
 
-    const lines = component.render(80).map(line => stripAnsi(line).trimEnd());
+    const lines = component.render(80).map(line => stripAnsi(line));
 
-    expect(lines).toHaveLength(4);
-    expect(lines[1]).toContain('1/3  ✓ Inspect task progress');
-    expect(lines[2]).toBe('       ▶ Implementing item aware quiet task summary wrapping');
-    expect(lines[3]).toBe('       ○ Verify quiet task wrapping');
+    expect(lines).toHaveLength(3);
+    expect(lines[1]).toContain('1/3');
+    expect(lines[1]).toContain('✓ Inspect task progress');
+    expect(lines[1]).toContain('▶ Implementing item aware quiet');
+    expect(lines[2]).toContain('○ Verify quiet task wrapping');
+
+    // Verify vertical alignment: first item on row 2 starts at the same column as row 1
+    const row1Start = lines[1]!.indexOf('✓');
+    const row2Start = lines[2]!.indexOf('○');
+    expect(row1Start).toBe(row2Start);
+  });
+
+  it('aligns items on a uniform column grid across rows', () => {
+    const component = new TaskProgressComponent();
+    component.setQuietMode(true);
+
+    component.updateTasks([
+      { id: 'a', content: 'First task', activeForm: 'Doing first', status: 'completed' },
+      { id: 'b', content: 'Second task', activeForm: 'Doing second', status: 'in_progress' },
+      { id: 'c', content: 'Third task', activeForm: 'Doing third', status: 'pending' },
+      { id: 'd', content: 'Fourth task', activeForm: 'Doing fourth', status: 'pending' },
+    ]);
+
+    const lines = component.render(80).map(line => stripAnsi(line));
+
+    // With short items at 80 cols, all 4 should fit on one line
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toContain('✓ First task');
+    expect(lines[1]).toContain('▶ Doing second');
+    expect(lines[1]).toContain('○ Third task');
+    expect(lines[1]).toContain('○ Fourth task');
   });
 
   it('wraps quiet summaries using terminal display width for wide characters', () => {

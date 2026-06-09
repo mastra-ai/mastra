@@ -10,6 +10,12 @@ import chalk from 'chalk';
 import { getTermWidth, theme } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
 
+function padAnsiToWidth(text: string, targetWidth: number): string {
+  const w = visibleWidth(text);
+  if (w >= targetWidth) return truncateAnsi(text, targetWidth);
+  return text + ' '.repeat(targetWidth - w);
+}
+
 export class TaskProgressComponent extends Container {
   private tasks: TaskItemInput[] = [];
   private quietMode = false;
@@ -77,25 +83,64 @@ export class TaskProgressComponent extends Container {
     const prefixWidth = visibleWidth(prefix);
     const continuationPrefix = ' '.repeat(prefixWidth);
     const maxWidth = Math.max(20, getTermWidth());
-    const itemSeparator = '  ';
-    const separatorWidth = itemSeparator.length;
-    const lines: string[] = [prefix];
+    const sep = '  ';
+    const sepWidth = sep.length;
 
-    for (const task of this.tasks) {
-      const item = this.formatQuietTaskItem(task);
-      const currentLine = lines[lines.length - 1]!;
-      const currentWidth = visibleWidth(currentLine);
-      const separator = currentWidth === 0 ? '' : itemSeparator;
-      const sepWidth = currentWidth === 0 ? 0 : separatorWidth;
-      const candidateWidth = currentWidth + sepWidth + visibleWidth(item);
+    const items = this.tasks.map(task => this.formatQuietTaskItem(task));
+    const itemWidths = items.map(item => visibleWidth(item));
+    const available = maxWidth - prefixWidth - sepWidth;
 
-      if (candidateWidth <= maxWidth) {
-        lines[lines.length - 1] = `${currentLine}${separator}${item}`;
-        continue;
+    if (available < 10 || items.length === 0) {
+      return [prefix + (items.length > 0 ? sep + truncateAnsi(items.join(sep), available) : '')];
+    }
+
+    // Check if all items fit on a single line without padding
+    const totalUnpadded = itemWidths.reduce((sum, w, i) => sum + w + (i > 0 ? sepWidth : 0), 0);
+    if (totalUnpadded <= available) {
+      return [prefix + sep + items.join(sep)];
+    }
+
+    // Grid layout: pad items to uniform column width for vertical alignment
+    const maxItemWidth = Math.max(...itemWidths);
+
+    let colWidth: number;
+    let numCols = Math.max(1, Math.floor((available + sepWidth) / (maxItemWidth + sepWidth)));
+
+    if (numCols >= 2) {
+      colWidth = maxItemWidth;
+    } else {
+      const twoColWidth = Math.floor((available - sepWidth) / 2);
+      if (twoColWidth >= 15) {
+        colWidth = twoColWidth;
+        numCols = 2;
+      } else {
+        colWidth = available;
+        numCols = 1;
       }
+    }
 
-      const itemLineWidth = maxWidth - prefixWidth - separatorWidth;
-      lines.push(`${continuationPrefix}${itemSeparator}${truncateAnsi(item, itemLineWidth)}`);
+    const rows: string[][] = [];
+    let currentRow: string[] = [];
+    for (const item of items) {
+      if (currentRow.length >= numCols) {
+        rows.push(currentRow);
+        currentRow = [];
+      }
+      currentRow.push(item);
+    }
+    if (currentRow.length > 0) rows.push(currentRow);
+
+    const lines: string[] = [];
+    for (let r = 0; r < rows.length; r++) {
+      const row = rows[r]!;
+      const linePrefix = r === 0 ? prefix : continuationPrefix;
+      const formattedCells = row.map((item, i) => {
+        if (i < row.length - 1 || r < rows.length - 1) {
+          return padAnsiToWidth(item, colWidth);
+        }
+        return truncateAnsi(item, colWidth);
+      });
+      lines.push(linePrefix + sep + formattedCells.join(sep));
     }
 
     return lines;
