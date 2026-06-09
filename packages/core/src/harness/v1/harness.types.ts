@@ -306,13 +306,16 @@ export type HarnessConfig<MODES extends HarnessMode[], TState = {}> = HarnessCon
          */
         mastra: Mastra;
         /**
-         * Backing agent. Must reference a key in `HarnessConfig.agents`.
-         * Validated at construction — unknown id throws `HarnessConfigError`.
+         * Optional default backing agent id. Modes with `agentId` resolve their
+         * own backing agent lazily when the session needs it.
          */
-        agent: string;
+        agent?: string;
       }
     | {
         mastra?: never;
-        agent: Agent;
+        /** Inline agent registry used by mode and subagent `agentId` bindings. */
+        agents?: Record<string, Agent>;
+        /** Optional default backing agent for modes without `agentId`. */
+        agent?: Agent;
       }
   );

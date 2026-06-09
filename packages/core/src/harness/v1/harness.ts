@@ -38,12 +38,13 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
   readonly #storage?: HarnessStorage;
   readonly #compositeStorage?: MastraCompositeStore;
   readonly #mastra?: Mastra;
+  readonly #agents?: Record<string, Agent>;
   readonly #memory: MastraMemory | DynamicArgument<MastraMemory>;
   readonly #events: EventEmitter;
   readonly #stateSchema?: HarnessConfig<MODES, TState>['stateSchema'];
   readonly #initialState?: Partial<TState>;
   readonly #workspace?: DynamicArgument<Workspace | undefined>;
-  readonly #agent: Agent;
+  readonly #agent?: Agent;
   readonly #subagents?: SubagentRegistryConfig;
   readonly #resolveModel?: ModelResolver;
   readonly #runtimeCompatibilityGeneration?: string | null;
@@ -59,6 +60,7 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
     this.#defaultMode = config.defaultModeId ?? config.modes[0]!.id;
     this.#storage = config.storage;
     this.#mastra = config.mastra;
+    this.#agents = 'agents' in config ? (config.agents as Record<string, Agent> | undefined) : undefined;
     this.#compositeStorage = config.mastra?.getStorage();
     this.#memory = config.memory;
     this.#events = new EventEmitter();
@@ -75,7 +77,11 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       this.#workspace = new Workspace(config.workspace);
     }
 
-    this.#agent = this.#mastra ? this.#mastra.getAgentById(config.agent) : (config.agent as Agent);
+    if (this.#mastra) {
+      this.#agent = config.agent ? (this.#mastra.getAgentById(config.agent) as Agent) : undefined;
+    } else {
+      this.#agent = (config as { agent?: Agent }).agent;
+    }
 
     if (config.subagents) {
       const entries = Object.entries(config.subagents.types ?? {});
@@ -288,7 +294,7 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       model: record.modelId,
       createdAt: record.createdAt,
       lastActivityAt: record.lastActivityAt,
-      agent: this.#agent,
+      agent: this.#agentForMode(mode),
       memory: this.#memory,
       storage,
       record,
@@ -306,8 +312,22 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
     });
   }
 
-  #resolveAgent(agentId: string): Agent {
+  #agentForMode(mode: HarnessMode): Agent {
+    if (mode.agentId) {
+      const agent = this.#tryResolveAgent(mode.agentId);
+      if (agent) return agent;
+    }
+    return this.#agent as Agent;
+  }
+
+  #tryResolveAgent(agentId: string): Agent | undefined {
     if (this.#mastra) return this.#mastra.getAgentById(agentId) as Agent;
+    return this.#agents?.[agentId];
+  }
+
+  #resolveAgent(agentId: string): Agent {
+    const agent = this.#tryResolveAgent(agentId);
+    if (agent) return agent;
     throw new Error(`Harness mode references unknown agent "${agentId}"`);
   }
 
