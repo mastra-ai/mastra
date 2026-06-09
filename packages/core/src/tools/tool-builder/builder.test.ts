@@ -594,3 +594,96 @@ describe('CoreToolBuilder background task schema injection', () => {
     expect((refinedTool.inputSchema as z.ZodTypeAny).safeParse({}).success).toBe(false);
   });
 });
+
+describe('CoreToolBuilder requestContext merge', () => {
+  it('preserves non-serializable closure requestContext values when exec RC is also present', async () => {
+    // Simulates what happens when the evented workflow engine deserialises requestContext:
+    // the 'harness' key (containing functions) is lost because JSON.stringify drops functions
+    // and may throw on objects with circular references.
+    const harnessCtx = {
+      harnessId: 'h-1',
+      getState: () => ({ tasks: [] }),
+      setState: vi.fn(),
+      updateState: vi.fn(),
+    };
+
+    const closureRC = new RequestContext();
+    closureRC.set('harness', harnessCtx);
+    closureRC.set('serializable-key', 'from-closure');
+
+    // The evented engine's RC — reconstructed from toJSON(), missing 'harness'
+    const execRC = new RequestContext();
+    execRC.set('serializable-key', 'from-exec');
+    execRC.set('workflow-only-key', 42);
+
+    const receivedCtx: { requestContext?: RequestContext } = {};
+    const execute = vi.fn().mockImplementation((_args: unknown, ctx: any) => {
+      receivedCtx.requestContext = ctx.requestContext;
+      return { result: 'ok' };
+    });
+
+    const testTool = createTool({
+      id: 'task_write',
+      description: 'Write tasks',
+      inputSchema: z.object({ tasks: z.array(z.string()) }),
+      execute,
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'task_write',
+        logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any,
+        requestContext: closureRC,
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!(
+      { tasks: ['a'] },
+      { toolCallId: 'call-1', messages: [], requestContext: execRC },
+    );
+
+    const merged = receivedCtx.requestContext!;
+    // Non-serializable key from closure is preserved
+    expect(merged.get('harness')).toBe(harnessCtx);
+    expect((merged.get('harness') as any).updateState).toBe(harnessCtx.updateState);
+    // Closure value wins for shared keys
+    expect(merged.get('serializable-key')).toBe('from-closure');
+    // Exec-only key is preserved
+    expect(merged.get('workflow-only-key')).toBe(42);
+  });
+
+  it('falls back to closure RC when exec RC is empty', async () => {
+    const closureRC = new RequestContext();
+    closureRC.set('harness', { harnessId: 'h-1' });
+
+    const receivedCtx: { requestContext?: RequestContext } = {};
+    const execute = vi.fn().mockImplementation((_args: unknown, ctx: any) => {
+      receivedCtx.requestContext = ctx.requestContext;
+      return { result: 'ok' };
+    });
+
+    const testTool = createTool({
+      id: 'test_tool',
+      description: 'Test',
+      inputSchema: z.object({}),
+      execute,
+    });
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'test_tool',
+        logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any,
+        requestContext: closureRC,
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!({}, { toolCallId: 'call-1', messages: [] });
+
+    // With no exec RC, closure RC is used directly
+    expect(receivedCtx.requestContext!.get('harness')).toEqual({ harnessId: 'h-1' });
+  });
+});
