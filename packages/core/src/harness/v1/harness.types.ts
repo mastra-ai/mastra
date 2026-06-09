@@ -2,18 +2,13 @@ import type { Agent } from '../../agent';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
 import type { PublicSchema } from '../../schema';
+import type { MastraCompositeStore } from '../../storage';
 import type { HarnessStorage } from '../../storage/domains/harness';
 import type { DynamicArgument } from '../../types';
 import type { Workspace, WorkspaceConfig } from '../../workspace';
 import type { HarnessMode } from './mode';
 import type { PermissionPolicy, ToolCategory, ToolCategoryResolver } from './permissions.types';
 import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
-
-export type HarnessStorageProvider = {
-  getStore(storeName: 'harness'): Promise<HarnessStorage | undefined>;
-  init?(): Promise<void>;
-  disableInit?: boolean;
-};
 
 export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
   /**
@@ -124,10 +119,10 @@ export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
 
   /**
    * Override for where SessionRecords are persisted. Accepts either the
-   * harness storage domain or a storage adapter that exposes a harness store
-   * via `getStore('harness')`.
+   * harness storage domain or a storage adapter, such as LibSQLStore, that
+   * exposes a harness store via `getStore('harness')`.
    */
-  storage?: HarnessStorage | HarnessStorageProvider;
+  storage?: HarnessStorage | MastraCompositeStore;
 
   /**
    * Memory backing thread state for Sessions. Sessions use this to read/write

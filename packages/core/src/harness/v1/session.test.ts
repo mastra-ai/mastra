@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { MastraMemory } from '../../memory';
+import { MastraCompositeStore } from '../../storage';
 import type { StorageCloneThreadInput } from '../../storage';
 import { HarnessStorage } from '../../storage/domains/harness';
 import type { SessionRecord } from '../../storage/domains/harness';
@@ -10,6 +11,11 @@ import { Harness } from './harness';
 
 class RecordingHarnessStorage extends HarnessStorage {
   readonly records = new Map<string, SessionRecord>();
+  initCalls = 0;
+
+  override async init(): Promise<void> {
+    this.initCalls += 1;
+  }
 
   async dangerouslyClearAll(): Promise<void> {
     this.records.clear();
@@ -157,10 +163,10 @@ describe('Harness.session()', () => {
 
   it('resolves the harness domain from a top-level storage adapter', async () => {
     const storage = new RecordingHarnessStorage();
-    const storageAdapter = {
-      init: vi.fn().mockResolvedValue(undefined),
-      getStore: vi.fn().mockResolvedValue(storage),
-    };
+    const storageAdapter = new MastraCompositeStore({
+      id: 'storage-adapter',
+      domains: { harness: storage },
+    });
     const harness = new Harness({
       agents: {},
       storage: storageAdapter,
@@ -172,8 +178,7 @@ describe('Harness.session()', () => {
     await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
     const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
 
-    expect(storageAdapter.init).toHaveBeenCalledTimes(1);
-    expect(storageAdapter.getStore).toHaveBeenCalledWith('harness');
+    expect(storage.initCalls).toBe(1);
     expect(storage.records).toHaveLength(1);
     expect(session.getMode()).toMatchObject({ id: 'build' });
   });
