@@ -16,10 +16,19 @@ import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 
 import { Agent } from '../agent';
+import { EventEmitterPubSub } from '../events/event-emitter';
+import type { PubSubDeliveryMode } from '../events/pubsub';
 import type { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 import type { HarnessEvent } from './types';
+
+/** Push-only wrapper around EventEmitterPubSub — mimics mc's SignalsPubSub. */
+class PushOnlyPubSub extends EventEmitterPubSub {
+  override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
+    return ['push'];
+  }
+}
 
 function createTextStreamModel(responseText: string) {
   return new MockLanguageModelV2({
@@ -135,5 +144,61 @@ describe('mc send-message reproduction', () => {
     const errorEvent = events.find((e): e is Extract<HarnessEvent, { type: 'error' }> => e.type === 'error');
     expect(errorEvent).toBeDefined();
     expect(errorEvent!.error.message).toContain('No model selected');
+  }, 30000);
+
+  it('produces assistant response with push-only pubsub (like mc SignalsPubSub)', async () => {
+    const storage = new InMemoryStore();
+    const pushOnlyPubSub = new PushOnlyPubSub();
+
+    function getDynamicModel({ requestContext }: { requestContext: RequestContext }) {
+      const harnessContext = requestContext.get('harness') as any;
+      const modelId = harnessContext?.state?.currentModelId;
+      if (!modelId) {
+        throw new Error('No model selected');
+      }
+      return createTextStreamModel('Hello from push-only!');
+    }
+
+    const stateSchema = z.object({
+      currentModelId: z.string().optional(),
+      modeId: z.string().optional(),
+    });
+
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'test-agent',
+      model: getDynamicModel as any,
+      instructions: 'You are a test agent.',
+    });
+
+    const harness = new Harness({
+      id: 'test-harness',
+      storage,
+      pubsub: pushOnlyPubSub,
+      resourceId: 'test-resource',
+      modes: [{ id: 'build', agent, defaultModelId: 'anthropic/claude-opus-4-7' }],
+      defaultModeId: 'build',
+      stateSchema,
+    });
+
+    await harness.init();
+    await harness.getMastra()?.startWorkers();
+    await harness.createThread();
+
+    const events: HarnessEvent[] = [];
+    harness.subscribe((event: HarnessEvent) => {
+      events.push(event);
+    });
+
+    expect((harness.getState() as any).currentModelId).toBe('anthropic/claude-opus-4-7');
+
+    await harness.sendMessage({ content: 'Hello!' });
+
+    const assistantEnd = events.find(
+      (e): e is Extract<HarnessEvent, { type: 'message_end' }> =>
+        e.type === 'message_end' && e.message.role === 'assistant',
+    );
+    expect(assistantEnd).toBeDefined();
+    expect(assistantEnd!.message.content).toEqual([{ type: 'text', text: 'Hello from push-only!' }]);
   }, 30000);
 });
