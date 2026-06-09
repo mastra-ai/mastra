@@ -387,6 +387,19 @@ describe('WorkflowInformation', () => {
       expect(screen.queryByText('run-success-1')).toBeNull();
       expect(screen.getByText('Your run history will appear here once you run the workflow')).not.toBeNull();
     });
+
+    it('highlights the active run row when viewing a specific run', async () => {
+      stubCapabilities();
+      stubWorkflow(baseWorkflow);
+      stubRuns(oneSuccessfulRun);
+      stubRunById('run-success-1');
+
+      renderInformation('run-success-1');
+
+      const runLabel = await screen.findByText('run-success-1');
+      const link = runLabel.closest('a');
+      expect(link?.className).toContain('bg-surface4');
+    });
   });
 
   describe('Toggle debug switch', () => {

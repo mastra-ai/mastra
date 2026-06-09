@@ -121,7 +121,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
                 )}
 
                 <div className="pt-2">
-                  <WorkflowRecentRuns workflowId={workflowId} />
+                  <WorkflowRecentRuns workflowId={workflowId} runId={initialRunId || runId} />
                 </div>
               </>
             ) : null}
