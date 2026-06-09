@@ -354,4 +354,47 @@ export class EventEmitterPubSub extends PubSub {
       member(eventWithAttempt, ack, nack);
     }
   }
+
+  // key → { owner, expiresAt }. In-process so a single Map is enough;
+  // there is no other process to race against. The same owner can renew
+  // their own lease; expired entries are reclaimed lazily on the next
+  // acquireLease call.
+  private leases: Map<string, { owner: string; expiresAt: number }> = new Map();
+
+  override acquireLease(key: string, owner: string, ttlMs: number): Promise<{ acquired: boolean; owner?: string }> {
+    const now = Date.now();
+    const existing = this.leases.get(key);
+    if (existing && existing.expiresAt > now && existing.owner !== owner) {
+      return Promise.resolve({ acquired: false, owner: existing.owner });
+    }
+    this.leases.set(key, { owner, expiresAt: now + ttlMs });
+    return Promise.resolve({ acquired: true, owner });
+  }
+
+  override getLeaseOwner(key: string): Promise<string | undefined> {
+    const existing = this.leases.get(key);
+    if (!existing) return Promise.resolve(undefined);
+    if (existing.expiresAt <= Date.now()) {
+      this.leases.delete(key);
+      return Promise.resolve(undefined);
+    }
+    return Promise.resolve(existing.owner);
+  }
+
+  override releaseLease(key: string, owner: string): Promise<void> {
+    const existing = this.leases.get(key);
+    if (existing && existing.owner === owner) {
+      this.leases.delete(key);
+    }
+    return Promise.resolve();
+  }
+
+  override renewLease(key: string, owner: string, ttlMs: number): Promise<boolean> {
+    const existing = this.leases.get(key);
+    if (!existing || existing.owner !== owner || existing.expiresAt <= Date.now()) {
+      return Promise.resolve(false);
+    }
+    existing.expiresAt = Date.now() + ttlMs;
+    return Promise.resolve(true);
+  }
 }
