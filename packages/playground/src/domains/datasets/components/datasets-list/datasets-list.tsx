@@ -20,6 +20,15 @@ export interface DatasetsListProps {
 
 const COLUMNS = 'auto 1fr auto 5rem 9rem 10rem 7rem 8rem';
 
+function getDatasetRowLayout(hasExperimentsAction: boolean, hasReviewAction: boolean) {
+  return {
+    rowLinkColEnd: hasExperimentsAction ? -3 : hasReviewAction ? -2 : -1,
+    showExperimentsPlaceholder: !hasExperimentsAction,
+    showReviewPlaceholderInLink: !hasExperimentsAction && !hasReviewAction,
+    showReviewPlaceholderAfterExperiments: hasExperimentsAction && !hasReviewAction,
+  };
+}
+
 function formatDate(dateStr: string | Date | undefined | null): string {
   if (!dateStr) return '—';
   const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr;
@@ -94,11 +103,16 @@ export function DatasetsList({
         const review = reviewByDataset?.get(ds.id);
         const tags = Array.isArray(ds.tags) ? (ds.tags as string[]) : [];
         const hasExperimentsAction = ds.experimentCount > 0;
-        const rowLinkColEnd = hasExperimentsAction ? -3 : review ? -2 : -1;
+        const rowLayout = getDatasetRowLayout(hasExperimentsAction, Boolean(review));
 
         return (
           <EntityList.RowWrapper key={ds.id}>
-            <EntityList.RowLink flushRight colEnd={rowLinkColEnd} to={paths.datasetLink(ds.id)} LinkComponent={Link}>
+            <EntityList.RowLink
+              flushRight
+              colEnd={rowLayout.rowLinkColEnd}
+              to={paths.datasetLink(ds.id)}
+              LinkComponent={Link}
+            >
               <EntityList.NameCell>{ds.name}</EntityList.NameCell>
               <EntityList.DescriptionCell>{ds.description}</EntityList.DescriptionCell>
               <EntityList.Cell>
@@ -120,8 +134,8 @@ export function DatasetsList({
                 {ds.targetType ? ds.targetType : <span className="text-neutral2">—</span>}
               </EntityList.TextCell>
               <EntityList.TextCell>{formatDate(ds.updatedAt)}</EntityList.TextCell>
-              {!hasExperimentsAction ? <EntityList.Cell className="justify-center" /> : null}
-              {!review && !hasExperimentsAction ? <EntityList.Cell className="justify-center" /> : null}
+              {rowLayout.showExperimentsPlaceholder ? <EntityList.Cell className="justify-center" /> : null}
+              {rowLayout.showReviewPlaceholderInLink ? <EntityList.Cell className="justify-center" /> : null}
             </EntityList.RowLink>
 
             {hasExperimentsAction ? (
@@ -152,7 +166,7 @@ export function DatasetsList({
                   <Chip color="green">{review.complete} reviewed</Chip>
                 )}
               </Button>
-            ) : hasExperimentsAction ? (
+            ) : rowLayout.showReviewPlaceholderAfterExperiments ? (
               <EntityList.Cell className="justify-center" />
             ) : null}
           </EntityList.RowWrapper>
