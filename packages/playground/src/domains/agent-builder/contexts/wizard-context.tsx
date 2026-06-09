@@ -63,11 +63,7 @@ const buildWizardSteps = ({
   for (const step of STEP_ORDER) {
     switch (step) {
       case 'ready':
-        if (includeInitial) result.push(step);
-        break;
       case 'identity':
-        if (includeInitial) result.push(step);
-        break;
       case 'library':
         if (includeInitial) result.push(step);
         break;

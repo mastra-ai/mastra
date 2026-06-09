@@ -1,42 +1,11 @@
 // @vitest-environment jsdom
-import { MastraReactProvider } from '@mastra/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
-import type { ReactNode } from 'react';
-import { MemoryRouter, Route, Routes } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import type { useBuilderAgentFeatures } from '../../../../hooks/use-builder-agent-features';
-import { AgentColorProvider } from '../../../../contexts/agent-color-context';
 import { StreamRunningContext } from '../../../../contexts/stream-chat-context';
-import { WizardProvider, useWizard, type WizardStep } from '../../../../contexts/wizard-context';
+import { useWizard, type WizardStep } from '../../../../contexts/wizard-context';
 import { AgentStepContainer } from '../agent-step-container';
-import { server } from '@/test/msw-server';
-
-type Features = ReturnType<typeof useBuilderAgentFeatures>;
-
-const FEATURES: Features = {
-  tools: false,
-  memory: false,
-  workflows: false,
-  agents: false,
-  avatarUpload: false,
-  skills: false,
-  model: false,
-  favorites: false,
-  browser: false,
-};
-
-vi.mock('@/domains/agent-builder/hooks/use-builder-agent-features', () => ({
-  useBuilderAgentFeatures: () => FEATURES,
-}));
-
-vi.mock('@/domains/agent-builder/contexts/agent-primitives-context', () => ({
-  useAgentPrimitives: () => ({ availableSkills: [] }),
-}));
-
-const BASE_URL = 'http://localhost:4111';
+import { flush, registerStepHandlers, renderStep } from './test-utils';
 
 const StepProbe = () => {
   const { step, next } = useWizard();
@@ -56,47 +25,21 @@ const advanceTo = (getByTestId: (id: string) => HTMLElement, target: WizardStep)
   }
 };
 
-const renderContainer = ({
-  isRunning = false,
-}: {
-  isRunning?: boolean;
-} = {}) => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const Wrapped = ({ children }: { children: ReactNode }) => (
-    <StreamRunningContext.Provider value={{ isRunning }}>{children}</StreamRunningContext.Provider>
+// Providing a real context value is not module mocking: the stream comes from a
+// live builder-agent run, which MSW can't model in this unit scope.
+const renderContainer = ({ isRunning = false }: { isRunning?: boolean } = {}) =>
+  renderStep(
+    <StreamRunningContext.Provider value={{ isRunning }}>
+      <StepProbe />
+      <AgentStepContainer cta={<button type="button">Continue</button>}>
+        <div>body</div>
+      </AgentStepContainer>
+    </StreamRunningContext.Provider>,
   );
-  return render(
-    <MastraReactProvider baseUrl={BASE_URL}>
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={['/agent-builder/agents/agent_test/edit']}>
-          <Routes>
-            <Route
-              path="/agent-builder/agents/:id/edit"
-              element={
-                <AgentColorProvider agentId="agent_test">
-                  <WizardProvider initialStep="ready">
-                    <Wrapped>
-                      <StepProbe />
-                      <AgentStepContainer cta={<button type="button">Continue</button>}>
-                        <div>body</div>
-                      </AgentStepContainer>
-                    </Wrapped>
-                  </WizardProvider>
-                </AgentColorProvider>
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>
-    </MastraReactProvider>,
-  );
-};
-
-const flush = () => act(async () => new Promise(resolve => setTimeout(resolve, 0)));
 
 describe('AgentStepContainer back button', () => {
   beforeEach(() => {
-    server.use(http.get('*/api/channels/platforms', () => HttpResponse.json([])));
+    registerStepHandlers();
   });
 
   afterEach(() => {

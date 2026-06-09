@@ -10,7 +10,11 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import AgentBuilderAgentEdit from '../edit';
-import type * as AgentBuilderModule from '@/domains/agent-builder';
+import {
+  authCapabilities,
+  buildBuilderSettings,
+  currentUser,
+} from '@/domains/agent-builder/components/agent-edit/agent-profile/__tests__/fixtures/builder';
 import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
 
@@ -22,39 +26,6 @@ vi.mock('@mastra/playground-ui', async () => {
     usePlaygroundStore: () => ({ requestContext: undefined }),
   };
 });
-
-vi.mock('@/domains/agent-builder', async () => {
-  const actual = await vi.importActual<typeof AgentBuilderModule>('@/domains/agent-builder');
-  return {
-    ...actual,
-    useBuilderAgentFeatures: () => ({
-      tools: false,
-      memory: false,
-      workflows: false,
-      agents: false,
-      skills: false,
-      avatarUpload: false,
-      model: false,
-      favorites: false,
-      browser: false,
-    }),
-  };
-});
-
-vi.mock('@/domains/auth/hooks/use-current-user', () => ({
-  useCurrentUser: () => ({ data: { id: 'user-1' }, isLoading: false }),
-}));
-
-vi.mock('@/domains/agent-builder/hooks/use-builder-agent-access', () => ({
-  useBuilderAgentAccess: () => ({
-    hasAccess: true,
-    canWrite: true,
-    canExecute: true,
-    canManageSkills: true,
-    canUseFavorites: true,
-    denialReason: null,
-  }),
-}));
 
 // Stub heavy chat panels so we can focus on layout.
 vi.mock('@/domains/agent-builder/components/agent-edit/conversation-panel', () => ({
@@ -212,15 +183,20 @@ const installRadixDomShims = () => {
 };
 
 const baseHandlers = (agent: typeof emptyAgent) => [
-  http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: true, user: { id: 'user-1' } })),
+  http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authCapabilities)),
+  http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json(currentUser)),
   http.get(`${BASE_URL}/api/stored/agents/agent-onboarding`, () => HttpResponse.json(agent)),
   http.patch(`${BASE_URL}/api/stored/agents/agent-onboarding`, async ({ request }) => {
     const body = (await request.json()) as Partial<typeof emptyAgent>;
     return HttpResponse.json({ ...agent, ...body });
   }),
+  http.get(`${BASE_URL}/api/stored/agents/agent-onboarding/dependents`, () =>
+    HttpResponse.json({ dependents: [], hiddenCount: 0 }),
+  ),
   http.get(`${BASE_URL}/api/stored/workspaces`, () => HttpResponse.json({ workspaces: [] })),
   http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json([])),
-  http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({})),
+  // All agent features off: the onboarding wizard resolves its minimal tree.
+  http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(buildBuilderSettings())),
 ];
 
 // Helper: drive the builder auto-run to completion so the 'ready' entry reveals

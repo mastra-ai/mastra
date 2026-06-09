@@ -1,40 +1,12 @@
 // @vitest-environment jsdom
-import { MastraReactProvider } from '@mastra/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
-import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
+import { cleanup, fireEvent, waitFor } from '@testing-library/react';
+import { useLocation } from 'react-router';
+import { Route } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { useBuilderAgentFeatures } from '../../../../hooks/use-builder-agent-features';
-import { AgentColorProvider } from '../../../../contexts/agent-color-context';
-import { WizardProvider, useWizard } from '../../../../contexts/wizard-context';
+import { useWizard } from '../../../../contexts/wizard-context';
 import { AgentProfileReadyStep } from '../agent-profile-ready-step';
-import { server } from '@/test/msw-server';
-
-type Features = ReturnType<typeof useBuilderAgentFeatures>;
-
-const DEFAULT_FEATURES: Features = {
-  tools: false,
-  memory: false,
-  workflows: false,
-  agents: false,
-  avatarUpload: false,
-  skills: false,
-  model: false,
-  favorites: false,
-  browser: false,
-};
-
-vi.mock('@/domains/agent-builder/hooks/use-builder-agent-features', () => ({
-  useBuilderAgentFeatures: () => DEFAULT_FEATURES,
-}));
-
-vi.mock('@/domains/agent-builder/contexts/agent-primitives-context', () => ({
-  useAgentPrimitives: () => ({ availableSkills: [] }),
-}));
-
-const BASE_URL = 'http://localhost:4111';
+import { TEST_AGENT_ID, flush, registerStepHandlers, renderStep } from './test-utils';
 
 const StepProbe = () => {
   const { step } = useWizard();
@@ -46,37 +18,18 @@ const LocationProbe = () => {
   return <div data-testid="location">{location.pathname}</div>;
 };
 
-const renderReady = () => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <MastraReactProvider baseUrl={BASE_URL}>
-      <QueryClientProvider client={queryClient}>
-        <MemoryRouter initialEntries={['/agent-builder/agents/agent_test/edit']}>
-          <Routes>
-            <Route
-              path="/agent-builder/agents/:id/edit"
-              element={
-                <AgentColorProvider agentId="agent_test">
-                  <WizardProvider initialStep="ready">
-                    <StepProbe />
-                    <AgentProfileReadyStep />
-                  </WizardProvider>
-                </AgentColorProvider>
-              }
-            />
-            <Route path="/agent-builder/agents/:id/view" element={<LocationProbe />} />
-          </Routes>
-        </MemoryRouter>
-      </QueryClientProvider>
-    </MastraReactProvider>,
+const renderReady = () =>
+  renderStep(
+    <>
+      <StepProbe />
+      <AgentProfileReadyStep />
+    </>,
+    { extraRoutes: <Route path="/agent-builder/agents/:id/view" element={<LocationProbe />} /> },
   );
-};
-
-const flush = () => act(async () => new Promise(resolve => setTimeout(resolve, 0)));
 
 describe('AgentProfileReadyStep', () => {
   beforeEach(() => {
-    server.use(http.get('*/api/channels/platforms', () => HttpResponse.json([])));
+    registerStepHandlers();
   });
 
   afterEach(() => {
@@ -107,7 +60,65 @@ describe('AgentProfileReadyStep', () => {
 
     fireEvent.click(getByTestId('agent-builder-ready-try'));
     await waitFor(() =>
-      expect(getByTestId('location').textContent).toBe('/agent-builder/agents/agent_test/view'),
+      expect(getByTestId('location').textContent).toBe(`/agent-builder/agents/${TEST_AGENT_ID}/view`),
     );
+  });
+
+  describe('specular sweep animation', () => {
+    // jsdom implements neither Element.animate nor a real matchMedia, so the
+    // tests install spies on both to observe the WAAPI call.
+    const stubMatchMedia = (matches: boolean) => {
+      vi.spyOn(window, 'matchMedia').mockImplementation(
+        (query: string) =>
+          ({
+            matches: query.includes('prefers-reduced-motion') ? matches : false,
+            media: query,
+            onchange: null,
+            addListener: () => {},
+            removeListener: () => {},
+            addEventListener: () => {},
+            removeEventListener: () => {},
+            dispatchEvent: () => false,
+          }) as MediaQueryList,
+      );
+    };
+
+    let animateSpy: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      animateSpy = vi.fn();
+      Object.defineProperty(HTMLElement.prototype, 'animate', {
+        configurable: true,
+        writable: true,
+        value: animateSpy,
+      });
+    });
+
+    afterEach(() => {
+      // @ts-expect-error -- jsdom has no native Element.animate; remove the stub entirely
+      delete HTMLElement.prototype.animate;
+      vi.restoreAllMocks();
+    });
+
+    it('plays the sweep exactly once on mount and not again on re-render', async () => {
+      stubMatchMedia(false);
+      const { rerenderStep } = renderReady();
+      await flush();
+
+      expect(animateSpy).toHaveBeenCalledTimes(1);
+
+      rerenderStep();
+      await flush();
+
+      expect(animateSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips the sweep entirely when prefers-reduced-motion is set', async () => {
+      stubMatchMedia(true);
+      renderReady();
+      await flush();
+
+      expect(animateSpy).not.toHaveBeenCalled();
+    });
   });
 });
