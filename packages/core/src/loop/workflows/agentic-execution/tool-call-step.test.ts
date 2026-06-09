@@ -462,9 +462,7 @@ describe('createToolCallStep delegated agent tool approvals', () => {
     });
     await new Promise(resolve => setImmediate(resolve));
 
-    const pending = (assistantMessage.content.metadata as Record<string, any>).pendingToolApprovals[
-      'agent-subAgent'
-    ];
+    const pending = (assistantMessage.content.metadata as Record<string, any>).pendingToolApprovals['agent-subAgent'];
     expect(pending).toMatchObject({
       toolCallId: 'parent-tool-call-id',
       runId: 'sub-agent-run-id',

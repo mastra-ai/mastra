@@ -341,11 +341,6 @@ export class AgentChannels {
           let runId: string | undefined;
           let toolName: string | undefined;
           let toolArgs: Record<string, unknown> | undefined;
-                }
-                if (runId) break;
-              }
-            }
-          }
 
           if (!runId) {
             this.log('info', `No pending approval found for toolCallId=${toolCallId}`);
