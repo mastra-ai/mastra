@@ -26,7 +26,8 @@ export const useToolkitSelection = (allToolkitIds: string[]) => {
     [allToolkitIds],
   );
 
-  const selectAll = useCallback(() => setSelected(new Set(allToolkitIds)), [allToolkitIds]);
+  // `null` (not a snapshot Set) so toolkits discovered later stay checked.
+  const selectAll = useCallback(() => setSelected(null), []);
   const clearAll = useCallback(() => setSelected(new Set()), []);
 
   const allUnchecked = useMemo(() => selected !== null && selected.size === 0, [selected]);
