@@ -481,6 +481,57 @@ export class Session<TState = {}> {
     }
   }
 
+  /**
+   * Streaming variant of {@link signal}. Composes the same toolsets, mode
+   * overrides, model, and request context as `signal()`, but invokes
+   * `agent.stream()` so callers can consume the live `fullStream` of chunks.
+   *
+   * Run status is marked `running` before the stream starts and returns to
+   * `idle` once the underlying stream settles (success or error). Callers are
+   * responsible for draining the returned stream.
+   */
+  async signalStream({ messages, ...options }: SessionSignalOptions): Promise<unknown> {
+    if (!this.#resolveAgent) {
+      throw new Error('Harness session cannot signal because no agent resolver is configured');
+    }
+
+    const agent = this.#agent;
+    const runId = options.runId ?? randomUUID();
+    this.#markRunning(runId);
+
+    try {
+      const requestContext = await this.#buildRequestContext();
+      const agentTools = await agent.listTools({ requestContext });
+      const tools = buildSessionToolsets({
+        agentTools,
+        modeOverrides: this.#getToolOverrides(),
+        builtInTools: buildHarnessBuiltInTools(this),
+      });
+      const model = this.#resolveModel ? await this.#resolveModel(this.#modelId) : undefined;
+      const output = (await agent.stream(messages, {
+        ...options,
+        runId,
+        requestContext,
+        ...(model ? { model } : {}),
+        toolsets: { harness: tools },
+        activeTools: options.activeTools
+          ? [...new Set([...options.activeTools, ...Object.keys(tools)])]
+          : Object.keys(tools),
+      })) as { finishReason?: Promise<unknown> };
+
+      // Return run status to idle once the stream settles, without blocking
+      // the caller from draining `fullStream`.
+      void Promise.resolve(output.finishReason)
+        .catch(() => undefined)
+        .finally(() => this.#markIdle());
+
+      return output;
+    } catch (error) {
+      this.#markIdle();
+      throw error;
+    }
+  }
+
   setMode(mode: HarnessMode) {
     const previousModeId = this.#mode.id;
     this.#mode = mode;
