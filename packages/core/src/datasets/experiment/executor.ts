@@ -8,7 +8,10 @@ import type { VersionOverrides } from '../../mastra/types';
 import { resolveObservabilityContext } from '../../observability';
 import { RequestContext } from '../../request-context';
 import type { TargetType } from '../../storage/types';
+import type { ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
+import { buildReplayHooks, createReplayState, finalizeReplayReport } from './replay';
+import type { ToolReplayEvent, ToolReplayOnMiss, ToolReplayReport, ToolReplayState } from './replay';
 
 /**
  * Common fields extracted from both FullOutput (v2/v3) and GenerateTextResult/GenerateObjectResult (v1).
@@ -54,6 +57,18 @@ export interface ExecutionResult {
   stepResults?: Record<string, StepResult<any, any, any, any>>;
   /** Order in which workflow steps actually executed */
   stepExecutionPath?: string[];
+  /** Tool replay divergence summary (only present when tool replay was active) */
+  toolReplay?: ToolReplayReport;
+}
+
+/** Resolved tool replay input for a single item execution. */
+export interface ToolReplayExecutionOptions {
+  /** Recorded events derived from the source trace (empty when no recording was found). */
+  events: ToolReplayEvent[];
+  /** Trace the events came from (null when no recording was found for the item). */
+  sourceTraceId: string | null;
+  /** Behavior when a tool call has no remaining recorded event. */
+  onMiss: ToolReplayOnMiss;
 }
 
 /**
@@ -119,6 +134,7 @@ export async function executeTarget(
     requestContext?: Record<string, unknown>;
     experimentId?: string;
     versions?: VersionOverrides;
+    toolReplay?: ToolReplayExecutionOptions;
   },
 ): Promise<ExecutionResult> {
   try {
@@ -139,6 +155,7 @@ export async function executeTarget(
           options?.requestContext,
           options?.experimentId,
           options?.versions,
+          options?.toolReplay,
         );
         break;
       case 'workflow':
@@ -211,6 +228,7 @@ async function executeAgent(
   requestContext?: Record<string, unknown>,
   experimentId?: string,
   versions?: VersionOverrides,
+  toolReplay?: ToolReplayExecutionOptions,
 ): Promise<ExecutionResult> {
   const model = await agent.getModel();
 
@@ -225,30 +243,82 @@ async function executeAgent(
   // Pass experimentId as tracing metadata so it appears on the AGENT_RUN span
   const tracingOptions = experimentId ? { metadata: { experimentId } } : undefined;
 
-  const rawResult = isSupportedLanguageModel(model)
-    ? await agent.generate(input, {
-        scorers: {},
-        returnScorerData: true,
-        abortSignal: signal,
-        ...(reqCtx ? { requestContext: reqCtx } : {}),
-        ...(tracingOptions ? { tracingOptions } : {}),
-        ...(versions ? { versions } : {}),
-      })
-    : await agent.generateLegacy(input, {
-        scorers: {},
-        returnScorerData: true,
-        ...(reqCtx ? { requestContext: reqCtx } : {}),
-        ...(tracingOptions ? { tracingOptions } : {}),
-      });
+  // Tool replay: fresh state per attempt so retries start with full queues.
+  // A replay-miss error thrown from the hook only surfaces to the model as a
+  // tool-error result, so onMiss: 'error' aborts the run via its own signal.
+  let replayState: ToolReplayState | undefined;
+  let hooks: ToolHooks | undefined;
+  let replayAbort: AbortController | undefined;
+  let fatalMissError: Error | undefined;
+
+  if (toolReplay) {
+    replayState = createReplayState(toolReplay.events, toolReplay.sourceTraceId);
+    replayAbort = new AbortController();
+    hooks = buildReplayHooks(replayState, {
+      onMiss: toolReplay.onMiss,
+      onFatalMiss: error => {
+        fatalMissError = error;
+        replayAbort!.abort(error);
+      },
+    });
+  }
+
+  const effectiveSignal = replayAbort
+    ? signal
+      ? AbortSignal.any([signal, replayAbort.signal])
+      : replayAbort.signal
+    : signal;
+
+  const fatalMissResult = (): ExecutionResult => {
+    const report = finalizeReplayReport(replayState!);
+    return {
+      output: { toolReplay: report },
+      error: { message: fatalMissError!.message, code: 'TOOL_REPLAY_MISS' },
+      traceId: null,
+      toolReplay: report,
+    };
+  };
+
+  let rawResult: unknown;
+  try {
+    rawResult = isSupportedLanguageModel(model)
+      ? await agent.generate(input, {
+          scorers: {},
+          returnScorerData: true,
+          abortSignal: effectiveSignal,
+          ...(reqCtx ? { requestContext: reqCtx } : {}),
+          ...(tracingOptions ? { tracingOptions } : {}),
+          ...(versions ? { versions } : {}),
+          ...(hooks ? { hooks } : {}),
+        })
+      : await agent.generateLegacy(input, {
+          scorers: {},
+          returnScorerData: true,
+          abortSignal: effectiveSignal,
+          ...(reqCtx ? { requestContext: reqCtx } : {}),
+          ...(tracingOptions ? { tracingOptions } : {}),
+          ...(hooks ? { hooks } : {}),
+        });
+  } catch (error) {
+    if (fatalMissError && replayState) return fatalMissResult();
+    throw error;
+  }
+
+  // The model may finish the step before the miss abort propagates — a fatal
+  // miss is an item failure even when generate() resolved.
+  if (fatalMissError && replayState) return fatalMissResult();
 
   // Narrow to the common fields we need — both v1 and v2 results share these
   const result = rawResult as AgentGenerateResult;
 
   const traceId = result.traceId ?? null;
   const scoringData = result.scoringData;
+  const replayReport = replayState ? finalizeReplayReport(replayState) : undefined;
 
   // Only persist fields relevant to experiment evaluation — drop provider metadata,
-  // duplicate messages, steps trace, and other debugging internals
+  // duplicate messages, steps trace, and other debugging internals.
+  // The replay report rides inside output so it persists via the existing
+  // experiment-result output column without a storage schema change.
   const trimmedOutput = {
     text: result.text,
     object: result.object,
@@ -260,6 +330,7 @@ async function executeAgent(
     reasoningText: result.reasoningText,
     traceId,
     error: result.error ?? null,
+    ...(replayReport ? { toolReplay: replayReport } : {}),
   };
 
   return {
@@ -268,6 +339,7 @@ async function executeAgent(
     traceId,
     scorerInput: scoringData?.input,
     scorerOutput: scoringData?.output,
+    ...(replayReport ? { toolReplay: replayReport } : {}),
   };
 }
 

@@ -3,6 +3,7 @@ import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
 import type { TargetType, ExperimentStatus } from '../../storage/types';
+import type { ToolReplayOnMiss, ToolReplayReport } from './replay';
 
 /**
  * A single data item for inline experiment data.
@@ -41,6 +42,12 @@ export interface DataItem<I = unknown, E = unknown> {
    * ```
    */
   resumeData?: unknown;
+  /**
+   * Source trace for tool replay on this item. Takes precedence over the
+   * itemId mapping derived from `toolReplay.fromExperimentId`.
+   * Storage-backed dataset items can set `metadata.replayTraceId` instead.
+   */
+  replayTraceId?: string;
 }
 
 /**
@@ -102,6 +109,18 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   agentVersion?: string;
   /** Version overrides for sub-agent delegation during experiment execution */
   versions?: VersionOverrides;
+  /**
+   * Replay recorded tool outputs from prior traced runs instead of executing
+   * live tools. Agent targets only. The source trace for each item resolves
+   * from `item.replayTraceId`, then `item.metadata.replayTraceId`, then the
+   * itemId → traceId mapping of `fromExperimentId`'s results.
+   */
+  toolReplay?: {
+    /** Prior experiment whose per-item results supply the source traceId for each itemId. */
+    fromExperimentId?: string;
+    /** Behavior when a tool call has no remaining recorded event (default: 'error'). */
+    onMiss?: ToolReplayOnMiss;
+  };
 }
 
 /**
@@ -135,6 +154,8 @@ export interface ItemResult {
   completedAt: Date;
   /** Number of retry attempts */
   retryCount: number;
+  /** Tool replay divergence summary (only present when toolReplay was active for the item) */
+  toolReplay?: ToolReplayReport;
 }
 
 /**

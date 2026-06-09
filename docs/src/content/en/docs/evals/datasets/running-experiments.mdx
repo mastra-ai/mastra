@@ -143,6 +143,85 @@ Visit the [Scorers overview](/docs/evals/overview) for details on available and 
 
 :::
 
+## Replaying tool calls
+
+**Added in:** `@mastra/core@1.43.0`
+
+Agent targets execute their tools live by default. For agents that read or write mutable external state (support tickets, CRM records), this makes experiments non-deterministic: the external resource drifts between runs, and tool writes hit production on every run.
+
+Tool replay freezes the external world instead. The experiment intercepts each tool call and returns the output recorded in a prior traced run, so you can re-run the same items and study how the agent behaves against identical observations. The agent itself stays free to diverge — different reasoning, ordering, or arguments are reported, not prevented.
+
+Recordings come from traces. Any traced agent run records its tool calls as spans, and experiments persist a `traceId` for every item result, so a previous experiment can serve directly as the recording:
+
+```typescript title="src/mastra/experiments/tool-replay.ts"
+// 1. Run the experiment live with tracing enabled (the recording)
+const baseline = await dataset.startExperiment({
+  name: 'support-agent-baseline',
+  targetType: 'agent',
+  targetId: 'support-agent',
+})
+
+// 2. Re-run with tool replay — no live tool executions
+const replayed = await dataset.startExperiment({
+  name: 'support-agent-replay',
+  targetType: 'agent',
+  targetId: 'support-agent',
+  toolReplay: { fromExperimentId: baseline.experimentId },
+})
+```
+
+Each item resolves its source trace in this order:
+
+1. `replayTraceId` on the item (inline data) or `metadata.replayTraceId` (storage-backed items)
+1. The `traceId` recorded for the same item ID in `fromExperimentId`'s results
+
+Matching is per-tool and ordered: each call to a tool consumes the next recorded event for that tool, so repeated calls to the same tool replay in their original order. Recorded errors are re-thrown so the agent sees the same failure. Recorded arguments are compared for diagnostics but never used for matching.
+
+### Miss policy
+
+When the agent makes a call with no recorded event remaining, the `onMiss` policy decides what happens:
+
+- `'error'` (default): The item fails with a `TOOL_REPLAY_MISS` error. No live tool runs, and the item is not retried.
+- `'passthrough'`: The call executes live and is recorded as a miss in the report.
+
+```typescript
+const replayed = await dataset.startExperiment({
+  targetType: 'agent',
+  targetId: 'support-agent',
+  toolReplay: {
+    fromExperimentId: baseline.experimentId,
+    onMiss: 'passthrough',
+  },
+})
+```
+
+### Divergence report
+
+Every replayed item result carries a `toolReplay` report describing how the run differed from the recording:
+
+```typescript
+const report = replayed.results[0].toolReplay
+
+console.log(report.replayedCount) // recorded events the agent consumed
+console.log(report.misses) // calls with no recorded event
+console.log(report.unconsumed) // recorded events the agent never requested
+console.log(report.argMismatches) // replayed calls whose args differed from the recording
+```
+
+The report also persists inside the item result's `output`, so it is available from [`listExperimentResults()`](/reference/datasets/listExperimentResults).
+
+### Limitations
+
+- Tool replay supports agent targets only. Workflow targets and inline `task` functions are rejected at setup.
+- Tools run inside sub-agents (agent-as-tool) or workflow-as-tool internals are not intercepted. The top-level call replays as a single recorded output.
+- Replayed calls do not execute the real tool, so replay runs produce no tool spans in their own traces. Use the divergence report to inspect replay behavior.
+
+:::note
+
+Visit the [`startExperiment` reference](/reference/datasets/startExperiment) for the full `toolReplay` parameter documentation.
+
+:::
+
 ## Async experiments
 
 `startExperiment()` blocks until every item completes. For long-running datasets, use [`startExperimentAsync()`](/reference/datasets/startExperimentAsync) to start the experiment in the background:

@@ -131,6 +131,33 @@ console.log(`Status: ${summary2.status}`)
     isOptional: true,
     description: 'Maximum retries per item on failure. Defaults to `0` (no retries). Abort errors are never retried.',
   },
+  {
+    name: 'toolReplay',
+    type: 'object',
+    isOptional: true,
+    description:
+      'Replay recorded tool outputs from prior traced runs instead of executing live tools. Agent targets only. Each item resolves its source trace from `item.replayTraceId` (inline data), then `item.metadata.replayTraceId` (storage-backed items), then the itemId → traceId mapping of `fromExperimentId`\'s results. See [Replaying tool calls](/docs/evals/datasets/running-experiments#replaying-tool-calls).',
+    properties: [
+      {
+        type: 'object',
+        parameters: [
+          {
+            name: 'fromExperimentId',
+            type: 'string',
+            isOptional: true,
+            description: 'Prior experiment whose per-item results supply the source trace for each item ID.',
+          },
+          {
+            name: 'onMiss',
+            type: "'error' | 'passthrough'",
+            isOptional: true,
+            description:
+              "Behavior when a tool call has no remaining recorded event. `'error'` fails the item without retries; `'passthrough'` executes the call live and records the miss. Defaults to `'error'`.",
+          },
+        ],
+      },
+    ],
+  },
 ]}
 />
 
@@ -243,6 +270,13 @@ console.log(`Status: ${summary2.status}`)
                     name: 'retryCount',
                     type: 'number',
                     description: 'Number of retry attempts.',
+                  },
+                  {
+                    name: 'toolReplay',
+                    type: 'ToolReplayReport',
+                    isOptional: true,
+                    description:
+                      'Tool replay divergence summary. Only present when `toolReplay` was active for the item. Contains `sourceTraceId`, `totalRecorded`, `replayedCount`, `misses`, `unconsumed`, and `argMismatches`.',
                   },
                   {
                     name: 'scores',

@@ -3,7 +3,9 @@ import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
 import { executeTarget } from './executor';
-import type { Target, ExecutionResult } from './executor';
+import type { Target, ExecutionResult, ToolReplayExecutionOptions } from './executor';
+import { extractToolReplayEvents } from './replay';
+import type { ToolReplayEvent } from './replay';
 import { resolveScorers, resolveStepScorers, runScorersForItem, runStepScorersForItem } from './scorer';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
@@ -19,6 +21,8 @@ type ExperimentItem = {
   resumeSteps?: Record<string, unknown>;
   /** Flat resume data for single-step suspend workflows */
   resumeData?: unknown;
+  /** Explicit source trace for tool replay (inline items; storage-backed items use metadata.replayTraceId) */
+  replayTraceId?: string;
 };
 
 // Re-export types and helpers
@@ -31,8 +35,20 @@ export type {
   ScorerResult,
   StartExperimentConfig,
 } from './types';
-export { executeTarget, type Target, type ExecutionResult } from './executor';
+export { executeTarget, type Target, type ExecutionResult, type ToolReplayExecutionOptions } from './executor';
 export { resolveScorers, runScorersForItem } from './scorer';
+export {
+  extractToolReplayEvents,
+  createReplayState,
+  buildReplayHooks,
+  finalizeReplayReport,
+  type ToolReplayEvent,
+  type ToolReplayOnMiss,
+  type ToolReplayMiss,
+  type ToolReplayArgMismatch,
+  type ToolReplayReport,
+  type ToolReplayState,
+} from './replay';
 
 // Re-export analytics
 export * from './analytics';
@@ -78,8 +94,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     requestContext: globalRequestContext,
     agentVersion,
     versions,
+    toolReplay,
   } = config;
-
   const startedAt = new Date();
   // Use provided experimentId (async trigger) or generate new one
   const experimentId = providedExperimentId ?? crypto.randomUUID();
@@ -126,6 +142,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           metadata: dataItem.metadata,
           resumeSteps: dataItem.resumeSteps,
           resumeData: dataItem.resumeData,
+          replayTraceId: dataItem.replayTraceId,
         };
       });
       datasetVersion = null;
@@ -179,7 +196,80 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   // Phase B — Resolve task function
   let execFn: (item: ExperimentItem, signal?: AbortSignal) => Promise<ExecutionResult>;
 
+  // Tool replay setup: validate target support and build the per-item source-trace
+  // resolver. Recorded events come from the source trace's tool spans — replay
+  // needs no separate artifact because experiments persist traceId per result.
+  let resolveToolReplay: ((item: ExperimentItem) => Promise<ToolReplayExecutionOptions>) | undefined;
+
   try {
+    if (toolReplay) {
+      if (config.task || targetType !== 'agent') {
+        throw new MastraError({
+          id: 'EXPERIMENT_TOOL_REPLAY_UNSUPPORTED_TARGET',
+          text: `toolReplay is only supported for agent targets (got ${config.task ? 'inline task' : `targetType '${targetType}'`})`,
+          domain: 'STORAGE',
+          category: 'USER',
+        });
+      }
+
+      const observabilityStore = await storage?.getStore('observability');
+      if (!observabilityStore) {
+        throw new MastraError({
+          id: 'EXPERIMENT_TOOL_REPLAY_NO_OBSERVABILITY',
+          text: 'toolReplay requires observability storage to load recorded traces. Configure storage in Mastra instance.',
+          domain: 'STORAGE',
+          category: 'USER',
+        });
+      }
+
+      // itemId → traceId from the prior experiment's results
+      let traceIdByItemId: Map<string, string> | undefined;
+      if (toolReplay.fromExperimentId) {
+        if (!experimentsStore) {
+          throw new MastraError({
+            id: 'EXPERIMENT_TOOL_REPLAY_NO_EXPERIMENTS_STORE',
+            text: 'toolReplay.fromExperimentId requires experiments storage. Configure storage in Mastra instance.',
+            domain: 'STORAGE',
+            category: 'USER',
+          });
+        }
+        const priorResults = await experimentsStore.listExperimentResults({
+          experimentId: toolReplay.fromExperimentId,
+          pagination: { page: 0, perPage: false },
+        });
+        traceIdByItemId = new Map(
+          priorResults.results.filter(r => r.traceId).map(r => [r.itemId, r.traceId as string]),
+        );
+      }
+
+      const onMiss = toolReplay.onMiss ?? 'error';
+      // Memoized per item so the retry loop doesn't refetch the trace
+      const cache = new Map<string, Promise<{ events: ToolReplayEvent[]; sourceTraceId: string | null }>>();
+      resolveToolReplay = async (item: ExperimentItem) => {
+        let pending = cache.get(item.id);
+        if (!pending) {
+          pending = (async () => {
+            const traceId =
+              item.replayTraceId ??
+              (typeof item.metadata?.replayTraceId === 'string' ? item.metadata.replayTraceId : undefined) ??
+              traceIdByItemId?.get(item.id) ??
+              null;
+            if (!traceId) return { events: [], sourceTraceId: null };
+            const trace = await observabilityStore.getTrace({ traceId });
+            return {
+              events: trace?.spans?.length ? extractToolReplayEvents(trace.spans) : [],
+              sourceTraceId: traceId,
+            };
+          })();
+          cache.set(item.id, pending);
+          // Don't cache failures — a transient storage error should be retryable
+          pending.catch(() => cache.delete(item.id));
+        }
+        const { events, sourceTraceId } = await pending;
+        return { events, sourceTraceId, onMiss };
+      };
+    }
+
     if (config.task) {
       // Inline task path
       const taskFn = config.task;
@@ -211,15 +301,32 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         throw new Error(`Target not found: ${targetType}/${targetId}`);
       }
       const { target } = resolved;
-      execFn = (item, itemSignal) => {
+      execFn = async (item, itemSignal) => {
         // Merge global request context with per-item request context (item takes precedence)
         const mergedRequestContext =
           globalRequestContext || item.requestContext ? { ...globalRequestContext, ...item.requestContext } : undefined;
+        let itemToolReplay: ToolReplayExecutionOptions | undefined;
+        if (resolveToolReplay) {
+          // A failed trace fetch fails the item, not the whole experiment
+          try {
+            itemToolReplay = await resolveToolReplay(item);
+          } catch (err: unknown) {
+            return {
+              output: null,
+              error: {
+                message: `Failed to load tool replay recording: ${err instanceof Error ? err.message : String(err)}`,
+                code: 'TOOL_REPLAY_LOAD_FAILED',
+              },
+              traceId: null,
+            };
+          }
+        }
         return executeTarget(target, targetType, item, {
           signal: itemSignal,
           requestContext: mergedRequestContext,
           experimentId,
           versions,
+          toolReplay: itemToolReplay,
         });
       };
     } else {
@@ -372,6 +479,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           startedAt: itemStartedAt,
           completedAt: itemCompletedAt,
           retryCount,
+          ...(execResult.toolReplay ? { toolReplay: execResult.toolReplay } : {}),
         };
 
         // Run scorers (inline, after target completes)
