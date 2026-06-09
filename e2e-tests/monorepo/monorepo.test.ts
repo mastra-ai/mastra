@@ -126,6 +126,10 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
             // Ignore punycode warning
             return;
           }
+          if (errMsg && errMsg.includes('falling back to an in-memory store')) {
+            // Ignore in-memory storage fallback warning (no storage configured in fixture)
+            return;
+          }
           reject(new Error('failed to start dev: ' + errMsg));
         });
         proc!.stdout?.on('data', data => {
@@ -179,6 +183,10 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
           const errMsg = data?.toString();
           if (errMsg && errMsg.includes('punycode')) {
             // Ignore punycode warning
+            return;
+          }
+          if (errMsg && errMsg.includes('falling back to an in-memory store')) {
+            // Ignore in-memory storage fallback warning (no storage configured in fixture)
             return;
           }
 

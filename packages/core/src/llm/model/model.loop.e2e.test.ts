@@ -5,18 +5,37 @@ import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { MessageList } from '../../agent/message-list';
+import { EventEmitterPubSub } from '../../events/event-emitter';
+import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
+import { InMemoryStore } from '../../storage';
 import { MastraLLMVNext } from './model.loop';
 import type { MastraLanguageModelV2 } from './shared.types';
 
 setupDummyApiKeys(getLLMTestMode(), ['openai']);
 
 const mock = createGatewayMock();
-beforeAll(() => mock.start());
-afterAll(() => mock.saveAndStop());
 
 const model = new MastraLLMVNext({
   models: [{ model: openai('gpt-4o-mini') as unknown as MastraLanguageModelV2, maxRetries: 0, id: 'test-model' }],
+});
+
+// The agentic loop runs on the evented workflow engine, which needs a
+// pubsub-equipped Mastra with running workers to dispatch step events.
+let mastra: Mastra;
+beforeAll(async () => {
+  mock.start();
+  mastra = new Mastra({
+    logger: false,
+    storage: new InMemoryStore(),
+    pubsub: new EventEmitterPubSub(),
+  });
+  await mastra.startWorkers();
+  model.__registerMastra(mastra);
+});
+afterAll(async () => {
+  await mastra.stopWorkers();
+  mock.saveAndStop();
 });
 
 describe.concurrent('MastraLLMVNext', () => {

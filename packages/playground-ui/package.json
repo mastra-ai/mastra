@@ -1,13 +1,14 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "33.0.0-alpha.0",
+  "version": "33.0.0-alpha.3",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
   "types": "dist/index.d.ts",
   "files": [
     "dist",
+    "theme.css",
     "CHANGELOG.md"
   ],
   "exports": {
@@ -18,6 +19,7 @@
       }
     },
     "./style.css": "./dist/index.css",
+    "./theme.css": "./theme.css",
     "./tokens": {
       "import": {
         "types": "./dist/tokens.d.ts",
@@ -126,6 +128,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "eslint-plugin-storybook": "^10.4.2",
     "jsdom": "^26.1.0",
+    "msw": "^2.12.11",
     "react": "catalog:",
     "react-dom": "catalog:",
     "rollup-plugin-node-externals": "^8.1.2",

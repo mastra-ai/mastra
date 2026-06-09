@@ -25,7 +25,7 @@ export function renderStartupError(
   const wrapper = document.createElement('main');
   wrapper.setAttribute('role', 'alert');
   wrapper.style.cssText =
-    'min-height:100vh;background:#0b0d10;color:#f4f4f5;font-family:Inter,ui-sans-serif,system-ui,sans-serif;padding:32px;box-sizing:border-box;';
+    'min-height:100vh;background:#0b0d10;color:#f4f4f5;font-family:"Mona Sans",ui-sans-serif,system-ui,sans-serif;font-feature-settings:"ss06" on;padding:32px;box-sizing:border-box;';
 
   const title = document.createElement('h1');
   title.textContent = 'Mastra Studio failed to start';

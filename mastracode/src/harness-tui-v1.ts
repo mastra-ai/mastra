@@ -13,6 +13,8 @@ function hash(input: string): string {
 }
 
 // ─── Modes ────────────────────────────────────────────────────────────────
+const codeAgentId = 'code-agent';
+
 const modes: HarnessModeV1[] = [
   {
     id: 'build',
@@ -37,7 +39,7 @@ const defaultModeId = 'build';
 
 // ─── Create minimal agent ─────────────────────────────────────────────────
 const codeAgent = new Agent({
-  id: 'code-agent',
+  id: codeAgentId,
   name: 'Code Agent',
   instructions: 'You are a helpful coding assistant.',
   model: modes.find(m => m.id === defaultModeId)!.defaultModelId,

@@ -843,6 +843,8 @@ describe('headless mode — thread control', () => {
     const thread = await harness.createThread({ title: 'target-thread' });
     const updatedAtBefore = thread.updatedAt.getTime();
 
+    await new Promise(resolve => setTimeout(resolve, 300));
+
     const exitCode = await runHeadless(harness, {
       prompt: 'Hello',
       format: 'default',
@@ -852,6 +854,9 @@ describe('headless mode — thread control', () => {
     });
 
     expect(exitCode).toBe(0);
+
+    // Allow fire-and-forget persistTokenUsage to flush
+    await new Promise(resolve => setTimeout(resolve, 300));
 
     // Verify the targeted thread was actually used (updatedAt advanced)
     const threads = await harness.listThreads();
@@ -869,6 +874,8 @@ describe('headless mode — thread control', () => {
     const thread = await harness.createThread({ title: 'my-feature' });
     const updatedAtBefore = thread.updatedAt.getTime();
 
+    await new Promise(resolve => setTimeout(resolve, 300));
+
     const exitCode = await runHeadless(harness, {
       prompt: 'Hello',
       format: 'default',
@@ -878,6 +885,9 @@ describe('headless mode — thread control', () => {
     });
 
     expect(exitCode).toBe(0);
+
+    // Allow fire-and-forget persistTokenUsage to flush
+    await new Promise(resolve => setTimeout(resolve, 300));
 
     // Verify the titled thread was actually used
     const threads = await harness.listThreads();

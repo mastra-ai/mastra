@@ -6,14 +6,22 @@ import { cn } from '@/lib/utils';
 export interface ThreadListProps {
   children: ReactNode;
   'aria-label'?: string;
+  /**
+   * When true, drops the standalone block chrome (background, border, rounded corners, inset)
+   * so the list can render flush inside an outer container without nesting a second box.
+   */
+  embedded?: boolean;
 }
 
-export const ThreadList = ({ children, 'aria-label': ariaLabel = 'Threads' }: ThreadListProps) => {
+export const ThreadList = ({ children, 'aria-label': ariaLabel = 'Threads', embedded = false }: ThreadListProps) => {
   return (
-    <div className="h-full w-full pb-2 pl-2">
+    <div className={cn('h-full w-full', !embedded && 'pb-2 pl-2')}>
       <nav
         aria-label={ariaLabel}
-        className="bg-surface3 rounded-studio-panel border border-border1/50 h-full overflow-y-auto p-1"
+        className={cn(
+          'h-full overflow-y-auto p-1',
+          !embedded && 'bg-surface3 rounded-studio-panel border border-border1/50',
+        )}
       >
         {children}
       </nav>
@@ -76,9 +84,13 @@ export const ThreadListItem = ({
         href={href}
         to={to}
         variant="ghost"
-        className={cn('w-full justify-start rounded-xl', isActive && 'bg-surface4 text-neutral6')}
+        className={cn(
+          'w-full min-w-0 justify-start rounded-xl text-left',
+          onDelete && 'pr-9',
+          isActive && 'bg-surface4 text-neutral6',
+        )}
       >
-        {children}
+        <span className="min-w-0 flex-1">{children}</span>
       </Button>
 
       {onDelete && (

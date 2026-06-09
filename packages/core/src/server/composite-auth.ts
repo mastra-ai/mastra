@@ -81,6 +81,7 @@ export class CompositeAuth
     if (!providers.some(isUserProvider)) {
       this.getCurrentUser = undefined as any;
       this.getUser = undefined as any;
+      this.getUsers = undefined as any;
     }
     // Proxy credentials provider methods if any inner provider supports them.
     const credProvider = this.findProvider(isCredentialsProvider as (p: unknown) => p is MastraAuthProvider) as any;
@@ -368,5 +369,16 @@ export class CompositeAuth
       }
     }
     return null;
+  }
+
+  /**
+   * Resolve multiple users by ID in one call. For each input ID, walks the
+   * providers in order and returns the first non-null match — preserving the
+   * existing "try each provider until one responds" semantics of `getUser`.
+   * Returns positionally-aligned results, with `null` for any ID no provider
+   * could resolve. Per-id lookups are performed in parallel.
+   */
+  async getUsers(userIds: string[]): Promise<Array<User | null>> {
+    return Promise.all(userIds.map(id => this.getUser(id)));
   }
 }
