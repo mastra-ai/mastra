@@ -14,7 +14,7 @@ January 2026
 
 ## Abstract
 
-Performance optimization guide for React applications, designed for AI agents and LLMs. Contains 12 rules across 6 categories, prioritized by impact from critical (eliminating waterfalls, reducing bundle size) to incremental (JavaScript micro-optimizations). Each rule includes detailed explanations, real-world examples comparing incorrect vs. correct implementations, and specific impact metrics to guide automated refactoring and code generation.
+Performance optimization guide for React applications, designed for AI agents and LLMs. Contains 14 rules across 7 categories, prioritized by impact from critical (eliminating waterfalls, reducing bundle size) to incremental (JavaScript micro-optimizations). Each rule includes detailed explanations, real-world examples comparing incorrect vs. correct implementations, and specific impact metrics to guide automated refactoring and code generation.
 
 ---
 
@@ -31,6 +31,7 @@ Performance optimization guide for React applications, designed for AI agents an
    - 4.1 [Use Lazy State Initialization](#41-use-lazy-state-initialization)
    - 4.2 [Use Transitions for Non-Urgent Updates](#42-use-transitions-for-non-urgent-updates)
    - 4.3 [useEffectEvent for Functions in useEffect](#43-useeffectevent-for-functions-in-useeffect)
+   - 4.4 [Never Reset State with useEffect](#44-never-reset-state-with-useeffect)
 5. [Rendering Performance](#5-rendering-performance) — **MEDIUM**
    - 5.1 [Animate SVG Wrapper Instead of SVG Element](#51-animate-svg-wrapper-instead-of-svg-element)
    - 5.2 [CSS content-visibility for Long Lists](#52-css-content-visibility-for-long-lists)
@@ -38,6 +39,8 @@ Performance optimization guide for React applications, designed for AI agents an
    - 6.1 [Early Length Check for Array Comparisons](#61-early-length-check-for-array-comparisons)
    - 6.2 [Use Set/Map for O(1) Lookups](#62-use-setmap-for-o1-lookups)
    - 6.3 [Use toSorted() Instead of sort() for Immutability](#63-use-tosorted-instead-of-sort-for-immutability)
+7. [Component Structure](#7-component-structure) — **MEDIUM-HIGH**
+   - 7.1 [One Component or Hook = One Responsibility = One File](#71-one-component-or-hook--one-responsibility--one-file)
 
 ---
 
@@ -342,6 +345,75 @@ export function App() {
 
 Reserve `useCallback` and `useMemo` for expensive computations (e.g., processing 200+ entries) where memoization provides measurable performance benefits. For typical event handlers, `useEffectEvent` is the preferred approach.
 
+### 4.4 Never Reset State with useEffect
+
+Never use `useEffect` to reset or re-sync local state when an upstream identity changes (e.g., a form's initial values when the selected product changes). Instead, restructure the component hierarchy: lift the discriminant (the product id) to the top of the tree, fetch the new entity there, and render a skeleton while loading. The skeleton unmounts the branch containing the form, so when the data arrives the form remounts and its `useState` initializers naturally pick up the fresh `initialValues`.
+
+**Incorrect (useEffect syncs state when product changes):**
+
+```tsx
+function ProductForm({ product }: { product: Product }) {
+  const [name, setName] = useState(product.name);
+  const [price, setPrice] = useState(product.price);
+
+  // Anti-pattern: re-syncing state with an effect.
+  // Renders once with stale values, then again after the effect runs.
+  // Every new field must be added here too — easy to forget, causes drift.
+  useEffect(() => {
+    setName(product.name);
+    setPrice(product.price);
+  }, [product.id]);
+
+  return (
+    <form>
+      <input value={name} onChange={e => setName(e.target.value)} />
+      <input value={price} onChange={e => setPrice(e.target.value)} />
+    </form>
+  );
+}
+```
+
+**Correct (lift the discriminant; skeleton unmounts the branch, form remounts fresh):**
+
+```tsx
+// Top of the tree: the product id is the discriminant
+function ProductPage({ productId }: { productId: string }) {
+  const { data: product, isLoading } = useQuery({
+    queryKey: ['product', productId],
+    queryFn: () => fetchProduct(productId),
+  });
+
+  // While the new product loads, the skeleton replaces the form branch.
+  // The old ProductForm unmounts, so its state is discarded.
+  if (isLoading) return <ProductFormSkeleton />;
+
+  // Fresh mount: useState initializers run again with the new values.
+  return <ProductForm initialValues={product} />;
+}
+
+function ProductForm({ initialValues }: { initialValues: Product }) {
+  // Initialized once per mount — no sync effect needed, ever.
+  const [name, setName] = useState(initialValues.name);
+  const [price, setPrice] = useState(initialValues.price);
+
+  return (
+    <form>
+      <input value={name} onChange={e => setName(e.target.value)} />
+      <input value={price} onChange={e => setPrice(e.target.value)} />
+    </form>
+  );
+}
+```
+
+**Fallback when data is already local (no fetch boundary):**
+
+```tsx
+// key forces a remount when the product changes
+<ProductForm key={product.id} initialValues={product} />
+```
+
+Prefer the hierarchy restructure (fetch high + skeleton) over `key`: it also removes the stale-data problem because the form can never render with the previous product's values. Use `key` as the minimal fix when no async boundary exists.
+
 ---
 
 ## 5. Rendering Performance
@@ -534,6 +606,123 @@ const sorted = [...items].sort((a, b) => a.value - b.value);
 - `.toReversed()` - immutable reverse
 - `.toSpliced()` - immutable splice
 - `.with()` - immutable element replacement
+
+---
+
+## 7. Component Structure
+
+**Impact: MEDIUM-HIGH (maintainability)**
+
+Bloated components are hard to test, review, and reuse, and unrelated state changes re-render everything.
+
+### 7.1 One Component or Hook = One Responsibility = One File
+
+Domain components and hooks must each own exactly one responsibility. If one part of a component fetches data, another filters it, another manages form state — split it. Don't fear refactoring: extracting hooks and components is cheap, while bloated components are hard to test, review, and reuse. Enforce **1 file = 1 component (or hook)**.
+
+**Exemption:** UI/design-system components (Button, Card, layout primitives) are composition-focused and out of scope for this rule. It targets domain components.
+
+**Incorrect (one file, one component, four responsibilities):**
+
+```tsx
+// products-page.tsx — fetching + filtering + selection + form, all entangled
+function ProductsPage() {
+  // Responsibility 1: data fetching
+  const { data: products } = useQuery({
+    queryKey: ['products'],
+    queryFn: fetchProducts,
+  });
+
+  // Responsibility 2: filtering logic
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<Category | null>(null);
+  const filtered = useMemo(
+    () =>
+      (products ?? []).filter(
+        p => p.name.includes(query) && (!category || p.category === category),
+      ),
+    [products, query, category],
+  );
+
+  // Responsibility 3: selection
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  // Responsibility 4: edit-form state for the selected product
+  const selected = filtered.find(p => p.id === selectedId);
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState(0);
+  // ...100 more lines of form handlers, validation, submit logic
+
+  return (/* one giant JSX tree mixing filters, list, and form */);
+}
+```
+
+**Correct (each responsibility in its own file):**
+
+```tsx
+// use-product-search.ts — hook: fetching + filtering
+export function useProductSearch() {
+  const { data: products } = useQuery({
+    queryKey: ['products'],
+    queryFn: fetchProducts,
+  });
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState<Category | null>(null);
+  const filtered = useMemo(
+    () =>
+      (products ?? []).filter(
+        p => p.name.includes(query) && (!category || p.category === category),
+      ),
+    [products, query, category],
+  );
+  return { filtered, query, setQuery, category, setCategory };
+}
+```
+
+```tsx
+// product-list.tsx — component: render the list, report selection
+export function ProductList({ products, onSelect }: ProductListProps) {
+  return (
+    <ul>
+      {products.map(p => (
+        <li key={p.id} onClick={() => onSelect(p.id)}>{p.name}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+```tsx
+// product-edit-form.tsx — component: edit one product
+export function ProductEditForm({ initialValues }: { initialValues: Product }) {
+  const [name, setName] = useState(initialValues.name);
+  const [price, setPrice] = useState(initialValues.price);
+  // form handlers live here, and only here
+  return (/* form JSX */);
+}
+```
+
+```tsx
+// products-page.tsx — component: composition only
+export function ProductsPage() {
+  const { filtered, query, setQuery, category, setCategory } = useProductSearch();
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selected = filtered.find(p => p.id === selectedId);
+
+  return (
+    <>
+      <ProductFilters query={query} onQueryChange={setQuery} category={category} onCategoryChange={setCategory} />
+      <ProductList products={filtered} onSelect={setSelectedId} />
+      {selected && <ProductEditForm key={selected.id} initialValues={selected} />}
+    </>
+  );
+}
+```
+
+Splitting also narrows re-render scope: typing in the filter no longer re-renders the form.
+
+Smells that trigger a split: multiple unrelated `useState`/`useQuery` clusters, comment headers separating "sections", a component you can't name without "And".
+
+The page/container component's single responsibility is composition — wiring hooks and children together is fine.
 
 ---
 
