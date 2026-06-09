@@ -6289,10 +6289,10 @@ export class Agent<
     // getLLM; re-register so the ephemeral case takes effect.
     llm.__registerMastra(effectiveMastra);
 
-    const useDirectExecution = process.env.MASTRA_DIRECT_EXECUTION === 'true';
+    const useEventedExecution = process.env.MASTRA_EVENTED_EXECUTION === 'true';
     const executionRunId = randomUUID();
 
-    if (!useDirectExecution) {
+    if (useEventedExecution) {
       // Evented engine path: needs pubsub workers and internal workflow registration.
       // Ensure the evented engine's workers are running on the effective Mastra.
       // Users who just do `new Mastra({ agents })` without calling startWorkers
@@ -6307,8 +6307,9 @@ export class Agent<
       // __registerMastra under the hood, which wires the pubsub `createRun` needs.
       effectiveMastra?.__registerInternalWorkflow(executionWorkflow, executionRunId);
     } else {
-      // Direct execution path: register Mastra for storage/observability but skip
-      // pubsub workers and internal workflow registration (not needed without events).
+      // Direct execution path (default): register Mastra for storage/observability
+      // but skip pubsub workers and internal workflow registration (not needed
+      // without events). Avoids requestContext serialisation loss.
       executionWorkflow.__registerMastra(effectiveMastra);
     }
 
@@ -6318,7 +6319,7 @@ export class Agent<
       const result = await run.start({ ...observabilityContext });
       return result;
     } finally {
-      if (!useDirectExecution) {
+      if (useEventedExecution) {
         // The WEP's terminal event handlers (processWorkflowEnd / processWorkflowFail /
         // processWorkflowSuspend) unregister the internal workflow after all events for
         // this run have been fully processed. This safety-net covers the exceptional path

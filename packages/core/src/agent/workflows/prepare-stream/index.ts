@@ -163,15 +163,13 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     runScope,
   });
 
-  // Internal toggle: when MASTRA_DIRECT_EXECUTION=true, bypass the evented
-  // workflow engine and run steps directly in-process. This avoids the
-  // requestContext serialisation cycle (toJSON → reconstruct) which drops
+  // Internal toggle: the default is direct (in-process) execution which avoids
+  // the requestContext serialisation cycle (toJSON → reconstruct) that drops
   // non-serialisable values (functions, circular-ref objects like the harness
-  // context). The evented engine is the default because it enables cross-process
-  // coordination via pubsub; the direct path is a safe fallback for environments
-  // where serialisation loss causes tool failures (e.g. "no harness context").
-  const useDirectExecution = process.env.MASTRA_DIRECT_EXECUTION === 'true';
-  const factory = useDirectExecution ? createDirectWorkflow : createEventedWorkflow;
+  // context). Set MASTRA_EVENTED_EXECUTION=true to opt in to the evented
+  // workflow engine for cross-process coordination via pubsub.
+  const useEventedExecution = process.env.MASTRA_EVENTED_EXECUTION === 'true';
+  const factory = useEventedExecution ? createEventedWorkflow : createDirectWorkflow;
 
   return factory({
     id: 'execution-workflow',
