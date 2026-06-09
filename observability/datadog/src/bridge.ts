@@ -550,7 +550,10 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       }
     }
 
-    const knownFields = ['usage', 'model', 'provider', 'parameters'];
+    // `model`/`provider` are surfaced as native LLM Obs fields and `usage` as metrics;
+    // everything else (including `parameters` — model settings like reasoning_effort)
+    // flows into metadata so it reaches Datadog.
+    const knownFields = ['usage', 'model', 'provider'];
     const otherAttributes = omitKeys((span.attributes ?? {}) as Record<string, any>, knownFields);
 
     const contextKeySet = new Set(this.config.requestContextKeys ?? []);

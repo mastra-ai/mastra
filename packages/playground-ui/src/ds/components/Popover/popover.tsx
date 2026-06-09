@@ -2,20 +2,20 @@ import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
 import * as React from 'react';
 
 import { usePortalContainer } from '@/ds/primitives/portal-container';
+import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
 
 const Popover = PopoverPrimitive.Root;
 
 type PopoverTriggerProps = PopoverPrimitive.Trigger.Props & {
+  /** @deprecated Use Base UI's `render` prop instead, e.g. `render={<Button />}`. */
   asChild?: boolean;
 };
 
 const PopoverTrigger = React.forwardRef<HTMLButtonElement, PopoverTriggerProps>(
   ({ asChild, children, ...props }, ref) => {
-    const renderProps = asChild && React.isValidElement(children) ? { render: children as React.ReactElement } : {};
-
     return (
-      <PopoverPrimitive.Trigger ref={ref} {...renderProps} {...props}>
+      <PopoverPrimitive.Trigger ref={ref} {...asChildRenderProps(asChild, children)} {...props}>
         {asChild ? undefined : children}
       </PopoverPrimitive.Trigger>
     );
