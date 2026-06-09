@@ -77,8 +77,6 @@ export const MessageList = ({
   const lastMessage = messages[messages.length - 1];
   const showPending =
     isRunning && !isLoadingEmpty && (lastMessage?.role !== 'assistant' || !hasStreamingPart(lastMessage));
-  // Defer the pending dot by 300ms so it doesn't flash on fast first tokens.
-  const delayedPending = useDelayedFlag(showPending, SKELETON_DELAY_MS);
 
   return (
     <div
@@ -95,7 +93,7 @@ export const MessageList = ({
           {messages.map(message => (
             <MessageRow key={message.id} message={message} />
           ))}
-          {delayedPending && <PendingIndicator testId="agent-builder-chat-pending" />}
+          {showPending && <PendingIndicator testId="agent-builder-chat-pending" />}
         </div>
       )}
     </div>

@@ -28,40 +28,17 @@ const buildUserMessage = (text: string): MastraDBMessage =>
   }) as unknown as MastraDBMessage;
 
 describe('MessageList pending indicator', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
-
   afterEach(() => {
-    vi.useRealTimers();
     cleanup();
   });
 
-  // The pending dot is deferred 300ms (anti-flash); advance past the delay
-  // before asserting it is visible.
-  const flushPendingDelay = () => {
-    act(() => {
-      vi.advanceTimersByTime(300);
-    });
-  };
-
   it('shows the pending indicator while running with no messages', () => {
     const { queryByTestId } = render(<MessageList messages={[]} isRunning={true} />);
-    flushPendingDelay();
     expect(queryByTestId('agent-builder-chat-pending')).not.toBeNull();
-  });
-
-  it('does not render the pending indicator during the 300ms grace period', () => {
-    const { queryByTestId } = render(<MessageList messages={[]} isRunning={true} />);
-    act(() => {
-      vi.advanceTimersByTime(299);
-    });
-    expect(queryByTestId('agent-builder-chat-pending')).toBeNull();
   });
 
   it('does not show the pending indicator when not running', () => {
     const { queryByTestId } = render(<MessageList messages={[]} isRunning={false} />);
-    flushPendingDelay();
     expect(queryByTestId('agent-builder-chat-pending')).toBeNull();
   });
 
@@ -76,20 +53,17 @@ describe('MessageList pending indicator', () => {
       ]),
     ];
     const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
-    flushPendingDelay();
     expect(queryByTestId('agent-builder-chat-pending')).toBeNull();
   });
 
   it('shows the pending indicator after a user message while waiting for the assistant', () => {
     const messages: MastraDBMessage[] = [buildUserMessage('hello')];
     const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
-    flushPendingDelay();
     expect(queryByTestId('agent-builder-chat-pending')).not.toBeNull();
   });
 
   it('does not show the pending indicator while the initial skeleton is rendered', () => {
     const { queryByTestId } = render(<MessageList messages={[]} isRunning={true} isLoading={true} />);
-    flushPendingDelay();
     expect(queryByTestId('agent-builder-chat-pending')).toBeNull();
   });
 
@@ -110,7 +84,6 @@ describe('MessageList pending indicator', () => {
       ]),
     ];
     const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
-    flushPendingDelay();
     expect(queryByTestId('agent-builder-chat-pending')).not.toBeNull();
   });
 
@@ -131,7 +104,6 @@ describe('MessageList pending indicator', () => {
       ]),
     ];
     const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
-    flushPendingDelay();
     expect(queryByTestId('agent-builder-chat-pending')).not.toBeNull();
   });
 

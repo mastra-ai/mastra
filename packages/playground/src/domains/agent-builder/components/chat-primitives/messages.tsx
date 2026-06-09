@@ -349,7 +349,6 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
   );
 };
 
-
 export const MessagesSkeleton = ({ testId }: { testId?: string }) => {
   return (
     <div className="flex flex-col gap-6" data-testid={testId}>
@@ -365,7 +364,6 @@ export const MessagesSkeleton = ({ testId }: { testId?: string }) => {
     </div>
   );
 };
-
 
 const SkillToolLine = ({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) => (
   <div className="flex items-start gap-2 min-w-0 max-w-full">

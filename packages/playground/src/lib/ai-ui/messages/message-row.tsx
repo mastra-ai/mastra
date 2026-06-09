@@ -57,7 +57,10 @@ const getMessageMetadata = (message: MastraDBMessage): MessageMetadata | undefin
  */
 const getDataParts = (message: MastraDBMessage): DataMessagePart[] =>
   message.content.parts
-    .filter((part): part is Extract<MessagePart, { type: string }> => typeof part.type === 'string' && part.type.startsWith('data-'))
+    .filter(
+      (part): part is Extract<MessagePart, { type: string }> =>
+        typeof part.type === 'string' && part.type.startsWith('data-'),
+    )
     .map(part => ({
       type: part.type,
       name: 'name' in part && typeof part.name === 'string' ? part.name : undefined,
@@ -66,7 +69,10 @@ const getDataParts = (message: MastraDBMessage): DataMessagePart[] =>
 
 const getTextFromParts = (message: MastraDBMessage): string =>
   message.content.parts
-    .filter((part): part is Extract<MessagePart, { type: 'text'; text: string }> => part.type === 'text' && typeof (part as { text?: unknown }).text === 'string')
+    .filter(
+      (part): part is Extract<MessagePart, { type: 'text'; text: string }> =>
+        part.type === 'text' && typeof (part as { text?: unknown }).text === 'string',
+    )
     .map(part => part.text)
     .join('\n');
 

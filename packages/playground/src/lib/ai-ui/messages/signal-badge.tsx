@@ -126,4 +126,3 @@ export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
 
   return null;
 };
-

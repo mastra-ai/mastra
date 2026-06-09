@@ -1,6 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import type { MessageFactoryPart } from '@mastra/react';
 import { Avatar, Button, ButtonsGroup, cn, PendingIndicator, useAutoscroll } from '@mastra/playground-ui';
+import type { MessageFactoryPart } from '@mastra/react';
 import { useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, EyeIcon, Mic, PlusIcon } from 'lucide-react';
 import { startTransition, useEffect, useRef, useState } from 'react';
@@ -8,9 +8,9 @@ import { startTransition, useEffect, useRef, useState } from 'react';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
 import { ComposerAttachments } from './attachments/attachment';
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
-import { BracketOverlay } from './components/bracket-overlay';
 import { useChatMessages, useChatRunning, useChatSend } from './chat/chat-context';
 import { useReadAloud } from './chat/use-read-aloud';
+import { BracketOverlay } from './components/bracket-overlay';
 import './composer-sending.css';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
@@ -88,16 +88,12 @@ export const Thread = ({ agentName, agentId, threadId, hasModelList, hideModelSw
 
   const isEmpty = messages.length === 0;
   const lastMessage = messages[messages.length - 1];
-  const showPending =
-    isRunning && (lastMessage?.role !== 'assistant' || !hasStreamingPart(lastMessage));
+  const showPending = isRunning && (lastMessage?.role !== 'assistant' || !hasStreamingPart(lastMessage));
   const delayedPending = useDelayedFlag(showPending, SKELETON_DELAY_MS);
 
   return (
     <ComposerAttachmentsProvider>
-      <div
-        className="group/thread grid grid-rows-[1fr_auto] h-full overflow-y-auto"
-        data-testid="thread-wrapper"
-      >
+      <div className="group/thread grid grid-rows-[1fr_auto] h-full overflow-y-auto" data-testid="thread-wrapper">
         <div ref={areaRef} className="overflow-y-scroll h-full" style={{ overflowAnchor: 'none' }}>
           {isEmpty ? (
             <ThreadWelcome agentName={agentName} />
@@ -141,7 +137,6 @@ export const Thread = ({ agentName, agentId, threadId, hasModelList, hideModelSw
     </ComposerAttachmentsProvider>
   );
 };
-
 
 export interface ThreadWelcomeProps {
   agentName?: string;

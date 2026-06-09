@@ -458,7 +458,16 @@ export function ChatProvider({
     },
     // Intentionally stable: fresh values are read through sendDepsRef.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [sendMessage, agentId, baseClient, queryClient, refreshThreadList, refreshWorkingMemory, isRunningStream, setMessages],
+    [
+      sendMessage,
+      agentId,
+      baseClient,
+      queryClient,
+      refreshThreadList,
+      refreshWorkingMemory,
+      isRunningStream,
+      setMessages,
+    ],
   );
 
   const cancel = useCallback(async () => {

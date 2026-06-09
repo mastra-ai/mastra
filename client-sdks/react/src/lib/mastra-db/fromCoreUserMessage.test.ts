@@ -155,7 +155,9 @@ describe('fromCoreUserMessagesToMastraDBMessage', () => {
       { role: 'user', content: 'see attached' },
       {
         role: 'user',
-        content: [{ type: 'file', data: 'data:application/pdf;base64,AAAA', mimeType: 'application/pdf', filename: 'doc.pdf' }],
+        content: [
+          { type: 'file', data: 'data:application/pdf;base64,AAAA', mimeType: 'application/pdf', filename: 'doc.pdf' },
+        ],
       },
     ];
     const out = fromCoreUserMessagesToMastraDBMessage(messages);

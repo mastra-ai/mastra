@@ -43,15 +43,17 @@ const baseHandlers = (_captured: Captured[]) => [
   http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
   http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
   http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => workingMemoryResponse()),
-  http.post(`${BASE_URL}/api/agents/:agentId/threads/subscribe`, () =>
-    new HttpResponse(
-      new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.close();
-        },
-      }),
-      { status: 200, headers: { 'content-type': 'text/event-stream' } },
-    ),
+  http.post(
+    `${BASE_URL}/api/agents/:agentId/threads/subscribe`,
+    () =>
+      new HttpResponse(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.close();
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'text/event-stream' } },
+      ),
   ),
 ];
 
@@ -250,13 +252,7 @@ describe('ChatProvider', () => {
     await act(async () => {
       render(
         <Wrapper>
-          <ChatProvider
-            agentId="agent-1"
-            threadId="thread-1"
-            initialMessages={[]}
-            modelVersion="v2"
-            supportsMemory
-          >
+          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]} modelVersion="v2" supportsMemory>
             <Probe />
           </ChatProvider>
         </Wrapper>,

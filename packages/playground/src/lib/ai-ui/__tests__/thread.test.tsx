@@ -41,15 +41,17 @@ const baseHandlers = () => [
   http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
   http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => workingMemoryResponse()),
   http.get(`${BASE_URL}/api/agents/:agentId/voice/speakers`, () => HttpResponse.json([])),
-  http.post(`${BASE_URL}/api/agents/:agentId/threads/subscribe`, () =>
-    new HttpResponse(
-      new ReadableStream<Uint8Array>({
-        start(controller) {
-          controller.close();
-        },
-      }),
-      { status: 200, headers: { 'content-type': 'text/event-stream' } },
-    ),
+  http.post(
+    `${BASE_URL}/api/agents/:agentId/threads/subscribe`,
+    () =>
+      new HttpResponse(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.close();
+          },
+        }),
+        { status: 200, headers: { 'content-type': 'text/event-stream' } },
+      ),
   ),
 ];
 
@@ -183,8 +185,9 @@ describe('Thread', () => {
 
     server.use(
       ...baseHandlers(),
-      http.post(`${BASE_URL}/api/agents/agent-1/stream`, () =>
-        new HttpResponse(blockedStream(), { status: 200, headers: { 'content-type': 'text/event-stream' } }),
+      http.post(
+        `${BASE_URL}/api/agents/agent-1/stream`,
+        () => new HttpResponse(blockedStream(), { status: 200, headers: { 'content-type': 'text/event-stream' } }),
       ),
     );
 

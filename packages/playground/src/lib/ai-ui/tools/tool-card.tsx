@@ -293,7 +293,12 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
         toolCalled={toolCalled}
       />
       {mcpAppInfo && result !== undefined && (
-        <McpAppToolResult appInfo={mcpAppInfo} toolArgs={args} toolResult={result} onSendMessage={handleMcpAppSendMessage} />
+        <McpAppToolResult
+          appInfo={mcpAppInfo}
+          toolArgs={args}
+          toolResult={result}
+          onSendMessage={handleMcpAppSendMessage}
+        />
       )}
     </>
   );

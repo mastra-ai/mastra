@@ -28,9 +28,7 @@ describe('messageStatusRenderers', () => {
 
   it('forwards tripwire metadata to the tripwire notice', () => {
     const Tripwire = messageStatusRenderers.Tripwire!;
-    const { getByText } = render(
-      <>{Tripwire({ text: 'blocked', tripwire: { processorId: 'guard' }, message })}</>,
-    );
+    const { getByText } = render(<>{Tripwire({ text: 'blocked', tripwire: { processorId: 'guard' }, message })}</>);
     expect(getByText('blocked')).not.toBeNull();
   });
 });

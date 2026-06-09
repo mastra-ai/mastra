@@ -5,11 +5,7 @@ import { useEffect } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '@/test/msw-server';
-import {
-  ComposerAttachmentsProvider,
-  useComposerAttachments,
-  type ComposerAttachment,
-} from '../composer-attachments';
+import { ComposerAttachmentsProvider, useComposerAttachments, type ComposerAttachment } from '../composer-attachments';
 
 afterEach(() => cleanup());
 
@@ -107,8 +103,9 @@ describe('composer attachments', () => {
 
   it('adds a URL attachment whose data forwards the URL, not base64', async () => {
     server.use(
-      http.head('https://example.com/pic.png', () =>
-        new HttpResponse(null, { status: 200, headers: { 'content-type': 'image/png' } }),
+      http.head(
+        'https://example.com/pic.png',
+        () => new HttpResponse(null, { status: 200, headers: { 'content-type': 'image/png' } }),
       ),
     );
     const { ref } = renderProvider();

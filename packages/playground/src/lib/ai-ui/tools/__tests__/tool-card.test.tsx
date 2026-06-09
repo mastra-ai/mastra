@@ -51,8 +51,7 @@ const Providers = ({ children }: { children: ReactNode }) => {
   );
 };
 
-const renderToolCard = (props: ToolCardProps) =>
-  render(<ToolCard {...props} />, { wrapper: Providers });
+const renderToolCard = (props: ToolCardProps) => render(<ToolCard {...props} />, { wrapper: Providers });
 
 /** Reads the live WorkflowRunContext result so the streaming wiring is observable. */
 const WorkflowResultProbe = ({ onResult }: { onResult: (r: unknown) => void }) => {

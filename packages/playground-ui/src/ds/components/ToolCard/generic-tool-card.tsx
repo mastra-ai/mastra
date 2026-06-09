@@ -55,7 +55,10 @@ export const GenericToolCard = ({ toolName, input, output }: GenericToolCardProp
   return (
     <ToolCardShell testId="generic-tool-card">
       <Collapsible>
-        <CollapsibleTrigger className="flex w-full items-center gap-2 text-left group" data-testid="generic-tool-card-trigger">
+        <CollapsibleTrigger
+          className="flex w-full items-center gap-2 text-left group"
+          data-testid="generic-tool-card-trigger"
+        >
           <span className="inline-flex items-center gap-1.5 rounded-md border border-border1/60 bg-surface1 px-2 py-0.5">
             <Wrench className="size-3.5 shrink-0 text-neutral4" aria-hidden />
             <Txt variant="ui-sm" className="text-neutral5" as="span">
