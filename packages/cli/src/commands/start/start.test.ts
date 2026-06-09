@@ -27,6 +27,29 @@ vi.mock('../utils', () => ({
   shouldSkipDotenvLoading: vi.fn().mockReturnValue(true),
 }));
 
+// start() registers SIGINT/SIGTERM handlers on every call. Snapshot the
+// listeners present before each test and remove only the ones added during the
+// test, so we never strip handlers owned by the runner or other suites.
+type SignalListener = (...args: unknown[]) => void;
+let signalListenersBefore: Record<'SIGINT' | 'SIGTERM', SignalListener[]>;
+
+beforeEach(() => {
+  signalListenersBefore = {
+    SIGINT: process.listeners('SIGINT') as unknown as SignalListener[],
+    SIGTERM: process.listeners('SIGTERM') as unknown as SignalListener[],
+  };
+});
+
+afterEach(() => {
+  (['SIGINT', 'SIGTERM'] as const).forEach(signal => {
+    (process.listeners(signal) as unknown as SignalListener[]).forEach(listener => {
+      if (!signalListenersBefore[signal].includes(listener)) {
+        process.removeListener(signal, listener);
+      }
+    });
+  });
+});
+
 describe('start command - customArgs handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -95,11 +118,6 @@ describe('start command - customArgs handling', () => {
 describe('start command - server stderr handling', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  afterEach(() => {
-    process.removeAllListeners('SIGINT');
-    process.removeAllListeners('SIGTERM');
   });
 
   function createFakeServer() {
