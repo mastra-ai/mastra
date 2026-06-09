@@ -5,7 +5,8 @@ import { Agent } from '../agent';
 import { Mastra } from '../mastra';
 import { MockMemory } from '../memory/mock';
 import type { ChunkType } from '../stream/types';
-import { createStep, createWorkflow } from '../workflows/workflow';
+import { createWorkflow } from '../workflows/create';
+import { createStep } from '../workflows/workflow';
 import { createTool } from '.';
 
 describe('ToolStream', () => {
