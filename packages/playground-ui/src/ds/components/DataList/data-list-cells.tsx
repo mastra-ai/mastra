@@ -20,8 +20,8 @@ export function DataListCell({ children, className, height = 'default', as, ...r
   return (
     <Component
       className={cn(
-        'relative grid items-center text-ui-md whitespace-nowrap text-neutral3',
-        height === 'compact' ? 'py-2' : 'py-3',
+        'relative grid min-w-0 items-center text-ui-md whitespace-nowrap text-neutral3',
+        height === 'compact' ? 'py-1.5' : 'py-2.5',
         className,
       )}
       {...rest}

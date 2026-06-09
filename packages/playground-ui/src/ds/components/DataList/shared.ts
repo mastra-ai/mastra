@@ -3,21 +3,19 @@
  * chain — applied to `DataList.RowButton` / `DataList.RowLink` when used
  * standalone, and to `DataList.RowWrapper` when used as a wrapper around them.
  *
- * Contains the `.data-list-row` marker class (used by the sibling-aware border
- * rules), the bottom/top border treatment, and rounded corners.
+ * Contains the `.data-list-row` marker class (used by the sibling-aware
+ * separator rules), the full-width separator treatment, and rounded corners.
  */
 export const dataListRowOuterStyles = [
-  'data-list-row col-span-full border-y border-b-border1 border-t-transparent',
-  '[.data-list-row:hover+&]:border-t-transparent [.data-list-row:focus-visible+&]:border-t-transparent',
-  '[.data-list-subheader+&]:border-t-transparent',
-  '[&:has(+.data-list-subheader)]:border-b-transparent',
-  '[&:not(:has(~.data-list-row))]:border-b-transparent',
+  'data-list-row col-span-full relative mt-1 mb-[3px]',
+  'after:absolute after:inset-x-[-0.25rem] after:bottom-[-0.25rem] after:h-px after:bg-border1 after:content-[""] after:pointer-events-none',
+  '[&:has(+.data-list-subheader)]:after:bg-transparent [&:not(:has(~.data-list-row))]:after:bg-transparent',
   'transition-colors duration-200 rounded-lg',
 ] as const;
 
 export const dataListRowStyles = [
   'mx-1 grid grid-cols-subgrid gap-8 px-5 outline-none cursor-pointer',
-  'hover:bg-surface4 hover:border-transparent focus-visible:bg-surface4 focus-visible:border-transparent focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
+  'hover:bg-surface4 focus-visible:bg-surface4 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
   ...dataListRowOuterStyles,
 ] as const;
 

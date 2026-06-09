@@ -17,7 +17,7 @@ export function DataListTop({ children, className, hasLeadingCell }: DataListTop
   return (
     <div
       className={cn(
-        'mx-1 grid grid-cols-subgrid gap-8 col-span-full border-b border-border1 px-5 bg-surface2 sticky top-0 z-10',
+        'mx-1 grid grid-cols-subgrid gap-8 col-span-full relative px-5 bg-surface2 sticky top-0 z-10 after:absolute after:inset-x-[-0.25rem] after:bottom-0 after:h-px after:bg-border1 after:content-[""] after:pointer-events-none',
         hasLeadingCell && 'gap-0 pl-0!',
         className,
       )}
