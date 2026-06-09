@@ -12,12 +12,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
-import { createStep, createWorkflow } from '../workflows/evented';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSubDeliveryMode } from '../events/pubsub';
 import type { Event } from '../events/types';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
+import { createStep, createWorkflow } from '../workflows/evented';
 
 /** Push-only wrapper — mimics mc's SignalsPubSub delivery semantics. */
 class PushOnlyPubSub extends EventEmitterPubSub {
