@@ -1,10 +1,29 @@
+import { execFileSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { openai } from '@ai-sdk/openai';
 import { Agent } from '@mastra/core/agent';
 import { Memory } from '@mastra/memory';
 import { AgentBrowser } from '@mastra/agent-browser';
+import { chromium } from 'playwright';
+
+const require = createRequire(import.meta.url);
+
+function getChromiumExecutablePath() {
+  let executablePath = chromium.executablePath();
+
+  if (!existsSync(executablePath)) {
+    const playwrightCli = require.resolve('playwright/cli');
+    execFileSync(process.execPath, [playwrightCli, 'install', 'chromium'], { stdio: 'inherit' });
+    executablePath = chromium.executablePath();
+  }
+
+  return executablePath;
+}
 
 const browser = new AgentBrowser({
   headless: process.env.BROWSER_HEADLESS !== 'false',
+  executablePath: getChromiumExecutablePath(),
 });
 
 export const browserAgent = new Agent({
