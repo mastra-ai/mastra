@@ -89,4 +89,29 @@ describe('start command - customArgs handling', () => {
 
     expect(commands).toEqual(['index.mjs']);
   });
+
+  it('should stream server stderr while the process is still running', async () => {
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    let stderrHandler: ((data: Buffer) => void) | undefined;
+    const mockProcess = {
+      stderr: {
+        on: vi.fn((event: string, handler: (data: Buffer) => void) => {
+          if (event === 'data') {
+            stderrHandler = handler;
+          }
+        }),
+      },
+      on: vi.fn(),
+      kill: vi.fn(),
+    };
+    spawnMock.mockReturnValue(mockProcess);
+    const { start } = await import('./start');
+
+    await start();
+    stderrHandler?.(Buffer.from('channel failed\n'));
+
+    expect(stderrWrite).toHaveBeenCalledWith(Buffer.from('channel failed\n'));
+
+    stderrWrite.mockRestore();
+  });
 });
