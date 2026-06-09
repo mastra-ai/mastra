@@ -568,6 +568,7 @@ export class Workspace<
   lastAccessedAt: Date;
 
   private _status: WorkspaceStatus = 'pending';
+  private _destroyPromise?: Promise<void>;
   private readonly _fs?: WorkspaceFilesystem;
   private readonly _filesystemResolver?: WorkspaceFilesystemResolver;
   private readonly _sandbox?: WorkspaceSandbox;
@@ -1283,8 +1284,24 @@ export class Workspace<
    * Destroy the workspace and clean up all resources.
    */
   async destroy(): Promise<void> {
-    this._status = 'destroying';
+    if (this._status === 'destroyed') {
+      return;
+    }
+    if (this._status === 'destroying' && this._destroyPromise) {
+      return await this._destroyPromise;
+    }
 
+    this._status = 'destroying';
+    this._destroyPromise = this._performDestroy();
+
+    try {
+      await this._destroyPromise;
+    } finally {
+      this._destroyPromise = undefined;
+    }
+  }
+
+  private async _performDestroy(): Promise<void> {
     try {
       // Shutdown LSP before sandbox — LSP clients need running processes to send shutdown/exit
       if (this._lsp) {
