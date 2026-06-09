@@ -147,7 +147,7 @@ describe('createDynamicTools – extraTools', () => {
     const storage = {
       getStore: vi.fn(async (name: string) => (name === 'notifications' ? notificationStore : undefined)),
     };
-    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, undefined, storage as any);
+    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, storage as any);
     const tools = getDynamicTools({ requestContext: makeRequestContext() });
 
     expect(tools).toHaveProperty(MC_TOOLS.NOTIFICATION_INBOX);
@@ -309,7 +309,7 @@ describe('createDynamicTools – disabledTools filtering', () => {
     const unfilteredTools = createDynamicTools()({ requestContext: makeRequestContext() });
     expect(unfilteredTools).toHaveProperty('request_access');
 
-    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, ['request_access']);
+    const getDynamicTools = createDynamicTools(undefined, undefined, ['request_access']);
 
     const tools = getDynamicTools({ requestContext: makeRequestContext() });
     expect(tools).not.toHaveProperty('request_access');
@@ -325,7 +325,7 @@ describe('createDynamicTools – disabledTools filtering', () => {
       execute: async () => ({ result: 'custom' }),
     });
 
-    const getDynamicTools = createDynamicTools(undefined, { my_tool: myTool }, undefined, ['my_tool']);
+    const getDynamicTools = createDynamicTools(undefined, { my_tool: myTool }, ['my_tool']);
     const tools = getDynamicTools({ requestContext: makeRequestContext() });
     expect(tools).not.toHaveProperty('my_tool');
   });

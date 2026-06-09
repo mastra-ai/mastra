@@ -1,7 +1,14 @@
+import type { Agent, AgentExecutionOptionsBase } from '../../agent';
+import type { MessageListInput } from '../../agent/message-list';
 import type { MastraMemory } from '../../memory';
+import type { PublicSchema } from '../../schema';
+import type { HarnessPendingItemRecord, HarnessStorage, SessionRecord } from '../../storage/domains/harness';
 import type { DynamicArgument } from '../../types';
+import type { Workspace } from '../../workspace';
 import type { EventEmitter } from './events';
 import type { HarnessMode } from './mode';
+import type { PermissionPolicy, ToolCategoryResolver } from './permissions.types';
+import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
 
 export type CloneSessionOptions = {
   sessionId?: string;
@@ -17,10 +24,42 @@ export type CloneSessionOptions = {
   messageLimit?: number;
 };
 
-export interface SessionConfig {
+export type HarnessAgentResolver = (agentId: string) => Agent | Promise<Agent>;
+export type HarnessModeResolver = (modeId: string) => HarnessMode | Promise<HarnessMode>;
+
+export interface SessionSignalOptions extends Omit<
+  AgentExecutionOptionsBase<unknown>,
+  'requestContext' | 'toolsets' | 'model'
+> {
+  messages: MessageListInput;
+}
+
+export interface SessionConfig<TState = {}> {
   memory: MastraMemory | DynamicArgument<MastraMemory>;
   events: EventEmitter;
-  // storage: HarnessStorage;
+  stateSchema?: PublicSchema<TState>;
+  initialState?: Partial<TState>;
+  workspace?: DynamicArgument<Workspace | undefined>;
+  agent: Agent;
+  /** Subagent registry the session can spawn through the built-in tool. */
+  subagents?: SubagentRegistryConfig;
+  /** Resolves a model id to a `LanguageModel`. Required for subagent spawn. */
+  resolveModel?: ModelResolver;
+  /** Default permission policy applied when no category rule matches. */
+  defaultPermissionPolicy?: PermissionPolicy;
+  /** Resolves a tool name to its category for permission-gate evaluation. */
+  toolCategoryResolver?: ToolCategoryResolver;
+  storage: HarnessStorage;
+  /** Initial durable record loaded under the session lease. */
+  record?: SessionRecord;
+  /** Runtime compatibility generation snapshotted on recoverable work. */
+  runtimeCompatibilityGeneration?: string | null;
+  /** Initial ordered pending records loaded from the durable record. */
+  pending?: HarnessPendingItemRecord[];
+  /** Resolves the mode's backing agent without exposing the registry publicly. */
+  resolveAgent?: HarnessAgentResolver;
+  /** Resolves modes for session-owned transitions without exposing the registry publicly. */
+  resolveMode?: HarnessModeResolver;
   /** Identifier of the Harness instance that owns this session. */
   ownerId: string;
   /** Initial record loaded under the lease. The Session takes ownership. */
@@ -37,5 +76,3 @@ export interface SessionConfig {
   createdAt: Date;
   lastActivityAt: Date;
 }
-
-export type { SessionRecord } from '../../storage/domains/harness';

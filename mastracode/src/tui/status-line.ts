@@ -29,19 +29,16 @@ function formatGithubPrLabel(
   subscription: GithubPrSubscriptionBadge,
 ): { plain: string; styled: string } {
   const plain = `PR#${subscription.prNumber}`;
-  const threadId = state.harness.getCurrentThreadId?.();
-  const resourceId = state.harness.getResourceId?.();
-  const polling = !!threadId && !!resourceId && state.options.githubSignals?.isPollingThread({ threadId, resourceId });
   const label = plain;
   const color = subscription.lastNotificationPriority === 'high' ? mastra.orange : extendedColors.skyBlue;
-  if (polling && state.gradientAnimator?.isRunning()) {
+  if (state.githubPrPollingActive && state.githubPrGradientAnimator?.isRunning()) {
     return {
       plain: label,
       styled: applyGradientSweep(
         label,
-        state.gradientAnimator.getOffset(),
+        state.githubPrGradientAnimator.getOffset(),
         color,
-        state.gradientAnimator.getFadeProgress(),
+        state.githubPrGradientAnimator.getFadeProgress(),
       ),
     };
   }

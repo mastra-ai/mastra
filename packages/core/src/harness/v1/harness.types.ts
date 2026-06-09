@@ -1,11 +1,16 @@
 import type { Agent } from '../../agent';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
+import type { PublicSchema } from '../../schema';
+import type { MastraCompositeStore } from '../../storage';
 import type { HarnessStorage } from '../../storage/domains/harness';
 import type { DynamicArgument } from '../../types';
+import type { Workspace, WorkspaceConfig } from '../../workspace';
 import type { HarnessMode } from './mode';
+import type { PermissionPolicy, ToolCategory, ToolCategoryResolver } from './permissions.types';
+import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
 
-export interface HarnessConfigCommon<MODES extends HarnessMode[]> {
+export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
   /**
    * Operator-managed compatibility token for the configured runtime surface:
    * agents and prompts/tools, mode-to-agent bindings, model aliases, MCP
@@ -25,6 +30,66 @@ export interface HarnessConfigCommon<MODES extends HarnessMode[]> {
    * a generated UUID when omitted.
    */
   ownerId?: string;
+
+  /**
+   * Optional schema used to validate harness state updates.
+   */
+  stateSchema?: PublicSchema<TState>;
+
+  /**
+   * Initial harness state. Merged over schema defaults when provided.
+   */
+  initialState?: Partial<TState>;
+
+  /**
+   * Workspace instance, dynamic workspace factory, or workspace configuration.
+   */
+  workspace?: DynamicArgument<Workspace | undefined> | WorkspaceConfig;
+
+  /**
+   * Session lifecycle policy. `maxSubagentDepth` caps durable child session
+   * creation across all subagent entry points and defaults to `1`.
+   */
+  sessions?: {
+    maxSubagentDepth?: number;
+  };
+
+  /**
+   * Subagent type registry. When `types` is non-empty and {@link resolveModel}
+   * is also configured, the harness exposes a built-in `subagent` tool to the
+   * session agent. The tool's `agentType` enum is drawn from the keys of this
+   * map. Validated at construction.
+   */
+  subagents?: SubagentRegistryConfig;
+
+  /**
+   * Resolves a model id string to a `LanguageModel`. Required when the
+   * built-in `subagent` tool is exposed (i.e. when {@link subagents} is set)
+   * so that fresh subagent runs can instantiate their model.
+   */
+  resolveModel?: ModelResolver;
+
+  /**
+   * Default permission policy applied when a tool's resolved category has no
+   * rule and no per-tool override. Set to `'allow'` to opt out of the gate
+   * entirely; `'deny'` for a strict allow-list posture. Defaults to `'ask'`.
+   */
+  defaultPermissionPolicy?: PermissionPolicy;
+
+  /**
+   * Resolves a tool name to its category for permission-gate evaluation.
+   * Returning `null` leaves the tool uncategorised — only per-tool rules
+   * apply, and `defaultPermissionPolicy` is the floor. The function form
+   * wins when both `toolCategoryResolver` and `toolCategories` are set.
+   */
+  toolCategoryResolver?: ToolCategoryResolver;
+
+  /**
+   * Static `toolName -> ToolCategory` map. Equivalent to passing a resolver
+   * of `(name) => toolCategories[name] ?? null`. Ignored when
+   * `toolCategoryResolver` is also set.
+   */
+  toolCategories?: Record<string, ToolCategory>;
 
   /**
    * Operating modes. Each mode pins a backing agent and may override or
@@ -53,10 +118,11 @@ export interface HarnessConfigCommon<MODES extends HarnessMode[]> {
   defaultModeId?: MODES[number]['id'];
 
   /**
-   * Override for where SessionRecords are persisted. Defaults to the harness
-   * domain on the bound Mastra storage.
+   * Override for where SessionRecords are persisted. Accepts either the
+   * harness storage domain or a storage adapter, such as LibSQLStore, that
+   * exposes a harness store via `getStore('harness')`.
    */
-  storage?: HarnessStorage;
+  storage?: HarnessStorage | MastraCompositeStore;
 
   /**
    * Memory backing thread state for Sessions. Sessions use this to read/write
@@ -65,7 +131,7 @@ export interface HarnessConfigCommon<MODES extends HarnessMode[]> {
   memory: DynamicArgument<MastraMemory>;
 
   //   /**
-  //    * Maximum number of items allowed to wait in `pendingQueue` per session.
+  //    * Maximum number of pending-status items allowed per session.
   //    * `session.queue(...)` rejects with `HarnessQueueFullError` when full.
   //    * Capacity check + durable append are atomic per session. Defaults to 100.
   //    */
@@ -179,15 +245,6 @@ export interface HarnessConfigCommon<MODES extends HarnessMode[]> {
   // models?: ModelInfo[];
 
   // /**
-  //  * Static, code-registered skills. These are merged ahead of the session's
-  //  * workspace-discovered skills for `session.skills.list/get/use`.
-  //  *
-  //  * Each `name` must be unique within this array. When a workspace skill has
-  //  * the same `name`, this code-registered descriptor wins.
-  //  */
-  // skills?: HarnessSkill[];
-
-  // /**
   //  * Resolves a catalog model id to its current auth status. Called by
   //  * `harness.models.getAuthStatus(modelId)`. May return a `Promise`.
   //  *
@@ -237,7 +294,7 @@ export interface HarnessConfigCommon<MODES extends HarnessMode[]> {
   // [key: string]: unknown;
 }
 
-export type HarnessConfig<MODES extends HarnessMode[]> = HarnessConfigCommon<MODES> &
+export type HarnessConfig<MODES extends HarnessMode[], TState = {}> = HarnessConfigCommon<TState, MODES> &
   (
     | {
         /**
@@ -250,16 +307,14 @@ export type HarnessConfig<MODES extends HarnessMode[]> = HarnessConfigCommon<MOD
          * registered there under a configured harness name.
          */
         mastra: Mastra;
-        agents?: never;
+        /**
+         * Backing agent. Must reference a key in `HarnessConfig.agents`.
+         * Validated at construction — unknown id throws `HarnessConfigError`.
+         */
+        agent: string;
       }
     | {
         mastra?: never;
-        /**
-         * Agents addressable by id. `HarnessMode.agentId` references resolve
-         * against the keys of this map. Validated at construction — an
-         * unknown id in any mode throws `HarnessConfigError`. May be omitted
-         * when the harness will be registered onto an existing Mastra.
-         */
-        agents: Record<string, Agent>;
+        agent: Agent;
       }
   );

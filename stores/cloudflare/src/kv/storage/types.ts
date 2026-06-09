@@ -6,6 +6,7 @@ import type {
   TABLE_THREADS,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_TRACES,
+  TABLE_HARNESS_SESSIONS,
   TABLE_RESOURCES,
   TABLE_NAMES,
   StorageResourceType,
@@ -47,6 +48,7 @@ import type {
   StorageBlobEntry,
   StorageFavoriteType,
   StorageToolProviderConnection,
+  SessionRecord,
 } from '@mastra/core/storage';
 import type { AgentVersion } from '@mastra/core/storage/domains/agents';
 import type { MCPClientVersion } from '@mastra/core/storage/domains/mcp-clients';
@@ -146,6 +148,7 @@ export type RecordTypes = {
   [TABLE_WORKFLOW_SNAPSHOT]: WorkflowRunState;
   [TABLE_SCORERS]: ScoreRowData;
   [TABLE_TRACES]: any;
+  [TABLE_HARNESS_SESSIONS]: SessionRecord;
   [TABLE_RESOURCES]: StorageResourceType;
   [TABLE_SPANS]: SpanRecord;
   [TABLE_AGENTS]: StorageAgentType;

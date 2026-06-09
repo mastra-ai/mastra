@@ -176,6 +176,7 @@ vi.mock('./agents/subagents/plan.js', () => ({
 
 vi.mock('./agents/tools.js', () => ({
   createDynamicTools: vi.fn(),
+  createToolHooks: vi.fn(),
 }));
 
 vi.mock('./agents/workspace.js', () => ({

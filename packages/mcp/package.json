@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp",
-  "version": "1.9.1",
+  "version": "1.9.2-alpha.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -27,7 +27,7 @@
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build:lib --watch",
     "test:client": "vitest run ./src/client/client.test.ts ./src/client/configuration.test.ts",
-    "test:server": "vitest run ./src/server/server.test.ts",
+    "test:server": "vitest run ./src/server",
     "test:integration": "cd integration-tests && pnpm test:mcp",
     "test": "pnpm test:server && pnpm test:client && pnpm test:integration",
     "lint": "eslint ."

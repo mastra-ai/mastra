@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { ReadableStreamDefaultController } from 'node:stream/web';
 
-import type { AgentExecutionOptionsBase, MastraLanguageModel } from '@mastra/core/agent';
+import type { AgentExecutionOptionsBase, MastraLanguageModel, PublicStructuredOutputOptions } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent/message-list';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
@@ -15,6 +15,7 @@ import type {
   UsageStats,
 } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
+import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/core/schema';
 import type { ChunkType, FullOutput, JSONValue, LanguageModelUsage, ProviderMetadata } from '@mastra/core/stream';
 import { ChunkFrom, MastraModelOutput } from '@mastra/core/stream';
 type MastraModelOutputOptions<OUTPUT = undefined> = ConstructorParameters<
@@ -23,6 +24,7 @@ type MastraModelOutputOptions<OUTPUT = undefined> = ConstructorParameters<
 
 export type SDKAgentRunOptions<OUTPUT = unknown> = AgentExecutionOptionsBase<OUTPUT> & {
   signal?: AbortSignal;
+  structuredOutput?: OUTPUT extends {} ? PublicStructuredOutputOptions<OUTPUT> : never;
   [key: string]: unknown;
 };
 
@@ -50,6 +52,7 @@ export type SDKModelGenerateResult = {
   };
   providerMetadata?: ProviderMetadata;
   costContext?: CostContext;
+  object?: unknown;
 };
 
 export function createNoopModel({ modelId, provider }: { modelId: string; provider: string }): MastraLanguageModel {
@@ -80,6 +83,7 @@ export function createCompletedMastraStream({
   usage,
   providerMetadata,
   costContext,
+  object,
 }: {
   runId: string;
   prompt: string;
@@ -89,6 +93,7 @@ export function createCompletedMastraStream({
   usage: LanguageModelUsage;
   providerMetadata?: ProviderMetadata;
   costContext?: CostContext;
+  object?: unknown;
 }): ReadableStream<ChunkType> {
   return new ReadableStream<ChunkType>({
     start(controller) {
@@ -114,6 +119,7 @@ export function createCompletedMastraStream({
         usage,
         providerMetadata,
         costContext,
+        object,
       });
       controller.close();
     },
@@ -180,6 +186,7 @@ export function toFullOutput<OUTPUT>({
     usage: toLanguageModelUsage(result.usage),
     providerMetadata: result.providerMetadata,
     costContext: result.costContext,
+    object: result.object,
   });
 
   return createMastraOutput<OUTPUT>({
@@ -688,6 +695,7 @@ export function enqueueFinishChunks(
     usage,
     providerMetadata,
     costContext,
+    object,
   }: {
     runId: string;
     prompt: string;
@@ -698,6 +706,7 @@ export function enqueueFinishChunks(
     usage: LanguageModelUsage;
     providerMetadata?: ProviderMetadata;
     costContext?: CostContext;
+    object?: unknown;
   },
 ): void {
   const timestamp = new Date();
@@ -723,6 +732,14 @@ export function enqueueFinishChunks(
       providerMetadata,
     },
   });
+  if (object !== undefined) {
+    controller.enqueue({
+      type: 'object-result',
+      runId,
+      from: ChunkFrom.AGENT,
+      object,
+    } as unknown as ChunkType);
+  }
   controller.enqueue({
     type: 'step-finish',
     runId,
@@ -842,6 +859,87 @@ export function promptToText(prompt: unknown): string {
   }
 
   return '';
+}
+
+export function withStructuredOutputPrompt<OUTPUT>(
+  prompt: string,
+  structuredOutput?: PublicStructuredOutputOptions<OUTPUT>,
+): string {
+  if (!structuredOutput?.schema) {
+    return prompt;
+  }
+
+  const schema = standardSchemaToJSONSchema(toStandardSchema(structuredOutput.schema));
+  const instructions =
+    structuredOutput.instructions ??
+    'Return only valid JSON that matches the JSON Schema. Do not include markdown fences or explanatory text.';
+
+  return `${prompt}\n\n${instructions}\n\nJSON Schema:\n${JSON.stringify(schema)}`;
+}
+
+export function getStructuredOutputSchema<OUTPUT>(
+  structuredOutput?: PublicStructuredOutputOptions<OUTPUT>,
+): Record<string, unknown> | undefined {
+  if (!structuredOutput?.schema) {
+    return undefined;
+  }
+
+  return standardSchemaToJSONSchema(toStandardSchema(structuredOutput.schema)) as Record<string, unknown>;
+}
+
+export async function getStructuredOutput<OUTPUT>(
+  text: string,
+  structuredOutput?: PublicStructuredOutputOptions<OUTPUT>,
+): Promise<OUTPUT | undefined> {
+  return getStructuredOutputFromValue(text, structuredOutput);
+}
+
+export async function getStructuredOutputFromValue<OUTPUT>(
+  value: unknown,
+  structuredOutput?: PublicStructuredOutputOptions<OUTPUT>,
+): Promise<OUTPUT | undefined> {
+  if (!structuredOutput?.schema) {
+    return undefined;
+  }
+
+  let parsed: unknown;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch (error) {
+      return handleStructuredOutputError(
+        new Error('Structured output must be valid JSON.', { cause: error }),
+        structuredOutput,
+      );
+    }
+  } else {
+    parsed = value;
+  }
+
+  const schema = toStandardSchema(structuredOutput.schema);
+  const result = await schema['~standard'].validate(parsed);
+  if (!result.issues) {
+    return result.value as OUTPUT;
+  }
+
+  const message = result.issues.map(issue => `- ${issue.path?.join('.') || 'root'}: ${issue.message}`).join('\n');
+  return handleStructuredOutputError(new Error(`Structured output validation failed:\n${message}`), structuredOutput);
+}
+
+function handleStructuredOutputError<OUTPUT>(
+  error: Error,
+  structuredOutput: PublicStructuredOutputOptions<OUTPUT>,
+): OUTPUT | undefined {
+  if (structuredOutput.errorStrategy === 'fallback') {
+    return structuredOutput.fallbackValue;
+  }
+
+  if (structuredOutput.errorStrategy === 'warn') {
+    structuredOutput.logger?.warn(error.message);
+    return undefined;
+  }
+
+  throw error;
 }
 
 export function sumDefined(...values: Array<number | undefined>): number | undefined {
