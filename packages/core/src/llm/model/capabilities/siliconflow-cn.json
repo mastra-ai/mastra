@@ -1,0 +1,23 @@
+{
+  "attachment": [
+    "PaddlePaddle/PaddleOCR-VL",
+    "PaddlePaddle/PaddleOCR-VL-1.5",
+    "Qwen/Qwen2.5-VL-32B-Instruct",
+    "Qwen/Qwen2.5-VL-72B-Instruct",
+    "Qwen/Qwen3-Omni-30B-A3B-Captioner",
+    "Qwen/Qwen3-Omni-30B-A3B-Instruct",
+    "Qwen/Qwen3-Omni-30B-A3B-Thinking",
+    "Qwen/Qwen3-VL-235B-A22B-Instruct",
+    "Qwen/Qwen3-VL-235B-A22B-Thinking",
+    "Qwen/Qwen3-VL-30B-A3B-Instruct",
+    "Qwen/Qwen3-VL-30B-A3B-Thinking",
+    "Qwen/Qwen3-VL-32B-Instruct",
+    "Qwen/Qwen3-VL-32B-Thinking",
+    "Qwen/Qwen3-VL-8B-Instruct",
+    "Qwen/Qwen3-VL-8B-Thinking",
+    "deepseek-ai/DeepSeek-OCR",
+    "deepseek-ai/deepseek-vl2",
+    "zai-org/GLM-4.5V",
+    "zai-org/GLM-4.6V"
+  ]
+}

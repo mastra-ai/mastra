@@ -2,7 +2,9 @@ packages:
   - mastracode
   - docs
   - packages/_vendored/*
+  - packages/_internals/*
   - packages/*
+  - agent-sdks/*
   - deployers/*
   - stores/*
   - browser/*
@@ -10,6 +12,7 @@ packages:
   - examples/voice/aws-nova-sonic-test
   - workflows/*
   - workspaces/*
+  - signals/*
   - server-adapters/*
   - pubsub/*
   - client-sdks/*
@@ -24,6 +27,9 @@ packages:
   - e2e-tests/client-js/zod-v4
   - e2e-tests/workspace-compat
 
+# Share pnpm's virtual store across git worktrees: https://pnpm.io/git-worktrees
+enableGlobalVirtualStore: true
+
 catalog:
   '@microsoft/api-extractor': ^7.57.7
   '@vitest/coverage-v8': 4.1.5
@@ -33,10 +39,25 @@ catalog:
   react-dom: ^19.2.5
   typescript: ^6.0.3
   vitest: 4.1.5
-  zod: ^4.3.6
+  zod: ^4.4.3
+  tsx: ^4.22.4
 
 patchedDependencies:
-  '@changesets/get-dependents-graph': patches/@changesets__get-dependents-graph.patch
+  '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
+  tsup@8.5.1: patches/tsup@8.5.1.patch
+
+packageExtensions:
+  '@ai-sdk/provider-utils@3.0.25':
+    dependencies:
+      msw: ^2.12.11
+      vitest: 4.1.5
+  '@uiw/codemirror-theme-dracula@*':
+    dependencies:
+      '@babel/runtime': ^7.29.2
+      '@lezer/highlight': ^1.2.3
+  '@arcadeai/arcadejs@^2.3.0':
+    dependencies:
+      zod: ^3.0.0
 
 blockExoticSubdeps: true
 trustPolicy: no-downgrade
@@ -50,10 +71,72 @@ minimumReleaseAgeExclude:
   - '@internal/*'
   - 'mastra'
   - 'create-mastra'
+  - 'mastracode'
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
   # but it is the official fix published on the @clerk/shared latest-v5 tag.
   - '@clerk/shared@3.47.4'
+  # Renovate cannot refresh lockfiles while pnpm rejects these official package
+  # versions as trust downgrades.
+  - 'effect@4.0.0-beta.59'
+  - 'tinyexec@1.2.2'
   # 0.7.4 is published with provenance attestation rather than trusted publisher.
   - 'prettier-plugin-tailwindcss@0.7.4'
+overrides:
+  typescript: ^6.0.3
+  '@types/node': 22.19.15
+  cookie: '>=1.1.1'
+  tmp: '>=0.2.5'
+  jsondiffpatch: '>=0.7.3'
+  ssri: '>=6.0.2'
+  jws: ^4.0.1
+  client-js-e2e-tests-zod-v3>zod: ^3.24.0
+  client-js-e2e-tests-zod-v4>zod: ^4.3.6
+  better-auth: ^1.4.18
+  js-yaml: ^3.14.2
+  glob@<=10.5.0: 10.5.0
+  body-parser@<=2.2.1: 2.2.2
+  inngest: ^4.2.2
+  fast-xml-parser@<5.5.7: ^5.7.1
+  langsmith@<0.5.19: ^0.5.19
+  lodash@<=4.17.23: ^4.18.0
+  prismjs@<1.30.0: ^1.30.0
+  serialize-javascript@<7.0.5: ^7.0.5
+  '@tootallnate/once@<3.0.1': ^3.0.1
+  '@codemirror/lang-jinja': ^6.0.1
+allowBuilds:
+  '@clerk/shared': false
+  '@datadog/native-appsec': false
+  '@datadog/native-iast-taint-tracking': false
+  '@datadog/native-metrics': false
+  '@datadog/pprof': false
+  '@fingerprintjs/fingerprintjs-pro-react': false
+  '@firebase/util': false
+  '@google/genai': false
+  '@nestjs/core': false
+  '@parcel/watcher': false
+  '@scarf/scarf': false
+  '@swc/core': false
+  agent-browser: false
+  bufferutil: false
+  cbor-extract: false
+  core-js: false
+  core-js-pure: false
+  couchbase: false
+  cpu-features: false
+  dd-trace: false
+  edgedriver: false
+  esbuild: false
+  geckodriver: false
+  inngest-cli: false
+  koffi: false
+  msgpackr-extract: false
+  msw: false
+  onnxruntime-node: false
+  protobufjs: false
+  sharp: false
+  sqlite3: false
+  ssh2: false
+  unrs-resolver: false
+  workerd: false

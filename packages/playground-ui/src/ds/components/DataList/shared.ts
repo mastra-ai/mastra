@@ -1,7 +1,7 @@
 /**
  * Row-level styling shared by anything that participates in the row sibling
  * chain — applied to `DataList.RowButton` / `DataList.RowLink` when used
- * standalone, and to `DataList.Row` when used as a wrapper around them.
+ * standalone, and to `DataList.RowWrapper` when used as a wrapper around them.
  *
  * Contains the `.data-list-row` marker class (used by the sibling-aware border
  * rules), the bottom/top border treatment, and rounded corners.
@@ -28,13 +28,13 @@ export const dataListRowStyles = [
 export type DataListRowSharedProps = {
   /**
    * Drop the row's default left margin. Use when the row is wrapped in a
-   * `DataList.Row` that owns the leading inset (e.g. for selection rows where
+   * `DataList.RowWrapper` that owns the leading inset (e.g. for selection rows where
    * the checkbox cell sits on the left).
    */
   flushLeft?: boolean;
   /**
    * Drop the row's default right margin. Use when the row is wrapped in a
-   * `DataList.Row` that owns the trailing inset (e.g. for rows with a
+   * `DataList.RowWrapper` that owns the trailing inset (e.g. for rows with a
    * trailing actions cell on the right).
    */
   flushRight?: boolean;

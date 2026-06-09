@@ -525,6 +525,26 @@ https://mastra.ai/en/docs/memory/overview`,
   }
 
   /**
+   * Helper method to update an existing thread
+   * @param id - The thread ID to update
+   * @param title - The new title for the thread
+   * @param metadata - The new metadata for the thread
+   * @param memoryConfig - Optional memory config
+   * @returns Promise resolving to the updated thread
+   */
+  abstract updateThread({
+    id,
+    title,
+    metadata,
+    memoryConfig,
+  }: {
+    id: string;
+    title: string;
+    metadata: Record<string, unknown>;
+    memoryConfig?: MemoryConfigInternal;
+  }): Promise<StorageThreadType>;
+
+  /**
    * Helper method to delete a thread
    * @param threadId - the id of the thread to delete
    */
@@ -690,7 +710,14 @@ https://mastra.ai/en/docs/memory/overview`,
     const isWorkingMemoryEnabled =
       typeof effectiveConfig.workingMemory === 'object' && effectiveConfig.workingMemory.enabled !== false;
 
-    if (isWorkingMemoryEnabled) {
+    // When useStateSignals is opted in, the WorkingMemoryStateProcessor delivers
+    // working memory via the state-signal lane. Skip the legacy system-message
+    // injection so the model doesn't receive the WORKING_MEMORY_SYSTEM_INSTRUCTION
+    // block alongside the signal.
+    const useStateSignals =
+      typeof effectiveConfig.workingMemory === 'object' && effectiveConfig.workingMemory.useStateSignals === true;
+
+    if (isWorkingMemoryEnabled && !useStateSignals) {
       if (!memoryStore)
         throw new MastraError({
           category: 'USER',
@@ -1035,6 +1062,7 @@ https://mastra.ai/en/docs/memory/overview`,
         bufferActivation: obs.bufferActivation,
         blockAfter: obs.blockAfter,
         previousObserverTokens: obs.previousObserverTokens,
+        observeAttachments: obs.observeAttachments,
       };
       const obsModelId = extractModelIdString(obs.model);
       if (obsModelId) {

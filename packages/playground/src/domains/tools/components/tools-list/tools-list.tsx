@@ -1,5 +1,10 @@
 import type { GetAgentResponse, GetToolResponse } from '@mastra/client-js';
-import { EntityList, EntityListSkeleton, AgentIcon, truncateString } from '@mastra/playground-ui';
+import {
+  DataList as EntityList,
+  DataListSkeleton as EntityListSkeleton,
+  AgentIcon,
+  truncateString,
+} from '@mastra/playground-ui';
 import { useMemo } from 'react';
 import { prepareToolsTable } from '@/domains/tools/utils/prepareToolsTable';
 import { useLinkComponent } from '@/lib/framework';

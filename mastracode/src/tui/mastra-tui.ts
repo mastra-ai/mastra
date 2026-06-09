@@ -5,6 +5,7 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { Component } from '@mariozechner/pi-tui';
+import type { AgentSignalAttributes } from '@mastra/core/agent';
 import type { HarnessEvent, HarnessMessage } from '@mastra/core/harness';
 import type { Workspace } from '@mastra/core/workspace';
 import { getOAuthProviders } from '../auth/storage.js';
@@ -35,10 +36,12 @@ import { dispatchSlashCommand } from './command-dispatch.js';
 import { startGoalWithDefaults } from './commands/goal.js';
 
 import type { SlashCommandContext } from './commands/types.js';
+import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
 import { promptAuthMode } from './components/login-mode-selector.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
+import { GradientAnimator } from './components/obi-loader.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent } from './event-dispatch.js';
@@ -70,7 +73,7 @@ import {
 } from './setup.js';
 import { handleShellPassthrough } from './shell.js';
 import type { MastraTUIOptions, TUIState } from './state.js';
-import { createTUIState } from './state.js';
+import { createTUIState, getGithubPrSubscriptionsFromMetadata } from './state.js';
 import { updateStatusLine } from './status-line.js';
 
 // =============================================================================
@@ -82,6 +85,22 @@ export type { MastraTUIOptions } from './state.js';
 // =============================================================================
 // MastraTUI Class
 // =============================================================================
+
+/**
+ * Delivery option attributes applied to user-message signals. When the signal is delivered to an
+ * active run it is tagged as while-active; when it starts a new run it is a message.
+ * The LLM sees these as XML attributes on the `<user-message>` element.
+ */
+type GithubPollingChangedHandler = (event: { threadId: string; resourceId: string; running: boolean }) => void;
+type GithubSignalsWithPollingEvents = { onPollingChanged?: (handler: GithubPollingChangedHandler) => void };
+
+const USER_SIGNAL_DELIVERY_OPTIONS: {
+  ifActive: { attributes: AgentSignalAttributes };
+  ifIdle: { attributes: AgentSignalAttributes };
+} = {
+  ifActive: { attributes: { delivery: 'while-active' } },
+  ifIdle: { attributes: { delivery: 'message' } },
+};
 
 /** How often to recheck for updates during a long-running session (ms). */
 const UPDATE_RECHECK_INTERVAL_MS = 45 * 60 * 1_000; // 45 minutes
@@ -97,7 +116,9 @@ export async function syncInitialThreadState(state: TUIState): Promise<void> {
   if (initThread?.title) {
     state.currentThreadTitle = initThread.title;
   }
-  state.goalManager.loadFromThreadMetadata(initThread?.metadata as Record<string, unknown> | undefined);
+  const metadata = initThread?.metadata as Record<string, unknown> | undefined;
+  state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
+  state.goalManager.loadFromThreadMetadata(metadata);
 }
 
 function shouldUseCaffeinate(): boolean {
@@ -129,6 +150,38 @@ export class MastraTUI {
 
   constructor(options: MastraTUIOptions) {
     this.state = createTUIState(options);
+
+    options.githubSignals?.onSubscriptionsChanged(event => {
+      const currentThreadId = this.state.harness.getCurrentThreadId?.();
+      const currentResourceId = this.state.harness.getResourceId?.();
+      if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
+      this.state.activeGithubPrSubscriptions = event.subscriptions.map(subscription => ({
+        owner: subscription.owner,
+        repo: subscription.repo,
+        prNumber: subscription.number,
+        lastSyncStatus: subscription.lastSyncStatus,
+        lastNotificationKind: subscription.lastNotificationKind,
+        lastNotificationPriority: subscription.lastNotificationPriority,
+      }));
+      updateStatusLine(this.state);
+      this.state.ui.requestRender();
+    });
+
+    (options.githubSignals as GithubSignalsWithPollingEvents | undefined)?.onPollingChanged?.(event => {
+      const currentThreadId = this.state.harness.getCurrentThreadId?.();
+      const currentResourceId = this.state.harness.getResourceId?.();
+      if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
+      if (!this.state.githubPrGradientAnimator) {
+        this.state.githubPrGradientAnimator = new GradientAnimator(() => {
+          updateStatusLine(this.state);
+        });
+      }
+      this.state.githubPrPollingActive = event.running;
+      if (event.running) this.state.githubPrGradientAnimator.start();
+      else this.state.githubPrGradientAnimator.stop();
+      updateStatusLine(this.state);
+      this.state.ui.requestRender();
+    });
 
     // Load user preferences
     const savedSettings = loadSettings();
@@ -319,7 +372,10 @@ export class MastraTUI {
 
   private renderOptimisticUserMessage(content: string, images?: Array<{ data: string; mimeType: string }>): string {
     const messageId = `user-${Date.now()}`;
-    addUserMessage(this.state, this.createUserSignalMessage(content, images, messageId));
+    const isInterjection = this.state.harness.isCurrentThreadStreamActive();
+    addUserMessage(this.state, this.createUserSignalMessage(content, images, messageId), {
+      ...(isInterjection ? { label: 'steer' } : {}),
+    });
     this.state.ui.requestRender();
     return messageId;
   }
@@ -363,7 +419,10 @@ export class MastraTUI {
         pendingNewThread,
       });
 
-      const signal = this.state.harness.sendSignal({ content: this.createUserSignalContent(content, images) });
+      const signal = this.state.harness.sendSignal({
+        content: this.createUserSignalContent(content, images),
+        ...USER_SIGNAL_DELIVERY_OPTIONS,
+      });
       this.remapOptimisticUserMessage(optimisticMessageId, signal.id);
       signal.accepted.catch((error: unknown) => {
         this.removeOptimisticUserMessage(signal.id);
@@ -388,10 +447,13 @@ export class MastraTUI {
 
     const send = () => {
       this.clearIdleCounter();
-      const signal = this.state.harness.sendSignal({ content: this.createUserSignalContent(content, images) });
+      const signal = this.state.harness.sendSignal({
+        content: this.createUserSignalContent(content, images),
+        ...USER_SIGNAL_DELIVERY_OPTIONS,
+      });
 
       if (hasActiveRun) {
-        addPendingUserMessage(this.state, signal.id, content, images);
+        addPendingUserMessage(this.state, signal.id, content, images, { isInterjection: true });
       } else {
         addUserMessage(this.state, this.createUserSignalMessage(content, images, signal.id));
       }
@@ -419,10 +481,12 @@ export class MastraTUI {
 
   private queueFollowUpMessage(text: string): void {
     if (text.startsWith('/')) {
+      const messageId = `queued-slash-${Date.now()}-${this.state.pendingSlashCommands.length}`;
       this.state.pendingSlashCommands.push(text);
+      this.state.pendingSlashCommandMessageIds.push(messageId);
       this.state.pendingQueuedActions.push('slash');
+      addPendingUserMessage(this.state, messageId, text);
       updateStatusLine(this.state);
-      this.state.ui.requestRender();
       return;
     }
 
@@ -472,6 +536,7 @@ export class MastraTUI {
 
     // Initialize harness (but don't select thread yet)
     await this.state.harness.init();
+    await this.state.harness.getMastra()?.startWorkers();
 
     // Check for existing threads and prompt for resume
     await promptForThreadSelection(this.state);
@@ -923,7 +988,13 @@ export class MastraTUI {
 
         if (this.state.harness.isRunning()) {
           if (text.startsWith('/')) {
-            this.queueFollowUpMessage(text);
+            // Run slash commands immediately — they are either settings
+            // commands (no agent interaction) or agent-facing commands the
+            // user explicitly chose to run mid-stream.  Use Ctrl+F to
+            // queue instead.
+            this.handleSlashCommand(text).catch(error => {
+              showError(this.state, error instanceof Error ? error.message : 'Slash command failed');
+            });
             return;
           }
 
@@ -1401,7 +1472,7 @@ export class MastraTUI {
   }
 
   /**
-   * Show a Y/N prompt offering to auto-update.
+   * Show a Y/N prompt offering to auto-update (inline in the chat flow).
    */
   private async showUpdatePrompt(
     currentVersion: string,
@@ -1415,12 +1486,31 @@ export class MastraTUI {
     }
     question += `\n\nWould you like to update now?`;
 
-    const answer = await askModalQuestion(this.state.ui, {
-      question,
-      options: [
-        { label: 'Yes', description: 'Update and restart' },
-        { label: 'No', description: 'Skip this version' },
-      ],
+    const answer = await new Promise<string | null>(resolve => {
+      const component = new AskQuestionInlineComponent(
+        {
+          question,
+          options: [
+            { label: 'Yes', description: 'Update and restart' },
+            { label: 'No', description: 'Skip this version' },
+          ],
+          allowCustomResponse: false,
+          onSubmit: answer => {
+            this.state.activeInlineQuestion = undefined;
+            resolve(answer);
+          },
+          onCancel: () => {
+            this.state.activeInlineQuestion = undefined;
+            resolve(null);
+          },
+        },
+        this.state.ui,
+      );
+
+      this.state.chatContainer.addChild(component);
+      this.state.activeInlineQuestion = component;
+      component.focused = true;
+      this.state.ui.requestRender();
     });
 
     if (answer === 'Yes') {

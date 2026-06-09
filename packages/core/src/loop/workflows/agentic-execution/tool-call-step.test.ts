@@ -238,7 +238,13 @@ describe('createToolCallStep tool execution error handling', () => {
 
     expect(result).toHaveProperty('error');
     expect(result).not.toHaveProperty('result');
-    expect(result.error).toBeInstanceOf(Error);
+    // The step output crosses the evented engine's pubsub boundary where Error instances
+    // would serialize to `{}`, so the step returns a plain {name,message,stack} shape that
+    // the consumer (`llm-mapping-step`) reifies back into an Error via `deserializeToolError`.
+    expect(result.error).toMatchObject({
+      name: 'Error',
+      message: expect.stringContaining('External API error: 503 Service Unavailable'),
+    });
   });
 });
 
@@ -491,6 +497,132 @@ describe('createToolCallStep needsApprovalFn enriched context', () => {
       result: toolResult,
       ...makeInputData(),
     });
+  });
+});
+
+describe('createToolCallStep global requireToolApproval function', () => {
+  let controller: { enqueue: Mock };
+  let suspend: Mock;
+  let streamState: { serialize: Mock };
+  let messageList: MessageList;
+  let neverResolve: Promise<never>;
+
+  const makeInputData = () => ({
+    toolCallId: 'global-call-id',
+    toolName: 'transfer-funds',
+    args: { amount: 500 },
+  });
+
+  const makeExecuteParams = (requireToolApproval: unknown, overrides: any = {}) => {
+    const requestContext = new RequestContext();
+    if (requireToolApproval !== undefined) {
+      requestContext.set('__mastra_requireToolApproval', requireToolApproval as any);
+    }
+    return {
+      ...makeBaseExecuteParams(suspend, { requestContext }),
+      writer: new ToolStream({
+        prefix: 'tool',
+        callId: 'global-call-id',
+        name: 'transfer-funds',
+        runId: 'global-run-id',
+      }),
+      inputData: makeInputData(),
+      ...overrides,
+    };
+  };
+
+  beforeEach(() => {
+    controller = { enqueue: vi.fn() };
+    neverResolve = new Promise(() => {});
+    suspend = vi.fn().mockReturnValue(neverResolve);
+    streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    messageList = createMessageList();
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('should require approval when the global function returns true', async () => {
+    const requireToolApproval = vi.fn().mockReturnValue(true);
+    const tools = { 'transfer-funds': { execute: vi.fn() } };
+
+    const toolCallStep = createToolCallStep({ tools, messageList, controller, runId: 'global-run-id', streamState });
+    const executePromise = toolCallStep.execute(makeExecuteParams(requireToolApproval));
+    await new Promise(resolve => setImmediate(resolve));
+
+    // The policy is evaluated with the tool name and args.
+    expect(requireToolApproval).toHaveBeenCalledWith(
+      expect.objectContaining({ toolName: 'transfer-funds', args: { amount: 500 } }),
+    );
+    expect(suspend).toHaveBeenCalled();
+    expect(tools['transfer-funds'].execute).not.toHaveBeenCalled();
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('should skip approval when the global function returns false', async () => {
+    const requireToolApproval = vi.fn().mockReturnValue(false);
+    const toolResult = { transferred: true };
+    const tools = { 'transfer-funds': { execute: vi.fn().mockResolvedValue(toolResult) } };
+
+    const toolCallStep = createToolCallStep({ tools, messageList, controller, runId: 'global-run-id', streamState });
+    const result = await toolCallStep.execute(makeExecuteParams(requireToolApproval));
+
+    expect(requireToolApproval).toHaveBeenCalled();
+    expect(suspend).not.toHaveBeenCalled();
+    expect(result).toEqual({ result: toolResult, ...makeInputData() });
+  });
+
+  it('should default to requiring approval when the global function throws', async () => {
+    const requireToolApproval = vi.fn().mockImplementation(() => {
+      throw new Error('policy error');
+    });
+    const tools = { 'transfer-funds': { execute: vi.fn() } };
+
+    const toolCallStep = createToolCallStep({ tools, messageList, controller, runId: 'global-run-id', streamState });
+    const executePromise = toolCallStep.execute(makeExecuteParams(requireToolApproval));
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(suspend).toHaveBeenCalled();
+    expect(tools['transfer-funds'].execute).not.toHaveBeenCalled();
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
+  });
+
+  it('lets a per-tool needsApprovalFn override a global function that requires approval', async () => {
+    // Global policy requires approval, but the tool's needsApprovalFn returns false. The
+    // per-tool function is authoritative (long-standing precedence), so the call runs without
+    // approval — the global must not be able to force approval on a tool that opts out.
+    const requireToolApproval = vi.fn().mockReturnValue(true);
+    const needsApprovalFn = vi.fn().mockReturnValue(false);
+    const toolResult = { transferred: true };
+    const tools = { 'transfer-funds': { execute: vi.fn().mockResolvedValue(toolResult), needsApprovalFn } };
+
+    const toolCallStep = createToolCallStep({ tools, messageList, controller, runId: 'global-run-id', streamState });
+    const result = await toolCallStep.execute(makeExecuteParams(requireToolApproval));
+
+    expect(needsApprovalFn).toHaveBeenCalled();
+    expect(suspend).not.toHaveBeenCalled();
+    expect(result).toEqual({ result: toolResult, ...makeInputData() });
+  });
+
+  it('lets a per-tool needsApprovalFn require approval the global function allowed', async () => {
+    // Global policy allows the call, but the tool's needsApprovalFn requires approval.
+    const requireToolApproval = vi.fn().mockReturnValue(false);
+    const needsApprovalFn = vi.fn().mockReturnValue(true);
+    const tools = { 'transfer-funds': { execute: vi.fn(), needsApprovalFn } };
+
+    const toolCallStep = createToolCallStep({ tools, messageList, controller, runId: 'global-run-id', streamState });
+    const executePromise = toolCallStep.execute(makeExecuteParams(requireToolApproval));
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(needsApprovalFn).toHaveBeenCalled();
+    expect(suspend).toHaveBeenCalled();
+    expect(tools['transfer-funds'].execute).not.toHaveBeenCalled();
+
+    await expect(Promise.race([executePromise, Promise.resolve('completed')])).resolves.toBe('completed');
   });
 });
 

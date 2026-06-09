@@ -71,8 +71,9 @@ export const isSupportedEmbeddingModel = <T>(
 
 export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
   id: string;
+  disableInit: boolean = false;
 
-  constructor({ id }: { id: string }) {
+  constructor({ id, disableInit }: { id: string; disableInit?: boolean }) {
     if (!id || typeof id !== 'string' || id.trim() === '') {
       throw new MastraError({
         id: 'VECTOR_INVALID_ID',
@@ -83,6 +84,7 @@ export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
     }
     super({ name: 'MastraVector', component: 'VECTOR' });
     this.id = id;
+    this.disableInit = disableInit ?? false;
   }
 
   get indexSeparator(): string {

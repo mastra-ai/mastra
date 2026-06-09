@@ -24,13 +24,21 @@ vi.mock('../../theme.js', () => ({
 import { OMMarkerComponent } from '../om-marker.js';
 
 describe('OMMarkerComponent activation rendering', () => {
-  it('renders TTL expiry as a separate muted line', () => {
-    const ttlMarker = new OMMarkerComponent({
-      type: 'om_activation_ttl',
+  it('renders idle timeout suffix inline on activation line', () => {
+    const activationMarker = new OMMarkerComponent({
+      type: 'om_activation',
+      operationType: 'observation',
+      tokensActivated: 7300,
+      observationTokens: 400,
       activateAfterIdle: 300_000,
-      ttlExpiredMs: 66_000_000,
     });
 
+    const activationText = stripAnsi(activationMarker.render(120).join('\n'));
+
+    expect(activationText).toContain('✓ Activated observations: -7.3k msg tokens, +0.4k obs tokens (5m idle timeout)');
+  });
+
+  it('renders activation without idle timeout suffix when not TTL-triggered', () => {
     const activationMarker = new OMMarkerComponent({
       type: 'om_activation',
       operationType: 'observation',
@@ -38,12 +46,10 @@ describe('OMMarkerComponent activation rendering', () => {
       observationTokens: 400,
     });
 
-    const ttlText = stripAnsi(ttlMarker.render(120).join('\n'));
     const activationText = stripAnsi(activationMarker.render(120).join('\n'));
 
-    expect(ttlText).toContain('Idle timeout (5m) exceeded by 18h20m, activating observations');
     expect(activationText).toContain('✓ Activated observations: -7.3k msg tokens, +0.4k obs tokens');
-    expect(activationText).not.toContain('TTL');
+    expect(activationText).not.toContain('idle timeout');
   });
 
   it('renders combined observation activation counts', () => {

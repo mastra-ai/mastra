@@ -13,12 +13,15 @@
  */
 export const RESOURCES = [
   'a2a',
+  'agent-builder',
   'agents',
+  'auth',
   'background-tasks',
   'channels',
   'datasets',
   'embedders',
   'experiments',
+  'infrastructure',
   'logs',
   'mcp',
   'memory',
@@ -86,8 +89,12 @@ export const PERMISSION_PATTERNS = {
   '*:write': '*:write',
   /** Full access to agent-to-agent communication */
   'a2a:*': 'a2a:*',
+  /** Full access to agent builder */
+  'agent-builder:*': 'agent-builder:*',
   /** Full access to agents */
   'agents:*': 'agents:*',
+  /** Full access to auth */
+  'auth:*': 'auth:*',
   /** Full access to background tasks */
   'background-tasks:*': 'background-tasks:*',
   /** Full access to channels */
@@ -98,6 +105,8 @@ export const PERMISSION_PATTERNS = {
   'embedders:*': 'embedders:*',
   /** Full access to experiments */
   'experiments:*': 'experiments:*',
+  /** Full access to infrastructure */
+  'infrastructure:*': 'infrastructure:*',
   /** Full access to logs */
   'logs:*': 'logs:*',
   /** Full access to MCP servers */
@@ -144,6 +153,12 @@ export const PERMISSION_PATTERNS = {
   'a2a:read': 'a2a:read',
   /** Create and modify agent-to-agent communication */
   'a2a:write': 'a2a:write',
+  /** Execute agent builder */
+  'agent-builder:execute': 'agent-builder:execute',
+  /** View agent builder */
+  'agent-builder:read': 'agent-builder:read',
+  /** Create and modify agent builder */
+  'agent-builder:write': 'agent-builder:write',
   /** Create agents */
   'agents:create': 'agents:create',
   /** Delete agents */
@@ -154,6 +169,8 @@ export const PERMISSION_PATTERNS = {
   'agents:read': 'agents:read',
   /** Create and modify agents */
   'agents:write': 'agents:write',
+  /** View auth */
+  'auth:read': 'auth:read',
   /** View background tasks */
   'background-tasks:read': 'background-tasks:read',
   /** View channels */
@@ -172,6 +189,8 @@ export const PERMISSION_PATTERNS = {
   'embedders:read': 'embedders:read',
   /** View experiments */
   'experiments:read': 'experiments:read',
+  /** View infrastructure */
+  'infrastructure:read': 'infrastructure:read',
   /** View logs */
   'logs:read': 'logs:read',
   /** Execute MCP servers */
@@ -256,8 +275,12 @@ export const PERMISSION_PATTERNS = {
   'stored-workspaces:write': 'stored-workspaces:write',
   /** View system info */
   'system:read': 'system:read',
+  /** Delete tool-providers */
+  'tool-providers:delete': 'tool-providers:delete',
   /** View tool-providers */
   'tool-providers:read': 'tool-providers:read',
+  /** Create and modify tool-providers */
+  'tool-providers:write': 'tool-providers:write',
   /** Execute tools */
   'tools:execute': 'tools:execute',
   /** View tools */
@@ -316,11 +339,15 @@ export type PermissionPattern = keyof typeof PERMISSION_PATTERNS;
 export const PERMISSIONS = [
   'a2a:read',
   'a2a:write',
+  'agent-builder:execute',
+  'agent-builder:read',
+  'agent-builder:write',
   'agents:create',
   'agents:delete',
   'agents:execute',
   'agents:read',
   'agents:write',
+  'auth:read',
   'background-tasks:read',
   'channels:read',
   'channels:write',
@@ -330,6 +357,7 @@ export const PERMISSIONS = [
   'datasets:write',
   'embedders:read',
   'experiments:read',
+  'infrastructure:read',
   'logs:read',
   'mcp:execute',
   'mcp:read',
@@ -372,7 +400,9 @@ export const PERMISSIONS = [
   'stored-workspaces:read',
   'stored-workspaces:write',
   'system:read',
+  'tool-providers:delete',
   'tool-providers:read',
+  'tool-providers:write',
   'tools:execute',
   'tools:read',
   'vector:delete',
@@ -405,6 +435,12 @@ export const MastraFGAPermissions = {
   A2A_READ: 'a2a:read',
   /** Create and modify agent-to-agent communication */
   A2A_WRITE: 'a2a:write',
+  /** Execute agent builder */
+  AGENT_BUILDER_EXECUTE: 'agent-builder:execute',
+  /** View agent builder */
+  AGENT_BUILDER_READ: 'agent-builder:read',
+  /** Create and modify agent builder */
+  AGENT_BUILDER_WRITE: 'agent-builder:write',
   /** Create agents */
   AGENTS_CREATE: 'agents:create',
   /** Delete agents */
@@ -415,6 +451,8 @@ export const MastraFGAPermissions = {
   AGENTS_READ: 'agents:read',
   /** Create and modify agents */
   AGENTS_WRITE: 'agents:write',
+  /** View auth */
+  AUTH_READ: 'auth:read',
   /** View background tasks */
   BACKGROUND_TASKS_READ: 'background-tasks:read',
   /** View channels */
@@ -433,6 +471,8 @@ export const MastraFGAPermissions = {
   EMBEDDERS_READ: 'embedders:read',
   /** View experiments */
   EXPERIMENTS_READ: 'experiments:read',
+  /** View infrastructure */
+  INFRASTRUCTURE_READ: 'infrastructure:read',
   /** View logs */
   LOGS_READ: 'logs:read',
   /** Execute MCP servers */
@@ -517,8 +557,12 @@ export const MastraFGAPermissions = {
   STORED_WORKSPACES_WRITE: 'stored-workspaces:write',
   /** View system info */
   SYSTEM_READ: 'system:read',
+  /** Delete tool-providers */
+  TOOL_PROVIDERS_DELETE: 'tool-providers:delete',
   /** View tool-providers */
   TOOL_PROVIDERS_READ: 'tool-providers:read',
+  /** Create and modify tool-providers */
+  TOOL_PROVIDERS_WRITE: 'tool-providers:write',
   /** Execute tools */
   TOOLS_EXECUTE: 'tools:execute',
   /** View tools */

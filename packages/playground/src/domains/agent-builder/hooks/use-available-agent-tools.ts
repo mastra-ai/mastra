@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useBuilderPickerVisibility } from '../../builder';
+import { useBuilderPickerVisibility } from '../../agent-builder';
 import { buildAvailableToolRecords } from '../services/build-available-tool-records';
 import { buildAgentTools } from '../types/agent-tool';
 import type { AgentTool } from '../types/agent-tool';

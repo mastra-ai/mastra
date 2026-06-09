@@ -1,10 +1,12 @@
 import { useMemo } from 'react';
 import type { Control } from 'react-hook-form';
 
+import type { AgentEditorConfig } from '../../context/agent-edit-form-context';
 import type { AgentFormValues } from '../agent-edit-page/utils/form-validation';
 
 import { isActive } from './agent-cms-is-active';
-import { AGENT_CMS_SECTIONS, CODE_AGENT_OVERRIDE_SECTIONS } from './agent-cms-sections';
+import { AGENT_CMS_SECTIONS, getCodeAgentOverrideSections } from './agent-cms-sections';
+import type { AgentCmsSection } from './agent-cms-sections';
 import { useSidebarDescriptions } from './use-sidebar-descriptions';
 
 interface NavTarget {
@@ -23,12 +25,15 @@ export function useAgentCmsNavigation(
   currentPath: string,
   control: Control<AgentFormValues>,
   isCodeAgentOverride?: boolean,
+  editorConfig?: AgentEditorConfig,
 ): AgentCmsNavigation {
   const descriptions = useSidebarDescriptions(control);
-  const sections = isCodeAgentOverride ? CODE_AGENT_OVERRIDE_SECTIONS : AGENT_CMS_SECTIONS;
+  const sections: AgentCmsSection[] = isCodeAgentOverride
+    ? getCodeAgentOverrideSections(editorConfig)
+    : AGENT_CMS_SECTIONS;
 
   const currentIndex = useMemo(
-    () => sections.findIndex(section => isActive(basePath, currentPath, section.pathSuffix)),
+    () => sections.findIndex((section: AgentCmsSection) => isActive(basePath, currentPath, section.pathSuffix)),
     [basePath, currentPath, sections],
   );
 
@@ -50,7 +55,9 @@ export function useAgentCmsNavigation(
         : null;
 
     const currentSection = currentIndex >= 0 ? sections[currentIndex] : null;
-    const isNextDisabled = currentSection?.required ? !descriptions[currentSection.descriptionKey].done : false;
+    const isNextDisabled = currentSection?.required
+      ? !descriptions[currentSection.descriptionKey as keyof typeof descriptions].done
+      : false;
 
     return { previous, next, isNextDisabled };
   }, [currentIndex, basePath, descriptions, sections]);

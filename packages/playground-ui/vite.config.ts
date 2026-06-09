@@ -22,6 +22,16 @@ const libConfig: UserConfig = {
     ...(baseConfig.plugins ?? []),
     dts({
       insertTypesEntry: true,
+      exclude: ['vite.config.ts', 'src/**/*.test.ts', 'src/**/*.test.tsx', 'src/**/__tests__/**'],
+      // vite-plugin-dts logs type errors but does not fail the build on its own.
+      // Since this is now the single TypeScript pass (the standalone `tsc` step
+      // was removed from `build`), fail the build when diagnostics are emitted so
+      // type errors still gate the bundle.
+      afterDiagnostic: diagnostics => {
+        if (diagnostics.length > 0) {
+          throw new Error(`vite-plugin-dts found ${diagnostics.length} type error(s); see log above.`);
+        }
+      },
     }),
     libInjectCss(),
     nodeExternals() as PluginOption,

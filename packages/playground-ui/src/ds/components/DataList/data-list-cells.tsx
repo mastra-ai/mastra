@@ -1,5 +1,5 @@
 import { format, isToday } from 'date-fns';
-import type { ComponentPropsWithoutRef, ElementType, MouseEvent, ReactNode } from 'react';
+import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { cn } from '@/lib/utils';
 
@@ -90,7 +90,7 @@ export function DataListSelectCell({ checked, onToggle, ...rest }: DataListSelec
       <Checkbox
         checked={checked}
         onCheckedChange={() => {}} // no-op: selection handled by onClick to capture shiftKey
-        onClick={(e: MouseEvent<HTMLButtonElement>) => {
+        onClick={e => {
           e.stopPropagation();
           onToggle(e.shiftKey);
         }}

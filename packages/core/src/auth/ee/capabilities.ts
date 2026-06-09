@@ -373,7 +373,7 @@ export async function buildCapabilities(
     if (hasAdminBypassPermissions(access.permissions)) {
       try {
         const allRoles = await rbacProvider.getAvailableRoles();
-        const getPermissionsForRole = rbacProvider.getPermissionsForRole;
+        const getPermissionsForRole = rbacProvider.getPermissionsForRole?.bind(rbacProvider);
         if (getPermissionsForRole) {
           // Use allSettled so one failing role lookup doesn't drop the whole picker.
           const rolePermissions = await Promise.allSettled(

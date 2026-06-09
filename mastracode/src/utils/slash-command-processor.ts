@@ -101,9 +101,8 @@ async function replaceFileReferences(template: string, workingDir: string): Prom
       const fullPath = path.resolve(workingDir, filePath!);
       const content = await fs.readFile(fullPath, 'utf-8');
       result = result.replace(fullMatch, content);
-    } catch (error) {
-      console.error(`Error reading file "${filePath}":`, error);
-      result = result.replace(fullMatch, `[Error: Could not read "${filePath}"]`);
+    } catch {
+      // Leave literal @mentions/search qualifiers such as @me intact when they do not resolve to files.
     }
   }
 

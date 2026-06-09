@@ -5,6 +5,7 @@ import { highlight } from '../CodeEditor';
 import { CopyButton } from '../CopyButton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import { Tab, TabList, Tabs } from '../Tabs';
+import { useTheme } from '../ThemeProvider';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -109,8 +110,29 @@ interface HighlightedCodeProps {
   lang?: string;
 }
 
+// Shiki runs with dual themes (`defaultColor: false`), so each token's colors
+// arrive as `--shiki-light` / `--shiki-dark` CSS variables on `htmlStyle` rather
+// than as a concrete `color`. Nothing in the app reads those variables, so we
+// resolve them into a real `color`/`backgroundColor` here, picking the variant
+// that matches the active theme. We deliberately do not spread `htmlStyle` (which
+// would inline both variables and pin one theme regardless of the app's toggle).
+function tokenStyle(token: ThemedToken, isDark: boolean): React.CSSProperties | undefined {
+  if (token.htmlStyle && typeof token.htmlStyle === 'object') {
+    const vars = token.htmlStyle as Record<string, string>;
+    const color = isDark ? vars['--shiki-dark'] : vars['--shiki-light'];
+    const background = isDark ? vars['--shiki-dark-bg'] : vars['--shiki-light-bg'];
+    const style: React.CSSProperties = {};
+    if (color) style.color = color;
+    if (background) style.backgroundColor = background;
+    return Object.keys(style).length ? style : undefined;
+  }
+  // Single-theme fallback: Shiki put the color directly on the token.
+  return token.color ? { color: token.color } : undefined;
+}
+
 function HighlightedCode({ code, lang }: HighlightedCodeProps) {
   const [tokens, setTokens] = React.useState<ThemedToken[][] | null>(null);
+  const isDark = useTheme().resolvedTheme === 'dark';
 
   React.useEffect(() => {
     if (!lang) {
@@ -144,10 +166,7 @@ function HighlightedCode({ code, lang }: HighlightedCodeProps) {
           <React.Fragment key={lineIndex}>
             <span>
               {line.map((token, tokenIndex) => (
-                <span
-                  key={tokenIndex}
-                  className="text-shiki-light bg-shiki-light-bg dark:text-shiki-dark dark:bg-shiki-dark-bg"
-                >
+                <span key={tokenIndex} style={tokenStyle(token, isDark)}>
                   {token.content}
                 </span>
               ))}

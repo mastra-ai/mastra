@@ -1,6 +1,7 @@
 import type { MessagePrimitive } from '@assistant-ui/react';
 import { ComposerPrimitive, ThreadPrimitive, useComposer, useComposerRuntime } from '@assistant-ui/react';
 import { Avatar, Button, ButtonsGroup, cn, useAutoscroll } from '@mastra/playground-ui';
+import { useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, EyeIcon, Mic, PlusIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
@@ -12,11 +13,12 @@ import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { UserMessage } from './messages/user-messages';
 import { useThreadRuntimeState } from './thread-runtime-state';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
+import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
-import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
 import { Link } from '@/lib/link';
+import { usePlaygroundStore } from '@/store/playground-store';
 // import { useBackgroundTaskStream } from '@/hooks';
 
 export interface ThreadProps {
@@ -132,7 +134,7 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher }: Compos
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerRuntime = useComposerRuntime();
-  const { isStreaming, canSendWhileStreaming, pendingSignals, hasPendingMessages } = useThreadRuntimeState();
+  const { isStreaming, canSendWhileStreaming } = useThreadRuntimeState();
   const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
@@ -172,19 +174,6 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher }: Compos
       <ComposerPrimitive.Root onSubmit={() => setSendPulseKey(k => k + 1)}>
         <div className="max-w-3xl w-full mx-auto pb-2">
           <ComposerAttachments />
-          {hasPendingMessages ? (
-            <div
-              className="mt-2 flex flex-col gap-1 text-icon-xs leading-icon-xs text-neutral3"
-              data-testid="pending-signal-message"
-            >
-              {pendingSignals.map(signal => (
-                <div key={signal.id} className="flex min-w-0 items-center gap-1 animate-pulse">
-                  <span className="shrink-0">pending:</span>
-                  <span className="truncate">{signal.preview}</span>
-                </div>
-              ))}
-            </div>
-          ) : null}
         </div>
 
         <div
@@ -258,7 +247,8 @@ const ComposerSendingGradient = ({ pulseKey }: { pulseKey: number }) => {
 
 const SpeechInput = ({ agentId }: { agentId?: string }) => {
   const composerRuntime = useComposerRuntime();
-  const { start, stop, isListening, transcript } = useSpeechRecognition({ agentId });
+  const { requestContext } = usePlaygroundStore();
+  const { start, stop, isListening, transcript } = useSpeechRecognition({ agentId, requestContext });
 
   useEffect(() => {
     if (!transcript) return;
@@ -297,8 +287,11 @@ const ComposerActionRow = ({ canExecute = true, agentId, threadId, showModelSwit
       {/* Keep action buttons above the switcher when this row wraps. */}
       <div className="flex flex-wrap-reverse justify-between items-center gap-2 px-1.5 pb-1.5">
         {showModelSwitcher && agentId && (
-          <div className="shrink-0 max-w-full rounded-full bg-surface3 border border-border1 transition-colors duration-normal focus-within:border-border2">
-            <ComposerModelSwitcher agentId={agentId} />
+          <div className="flex items-center gap-1.5 shrink-0 max-w-full">
+            <div className="rounded-full bg-surface3 border border-border1 transition-colors duration-normal focus-within:border-border2">
+              <ComposerModelSwitcher agentId={agentId} />
+            </div>
+            <ComposerModelSettings agentId={agentId} />
           </div>
         )}
 

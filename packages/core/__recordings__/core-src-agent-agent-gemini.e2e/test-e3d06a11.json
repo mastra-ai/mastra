@@ -1,10 +1,10 @@
 {
   "meta": {
     "name": "test-e3d06a11",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should handle conversation ending with tool result",
     "createdAt": "2026-05-18T10:50:52.186Z",
-    "updatedAt": "2026-05-20T14:04:39.455Z"
+    "updatedAt": "2026-05-28T17:33:42.304Z"
   },
   "recordings": [
     {
@@ -83,7 +83,7 @@
             }
           }
         },
-        "timestamp": 1779285878849
+        "timestamp": 1779989621226
       },
       "response": {
         "status": 200,
@@ -91,9 +91,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:04:39 GMT",
+          "date": "Thu, 28 May 2026 17:33:42 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=574",
+          "server-timing": "gfet4t7; dur=969",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -134,7 +134,7 @@
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.0-flash",
-          "responseId": "dr8NauKHO4OvkdUP_-XBkAQ"
+          "responseId": "dXwYat3aIOaV_uMP5vCuyQ4"
         },
         "isStreaming": false
       }

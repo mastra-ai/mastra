@@ -73,15 +73,11 @@ describe('gateway-sync wrapper', () => {
   });
 
   it('does not throw when the registry sync rejects', async () => {
-    const error = new Error('boom');
-    registrySyncGateways.mockRejectedValueOnce(error);
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    registrySyncGateways.mockRejectedValueOnce(new Error('boom'));
     const { syncGateways } = await import('../gateway-sync.js');
 
+    // Should resolve without throwing even when the underlying sync rejects
     await expect(syncGateways(true)).resolves.toBeUndefined();
-
-    expect(errorSpy).toHaveBeenCalledWith('[GatewaySync] Sync failed:', error);
-    errorSpy.mockRestore();
   });
 
   it('startGatewaySync schedules a periodic sync that clears on stop', async () => {

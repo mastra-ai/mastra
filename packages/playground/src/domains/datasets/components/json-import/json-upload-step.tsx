@@ -103,7 +103,7 @@ export function JSONUploadStep({ onFileSelect, isParsing, error }: JSONUploadSte
       >
         {isParsing ? (
           <>
-            <Spinner size="lg" />
+            <Spinner />
             <span className="text-sm text-neutral4">Parsing JSON...</span>
           </>
         ) : (

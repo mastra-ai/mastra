@@ -1,0 +1,3 @@
+{
+  "attachment": ["google/gemma-3", "meta/llama-3.2-11b-vision-instruct", "qwen/qwen-2.5-7b-vision-instruct"]
+}

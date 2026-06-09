@@ -1,4 +1,5 @@
 import type { CreateStoredAgentParams } from '@mastra/client-js';
+import type { AgentEditorConfig } from '@mastra/core/agent';
 import { toast } from '@mastra/playground-ui';
 import { useMastraClient } from '@mastra/react';
 import { useQueryClient } from '@tanstack/react-query';
@@ -31,6 +32,9 @@ type EditOptions = {
   isCodeAgentOverride?: boolean;
   /** True when a stored override record already exists for this code agent */
   hasStoredOverride?: boolean;
+  /** Editor config from the code agent definition — controls which fields are owned by the user vs code */
+  editorConfig?: AgentEditorConfig;
+  saveSuccessMessage?: string;
   onSuccess: (agentId: string) => void;
 };
 
@@ -46,6 +50,21 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
   const agentId = isEdit ? options.agentId : undefined;
   const isCodeAgentOverride = isEdit && !!options.isCodeAgentOverride;
   const hasStoredOverride = isEdit && !!options.hasStoredOverride;
+  const editorConfig = isEdit ? options.editorConfig : undefined;
+
+  // Derive which fields are owned by the user (vs by code).
+  // editor === false → nothing is owned (locked)
+  // editor.instructions === true → user owns instructions
+  // editor.tools === true → user owns tools (membership + descriptions)
+  // editor.tools === { description: true } → user owns tool descriptions only
+  // Variables (requestContextSchema) are always editable for code agents.
+  const ownsInstructions = !isCodeAgentOverride || (editorConfig !== false && editorConfig?.instructions === true);
+  const ownsTools = !isCodeAgentOverride || (editorConfig !== false && editorConfig?.tools === true);
+  const ownsToolDescriptions =
+    !isCodeAgentOverride ||
+    (editorConfig !== false &&
+      (editorConfig?.tools === true ||
+        (typeof editorConfig?.tools === 'object' && editorConfig.tools.description === true)));
 
   // Track whether we've already created a stored override for a code agent in this session
   const [overrideCreated, setOverrideCreated] = useState(false);
@@ -137,17 +156,30 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
           }),
         );
 
+        // Only send fields the user actually owns. The server will also strip
+        // unowned fields as a defense-in-depth measure, but doing it here too
+        // avoids sending empty/stale payloads on every save.
         return {
           // name and model are required by the create schema — pass the code agent's values through.
           // applyStoredOverrides will NOT apply these fields for code agent overrides.
           name: values.name,
           model: values.model,
-          // Only send editable fields: instructions, tools, integrationTools, and variables (requestContextSchema)
-          instructions: mapInstructionBlocksToApi(values.instructionBlocks),
-          tools: Object.keys(registryTools).length > 0 ? registryTools : {},
-          integrationTools: transformIntegrationToolsForApi(values.integrationTools),
-          mcpClients: mcpClientsParam,
+          // Variables (requestContextSchema) are always editable for code agents.
           requestContextSchema: values.variables ? Object.fromEntries(Object.entries(values.variables)) : undefined,
+          // Instructions: when the user owns them, send the edited blocks.
+          // When they don't, still send an empty array (CREATE schema requires it),
+          // the server drops it for unowned fields based on editorConfig.
+          instructions: ownsInstructions ? mapInstructionBlocksToApi(values.instructionBlocks) : [],
+          // Tools: send when the user owns membership OR descriptions.
+          // Server enforces what gets persisted (and rejects membership changes
+          // in descriptions-only mode).
+          ...(ownsTools || ownsToolDescriptions
+            ? {
+                tools: Object.keys(registryTools).length > 0 ? registryTools : {},
+                integrationTools: transformIntegrationToolsForApi(values.integrationTools),
+                mcpClients: mcpClientsParam,
+              }
+            : {}),
         };
       }
 
@@ -198,7 +230,7 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
         requestContextSchema: values.variables ? Object.fromEntries(Object.entries(values.variables)) : undefined,
       };
     },
-    [isEdit, isCodeAgentOverride, client],
+    [isEdit, isCodeAgentOverride, ownsInstructions, ownsTools, ownsToolDescriptions, client],
   );
 
   const buildMemoryParams = useCallback((values: AgentFormValues) => {
@@ -256,12 +288,23 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
           });
         }
 
-        // Reset form dirty state so publish can detect unsaved changes
-        form.reset(values);
-        void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
-        void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
-        void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
-        toast.success('Draft saved');
+        // Reset form dirty state so publish can detect unsaved changes.
+        // Pass keepDefaultValues so currently rendered field state (e.g. open tabs,
+        // focused inputs) is preserved — only the dirty flag is cleared.
+        form.reset(values, { keepValues: true });
+        // For code-mode overrides we intentionally skip stored-agent / agent query
+        // invalidation: the dataSource reload would cascade through the
+        // resetFormWithData effect and remount the System Prompt tab, which
+        // is jarring. The filesystem write is authoritative for code mode and
+        // the in-memory form already reflects the saved state.
+        if (!isCodeAgentOverride) {
+          void queryClient.invalidateQueries({ queryKey: ['agent-versions', agentId] });
+          void queryClient.invalidateQueries({ queryKey: ['stored-agent', agentId] });
+          void queryClient.invalidateQueries({ queryKey: ['agent', agentId] });
+        }
+        toast.success(
+          options.mode === 'edit' && options.saveSuccessMessage ? options.saveSuccessMessage : 'Draft saved',
+        );
       } catch (error) {
         toast.error(`Failed to save draft: ${error instanceof Error ? error.message : 'Unknown error'}`);
       } finally {
@@ -393,6 +436,72 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
     ],
   );
 
+  const getAgentExport = useCallback(async () => {
+    if (!isEdit) return;
+
+    const isValid = await form.trigger();
+    if (!isValid) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+
+    const sharedParams = await buildSharedParams(form.getValues());
+    return client.getStoredAgent(options.agentId).export(sharedParams);
+  }, [buildSharedParams, client, form, isEdit, options]);
+
+  const handleDownloadJson = useCallback(async () => {
+    try {
+      const response = await getAgentExport();
+      if (!response) return;
+
+      const blob = new Blob([response.content], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = response.fileName;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      toast.success('Agent JSON downloaded');
+    } catch (error) {
+      toast.error(`Failed to download JSON: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }, [getAgentExport]);
+
+  const handleOpenPr = useCallback(
+    async ({ platformApiEndpoint, projectId }: { platformApiEndpoint: string; projectId: string }) => {
+      if (!isEdit) return;
+
+      try {
+        const response = await getAgentExport();
+        if (!response) return;
+
+        const apiEndpoint = platformApiEndpoint.replace(/\/$/, '');
+        const prResponse = await fetch(`${apiEndpoint}/v1/server/projects/${projectId}/agent-overrides/pr`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            agentId: response.agentId,
+            fileName: response.fileName,
+            content: response.content,
+          }),
+        });
+
+        if (!prResponse.ok) {
+          const message = await prResponse.text();
+          throw new Error(message || `Request failed with ${prResponse.status}`);
+        }
+
+        const result = (await prResponse.json()) as { url: string };
+        window.open(result.url, '_blank', 'noopener,noreferrer');
+        toast.success('Pull request opened');
+      } catch (error) {
+        toast.error(`Failed to open PR: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    },
+    [getAgentExport, isEdit],
+  );
+
   const watched = useWatch({ control: form.control });
 
   const canPublish = useMemo(() => {
@@ -416,5 +525,15 @@ export function useAgentCmsForm(options: UseAgentCmsFormOptions) {
 
   const isDirty = form.formState.isDirty;
 
-  return { form, handlePublish, handleSaveDraft, isSubmitting, isSavingDraft, canPublish, isDirty };
+  return {
+    form,
+    handlePublish,
+    handleSaveDraft,
+    handleDownloadJson,
+    handleOpenPr,
+    isSubmitting,
+    isSavingDraft,
+    canPublish,
+    isDirty,
+  };
 }

@@ -38,13 +38,11 @@ export function buildMessagesFromChunks({
   messageId,
   responseModelMetadata,
   tools,
-  createdAt = new Date(),
 }: {
   chunks: CollectedChunk[];
   messageId: string;
   responseModelMetadata?: { metadata: Record<string, unknown> };
   tools?: ToolSet;
-  createdAt?: Date;
 }): MastraDBMessage[] {
   // Parts are pushed in first-delta order. Text and reasoning spans push a part
   // on the first delta and mutate it in place as subsequent deltas arrive.
@@ -335,7 +333,7 @@ export function buildMessagesFromChunks({
     .join('\n');
 
   // Build a single assistant message with all parts in stream order
-  const message: MastraDBMessage = {
+  const message = {
     id: messageId,
     role: 'assistant' as const,
     content: {
@@ -344,8 +342,7 @@ export function buildMessagesFromChunks({
       ...(contentString ? { content: contentString } : {}),
       ...responseModelMetadata,
     },
-    createdAt,
-  };
+  } as MastraDBMessage;
 
   return [message];
 }

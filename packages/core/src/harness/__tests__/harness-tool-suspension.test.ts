@@ -282,6 +282,7 @@ describe('Harness: tool suspension and resumption', () => {
     const resumeEnd = events.find((e: any) => e.type === 'agent_end');
     expect(resumeEnd).toBeDefined();
     expect(resumeEnd.reason).toBe('complete');
+    expect(events.some((e: any) => e.type === 'error')).toBe(false);
 
     // pendingSuspension should be cleared after resume
     const ds = harness.getDisplayState();

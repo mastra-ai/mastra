@@ -48,7 +48,7 @@ Pass criteria per role for representative endpoints. The agent uses this to set 
 | `POST /stored/skills/:id/publish`       | 200   | 200   | 403    | 403    |
 | `POST /agents/:id/chat` (execute)       | 200   | 200   | 200    | 403    |
 | `GET /editor/builder/infrastructure`    | 200   | 200   | 200    | 200    |
-| `PUT /stored/agents/:id/star`           | 200   | 200   | 200    | 200    |
+| `PUT /stored/agents/:id/favorite`       | 200   | 200   | 200    | 200    |
 
 Member create/PATCH on own works because the scaffold grants `stored-{agents,skills,workspaces}:write`. Publish/delete/share remain admin-only. **Member PATCH on another author's record returns `404 Not Found`** — the visibility/ownership filter hides the row before the handler runs, so non-owners can't tell the difference between "doesn't exist" and "forbidden". This is the standard REST "don't reveal existence" pattern.
 
@@ -136,11 +136,14 @@ Disable auth (comment out `AUTH_PROVIDER` in `.env`), restart. Everything should
 
 ```bash
 curl -s -o /dev/null -w '%{http_code}\n' "$BASE/stored/agents"
+curl -s "$BASE/auth/me"
 ```
 
-- [ ] 200
+- [ ] `/stored/agents` returns 200
+- [ ] `/auth/me` returns 200 with body `null` (not 401, not a user object) — the route resolves a missing caller to `null` rather than rejecting
 - [ ] UI loads without login
 - [ ] All affordances visible
+- [ ] Created records have `authorId: null`
 
 ### 8. UI gating (per-role sidebar / affordances)
 

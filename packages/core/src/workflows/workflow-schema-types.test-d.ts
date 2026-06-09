@@ -1,6 +1,7 @@
 import { describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod/v4';
-import { createStep, createWorkflow } from './workflow';
+import { createWorkflow } from './create';
+import { createStep } from './workflow';
 
 describe('Workflow schema type inference', () => {
   describe('schemas with .optional().default()', () => {
@@ -489,6 +490,64 @@ describe('Workflow schema type inference', () => {
 
       // @ts-expect-error - step's requestContextSchema does not match the workflow's
       workflow.dountil(step, async ({ inputData }) => inputData.value >= 10);
+    });
+  });
+
+  // Regression: https://github.com/mastra-ai/mastra/issues/16975
+  // parallel() dropped the TRequestContext generic on the step parameter,
+  // causing typed requestContextSchema steps to be rejected with a misleading
+  // "Expected Step with state schema that is a subset of workflow state" error.
+  describe('requestContextSchema inference in parallel', () => {
+    const requestContextSchema = z.object({
+      userId: z.string(),
+    });
+
+    it('parallel should accept steps whose requestContextSchema matches the workflow', () => {
+      const stepA = createStep({
+        id: 'step-a',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ a: z.string() }),
+        requestContextSchema,
+        execute: async ({ inputData }) => ({ a: inputData.name }),
+      });
+
+      const stepB = createStep({
+        id: 'step-b',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ b: z.string() }),
+        requestContextSchema,
+        execute: async () => ({ b: 'step-b' }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'repro',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        requestContextSchema,
+      });
+
+      const chained = workflow.parallel([stepA, stepB]);
+      expectTypeOf(chained).not.toBeNever();
+    });
+
+    it('parallel should reject a step whose requestContextSchema does not match the workflow', () => {
+      const step = createStep({
+        id: 'bad-ctx',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ a: z.string() }),
+        requestContextSchema: z.object({ otherProp: z.boolean() }),
+        execute: async ({ inputData }) => ({ a: inputData.name }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'parallel-mismatch',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ result: z.string() }),
+        requestContextSchema,
+      });
+
+      // @ts-expect-error - step's requestContextSchema does not match the workflow's
+      workflow.parallel([step]);
     });
   });
 });

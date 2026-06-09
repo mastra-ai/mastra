@@ -208,10 +208,9 @@ export const useMemoryWithOMStatus = ({
     queryKey: ['memory-status', agentId, resourceId, threadId, requestContext],
     queryFn: () =>
       agentId
-        ? client.getMemoryStatus(agentId, {
+        ? client.getMemoryStatus(agentId, requestContext, {
             resourceId,
             threadId,
-            requestContext,
           })
         : null,
     enabled: Boolean(agentId),

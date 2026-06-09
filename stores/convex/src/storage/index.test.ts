@@ -4,11 +4,15 @@ import {
   createClientAcceptanceTests,
   createDomainDirectTests,
 } from '@internal/storage-test-utils';
+import { TABLE_MESSAGES } from '@mastra/core/storage';
 import dotenv from 'dotenv';
 import { describe, expect, it, vi } from 'vitest';
 
 import { ConvexAdminClient } from './client';
+import { ConvexDB } from './db';
+import { ChannelsConvex } from './domains/channels';
 import { MemoryConvex } from './domains/memory';
+import { SchedulesConvex } from './domains/schedules';
 import { ScoresConvex } from './domains/scores';
 import { WorkflowsConvex } from './domains/workflows';
 import { ConvexStore } from './index';
@@ -168,6 +172,157 @@ describe('Convex Schema Sync', () => {
     expect(convexFields).toContain('id');
   });
 
+  it('mastraSchedulesTable should include scheduler state fields', async () => {
+    const { mastraSchedulesTable } = await import('../schema');
+
+    const convexValidator = (mastraSchedulesTable as any).validator;
+    const convexFields = convexValidator ? Object.keys(convexValidator.fields || {}) : [];
+
+    expect(convexFields).toEqual(
+      expect.arrayContaining([
+        'id',
+        'target',
+        'cron',
+        'status',
+        'next_fire_at',
+        'last_fire_at',
+        'last_run_id',
+        'created_at',
+        'updated_at',
+        'workflow_id',
+      ]),
+    );
+
+    const indexes = ((mastraSchedulesTable as any).indexes ?? []).map(
+      (index: { indexDescriptor: string; fields: string[] }) => [index.indexDescriptor, index.fields],
+    );
+    expect(indexes).toEqual(
+      expect.arrayContaining([
+        ['by_workflow_status', ['workflow_id', 'status']],
+        ['by_workflow_id', ['workflow_id']],
+        ['by_owner_id', ['owner_id']],
+      ]),
+    );
+  });
+
+  it('mastraScheduleTriggersTable should include trigger history fields', async () => {
+    const { mastraScheduleTriggersTable } = await import('../schema');
+
+    const convexValidator = (mastraScheduleTriggersTable as any).validator;
+    const convexFields = convexValidator ? Object.keys(convexValidator.fields || {}) : [];
+
+    expect(convexFields).toEqual(
+      expect.arrayContaining([
+        'id',
+        'schedule_id',
+        'run_id',
+        'scheduled_fire_at',
+        'actual_fire_at',
+        'outcome',
+        'trigger_kind',
+      ]),
+    );
+  });
+
+  it('server entrypoint should re-export scheduler schema helpers', async () => {
+    const serverExports = await import('../server');
+
+    expect(serverExports.mastraSchedulesTable).toBeDefined();
+    expect(serverExports.mastraScheduleTriggersTable).toBeDefined();
+    expect(serverExports.TABLE_SCHEDULES).toBe('mastra_schedules');
+    expect(serverExports.TABLE_SCHEDULE_TRIGGERS).toBe('mastra_schedule_triggers');
+  });
+
+  it('mastraChannelInstallationsTable should include channel installation fields and indexes', async () => {
+    const { mastraChannelInstallationsTable } = await import('../schema');
+
+    const convexValidator = (mastraChannelInstallationsTable as any).validator;
+    const convexFields = convexValidator ? Object.keys(convexValidator.fields || {}) : [];
+
+    expect(convexFields).toEqual(
+      expect.arrayContaining([
+        'id',
+        'platform',
+        'agentId',
+        'status',
+        'webhookId',
+        'data',
+        'configHash',
+        'error',
+        'createdAt',
+        'updatedAt',
+      ]),
+    );
+
+    const indexes = ((mastraChannelInstallationsTable as any).indexes ?? []).map(
+      (index: { indexDescriptor: string; fields: string[] }) => [index.indexDescriptor, index.fields],
+    );
+    expect(indexes).toEqual(
+      expect.arrayContaining([
+        ['by_webhook', ['webhookId']],
+        ['by_platform_agent', ['platform', 'agentId']],
+        ['by_platform', ['platform']],
+      ]),
+    );
+  });
+
+  it('mastraChannelConfigTable should include platform config fields and indexes', async () => {
+    const { mastraChannelConfigTable } = await import('../schema');
+
+    const convexValidator = (mastraChannelConfigTable as any).validator;
+    const convexFields = convexValidator ? Object.keys(convexValidator.fields || {}) : [];
+
+    expect(convexFields).toEqual(expect.arrayContaining(['id', 'platform', 'data', 'updatedAt']));
+
+    const indexes = ((mastraChannelConfigTable as any).indexes ?? []).map(
+      (index: { indexDescriptor: string; fields: string[] }) => [index.indexDescriptor, index.fields],
+    );
+    expect(indexes).toEqual(expect.arrayContaining([['by_platform', ['platform']]]));
+  });
+
+  it('mastraBackgroundTasksTable should include background task fields and indexes', async () => {
+    const { TABLE_BACKGROUND_TASKS, TABLE_SCHEMAS } = await import('@mastra/core/storage');
+    const { mastraBackgroundTasksTable } = await import('../schema');
+
+    const coreSchema = TABLE_SCHEMAS[TABLE_BACKGROUND_TASKS];
+    const coreFields = Object.keys(coreSchema);
+
+    const convexValidator = (mastraBackgroundTasksTable as any).validator;
+    const convexFields = convexValidator ? Object.keys(convexValidator.fields || {}) : [];
+
+    const missingFields = coreFields.filter(field => !convexFields.includes(field));
+
+    expect(missingFields).toEqual([]);
+
+    const indexes = ((mastraBackgroundTasksTable as any).indexes ?? []).map(
+      (index: { indexDescriptor: string; fields: string[] }) => [index.indexDescriptor, index.fields],
+    );
+    expect(indexes).toEqual(
+      expect.arrayContaining([
+        ['by_record_id', ['id']],
+        ['by_agent_status', ['agent_id', 'status']],
+        ['by_status_created', ['status', 'createdAt']],
+        ['by_resource', ['resource_id']],
+      ]),
+    );
+  });
+
+  it('server entrypoint should re-export channel schema helpers', async () => {
+    const serverExports = await import('../server');
+
+    expect(serverExports.mastraChannelInstallationsTable).toBeDefined();
+    expect(serverExports.mastraChannelConfigTable).toBeDefined();
+    expect(serverExports.TABLE_CHANNEL_INSTALLATIONS).toBe('mastra_channel_installations');
+    expect(serverExports.TABLE_CHANNEL_CONFIG).toBe('mastra_channel_config');
+  });
+
+  it('server entrypoint should re-export background task schema helpers', async () => {
+    const serverExports = await import('../server');
+
+    expect(serverExports.mastraBackgroundTasksTable).toBeDefined();
+    expect(serverExports.TABLE_BACKGROUND_TASKS).toBe('mastra_background_tasks');
+  });
+
   it('cache tables should include indexes used by ConvexServerCache', async () => {
     const { mastraCacheTable, mastraCacheListItemsTable } = await import('../schema');
     const normalizeIndexes = (indexes: any[]) =>
@@ -190,6 +345,86 @@ describe('Convex Schema Sync', () => {
         ['by_key_index', ['key', 'index']],
       ]),
     );
+  });
+});
+
+describe('ConvexStore domains', () => {
+  it('exposes channels storage for channel provider support', async () => {
+    const store = new ConvexStore({
+      id: 'convex-domain-test',
+      deploymentUrl: 'https://test.convex.cloud',
+      adminAuthToken: 'test-token',
+    });
+
+    expect(store.stores.channels).toBeInstanceOf(ChannelsConvex);
+  });
+
+  it('exposes schedules storage for workflow scheduler support', async () => {
+    const store = new ConvexStore({
+      id: 'convex-domain-test',
+      deploymentUrl: 'https://test.convex.cloud',
+      adminAuthToken: 'test-token',
+    });
+
+    expect(store.stores.schedules).toBeInstanceOf(SchedulesConvex);
+  });
+});
+
+describe('ConvexDB schedule operations', () => {
+  it('requires schedule ids before normalizing records', async () => {
+    const callStorage = vi.fn();
+    const db = new ConvexDB({ callStorage } as unknown as ConvexAdminClient);
+
+    await expect(db.createSchedule({ cron: '* * * * *' })).rejects.toThrow('Schedule is missing an id');
+
+    expect(callStorage).not.toHaveBeenCalled();
+  });
+
+  it('requires schedule trigger ids before normalizing records', async () => {
+    const callStorage = vi.fn();
+    const db = new ConvexDB({ callStorage } as unknown as ConvexAdminClient);
+
+    await expect(db.recordScheduleTrigger({ schedule_id: 'schedule-1' })).rejects.toThrow(
+      'Schedule trigger is missing an id',
+    );
+
+    expect(callStorage).not.toHaveBeenCalled();
+  });
+});
+
+describe('ConvexDB loadMany', () => {
+  it('dedupes and chunks ids before calling storage', async () => {
+    const callStorage = vi.fn(async request => request.ids.map((id: string) => ({ id })));
+    const db = new ConvexDB({ callStorage } as unknown as ConvexAdminClient);
+    const ids = [...Array.from({ length: 205 }, (_, index) => `message-${index}`), 'message-0', 'message-100'];
+
+    await expect(db.loadMany(TABLE_MESSAGES, ids)).resolves.toHaveLength(205);
+
+    expect(callStorage).toHaveBeenCalledTimes(21);
+    expect(callStorage).toHaveBeenNthCalledWith(1, {
+      op: 'loadMany',
+      tableName: TABLE_MESSAGES,
+      ids: ids.slice(0, 10),
+    });
+    expect(callStorage).toHaveBeenNthCalledWith(20, {
+      op: 'loadMany',
+      tableName: TABLE_MESSAGES,
+      ids: ids.slice(190, 200),
+    });
+    expect(callStorage).toHaveBeenNthCalledWith(21, {
+      op: 'loadMany',
+      tableName: TABLE_MESSAGES,
+      ids: ids.slice(200, 205),
+    });
+  });
+
+  it('skips storage calls for empty id lists', async () => {
+    const callStorage = vi.fn();
+    const db = new ConvexDB({ callStorage } as unknown as ConvexAdminClient);
+
+    await expect(db.loadMany(TABLE_MESSAGES, [])).resolves.toEqual([]);
+
+    expect(callStorage).not.toHaveBeenCalled();
   });
 });
 

@@ -426,6 +426,77 @@ export { handler as GET, handler as POST, handler as PUT }
 
 The `createServe` function works with any Inngest adapter. See the [Inngest serve documentation](https://www.inngest.com/docs/reference/serve) for a complete list of available adapters including AWS Lambda, Cloudflare Workers, and more.
 
+## Running as a Connect worker
+
+`serve()` exposes an HTTP endpoint that Inngest calls into. As an alternative, `connect()` opens a long-lived outbound connection from your worker to Inngest, so the worker does not need a publicly reachable endpoint. Use this for long-running worker processes on runtimes such as Kubernetes, Docker, ECS, Fly.io, or Render.
+
+:::note
+Inngest Connect is in public beta. Serverless runtimes such as Vercel and AWS Lambda are not supported for Connect workers.
+:::
+
+### When to use `connect()` instead of `serve()`
+
+- The worker process runs in a private network that only allows outbound connections.
+- You want to keep heavy workflow execution out of the same process that serves user-facing HTTP traffic.
+- You want to scale workers up and down independently of the Mastra HTTP server, with per-worker concurrency limits.
+
+Use the same Mastra workflow definitions with either `serve()` or `connect()`. The collection behavior is the same for standard workflows, nested workflows, cron workflows, and additional Inngest functions.
+
+### Requirements
+
+- `inngest@^4`
+- Node.js `22.13.0` or later
+- A long-running process for the worker
+
+### Setup
+
+Run the Mastra server and the Connect worker as two processes. The Mastra server in this setup does not need to expose `/inngest/api`:
+
+```ts title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { incrementWorkflow } from './workflows'
+import { PinoLogger } from '@mastra/loggers'
+
+export const mastra = new Mastra({
+  workflows: { incrementWorkflow },
+  logger: new PinoLogger({ name: 'Mastra', level: 'info' }),
+})
+```
+
+```ts title="src/worker.ts"
+import { connect } from '@mastra/inngest/connect'
+import { mastra } from './mastra'
+import { inngest } from './mastra/inngest'
+
+await connect({
+  mastra,
+  inngest,
+  instanceId: process.env.INNGEST_CONNECT_INSTANCE_ID,
+  maxWorkerConcurrency: Number(process.env.INNGEST_CONNECT_MAX_WORKER_CONCURRENCY ?? 10),
+})
+```
+
+Start the worker with `INNGEST_DEV=1 node --import tsx src/worker.ts` during local development. The Inngest Dev Server discovers the worker through the outbound connection, so no `-u` flag is required.
+
+In production, set `INNGEST_EVENT_KEY` and `INNGEST_SIGNING_KEY`. Set `appVersion` on the `Inngest` client to a deploy identifier, such as a commit SHA or image tag, so Inngest can manage rolling deploys.
+
+When migrating an existing production app from `serve()` to `connect()`, test the worker with a separate Inngest app before moving traffic.
+
+### Options
+
+`connect()` accepts the same options as Inngest's [`connect`](https://www.inngest.com/docs/setup/connect) plus the Mastra-specific fields. The most common ones:
+
+- `mastra`: The Mastra instance whose workflows should be exposed.
+- `inngest`: The Inngest client. Use the same client you would pass to `serve()`.
+- `functions`: Optional array of additional Inngest functions to register alongside Mastra workflows.
+- `instanceId`: Stable identifier for the worker, shown in the Inngest dashboard. Defaults to the machine hostname.
+- `maxWorkerConcurrency`: Maximum number of steps the worker runs at a time. Defaults to unlimited.
+- `registerOptions`: Forwarded to Inngest during app registration (for example `signingKey`). When a field is set both here and at the top level, `registerOptions` wins — this matches the behavior of `serve()`.
+
+`connect()` returns Inngest's `WorkerConnection`. The Inngest SDK handles `SIGINT` and `SIGTERM` by default. Store the returned connection and call `.close()` only when your worker needs custom shutdown control.
+
+If the Mastra instance has no `InngestWorkflow` and no additional `functions` are provided, `connect()` logs a warning because the worker would otherwise stay connected with nothing to execute. Register at least one workflow on Mastra or pass `functions: [...]`.
+
 ## Using a custom `apiPrefix`
 
 If you need to keep `/api/inngest` (for example to match Inngest's auto-discover convention without changing the dashboard URL), set `server.apiPrefix` to relocate Mastra's built-in routes:

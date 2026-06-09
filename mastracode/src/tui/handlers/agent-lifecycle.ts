@@ -4,12 +4,12 @@
  */
 import { Spacer, Text } from '@mariozechner/pi-tui';
 
-import { getCurrentGitBranch } from '../../utils/project.js';
+import { getCurrentGitBranchAsync } from '../../utils/project.js';
 import { JudgeDisplayComponent } from '../components/judge-display.js';
 import { GradientAnimator } from '../components/obi-loader.js';
 import { showInfo } from '../display.js';
 import { pruneChatContainer } from '../prune-chat.js';
-import { clearPendingUserMessages } from '../render-messages.js';
+import { clearPendingUserMessages, removePendingUserMessage } from '../render-messages.js';
 import { BOX_INDENT, theme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
@@ -18,11 +18,13 @@ export function handleAgentStart(ctx: EventHandlerContext): void {
   const { state } = ctx;
   state.goalManager.startActiveTimer();
 
-  // Refresh git branch so status line reflects the current branch
-  const freshBranch = getCurrentGitBranch(state.projectInfo.rootPath);
-  if (freshBranch) {
-    state.projectInfo.gitBranch = freshBranch;
-  }
+  // Refresh git branch async to avoid blocking the event loop
+  getCurrentGitBranchAsync(state.projectInfo.rootPath).then(freshBranch => {
+    if (freshBranch) {
+      state.projectInfo.gitBranch = freshBranch;
+      ctx.updateStatusLine();
+    }
+  });
 
   if (!state.gradientAnimator) {
     state.gradientAnimator = new GradientAnimator(() => {
@@ -38,11 +40,13 @@ export function handleAgentEnd(ctx: EventHandlerContext): void {
     state.gradientAnimator.fadeOut();
   }
 
-  // Refresh git branch — tool calls during this turn may have switched branches
-  const freshBranch = getCurrentGitBranch(state.projectInfo.rootPath);
-  if (freshBranch) {
-    state.projectInfo.gitBranch = freshBranch;
-  }
+  // Refresh git branch async — tool calls during this turn may have switched branches
+  getCurrentGitBranchAsync(state.projectInfo.rootPath).then(freshBranch => {
+    if (freshBranch) {
+      state.projectInfo.gitBranch = freshBranch;
+      ctx.updateStatusLine();
+    }
+  });
 
   if (state.streamingComponent) {
     state.streamingComponent = undefined;
@@ -101,16 +105,27 @@ function drainQueuedAction(ctx: EventHandlerContext): boolean {
       ],
       createdAt: new Date(),
     });
+    // Track the text so the subscription echo is suppressed in addUserMessage.
+    const key = nextMessage.content.trim();
+    const counts = (state.firedQueuedMessageTexts ??= new Map<string, number>());
+    counts.set(key, (counts.get(key) ?? 0) + 1);
     state.ui.requestRender();
     ctx.fireMessage(nextMessage.content, nextMessage.images);
     return true;
   }
 
   const nextCommand = state.pendingSlashCommands.shift();
+  const pendingMessageId = state.pendingSlashCommandMessageIds.shift();
   if (!nextCommand) {
+    if (pendingMessageId) {
+      removePendingUserMessage(state, pendingMessageId);
+    }
     return true;
   }
 
+  if (pendingMessageId) {
+    removePendingUserMessage(state, pendingMessageId);
+  }
   ctx.handleSlashCommand(nextCommand).catch(error => {
     ctx.showError(error instanceof Error ? error.message : 'Queued slash command failed');
   });
@@ -146,6 +161,7 @@ export function handleAgentAborted(ctx: EventHandlerContext): void {
   state.pendingFollowUpMessages = [];
   state.pendingQueuedActions = [];
   state.pendingSlashCommands = [];
+  state.pendingSlashCommandMessageIds = [];
   clearPendingUserMessages(state);
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();
@@ -174,6 +190,7 @@ export function handleAgentError(ctx: EventHandlerContext): void {
   state.pendingFollowUpMessages = [];
   state.pendingQueuedActions = [];
   state.pendingSlashCommands = [];
+  state.pendingSlashCommandMessageIds = [];
   clearPendingUserMessages(state);
   state.pendingTools.clear();
   state.pendingTaskToolIds?.clear();

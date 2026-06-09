@@ -46,6 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      issues: write
       pull-requests: write
       id-token: write
     steps:
@@ -54,7 +55,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
         name: Install pnpm
         with:
           run_install: false
@@ -135,6 +136,19 @@ jobs:
             --endpoint-url "${STUDIO_ENDPOINT_URL}" \
             --delete
 
+      - name: Notify linked issues (alpha available)
+        if: ${{ !inputs.dry_run }}
+        continue-on-error: true
+        run: |
+          pnpm install --ignore-workspace --ignore-scripts
+          npx tsx index.ts
+        working-directory: scripts/release-issue-notification
+        env:
+          MODE: alpha-released
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+
   # ===========================================
   # STABLE RELEASE: Manual trigger only
   # ===========================================
@@ -146,6 +160,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      issues: write
       pull-requests: write
       id-token: write
     steps:
@@ -159,7 +174,7 @@ jobs:
         id: app-auth
         uses: ./.github/actions/app-auth
         with:
-          app-id: ${{ vars.DANE_APP_ID }}
+          client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
 
       - name: Re-checkout with app token
@@ -179,7 +194,7 @@ jobs:
             echo "files_exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
         name: Install pnpm
         with:
           run_install: false
@@ -276,6 +291,19 @@ jobs:
           pnpm changeset-cli tag
           git push origin --tags
 
+      - name: Notify linked issues (stable released)
+        if: ${{ !inputs.dry_run }}
+        continue-on-error: true
+        run: |
+          pnpm install --ignore-workspace --ignore-scripts
+          npx tsx index.ts
+        working-directory: scripts/release-issue-notification
+        env:
+          MODE: stable-released
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+
   enter_prerelease:
     needs: stable
     if: |
@@ -301,7 +329,7 @@ jobs:
         id: app-auth
         uses: ./.github/actions/app-auth
         with:
-          app-id: ${{ vars.DANE_APP_ID }}
+          client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
 
       - name: Re-checkout with app token
@@ -311,7 +339,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
         name: Install pnpm
         with:
           run_install: false
@@ -376,7 +404,7 @@ jobs:
         id: app-auth
         uses: ./.github/actions/app-auth
         with:
-          app-id: ${{ vars.DANE_APP_ID }}
+          client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
 
       - name: Re-checkout with app token
@@ -386,7 +414,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: true
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093
         name: Install pnpm
         with:
           run_install: false
@@ -438,6 +466,9 @@ jobs:
           done
           echo "Finished updating workspace dependencies. $changed_count files updated."
         shell: bash
+
+      - name: Update lockfile
+        run: pnpm install --no-frozen-lockfile --lockfile-only
 
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" build

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Button } from '../Button';
 import { Spinner } from './spinner';
 
 const meta: Meta<typeof Spinner> = {
@@ -6,10 +7,35 @@ const meta: Meta<typeof Spinner> = {
   component: Spinner,
   parameters: {
     layout: 'centered',
+    controls: {
+      disable: true,
+    },
   },
   argTypes: {
-    color: {
-      control: { type: 'color' },
+    size: {
+      table: {
+        disable: true,
+      },
+    },
+    variant: {
+      table: {
+        disable: true,
+      },
+    },
+    className: {
+      table: {
+        disable: true,
+      },
+    },
+    'aria-label': {
+      table: {
+        disable: true,
+      },
+    },
+    role: {
+      table: {
+        disable: true,
+      },
     },
   },
 };
@@ -21,52 +47,53 @@ export const Default: Story = {
   args: {},
 };
 
-export const White: Story = {
+export const Pulse: Story = {
   args: {
-    color: '#ffffff',
+    variant: 'pulse',
   },
 };
 
-export const Blue: Story = {
+export const ClassNameColor: Story = {
   args: {
-    color: '#3b82f6',
-  },
-};
-
-export const Green: Story = {
-  args: {
-    color: '#22c55e',
+    className: 'text-neutral3',
   },
 };
 
 export const Small: Story = {
   args: {
-    className: 'h-4 w-4',
-  },
-};
-
-export const Large: Story = {
-  args: {
-    className: 'h-8 w-8',
+    size: 'sm',
   },
 };
 
 export const InButton: Story = {
   render: () => (
-    <button className="flex items-center gap-2 px-4 py-2 bg-surface2 border border-border1 rounded-md text-neutral6">
-      <Spinner className="h-4 w-4" />
+    <Button>
+      <Spinner />
       Loading...
-    </button>
+    </Button>
   ),
 };
 
-export const AllSizes: Story = {
+export const Sizes: Story = {
   render: () => (
     <div className="flex items-center gap-4">
-      <Spinner className="h-4 w-4" />
-      <Spinner className="h-6 w-6" />
-      <Spinner className="h-8 w-8" />
-      <Spinner className="h-12 w-12" />
+      <Spinner size="sm" />
+      <Spinner />
+    </div>
+  ),
+};
+
+export const ClassNameSizeOverride: Story = {
+  args: {
+    className: 'size-3',
+  },
+};
+
+export const AllVariants: Story = {
+  render: () => (
+    <div className="flex items-center gap-4">
+      <Spinner />
+      <Spinner variant="pulse" />
     </div>
   ),
 };

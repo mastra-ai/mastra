@@ -13,9 +13,10 @@ import { DataListNextPageLoading } from './data-list-next-page-loading';
 import { DataListNoMatch } from './data-list-no-match';
 import { DataListPagination } from './data-list-pagination';
 import { DataListRoot } from './data-list-root';
-import { DataListRow } from './data-list-row';
 import { DataListRowButton } from './data-list-row-button';
 import { DataListRowLink } from './data-list-row-link';
+import { DataListRowStatic } from './data-list-row-static';
+import { DataListRowWrapper } from './data-list-row-wrapper';
 import { DataListSpacer } from './data-list-spacer';
 import { DataListSubheader } from './data-list-subheader';
 import { DataListSubHeading } from './data-list-subheading';
@@ -34,9 +35,10 @@ export const DataList = Object.assign(DataListRoot, {
   TopCell: DataListTopCell,
   TopCellWithTooltip: DataListTopCellWithTooltip,
   TopCellSmart: DataListTopCellSmart,
-  Row: DataListRow,
+  RowWrapper: DataListRowWrapper,
   RowButton: DataListRowButton,
   RowLink: DataListRowLink,
+  RowStatic: DataListRowStatic,
   Cell: DataListCell,
   TextCell: DataListTextCell,
   NameCell: DataListNameCell,

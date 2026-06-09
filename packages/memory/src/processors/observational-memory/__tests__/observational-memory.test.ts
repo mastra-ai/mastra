@@ -2537,6 +2537,179 @@ describe('Observer Agent Helpers', () => {
       );
     });
 
+    it('auto mode resolves function-based observer model and drops attachments for text-only models', async () => {
+      let capturedPrompt: any;
+
+      // Simulate a function-based model that returns a text-only model string
+      const textOnlyModelFn = ({ requestContext: _rc }: { requestContext: any }) => 'deepseek/deepseek-v4-flash';
+
+      const observer = new ObserverRunner({
+        observationConfig: {
+          model: textOnlyModelFn,
+          messageTokens: 1000,
+          bufferTokens: false,
+          previousObserverTokens: 1000,
+          observeAttachments: 'auto',
+        } as any,
+        observedMessageIds: new Set(),
+        resolveModel: () => ({ model: textOnlyModelFn as any }),
+        tokenCounter: {
+          countMessages: () => 1,
+        } as any,
+      });
+
+      vi.spyOn(observer as any, 'createAgent').mockReturnValue({
+        stream: async (prompt: any) => {
+          capturedPrompt = prompt;
+          return {
+            getFullOutput: async () => ({
+              text: '<observations>\n- test\n</observations>',
+              usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+            }),
+          };
+        },
+      });
+
+      // Mock modelSupportsAttachments to return false for our text-only model
+      const llmModule = await import('@mastra/core/llm');
+      const spy = vi.spyOn(llmModule, 'modelSupportsAttachments').mockReturnValue(false);
+
+      try {
+        const message = createTestMessage('ignored', 'user');
+        message.content = {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Please check this image.' },
+            { type: 'image', image: 'https://example.com/photo.png', mimeType: 'image/png' } as any,
+          ],
+        };
+
+        await observer.call(undefined, [message], undefined, {
+          requestContext: { threadId: 'test-thread' } as any,
+        });
+
+        // The function model should be resolved with requestContext, looked up,
+        // found to not support attachments, and attachments should be dropped
+        expect(spy).toHaveBeenCalledWith('deepseek/deepseek-v4-flash');
+        const content = capturedPrompt[1].content as any[];
+        expect(content.some((part: any) => part.type === 'image')).toBe(false);
+        const joined = content
+          .filter((part: any) => part.type === 'text')
+          .map((part: any) => part.text)
+          .join('\n');
+        expect(joined).toContain('[Image #1: photo.png]');
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
+    it('auto mode drops attachments for OpenRouter text-only models using provider capabilities', async () => {
+      let capturedPrompt: any;
+
+      const observer = new ObserverRunner({
+        observationConfig: {
+          model: 'openrouter/deepseek/deepseek-v4-flash',
+          messageTokens: 1000,
+          bufferTokens: false,
+          previousObserverTokens: 1000,
+          observeAttachments: 'auto',
+        } as any,
+        observedMessageIds: new Set(),
+        resolveModel: () => ({ model: 'openrouter/deepseek/deepseek-v4-flash' as any }),
+        tokenCounter: {
+          countMessages: () => 1,
+        } as any,
+      });
+
+      vi.spyOn(observer as any, 'createAgent').mockReturnValue({
+        stream: async (prompt: any) => {
+          capturedPrompt = prompt;
+          return {
+            getFullOutput: async () => ({
+              text: '<observations>\n- test\n</observations>',
+              usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+            }),
+          };
+        },
+      });
+
+      const message = createTestMessage('ignored', 'user');
+      message.content = {
+        format: 2,
+        parts: [
+          { type: 'text', text: 'Please check this image.' },
+          { type: 'image', image: 'https://example.com/photo.png', mimeType: 'image/png' } as any,
+        ],
+      };
+
+      await observer.call(undefined, [message]);
+
+      const content = capturedPrompt[1].content as any[];
+      expect(content.some((part: any) => part.type === 'image')).toBe(false);
+      const joined = content
+        .filter((part: any) => part.type === 'text')
+        .map((part: any) => part.text)
+        .join('\n');
+      expect(joined).toContain('[Image #1: photo.png]');
+    });
+
+    it('auto mode forwards attachments for multimodal function-based observer model', async () => {
+      let capturedPrompt: any;
+
+      const multimodalModelFn = ({ requestContext: _rc }: { requestContext: any }) => 'openai/gpt-4o';
+
+      const observer = new ObserverRunner({
+        observationConfig: {
+          model: multimodalModelFn,
+          messageTokens: 1000,
+          bufferTokens: false,
+          previousObserverTokens: 1000,
+          observeAttachments: 'auto',
+        } as any,
+        observedMessageIds: new Set(),
+        resolveModel: () => ({ model: multimodalModelFn as any }),
+        tokenCounter: {
+          countMessages: () => 1,
+        } as any,
+      });
+
+      vi.spyOn(observer as any, 'createAgent').mockReturnValue({
+        stream: async (prompt: any) => {
+          capturedPrompt = prompt;
+          return {
+            getFullOutput: async () => ({
+              text: '<observations>\n- test\n</observations>',
+              usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+            }),
+          };
+        },
+      });
+
+      const llmModule = await import('@mastra/core/llm');
+      const spy = vi.spyOn(llmModule, 'modelSupportsAttachments').mockReturnValue(true);
+
+      try {
+        const message = createTestMessage('ignored', 'user');
+        message.content = {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Please check this image.' },
+            { type: 'image', image: 'https://example.com/photo.png', mimeType: 'image/png' } as any,
+          ],
+        };
+
+        await observer.call(undefined, [message], undefined, {
+          requestContext: { threadId: 'test-thread' } as any,
+        });
+
+        expect(spy).toHaveBeenCalledWith('openai/gpt-4o');
+        const content = capturedPrompt[1].content as any[];
+        expect(content.some((part: any) => part.type === 'image')).toBe(true);
+      } finally {
+        spy.mockRestore();
+      }
+    });
+
     it('should inject thread title instructions into the observer request when enabled', async () => {
       let capturedPrompt: any;
 
@@ -13457,6 +13630,68 @@ describe('Single-thread replay red tests', () => {
     expect(remainingText).toContain('new-after-boundary');
   });
 
+  it('T1-C: historical response messages after an inflated watermark should not replay', async () => {
+    const { messageList, threadId, resourceId } = await createReplayFixture();
+
+    const observedUserAt = new Date('2025-01-01T10:00:00.000Z');
+    const observedResponseAt = new Date('2025-01-01T10:00:01.000Z');
+    const lastObservedAt = new Date('2025-01-01T10:00:02.000Z');
+    const futurePartTimestamp = new Date('2025-01-02T10:00:00.000Z').getTime();
+
+    messageList.add(
+      {
+        id: 'observed-user',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'already-observed-user' }] },
+        createdAt: observedUserAt,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'watermark-advancer',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'already-observed-watermark',
+          parts: [{ type: 'text', text: 'already-observed-watermark', createdAt: futurePartTimestamp }],
+        },
+        createdAt: lastObservedAt,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'observed-response',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: 'already-observed-response',
+          parts: [{ type: 'text', text: 'already-observed-response' }],
+        },
+        createdAt: observedResponseAt,
+      } as any,
+      'response',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['watermark-advancer'], lastObservedAt } as any,
+      fallbackCursor: { createdAt: lastObservedAt.toISOString(), id: 'observed-response' },
+    });
+
+    expect(messageList.get.all.db().map((m: any) => m.id)).toEqual([]);
+    expect(getModelVisibleText(messageList)).not.toContain('already-observed-response');
+  });
+
   it('T2-B: marker-bearing mixed message should be trimmed to post-marker parts only', async () => {
     const { messageList, threadId, resourceId } = await createReplayFixture();
 
@@ -14179,6 +14414,40 @@ describe('Single-thread replay red tests', () => {
 
     releaseSave();
     await savePromise;
+  });
+
+  it('T4-D: preserves current step messages during observed-message filtering', async () => {
+    const { messageList, threadId, resourceId } = await createReplayFixture();
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const observed = {
+      id: 'already-observed',
+      threadId,
+      resourceId,
+      role: 'assistant',
+      content: { format: 2, parts: [{ type: 'text', text: 'already seen' }] },
+      createdAt: t0,
+    } as any;
+    const currentInput = {
+      id: 'current-input',
+      threadId,
+      resourceId,
+      role: 'user',
+      content: { format: 2, parts: [{ type: 'text', text: 'current turn input' }] },
+      createdAt: t0,
+    } as any;
+
+    messageList.add(observed, 'memory');
+    messageList.add(currentInput, 'input');
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['already-observed'], lastObservedAt: t0 } as any,
+      preserveMessageIds: new Set(['current-input']),
+    });
+
+    const remainingIds = messageList.get.all.db().map((m: any) => m.id);
+    expect(remainingIds).toEqual(['current-input']);
   });
 
   it('T5-A: part excluded by getUnobservedMessages should not survive step-0 filter', async () => {

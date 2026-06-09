@@ -245,9 +245,11 @@ export const readFileTool = createTool({
       const result = extractLinesWithLimit(fullContent, offset, limit);
 
       const shouldShowLineNumbers = showLineNumbers !== false;
-      const formattedContent = shouldShowLineNumbers
-        ? formatWithLineNumbers(result.content, result.lines.start)
-        : result.content;
+      const hasExtractedLines = result.lines.start !== 0 || result.lines.end !== 0;
+      const formattedContent =
+        shouldShowLineNumbers && hasExtractedLines
+          ? formatWithLineNumbers(result.content, result.lines.start)
+          : result.content;
 
       let header: string;
       if (hasLineRange) {

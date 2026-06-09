@@ -1,14 +1,16 @@
 import type { Mastra } from '@mastra/core';
 
-import { builderToModelPolicy, resolvePickerVisibility } from '@mastra/core/agent-builder/ee';
 import { HTTPException } from '../http-exception';
 import {
   agentFeaturesSchema,
+  builderAvailableModelsResponseSchema,
   builderSettingsResponseSchema,
   infrastructureStatusResponseSchema,
 } from '../schemas/editor-builder';
 import type { AgentFeatures, InfrastructureStatus } from '../schemas/editor-builder';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { resolveBuilderModelPolicy } from '../utils/resolve-builder-model-policy';
+import { buildProvidersList } from './agents';
 import { handleError } from './error';
 
 /**
@@ -127,6 +129,12 @@ export const GET_EDITOR_BUILDER_SETTINGS_ROUTE = createRoute({
       const agentKeyMap = toResponseKey(agentAliases, 'id');
       const workflowKeyMap = toResponseKey(workflowAliases, 'key');
 
+      // Lazy-load the EE subpath so this module remains importable on
+      // `@mastra/core` versions that pre-date it (added in core 1.34.0).
+      // We only reach here after `builder.enabled` is true, which guarantees
+      // a compatible core.
+      const { builderToModelPolicy, resolvePickerVisibility } = await import('@mastra/core/agent-builder/ee');
+
       const picker = resolvePickerVisibility({
         config: configuration?.agent,
         registeredToolIds: toolAliases.flatMap(a => [a.id, a.key]),
@@ -164,6 +172,56 @@ export const GET_EDITOR_BUILDER_SETTINGS_ROUTE = createRoute({
       };
     } catch (error) {
       return handleError(error, 'Error getting builder settings');
+    }
+  },
+});
+
+/**
+ * GET /editor/builder/models/available
+ *
+ * Returns the configured AI providers/models filtered by the active builder
+ * model policy. The server is the single authority for the allowlist: it
+ * applies `isModelAllowed` here so the Studio model picker can render the
+ * response verbatim without importing any EE matcher into the browser.
+ *
+ * - Policy inactive (or no allowlist) ⇒ the full provider list is returned.
+ * - Policy active with an allowlist ⇒ each provider's models are filtered,
+ *   and providers left with no allowed models are omitted entirely.
+ */
+export const GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/editor/builder/models/available',
+  responseType: 'json',
+  responseSchema: builderAvailableModelsResponseSchema,
+  summary: 'List builder-available AI models',
+  description: 'Returns AI providers/models filtered by the active agent-builder model policy.',
+  tags: ['Editor'],
+  requiresAuth: true,
+  requiresPermission: 'stored-agents:read',
+  handler: async ({ mastra }) => {
+    try {
+      const providers = await buildProvidersList(mastra);
+      const policy = await resolveBuilderModelPolicy(mastra.getEditor());
+
+      // Inactive policy (or no allowlist) ⇒ nothing to filter.
+      if (!policy.active || !policy.allowed || policy.allowed.length === 0) {
+        return { providers };
+      }
+
+      // Lazy-load the EE matcher (server-only); mirrors the convention used by
+      // resolve-builder-model-policy and the settings handler.
+      const { isModelAllowed } = await import('@mastra/core/agent-builder/ee');
+
+      const filtered = providers
+        .map(provider => ({
+          ...provider,
+          models: provider.models.filter(modelId => isModelAllowed(policy.allowed, { provider: provider.id, modelId })),
+        }))
+        .filter(provider => provider.models.length > 0);
+
+      return { providers: filtered };
+    } catch (error) {
+      return handleError(error, 'Error fetching available models');
     }
   },
 });

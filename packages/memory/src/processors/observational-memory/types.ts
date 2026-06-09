@@ -123,6 +123,16 @@ export interface ObservationConfig {
   bufferTokens?: number | false;
 
   /**
+   * Whether to run background observation buffering when a turn ends and the agent becomes idle.
+   *
+   * This is separate from `bufferTokens`: `bufferTokens` controls step-time async buffering,
+   * while `bufferOnIdle` controls end-of-turn buffering for short idle turns.
+   *
+   * @default false
+   */
+  bufferOnIdle?: boolean;
+
+  /**
    * Controls how many raw message tokens to retain after activation.
    *
    * - **Ratio (0 < value <= 1):** fraction of `messageTokens` to activate.
@@ -199,7 +209,11 @@ export interface ObservationConfig {
    * line (e.g. `[Image #1: photo.png]`) is always emitted so the Observer
    * still knows an attachment existed.
    *
-   * - `true` (default): forward all attachments.
+   * - `'auto'`: use the provider capabilities registry to decide.
+   *   If the observer model supports attachments (multimodal input), they
+   *   are forwarded; otherwise they are dropped. Falls back to `true` when
+   *   no capabilities data is available for the model.
+   * - `true`: forward all attachments.
    * - `false`: drop all attachments; placeholders remain visible.
    * - `string[]`: allowlist of mimeType patterns. Each entry is matched
    *   case-insensitively against the part's mimeType. Supports exact matches
@@ -212,7 +226,7 @@ export interface ObservationConfig {
    *
    * @default true
    */
-  observeAttachments?: boolean | string[];
+  observeAttachments?: 'auto' | boolean | string[];
 }
 
 /**
@@ -951,6 +965,8 @@ export interface ResolvedObservationConfig {
   maxTokensPerBatch: number;
   /** Token interval for async background observation buffering (resolved from config) */
   bufferTokens?: number;
+  /** Whether to buffer unobserved messages at the end of an idle turn */
+  bufferOnIdle: boolean;
   /** Ratio of buffered observations to activate (0-1 float) */
   bufferActivation?: number;
   /** Time in milliseconds, or auto provider-aware TTL, before buffered observations are force-activated based on the last assistant message part timestamp */
@@ -966,7 +982,7 @@ export interface ResolvedObservationConfig {
   /** Whether the Observer should suggest thread titles */
   threadTitle?: boolean;
   /** Filter for attachment parts forwarded to the Observer model */
-  observeAttachments: boolean | string[];
+  observeAttachments: 'auto' | boolean | string[];
 }
 
 export interface ResolvedReflectionConfig {

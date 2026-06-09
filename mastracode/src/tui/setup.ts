@@ -136,7 +136,11 @@ export function setupKeyboardShortcuts(
 
   // Shift+Tab - cycle harness modes
   state.editor.onAction('cycleMode', async () => {
-    // Block mode switching while plan approval is active
+    // Block mode switching while the agent is active or plan approval is pending
+    if (state.harness.isRunning()) {
+      showInfo(state, 'Wait for the agent to finish first');
+      return;
+    }
     if (state.activeInlinePlanApproval) {
       showInfo(state, 'Resolve the plan approval first');
       return;
@@ -345,6 +349,17 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'update', description: 'Check for and install updates' },
     { name: 'api-keys', description: 'Manage API keys for model providers' },
     { name: 'observability', description: 'Configure cloud observability' },
+    {
+      name: 'github',
+      description: 'Subscribe/sync/debug GitHub PR signals',
+      getArgumentCompletions: (argumentPrefix: string) =>
+        [
+          { value: 'subscribe', label: 'subscribe', description: 'Subscribe this thread to a GitHub PR' },
+          { value: 'unsubscribe', label: 'unsubscribe', description: 'Unsubscribe this thread from a GitHub PR' },
+          { value: 'sync', label: 'sync', description: 'Immediately sync subscribed GitHub PRs' },
+          { value: 'debug', label: 'debug', description: 'Show GitHub signal subscription debug info' },
+        ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+    },
     {
       name: 'goal',
       description: 'Set/manage persistent goal (Ralph loop)',

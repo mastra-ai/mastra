@@ -1,6 +1,6 @@
 import { Tool, MASTRA_TOOL_MARKER } from './tool';
 import type { ToolToConvert } from './tool-builder/builder';
-import type { VercelTool } from './types';
+import type { NeedsApprovalFn, VercelTool } from './types';
 
 /**
  * Checks if a tool is a Mastra Tool, using both instanceof and marker.
@@ -64,4 +64,18 @@ export const isProviderTool = isProviderDefinedTool;
  */
 export function getProviderToolName(providerId: string): string {
   return providerId.split('.').slice(1).join('.');
+}
+
+/**
+ * Reads a per-tool {@link NeedsApprovalFn} attached to a tool instance, if present.
+ *
+ * Runtime tool maps are loosely typed (AI SDK `ToolSet` shape plus Mastra extras), so the
+ * `needsApprovalFn` decided by {@link CoreToolBuilder} / the MCP client is read off an
+ * arbitrary tool-like value. This helper centralizes that access with a typed result so the
+ * runtime never has to reach through `any` for it.
+ */
+export function getNeedsApprovalFn(tool: unknown): NeedsApprovalFn | undefined {
+  if (typeof tool !== 'object' || tool === null) return undefined;
+  const fn = (tool as { needsApprovalFn?: unknown }).needsApprovalFn;
+  return typeof fn === 'function' ? (fn as NeedsApprovalFn) : undefined;
 }

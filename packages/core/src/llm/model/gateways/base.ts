@@ -20,6 +20,12 @@ export interface ProviderConfig {
 }
 
 /**
+ * Compact capability data collected from gateways during generation.
+ * Each provider maps to a list of model IDs that support attachments.
+ */
+export type AttachmentCapabilities = Record<string, string[]>;
+
+/**
  * Union type for language models that can be returned by gateways.
  * Supports both AI SDK v5 (LanguageModelV2) and v6 (LanguageModelV3).
  */
@@ -33,39 +39,54 @@ export type GatewayLanguageModelWithStreamTransport = GatewayLanguageModel & {
   [MASTRA_GATEWAY_STREAM_TRANSPORT]?: GatewayStreamTransportHandle;
 };
 
-export abstract class MastraModelGateway {
+export type GatewayAuthSource = 'explicit' | 'gateway' | 'legacy';
+
+export type GatewayAuthRequest = {
+  gatewayId: string;
+  providerId: string;
+  modelId: string;
+  routerId: string;
+};
+
+export type GatewayAuthResult = {
+  apiKey?: string;
+  bearerToken?: string;
+  headers?: Record<string, string>;
+  source?: GatewayAuthSource;
+};
+
+export interface MastraModelGatewayInterface {
   /**
    * Unique identifier for the gateway
    * This ID is used as the prefix for all providers from this gateway (e.g., "netlify/anthropic")
    * Exception: models.dev is a provider registry and doesn't use a prefix
    */
-  abstract readonly id: string;
+  readonly id: string;
 
   /**
    * Name of the gateway provider
    */
-  abstract readonly name: string;
+  readonly name: string;
 
   /**
-   * Get the gateway ID
+   * Get the gateway ID. Optional for plain object gateways; defaults to `id`.
+   * @deprecated Use `id` instead.
+   * @returns The gateway ID.
    */
-  getId(): string {
-    return this.id;
-  }
+  getId?(): string;
 
   /**
    * Whether this gateway should be enabled for the current runtime.
    * Disabled gateways are skipped when syncing and filtered out when reading cached registry data.
+   * Optional for plain object gateways; defaults to `true`.
    */
-  shouldEnable(): boolean {
-    return true;
-  }
+  shouldEnable?(): boolean;
 
   /**
-   * Fetch provider configurations from the gateway
-   * Should return providers in the standard format
+   * Fetch provider configurations from the gateway.
+   * Should return providers in the standard format.
    */
-  abstract fetchProviders(): Promise<Record<string, ProviderConfig>>;
+  fetchProviders(): Promise<Record<string, ProviderConfig>>;
 
   /**
    * Build the URL for a specific model/provider combination
@@ -73,15 +94,20 @@ export abstract class MastraModelGateway {
    * @param envVars Environment variables available
    * @returns URL string if this gateway can handle the model, false otherwise
    */
-  abstract buildUrl(modelId: string, envVars: Record<string, string>): string | undefined | Promise<string | undefined>;
+  buildUrl(modelId: string, envVars: Record<string, string>): string | undefined | Promise<string | undefined>;
 
-  abstract getApiKey(modelId: string): Promise<string>;
+  getApiKey(modelId: string): Promise<string>;
+
+  /**
+   * Resolve auth before falling back to getApiKey/env behavior.
+   */
+  resolveAuth?(request: GatewayAuthRequest): Promise<GatewayAuthResult | undefined> | GatewayAuthResult | undefined;
 
   /**
    * Resolve a language model from the gateway.
    * Supports returning either LanguageModelV2 (AI SDK v5) or LanguageModelV3 (AI SDK v6).
    */
-  abstract resolveLanguageModel(args: {
+  resolveLanguageModel(args: {
     modelId: string;
     providerId: string;
     apiKey: string;
@@ -95,10 +121,37 @@ export abstract class MastraModelGateway {
    * Gateways typically hold credentials (apiKey, OAuth tokens, customFetch
    * closures that capture secrets). The base implementation exposes only
    * the gateway identity so subclasses are safe by default.
-   *
-   * Subclasses that want to expose additional non-sensitive fields
-   * (e.g. baseUrl when it's a public URL) can override this method.
    */
+  serializeForSpan?(): { id: string; name: string } & Record<string, unknown>;
+}
+
+export abstract class MastraModelGateway implements MastraModelGatewayInterface {
+  abstract readonly id: string;
+  abstract readonly name: string;
+
+  getId(): string {
+    return this.id;
+  }
+
+  shouldEnable(): boolean {
+    return true;
+  }
+
+  abstract fetchProviders(): Promise<Record<string, ProviderConfig>>;
+
+  abstract buildUrl(modelId: string, envVars: Record<string, string>): string | undefined | Promise<string | undefined>;
+
+  abstract getApiKey(modelId: string): Promise<string>;
+
+  abstract resolveLanguageModel(args: {
+    modelId: string;
+    providerId: string;
+    apiKey: string;
+    headers?: Record<string, string>;
+    transport?: OpenAITransport;
+    responsesWebSocket?: ResponsesWebSocketOptions;
+  }): Promise<GatewayLanguageModel> | GatewayLanguageModel;
+
   serializeForSpan(): { id: string; name: string } {
     return { id: this.id, name: this.name };
   }

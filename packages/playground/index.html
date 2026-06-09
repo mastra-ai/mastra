@@ -89,10 +89,6 @@
 
   <body class="overflow-hidden">
     <div id="root"></div>
-    <script type="module">
-      // Use relative import to work with any base path
-      // Vite transforms this during build to reference compiled output with correct paths
-      import('./src/main.tsx');
-    </script>
+    <script type="module" src="./src/bootstrap.ts"></script>
   </body>
 </html>

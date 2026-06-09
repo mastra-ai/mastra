@@ -15,10 +15,14 @@ import {
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
+import { NotificationSummaryComponent } from './components/notification-summary.js';
+import { NotificationComponent } from './components/notification.js';
 import { OMMarkerComponent } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
 import { PlanResultComponent } from './components/plan-approval-inline.js';
+import { ReactiveSignalComponent } from './components/reactive-signal.js';
 import { SlashCommandComponent } from './components/slash-command.js';
+import { StateSignalComponent } from './components/state-signal.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
@@ -30,6 +34,28 @@ import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 
 // Re-export so existing consumers can still import from here
 export { formatToolResult };
+
+const WHILE_ACTIVE_USER_MESSAGE_LABEL = 'steer';
+// These are internal control-plane signals handled by GithubSignals. The user-visible
+// result is rendered by github-sync-status, so showing these would duplicate the UI.
+const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
+
+function shouldRenderReactiveSignal(tagName: string): boolean {
+  return !HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName);
+}
+
+type MessageWithAttributes = HarnessMessage & {
+  attributes?: Record<string, string | number | boolean | null | undefined>;
+};
+
+function getUserMessageLabel(message: MessageWithAttributes, fallbackLabel?: string): string | undefined {
+  if (message.attributes?.delivery === 'while-active') return WHILE_ACTIVE_USER_MESSAGE_LABEL;
+  return fallbackLabel;
+}
+
+function getPendingUserMessageLabel(isInterjection?: boolean): string | undefined {
+  return isInterjection ? WHILE_ACTIVE_USER_MESSAGE_LABEL : undefined;
+}
 
 function getCurrentModeColor(state: TUIState): string | undefined {
   return state.harness.getCurrentMode?.()?.color;
@@ -139,7 +165,13 @@ function renderTaskTransitionFromHistory(
 
 function createReminderComponent(
   reminderType: string | undefined,
-  options: { message?: string; path?: string; gapText?: string; goalMaxTurns?: number; judgeModelId?: string },
+  options: {
+    message?: string;
+    path?: string;
+    gapText?: string;
+    goalMaxTurns?: number;
+    judgeModelId?: string;
+  },
 ): SystemReminderComponent | TemporalGapComponent {
   if (reminderType === 'temporal-gap') {
     return new TemporalGapComponent({
@@ -198,6 +230,7 @@ export function addPendingUserMessage(
   messageId: string,
   text: string,
   images?: Array<{ data: string; mimeType: string }>,
+  options?: { isInterjection?: boolean },
 ): void {
   const existing = state.pendingSignalMessageComponentsById.get(messageId);
   if (existing) {
@@ -206,7 +239,7 @@ export function addPendingUserMessage(
   }
 
   const component = new PendingUserMessageComponent(text, images?.length ?? 0);
-  state.pendingSignalMessageComponentsById.set(messageId, { component, text });
+  state.pendingSignalMessageComponentsById.set(messageId, { component, text, isInterjection: options?.isInterjection });
   state.chatContainer.addChild(component);
   reconcileChatBoundarySpacers(state.chatContainer);
   state.ui.requestRender();
@@ -228,7 +261,10 @@ function replacePendingUserMessage(state: TUIState, messageId: string, text: str
   const pending = state.pendingSignalMessageComponentsById.get(messageId);
   if (!pending) return;
 
-  const confirmed = new UserMessageComponent(text, getMarkdownTheme());
+  const label = getPendingUserMessageLabel(pending.isInterjection);
+  const confirmed = new UserMessageComponent(text, getMarkdownTheme(), {
+    ...(label ? { label } : {}),
+  });
   const idx = state.chatContainer.children.indexOf(pending.component as never);
   if (idx >= 0) {
     (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
@@ -262,7 +298,10 @@ function confirmMatchingPendingUserMessage(state: TUIState, messageId: string, t
   for (const [pendingId, pending] of state.pendingSignalMessageComponentsById) {
     if (pending.text.trim() !== normalizedText) continue;
 
-    const confirmed = new UserMessageComponent(text, getMarkdownTheme());
+    const label = getPendingUserMessageLabel(pending.isInterjection);
+    const confirmed = new UserMessageComponent(text, getMarkdownTheme(), {
+      ...(label ? { label } : {}),
+    });
     const idx = state.chatContainer.children.indexOf(pending.component as never);
     if (idx >= 0) {
       (state.chatContainer.children as unknown[]).splice(idx, 1, confirmed);
@@ -282,7 +321,7 @@ function unescapeSkillBoundary(text: string): string {
   return text.replaceAll('&lt;/skill&gt;', '</skill>');
 }
 
-export function addUserMessage(state: TUIState, message: HarnessMessage): void {
+export function addUserMessage(state: TUIState, message: HarnessMessage, options?: { label?: string }): void {
   if (state.messageComponentsById.has(message.id)) {
     return;
   }
@@ -319,6 +358,87 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
     return;
   }
 
+  const stateSignalPart = message.content.find(content => (content as { type?: string }).type === 'state_signal') as
+    | { type: 'state_signal'; stateId: string; mode: 'snapshot' | 'delta'; version?: number; message?: string }
+    | undefined;
+
+  if (stateSignalPart) {
+    const component = new StateSignalComponent({
+      stateId: stateSignalPart.stateId,
+      mode: stateSignalPart.mode,
+      version: stateSignalPart.version,
+      message: stateSignalPart.message,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
+    state.ui.requestRender();
+    return;
+  }
+
+  const reactiveSignalPart = message.content.find(
+    content => (content as { type?: string }).type === 'reactive_signal',
+  ) as { type: 'reactive_signal'; tagName: string; message?: string } | undefined;
+
+  if (reactiveSignalPart) {
+    if (!shouldRenderReactiveSignal(reactiveSignalPart.tagName)) return;
+    const component = new ReactiveSignalComponent({
+      tagName: reactiveSignalPart.tagName,
+      message: reactiveSignalPart.message,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
+    state.ui.requestRender();
+    return;
+  }
+
+  const notificationPart = message.content.find(content => (content as { type?: string }).type === 'notification') as
+    | {
+        type: 'notification';
+        message: string;
+        source?: string;
+        kind?: string;
+        priority?: string;
+        status?: string;
+      }
+    | undefined;
+
+  if (notificationPart) {
+    const component = new NotificationComponent({
+      message: notificationPart.message,
+      source: notificationPart.source,
+      kind: notificationPart.kind,
+      priority: notificationPart.priority,
+      status: notificationPart.status,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
+    state.ui.requestRender();
+    return;
+  }
+
+  const notificationSummaryPart = message.content.find(
+    content => (content as { type?: string }).type === 'notification_summary',
+  ) as
+    | {
+        type: 'notification_summary';
+        message: string;
+        pending: number;
+        bySource: Record<string, number>;
+      }
+    | undefined;
+
+  if (notificationSummaryPart) {
+    const component = new NotificationSummaryComponent({
+      message: notificationSummaryPart.message,
+      pending: notificationSummaryPart.pending,
+      bySource: notificationSummaryPart.bySource,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
+    state.ui.requestRender();
+    return;
+  }
+
   const textContent = message.content
     .filter(c => c.type === 'text')
     .map(c => (c as { type: 'text'; text: string }).text)
@@ -330,12 +450,78 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
   const exactDisplayText = displayText.trim();
 
+  const slashCommandMatch = exactDisplayText.match(/^<slash-command\s+name="([^"]*)">([\s\S]*?)<\/slash-command>$/);
+  if (slashCommandMatch) {
+    const commandName = slashCommandMatch[1]!;
+    const commandContent = slashCommandMatch[2]!.trim();
+    const pending = state.pendingSignalMessageComponentsById.get(message.id);
+    if (pending) {
+      state.chatContainer.removeChild(pending.component as never);
+      state.pendingSignalMessageComponentsById.delete(message.id);
+      reconcileChatBoundarySpacers(state.chatContainer);
+    }
+    const existingSlashComp = state.allSlashCommandComponents.find(
+      component =>
+        component.matches(commandName, commandContent) && state.chatContainer.children.includes(component as never),
+    );
+    if (existingSlashComp) {
+      state.messageComponentsById.set(message.id, existingSlashComp);
+      state.ui.requestRender();
+      return;
+    }
+
+    const slashComp = new SlashCommandComponent(commandName, commandContent);
+    state.allSlashCommandComponents.push(slashComp);
+    state.chatContainer.addChild(slashComp);
+    state.ui.requestRender();
+    return;
+  }
+
+  const skillMatch = exactDisplayText.match(/^<skill\s+name="([^"]*)">([\s\S]*?)<\/skill>$/);
+  if (skillMatch) {
+    const commandName = `skill/${skillMatch[1]!}`;
+    const skillContent = unescapeSkillBoundary(skillMatch[2]!.trim());
+    const pending = state.pendingSignalMessageComponentsById.get(message.id);
+    if (pending) {
+      state.chatContainer.removeChild(pending.component as never);
+      state.pendingSignalMessageComponentsById.delete(message.id);
+      reconcileChatBoundarySpacers(state.chatContainer);
+    }
+    const existingSkillComp = state.allSlashCommandComponents.find(
+      component =>
+        component.matches(commandName, skillContent) && state.chatContainer.children.includes(component as never),
+    );
+    if (existingSkillComp) {
+      state.messageComponentsById.set(message.id, existingSkillComp);
+      state.ui.requestRender();
+      return;
+    }
+
+    const skillComp = new SlashCommandComponent(commandName, skillContent);
+    state.allSlashCommandComponents.push(skillComp);
+    state.chatContainer.addChild(skillComp);
+    state.ui.requestRender();
+    return;
+  }
+
   if (state.pendingSignalMessageComponentsById.has(message.id)) {
     confirmPendingUserMessage(state, message.id, displayText);
     return;
   }
 
   if (confirmMatchingPendingUserMessage(state, message.id, displayText)) {
+    return;
+  }
+
+  // Suppress subscription echo of locally-rendered queued messages (Ctrl+F queue).
+  // drainQueuedAction already rendered the message with a local ID; the subscription
+  // echoes it back with a different signal ID which would otherwise create a duplicate.
+  const dedupKey = displayText.trim();
+  const pendingEchoCounts = state.firedQueuedMessageTexts;
+  const dedupCount = pendingEchoCounts?.get(dedupKey) ?? 0;
+  if (dedupCount > 0) {
+    if (dedupCount === 1) pendingEchoCounts!.delete(dedupKey);
+    else pendingEchoCounts!.set(dedupKey, dedupCount - 1);
     return;
   }
 
@@ -361,51 +547,12 @@ export function addUserMessage(state: TUIState, message: HarnessMessage): void {
     return;
   }
 
-  // Check for persisted slash command tags.
-  const slashCommandMatch = exactDisplayText.match(/^<slash-command\s+name="([^"]*)">([\s\S]*?)<\/slash-command>$/);
-  if (slashCommandMatch) {
-    const commandName = slashCommandMatch[1]!;
-    const commandContent = slashCommandMatch[2]!.trim();
-    const existingSlashComp = state.allSlashCommandComponents.find(
-      component =>
-        component.matches(commandName, commandContent) && state.chatContainer.children.includes(component as never),
-    );
-    if (existingSlashComp) {
-      state.messageComponentsById.set(message.id, existingSlashComp);
-      return;
-    }
-
-    const slashComp = new SlashCommandComponent(commandName, commandContent);
-    state.allSlashCommandComponents.push(slashComp);
-    state.chatContainer.addChild(slashComp);
-    state.ui.requestRender();
-    return;
-  }
-
-  // Check for persisted skill activation tags.
-  const skillMatch = exactDisplayText.match(/^<skill\s+name="([^"]*)">([\s\S]*?)<\/skill>$/);
-  if (skillMatch) {
-    const commandName = `skill/${skillMatch[1]!}`;
-    const skillContent = unescapeSkillBoundary(skillMatch[2]!.trim());
-    const existingSkillComp = state.allSlashCommandComponents.find(
-      component =>
-        component.matches(commandName, skillContent) && state.chatContainer.children.includes(component as never),
-    );
-    if (existingSkillComp) {
-      state.messageComponentsById.set(message.id, existingSkillComp);
-      return;
-    }
-
-    const skillComp = new SlashCommandComponent(commandName, skillContent);
-    state.allSlashCommandComponents.push(skillComp);
-    state.chatContainer.addChild(skillComp);
-    state.ui.requestRender();
-    return;
-  }
-
   const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
   if (displayText || prefix) {
-    const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme());
+    const label = getUserMessageLabel(message, options?.label);
+    const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme(), {
+      ...(label ? { label } : {}),
+    });
 
     state.messageComponentsById.set(message.id, userComponent);
 

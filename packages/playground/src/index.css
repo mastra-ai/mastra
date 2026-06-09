@@ -1,26 +1,8 @@
+@import './fonts.css';
 @import '../../playground-ui/src/index.css';
 
 /* Scan playground-ui dist for Tailwind classes used by consumed components */
 @source '../../node_modules/@mastra/playground-ui';
-
-@font-face {
-  font-family: 'TasaExplorer';
-  src:
-    local('TasaExplorer'),
-    url('./assets/fonts/TASAExplorerVF.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Inter';
-  src:
-    local('Inter'),
-    url('./assets/fonts/InterVariable.ttf') format('truetype');
-}
-@font-face {
-  font-family: 'GeistMonoVF';
-  src:
-    local('GeistMonoVF'),
-    url('./assets/fonts/GeistMonoVF.woff') format('woff');
-}
 
 @layer base {
   :root {
@@ -28,8 +10,22 @@
     --color-thumb: var(--surface4);
     --color-thumb-hover: var(--surface6);
     --color-track: transparent;
+
+    /*
+     * Override playground-ui semantic font tokens with locally-bundled fonts.
+     * Studio uses Mona Sans for both display and body.
+     */
+    --font-display:
+      'Mona Sans', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+      'Noto Color Emoji';
+    --font-body:
+      'Mona Sans', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+      'Noto Color Emoji';
+    --font-mono:
+      'CommitMono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
   }
   html {
+    font-feature-settings: 'ss06' on;
     scrollbar-color: var(--color-thumb) var(--color-track);
     scrollbar-width: thin;
   }
@@ -76,13 +72,94 @@ html::-webkit-scrollbar-thumb:hover {
   }
 }
 
+@keyframes shimmer-text {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
 div[class^='language-'],
 pre[class^='language-'],
 code[class^='language-'] {
-  font-family: var(--geist-mono) !important;
+  font-family: var(--font-mono) !important;
 }
 
 th:has(header) {
   height: var(--top-bar-height) !important;
   padding-block: 0 !important;
+}
+
+@layer base {
+  /*
+   * Agent builder starter page — editorial serif minimal motion.
+   * A slow aurora-like gradient drifts behind the content, and the
+   * headline / prompt / chips stagger in on mount. Low contrast on
+   * purpose so the motion feels atmospheric, never loud.
+   */
+  .starter-aurora {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .starter-aurora::before {
+    content: '';
+    position: absolute;
+    inset: -20%;
+    background:
+      radial-gradient(ellipse 55% 45% at 25% 30%, rgba(212, 212, 216, 0.09), transparent 65%),
+      radial-gradient(ellipse 50% 40% at 75% 70%, rgba(161, 161, 170, 0.07), transparent 65%),
+      radial-gradient(ellipse 40% 35% at 50% 95%, rgba(244, 244, 245, 0.05), transparent 70%);
+    filter: blur(40px);
+    animation: starter-drift 28s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+    pointer-events: none;
+    z-index: 0;
+    will-change: transform;
+  }
+
+  @keyframes starter-drift {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    33% {
+      transform: translate3d(-2%, 1.5%, 0) scale(1.04);
+    }
+    66% {
+      transform: translate3d(1.5%, -2%, 0) scale(0.98);
+    }
+  }
+
+  @keyframes starter-enter {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .starter-heading {
+    animation: starter-enter 520ms var(--ease-out-custom) both;
+  }
+  .starter-prompt {
+    animation: starter-enter 520ms var(--ease-out-custom) 120ms both;
+  }
+  .starter-chip {
+    animation: starter-enter 420ms var(--ease-out-custom) both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .starter-aurora::before,
+    .starter-heading,
+    .starter-prompt,
+    .starter-chip {
+      animation: none;
+    }
+  }
 }

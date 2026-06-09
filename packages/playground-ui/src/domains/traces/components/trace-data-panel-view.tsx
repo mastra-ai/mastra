@@ -41,6 +41,14 @@ export interface TraceDataPanelViewProps {
    * `spans`. When omitted, the span with no parent is used (trace case).
    */
   anchorSpanId?: string;
+  /**
+   * Whether to render the "Evaluating traces and saving them as dataset items is
+   * available in Mastra Studio" info notice when neither `onEvaluateTrace` nor
+   * `onSaveAsDatasetItem` is provided. Defaults to `true`. Pass `false` when this
+   * panel is rendered inside Studio in a context that intentionally omits those
+   * handlers (e.g. inline below an experiment result).
+   */
+  showUnavailableFeaturesMsg?: boolean;
 }
 
 export function TraceDataPanelView({
@@ -61,6 +69,7 @@ export function TraceDataPanelView({
   LinkComponent,
   traceHref,
   anchorSpanId,
+  showUnavailableFeaturesMsg = true,
 }: TraceDataPanelViewProps) {
   const isOnTracePage = placement === 'trace-page';
   const [internalCollapsed, setInternalCollapsed] = useState(false);
@@ -143,12 +152,14 @@ export function TraceDataPanelView({
                   {collapsed ? <ChevronsUpDownIcon /> : <ChevronsDownUpIcon />}
                 </Button>
               )}
-              <DataPanel.NextPrevNav
-                onPrevious={onPrevious}
-                onNext={onNext}
-                previousLabel="Previous trace"
-                nextLabel="Next trace"
-              />
+              {(onPrevious || onNext) && (
+                <DataPanel.NextPrevNav
+                  onPrevious={onPrevious}
+                  onNext={onNext}
+                  previousLabel="Previous trace"
+                  nextLabel="Next trace"
+                />
+              )}
               {showOpenTracePageLink && (
                 <Button
                   as={LinkComponent}
@@ -196,7 +207,7 @@ export function TraceDataPanelView({
               </div>
             )}
 
-            {!isOnTracePage && !onEvaluateTrace && !onSaveAsDatasetItem && (
+            {!isOnTracePage && !onEvaluateTrace && !onSaveAsDatasetItem && showUnavailableFeaturesMsg && (
               <Notice variant="info" className="mb-6">
                 <Notice.Message>
                   Evaluating traces and saving them as dataset items is available in Mastra Studio (local or deployed).

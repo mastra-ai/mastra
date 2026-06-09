@@ -13,6 +13,9 @@ import {
   agentThatHarassesYou,
   chefAgent,
   chefAgentResponses,
+  codeOverrideEditableAgent,
+  codeOverrideLockedAgent,
+  codeOverrideDescriptionsOnlyAgent,
   dynamicAgent,
   evalAgent,
   dynamicToolsAgent,
@@ -84,6 +87,8 @@ import {
   stepLoggerProcessor,
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
+import { codeModeAgent } from './agents/code-mode-agent';
+import { clinicDirectAgent, clinicSpecialistAgent, clinicSupervisorAgent } from './agents/clinic-context-agents';
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
@@ -104,6 +109,9 @@ export const mastra = new Mastra({
     gatewayAgent,
     chefAgent,
     chefAgentResponses,
+    codeOverrideEditableAgent,
+    codeOverrideLockedAgent,
+    codeOverrideDescriptionsOnlyAgent,
     dynamicAgent,
     dynamicToolsAgent,
     agentThatHarassesYou,
@@ -124,6 +132,10 @@ export const mastra = new Mastra({
     subscriptionOrchestratorAgent,
     cryptoResearchAgent,
     slackDemoAgent,
+    codeModeAgent,
+    clinicDirectAgent,
+    clinicSpecialistAgent,
+    clinicSupervisorAgent,
   },
   processors: {
     moderationProcessor,
@@ -155,6 +167,7 @@ export const mastra = new Mastra({
     sourcemap: true,
   },
   editor: new MastraEditor({
+    source: 'code',
     toolProviders: {
       composio: new ComposioToolProvider({ apiKey: '' }),
     },

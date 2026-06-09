@@ -492,14 +492,12 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         }
       />
 
-      {datasetDialogTarget && (
-        <TraceAsItemDialog
-          rootSpanId={datasetDialogTarget.rootSpanId}
-          traceId={datasetDialogTarget.traceId}
-          isOpen
-          onClose={() => setDatasetDialogTarget(null)}
-        />
-      )}
+      <TraceAsItemDialog
+        rootSpanId={datasetDialogTarget?.rootSpanId}
+        traceId={datasetDialogTarget?.traceId}
+        isOpen={!!datasetDialogTarget}
+        onClose={() => setDatasetDialogTarget(null)}
+      />
     </PageLayout>
   );
 }

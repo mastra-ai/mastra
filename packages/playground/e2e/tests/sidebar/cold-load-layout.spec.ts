@@ -5,19 +5,22 @@ import { resetStorage } from '../__utils__/reset-storage';
 
 /**
  * FEATURE: Studio Layout Cold-Load Stability
- * REGRESSION GUARD: Prevents reintroduction of an `isFetched`-gated sidebar render
- *   that left the main panel stretched full-width until /api/auth/capabilities
- *   resolved, then snapped into a sidebar+main grid.
  *
- * Existing coverage we do NOT duplicate:
- *   - Post-resolution unauthenticated state (sidebar hidden, inline login shown):
- *     `e2e/tests/auth/login-flow.spec.ts` → "unauthenticated user sees login prompt
- *     on protected page".
- *   - Post-resolution authenticated state (full nav rendered for admin/member/viewer):
- *     `e2e/tests/auth/login-flow.spec.ts` + `e2e/tests/auth/viewer-role.spec.ts`.
+ * The app is wrapped in `RoutePermissionsGate`, which renders a full-screen
+ * spinner until `/api/auth/capabilities` resolves and only then mounts the
+ * router (and therefore the sidebar). That single async boundary is what now
+ * guarantees there is no cold-load layout jump: the sidebar+main grid never
+ * paints in a half-resolved state, so it cannot snap from full-width to a
+ * gridded layout once auth lands.
  *
- * The unique observation here is the pre-resolution paint, which requires stalling
- * the auth route — something the existing `setupMockAuth` utility cannot express.
+ * This test stalls the auth route to assert that boundary directly:
+ *   - while auth is in flight, the gate shows its spinner and the sidebar is
+ *     NOT in the DOM;
+ *   - once auth resolves, the sidebar mounts at a real width and stays stable
+ *     across the next paint.
+ *
+ * Post-resolution role-specific nav rendering is covered elsewhere:
+ *   - `e2e/tests/auth/login-flow.spec.ts`, `e2e/tests/auth/viewer-role.spec.ts`.
  */
 
 const LAYOUT_TOLERANCE_PX = 1;
@@ -69,23 +72,20 @@ test.describe('Studio Layout - Cold-Load Stability', () => {
     await resetStorage();
   });
 
-  test('sidebar column stays stable across auth resolution (no cold-load layout jump)', async ({ page }) => {
+  test('gate holds the layout behind a spinner until auth resolves (no cold-load layout jump)', async ({ page }) => {
     // ARRANGE: Stall the auth routes so the page renders its first paint with auth
-    // still in flight. Admin response so post-resolution keeps the sidebar.
-    const releaseAuth = await gateAuth(page, { role: 'admin' });
+    // still in flight. Auth disabled so the gate resolves to children without an
+    // RBAC permission-patterns request.
+    const releaseAuth = await gateAuth(page, { enabled: false });
     await page.goto('/agents');
 
-    // ASSERT 1 (pre-resolution): The sidebar is in the DOM and laid out at a real
-    // width BEFORE auth resolves. Without the optimistic render this would never
-    // appear until `releaseAuth()` fires, and the test would time out here.
     const sidebar = page.locator('.sidebar-layout').first();
-    await expect(sidebar).toBeVisible({ timeout: 5000 });
 
-    const boxBefore = await sidebar.boundingBox();
-    expect(boxBefore).not.toBeNull();
-    // MainSidebarProvider hydrates width synchronously from localStorage (default 240px).
-    // Anything smaller would mean the sidebar collapsed or was unmounted.
-    expect(boxBefore!.width).toBeGreaterThan(100);
+    // ASSERT 1 (pre-resolution): The gate is showing its spinner and the sidebar
+    // has NOT been mounted yet. This is the boundary that prevents a half-resolved
+    // layout from painting and then snapping.
+    await expect(page.getByRole('status', { name: 'Loading' })).toBeVisible({ timeout: 5000 });
+    await expect(sidebar).toHaveCount(0);
 
     // ACT: Release the auth response. Register the waiter BEFORE calling release()
     // so the response cannot be flushed before we are listening for it.
@@ -93,12 +93,19 @@ test.describe('Studio Layout - Cold-Load Stability', () => {
     releaseAuth();
     await responsePromise;
 
-    // Flush one frame so any React commit triggered by the resolved auth query
-    // has been painted before we re-measure.
+    // ASSERT 2 (post-resolution): The sidebar now mounts at a real width.
+    // MainSidebarProvider hydrates width synchronously from localStorage (default
+    // 240px); anything smaller would mean the sidebar collapsed or was unmounted.
+    await expect(sidebar).toBeVisible({ timeout: 5000 });
+    const boxBefore = await sidebar.boundingBox();
+    expect(boxBefore).not.toBeNull();
+    expect(boxBefore!.width).toBeGreaterThan(100);
+
+    // Flush one frame so any subsequent React commit has been painted before we
+    // re-measure, then prove the sidebar position/width is unchanged within
+    // sub-pixel tolerance — i.e. it mounted once, in its final position.
     await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => resolve())));
 
-    // ASSERT 2 (post-resolution): Sidebar position and width are unchanged within
-    // sub-pixel tolerance — proves there was no horizontal layout jump.
     const boxAfter = await sidebar.boundingBox();
     expect(boxAfter).not.toBeNull();
     expect(Math.abs(boxAfter!.x - boxBefore!.x)).toBeLessThanOrEqual(LAYOUT_TOLERANCE_PX);

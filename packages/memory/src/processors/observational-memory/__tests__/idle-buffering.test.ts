@@ -69,12 +69,13 @@ function createMessages(count: number): MastraDBMessage[] {
  * Create a minimal mock of ObservationalMemory with only the methods
  * that ObservationTurn.end() needs.
  */
-function createMockOM(opts: { asyncEnabled: boolean; unobservedMessages?: MastraDBMessage[] }) {
+function createMockOM(opts: { asyncEnabled: boolean; bufferOnIdle?: boolean; unobservedMessages?: MastraDBMessage[] }) {
   const record = createMockRecord();
   return {
     buffering: {
       isAsyncObservationEnabled: vi.fn(() => opts.asyncEnabled),
     },
+    getObservationConfig: vi.fn(() => ({ bufferOnIdle: opts.bufferOnIdle ?? true })),
     getOrCreateRecord: vi.fn(async () => record),
     getUnobservedMessages: vi.fn(() => opts.unobservedMessages ?? []),
     persistMessages: vi.fn(async () => {}),
@@ -116,6 +117,8 @@ describe('turn.end() idle buffering', () => {
       threadId,
       resourceId,
       messageList: mockMessageList as any,
+      sendSignal: vi.fn(),
+      requestContext: { get: vi.fn() } as any,
     });
 
     (turn as any)._started = true;
@@ -135,6 +138,28 @@ describe('turn.end() idle buffering', () => {
     );
   });
 
+  it('should NOT trigger buffer() when bufferOnIdle is disabled', async () => {
+    const messages = createMessages(5);
+    const mockOM = createMockOM({ asyncEnabled: true, bufferOnIdle: false, unobservedMessages: messages });
+    const mockMessageList = createMockMessageList(messages);
+
+    const turn = new ObservationTurn({
+      om: mockOM as any,
+      threadId,
+      resourceId,
+      messageList: mockMessageList as any,
+      sendSignal: vi.fn(),
+      requestContext: { get: vi.fn() } as any,
+    });
+
+    (turn as any)._started = true;
+    (turn as any)._record = mockOM._mockRecord;
+
+    await turn.end();
+
+    expect(mockOM.buffer).not.toHaveBeenCalled();
+  });
+
   it('should NOT trigger buffer() when buffering is disabled', async () => {
     const messages = createMessages(5);
     const mockOM = createMockOM({ asyncEnabled: false, unobservedMessages: messages });
@@ -145,6 +170,8 @@ describe('turn.end() idle buffering', () => {
       threadId,
       resourceId,
       messageList: mockMessageList as any,
+      sendSignal: vi.fn(),
+      requestContext: { get: vi.fn() } as any,
     });
 
     (turn as any)._started = true;
@@ -165,6 +192,8 @@ describe('turn.end() idle buffering', () => {
       threadId,
       resourceId,
       messageList: mockMessageList as any,
+      sendSignal: vi.fn(),
+      requestContext: { get: vi.fn() } as any,
     });
 
     (turn as any)._started = true;
@@ -186,6 +215,8 @@ describe('turn.end() idle buffering', () => {
       threadId,
       resourceId,
       messageList: mockMessageList as any,
+      sendSignal: vi.fn(),
+      requestContext: { get: vi.fn() } as any,
     });
 
     (turn as any)._started = true;
@@ -220,6 +251,8 @@ describe('turn.end() idle buffering', () => {
       threadId,
       resourceId,
       messageList: mockMessageList as any,
+      sendSignal: vi.fn(),
+      requestContext: { get: vi.fn() } as any,
     });
 
     (turn as any)._started = true;
@@ -237,18 +270,22 @@ describe('turn.end() idle buffering', () => {
     const mockOM = createMockOM({ asyncEnabled: true, unobservedMessages });
     const mockMessageList = createMockMessageList(unobservedMessages);
     const mockWriter = { custom: vi.fn() };
+    const mockSendSignal = vi.fn();
     const mockRequestContext = { get: vi.fn() };
     const mockObservabilityContext = { span: vi.fn() };
+    const mockActorModelContext = { provider: 'test-provider', modelId: 'test-model' };
 
     const turn = new ObservationTurn({
       om: mockOM as any,
       threadId,
       resourceId,
       messageList: mockMessageList as any,
+      sendSignal: mockSendSignal,
+      requestContext: mockRequestContext as any,
       observabilityContext: mockObservabilityContext as any,
     });
     turn.writer = mockWriter as any;
-    turn.requestContext = mockRequestContext as any;
+    turn.actorModelContext = mockActorModelContext;
 
     (turn as any)._started = true;
     (turn as any)._record = mockOM._mockRecord;
@@ -261,8 +298,11 @@ describe('turn.end() idle buffering', () => {
       messages: unobservedMessages,
       record: mockOM._mockRecord,
       writer: mockWriter,
+      sendSignal: mockSendSignal,
       requestContext: mockRequestContext,
+      currentModel: mockActorModelContext,
       observabilityContext: mockObservabilityContext,
+      skipMinimumTokenCheck: true,
     });
   });
 });

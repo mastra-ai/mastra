@@ -1,10 +1,15 @@
 import 'dotenv/config'
 import prismMastraDark from './src/theme/prism-mastra-dark.js'
 import prismMastraLight from './src/theme/prism-mastra-light.js'
+import remarkModelTokens from './src/plugins/remark-model-tokens'
 import type { Config } from '@docusaurus/types'
 import type { ThemeConfig } from '@docusaurus/preset-classic'
 
 const NPM2YARN_CONFIG = { sync: true, converters: ['pnpm', 'yarn', 'bun'] }
+const SHARED_REMARK_PLUGINS = [
+  remarkModelTokens,
+  [require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG],
+] as const
 const ADMONITIONS_CONFIG = {
   keywords: ['note', 'tip', 'info', 'warning', 'danger', 'experimental'],
 }
@@ -66,7 +71,7 @@ const config: Config = {
         sidebarPath: './src/content/en/models/sidebars.js',
         editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
         admonitions: ADMONITIONS_CONFIG,
-        remarkPlugins: [[require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG]],
+        remarkPlugins: [...SHARED_REMARK_PLUGINS],
       },
     ],
     [
@@ -78,7 +83,7 @@ const config: Config = {
         sidebarPath: './src/content/en/guides/sidebars.js',
         editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
         admonitions: ADMONITIONS_CONFIG,
-        remarkPlugins: [[require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG]],
+        remarkPlugins: [...SHARED_REMARK_PLUGINS],
       },
     ],
     [
@@ -90,7 +95,7 @@ const config: Config = {
         sidebarPath: './src/content/en/reference/sidebars.js',
         editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
         admonitions: ADMONITIONS_CONFIG,
-        remarkPlugins: [[require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG]],
+        remarkPlugins: [...SHARED_REMARK_PLUGINS],
       },
     ],
     [
@@ -116,7 +121,7 @@ const config: Config = {
           // Remove this to remove the "edit this page" links.
           editUrl: 'https://github.com/mastra-ai/mastra/tree/main/docs',
           admonitions: ADMONITIONS_CONFIG,
-          remarkPlugins: [[require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG]],
+          remarkPlugins: [...SHARED_REMARK_PLUGINS],
         },
         blog: false,
         theme: {
