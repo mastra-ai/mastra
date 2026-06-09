@@ -24,6 +24,12 @@ import { Memory } from '@mastra/memory';
 export interface RealV1HarnessOptions<TState> {
   /** Stream factory for the backing mock model. Defaults to an empty text stream. */
   doStream?: () => Promise<{ stream: ReadableStream }>;
+  /**
+   * Generate result for the backing mock model. v1 `session.signal()` runs the
+   * agent via `agent.generate()` (non-streaming), so tests that exercise
+   * `signal()` must provide this.
+   */
+  doGenerate?: unknown;
   /** Tools exposed on the backing agent. */
   tools?: Record<string, unknown>;
   /** Modes to register. Defaults to a single `default` mode. */
@@ -75,6 +81,7 @@ export function createRealV1Harness<TState = Record<string, unknown>>(
     instructions: 'You are a test agent.',
     model: new MastraLanguageModelV2Mock({
       doStream: options.doStream ?? (async () => ({ stream: emptyTextStream() })),
+      ...(options.doGenerate ? { doGenerate: options.doGenerate } : {}),
     }) as never,
     tools: (options.tools ?? {}) as never,
   });
@@ -93,7 +100,11 @@ export function createRealV1Harness<TState = Record<string, unknown>>(
     storage,
     stateSchema: options.stateSchema,
     initialState: options.initialState,
-    resolveModel: () => new MastraLanguageModelV2Mock({ doStream: async () => ({ stream: emptyTextStream() }) }) as never,
+    resolveModel: () =>
+      new MastraLanguageModelV2Mock({
+        doStream: options.doStream ?? (async () => ({ stream: emptyTextStream() })),
+        ...(options.doGenerate ? { doGenerate: options.doGenerate } : {}),
+      }) as never,
   });
 
   return {
