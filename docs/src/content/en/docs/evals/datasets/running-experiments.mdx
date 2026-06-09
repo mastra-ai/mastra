@@ -213,6 +213,8 @@ The report also persists inside the item result's `output`, so it is available f
 - Tools run inside sub-agents (agent-as-tool) or workflow-as-tool internals are not intercepted. The top-level call replays as a single recorded output.
 - Replayed calls do not execute the real tool, so replay runs produce no tool spans in their own traces. Use the divergence report to inspect replay behavior.
 - Replay uses per-execution tool hooks, which override agent-level `hooks` (such as a configured `beforeToolCall`) for the replayed runs.
+- Recordings inherit tracing's sensitive-data filtering. Redacted input fields surface as `argMismatches` in the report, and redacted output fields replay as `[REDACTED]` values. If a tool returns sensitive values that replay needs, adjust the `sensitiveDataFilter` option on your observability config.
+- Traces are exported asynchronously. When replaying immediately after a recording run in the same process, ensure the tracing exporter has flushed before starting the replay; an incomplete trace replays as missing events.
 
 :::note
 
