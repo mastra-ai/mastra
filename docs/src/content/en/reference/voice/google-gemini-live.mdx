@@ -526,7 +526,7 @@ Native-audio Gemini Live models — any model whose ID contains `native-audio`, 
 - The model's spoken reply is delivered as audio plus an `output_audio_transcription` transcript and surfaced as `writing` with `role: 'assistant'`.
 - The model's internal reasoning is delivered as `modelTurn.parts.text` and surfaced as `thinking`.
 
-On non-native-audio models there is no `output_audio_transcription` channel, so `modelTurn.parts.text` is the spoken response itself and is emitted as `writing`; the `thinking` event does not fire.
+On non-native-audio models there is no `output_audio_transcription` channel, so `modelTurn.parts.text` is the spoken response itself and is emitted as `writing`; the `thinking` event doesn't fire.
 
 Input transcription, output transcription, and barge-in detection (`realtime_input_config.activity_handling = 'START_OF_ACTIVITY_INTERRUPTS'`) are enabled automatically in the setup payload — no extra configuration is required.
 

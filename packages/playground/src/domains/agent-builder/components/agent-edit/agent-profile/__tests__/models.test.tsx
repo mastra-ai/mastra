@@ -1,10 +1,18 @@
 // @vitest-environment jsdom
 import type { BuilderAvailableModelsResponse } from '@mastra/client-js';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render } from '@testing-library/react';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+
+// Base UI's Checkbox synthesizes a PointerEvent on click, which jsdom does not
+// implement; alias it to MouseEvent so click handlers run.
+beforeAll(() => {
+  if (typeof window.PointerEvent === 'undefined') {
+    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
+  }
+});
 import { AgentColorProvider } from '../../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import { Models } from '../models';
@@ -111,32 +119,32 @@ describe('Models', () => {
     expect(openaiSection.contains(anthropicCard)).toBe(false);
   });
 
-  it('renders one provider-filter badge per provider, all checked by default', () => {
+  it('renders one provider filter row per provider, all checked by default', () => {
     const { getByTestId } = render(
       <FormHarness>
         <Models />
       </FormHarness>,
     );
 
-    const openaiBadge = getByTestId('model-provider-filter-badge-openai');
-    const anthropicBadge = getByTestId('model-provider-filter-badge-anthropic');
-    expect(openaiBadge).toBeTruthy();
-    expect(anthropicBadge).toBeTruthy();
+    const openaiRow = getByTestId('models-provider-filter-item-openai');
+    const anthropicRow = getByTestId('models-provider-filter-item-anthropic');
+    expect(openaiRow).toBeTruthy();
+    expect(anthropicRow).toBeTruthy();
 
-    const openaiCheckbox = getByTestId('model-provider-filter-checkbox-openai');
-    const anthropicCheckbox = getByTestId('model-provider-filter-checkbox-anthropic');
+    const openaiCheckbox = getByTestId('models-provider-filter-checkbox-openai');
+    const anthropicCheckbox = getByTestId('models-provider-filter-checkbox-anthropic');
     expect(openaiCheckbox.getAttribute('aria-checked')).toBe('true');
     expect(anthropicCheckbox.getAttribute('aria-checked')).toBe('true');
   });
 
-  it('unchecking a provider badge hides that provider section and cards', () => {
+  it('unchecking a provider hides that provider section and cards', () => {
     const { getByTestId, queryByTestId } = render(
       <FormHarness>
         <Models />
       </FormHarness>,
     );
 
-    fireEvent.click(getByTestId('model-provider-filter-checkbox-anthropic'));
+    fireEvent.click(getByTestId('models-provider-filter-checkbox-anthropic'));
 
     expect(queryByTestId('model-provider-section-anthropic')).toBeNull();
     expect(queryByTestId('model-card-anthropic-claude-3-5-sonnet')).toBeNull();
@@ -144,51 +152,81 @@ describe('Models', () => {
     expect(queryByTestId('model-card-openai-gpt-4o')).toBeTruthy();
   });
 
-  it('re-checking a provider badge restores it', () => {
+  it('re-checking a provider restores it', () => {
     const { getByTestId, queryByTestId } = render(
       <FormHarness>
         <Models />
       </FormHarness>,
     );
 
-    const anthropicCheckbox = getByTestId('model-provider-filter-checkbox-anthropic');
+    const anthropicCheckbox = getByTestId('models-provider-filter-checkbox-anthropic');
     fireEvent.click(anthropicCheckbox);
     expect(queryByTestId('model-provider-section-anthropic')).toBeNull();
 
-    fireEvent.click(getByTestId('model-provider-filter-checkbox-anthropic'));
+    fireEvent.click(getByTestId('models-provider-filter-checkbox-anthropic'));
     expect(queryByTestId('model-provider-section-anthropic')).toBeTruthy();
     expect(queryByTestId('model-card-anthropic-claude-3-5-sonnet')).toBeTruthy();
   });
 
-  it('unchecking all providers shows the dedicated empty-state copy', () => {
-    const { getByTestId, getByText } = render(
+  it('Clear all hides every provider section and shows the empty-state copy', () => {
+    const { getByTestId, getByText, queryByTestId } = render(
       <FormHarness>
         <Models />
       </FormHarness>,
     );
 
-    fireEvent.click(getByTestId('model-provider-filter-checkbox-openai'));
-    fireEvent.click(getByTestId('model-provider-filter-checkbox-anthropic'));
+    fireEvent.click(getByTestId('models-provider-filter-clear-all'));
 
+    expect(queryByTestId('model-provider-section-openai')).toBeNull();
+    expect(queryByTestId('model-provider-section-anthropic')).toBeNull();
     expect(getByText('Select at least one provider to see models')).toBeTruthy();
   });
 
-  it('paints the checked provider badge with agent color when an agentId is provided', () => {
+  it('Select all restores every provider section after clearing', () => {
+    const { getByTestId, queryByTestId } = render(
+      <FormHarness>
+        <Models />
+      </FormHarness>,
+    );
+
+    fireEvent.click(getByTestId('models-provider-filter-clear-all'));
+    expect(queryByTestId('model-provider-section-openai')).toBeNull();
+
+    fireEvent.click(getByTestId('models-provider-filter-select-all'));
+    expect(queryByTestId('model-provider-section-openai')).toBeTruthy();
+    expect(queryByTestId('model-provider-section-anthropic')).toBeTruthy();
+  });
+
+  it('left-pane search filters the provider checklist without affecting the model grid', async () => {
+    const { getByTestId, queryByTestId } = render(
+      <FormHarness>
+        <Models />
+      </FormHarness>,
+    );
+
+    const filterSearch = getByTestId('models-provider-filter-search').querySelector('input');
+    expect(filterSearch).toBeTruthy();
+    fireEvent.change(filterSearch!, { target: { value: 'anthropic' } });
+
+    await waitFor(() => expect(queryByTestId('models-provider-filter-item-openai')).toBeNull());
+    expect(queryByTestId('models-provider-filter-item-anthropic')).toBeTruthy();
+
+    // Model grid is unaffected by the left-pane search.
+    expect(queryByTestId('model-provider-section-openai')).toBeTruthy();
+    expect(queryByTestId('model-card-openai-gpt-4o')).toBeTruthy();
+  });
+
+  it('paints the checked provider checkbox with agent color when an agentId is provided', () => {
     const { getByTestId } = render(
       <FormHarness>
         <Models />
       </FormHarness>,
     );
 
-    const badge = getByTestId('model-provider-filter-badge-openai') as HTMLLabelElement;
-    expect(badge.style.borderColor).toMatch(/^(rgb|hsl)\(/);
-    expect(badge.style.color).toMatch(/^(rgb|hsl)\(/);
-    expect(badge.style.backgroundColor).toBe('');
-    expect(badge.className).not.toContain('border-accent1');
-
-    const checkbox = getByTestId('model-provider-filter-checkbox-openai') as HTMLButtonElement;
+    const checkbox = getByTestId('models-provider-filter-checkbox-openai') as HTMLButtonElement;
     expect(checkbox.style.backgroundColor).toMatch(/^(rgb|hsl)\(/);
     expect(checkbox.style.borderColor).toMatch(/^(rgb|hsl)\(/);
+    expect(checkbox.className).not.toContain('bg-accent1');
   });
 
   it('combines provider filter and search: searching for a hidden provider yields the search empty state', async () => {
@@ -198,7 +236,7 @@ describe('Models', () => {
       </FormHarness>,
     );
 
-    fireEvent.click(getByTestId('model-provider-filter-checkbox-anthropic'));
+    fireEvent.click(getByTestId('models-provider-filter-checkbox-anthropic'));
 
     const searchInput = getByTestId('model-card-picker-search').querySelector('input');
     expect(searchInput).toBeTruthy();

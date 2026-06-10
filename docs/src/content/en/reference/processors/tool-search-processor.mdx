@@ -136,7 +136,7 @@ const toolSearch = new ToolSearchProcessor({
 
 ### State inspection (legacy `'in-memory'` store)
 
-These methods operate on the default `'in-memory'` store only. They are no-ops for the `'context'` store, whose state lives in the conversation messages rather than an in-process map.
+These methods operate on the default `'in-memory'` store only. They're no-ops for the `'context'` store, whose state lives in the conversation messages rather than an in-process map.
 
 #### `clearState(threadId)`
 
@@ -199,7 +199,7 @@ The `phase` value describes where the filter is being applied:
 
 - `search`: Filters results returned by `search_tools`.
 - `load`: Blocks `load_tool` from loading disallowed tools.
-- `active`: Hides already-loaded tools from the current request if they are no longer allowed.
+- `active`: Hides already-loaded tools from the current request if they're no longer allowed.
 
 If the hook throws or rejects, `ToolSearchProcessor` treats the tool as disallowed for that request. The hook may run for every matching search candidate, so keep async policy checks cheap or cached. The `search_tools` meta-tool is always available; `load_tool` is available unless `search.autoLoad` is enabled. Tools passed directly through the agent or `processInputStep` remain available unless you filter them outside `ToolSearchProcessor`.
 
@@ -245,7 +245,7 @@ The agent workflow is:
 
 ## Single-step discovery with `autoLoad`
 
-Set `search.autoLoad` to `true` to skip the separate load step. The tools returned by `search_tools` are activated immediately, and the `load_tool` meta-tool is not exposed. This removes one model turn per discovery, which lowers token usage and latency, and works the same across providers.
+Set `search.autoLoad` to `true` to skip the separate load step. The tools returned by `search_tools` are activated immediately, and the `load_tool` meta-tool isn't exposed. This removes one model turn per discovery, which lowers token usage and latency, and works the same across providers.
 
 ```typescript
 const toolSearch = new ToolSearchProcessor({
@@ -264,7 +264,7 @@ With `autoLoad` the workflow becomes:
 1. The matching tools are activated automatically and become available on the next turn
 1. Agent uses the tool normally
 
-Every match is activated, so keep `topK` small (for example, `3`) to avoid adding tools the agent did not need. Activated tools are appended after existing tools, which keeps the cached prompt prefix stable for providers that support prompt caching.
+Every match is activated, so keep `topK` small (for example, `3`) to avoid adding tools the agent didn't need. Activated tools are appended after existing tools, which keeps the cached prompt prefix stable for providers that support prompt caching.
 
 ## Loaded-tool storage
 

@@ -631,9 +631,48 @@ export class Mastra<
   #datasets?: DatasetsManager;
   // Global version overrides for primitives (agents, etc.)
   #versions?: VersionOverrides;
+  // Cached pubsub proxy that tags internal-workflow events with `_localOnly`
+  // so the broker skips relaying multi-MB payloads to non-owning instances.
+  #pubsubProxy?: PubSub;
 
-  get pubsub() {
-    return this.#pubsub;
+  get pubsub(): PubSub {
+    if (!this.#pubsubProxy) {
+      const raw = this.#pubsub;
+      const self = this;
+      this.#pubsubProxy = new Proxy(raw, {
+        get(target, prop, _receiver) {
+          if (prop === 'publish') {
+            return function publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>) {
+              // Internal execution-workflows / agentic-loops are run-scoped:
+              // only the owning instance needs their events. Pass `localOnly`
+              // so the broker delivers locally + echoes back to the sender,
+              // but does NOT fan out to other clients (avoids serialising
+              // cumulative stepResults blobs — often 9 MB+ — across the unix
+              // socket). The flag rides on the publish-frame envelope, not on
+              // event.data, so WEP consumers never see it.
+              if (topic === 'workflows' || topic === 'workflows-finish') {
+                const data = event.data as Record<string, unknown> | undefined;
+                const wfId = data?.workflowId as string | undefined;
+                const rId = data?.runId as string | undefined;
+                if (wfId && rId && self.__hasInternalWorkflow(wfId, rId)) {
+                  return target.publish(topic, event, { localOnly: true });
+                }
+              }
+              return target.publish(topic, event);
+            };
+          }
+          // Bind methods to `target` so private field access (#subscribers etc.)
+          // works correctly — JS Proxies set `this` to the proxy, which breaks
+          // private fields since they are scoped to the declaring class instance.
+          const val = Reflect.get(target, prop, target);
+          if (typeof val === 'function') {
+            return val.bind(target);
+          }
+          return val;
+        },
+      }) as PubSub;
+    }
+    return this.#pubsubProxy;
   }
 
   get agentThreadStreamRuntime() {
@@ -2393,6 +2432,43 @@ export class Mastra<
     return !!this.#internalMastraWorkflows[id];
   }
 
+  /**
+   * Returns `true` when this Mastra instance can resolve the workflow
+   * identified by `workflowId` + `runId`.  Mirrors the resolution order in
+   * the WEP's `#dispatch` — internal registry → nested (parentWorkflow
+   * present) → public registry — without side-effects.
+   *
+   * Used by the push-subscription guard in {@link startWorkers} to drop
+   * cross-process events for internal workflows that belong to another
+   * process.
+   */
+  #ownsWorkflow(workflowId: string, runId: string, parentWorkflow: unknown): boolean {
+    // 1. Internal registry (run-scoped execution-workflow, agentic-loop, etc.)
+    if (this.__hasInternalWorkflow(workflowId, runId)) return true;
+    // 2. Nested workflow — walk up the parentWorkflow chain to the root and
+    //    verify that the root workflow is owned by this instance. Without this
+    //    check, cross-process subscribers would process foreign nested events
+    //    (the parentWorkflow field is truthy on both processes) and publish
+    //    spurious workflow.fail events that kill the correct owner's run.
+    if (parentWorkflow) {
+      let root = parentWorkflow as { workflowId?: string; runId?: string; parentWorkflow?: unknown };
+      while (root.parentWorkflow) {
+        root = root.parentWorkflow as typeof root;
+      }
+      const rootId = root.workflowId as string | undefined;
+      const rootRunId = root.runId as string | undefined;
+      if (rootId && rootRunId) {
+        return this.#ownsWorkflow(rootId, rootRunId, undefined);
+      }
+      // Malformed chain — fall through to public registry check below.
+    }
+    // 3. Public workflow registry — direct lookup to avoid telemetry noise
+    //    from getWorkflowById() on the expected "foreign workflow" path.
+    const workflows = this.#workflows as Record<string, AnyWorkflow> | undefined;
+    if (workflows?.[workflowId]) return true;
+    return Object.values(workflows ?? {}).some(w => w.id === workflowId);
+  }
+
   __getInternalWorkflow(id: string, runId?: string): AnyWorkflow {
     const workflow = runId
       ? (this.#internalMastraWorkflows[`${id}:${runId}`] ?? this.#internalMastraWorkflows[id])
@@ -4142,6 +4218,24 @@ export class Mastra<
       const pushOnly = modes.includes('push') && !modes.includes('pull');
       if (pushOnly && !this.#pushSubscription) {
         const cb: EventCallback = (event, ack) => {
+          // In cross-process push environments (e.g. UnixSocketPubSub),
+          // every subscriber receives every event — including events for
+          // internal workflows registered on a different process. Skip
+          // events whose workflow exists in neither the internal nor the
+          // public registry so only the owning process handles them.
+          // Without this guard the WEP would publish workflow.fail,
+          // propagating through workflows-finish and erroneously
+          // terminating the correct process's run.
+          const data = event.data as Record<string, unknown> | undefined;
+          const wfId = data?.workflowId as string | undefined;
+          const rId = data?.runId as string | undefined;
+          if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
+            if (ack) {
+              void ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err));
+            }
+            return;
+          }
+
           void this.handleWorkflowEvent(event)
             .then(result => {
               if (result.ok && ack) {
