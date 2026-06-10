@@ -57,7 +57,7 @@ class AsyncCallbackPubSub extends PubSub {
   #index = 0;
   #pending = new Set<Promise<void>>();
 
-  async publish(topic: string, event: any): Promise<void> {
+  async publish(topic: string, event: any, _options?: { localOnly?: boolean }): Promise<void> {
     const subscribers = [...(this.#subscribers.get(topic) ?? [])];
     const envelope = {
       ...event,

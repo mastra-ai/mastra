@@ -104,7 +104,7 @@ export class CachingPubSub extends PubSub {
    * Uses atomic increment for index assignment to prevent race conditions
    * when multiple events are published concurrently.
    */
-  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt' | 'index'>): Promise<void> {
+  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt' | 'index'>, options?: { localOnly?: boolean }): Promise<void> {
     const cacheKey = this.getCacheKey(topic);
     const counterKey = this.getCounterKey(topic);
 
@@ -138,7 +138,7 @@ export class CachingPubSub extends PubSub {
     }
 
     // Always publish to inner PubSub — cache failure must not block live delivery
-    await this.inner.publish(topic, fullEvent);
+    await this.inner.publish(topic, fullEvent, options);
   }
 
   /**

@@ -17,7 +17,7 @@ import type { Event, EventCallback, SubscribeOptions } from './types';
 export type PubSubDeliveryMode = 'pull' | 'push';
 
 export abstract class PubSub {
-  abstract publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void>;
+  abstract publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }): Promise<void>;
   abstract subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void>;
   abstract unsubscribe(topic: string, cb: EventCallback): Promise<void>;
   /**

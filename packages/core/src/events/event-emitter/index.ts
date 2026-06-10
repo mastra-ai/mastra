@@ -85,7 +85,7 @@ export class EventEmitterPubSub extends PubSub {
     }
   }
 
-  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, _options?: { localOnly?: boolean }): Promise<void> {
     const id = crypto.randomUUID();
     const createdAt = new Date();
     this.emitter.emit(topic, {

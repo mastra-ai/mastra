@@ -631,9 +631,41 @@ export class Mastra<
   #datasets?: DatasetsManager;
   // Global version overrides for primitives (agents, etc.)
   #versions?: VersionOverrides;
+  // Cached pubsub proxy that tags internal-workflow events with `_localOnly`
+  // so the broker skips relaying multi-MB payloads to non-owning instances.
+  #pubsubProxy?: PubSub;
 
-  get pubsub() {
-    return this.#pubsub;
+  get pubsub(): PubSub {
+    if (!this.#pubsubProxy) {
+      const raw = this.#pubsub;
+      const self = this;
+      this.#pubsubProxy = new Proxy(raw, {
+        get(target, prop, receiver) {
+          if (prop === 'publish') {
+            return function publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>) {
+              // Internal execution-workflows / agentic-loops are run-scoped:
+              // only the owning instance needs their events. Pass `localOnly`
+              // so the broker delivers locally + echoes back to the sender,
+              // but does NOT fan out to other clients (avoids serialising
+              // cumulative stepResults blobs — often 9 MB+ — across the unix
+              // socket). The flag rides on the publish-frame envelope, not on
+              // event.data, so WEP consumers never see it.
+              if (topic === 'workflows' || topic === 'workflows-finish') {
+                const data = event.data as Record<string, unknown> | undefined;
+                const wfId = data?.workflowId as string | undefined;
+                const rId = data?.runId as string | undefined;
+                if (wfId && rId && self.__hasInternalWorkflow(wfId, rId)) {
+                  return target.publish(topic, event, { localOnly: true });
+                }
+              }
+              return target.publish(topic, event);
+            };
+          }
+          return Reflect.get(target, prop, receiver);
+        },
+      }) as PubSub;
+    }
+    return this.#pubsubProxy;
   }
 
   get agentThreadStreamRuntime() {

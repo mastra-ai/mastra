@@ -36,9 +36,9 @@ class SignalsPubSub extends PubSub {
     return ['push'];
   }
 
-  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }): Promise<void> {
     const socket = await this.#getOrCreate(topic);
-    await socket.publish(topic, event);
+    await socket.publish(topic, event, options);
   }
 
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
