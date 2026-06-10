@@ -1,3 +1,4 @@
+import { RETHROWN_TOOL_ERROR_NAMES } from '../../loop/workflows/agentic-execution/rethrown-error-names';
 import { SpanType } from '../../observability';
 import type { SpanRecord } from '../../storage/domains/observability/tracing';
 import type { ToolHooks } from '../../tools/types';
@@ -175,7 +176,14 @@ export function extractToolReplayEvents(spans: SpanRecord[]): ToolReplayEvent[] 
   const toolSpans = spans.filter(span => isToolSpan(span) && !hasToolSpanAncestor(span, spansById));
 
   // Adapter sort order is not contractual — order by startedAt defensively.
-  toolSpans.sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
+  // startedAt has ms resolution, so parallel calls can tie; break ties by
+  // spanId (ordinal comparison — localeCompare is locale-sensitive) so the
+  // FIFO order is identical across storage adapters.
+  toolSpans.sort((a, b) => {
+    const diff = new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime();
+    if (diff !== 0) return diff;
+    return a.spanId < b.spanId ? -1 : a.spanId > b.spanId ? 1 : 0;
+  });
 
   const events: ToolReplayEvent[] = [];
   for (const span of toolSpans) {
@@ -262,9 +270,9 @@ export function buildReplayHooks(
 
       if (event.error) {
         const error = new Error(event.error.message);
-        // Never reuse 'FGADeniedError' — the tool-call step re-throws that name
-        // instead of converting it to a tool-error result.
-        if (event.error.name && event.error.name !== 'FGADeniedError') {
+        // Never reuse names the tool-call step re-throws (instead of converting
+        // to a tool-error result) — shared source of truth with the loop.
+        if (event.error.name && !RETHROWN_TOOL_ERROR_NAMES.has(event.error.name)) {
           error.name = event.error.name;
         }
         throw error;

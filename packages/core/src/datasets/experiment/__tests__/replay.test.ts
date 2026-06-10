@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { RETHROWN_TOOL_ERROR_NAMES } from '../../../loop/workflows/agentic-execution/rethrown-error-names';
 import { SpanType } from '../../../observability';
 import type { SpanRecord } from '../../../storage/domains/observability/tracing';
 import type { ToolHookContext } from '../../../tools/types';
@@ -52,6 +53,19 @@ describe('extractToolReplayEvents', () => {
       ['send', 2],
     ]);
     expect(events[0]!.input).toEqual({ key: 'first' });
+  });
+
+  it('breaks startedAt ties deterministically by spanId regardless of adapter order', () => {
+    const tied = [
+      toolSpan('span-b', 'lookup', 1000, { input: { key: 'b' } }),
+      toolSpan('span-a', 'lookup', 1000, { input: { key: 'a' } }),
+    ];
+
+    const forward = extractToolReplayEvents(tied);
+    const reversed = extractToolReplayEvents([...tied].reverse());
+
+    expect(forward.map(e => e.spanId)).toEqual(['span-a', 'span-b']);
+    expect(reversed.map(e => e.spanId)).toEqual(['span-a', 'span-b']);
   });
 
   it('excludes non-tool spans and event spans, includes MCP tool spans', () => {
@@ -181,16 +195,18 @@ describe('buildReplayHooks', () => {
     expect(finalizeReplayReport(state).replayedCount).toBe(1);
   });
 
-  it('never reuses the FGADeniedError name for replayed errors', async () => {
-    const events = extractToolReplayEvents([
-      toolSpan('e1', 'guarded', 1000, { error: { name: 'FGADeniedError', message: 'denied' } }),
-    ]);
-    const state = createReplayState(events, TRACE_ID);
-    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+  it('never reuses error names the tool-call step re-throws', async () => {
+    for (const rethrownName of RETHROWN_TOOL_ERROR_NAMES) {
+      const events = extractToolReplayEvents([
+        toolSpan('e1', 'guarded', 1000, { error: { name: rethrownName, message: 'denied' } }),
+      ]);
+      const state = createReplayState(events, TRACE_ID);
+      const hooks = buildReplayHooks(state, { onMiss: 'error' });
 
-    expect(() => callHook(hooks, 'guarded', {})).toThrowError(
-      expect.objectContaining({ name: 'Error', message: 'denied' }),
-    );
+      expect(() => callHook(hooks, 'guarded', {})).toThrowError(
+        expect.objectContaining({ name: 'Error', message: 'denied' }),
+      );
+    }
   });
 
   it('onMiss passthrough lets the call proceed and records the miss', async () => {

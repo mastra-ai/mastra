@@ -25,6 +25,7 @@ import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
+import { RETHROWN_TOOL_ERROR_NAMES } from './rethrown-error-names';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
 
@@ -1168,7 +1169,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         return { result, ...inputData };
       } catch (error) {
         // Re-throw FGA authorization errors instead of swallowing them
-        if (error instanceof Error && error.name === 'FGADeniedError') {
+        if (error instanceof Error && RETHROWN_TOOL_ERROR_NAMES.has(error.name)) {
           throw error;
         }
         return {
