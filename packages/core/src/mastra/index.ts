@@ -41,7 +41,7 @@ import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../obs
 import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
-import type { ApiRoute, Middleware, ServerConfig } from '../server/types';
+import type { ApiRoute, Middleware, ServerConfig, StudioConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
 import { InMemoryStore } from '../storage';
 import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inmemory';
@@ -319,6 +319,38 @@ export interface Config<
   server?: ServerConfig;
 
   /**
+   * Studio-specific authentication and authorization configuration.
+   *
+   * When configured, Studio uses separate auth from the server (API) auth,
+   * allowing different providers for internal team members vs external customers.
+   *
+   * - `server.auth` handles API authentication (external customers)
+   * - `studio.auth` handles Studio authentication (internal team)
+   *
+   * **Dual auth is opt-in:** If `studio.auth` is not configured, Studio requests
+   * fall back to `server.auth` for backward compatibility. To enable strict
+   * separation between Studio and API auth, configure both `studio.auth` and
+   * `server.auth`.
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   server: {
+   *     auth: new MastraAuthWorkos({ ... }), // External customers
+   *   },
+   *   studio: {
+   *     auth: new MastraAuthOkta({ ... }), // Internal team
+   *     rbac: new StaticRBACProvider({
+   *       roles: DEFAULT_ROLES,
+   *       getUserRoles: (user) => [user.role],
+   *     }),
+   *   },
+   * });
+   * ```
+   */
+  studio?: StudioConfig;
+
+  /**
    * MCP servers provide tools and resources that agents can use.
    */
   mcpServers?: TMCPServers;
@@ -566,6 +598,7 @@ export class Mastra<
   #workspace?: Workspace;
   #workspaces: Record<string, RegisteredWorkspace> = {};
   #server?: ServerConfig;
+  #studio?: StudioConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
@@ -1319,6 +1352,10 @@ export class Mastra<
 
     if (config?.server) {
       this.#server = config.server;
+    }
+
+    if (config?.studio) {
+      this.#studio = config.studio;
     }
 
     // Register channels and merge their routes into server config
@@ -3803,6 +3840,23 @@ export class Mastra<
 
   public getServer() {
     return this.#server;
+  }
+
+  /**
+   * Gets the Studio-specific authentication and authorization configuration.
+   *
+   * @returns The studio config, or undefined if not configured
+   *
+   * @example
+   * ```typescript
+   * const studioConfig = mastra.getStudio();
+   * if (studioConfig?.auth) {
+   *   // Studio has separate auth configured
+   * }
+   * ```
+   */
+  public getStudio() {
+    return this.#studio;
   }
 
   /**
