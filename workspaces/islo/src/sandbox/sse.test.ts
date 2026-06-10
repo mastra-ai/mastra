@@ -60,6 +60,7 @@ describe('consumeIsloStream', () => {
     });
 
     expect(result.exitCode).toBe(7);
+    expect(result.sawExit).toBe(true);
     // Multi-data lines join with '\n', so two lines `hello` + `` produce `hello\n`.
     expect(out).toBe('hello\n');
     expect(err).toBe('warn-line');
@@ -76,11 +77,12 @@ describe('consumeIsloStream', () => {
     });
 
     expect(result.exitCode).toBe(0);
+    expect(result.sawExit).toBe(true);
     expect(collected).toEqual(['line-1', 'line-2']);
   });
 
   it('treats unknown event types as no-ops without throwing', async () => {
-    const body = 'event: heartbeat\ndata: tick\n\nevent: stdout\ndata: ok\n\n';
+    const body = 'event: heartbeat\ndata: tick\n\nevent: stdout\ndata: ok\n\nevent: exit\ndata: 0\n\n';
     let out = '';
     const result = await consumeIsloStream(streamFromString(body), {
       onStdout: (d) => {
@@ -89,6 +91,7 @@ describe('consumeIsloStream', () => {
     });
     expect(out).toBe('ok');
     expect(result.exitCode).toBe(0);
+    expect(result.sawExit).toBe(true);
   });
 
   it('handles CRLF line endings', async () => {
@@ -101,16 +104,33 @@ describe('consumeIsloStream', () => {
     });
     expect(out).toBe('hi');
     expect(result.exitCode).toBe(1);
+    expect(result.sawExit).toBe(true);
   });
 
-  it('handles a final event without a trailing blank line', async () => {
+  it('handles a final stdout event without a trailing blank line', async () => {
     const body = 'event: stdout\ndata: trailing\n';
     let out = '';
-    await consumeIsloStream(streamFromString(body), {
+    const result = await consumeIsloStream(streamFromString(body), {
       onStdout: (d) => {
         out += d;
       },
     });
     expect(out).toBe('trailing');
+    expect(result.exitCode).toBeNull();
+    expect(result.sawExit).toBe(false);
+  });
+
+  it('does not treat a missing exit event as success', async () => {
+    const result = await consumeIsloStream(streamFromString('event: stdout\ndata: ok\n\n'));
+
+    expect(result.exitCode).toBeNull();
+    expect(result.sawExit).toBe(false);
+  });
+
+  it('does not treat a malformed exit event as success', async () => {
+    const result = await consumeIsloStream(streamFromString('event: exit\ndata: not-a-number\n\n'));
+
+    expect(result.exitCode).toBeNull();
+    expect(result.sawExit).toBe(false);
   });
 });

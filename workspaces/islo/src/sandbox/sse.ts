@@ -18,13 +18,14 @@ export interface SSECallbacks {
 }
 
 export interface SSEResult {
-  exitCode: number;
+  exitCode: number | null;
+  sawExit: boolean;
 }
 
 /**
  * Consume the islo SSE stream and dispatch stdout/stderr deltas.
  * Resolves when the response body ends; returns the exit code emitted by the
- * final `exit` event (defaults to 0 if none was seen).
+ * final valid `exit` event and whether that event was observed.
  */
 export async function consumeIsloStream(
   body: ReadableStream<Uint8Array>,
@@ -33,7 +34,8 @@ export async function consumeIsloStream(
   const decoder = new TextDecoder('utf-8');
   const reader = body.getReader();
   let buffer = '';
-  let exitCode = 0;
+  let exitCode: number | null = null;
+  let sawExit = false;
   let event = '';
   let dataLines: string[] = [];
 
@@ -53,6 +55,7 @@ export async function consumeIsloStream(
         const parsed = Number.parseInt(payload.trim(), 10);
         if (Number.isFinite(parsed)) {
           exitCode = parsed;
+          sawExit = true;
         }
         break;
       }
@@ -89,7 +92,7 @@ export async function consumeIsloStream(
     }
   }
 
-  return { exitCode };
+  return { exitCode, sawExit };
 
   function processLine(line: string): void {
     if (line === '') {

@@ -88,11 +88,10 @@ describe('IsloSandbox', () => {
     });
 
     it('configures token exchange on control URL and sandbox calls on compute URL', () => {
-      const sb = new IsloSandbox({
+      new IsloSandbox({
         controlUrl: 'https://control.example.com/',
         computeUrl: 'https://compute.example.com/',
       });
-      expect(sb.processes).toBeUndefined();
       expect(tokenProviderConstructorMock).toHaveBeenCalledWith({
         apiKey: 'ak_test',
         baseUrl: 'https://control.example.com',
@@ -103,6 +102,11 @@ describe('IsloSandbox', () => {
           baseUrl: 'https://compute.example.com',
         }),
       );
+    });
+
+    it('does not expose background process management in v1', () => {
+      const sb = new IsloSandbox();
+      expect(sb.processes).toBeUndefined();
     });
 
     it('resolves ISLO_CONTROL_URL and ISLO_COMPUTE_URL independently', () => {
@@ -124,11 +128,15 @@ describe('IsloSandbox', () => {
 
   describe('lifecycle', () => {
     it('start() creates a new sandbox when none exists', async () => {
-      const sb = new IsloSandbox({ sandboxName: 'mastra-test', image: 'ubuntu:24.04' });
+      const sb = new IsloSandbox({
+        sandboxName: 'mastra-test',
+        image: 'ubuntu:24.04',
+        metadata: { project: 'mastra' },
+      });
       await sb._start();
       expect(getSandboxMock).toHaveBeenCalledWith({ sandbox_name: 'mastra-test' });
       expect(createSandboxMock).toHaveBeenCalledWith(
-        expect.objectContaining({ name: 'mastra-test', image: 'ubuntu:24.04' }),
+        expect.objectContaining({ name: 'mastra-test', image: 'ubuntu:24.04', metadata: { project: 'mastra' } }),
       );
       expect(sb.status).toBe('running');
     });
@@ -248,6 +256,14 @@ describe('IsloSandbox', () => {
       const result = await sb.executeCommand!('false');
       expect(result.exitCode).toBe(7);
       expect(result.success).toBe(false);
+    });
+
+    it('throws when the exec stream ends without a valid exit event', async () => {
+      const sseBody = 'event: stdout\ndata: partial\n\n';
+      globalThis.fetch = vi.fn().mockResolvedValue(new Response(streamFromString(sseBody))) as unknown as typeof fetch;
+
+      const sb = new IsloSandbox({ sandboxName: 'mastra-test' });
+      await expect(sb.executeCommand!('echo', ['partial'])).rejects.toThrow(/valid exit event/);
     });
 
     it('throws when the stream endpoint returns a non-2xx response', async () => {

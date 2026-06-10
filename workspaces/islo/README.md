@@ -26,7 +26,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   name: 'my-agent',
-  model: 'anthropic/claude-opus-4-5',
+  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
   workspace,
 });
 ```

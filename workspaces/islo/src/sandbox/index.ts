@@ -34,6 +34,9 @@ const ENV_CONTROL_URL = 'ISLO_CONTROL_URL';
 const ENV_COMPUTE_URL = 'ISLO_COMPUTE_URL';
 const DEFAULT_CONTROL_URL = 'https://api.islo.dev';
 const DEFAULT_COMPUTE_URL = 'https://ca.compute.islo.dev';
+type IsloSandboxCreatePayload = Parameters<IsloApiClient['sandboxes']['createSandbox']>[0] & {
+  metadata?: Record<string, unknown>;
+};
 
 /**
  * Configuration for an `IsloSandbox` instance.
@@ -162,13 +165,15 @@ export class IsloSandbox extends MastraSandbox {
     }
 
     this.logger.debug(`creating islo sandbox ${this.sandboxName}`);
-    const created = await this.client.sandboxes.createSandbox({
+    const createPayload: IsloSandboxCreatePayload = {
       name: this.sandboxName,
       image: this.image,
       workdir: this.workdir,
       gateway_profile: this.gatewayProfile,
       env: nullifyValues(this.env),
-    });
+      metadata: emptyToUndefined(this.metadata),
+    };
+    const created = await this.client.sandboxes.createSandbox(createPayload);
     this._createdAt = created.created_at ? new Date(created.created_at) : new Date();
   }
 
@@ -302,6 +307,9 @@ export class IsloSandbox extends MastraSandbox {
           options.onStderr?.(data);
         },
       });
+      if (!result.sawExit || result.exitCode === null) {
+        throw new Error('islo exec stream ended without a valid exit event');
+      }
       exitCode = result.exitCode;
     } catch (err) {
       const aborted = (err as { name?: string })?.name === 'AbortError';
@@ -387,6 +395,10 @@ function nullifyValues(record: Record<string, string>): Record<string, string | 
     out[k] = record[k] ?? null;
   }
   return out;
+}
+
+function emptyToUndefined<T extends Record<string, unknown>>(record: T): T | undefined {
+  return Object.keys(record).length === 0 ? undefined : record;
 }
 
 function mergeEnv(base: Record<string, string>, overlay: NodeJS.ProcessEnv): Record<string, string> {
