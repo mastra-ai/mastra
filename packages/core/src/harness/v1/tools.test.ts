@@ -53,4 +53,19 @@ describe('buildSessionToolsets', () => {
     });
     expect(result).toEqual({ c });
   });
+
+  it('caller-supplied built-ins override same-id built-ins (executing subagent over v1 stub)', () => {
+    // HarnessCompat injects the legacy *executing* `subagent` tool over v1's
+    // record-only stub by spreading it last into builtInTools (see
+    // Session.#buildThreadStreamOptions). Proves the injected tool wins by id
+    // so v1-dispatched runs run the real subagent rather than the stub.
+    const v1Stub = stub('subagent');
+    const executing = stub('subagent');
+    const v1BuiltIns: Record<string, unknown> = { task_write: stub('task_write'), subagent: v1Stub };
+    const additionalBuiltInTools: Record<string, unknown> = { subagent: executing };
+    const result = buildSessionToolsets({
+      builtInTools: { ...v1BuiltIns, ...additionalBuiltInTools } as never,
+    });
+    expect((result as Record<string, unknown>).subagent).toBe(executing);
+  });
 });

@@ -5,7 +5,7 @@ import type { Session, HarnessMode, Harness } from '@mastra/core/harness/v1';
 import type { AgentSignalContents } from '@mastra/core/agent';
 import type { TracingContext, TracingOptions } from '@mastra/core/observability';
 import { randomUUID } from 'node:crypto';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 
 type CloneSessionOptions = {
   sessionId?: string;
@@ -454,9 +454,23 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
       // consumed before the run starts so no chunks are missed.
       await this.#adoptSessionSubscription(session);
 
+      // Seed legacy harness capabilities (`emitEvent`, `registerQuestion`,
+      // `registerPlanApproval`, `abortSignal`) onto the request context so tools
+      // dispatched through v1 (e.g. the executing `subagent` tool) can render
+      // activity through this harness's existing display pipeline. The v1
+      // request-context builder merges these forward under its own identity.
+      const seededContext = await this.seedHarnessCapabilities(requestContext ?? new RequestContext());
+
+      // v1's own `subagent` built-in only registers a durable child record;
+      // inject the legacy executing tool (fresh constrained Agent + streamed
+      // run) so delegation actually runs. Built per-run so it reflects the
+      // current mode/model. `buildSubagentTool` lives on the core
+      // `createSubagentTool` export and survives the legacy Harness removal.
+      const subagentTool = this.buildSubagentTool(seededContext);
       const { runId } = await session.signalThread({
         content: typeof content === 'string' ? content : JSON.stringify(content),
-        requestContext,
+        requestContext: seededContext,
+        ...(subagentTool ? { additionalBuiltInTools: { subagent: subagentTool } } : {}),
       });
 
       return { accepted: true as const, runId: runId ?? id };

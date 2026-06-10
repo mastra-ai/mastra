@@ -4007,55 +4007,9 @@ export class Harness<TState = {}> {
     }
 
     // Auto-create subagent tool if subagent definitions are configured
-    if (this.config.subagents?.length && this.config.resolveModel) {
-      const currentMode = this.getCurrentMode();
-      const hasMemory = Boolean(this.config.memory);
-      builtInTools.subagent = createSubagentTool({
-        subagents: this.config.subagents,
-        resolveModel: this.config.resolveModel,
-        harnessTools: resolvedHarnessTools,
-        fallbackModelId: currentMode?.defaultModelId,
-        getParentModelId: () => this.getCurrentModelId(),
-        // Resolved lazily so forked subagents see the current mode's agent
-        // even if the mode switches between tool-call scheduling and execution.
-        getParentAgent: () => {
-          try {
-            return this.getCurrentAgent();
-          } catch {
-            return undefined;
-          }
-        },
-        // Only wired up when memory is configured. Clones at the memory layer
-        // (not via Harness.cloneThread) so the parent thread stays the active
-        // thread while the forked subagent runs on the clone.
-        //
-        // The clone is tagged with `forkedSubagent: true` + `parentThreadId` so
-        // that thread pickers / startup flows can hide transient fork threads —
-        // see `listThreads` (filtered by default).
-        cloneThreadForFork: hasMemory
-          ? async ({ sourceThreadId, resourceId, title }) => {
-              const memory = await this.resolveMemory();
-              const result = await memory.cloneThread({
-                sourceThreadId,
-                resourceId: resourceId ?? this.resourceId,
-                title,
-                metadata: {
-                  forkedSubagent: true,
-                  parentThreadId: sourceThreadId,
-                },
-              });
-              return { id: result.thread.id, resourceId: result.thread.resourceId };
-            }
-          : undefined,
-        // Forks inherit the parent's toolsets verbatim so harness-injected
-        // tools (`ask_user`, `submit_plan`, user-configured harness tools, etc.)
-        // remain available inside the fork. The `subagent` entry itself is
-        // deliberately kept — its schema/description are part of the parent's
-        // prompt-cache prefix, and stripping it would invalidate the cache.
-        // Recursive forking is blocked at runtime instead: see the patched
-        // `subagent` execute that the forked tool path installs in `tools.ts`.
-        getParentToolsets: forkRequestContext => this.buildToolsets(forkRequestContext ?? requestContext),
-      });
+    const subagentTool = this.buildSubagentTool(requestContext, resolvedHarnessTools);
+    if (subagentTool) {
+      builtInTools.subagent = subagentTool;
     }
 
     // Remove any explicitly disabled built-in tools
@@ -4077,6 +4031,75 @@ export class Harness<TState = {}> {
       return { harnessBuiltIn: builtInTools, harness: resolvedHarnessTools };
     }
     return { harnessBuiltIn: builtInTools };
+  }
+
+  /**
+   * Build the executing `subagent` tool from the configured subagent
+   * definitions, or `undefined` when no subagents/model resolver are
+   * configured. The tool spawns a fresh constrained Agent per call, streams
+   * its run, and returns the findings as text.
+   *
+   * Exposed as `protected` so the v1 compat layer can compose the *same*
+   * proven executing tool into the v1 session toolset (v1's own built-in
+   * `subagent` only registers a durable child record and does not run the
+   * agent). Lives on the standalone `createSubagentTool` core export, so it
+   * survives the eventual removal of the legacy Harness.
+   */
+  protected buildSubagentTool(
+    requestContext: RequestContext,
+    resolvedHarnessTools?: ToolsInput,
+  ): ReturnType<typeof createSubagentTool> | undefined {
+    if (!this.config.subagents?.length || !this.config.resolveModel) {
+      return undefined;
+    }
+    const currentMode = this.getCurrentMode();
+    const hasMemory = Boolean(this.config.memory);
+    return createSubagentTool({
+      subagents: this.config.subagents,
+      resolveModel: this.config.resolveModel,
+      harnessTools: resolvedHarnessTools,
+      fallbackModelId: currentMode?.defaultModelId,
+      getParentModelId: () => this.getCurrentModelId(),
+      // Resolved lazily so forked subagents see the current mode's agent
+      // even if the mode switches between tool-call scheduling and execution.
+      getParentAgent: () => {
+        try {
+          return this.getCurrentAgent();
+        } catch {
+          return undefined;
+        }
+      },
+      // Only wired up when memory is configured. Clones at the memory layer
+      // (not via Harness.cloneThread) so the parent thread stays the active
+      // thread while the forked subagent runs on the clone.
+      //
+      // The clone is tagged with `forkedSubagent: true` + `parentThreadId` so
+      // that thread pickers / startup flows can hide transient fork threads —
+      // see `listThreads` (filtered by default).
+      cloneThreadForFork: hasMemory
+        ? async ({ sourceThreadId, resourceId, title }) => {
+            const memory = await this.resolveMemory();
+            const result = await memory.cloneThread({
+              sourceThreadId,
+              resourceId: resourceId ?? this.resourceId,
+              title,
+              metadata: {
+                forkedSubagent: true,
+                parentThreadId: sourceThreadId,
+              },
+            });
+            return { id: result.thread.id, resourceId: result.thread.resourceId };
+          }
+        : undefined,
+      // Forks inherit the parent's toolsets verbatim so harness-injected
+      // tools (`ask_user`, `submit_plan`, user-configured harness tools, etc.)
+      // remain available inside the fork. The `subagent` entry itself is
+      // deliberately kept — its schema/description are part of the parent's
+      // prompt-cache prefix, and stripping it would invalidate the cache.
+      // Recursive forking is blocked at runtime instead: see the patched
+      // `subagent` execute that the forked tool path installs in `tools.ts`.
+      getParentToolsets: forkRequestContext => this.buildToolsets(forkRequestContext ?? requestContext),
+    });
   }
 
   /**
@@ -4112,6 +4135,21 @@ export class Harness<TState = {}> {
     }
 
     return requestContext;
+  }
+
+  /**
+   * Seed the legacy harness capability fields (`emitEvent`, `registerQuestion`,
+   * `registerPlanApproval`, `abortSignal`, …) onto the `harness` entry of a
+   * request context, returning the same context.
+   *
+   * Used by the v1 compat layer: tools dispatched through `session.signalThread`
+   * (e.g. the executing `subagent` tool) call `harnessCtx.emitEvent(...)` to
+   * render activity. The v1 request-context builder merges these capabilities
+   * forward while overlaying its own identity fields, so subagent/question/plan
+   * display events reach this harness's existing display pipeline.
+   */
+  protected async seedHarnessCapabilities(requestContext?: RequestContext): Promise<RequestContext> {
+    return this.buildRequestContext(requestContext);
   }
 
   /**

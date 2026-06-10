@@ -630,11 +630,18 @@ export class Session<TState = {}> {
   async signalThread({
     content,
     requestContext: requestContextInput,
+    additionalBuiltInTools,
     ifActive,
     ifIdle,
   }: {
     content: string;
     requestContext?: RequestContext;
+    /**
+     * Tools merged over the v1 built-ins (by id) for this run. The HarnessCompat
+     * era injects the legacy executing `subagent` tool here so v1's record-only
+     * `subagent` stub is replaced with the product schema + real execution.
+     */
+    additionalBuiltInTools?: ToolsInput;
     ifActive?: { attributes?: Record<string, unknown> };
     ifIdle?: { attributes?: Record<string, unknown> };
   }): Promise<{ accepted: boolean; runId: string | null }> {
@@ -644,7 +651,7 @@ export class Session<TState = {}> {
 
     const agent = this.#agent;
     const signal = createSignal({ type: 'user', tagName: 'user', contents: content });
-    const streamOptions = await this.#buildThreadStreamOptions(requestContextInput);
+    const streamOptions = await this.#buildThreadStreamOptions(requestContextInput, additionalBuiltInTools);
 
     const result = agent.sendSignal(signal, {
       resourceId: this.#resourceId,
@@ -680,14 +687,20 @@ export class Session<TState = {}> {
   /** Build the per-run stream options for {@link signalThread}, mirroring the
    * legacy harness contract (composed harness toolsets, request context,
    * multi-step round-trips, yolo-aware approval gating, abort signal). */
-  async #buildThreadStreamOptions(requestContextInput?: RequestContext): Promise<Record<string, unknown>> {
+  async #buildThreadStreamOptions(
+    requestContextInput?: RequestContext,
+    additionalBuiltInTools?: ToolsInput,
+  ): Promise<Record<string, unknown>> {
     this.#abortController ??= new AbortController();
     const requestContext = await this.#buildRequestContext(requestContextInput);
     const agentTools = await this.#agent.listTools({ requestContext });
     const tools = buildSessionToolsets({
       agentTools,
       modeOverrides: this.#getToolOverrides(),
-      builtInTools: buildHarnessBuiltInTools(this),
+      // Caller-supplied tools override v1 built-ins by id. The HarnessCompat
+      // era injects the legacy executing `subagent` tool here so it replaces
+      // v1's record-only `subagent` stub with the product schema + real run.
+      builtInTools: { ...buildHarnessBuiltInTools(this), ...(additionalBuiltInTools ?? {}) },
     });
     const model = this.#resolveModel ? await this.#resolveModel(this.#modelId) : undefined;
     const isYolo = (this.#state as { yolo?: unknown }).yolo === true;
