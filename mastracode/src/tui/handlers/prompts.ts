@@ -1,6 +1,6 @@
 /**
  * Event handlers for interactive prompt events:
- * tool_suspended (ask_user / request_access), plan_approval_required.
+ * tool_suspended (ask_user / request_access / submit_plan).
  */
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 import { savePlanToDisk } from '../../utils/plans.js';
@@ -239,10 +239,10 @@ export async function handleSandboxAccessRequest(
 }
 
 /**
- * Handle a plan_approval_required event from the submit_plan tool.
+ * Handle a suspended submit_plan tool call.
  * Shows the plan inline with Approve/Reject/Request Changes options.
  */
-async function approvePlan(ctx: EventHandlerContext, planId: string, title: string, plan: string): Promise<void> {
+async function approvePlan(ctx: EventHandlerContext, toolCallId: string, title: string, plan: string): Promise<void> {
   const { state } = ctx;
   await state.harness.setState({
     activePlan: {
@@ -256,9 +256,9 @@ async function approvePlan(ctx: EventHandlerContext, planId: string, title: stri
     plan,
     resourceId: state.harness.getResourceId(),
   }).catch(() => {});
-  await state.harness.respondToPlanApproval({
-    planId,
-    response: { action: 'approved' },
+  await state.harness.respondToToolSuspension({
+    toolCallId,
+    resumeData: { action: 'approved' },
   });
 }
 
@@ -268,20 +268,20 @@ function formatPlanGoalObjective(title: string, plan: string): string {
 
 export async function handlePlanApproval(
   ctx: EventHandlerContext,
-  planId: string,
+  toolCallId: string,
   title: string,
   plan: string,
 ): Promise<void> {
   const { state } = ctx;
   return new Promise(resolve => {
     const approvalOptions = {
-      planId,
+      toolCallId,
       title,
       plan,
       onApprove: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        await approvePlan(ctx, planId, title, plan);
+        await approvePlan(ctx, toolCallId, title, plan);
 
         // Fire a structured system-reminder signal to wake the freshly
         // switched-to default-mode agent. The signal echoes back as a
@@ -289,7 +289,7 @@ export async function handlePlanApproval(
         // path as any other reminder — no legacy XML regex, no companion
         // `addUserMessage` call, so the reminder shows up exactly once.
         //
-        // `approvePlan` (via `respondToPlanApproval` → `switchMode`) waits
+        // `approvePlan` (via `respondToToolSuspension` → `switchMode`) waits
         // for the aborted plan-mode run to fully idle before returning, so
         // this signal always starts a fresh build-mode run instead of
         // queuing onto the dying one.
@@ -307,7 +307,7 @@ export async function handlePlanApproval(
       onGoal: async () => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        await approvePlan(ctx, planId, title, plan);
+        await approvePlan(ctx, toolCallId, title, plan);
 
         // `approvePlan` waits for plan mode to idle before `startGoal` sends
         // the canonical goal reminder, so this starts a fresh build-mode run.
@@ -324,9 +324,9 @@ export async function handlePlanApproval(
       onReject: async (feedback?: string) => {
         state.activeInlinePlanApproval = undefined;
         state.ui.setFocus(state.editor);
-        await state.harness.respondToPlanApproval({
-          planId,
-          response: { action: 'rejected', feedback },
+        await state.harness.respondToToolSuspension({
+          toolCallId,
+          resumeData: { action: 'rejected', feedback },
         });
         resolve();
       },

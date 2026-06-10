@@ -36,7 +36,6 @@ function createMockState(): TUIState {
     options: { inlineQuestions: true, harness: {} as any },
     harness: {
       respondToToolSuspension: vi.fn(),
-      respondToPlanApproval: vi.fn(),
     },
     chatContainer,
     ui: {

@@ -701,15 +701,20 @@ harness.respondToToolSuspension({
 })
 ```
 
-#### `respondToPlanApproval({ planId, response })`
+#### Responding to a submitted plan
 
-Respond to a pending plan approval from the `submit_plan` built-in tool. The `response` object contains `action` (`'approved'` or `'rejected'`) and an optional `feedback` string.
+The `submit_plan` built-in tool pauses via the native tool-suspension primitive, so it surfaces through the same `tool_suspended` event as other interactive tools. Resume it with [`respondToToolSuspension`](#respondtotoolsuspension-resumedata-toolcallid-requestcontext-), passing a `resumeData` object with `action` (`'approved'` or `'rejected'`) and an optional `feedback` string.
+
+On approval, the Harness automatically switches to its default (execution) mode. On rejection, the plan-mode run resumes so the agent can revise and submit again.
 
 ```typescript
-harness.respondToPlanApproval({ planId: 'plan-123', response: { action: 'approved' } })
-harness.respondToPlanApproval({
-  planId: 'plan-123',
-  response: { action: 'rejected', feedback: 'Needs more detail' },
+harness.respondToToolSuspension({
+  toolCallId: event.toolCallId,
+  resumeData: { action: 'approved' },
+})
+harness.respondToToolSuspension({
+  toolCallId: event.toolCallId,
+  resumeData: { action: 'rejected', feedback: 'Needs more detail' },
 })
 ```
 
@@ -1022,7 +1027,7 @@ The harness emits events through registered listeners. The following table lists
 | `message_end` | A message finished streaming. |
 | `tool_start` | A tool call started. |
 | `tool_approval_required` | A tool call requires user approval. |
-| `tool_suspended` | A tool paused via the native tool-suspension primitive (for example `ask_user` or `request_access`). Includes `toolCallId`, `toolName`, and `suspendPayload`. Resume it with [`respondToToolSuspension`](#respondtotoolsuspension-resumedata-toolcallid-requestcontext-). |
+| `tool_suspended` | A tool paused via the native tool-suspension primitive (for example `ask_user`, `request_access`, or `submit_plan`). Includes `toolCallId`, `toolName`, and `suspendPayload`. Resume it with [`respondToToolSuspension`](#respondtotoolsuspension-resumedata-toolcallid-requestcontext-). |
 | `tool_update` | A tool call was updated with progress. |
 | `tool_end` | A tool call finished. |
 | `tool_input_start` | Tool input started streaming. |
@@ -1040,8 +1045,6 @@ The harness emits events through registered listeners. The following table lists
 | `om_observation_end` | An observation completed. |
 | `om_reflection_start` | A reflection started. |
 | `om_reflection_end` | A reflection completed. |
-| `plan_approval_required` | The agent submitted a plan for approval via the `submit_plan` tool. |
-| `plan_approved` | A plan was approved. |
 | `subagent_start` | A subagent started processing. |
 | `subagent_text_delta` | A subagent emitted a text delta. |
 | `subagent_tool_start` | A subagent started a tool call. |

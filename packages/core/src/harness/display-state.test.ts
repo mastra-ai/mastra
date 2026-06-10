@@ -39,7 +39,6 @@ describe('defaultDisplayState', () => {
     expect(ds.toolInputBuffers).toBeInstanceOf(Map);
     expect(ds.toolInputBuffers.size).toBe(0);
     expect(ds.pendingApproval).toBeNull();
-    expect(ds.pendingPlanApproval).toBeNull();
     expect(ds.activeSubagents).toBeInstanceOf(Map);
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.omProgress.status).toBe('idle');
@@ -75,7 +74,6 @@ describe('Harness.getDisplayState()', () => {
     expect(ds.tokenUsage).toEqual(createEmptyTokenUsage());
     expect(ds.activeTools.size).toBe(0);
     expect(ds.pendingApproval).toBeNull();
-    expect(ds.pendingPlanApproval).toBeNull();
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.modifiedFiles.size).toBe(0);
     expect(ds.tasks).toEqual([]);
@@ -135,14 +133,6 @@ describe('agent lifecycle', () => {
 
     emit(harness, { type: 'agent_end', reason: 'complete' });
     expect(harness.getDisplayState().isRunning).toBe(false);
-  });
-
-  it('clears pendingPlanApproval on agent_end', () => {
-    emit(harness, { type: 'plan_approval_required', planId: 'p1', title: 'Plan', plan: '# Plan' });
-    expect(harness.getDisplayState().pendingPlanApproval).not.toBeNull();
-
-    emit(harness, { type: 'agent_end', reason: 'complete' });
-    expect(harness.getDisplayState().pendingPlanApproval).toBeNull();
   });
 
   it('marks running tools as error on agent_end', () => {
@@ -684,26 +674,20 @@ describe('interactive prompts', () => {
     expect(s!.toolName).toBe('ask_user');
   });
 
-  it('sets pendingPlanApproval on plan_approval_required', () => {
+  it('sets pendingSuspension on tool_suspended for submit_plan', () => {
     emit(harness, {
-      type: 'plan_approval_required',
-      planId: 'p1',
-      title: 'Refactor Plan',
-      plan: '# Steps\n1. Do X',
+      type: 'tool_suspended',
+      toolCallId: 'call-plan',
+      toolName: 'submit_plan',
+      args: { title: 'Refactor Plan', plan: '# Steps\n1. Do X' },
+      suspendPayload: { title: 'Refactor Plan', plan: '# Steps\n1. Do X' },
+      resumeSchema: undefined,
     });
-    const p = harness.getDisplayState().pendingPlanApproval;
-    expect(p).not.toBeNull();
-    expect(p!.planId).toBe('p1');
-    expect(p!.title).toBe('Refactor Plan');
-    expect(p!.plan).toBe('# Steps\n1. Do X');
-  });
-
-  it('clears pendingPlanApproval on plan_approved', () => {
-    emit(harness, { type: 'plan_approval_required', planId: 'p1', title: 'Plan', plan: '...' });
-    expect(harness.getDisplayState().pendingPlanApproval).not.toBeNull();
-
-    emit(harness, { type: 'plan_approved' });
-    expect(harness.getDisplayState().pendingPlanApproval).toBeNull();
+    const s = harness.getDisplayState().pendingSuspension;
+    expect(s).not.toBeNull();
+    expect(s!.toolCallId).toBe('call-plan');
+    expect(s!.toolName).toBe('submit_plan');
+    expect(s!.suspendPayload).toEqual({ title: 'Refactor Plan', plan: '# Steps\n1. Do X' });
   });
 });
 
@@ -1344,7 +1328,14 @@ describe('resetThreadDisplayState', () => {
     // Populate various state
     emit(harness, { type: 'tool_start', toolCallId: 't1', toolName: 'read_file', args: {} });
     emit(harness, { type: 'tool_input_start', toolCallId: 't2', toolName: 'write_file' });
-    emit(harness, { type: 'plan_approval_required', planId: 'p1', title: 'P', plan: '#' });
+    emit(harness, {
+      type: 'tool_suspended',
+      toolCallId: 'p1',
+      toolName: 'submit_plan',
+      args: { title: 'P', plan: '#' },
+      suspendPayload: { title: 'P', plan: '#' },
+      resumeSchema: undefined,
+    });
     emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 't', modelId: 'm' });
     emit(harness, {
       type: 'task_updated',
@@ -1360,7 +1351,7 @@ describe('resetThreadDisplayState', () => {
     expect(ds.activeTools.size).toBe(0);
     expect(ds.toolInputBuffers.size).toBe(0);
     expect(ds.pendingApproval).toBeNull();
-    expect(ds.pendingPlanApproval).toBeNull();
+    expect(ds.pendingSuspension).toBeNull();
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.currentMessage).toBeNull();
     expect(ds.modifiedFiles.size).toBe(0);
@@ -1595,13 +1586,14 @@ describe('Harness.subscribeDisplayState()', () => {
     expect(listener.mock.calls[1]?.[0].pendingSuspension?.toolCallId).toBe('t2');
 
     emit(harness, {
-      type: 'plan_approval_required',
-      planId: 'p1',
-      title: 'Plan',
-      plan: '# Plan',
+      type: 'tool_suspended',
+      toolCallId: 'p1',
+      toolName: 'submit_plan',
+      args: { title: 'Plan', plan: '# Plan' },
+      suspendPayload: { title: 'Plan', plan: '# Plan' },
     });
     expect(listener).toHaveBeenCalledTimes(3);
-    expect(listener.mock.calls[2]?.[0].pendingPlanApproval?.planId).toBe('p1');
+    expect(listener.mock.calls[2]?.[0].pendingSuspension?.toolCallId).toBe('p1');
 
     emit(harness, {
       type: 'error',

@@ -593,14 +593,6 @@ export interface HarnessDisplayState {
     resumeSchema?: string;
   } | null;
 
-  // ── Interactive prompts ──────────────────────────────────────────────
-  /** A plan awaiting user approval (null when none) */
-  pendingPlanApproval: {
-    planId: string;
-    title?: string;
-    plan: string;
-  } | null;
-
   // ── Subagent tracking ────────────────────────────────────────────────
   /** Active subagent executions keyed by parent toolCallId */
   activeSubagents: Map<string, ActiveSubagentState>;
@@ -640,7 +632,6 @@ export function defaultDisplayState(): HarnessDisplayState {
     toolInputBuffers: new Map(),
     pendingApproval: null,
     pendingSuspension: null,
-    pendingPlanApproval: null,
     activeSubagents: new Map(),
     omProgress: defaultOMProgressState(),
     bufferingMessages: false,
@@ -822,13 +813,6 @@ export type HarnessEvent =
       currentModel?: string;
     }
   | { type: 'om_thread_title_updated'; cycleId: string; threadId: string; oldTitle?: string; newTitle: string }
-  | {
-      type: 'plan_approval_required';
-      planId: string;
-      title: string;
-      plan: string;
-    }
-  | { type: 'plan_approved' }
   | { type: 'subagent_start'; toolCallId: string; agentType: string; task: string; modelId: string; forked?: boolean }
   | { type: 'subagent_text_delta'; toolCallId: string; agentType: string; textDelta: string }
   | {
@@ -1045,12 +1029,6 @@ export interface HarnessRequestContext<TState = unknown> {
 
   /** Emit a harness event (used by tools to forward events) */
   emitEvent?: (event: HarnessEvent) => void;
-
-  /** Register a pending plan approval resolver (used by submit_plan tools) */
-  registerPlanApproval?: (params: {
-    planId: string;
-    resolve: (result: { action: 'approved' | 'rejected'; feedback?: string }) => void;
-  }) => void;
 
   /** Get the configured subagent model ID for a specific agent type */
   getSubagentModelId?: (params?: { agentType?: string }) => string | null;
