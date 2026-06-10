@@ -29,33 +29,21 @@ export function createPendingMarker(): PendingMarker {
   return { [PENDING_MARKER_KEY]: true };
 }
 
+/**
+ * Tags a foreach step result with the transport-only `__mastra_foreach__` marker
+ * (plus optionally the completed iteration index) that storage merge logic uses
+ * to apply element-wise output merging. Foreach step results are plain JSON-safe
+ * objects, so this always shallow-copies — never mutates the input.
+ */
 export function markForeachStepResult<T extends object>(
   result: T,
   completedIndex?: number,
 ): T & ForeachStepResultMarker {
-  const prototype = Object.getPrototypeOf(result);
-  const marked =
-    prototype === Object.prototype || prototype === null
-      ? ({ ...result } as T & ForeachStepResultMarker)
-      : // Non-plain results may carry prototype serializers or private fields.
-        // Keep the original reference so those serializers still execute correctly.
-        (result as T & ForeachStepResultMarker);
-
-  Object.defineProperty(marked, FOREACH_STEP_RESULT_KEY, {
-    value: true,
-    enumerable: true,
-    configurable: true,
-  });
-
-  if (completedIndex !== undefined) {
-    Object.defineProperty(marked, FOREACH_COMPLETED_INDEXES_KEY, {
-      value: [completedIndex],
-      enumerable: true,
-      configurable: true,
-    });
-  }
-
-  return marked;
+  return {
+    ...result,
+    [FOREACH_STEP_RESULT_KEY]: true,
+    ...(completedIndex !== undefined ? { [FOREACH_COMPLETED_INDEXES_KEY]: [completedIndex] } : {}),
+  } as T & ForeachStepResultMarker;
 }
 
 /**
@@ -72,4 +60,52 @@ export function isPendingMarker(val: unknown): val is PendingMarker {
     (val as Record<string, unknown>)[PENDING_MARKER_KEY] === true &&
     Object.keys(val).length === 1
   );
+}
+
+/**
+ * Identifies engine-produced suspended step results (as opposed to user outputs
+ * that merely look like `{ status: 'suspended' }`). Engine suspends always carry
+ * a numeric `suspendedAt` and a `suspendPayload.__workflow_meta` object, so all
+ * three are required. Works after JSON serialization/deserialization.
+ */
+export function isSuspendedStepResult(val: unknown): boolean {
+  const result = val as Record<string, unknown> | null;
+  const suspendPayload = result?.suspendPayload;
+
+  return (
+    val !== null &&
+    typeof val === 'object' &&
+    'status' in val &&
+    result?.status === 'suspended' &&
+    typeof result.suspendedAt === 'number' &&
+    suspendPayload !== null &&
+    typeof suspendPayload === 'object' &&
+    '__workflow_meta' in suspendPayload
+  );
+}
+
+/**
+ * Reads the completed iteration indexes recorded on a foreach step result.
+ * Returns an empty set for results without the marker (e.g. legacy snapshots).
+ */
+export function getForeachCompletedIndexes(result: unknown): Set<number> {
+  const indexes = (result as Record<string, unknown> | null)?.[FOREACH_COMPLETED_INDEXES_KEY];
+  if (!Array.isArray(indexes)) {
+    return new Set();
+  }
+
+  return new Set(indexes.filter(index => Number.isInteger(index) && index >= 0));
+}
+
+/**
+ * Removes the internal completed-indexes bookkeeping from a foreach step result
+ * before it is exposed outside the merge machinery (final results, watch events).
+ */
+export function stripForeachCompletedIndexes<T>(result: T): T {
+  if (!result || typeof result !== 'object' || !(FOREACH_COMPLETED_INDEXES_KEY in result)) {
+    return result;
+  }
+
+  const { [FOREACH_COMPLETED_INDEXES_KEY]: _completedIndexes, ...cleanResult } = result as Record<string, unknown>;
+  return cleanResult as T;
 }

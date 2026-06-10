@@ -4,4 +4,4 @@
 'mastra': patch
 ---
 
-Kept remote workflow step execution aligned with local resume behavior.
+Fixed resuming workflow steps through the remote step-execution endpoint when the resume data is falsy (`false`, `0`, `null`, `""`). Remote execution now correctly handles falsy resume data, matching local resume behavior.

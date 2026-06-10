@@ -6,6 +6,7 @@ import {
   WorkflowsStorage,
   ensureDate,
   serializeWorkflowSnapshotValue,
+  withRuntimeStepResult,
 } from '@mastra/core/storage';
 import type {
   StorageListWorkflowRunsInput,
@@ -372,7 +373,9 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       }
 
       const snapshot = typeof data.snapshot === 'string' ? JSON.parse(data.snapshot) : data.snapshot;
-      return snapshot.context;
+      // The stored context holds the serialized view; hand runtime callers the
+      // raw step result for non-foreach entries, matching core merge semantics.
+      return withRuntimeStepResult(snapshot.context, stepId, result);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(

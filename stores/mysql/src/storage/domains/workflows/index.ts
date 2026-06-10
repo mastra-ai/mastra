@@ -1,5 +1,12 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS, WorkflowsStorage, normalizePerPage } from '@mastra/core/storage';
+import {
+  TABLE_WORKFLOW_SNAPSHOT,
+  TABLE_SCHEMAS,
+  WorkflowsStorage,
+  mergeWorkflowState,
+  mergeWorkflowStepResult,
+  normalizePerPage,
+} from '@mastra/core/storage';
 import type {
   CreateIndexOptions,
   StorageListWorkflowRunsInput,
@@ -182,15 +189,19 @@ export class WorkflowsMySQL extends WorkflowsStorage {
       }
 
       const currentSnapshot = parseSnapshot(rows[0]!.snapshot) as WorkflowRunState;
-      const context = { ...(currentSnapshot.context ?? {}) };
-
-      context[stepId] = result;
-
       const updatedSnapshot: WorkflowRunState = {
         ...currentSnapshot,
-        context,
-        requestContext: { ...(currentSnapshot.requestContext ?? {}), ...(requestContext ?? {}) },
+        context: { ...(currentSnapshot.context ?? {}) },
       };
+
+      // Merge the new step result using element-wise array merging
+      // (critical for concurrent foreach iteration results)
+      const context = mergeWorkflowStepResult({
+        snapshot: updatedSnapshot,
+        stepId,
+        result,
+        requestContext: requestContext ?? {},
+      });
 
       await connection.execute(
         `UPDATE ${formatTableName(TABLE_WORKFLOW_SNAPSHOT)} SET ${quoteIdentifier('snapshot', 'column name')} = ?, ${quoteIdentifier('updatedAt', 'column name')} = ? WHERE ${quoteIdentifier('workflow_name', 'column name')} = ? AND ${quoteIdentifier('run_id', 'column name')} = ?`,
@@ -243,7 +254,7 @@ export class WorkflowsMySQL extends WorkflowsStorage {
       const existing = parseSnapshot(rows[0]!.snapshot) as WorkflowRunState;
 
       // Merge opts into the snapshot
-      const updatedSnapshot = { ...existing, ...opts };
+      const updatedSnapshot = mergeWorkflowState({ snapshot: existing, opts });
 
       await connection.execute(
         `UPDATE ${formatTableName(TABLE_WORKFLOW_SNAPSHOT)} SET ${quoteIdentifier('snapshot', 'column name')} = ?, ${quoteIdentifier('updatedAt', 'column name')} = ? WHERE ${quoteIdentifier('workflow_name', 'column name')} = ? AND ${quoteIdentifier('run_id', 'column name')} = ?`,

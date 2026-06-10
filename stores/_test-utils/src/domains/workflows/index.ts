@@ -836,6 +836,134 @@ export function createWorkflowsTests({ storage }: WorkflowsTestOptions) {
       );
     });
 
+    // Mirrors the evented foreach bulk-resume write pattern: sparse, marker-tagged
+    // updates rely on element-wise merge semantics. Stores that replace the step
+    // result wholesale would lose completed iterations here.
+    it('preserves completed foreach iterations across sparse marker updates', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping foreach sparse marker updates test');
+        return;
+      }
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'running', context: {} } as any,
+      });
+
+      const suspendedIteration = {
+        status: 'suspended',
+        suspendedAt: Date.now(),
+        suspendPayload: { __workflow_meta: { path: [0, 1] } },
+      };
+
+      // Initial foreach state: iterations 0 and 2 completed, iteration 1 suspended.
+      await workflowsStorage.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'foreach-step',
+        result: {
+          status: 'suspended',
+          payload: ['a', 'b', 'c'],
+          output: ['done-0', suspendedIteration, 'done-2'],
+          startedAt: Date.now(),
+          __mastra_foreach__: true,
+          __mastra_foreach_completed_indexes__: [0, 2],
+        } as any,
+        requestContext: {},
+      });
+
+      // Bulk-resume reset: a sparse pending-marker write targeting only index 1.
+      await workflowsStorage.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'foreach-step',
+        result: {
+          status: 'suspended',
+          payload: ['a', 'b', 'c'],
+          output: [null, { __mastra_pending__: true }],
+          startedAt: Date.now(),
+          __mastra_foreach__: true,
+        } as any,
+        requestContext: {},
+      });
+
+      const afterReset = await workflowsStorage.loadWorkflowSnapshot({ workflowName, runId });
+      expect((afterReset?.context?.['foreach-step'] as any)?.output).toEqual(['done-0', null, 'done-2']);
+
+      // Iteration 1 completes with a sparse completion write.
+      await workflowsStorage.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'foreach-step',
+        result: {
+          status: 'running',
+          payload: ['a', 'b', 'c'],
+          output: [null, 'done-1'],
+          startedAt: Date.now(),
+          __mastra_foreach__: true,
+          __mastra_foreach_completed_indexes__: [1],
+        } as any,
+        requestContext: {},
+      });
+
+      const finalSnapshot = await workflowsStorage.loadWorkflowSnapshot({ workflowName, runId });
+      const storedResult = finalSnapshot?.context?.['foreach-step'] as any;
+      expect(storedResult?.output).toEqual(['done-0', 'done-1', 'done-2']);
+      // The transport-only marker must not be persisted; completed indexes are merged.
+      expect(storedResult?.__mastra_foreach__).toBeUndefined();
+      expect([...(storedResult?.__mastra_foreach_completed_indexes__ ?? [])].sort((a, b) => a - b)).toEqual([0, 1, 2]);
+    });
+
+    it('persists serialized workflow step results instead of live cumulative message history', async () => {
+      if (!supportsConcurrentUpdates) {
+        console.log('Skipping serialized workflow step results test');
+        return;
+      }
+      const workflowName = 'test-workflow';
+      const runId = `run-${randomUUID()}`;
+      const workflowSnapshotSerializer = Symbol.for('mastra.workflowSnapshotSerializer');
+      const cumulativeMessages = Array.from({ length: 20 }, (_, index) => ({
+        role: 'assistant',
+        content: `message-${index}-${'x'.repeat(100)}`,
+      }));
+      const liveStep = {
+        response: { messages: cumulativeMessages },
+        [workflowSnapshotSerializer]: () => ({
+          response: { messages: cumulativeMessages.slice(-1) },
+        }),
+      };
+
+      await workflowsStorage.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'running', context: {} } as any,
+      });
+
+      const returnedContext = await workflowsStorage.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'agent-step',
+        result: {
+          status: 'success',
+          output: { steps: [liveStep] },
+        } as any,
+        requestContext: {},
+      });
+
+      // Runtime callers must keep the raw (cumulative) view…
+      const returnedMessages = (returnedContext as any)?.['agent-step']?.output?.steps?.[0]?.response?.messages;
+      expect(returnedMessages).toEqual(cumulativeMessages);
+
+      // …while the persisted snapshot stores only the per-step delta.
+      const loadedSnapshot = await workflowsStorage.loadWorkflowSnapshot({ workflowName, runId });
+      const storedMessages = (loadedSnapshot as any)?.context?.['agent-step']?.output?.steps?.[0]?.response?.messages;
+
+      expect(storedMessages).toEqual([cumulativeMessages.at(-1)]);
+    });
+
     // This test requires atomic transactions for concurrent updates.
     // Stores without transaction support (e.g., LanceDB) may fail this test
     // due to race conditions in the read-modify-write pattern.

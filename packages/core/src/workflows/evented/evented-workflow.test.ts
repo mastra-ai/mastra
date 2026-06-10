@@ -383,6 +383,69 @@ describe('Workflow (Evented Engine Specific)', () => {
     }
   });
 
+  it('drops late suspended iterations after a concurrent foreach failure', async () => {
+    const foreachStep = createStep({
+      id: 'foreach-late-suspend-step',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ inputData, suspend }) => {
+        if (inputData.value === 0) {
+          throw new Error('foreach iteration failed');
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await suspend({ reason: 'needs approval' });
+        return { value: inputData.value };
+      },
+    });
+
+    const workflow = createWorkflow({
+      id: 'evented-foreach-late-suspend',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.array(z.object({ value: z.number() })),
+      steps: [foreachStep],
+      options: { validateInputs: false },
+    })
+      .foreach(foreachStep, { concurrency: 2 })
+      .commit();
+
+    const mastra = new Mastra({
+      workflows: { 'evented-foreach-late-suspend': workflow },
+      logger: false,
+      storage: testStorage,
+      pubsub: new EventEmitterPubSub(),
+    });
+
+    try {
+      await mastra.startWorkers();
+
+      const run = await workflow.createRun({ runId: 'evented-foreach-late-suspend-run' });
+      const result = await run.start({ inputData: [{ value: 0 }, { value: 1 }] });
+
+      expect(result.status).toBe('failed');
+
+      // Give the slow iteration time to suspend after the workflow already failed,
+      // then make sure the late suspend neither resurrected the run nor landed in
+      // the persisted foreach output.
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const workflowsStore = await testStorage.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: 'evented-foreach-late-suspend',
+        runId: 'evented-foreach-late-suspend-run',
+      });
+      const foreachResult = snapshot?.context?.['foreach-late-suspend-step'] as any;
+
+      expect(snapshot?.status).toBe('failed');
+      expect(foreachResult?.status).toBe('failed');
+      expect(foreachResult?.output?.[1] ?? null).toBeNull();
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
   it('treats null foreach iteration outputs as completed values', async () => {
     const foreachStep = createStep({
       id: 'foreach-null-output-step',

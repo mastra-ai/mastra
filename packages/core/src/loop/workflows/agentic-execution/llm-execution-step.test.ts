@@ -291,6 +291,115 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(requestStepMessageLengths).toEqual([[], [1], [1, 2], [1, 2, 3]]);
   });
 
+  it('restores cumulative response messages when resuming from delta-format snapshot steps', async () => {
+    let streamCallCount = 0;
+    const doStream = vi.fn(async () => {
+      streamCallCount++;
+
+      return {
+        stream: convertArrayToReadableStream([
+          {
+            type: 'response-metadata',
+            id: `resp-${streamCallCount}`,
+            modelId: 'mock-model-id',
+            timestamp: new Date(0),
+          },
+          {
+            type: 'text-start',
+            id: `text-${streamCallCount}`,
+          },
+          {
+            type: 'text-delta',
+            id: `text-${streamCallCount}`,
+            delta: `response ${streamCallCount}`,
+          },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: testUsage,
+          },
+        ]),
+        request: {},
+        response: { headers: undefined },
+        warnings: [],
+      };
+    });
+
+    const requestStepMessageLengths: number[][] = [];
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      inputProcessors: [
+        {
+          id: 'capture-request-steps',
+          processLLMRequest: async ({ prompt, steps }) => {
+            requestStepMessageLengths.push(steps.map(step => step.response.messages.length));
+            return { prompt };
+          },
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const firstResult = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+    const secondResult = await llmExecutionStep.execute(createExecuteParams(firstResult));
+
+    // Simulate the persistence + transport round trip a resumed evented run sees:
+    // steps are stored as per-step deltas and lose class identity.
+    const rehydratedInput = JSON.parse(JSON.stringify(serializeWorkflowSnapshotValue(secondResult)));
+    expect(rehydratedInput.output.steps[0].response.messages).toHaveLength(1);
+    expect(rehydratedInput.output.steps[1].response.messages).toHaveLength(1);
+
+    const thirdResult = await llmExecutionStep.execute(createExecuteParams(rehydratedInput));
+
+    // The request processor saw the restored cumulative views, not the deltas.
+    expect(requestStepMessageLengths).toEqual([[], [1], [1, 2]]);
+
+    // Runtime steps expose cumulative messages again…
+    const runtimeSteps = JSON.parse(JSON.stringify(thirdResult.output.steps));
+    expect(runtimeSteps[0].response.messages).toHaveLength(1);
+    expect(runtimeSteps[1].response.messages).toHaveLength(2);
+    expect(runtimeSteps[2].response.messages).toHaveLength(3);
+
+    // …while snapshot serialization stays delta-only for every step.
+    const serializedSteps = serializeWorkflowSnapshotValue(thirdResult.output.steps);
+    expect(serializedSteps[0].response.messages).toEqual([thirdResult.messages.nonUser[0]]);
+    expect(serializedSteps[1].response.messages).toHaveLength(1);
+    expect(serializedSteps[2].response.messages).toHaveLength(1);
+  });
+
   it('should infer providerExecuted for gateway tools and not merge streamed results onto toolCalls', async () => {
     const tools = {
       perplexitySearch: {

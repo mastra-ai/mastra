@@ -6,6 +6,7 @@ import {
   safelyParseJSON,
   normalizePerPage,
   serializeWorkflowSnapshotValue,
+  withRuntimeStepResult,
 } from '@mastra/core/storage';
 import type {
   WorkflowRun,
@@ -151,7 +152,12 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
                   hasForeachMarker: hasForeachStepResultMarker('$$stepResult'),
                   completedIndexes: getField('$$stepResult', '__mastra_foreach_completed_indexes__'),
                   existingCompletedIndexes: getField('$$existingStepResult', '__mastra_foreach_completed_indexes__'),
-                  stepResultToStore: stripForeachStepResultMarker('$$stepResult'),
+                  // $objectToArray (inside the strip helper) errors on non-object
+                  // input, and $let vars evaluate eagerly — guard like the core
+                  // merge, which tolerates non-object results.
+                  stepResultToStore: {
+                    $cond: [isObject('$$stepResult'), stripForeachStepResultMarker('$$stepResult'), '$$stepResult'],
+                  },
                 },
                 in: {
                   $mergeObjects: [
@@ -466,7 +472,9 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
 
       const snapshot =
         typeof updatedDoc?.snapshot === 'string' ? JSON.parse(updatedDoc.snapshot) : updatedDoc?.snapshot;
-      return snapshot?.context || {};
+      // The stored context holds the serialized view; hand runtime callers the
+      // raw step result for non-foreach entries, matching core merge semantics.
+      return withRuntimeStepResult(snapshot?.context || {}, stepId, result);
     } catch (error) {
       throw new MastraError(
         {
@@ -508,9 +516,11 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
         [
           {
             $set: {
-              // Merge the new options into the existing snapshot
+              // Merge the new options into the existing snapshot. $literal keeps
+              // user data (e.g. "$"-prefixed keys or "$field"-shaped strings in
+              // workflow results) from being evaluated as aggregation expressions.
               snapshot: {
-                $mergeObjects: ['$snapshot', serializedOpts],
+                $mergeObjects: ['$snapshot', { $literal: serializedOpts }],
               },
               updatedAt: new Date(),
             },

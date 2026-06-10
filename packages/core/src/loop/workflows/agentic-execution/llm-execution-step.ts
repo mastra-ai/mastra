@@ -125,7 +125,15 @@ export function getComparableMessageKey(message: unknown): string | undefined {
   }
 }
 
-function restoreCumulativeStepResponseMessages(steps: any[], responseMessages: any[]): void {
+/**
+ * Rebuilds the cumulative `response.messages` view on step results that were
+ * round-tripped through workflow snapshot persistence (where only per-step
+ * message deltas are stored), and re-attaches the snapshot serializer hook so
+ * the next persist stays delta-only. Live `DefaultStepResult` instances and
+ * already-restored steps are left untouched, so this is safe to call on every
+ * iteration with a mix of live and rehydrated steps.
+ */
+export function restoreCumulativeStepResponseMessages(steps: any[], responseMessages: any[]): void {
   const responseMessageKeys = responseMessages.map(getComparableMessageKey);
   let lastMatchedIndex = -1;
   let lastStoredMessageCount = 0;
@@ -147,6 +155,12 @@ function restoreCumulativeStepResponseMessages(steps: any[], responseMessages: a
     let liveMessages: any[];
 
     if (matchedIndex === -1) {
+      // The step's last message isn't in the rehydrated history (processor-mutated
+      // messages or trimmed history). Recovery is conservative: treat the step's own
+      // array as both views, with everything past the previously-consumed count as
+      // its delta. The cursor advance below is a best-effort guess (a step-local
+      // length used as a global index — only exact for the first step); later steps
+      // re-anchor by key search, so an imprecise cursor only narrows their search.
       if (messages.length <= lastStoredMessageCount) {
         continue;
       }
@@ -158,8 +172,17 @@ function restoreCumulativeStepResponseMessages(steps: any[], responseMessages: a
       const previousMatchedIndex = lastMatchedIndex;
       lastMatchedIndex = matchedIndex;
       lastStoredMessageCount = Math.max(lastStoredMessageCount, messages.length);
-      snapshotMessages = responseMessages.slice(previousMatchedIndex + 1, matchedIndex + 1);
-      liveMessages = responseMessages.slice(0, matchedIndex + 1);
+      if (messages.length === matchedIndex + 1) {
+        // The step's own array already spans the full cumulative prefix (legacy
+        // cumulative snapshots, or a first-step delta that equals it). Keep the
+        // step's own message objects — swapping in live message-list objects
+        // can change message part shapes — and only re-derive the delta.
+        snapshotMessages = messages.slice(previousMatchedIndex + 1);
+        liveMessages = messages;
+      } else {
+        snapshotMessages = responseMessages.slice(previousMatchedIndex + 1, matchedIndex + 1);
+        liveMessages = responseMessages.slice(0, matchedIndex + 1);
+      }
     }
 
     const workflowSnapshotSerializer = step?.[WORKFLOW_SNAPSHOT_SERIALIZER];

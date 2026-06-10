@@ -211,6 +211,7 @@ describe('WorkflowsConvex atomic workflow updates', () => {
       },
     };
 
+    // Runtime callers get the raw (cumulative) view back for non-foreach results…
     await expect(
       workflows.updateWorkflowResults({
         workflowName: 'workflow-a',
@@ -220,9 +221,10 @@ describe('WorkflowsConvex atomic workflow updates', () => {
         requestContext: {},
       }),
     ).resolves.toEqual({
-      'step-1': { status: 'success', output: { steps: [{ response: { messages: ['second'] } }] } },
+      'step-1': { status: 'success', output: { steps: [{ response: { messages: ['first', 'second'] } }] } },
     });
 
+    // …while the payload sent to Convex (what gets persisted) is the serialized delta.
     expect(requests[0]).toMatchObject({
       op: 'mergeWorkflowStepResult',
       result: JSON.stringify({

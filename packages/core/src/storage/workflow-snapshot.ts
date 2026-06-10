@@ -1,40 +1,36 @@
 import type { StepResult, WorkflowRunState } from '../workflows';
+import {
+  FOREACH_COMPLETED_INDEXES_KEY,
+  FOREACH_STEP_RESULT_KEY,
+  getForeachCompletedIndexes,
+  isPendingMarker,
+  isSuspendedStepResult,
+} from '../workflows/evented/types';
 import { serializeWorkflowSnapshotValue } from '../workflows/snapshot-serialization';
 import type { UpdateWorkflowStateOptions } from './types';
 
 export { serializeWorkflowSnapshotValue };
 
-// NOTE: This merge logic is mirrored by Convex, MongoDB, and Upstash storage.
-// Keep all copies in sync when changing foreach marker or merge semantics.
-const PENDING_MARKER_KEY = '__mastra_pending__';
-const FOREACH_STEP_RESULT_KEY = '__mastra_foreach__';
-const FOREACH_COMPLETED_INDEXES_KEY = '__mastra_foreach_completed_indexes__';
-
-function isPendingMarker(val: unknown): boolean {
-  return (
-    val !== null &&
-    typeof val === 'object' &&
-    Object.prototype.hasOwnProperty.call(val, PENDING_MARKER_KEY) &&
-    (val as Record<string, unknown>)[PENDING_MARKER_KEY] === true &&
-    Object.keys(val).length === 1
-  );
-}
-
-function isSuspendedStepResult(val: unknown): boolean {
-  const result = val as Record<string, unknown> | null;
-  const suspendPayload = result?.suspendPayload;
-
-  return (
-    val !== null &&
-    typeof val === 'object' &&
-    'status' in val &&
-    result?.status === 'suspended' &&
-    typeof result.suspendedAt === 'number' &&
-    suspendPayload !== null &&
-    typeof suspendPayload === 'object' &&
-    '__workflow_meta' in suspendPayload
-  );
-}
+// NOTE: This merge logic is mirrored by stores that merge server-side and cannot
+// import @mastra/core there: stores/convex/src/server/workflow-snapshot.ts,
+// stores/mongodb (aggregation pipeline in domains/workflows) and stores/upstash
+// (Lua script in domains/workflows). Keep all copies in sync when changing
+// foreach marker or merge semantics.
+//
+// Foreach slot states, as seen by this merge (output[i] for iteration i):
+// - missing / `null`            → pending: iteration not started, or reset for resume.
+//                                 Exception: `null` with i in completed-indexes is a
+//                                 completed iteration whose user output was null.
+// - `{ __mastra_pending__ }`    → reset command: incoming-only value asking to null
+//                                 out a resumable slot; never stored.
+// - suspended step result       → iteration suspended (strict shape: numeric
+//                                 suspendedAt + suspendPayload.__workflow_meta, so
+//                                 user outputs shaped like { status: 'suspended' }
+//                                 don't match).
+// - anything else (non-null)    → completed iteration output.
+// Writers tag foreach updates with `__mastra_foreach__` (stripped before storing)
+// and record completed slots in `__mastra_foreach_completed_indexes__` (persisted)
+// so stale concurrent writes can't clobber completed work.
 
 function canResetWithPendingMarker(val: unknown): boolean {
   if (val == null || isPendingMarker(val)) {
@@ -55,15 +51,6 @@ function hasPartialForeachValue(output: unknown[]): boolean {
 
 function hasForeachStepResultMarker(result: unknown): boolean {
   return (result as Record<string, unknown> | null)?.[FOREACH_STEP_RESULT_KEY] === true;
-}
-
-function getForeachCompletedIndexes(result: unknown): Set<number> {
-  const indexes = (result as Record<string, unknown> | null)?.[FOREACH_COMPLETED_INDEXES_KEY];
-  if (!Array.isArray(indexes)) {
-    return new Set();
-  }
-
-  return new Set(indexes.filter(index => Number.isInteger(index) && index >= 0));
 }
 
 function stripForeachStepResultMarker<T>(result: T): T {
@@ -111,10 +98,9 @@ export function mergeWorkflowStepResult({
     throw new Error(`Snapshot context not found for runId ${snapshot?.runId}`);
   }
 
-  const serializedResult = serializeWorkflowSnapshotValue(result);
-  const hasForeachMarker = hasForeachStepResultMarker(serializedResult);
-  const completedIndexes = getForeachCompletedIndexes(serializedResult);
-  const resultToStore = stripForeachStepResultMarker(serializedResult);
+  const hasForeachMarker = hasForeachStepResultMarker(result);
+  const completedIndexes = getForeachCompletedIndexes(result);
+  const incomingResult = stripForeachStepResultMarker(result);
   const existingResult = snapshot.context[stepId];
   const existingCompletedIndexes = getForeachCompletedIndexes(existingResult);
   const mergedCompletedIndexes = mergeForeachCompletedIndexes(existingResult, completedIndexes);
@@ -127,18 +113,16 @@ export function mergeWorkflowStepResult({
       ? (existingResult.output as unknown[])
       : undefined;
   const newOutput =
-    serializedResult &&
-    typeof serializedResult === 'object' &&
-    'output' in serializedResult &&
-    Array.isArray(serializedResult.output)
-      ? (serializedResult.output as unknown[])
+    result && typeof result === 'object' && 'output' in result && Array.isArray(result.output)
+      ? (result.output as unknown[])
       : undefined;
   const hasPendingMarker = newOutput?.some(isPendingMarker) ?? false;
+  let mergedResult: StepResult<any, any, any, any>;
   if (
     existingResult &&
     existingOutput &&
-    serializedResult &&
-    typeof serializedResult === 'object' &&
+    result &&
+    typeof result === 'object' &&
     newOutput &&
     hasForeachMarker &&
     (hasPendingMarker || hasPartialForeachValue(existingOutput) || hasPartialForeachValue(newOutput))
@@ -162,26 +146,64 @@ export function mergeWorkflowStepResult({
         }
       }
     }
-    snapshot.context[stepId] = {
+    mergedResult = {
       ...existingResult,
       // Pending-marker writes are reset commands built from an earlier snapshot,
       // so keep existing step-level fields and ignore sibling values they carry.
-      ...(hasPendingMarker ? {} : (resultToStore as any)),
+      ...(hasPendingMarker ? {} : (incomingResult as any)),
       ...(hasPendingMarker ? {} : completedIndexesToStore),
       output: mergedOutput,
     };
   } else {
-    snapshot.context[stepId] = resultToStore;
+    mergedResult = incomingResult;
   }
+
+  // The snapshot object is what storage adapters persist, so it gets the serialized
+  // view (per-step response-message deltas, toJSON-applied values). The returned
+  // context feeds back into engine runtime state via updateWorkflowResults, so the
+  // merged step result must NOT be the serialized view there — replacing live values
+  // with snapshot-serialized ones mid-run would, for example, swap cumulative AI SDK
+  // response messages for per-step deltas in stream chunk payloads. A plain JSON
+  // clone of the raw merged result keeps the pre-existing runtime contract.
+  snapshot.context[stepId] = serializeWorkflowSnapshotValue(mergedResult);
 
   snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
   try {
-    return JSON.parse(JSON.stringify(snapshot.context));
+    const runtimeContext = JSON.parse(JSON.stringify(snapshot.context));
+    runtimeContext[stepId] = JSON.parse(JSON.stringify(mergedResult));
+    return runtimeContext;
   } catch {
     // Step results may contain non-serializable values (circular refs, functions, etc.)
     // when the workflow opts out of full persistence. Return a shallow copy so the
     // caller still gets a usable context without crashing.
-    return { ...snapshot.context };
+    return { ...snapshot.context, [stepId]: mergedResult };
+  }
+}
+
+/**
+ * Builds the runtime view of an `updateWorkflowResults` return for stores that
+ * merge server-side (MongoDB aggregation, Upstash Lua, Convex server runtime)
+ * and can therefore only hand back the serialized stored context. For
+ * non-foreach results the stored entry is exactly the serialized incoming
+ * result, so the raw result (JSON-cloned, matching `mergeWorkflowStepResult`'s
+ * return contract) is the more faithful runtime value — e.g. it keeps
+ * cumulative AI SDK response messages where the stored form holds per-step
+ * deltas. Foreach-marked results are left alone: the server-side merge across
+ * concurrent iteration writes is authoritative there.
+ */
+export function withRuntimeStepResult(
+  context: Record<string, StepResult<any, any, any, any>>,
+  stepId: string,
+  result: StepResult<any, any, any, any>,
+): Record<string, StepResult<any, any, any, any>> {
+  if (hasForeachStepResultMarker(result)) {
+    return context;
+  }
+
+  try {
+    return { ...context, [stepId]: JSON.parse(JSON.stringify(result)) };
+  } catch {
+    return context;
   }
 }
 

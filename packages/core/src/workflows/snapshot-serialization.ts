@@ -1,4 +1,11 @@
-import { WORKFLOW_SNAPSHOT_SERIALIZER } from '../stream/aisdk/v5/output-helpers';
+/**
+ * Symbol-keyed hook objects can implement to control how they are persisted in
+ * workflow snapshots (e.g. `DefaultStepResult` persists per-step response
+ * message deltas instead of the cumulative history). `Symbol.for` is used so
+ * the hook keeps working across duplicated copies of @mastra/core, and so a
+ * user object's own `toWorkflowSnapshot` property is never picked up by accident.
+ */
+export const WORKFLOW_SNAPSHOT_SERIALIZER = Symbol.for('mastra.workflowSnapshotSerializer');
 
 export function serializeWorkflowSnapshotValue(value: any, seen = new WeakSet<object>()): any {
   if (value === null || typeof value !== 'object') {
@@ -34,7 +41,11 @@ export function serializeWorkflowSnapshotValue(value: any, seen = new WeakSet<ob
   }
 
   if (Array.isArray(value)) {
-    const serialized = value.map(item => serializeWorkflowSnapshotValue(item, seen));
+    // Match JSON.stringify semantics: functions in arrays become null. Without
+    // this, non-JSON writers (e.g. the MongoDB driver) would receive raw functions.
+    const serialized = value.map(item =>
+      typeof item === 'function' ? null : serializeWorkflowSnapshotValue(item, seen),
+    );
     seen.delete(value);
     return serialized;
   }

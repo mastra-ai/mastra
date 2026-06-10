@@ -20,7 +20,12 @@ import { serializeWorkflowSnapshotValue } from '../../snapshot-serialization';
 import { createRestartExecutionParams, createTimeTravelExecutionParams, validateStepResumeData } from '../../utils';
 import { resolveCurrentState } from '../helpers';
 import { StepExecutor } from '../step-executor';
-import { FOREACH_COMPLETED_INDEXES_KEY, markForeachStepResult } from '../types';
+import {
+  getForeachCompletedIndexes,
+  isSuspendedStepResult,
+  markForeachStepResult,
+  stripForeachCompletedIndexes,
+} from '../types';
 import { EventedWorkflow } from '../workflow';
 import { processWorkflowForEach, processWorkflowLoop } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
@@ -79,27 +84,6 @@ export type ParentWorkflow = {
 };
 
 const TERMINAL_WORKFLOW_STATUSES = new Set(['success', 'failed', 'canceled', 'bailed', 'tripwire']);
-
-function isSuspendedStepResult(value: any): boolean {
-  return (
-    value &&
-    typeof value === 'object' &&
-    value.status === 'suspended' &&
-    typeof value.suspendedAt === 'number' &&
-    value.suspendPayload &&
-    typeof value.suspendPayload === 'object' &&
-    '__workflow_meta' in value.suspendPayload
-  );
-}
-
-function getForeachCompletedIndexes(result: unknown): Set<number> {
-  const indexes = (result as Record<string, unknown> | null)?.[FOREACH_COMPLETED_INDEXES_KEY];
-  if (!Array.isArray(indexes)) {
-    return new Set();
-  }
-
-  return new Set(indexes.filter(index => Number.isInteger(index) && index >= 0));
-}
 
 export class WorkflowEventProcessor extends EventProcessor {
   private stepExecutor: StepExecutor;
@@ -1823,6 +1807,13 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Cache workflows store to avoid redundant async calls
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+    // Deliberately re-read here even though #dispatch already loaded a snapshot
+    // for the terminal guard: this handler's terminal check gates endWorkflow
+    // (which writes terminal state with no later event to correct it) and the
+    // foreach branch builds its merge base from this snapshot, so both need the
+    // freshest read available. Reusing the dispatch-time snapshot would widen
+    // the race in which a late step end overwrites a concurrently committed
+    // failed/canceled status.
     const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: workflowId,
       runId,
@@ -1969,7 +1960,10 @@ export class WorkflowEventProcessor extends EventProcessor {
           (r: any, index: number) => r === null && !completedIndexes.has(index),
         ).length;
         const suspendedCount = iterationResults.filter((r: any) => isSuspendedStepResult(r)).length;
-        const failedResult = foreachResult?.status === 'failed' ? foreachResult : undefined;
+        // Strip internal completed-indexes bookkeeping before this result is
+        // persisted as the workflow-level result and published to watchers.
+        const failedResult =
+          foreachResult?.status === 'failed' ? stripForeachCompletedIndexes(foreachResult) : undefined;
         const iterationsStarted = iterationResults.length;
 
         // Emit per-iteration progress event

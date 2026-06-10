@@ -4,29 +4,14 @@ import type { PubSub } from '../../../events';
 import type { Mastra } from '../../../mastra';
 import { resolveCurrentState } from '../helpers';
 import type { StepExecutor } from '../step-executor';
-import { createPendingMarker, FOREACH_COMPLETED_INDEXES_KEY, markForeachStepResult } from '../types';
+import {
+  createPendingMarker,
+  getForeachCompletedIndexes,
+  isSuspendedStepResult,
+  markForeachStepResult,
+  stripForeachCompletedIndexes,
+} from '../types';
 import type { ProcessorArgs } from '.';
-
-function getForeachCompletedIndexes(result: unknown): Set<number> {
-  const indexes = (result as Record<string, unknown> | null)?.[FOREACH_COMPLETED_INDEXES_KEY];
-  if (!Array.isArray(indexes)) {
-    return new Set();
-  }
-
-  return new Set(indexes.filter(index => Number.isInteger(index) && index >= 0));
-}
-
-function isSuspendedStepResult(value: any): boolean {
-  return (
-    value &&
-    typeof value === 'object' &&
-    value.status === 'suspended' &&
-    typeof value.suspendedAt === 'number' &&
-    value.suspendPayload &&
-    typeof value.suspendPayload === 'object' &&
-    '__workflow_meta' in value.suspendPayload
-  );
-}
 
 function isForeachIterationPending(result: { output?: unknown[] } | undefined, index: number): boolean {
   const output = result?.output;
@@ -40,15 +25,6 @@ function isForeachIterationPending(result: { output?: unknown[] } | undefined, i
 
 function isForeachIterationComplete(result: { output?: unknown[] } | undefined, index: number): boolean {
   return !isForeachIterationPending(result, index);
-}
-
-function stripForeachCompletedIndexes<T extends object>(result: T): T {
-  if (!(FOREACH_COMPLETED_INDEXES_KEY in result)) {
-    return result;
-  }
-
-  const { [FOREACH_COMPLETED_INDEXES_KEY]: _completedIndexes, ...cleanResult } = result as Record<string, unknown>;
-  return cleanResult as T;
 }
 
 export async function processWorkflowLoop(

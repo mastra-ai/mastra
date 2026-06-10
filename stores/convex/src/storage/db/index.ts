@@ -4,6 +4,7 @@ import { MastraBase } from '@mastra/core/base';
 import type { StorageThreadType } from '@mastra/core/memory';
 import {
   serializeWorkflowSnapshotValue,
+  withRuntimeStepResult,
   TABLE_RESOURCES,
   TABLE_SCHEDULES,
   TABLE_SCHEDULE_TRIGGERS,
@@ -272,7 +273,9 @@ export class ConvexDB extends MastraBase {
     if (!context) {
       throw new Error(`Convex workflow step merge returned no context for runId ${runId}`);
     }
-    return JSON.parse(context);
+    // The stored context holds the serialized view; hand runtime callers the
+    // raw step result for non-foreach entries, matching core merge semantics.
+    return withRuntimeStepResult(JSON.parse(context), stepId, result);
   }
 
   public async mergeWorkflowState({

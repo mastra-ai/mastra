@@ -6,9 +6,10 @@ import type {
   DynamicToolCall,
   DynamicToolResult,
 } from '@internal/ai-sdk-v5';
+import { WORKFLOW_SNAPSHOT_SERIALIZER } from '../../../workflows/snapshot-serialization';
 import type { StepTripwireData } from '../../types';
 
-export const WORKFLOW_SNAPSHOT_SERIALIZER = Symbol.for('mastra.workflowSnapshotSerializer');
+export { WORKFLOW_SNAPSHOT_SERIALIZER };
 
 // ContentPart is not exported from ai, so we derive it from StepResult
 type ContentPart<TOOLS extends ToolSet> = StepResult<TOOLS>['content'][number];
@@ -56,7 +57,13 @@ export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOL
     this.tripwire = tripwire;
   }
 
-  toWorkflowSnapshot() {
+  /**
+   * Workflow snapshot persistence hook: persist only the response messages this
+   * step added (when known) instead of the cumulative history, so long agentic
+   * runs don't store the conversation once per step. Runtime consumers keep
+   * reading the cumulative `this.response.messages`.
+   */
+  [WORKFLOW_SNAPSHOT_SERIALIZER]() {
     return {
       content: this.content,
       finishReason: this.finishReason,
@@ -70,10 +77,6 @@ export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOL
       providerMetadata: this.providerMetadata,
       tripwire: this.tripwire,
     };
-  }
-
-  [WORKFLOW_SNAPSHOT_SERIALIZER]() {
-    return this.toWorkflowSnapshot();
   }
 
   get text() {
