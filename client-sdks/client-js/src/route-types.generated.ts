@@ -82458,6 +82458,15 @@ export type PostDatasetsDatasetIdExperiments_Body = {
         defaultStatus?: ('draft' | 'published') | undefined;
       }
     | undefined;
+  /** Replay recorded tool outputs from prior traced runs instead of executing live tools. Agent targets only. */
+  toolReplay?:
+    | {
+        /** Prior experiment whose per-item results supply the source trace for each item */
+        fromExperimentId?: string | undefined;
+        /** Behavior when a tool call has no remaining recorded event (default: 'error') */
+        onMiss?: ('error' | 'passthrough') | undefined;
+      }
+    | undefined;
 };
 
 export type PostDatasetsDatasetIdExperiments_Response = {

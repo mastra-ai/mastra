@@ -2602,8 +2602,16 @@ export interface DatasetRecord {
   updatedAt: string | Date;
 }
 
+// Re-exported from @mastra/core/datasets for convenience: the divergence
+// report shape carried by replay-run experiment results (output.toolReplay).
+export type { ToolReplayReport, ToolReplayOnMiss } from '@mastra/core/datasets';
+
 export interface DatasetExperiment {
   id: string;
+  name?: string;
+  description?: string;
+  /** Arbitrary experiment metadata. Experiments run with tool replay carry a `toolReplay` marker here. */
+  metadata?: Record<string, unknown>;
   datasetId: string | null;
   datasetVersion: number | null;
   agentVersion: string | null;
@@ -2613,12 +2621,21 @@ export interface DatasetExperiment {
   totalItems: number;
   succeededCount: number;
   failedCount: number;
+  skippedCount: number;
   startedAt: string | Date | null;
   completedAt: string | Date | null;
   createdAt: string | Date;
   updatedAt: string | Date;
 }
 
+/**
+ * A single item result of a dataset experiment.
+ *
+ * For experiments run with tool replay, `output` carries a
+ * `toolReplay: ToolReplayReport` divergence report, and failed items use the
+ * error codes `TOOL_REPLAY_MISS`, `TOOL_REPLAY_NO_RECORDING`, or
+ * `TOOL_REPLAY_LOAD_FAILED`.
+ */
 export interface DatasetExperimentResult {
   id: string;
   experimentId: string;
@@ -2627,7 +2644,7 @@ export interface DatasetExperimentResult {
   input: unknown;
   output: unknown | null;
   groundTruth: unknown | null;
-  error: string | null;
+  error: { message: string; stack?: string; code?: string } | null;
   startedAt: string | Date;
   completedAt: string | Date;
   retryCount: number;
@@ -2742,7 +2759,44 @@ export interface TriggerDatasetExperimentParams {
   agentVersion?: string;
   maxConcurrency?: number;
   requestContext?: Record<string, unknown>;
+  /** Version overrides for sub-agent delegation during experiment execution. */
+  versions?: {
+    agents?: Record<string, { versionId: string } | { status: 'draft' | 'published' }>;
+    defaultStatus?: 'draft' | 'published';
+  };
+  /**
+   * Replay recorded tool outputs from a prior traced run instead of executing
+   * live tools. Agent targets only. Requires a server with tool replay
+   * support; older servers ignore this field and run the experiment live.
+   */
+  toolReplay?: {
+    fromExperimentId?: string;
+    onMiss?: 'error' | 'passthrough';
+  };
 }
+
+// Compile-time drift detectors: TriggerDatasetExperimentParams is
+// hand-maintained (the package idiom for flat-client methods), while the
+// request body type is generated from the server route schema. These pure
+// type-level assertions (zero runtime emit) fail tsc and the dts build when
+// the two drift apart; the offending key appears in the error message.
+// Key-set equality is checked explicitly because mutual assignability is
+// blind to optional-field drift — the exact failure mode this guards.
+type ExpectTrue<T extends true> = T;
+type TriggerExperimentGeneratedBody = Body<'POST /datasets/:datasetId/experiments'>;
+type TriggerExperimentHandBody = Omit<TriggerDatasetExperimentParams, 'datasetId'>;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _TriggerExperimentBodyKeysInSync = ExpectTrue<
+  [Exclude<keyof TriggerExperimentGeneratedBody, keyof TriggerExperimentHandBody>] extends [never]
+    ? [Exclude<keyof TriggerExperimentHandBody, keyof TriggerExperimentGeneratedBody>] extends [never]
+      ? true
+      : false
+    : false
+>;
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+type _TriggerExperimentBodyTypesCompatible = ExpectTrue<
+  GeneratedRequest<TriggerExperimentGeneratedBody> extends TriggerExperimentHandBody ? true : false
+>;
 
 export interface CompareExperimentsParams {
   datasetId: string;

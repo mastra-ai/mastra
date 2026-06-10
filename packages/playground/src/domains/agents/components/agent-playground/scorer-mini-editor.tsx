@@ -620,7 +620,7 @@ export function ScorerMiniEditor({
                     let correct = 0;
                     let incorrect = 0;
                     let errors = 0;
-                    experimentResults.forEach((result: { output: unknown; error: string | null }, i: number) => {
+                    experimentResults.forEach((result: { output: unknown; error: unknown }, i: number) => {
                       const item = testItems[i];
                       if (!item) return;
                       if (result.error) {

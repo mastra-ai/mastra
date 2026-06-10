@@ -917,4 +917,52 @@ describe('MastraClient', () => {
       });
     });
   });
+
+  describe('Dataset experiment tool replay', () => {
+    let client: MastraClient;
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+    });
+
+    it('triggerDatasetExperiment forwards toolReplay in the POST body', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({}),
+      });
+
+      await client.triggerDatasetExperiment({
+        datasetId: 'ds-1',
+        targetType: 'agent',
+        targetId: 'support-agent',
+        toolReplay: { fromExperimentId: 'prior-exp', onMiss: 'passthrough' },
+      });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/experiments');
+      expect(init.method).toBe('POST');
+      const body = JSON.parse(init.body);
+      expect(body.toolReplay).toEqual({ fromExperimentId: 'prior-exp', onMiss: 'passthrough' });
+      expect(body.datasetId).toBeUndefined(); // path param never leaks into the body
+    });
+
+    it('triggerDatasetExperiment omits toolReplay when not provided', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({}),
+      });
+
+      await client.triggerDatasetExperiment({
+        datasetId: 'ds-1',
+        targetType: 'agent',
+        targetId: 'support-agent',
+      });
+
+      const body = JSON.parse((global.fetch as any).mock.calls[0][1].body);
+      expect('toolReplay' in body).toBe(false);
+    });
+  });
 });
