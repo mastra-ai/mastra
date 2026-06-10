@@ -13,7 +13,6 @@ import type {
   ISessionProvider,
   ISSOProvider,
   ICredentialsProvider,
-  IUserListing,
   SSOCallbackResult,
 } from '@mastra/core/auth';
 import type { IRBACProvider, IFGAProvider, EEUser } from '@mastra/core/auth/ee';
@@ -836,7 +835,8 @@ export const GET_USERS_ROUTE = createRoute({
       const serverConfig = mastra.getServer?.();
       const auth = serverConfig?.auth;
 
-      if (!auth || !implementsInterface<IUserListing<EEUser>>(auth, 'listUsers')) {
+      // Duck-type check for listUsers method (avoid importing IUserListing for backward compat)
+      if (!auth || typeof (auth as any).listUsers !== 'function') {
         throw new HTTPException(404, { message: 'User listing not available' });
       }
 
@@ -884,7 +884,8 @@ export const GET_USER_ROUTE = createRoute({
       const serverConfig = mastra.getServer?.();
       const auth = serverConfig?.auth;
 
-      if (!auth || !implementsInterface<IUserProvider<EEUser>>(auth, 'getUser')) {
+      // Duck-type check for getUser method
+      if (!auth || typeof (auth as any).getUser !== 'function') {
         throw new HTTPException(404, { message: 'User detail not available' });
       }
 
