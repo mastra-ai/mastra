@@ -13,6 +13,7 @@ import { requestContextDemoAgent } from './request-context-demo-agent';
 
 // Export Dynamic Tools Agent
 export { dynamicToolsAgent } from './dynamic-tools-agent.js';
+export { modelSwapperTestAgent } from './model-swapper-test-agent.js';
 export { slackDemoAgent } from './slack-agent.js';
 const memory = new Memory();
 

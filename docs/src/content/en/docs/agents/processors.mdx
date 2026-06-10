@@ -433,6 +433,45 @@ Add `ProviderHistoryCompat` explicitly when you need provider history compatibil
 
 See the [`ProviderHistoryCompat` reference](/reference/processors/provider-history-compat) for setup, built-in rules, and custom rule options.
 
+### `ModelSwapperProcessor`
+
+Routes each request to a model based on the latest user message. The processor uses a lightweight classifier model in `processInput()`, stores the matched route in processor state, and applies the selected model during the first `processInputStep()`.
+
+Use this processor only when you want explicit, opt-in model routing for a known traffic shape. It can reduce direct model cost when many requests can use a lower-cost model, but it adds a classifier call and can reduce prompt cache efficiency because cache entries are usually scoped by model.
+
+```typescript {8-29}
+import { Agent } from '@mastra/core/agent'
+import { ModelSwapperProcessor } from '@mastra/core/processors'
+
+export const supportAgent = new Agent({
+  name: 'Support Agent',
+  instructions: 'Answer user questions and escalate complex work to stronger models.',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  inputProcessors: [
+    new ModelSwapperProcessor({
+      model: '__GATEWAY_OPENAI_MODEL_NANO__',
+      defaultModel: '__GATEWAY_OPENAI_MODEL_BASE__',
+      rules: [
+        {
+          description: 'Short factual questions and basic troubleshooting',
+          model: '__GATEWAY_OPENAI_MODEL_MINI__',
+        },
+        {
+          description: 'Planning, debugging, architecture, or multi-step analysis',
+          model: '__GATEWAY_OPENAI_MODEL__',
+        },
+      ],
+    }),
+  ],
+})
+```
+
+Use `defaultModel` when unmatched requests should still use a known model. Omit it to leave the agent's configured model unchanged when no rule matches.
+
+Before using this processor in production, compare it against a single-model baseline with prompt caching enabled. If repeated prompts already get strong cache hit rates on one model, splitting requests across multiple models can offset the direct savings.
+
+See the [`ModelSwapperProcessor` reference](/reference/processors/model-swapper) for routing rules and behavior notes.
+
 ## Response caching
 
 :::experimental

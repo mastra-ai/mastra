@@ -446,6 +446,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/cost-guard-processor', label: 'CostGuardProcessor' },
         { type: 'doc', id: 'processors/language-detector', label: 'LanguageDetector' },
         { type: 'doc', id: 'processors/message-history-processor', label: 'MessageHistory' },
+        { type: 'doc', id: 'processors/model-swapper', label: 'ModelSwapperProcessor' },
         { type: 'doc', id: 'processors/moderation-processor', label: 'ModerationProcessor' },
         { type: 'doc', id: 'processors/pii-detector', label: 'PIIDetector' },
         { type: 'doc', id: 'processors/prefill-error-handler', label: 'PrefillErrorHandler' },

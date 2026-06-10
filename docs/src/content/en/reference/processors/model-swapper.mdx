@@ -1,0 +1,184 @@
+---
+title: "Reference: ModelSwapperProcessor | Processors"
+description: "API reference for ModelSwapperProcessor, which routes agent requests to different models based on user input."
+packages:
+  - "@mastra/core"
+---
+
+# ModelSwapperProcessor
+
+The `ModelSwapperProcessor` is an **input processor** that classifies the latest user request and swaps the agent model before the first language model call. Use it for explicit, opt-in routing when a known share of requests can use a lower-cost model while stronger models handle requests that need more reasoning.
+
+The processor runs classification once in `processInput()` and applies the selected model in `processInputStep()`. Messages are not rewritten.
+
+This processor is best for advanced cost and latency tuning. It adds one classifier call per request, and model switching can reduce prompt cache efficiency because cache entries are usually scoped by model.
+
+## Usage example
+
+The following example demonstrates routing requests to different models with a small classifier model:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { ModelSwapperProcessor } from '@mastra/core/processors'
+
+export const supportAgent = new Agent({
+  name: 'Support Agent',
+  instructions: 'Answer user questions and provide detailed help when needed.',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  inputProcessors: [
+    new ModelSwapperProcessor({
+      model: '__GATEWAY_OPENAI_MODEL_NANO__',
+      defaultModel: '__GATEWAY_OPENAI_MODEL_BASE__',
+      rules: [
+        {
+          description: 'Short factual questions, summaries, and routine support requests',
+          model: '__GATEWAY_OPENAI_MODEL_MINI__',
+        },
+        {
+          description: 'Architecture, debugging, planning, or multi-step analysis',
+          model: '__GATEWAY_OPENAI_MODEL__',
+        },
+      ],
+    }),
+  ],
+})
+```
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'ModelSwapperOptions',
+    description: 'Configuration options for request classification and model routing.',
+    isOptional: false,
+    properties: [
+      {
+        type: 'ModelSwapperOptions',
+        parameters: [
+          {
+            name: 'model',
+            type: 'MastraModelConfig',
+            description: 'Model configuration for the internal classification agent.',
+            isOptional: false,
+          },
+          {
+            name: 'rules',
+            type: 'ModelSwapRule[]',
+            description:
+              'Ordered routing rules. The classifier returns 1 for the first rule, 2 for the second rule, and 0 for no match.',
+            isOptional: false,
+          },
+          {
+            name: 'defaultModel',
+            type: 'MastraModelConfig',
+            description: 'Model to use when the classifier returns 0 or an invalid rule number.',
+            isOptional: true,
+            default: 'undefined',
+          },
+          {
+            name: 'instructions',
+            type: 'string',
+            description: 'Custom instructions for the internal classification agent.',
+            isOptional: true,
+            default: 'undefined',
+          },
+          {
+            name: 'lastMessageOnly',
+            type: 'boolean',
+            description: 'Whether to classify only the most recent message instead of all selected messages.',
+            isOptional: true,
+            default: 'true',
+          },
+          {
+            name: 'providerOptions',
+            type: 'ProviderOptions',
+            description: 'Provider-specific options passed to the internal classification agent.',
+            isOptional: true,
+            default: 'undefined',
+          },
+          {
+            name: 'structuredOutputOptions',
+            type: '{ jsonPromptInjection?: boolean }',
+            description: 'Structured output options used by the internal classification agent.',
+            isOptional: true,
+            default: 'undefined',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Routing rules
+
+Each `ModelSwapRule` describes when a request should use a specific model. Rules are ordered. The classifier returns the rule number, where `1` maps to `rules[0]`, `2` maps to `rules[1]`, and `0` means no match.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'ModelSwapRule',
+    type: 'object',
+    description: 'A rule that maps classifier output to a model.',
+    properties: [
+      {
+        type: 'ModelSwapRule',
+        parameters: [
+          {
+            name: 'description',
+            type: 'string',
+            description: 'Natural language routing criteria for requests that should use this model.',
+            isOptional: false,
+          },
+          {
+            name: 'model',
+            type: 'MastraModelConfig',
+            description: 'Model to use when the rule matches.',
+            isOptional: false,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Result metadata
+
+The processor stores the classification result in its request-scoped state. The result has the following shape:
+
+```typescript
+type ModelSwapperResult = {
+  rule: number
+  selectedModel?: MastraModelConfig
+}
+```
+
+`selectedModel` is set when a valid rule number matches, or when `defaultModel` is configured for unmatched requests.
+
+## When to use it
+
+Use `ModelSwapperProcessor` when:
+
+- You have measured traffic where a meaningful share of requests can use a lower-cost model.
+- You want per-request routing without changing the user's messages.
+- You can accept one extra classifier call before the first model call.
+- You can test quality for each routed model.
+
+Avoid it when:
+
+- Prompt caching is a major part of your cost strategy. Splitting traffic across models can reduce cache hit rates.
+- Users expect every request to use the agent's configured model.
+- Tool-calling, formatting, or safety behavior must be identical across requests.
+- The cost of the classifier call is higher than the expected routing savings.
+
+## Behavior notes
+
+- Classification uses the latest message by default. Set `lastMessageOnly: false` to classify all selected input messages.
+- The selected model is applied only on step `0`. Tool-continuation steps keep the current model unless another processor changes it.
+- If the classifier returns `0` and no `defaultModel` is configured, the processor returns `{}` from `processInputStep()` and the agent's configured model stays unchanged.
+- If the classifier fails, the processor fails open and leaves the model unchanged.
+- Message content is passed through unchanged.
+- The selected model can differ from the model configured on the agent. Use traces or request metadata when users need to audit which model handled a request.

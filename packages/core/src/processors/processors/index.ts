@@ -12,6 +12,12 @@ export {
   type PromptInjectionCategoryScores,
 } from './prompt-injection-detector';
 export {
+  ModelSwapperProcessor,
+  type ModelSwapperOptions,
+  type ModelSwapperResult,
+  type ModelSwapRule,
+} from './model-swapper';
+export {
   PIIDetector,
   type PIIDetectorOptions,
   type PIIDetectionResult,

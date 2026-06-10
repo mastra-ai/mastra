@@ -8,7 +8,7 @@
   "scripts": {
     "docusaurus": "docusaurus",
     "dev": "docusaurus start",
-    "build": "docusaurus build",
+    "build": "BROWSERSLIST_CONFIG=package.json docusaurus build",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",

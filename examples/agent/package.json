@@ -62,6 +62,7 @@
     "start-deployed": "npx bun src/with-deployed.ts",
     "start": "npx bun src/index.ts",
     "processor-demo": "npx bun src/processor-demo.ts",
+    "test:model-swapper": "npx tsx src/test-model-swapper.ts",
     "mastra:dev": "mastra dev",
     "mastra:build": "mastra build -s",
     "mastra:start": "mastra start",
