@@ -122,7 +122,11 @@ describe('Drawer', () => {
       </Drawer>,
     );
 
-    expect(document.querySelector('[data-slot="drawer-backdrop"]')).toBeDefined();
+    const backdrop = document.querySelector('[data-slot="drawer-backdrop"]');
+    expect(backdrop).toBeDefined();
+    expect(backdrop?.getAttribute('data-overlay')).toBe('visible');
+    expect(backdrop?.classList.contains('bg-overlay')).toBe(true);
+    expect(backdrop?.classList.contains('backdrop-blur-xs')).toBe(true);
     expect(document.querySelector('[data-slot="drawer-viewport"]')).toBeDefined();
     expect(document.querySelector('[data-slot="drawer-popup"]')).toBeDefined();
     expect(document.querySelector('[data-slot="drawer-content"]')).toBeDefined();
@@ -204,6 +208,62 @@ describe('Drawer', () => {
     expect(popup?.classList.contains('w-[32rem]')).toBe(true);
   });
 
+  it('renders a native drag handle outside interactive content for floating side drawers', () => {
+    render(
+      <Drawer side="right" variant="floating" defaultOpen>
+        <DrawerContent>
+          <DrawerTitle>Floating drawer</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    const content = document.querySelector('[data-slot="drawer-content"]');
+    const sideHandle = document.querySelector('[data-slot="drawer-side-handle"]');
+    expect(sideHandle).not.toBeNull();
+    expect(content?.contains(sideHandle)).toBe(false);
+    expect(sideHandle?.classList.contains('-left-2')).toBe(true);
+    expect(sideHandle?.classList.contains('touch-none')).toBe(true);
+  });
+
+  it('renders a transparent backdrop for a floating drawer when requested', () => {
+    render(
+      <Drawer side="right" variant="floating" overlay="transparent" defaultOpen>
+        <DrawerContent>
+          <DrawerTitle>Transparent overlay drawer</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    const backdrop = document.querySelector('[data-slot="drawer-backdrop"]');
+    const viewport = document.querySelector('[data-slot="drawer-viewport"]');
+    const popup = document.querySelector('[data-slot="drawer-popup"]');
+    expect(backdrop?.getAttribute('data-overlay')).toBe('transparent');
+    expect(backdrop?.classList.contains('bg-transparent')).toBe(true);
+    expect(backdrop?.classList.contains('bg-overlay')).toBe(false);
+    expect(backdrop?.classList.contains('backdrop-blur-xs')).toBe(false);
+    expect(viewport?.getAttribute('data-variant')).toBe('floating');
+    expect(popup?.classList.contains('drawer-popup-floating')).toBe(true);
+  });
+
+  it('keeps outside interactions from dismissing a floating drawer without an overlay', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <>
+        <button type="button">Behind surface</button>
+        <Drawer side="right" variant="floating" defaultOpen onOpenChange={onOpenChange}>
+          <DrawerContent>
+            <DrawerTitle>Persistent floating drawer</DrawerTitle>
+          </DrawerContent>
+        </Drawer>
+      </>,
+    );
+
+    const behindSurface = screen.getByRole('button', { name: 'Behind surface' });
+    fireEvent.pointerDown(behindSurface);
+    fireEvent.click(behindSurface);
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
   it('supports the floating variant on DrawerContent without changing the root', () => {
     render(
       <Drawer side="right" defaultOpen>
@@ -215,7 +275,7 @@ describe('Drawer', () => {
 
     const viewport = document.querySelector('[data-slot="drawer-viewport"]');
     const popup = document.querySelector('[data-slot="drawer-popup"]');
-    expect(document.querySelector('[data-slot="drawer-backdrop"]')).toBeNull();
+    expect(document.querySelector('[data-slot="drawer-backdrop"]')?.getAttribute('data-overlay')).toBe('visible');
     expect(viewport?.getAttribute('data-variant')).toBe('floating');
     expect(popup?.getAttribute('data-variant')).toBe('floating');
   });

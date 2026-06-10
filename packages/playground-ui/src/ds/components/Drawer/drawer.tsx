@@ -10,15 +10,16 @@ import './drawer.css';
 
 export type DrawerSide = 'top' | 'right' | 'bottom' | 'left';
 
-const drawerBackdropVariants = cva('drawer-backdrop fixed inset-0 z-50 bg-overlay backdrop-blur-xs', {
+const drawerBackdropVariants = cva('drawer-backdrop fixed inset-0 z-50', {
   variants: {
-    variant: {
-      default: '',
-      floating: 'hidden',
+    overlay: {
+      visible: 'bg-overlay backdrop-blur-xs',
+      transparent: 'bg-transparent',
+      none: 'hidden',
     },
   },
   defaultVariants: {
-    variant: 'default',
+    overlay: 'visible',
   },
 });
 
@@ -132,6 +133,7 @@ type DrawerBackdropVariantsProps = VariantProps<typeof drawerBackdropVariants>;
 type DrawerViewportVariantsProps = VariantProps<typeof drawerViewportVariants>;
 type DrawerPopupVariantsProps = VariantProps<typeof drawerPopupVariants>;
 export type DrawerVariant = NonNullable<DrawerPopupVariantsProps['variant']>;
+export type DrawerOverlay = 'auto' | NonNullable<DrawerBackdropVariantsProps['overlay']>;
 
 // `side` = anchor edge; Base UI's `swipeDirection` = dismissal gesture (bottom sheet swipes `down`).
 const sideToSwipeDirection: Record<DrawerSide, 'up' | 'down' | 'left' | 'right'> = {
@@ -144,9 +146,25 @@ const sideToSwipeDirection: Record<DrawerSide, 'up' | 'down' | 'left' | 'right'>
 type DrawerContextValue = {
   side: DrawerSide;
   variant: DrawerVariant;
+  resolvedOverlay: NonNullable<DrawerBackdropVariantsProps['overlay']>;
 };
 
-const DrawerContext = React.createContext<DrawerContextValue>({ side: 'bottom', variant: 'default' });
+const resolveDrawerOverlay = (
+  overlay: DrawerOverlay,
+  variant: DrawerVariant,
+): NonNullable<DrawerBackdropVariantsProps['overlay']> => {
+  if (overlay !== 'auto') {
+    return overlay;
+  }
+
+  return variant === 'floating' ? 'none' : 'visible';
+};
+
+const DrawerContext = React.createContext<DrawerContextValue>({
+  side: 'bottom',
+  variant: 'default',
+  resolvedOverlay: 'visible',
+});
 
 const useDrawerContext = () => React.useContext(DrawerContext);
 
@@ -157,14 +175,35 @@ export type DrawerProps<Payload = unknown> = Omit<DrawerPrimitive.Root.Props<Pay
   side?: DrawerSide;
   /** Visual treatment for the drawer panel. Defaults to `default`. */
   variant?: DrawerVariant;
+  /** Backdrop behavior. `auto` renders a visible backdrop for default drawers and no backdrop for floating drawers. */
+  overlay?: DrawerOverlay;
 };
 
-function Drawer<Payload = unknown>({ side = 'bottom', variant = 'default', children, ...props }: DrawerProps<Payload>) {
-  const contextValue = React.useMemo<DrawerContextValue>(() => ({ side, variant }), [side, variant]);
+function Drawer<Payload = unknown>({
+  side = 'bottom',
+  variant = 'default',
+  overlay = 'auto',
+  modal,
+  disablePointerDismissal,
+  children,
+  ...props
+}: DrawerProps<Payload>) {
+  const resolvedOverlay = resolveDrawerOverlay(overlay, variant);
+  const resolvedModal = modal ?? (resolvedOverlay === 'none' ? false : undefined);
+  const resolvedDisablePointerDismissal = disablePointerDismissal ?? (resolvedOverlay === 'none' ? true : undefined);
+  const contextValue = React.useMemo<DrawerContextValue>(
+    () => ({ side, variant, resolvedOverlay }),
+    [side, variant, resolvedOverlay],
+  );
 
   return (
     <DrawerContext.Provider value={contextValue}>
-      <DrawerPrimitive.Root swipeDirection={sideToSwipeDirection[side]} {...props}>
+      <DrawerPrimitive.Root
+        swipeDirection={sideToSwipeDirection[side]}
+        modal={resolvedModal}
+        disablePointerDismissal={resolvedDisablePointerDismissal}
+        {...props}
+      >
         {children}
       </DrawerPrimitive.Root>
     </DrawerContext.Provider>
@@ -218,16 +257,16 @@ type DrawerBackdropProps = Omit<DrawerPrimitive.Backdrop.Props, 'className'> & {
 
 // The `drawer-backdrop` class (drawer.css) fades the overlay with the swipe gesture.
 const DrawerBackdrop = React.forwardRef<HTMLDivElement, DrawerBackdropProps>(
-  ({ className, variant, ...props }, ref) => {
-    const { variant: contextVariant } = useDrawerContext();
-    const resolvedVariant = variant ?? contextVariant;
+  ({ className, overlay, ...props }, ref) => {
+    const { resolvedOverlay } = useDrawerContext();
+    const resolvedBackdropOverlay = overlay ?? resolvedOverlay;
 
     return (
       <DrawerPrimitive.Backdrop
         ref={ref}
         data-slot="drawer-backdrop"
-        data-variant={resolvedVariant}
-        className={cn(drawerBackdropVariants({ variant: resolvedVariant }), className)}
+        data-overlay={resolvedBackdropOverlay}
+        className={cn(drawerBackdropVariants({ overlay: resolvedBackdropOverlay }), className)}
         {...props}
       />
     );
@@ -298,6 +337,31 @@ const DrawerHandleBar = () => (
 );
 DrawerHandleBar.displayName = 'DrawerHandleBar';
 
+type DrawerFloatingSideHandleProps = {
+  side: DrawerSide;
+  variant: DrawerVariant;
+};
+
+const DrawerFloatingSideHandle = ({ side, variant }: DrawerFloatingSideHandleProps) => {
+  if (variant !== 'floating' || (side !== 'left' && side !== 'right')) {
+    return null;
+  }
+
+  return (
+    <div
+      aria-hidden
+      data-slot="drawer-side-handle"
+      className={cn(
+        'absolute top-1/2 z-10 flex h-20 w-5 -translate-y-1/2 touch-none select-none items-center justify-center cursor-ew-resize',
+        side === 'right' ? '-left-2' : '-right-2',
+      )}
+    >
+      <div className="h-10 w-1 rounded-full bg-surface5/80 shadow-sm" />
+    </div>
+  );
+};
+DrawerFloatingSideHandle.displayName = 'DrawerFloatingSideHandle';
+
 type DrawerContentProps = Omit<DrawerPrimitive.Popup.Props, 'className' | 'children'> & {
   className?: string;
   children?: React.ReactNode;
@@ -307,16 +371,17 @@ type DrawerContentProps = Omit<DrawerPrimitive.Popup.Props, 'className' | 'child
 // Drop to the primitives for non-modal pages, custom portal targets, or chrome outside the popup.
 const DrawerContent = React.forwardRef<HTMLDivElement, DrawerContentProps>(
   ({ className, children, variant, ...props }, ref) => {
-    const { side, variant: contextVariant } = useDrawerContext();
+    const { side, variant: contextVariant, resolvedOverlay } = useDrawerContext();
     const resolvedVariant = variant ?? contextVariant;
     const showHandle = side === 'top' || side === 'bottom';
 
     return (
       <DrawerPortal>
-        {resolvedVariant === 'default' && <DrawerBackdrop />}
+        {resolvedOverlay !== 'none' && <DrawerBackdrop />}
         <DrawerViewport variant={resolvedVariant}>
           <DrawerPopup ref={ref} variant={resolvedVariant} className={className} {...props}>
             {showHandle && side === 'bottom' && <DrawerHandleBar />}
+            <DrawerFloatingSideHandle side={side} variant={resolvedVariant} />
             <div data-slot="drawer-content" className={cn('relative flex min-h-0 flex-1 flex-col', nestedFadeClass)}>
               {children}
             </div>
