@@ -1,6 +1,6 @@
 import { useMastraClient } from '@mastra/react';
 import { useQueries } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import { useToolProviders } from './use-tool-providers';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
@@ -105,14 +105,14 @@ export const useAllConnections = (options?: UseAllConnectionsOptions) => {
   // A toolkit "has a connection" only when at least one connection is active.
   // Pending/failed rows don't count — this keeps the card hint in sync with the
   // toolkit row control, which also treats only active connections as usable.
-  const hasConnection = useMemo(
-    () => (providerId: string, toolkit: string) =>
+  const hasConnection = useCallback(
+    (providerId: string, toolkit: string) =>
       (connectionsByKey.get(`${providerId}:${toolkit}`) ?? []).some(connection => connection.status === 'active'),
     [connectionsByKey],
   );
 
-  const getConnections = useMemo(
-    () => (providerId: string, toolkit: string) => connectionsByKey.get(`${providerId}:${toolkit}`) ?? [],
+  const getConnections = useCallback(
+    (providerId: string, toolkit: string) => connectionsByKey.get(`${providerId}:${toolkit}`) ?? [],
     [connectionsByKey],
   );
 

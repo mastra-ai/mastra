@@ -74,6 +74,12 @@ const buildWizardSteps = ({ gates, includeInitial }: BuildStepsInput): WizardSte
   return result;
 };
 
+const resolveSurvivingStep = (current: WizardStep, steps: WizardStep[]): WizardStep => {
+  if (steps.includes(current)) return current;
+  const currentOrderIdx = STEP_ORDER.indexOf(current);
+  return STEP_ORDER.slice(currentOrderIdx + 1).find(step => steps.includes(step)) ?? 'end';
+};
+
 const WizardContext = createContext<WizardContextValue | null>(null);
 
 interface WizardProviderProps {
@@ -124,11 +130,8 @@ export const WizardProvider = ({ initialStep = 'end', hasAgentTools = true, chil
   // Clamp forward if the current step is no longer in the resolved tree
   // (e.g. a feature flag was turned off while the wizard was on that step).
   useEffect(() => {
-    if (steps.includes(step)) return;
-    const currentOrderIdx = STEP_ORDER.indexOf(step);
-    const nextSurviving = STEP_ORDER.slice(currentOrderIdx + 1).find(s => steps.includes(s));
-    setStep(nextSurviving ?? 'end');
-  }, [steps, step]);
+    setStep(current => resolveSurvivingStep(current, steps));
+  }, [steps]);
 
   const next = useCallback(() => {
     setStep(current => {

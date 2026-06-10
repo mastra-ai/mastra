@@ -1,5 +1,5 @@
 import { Button, Spinner } from '@mastra/playground-ui';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { FormProvider, useForm, useFormContext, useFormState, useWatch } from 'react-hook-form';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu';
@@ -32,11 +32,11 @@ import { useWizard, WizardProvider } from '@/domains/agent-builder/contexts/wiza
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
 import { useChannelConnectToast } from '@/domains/agent-builder/hooks/use-channel-connect-toast';
-import { useAllProviderTools } from '@/domains/tool-providers/hooks/use-all-provider-tools';
 import { AgentBuilderEditLayout } from '@/domains/agent-builder/layouts/agent-builder-edit-layout';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { storedAgentToFormValues } from '@/domains/agent-builder/services/stored-agent-to-form-values';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { useAllProviderTools } from '@/domains/tool-providers/hooks/use-all-provider-tools';
 import { startViewTransition } from '@/lib/routing';
 
 export default function AgentBuilderAgentEdit() {
@@ -158,17 +158,8 @@ const EditPageLayout = () => {
   // re-centers the layout.
   const shouldBeCentered = (step === 'ready' && !isBuilderReady) || (step === 'identity' && !hasMandatoryFields);
 
-  const [variant, setVariant] = useState<'centered' | 'split'>(shouldBeCentered ? 'centered' : 'split');
-
-  useEffect(() => {
-    const next = shouldBeCentered ? 'centered' : 'split';
-    if (next === variant) return;
-    startViewTransition(() => {
-      setVariant(next);
-    });
-  }, [shouldBeCentered, variant]);
-
-  const isCentered = variant === 'centered';
+  const variant = shouldBeCentered ? 'centered' : 'split';
+  const isCentered = shouldBeCentered;
   const showMobileInitialCtas = step === 'identity' && hasMandatoryFields && !isStreamRunning;
 
   return (

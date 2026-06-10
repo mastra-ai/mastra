@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
 
-import { useBuilderPickerVisibility } from '../../agent-builder';
+import { useBuilderPickerVisibility } from './use-builder-settings';
 import { useAllConnections } from '../../tool-providers/hooks/use-all-connections';
 import { useAllProviderTools } from '../../tool-providers/hooks/use-all-provider-tools';
 import type { AgentBuilderEditFormValues } from '../schemas';

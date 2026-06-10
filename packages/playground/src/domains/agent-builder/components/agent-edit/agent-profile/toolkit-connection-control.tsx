@@ -2,12 +2,13 @@ import { Button, Skeleton } from '@mastra/playground-ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { Settings } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useFormContext, useWatch } from 'react-hook-form';
+import { useFormContext, useWatch, type UseFormSetValue } from 'react-hook-form';
 
 import { ManageConnectionDialog } from '../../../../tool-providers/components/manage-connection-dialog';
 import { useAuthorize } from '../../../../tool-providers/hooks/use-authorize';
 import { useExistingConnections } from '../../../../tool-providers/hooks/use-existing-connections';
 import { useToolkits } from '../../../../tool-providers/hooks/use-toolkits';
+import type { AgentBuilderEditFormValues } from '../../../schemas';
 import type { ToolProviderConnectionFormValue, ToolProvidersFormValue } from '../../../../tool-providers/schemas';
 
 export interface ToolkitConnectionControlProps {
@@ -64,6 +65,56 @@ const pinsEqual = (a: ToolProviderConnectionFormValue[], b: ToolProviderConnecti
   });
 };
 
+interface ActiveConnection {
+  connectionId: string;
+  label?: string | null;
+}
+
+const getToolkitConnectionPins = ({
+  activeConnections,
+  pinned,
+  toolkit,
+}: {
+  activeConnections: ActiveConnection[];
+  pinned: ToolProviderConnectionFormValue[];
+  toolkit: string;
+}): ToolProviderConnectionFormValue[] => {
+  const pinnedById = new Map(pinned.map(connection => [connection.connectionId, connection]));
+  const desired = activeConnections.map(connection => {
+    const existing = pinnedById.get(connection.connectionId);
+    return {
+      kind: 'author' as const,
+      toolkit,
+      connectionId: connection.connectionId,
+      scope: existing?.scope ?? ('per-author' as const),
+      label: existing?.label?.trim() || connection.label?.trim() || undefined,
+    };
+  });
+
+  if (desired.length < 2) return desired;
+
+  return dedupeLabels(desired.map(pin => ({ ...pin, label: pin.label || deriveConnectionLabel(pin.connectionId) })));
+};
+
+const useSyncActiveConnectionsToForm = ({
+  hasSelectedTool,
+  currentPins,
+  desiredPins,
+  connectionsField,
+  setValue,
+}: {
+  hasSelectedTool: boolean;
+  currentPins: ToolProviderConnectionFormValue[];
+  desiredPins: ToolProviderConnectionFormValue[];
+  connectionsField: `toolProviders.${string}.connections.${string}`;
+  setValue: UseFormSetValue<AgentBuilderEditFormValues>;
+}) => {
+  useEffect(() => {
+    if (!hasSelectedTool || pinsEqual(currentPins, desiredPins)) return;
+    setValue(connectionsField, desiredPins, { shouldDirty: true });
+  }, [hasSelectedTool, desiredPins, currentPins, connectionsField, setValue]);
+};
+
 /**
  * Per-toolkit connection control rendered on the right edge of a toolkit row in
  * the left filter pane. Connections are keyed by `(providerId, toolkit)`, so a
@@ -85,7 +136,7 @@ export const ToolkitConnectionControl = ({
   disabled = false,
   multipleAllowed = false,
 }: ToolkitConnectionControlProps) => {
-  const { setValue } = useFormContext();
+  const { setValue } = useFormContext<AgentBuilderEditFormValues>();
   const queryClient = useQueryClient();
   const authorize = useAuthorize();
   const connectionsQuery = useExistingConnections(providerId, toolkit, { scopeToSelf: true });
@@ -99,7 +150,7 @@ export const ToolkitConnectionControl = ({
     [toolkitsQuery.data?.data, toolkit],
   );
 
-  const connectionsField = `toolProviders.${providerId}.connections.${toolkit}` as const;
+  const connectionsField = useMemo(() => `toolProviders.${providerId}.connections.${toolkit}` as const, [providerId, toolkit]);
   const pinnedRaw = useWatch({ name: connectionsField }) as ToolProviderConnectionFormValue[] | undefined;
   const pinned = useMemo(() => pinnedRaw ?? [], [pinnedRaw]);
 
@@ -117,36 +168,21 @@ export const ToolkitConnectionControl = ({
     [connectionsQuery.data?.items],
   );
 
-  // While a tool in this toolkit is selected, ensure every active connection is
-  // pinned in the form so the agent uses it. The stored schema requires every
-  // pin to carry a non-empty, schema-valid label once a toolkit holds two or
-  // more connections, so we backfill a deterministic fallback label (derived
-  // from the backend label or the connectionId) whenever that threshold is hit.
-  useEffect(() => {
-    if (!hasSelectedTool) return;
+  const desiredPins = useMemo(
+    () => getToolkitConnectionPins({ activeConnections, pinned, toolkit }),
+    [activeConnections, pinned, toolkit],
+  );
 
-    const pinnedById = new Map(pinned.map(connection => [connection.connectionId, connection]));
-    const desired = activeConnections.map(connection => {
-      const existing = pinnedById.get(connection.connectionId);
-      return {
-        kind: 'author' as const,
-        toolkit,
+  const manageableConnections = useMemo(
+    () =>
+      activeConnections.map(connection => ({
         connectionId: connection.connectionId,
-        scope: existing?.scope ?? ('per-author' as const),
-        label: existing?.label?.trim() || connection.label?.trim() || undefined,
-      };
-    });
+        label: connection.label,
+      })),
+    [activeConnections],
+  );
 
-    // Once two or more connections exist, every pin must carry a unique,
-    // schema-valid label; backfill and disambiguate before writing.
-    const next =
-      desired.length >= 2
-        ? dedupeLabels(desired.map(pin => ({ ...pin, label: pin.label || deriveConnectionLabel(pin.connectionId) })))
-        : desired;
-
-    if (pinsEqual(pinned, next)) return;
-    setValue(connectionsField, next, { shouldDirty: true });
-  }, [hasSelectedTool, activeConnections, pinned, connectionsField, toolkit, setValue]);
+  useSyncActiveConnectionsToForm({ hasSelectedTool, currentPins: pinned, desiredPins, connectionsField, setValue });
 
   const unpinConnection = (connectionId: string) => {
     if (!pinned.some(connection => connection.connectionId === connectionId)) return;
@@ -214,10 +250,7 @@ export const ToolkitConnectionControl = ({
           open
           onOpenChange={setManageOpen}
           providerId={providerId}
-          connections={activeConnections.map(connection => ({
-            connectionId: connection.connectionId,
-            label: connection.label,
-          }))}
+          connections={manageableConnections}
           disabled={disabled}
           testIdPrefix={`toolkit-manage-${testIdSuffix}`}
           onDisconnected={unpinConnection}

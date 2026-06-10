@@ -36,12 +36,12 @@ export function useAutosaveAgent({
   const requestSeqRef = useRef(0);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const clearSavedTimer = () => {
+  const clearSavedTimer = useCallback(() => {
     if (savedTimerRef.current) {
       clearTimeout(savedTimerRef.current);
       savedTimerRef.current = null;
     }
-  };
+  }, []);
 
   const performSave = useCallback(async () => {
     const seq = ++requestSeqRef.current;
@@ -65,7 +65,7 @@ export function useAutosaveAgent({
       setStatus('error');
       setLastError(err instanceof Error ? err : new Error(String(err)));
     }
-  }, [save, savedDisplayMs]);
+  }, [clearSavedTimer, save, savedDisplayMs]);
 
   const debouncedSave = useDebouncedCallback(() => {
     void performSave();
@@ -90,7 +90,7 @@ export function useAutosaveAgent({
       debouncedSave.flush();
       clearSavedTimer();
     };
-  }, [debouncedSave]);
+  }, [clearSavedTimer, debouncedSave]);
 
   const retry = useCallback(() => {
     void performSave();
