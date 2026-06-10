@@ -7,7 +7,7 @@ packages:
 
 # BrowserViewer
 
-The `@mastra/browser-viewer` package provides browser automation for CLI-based tools like [agent-browser](https://www.npmjs.com/package/agent-browser), [browser-use](https://pypi.org/project/browser-use/), and [browse](https://www.npmjs.com/package/@browserbasehq/browse-cli). BrowserViewer launches Chrome via Playwright, exposes a Chrome DevTools Protocol (CDP) URL, and automatically injects it into CLI commands run through [workspace tools](/docs/workspace/overview).
+The `@mastra/browser-viewer` package provides browser automation for CLI-based tools like [agent-browser](https://www.npmjs.com/package/agent-browser), [browser-use](https://pypi.org/project/browser-use/), and [browse](https://www.npmjs.com/package/browse). BrowserViewer launches Chrome via Playwright, exposes a Chrome DevTools Protocol (CDP) URL, and automatically injects it into CLI commands run through [workspace tools](/docs/workspace/overview).
 
 ## When to use BrowserViewer
 
@@ -102,10 +102,10 @@ npx skills add browser-use/browser-use --skill browser-use
 
 CDP flag: `--cdp-url`
 
-### browse-cli
+### browse
 
 ```bash
-npm install -g @browserbasehq/browse-cli
+npm install -g browse
 npx skills add browserbase/skills
 ```
 
