@@ -8,13 +8,13 @@ import { Agent } from '../agent';
  * Regression test for the background sub-agent tool-content bug.
  *
  * When a sub-agent delegation (`agent-<name>` tool) is dispatched as a background task, the agentic
- * loop returns a placeholder result of shape `{ result: string }` instead of the sub-agent's
- * `agentOutputSchema` shape. The sub-agent tool's `toModelOutput` read `output.text`, which is
- * undefined for that placeholder, so the supervisor's continuation request carried a `role: "tool"`
- * message with null content — rejected by providers (e.g. Anthropic) with a 500.
+ * loop hands `toModelOutput` the placeholder string ("Background task started...") instead of the
+ * sub-agent's `agentOutputSchema` object. The sub-agent tool's `toModelOutput` read `output.text`,
+ * which is undefined for that string, so the supervisor's continuation request carried a
+ * `role: "tool"` message with null content — rejected by providers (e.g. Anthropic) with a 500.
  *
- * The fix makes `toModelOutput` fall back to the placeholder's `result`, so the tool message always
- * carries non-empty content.
+ * The fix makes `toModelOutput` use the placeholder string directly when `output` is a string, so
+ * the tool message always carries non-empty content.
  *
  * The background manager workers are intentionally NOT started, so the dispatched task stays pending
  * and the supervisor's continuation turn carries the placeholder (the buggy path), deterministically.

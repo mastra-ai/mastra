@@ -4115,7 +4115,7 @@ export class Agent<
 
         const toModelOutput = delegation?.includeSubAgentToolResultsInModelContext
           ? undefined
-          : (output: z.infer<typeof agentOutputSchema>) => ({
+          : (output: z.infer<typeof agentOutputSchema> | string) => ({
               type: 'text' as const,
               // When a sub-agent invocation is dispatched as a background task, the agentic loop
               // hands `toModelOutput` the placeholder string from tool-call-step.ts ("Background
