@@ -23,6 +23,23 @@ type SessionStateFields = {
   modeId?: string;
 };
 
+/**
+ * Observational Memory state fields the v1 session owns (Step 5.3). Like the
+ * identity fields, these are read authoritatively from the session and mirrored
+ * into legacy state so legacy OM getters that still read `this.state` stay
+ * consistent during the compat era.
+ */
+const OM_STATE_FIELDS = [
+  'observerModelId',
+  'reflectorModelId',
+  'observationThreshold',
+  'reflectionThreshold',
+  'cavemanObservations',
+  'observeAttachments',
+] as const;
+type OmStateField = (typeof OM_STATE_FIELDS)[number];
+type OmStateFields = Partial<Record<OmStateField, unknown>>;
+
 export function v1ModeToLegacy<TState = {}>(mode: HarnessMode, agent: Agent): HarnessModeLegacy<TState> {
   const meta = mode.metadata ?? {};
   return {
@@ -99,13 +116,26 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
       return state;
     }
 
-    // Legacy state stays the single state owner for now: session state is a
-    // durability mirror only. Spreading `session.getState()` here would let
-    // schema defaults (e.g. `tasks: []`) shadow legacy values written through
-    // the legacy-private `updateState` path (the #17541 task-drift bug). The
-    // session owns only its identity fields: model and mode.
+    // Legacy state stays the single state owner for non-identity, non-OM
+    // fields: session state is a durability mirror for those. Spreading
+    // `session.getState()` wholesale here would let schema defaults (e.g.
+    // `tasks: []`) shadow legacy values written through the legacy-private
+    // `updateState` path (the #17541 task-drift bug). The session owns its
+    // identity fields (model, mode) and, as of Step 5.3, its OM fields — the
+    // latter projected only when actually present on the session so schema
+    // defaults never shadow a legacy value.
+    const sessionState = session.getState() as OmStateFields;
+    const omProjection: OmStateFields = {};
+    for (const field of OM_STATE_FIELDS) {
+      const value = sessionState[field];
+      if (value !== undefined) {
+        omProjection[field] = value;
+      }
+    }
+
     return {
       ...state,
+      ...omProjection,
       currentModelId: session.getModelId(),
       modeId: session.getMode().id,
     } as Readonly<TState>;
@@ -133,6 +163,24 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
       if (typeof modeId === 'string' && modeId !== session.getMode().id) {
         await this.switchMode({ modeId });
       }
+    }
+
+    // Step 5.3: the v1 session is the authoritative owner of the OM fields
+    // (observer/reflector model ids, observation/reflection thresholds, caveman
+    // observations, observe attachments). Write them to the session AWAITED so
+    // read-after-write through the OM getters is consistent, then mirror into
+    // legacy state below for legacy read-through. Unlike the generic non-OM
+    // mirror, OM writes are awaited because the `/om` overlay reads them back
+    // immediately on reopen.
+    const omUpdates: OmStateFields = {};
+    for (const field of OM_STATE_FIELDS) {
+      const value = (harnessUpdates as OmStateFields)[field];
+      if (value !== undefined) {
+        omUpdates[field] = value;
+      }
+    }
+    if (session && Object.keys(omUpdates).length > 0) {
+      await session.setState(omUpdates as Partial<TState>);
     }
 
     // Mirror identity fields into legacy state so legacy read-through stays in
@@ -172,6 +220,38 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
 
   async setSubagentModelId({ modelId, agentType }: { modelId: string; agentType?: string }): Promise<void> {
     await super.setSubagentModelId({ modelId, agentType });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Observational Memory (Step 5.3)
+  //
+  // The v1 session is the authoritative owner of the OM model/threshold fields.
+  // `getState()` projects them off the session (present-only), so these getters
+  // read the session value through `getState()` and fall back to the legacy
+  // config default (via `super`) when the session has not set the field. Writes
+  // route through the overridden `setState` (awaited into the session) above;
+  // `switchObserverModel`/`switchReflectorModel` call `setState` so they flow to
+  // the session by construction without needing their own overrides.
+  // ---------------------------------------------------------------------------
+
+  override getObserverModelId(): string | undefined {
+    const fromSession = (this.getState() as OmStateFields).observerModelId;
+    return typeof fromSession === 'string' ? fromSession : super.getObserverModelId();
+  }
+
+  override getReflectorModelId(): string | undefined {
+    const fromSession = (this.getState() as OmStateFields).reflectorModelId;
+    return typeof fromSession === 'string' ? fromSession : super.getReflectorModelId();
+  }
+
+  override getObservationThreshold(): number | undefined {
+    const fromSession = (this.getState() as OmStateFields).observationThreshold;
+    return typeof fromSession === 'number' ? fromSession : super.getObservationThreshold();
+  }
+
+  override getReflectionThreshold(): number | undefined {
+    const fromSession = (this.getState() as OmStateFields).reflectionThreshold;
+    return typeof fromSession === 'number' ? fromSession : super.getReflectionThreshold();
   }
 
   async switchThread({ threadId }: { threadId: string }): Promise<void> {

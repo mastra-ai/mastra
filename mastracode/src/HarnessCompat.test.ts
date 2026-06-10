@@ -72,6 +72,28 @@ vi.mock('@mastra/core/harness', () => ({
     listModes() {
       return legacyListModes();
     }
+
+    // Legacy OM getters read directly from legacy state, mirroring the real
+    // base. HarnessCompat's overrides prefer the v1 session and fall back here.
+    getObserverModelId() {
+      const v = legacyState.observerModelId;
+      return typeof v === 'string' ? v : undefined;
+    }
+
+    getReflectorModelId() {
+      const v = legacyState.reflectorModelId;
+      return typeof v === 'string' ? v : undefined;
+    }
+
+    getObservationThreshold() {
+      const v = legacyState.observationThreshold;
+      return typeof v === 'number' ? v : undefined;
+    }
+
+    getReflectionThreshold() {
+      const v = legacyState.reflectionThreshold;
+      return typeof v === 'number' ? v : undefined;
+    }
   },
 }));
 
@@ -223,5 +245,57 @@ describe('HarnessCompat session-derived state', () => {
 
     expect(legacySetState).toHaveBeenCalledWith({ subagentModelId: 'default-subagent-model' });
     expect(harness.getSubagentModelId()).toBe('default-subagent-model');
+  });
+
+  it('makes the v1 session authoritative for OM fields (Step 5.3)', async () => {
+    const { harness, harnessV1 } = await createCompat({ threadId: 'thread-id' });
+    await harness.switchThread({ threadId: 'thread-id' });
+
+    // Before any OM write, getters fall back to legacy (here: undefined).
+    expect(harness.getObserverModelId()).toBeUndefined();
+    expect(harness.getObservationThreshold()).toBeUndefined();
+
+    await harness.setState({
+      observerModelId: 'openai/observer',
+      reflectorModelId: 'openai/reflector',
+      observationThreshold: 12_345,
+      reflectionThreshold: 23_456,
+      cavemanObservations: true,
+    } as never);
+
+    // Getters read the authoritative REAL v1 session value.
+    expect(harness.getObserverModelId()).toBe('openai/observer');
+    expect(harness.getReflectorModelId()).toBe('openai/reflector');
+    expect(harness.getObservationThreshold()).toBe(12_345);
+    expect(harness.getReflectionThreshold()).toBe(23_456);
+    // Non-getter OM fields surface through getState's session projection.
+    expect(harness.getState()).toMatchObject({ cavemanObservations: true });
+
+    // The session genuinely persisted the OM fields (read straight off the
+    // real v1 session, not the compat projection).
+    const session = await harnessV1.session({ threadId: 'thread-id', resourceId: 'resource-id' });
+    expect(session.getState()).toMatchObject({
+      observerModelId: 'openai/observer',
+      observationThreshold: 12_345,
+      cavemanObservations: true,
+    });
+  });
+
+  it('persists session-owned OM fields across a thread reload (no drift)', async () => {
+    const { harness, harnessV1 } = await createCompat({ threadId: 'om-thread' });
+    await harness.switchThread({ threadId: 'om-thread' });
+    await harness.setState({ observerModelId: 'openai/persisted-observer', observationThreshold: 99_000 } as never);
+
+    // Drop the in-memory session and reload the thread: the durable v1 store
+    // must still return the OM values the user set.
+    await harness.switchThread({ threadId: 'om-thread' });
+    expect(harness.getObserverModelId()).toBe('openai/persisted-observer');
+    expect(harness.getObservationThreshold()).toBe(99_000);
+
+    const reloaded = await harnessV1.session({ threadId: 'om-thread', resourceId: 'resource-id' });
+    expect(reloaded.getState()).toMatchObject({
+      observerModelId: 'openai/persisted-observer',
+      observationThreshold: 99_000,
+    });
   });
 });
