@@ -36,17 +36,14 @@ export type {
 } from './types';
 export { executeTarget, type Target, type ExecutionResult, type ToolReplayExecutionOptions } from './executor';
 export { resolveScorers, runScorersForItem } from './scorer';
+// Only the report-facing types are public API; the replay mechanics
+// (extraction, state, hooks) are internal to the experiment runner.
 export {
-  extractToolReplayEvents,
-  createReplayState,
-  buildReplayHooks,
-  finalizeReplayReport,
   type ToolReplayEvent,
   type ToolReplayOnMiss,
   type ToolReplayMiss,
   type ToolReplayArgMismatch,
   type ToolReplayReport,
-  type ToolReplayState,
 } from './replay';
 
 // Re-export analytics
@@ -228,6 +225,28 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           throw new MastraError({
             id: 'EXPERIMENT_TOOL_REPLAY_NO_EXPERIMENTS_STORE',
             text: 'toolReplay.fromExperimentId requires experiments storage. Configure storage in Mastra instance.',
+            domain: 'STORAGE',
+            category: 'USER',
+          });
+        }
+        const sourceExperiment = await experimentsStore.getExperimentById({ id: toolReplay.fromExperimentId });
+        if (!sourceExperiment) {
+          throw new MastraError({
+            id: 'EXPERIMENT_TOOL_REPLAY_SOURCE_NOT_FOUND',
+            text: `toolReplay.fromExperimentId '${toolReplay.fromExperimentId}' does not match any experiment`,
+            domain: 'STORAGE',
+            category: 'USER',
+          });
+        }
+        // Replay runs short-circuit tools before any tool span is created, so
+        // a replay experiment's traces contain no tool spans — chaining one as
+        // a recording source would make every item miss (onMiss 'error') or
+        // run fully live (onMiss 'passthrough'). Recordings must come from
+        // live runs.
+        if ((sourceExperiment.metadata as Record<string, unknown> | null | undefined)?.toolReplay) {
+          throw new MastraError({
+            id: 'EXPERIMENT_TOOL_REPLAY_SOURCE_IS_REPLAY',
+            text: `Experiment '${toolReplay.fromExperimentId}' is itself a tool replay run; its traces contain no tool spans. Use the original live experiment as fromExperimentId.`,
             domain: 'STORAGE',
             category: 'USER',
           });
@@ -492,10 +511,14 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         let execResult = await execFn(item, itemSignal);
 
         while (execResult.error && retryCount < maxRetries) {
+          // Don't retry deterministic tool replay failures — neither the
+          // recording (miss) nor its absence (no recording: the resolver
+          // memoizes resolved lookups) can change within a run. Checked before
+          // the message heuristic so the structured codes stay load-bearing.
+          if (execResult.error.code === 'TOOL_REPLAY_MISS' || execResult.error.code === 'TOOL_REPLAY_NO_RECORDING')
+            break;
           // Don't retry abort errors
           if (execResult.error.message.toLowerCase().includes('abort')) break;
-          // Don't retry deterministic tool replay misses — the recording can't change
-          if (execResult.error.code === 'TOOL_REPLAY_MISS') break;
 
           retryCount++;
           const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 30000);

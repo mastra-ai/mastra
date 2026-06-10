@@ -259,7 +259,11 @@ async function executeAgent(
     hooks = buildReplayHooks(replayState, {
       onMiss: toolReplay.onMiss,
       onFatalMiss: error => {
-        fatalMissError = error;
+        // Keep the FIRST miss: the abort signal's reason is frozen at the first
+        // abort() call, and later misses (parallel tool calls in the same step
+        // still run their hooks) must not make the reported error disagree
+        // with it. All misses are listed in the report regardless.
+        fatalMissError ??= error;
         replayAbort!.abort(error);
       },
     });
@@ -281,10 +285,10 @@ async function executeAgent(
   // Keep the failure contract: failed executions have output: null (scorers
   // run against output even on errors). The divergence report stays available
   // on ExecutionResult.toolReplay / ItemResult.toolReplay.
-  const fatalMissResult = (): ExecutionResult => ({
+  const fatalMissResult = (traceId: string | null = null): ExecutionResult => ({
     output: null,
     error: { message: fatalMissError!.message, code: 'TOOL_REPLAY_MISS' },
-    traceId: null,
+    traceId,
     toolReplay: composeReport(),
   });
 
@@ -310,12 +314,29 @@ async function executeAgent(
         });
   } catch (error) {
     if (fatalMissError && replayState) return fatalMissResult();
+    if (replayState) {
+      // Any other failure during replay (provider error, mid-run abort) keeps
+      // the divergence report — partial replay and passthrough live-execution
+      // evidence matters most on failures. (When an outer signal aborts, the
+      // raceWithSignal in executeTarget can reject first and bypass this catch;
+      // only the report is lost on that path, not the failure itself.)
+      return {
+        output: null,
+        error: {
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        },
+        traceId: null,
+        toolReplay: composeReport(),
+      };
+    }
     throw error;
   }
 
   // The model may finish the step before the miss abort propagates — a fatal
-  // miss is an item failure even when generate() resolved.
-  if (fatalMissError && replayState) return fatalMissResult();
+  // miss is an item failure even when generate() resolved. The resolved run's
+  // traceId is kept so the diverging attempt stays debuggable from its trace.
+  if (fatalMissError && replayState) return fatalMissResult((rawResult as AgentGenerateResult).traceId ?? null);
 
   // Narrow to the common fields we need — both v1 and v2 results share these
   const result = rawResult as AgentGenerateResult;

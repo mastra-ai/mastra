@@ -501,6 +501,192 @@ describe('tool replay integration', () => {
     expect(summary.results[0]?.toolReplay?.staleRecording).toBe(true);
   });
 
+  it('does not retry TOOL_REPLAY_NO_RECORDING failures — the resolution is memoized and cannot change', async () => {
+    const summary = await runExperiment(mastra, {
+      data: [{ id: 'item-without-recording', input: 'Look up first and second' }],
+      targetType: 'agent',
+      targetId: 'replay-test-agent',
+      toolReplay: {},
+      maxRetries: 2,
+    });
+
+    expect(summary.failedCount).toBe(1);
+    const result = summary.results[0]!;
+    expect(result.error?.code).toBe('TOOL_REPLAY_NO_RECORDING');
+    // Deterministic failure — retrying would only burn exponential backoff.
+    expect(result.retryCount).toBe(0);
+    expect(liveExecute).not.toHaveBeenCalled();
+  });
+
+  it('rejects fromExperimentId pointing at an experiment that does not exist', async () => {
+    await expect(
+      runExperiment(mastra, {
+        data: [{ id: 'item-1', input: 'Look up first and second' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        toolReplay: { fromExperimentId: 'no-such-experiment' },
+      }),
+    ).rejects.toThrowError(/does not match any experiment/);
+  });
+
+  it('rejects fromExperimentId pointing at a replay experiment — recordings must come from live runs', async () => {
+    // A replay run's trace contains no tool spans, so chaining it would make
+    // every item miss (onMiss 'error') or run fully live (onMiss 'passthrough').
+    await experimentsStorage.createExperiment({
+      id: 'replay-exp',
+      datasetId: null,
+      datasetVersion: null,
+      targetType: 'agent',
+      targetId: 'replay-test-agent',
+      totalItems: 1,
+      metadata: { toolReplay: { onMiss: 'error' } },
+    });
+
+    await expect(
+      runExperiment(mastra, {
+        data: [{ id: 'item-1', input: 'Look up first and second' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        toolReplay: { fromExperimentId: 'replay-exp' },
+      }),
+    ).rejects.toThrowError(/itself a tool replay run/);
+  });
+
+  it('keeps the divergence report when the run fails after replaying began (non-miss failure)', async () => {
+    await seedRecordedTrace('rec-trace-late-fail', [
+      { input: { key: 'first' }, output: { value: 'recorded:first' } },
+      { input: { key: 'second' }, output: { value: 'recorded:second' } },
+    ]);
+
+    // Model issues one tool call, then the provider blows up mid-run.
+    let calls = 0;
+    const failingModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        calls++;
+        if (calls === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            finishReason: 'tool-calls' as const,
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [
+              {
+                type: 'tool-call' as const,
+                toolCallType: 'function' as const,
+                toolCallId: 'call-late-fail',
+                toolName: 'lookup',
+                input: '{"key":"first"}',
+              },
+            ],
+          };
+        }
+        throw new Error('provider exploded');
+      },
+    });
+    const failingAgent = new Agent({
+      id: 'late-fail-agent',
+      name: 'Late Fail Agent',
+      instructions: 'Use the lookup tool.',
+      model: failingModel,
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'Look up a record in an external system',
+          inputSchema: z.object({ key: z.string() }),
+          execute: liveExecute,
+        }),
+      },
+    });
+    const failingMastra = new MastraClass({ agents: { 'late-fail-agent': failingAgent }, logger: false });
+    (mastra.getAgentById as ReturnType<typeof vi.fn>).mockReturnValue(failingMastra.getAgent('late-fail-agent'));
+    (mastra.getAgent as ReturnType<typeof vi.fn>).mockReturnValue(failingMastra.getAgent('late-fail-agent'));
+
+    const summary = await runExperiment(mastra, {
+      data: [{ id: 'item-1', input: 'Look up first and second', replayTraceId: 'rec-trace-late-fail' }],
+      targetType: 'agent',
+      targetId: 'late-fail-agent',
+      toolReplay: {},
+    });
+
+    expect(summary.failedCount).toBe(1);
+    const result = summary.results[0]!;
+    expect(result.error?.message).toContain('provider exploded');
+    expect(result.output).toBeNull();
+    // The partial divergence evidence survives the failure — one call was
+    // replayed before the provider died, one recorded event went unconsumed.
+    expect(result.toolReplay?.replayedCount).toBe(1);
+    expect(result.toolReplay?.unconsumed).toEqual([{ toolName: 'lookup', count: 1 }]);
+    expect(liveExecute).not.toHaveBeenCalled();
+
+    const persisted = await experimentsStorage.listExperimentResults({
+      experimentId: summary.experimentId,
+      pagination: { page: 0, perPage: false },
+    });
+    expect((persisted.results[0]?.output as { toolReplay?: ToolReplayReport }).toolReplay?.replayedCount).toBe(1);
+  });
+
+  it('reports the first miss when parallel calls miss in the same step', async () => {
+    // Recording exists (found) but covers a different tool, so both parallel
+    // calls in the model's single step are misses.
+    await seedRecordedTrace('rec-trace-two-miss', [{ input: { key: 'first' }, output: { value: 'one' } }]);
+
+    const twoCallModel = new MockLanguageModelV2({
+      doGenerate: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        finishReason: 'tool-calls' as const,
+        usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+        content: [
+          {
+            type: 'tool-call' as const,
+            toolCallType: 'function' as const,
+            toolCallId: 'call-alpha',
+            toolName: 'alpha',
+            input: '{}',
+          },
+          {
+            type: 'tool-call' as const,
+            toolCallType: 'function' as const,
+            toolCallId: 'call-beta',
+            toolName: 'beta',
+            input: '{}',
+          },
+        ],
+      }),
+    });
+    const noop = vi.fn().mockResolvedValue({ ok: true });
+    const twoToolAgent = new Agent({
+      id: 'two-miss-agent',
+      name: 'Two Miss Agent',
+      instructions: 'Use alpha and beta.',
+      model: twoCallModel,
+      tools: {
+        alpha: createTool({ id: 'alpha', description: 'a', inputSchema: z.object({}), execute: noop }),
+        beta: createTool({ id: 'beta', description: 'b', inputSchema: z.object({}), execute: noop }),
+      },
+    });
+    const twoMissMastra = new MastraClass({ agents: { 'two-miss-agent': twoToolAgent }, logger: false });
+    (mastra.getAgentById as ReturnType<typeof vi.fn>).mockReturnValue(twoMissMastra.getAgent('two-miss-agent'));
+    (mastra.getAgent as ReturnType<typeof vi.fn>).mockReturnValue(twoMissMastra.getAgent('two-miss-agent'));
+
+    const summary = await runExperiment(mastra, {
+      data: [{ id: 'item-1', input: 'Run both tools', replayTraceId: 'rec-trace-two-miss' }],
+      targetType: 'agent',
+      targetId: 'two-miss-agent',
+      toolReplay: {},
+    });
+
+    expect(summary.failedCount).toBe(1);
+    const result = summary.results[0]!;
+    expect(result.error?.code).toBe('TOOL_REPLAY_MISS');
+    // The reported error must name the FIRST miss (it is also the abort
+    // reason); later misses from the same step appear in the report only.
+    const misses = result.toolReplay?.misses ?? [];
+    expect(misses.length).toBeGreaterThanOrEqual(1);
+    expect(result.error?.message).toContain(`'${misses[0]!.toolName}'`);
+    expect(noop).not.toHaveBeenCalled();
+  });
+
   it('rejects toolReplay for non-agent targets at setup', async () => {
     await expect(
       runExperiment(mastra, {
