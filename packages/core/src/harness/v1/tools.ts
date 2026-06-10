@@ -268,7 +268,8 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
     }),
     submit_plan: createTool({
       id: 'submit_plan',
-      description: 'Register a pending plan approval for the current harness session.',
+      description:
+        'Submit a completed implementation plan for user review. The plan will be rendered as markdown and the user can approve, reject, or request changes. Use this when your exploration is complete and you have a concrete plan ready for review. On approval, the system automatically switches to the default mode so you can implement.',
       inputSchema: z.object({ title: z.string().nullable().optional(), plan: z.string() }),
       execute: async (input, context) => {
         try {
@@ -281,7 +282,28 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
             traceId: context.traceId ?? null,
             payload: { ...input, transitionModeId: session.getMode().transitionsTo },
           });
-          return { isError: false, pendingItemId: pending.id, status: pending.status };
+
+          // Block the run at the human-in-the-loop boundary until the user
+          // responds via session.respondToPlanApproval (legacy product
+          // contract: the model must not keep looping while the plan is
+          // under review).
+          const response = await session.waitForPendingResponse(pending.id, {
+            abortSignal: (context as { abortSignal?: AbortSignal }).abortSignal,
+          });
+
+          if (response.approved === true) {
+            return {
+              content: 'Plan approved. Proceed with implementation following the approved plan.',
+              isError: false,
+            };
+          }
+
+          const feedback =
+            typeof response.feedback === 'string' && response.feedback ? `\n\nUser feedback: ${response.feedback}` : '';
+          return {
+            content: `Plan was not approved. The user wants revisions.${feedback}\n\nPlease revise the plan based on the feedback and submit again with submit_plan.`,
+            isError: false,
+          };
         } catch (error) {
           return recoverableError(error);
         }

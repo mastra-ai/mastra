@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { SessionRecord } from '../../storage/domains/harness';
+import type { HarnessPendingItemRecord, SessionRecord } from '../../storage/domains/harness';
 
 export interface HarnessEventBase {
   id: string;
@@ -47,6 +47,11 @@ export interface StateChangedEvent extends HarnessEventBase {
   changedKeys: string[];
 }
 
+export interface PendingItemRegisteredEvent extends HarnessEventBase {
+  type: 'pending_item_registered';
+  item: HarnessPendingItemRecord;
+}
+
 export interface SubagentStartEvent extends HarnessEventBase {
   type: 'subagent_start';
   subagentSessionId: string;
@@ -68,6 +73,7 @@ export type HarnessEvent =
   | ModelChangedEvent
   | ThreadClonedEvent
   | StateChangedEvent
+  | PendingItemRegisteredEvent
   | SubagentStartEvent
   | CustomEvent;
 export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
@@ -279,6 +285,7 @@ const RESERVED_EVENT_TYPES = new Set([
   'model_changed',
   'thread_cloned',
   'state_changed',
+  'pending_item_registered',
   'subagent_start',
 ]);
 

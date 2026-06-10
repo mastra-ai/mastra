@@ -59,6 +59,24 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     // `state_changed` event; MC's TUI consumes a legacy `task_updated` event.
     // Forward task changes so the task panel reflects real session-owned state.
     this.#harnessV1.subscribe(event => {
+      // v1 submit_plan registers a durable plan-approval pending item; MC's
+      // TUI consumes a legacy `plan_approval_required` event to render the
+      // approve/reject prompt.
+      if (event.type === 'pending_item_registered') {
+        const item = (event as { item?: { id: string; kind: string; status: string; payload?: Record<string, unknown> } })
+          .item;
+        if (item?.kind === 'plan-approval' && item.status === 'pending') {
+          const payload = (item.payload ?? {}) as { title?: string | null; plan?: string };
+          this.emit({
+            type: 'plan_approval_required',
+            planId: item.id,
+            title: payload.title || 'Implementation Plan',
+            plan: payload.plan ?? '',
+          });
+        }
+        return;
+      }
+
       if (event.type !== 'state_changed') return;
       const stateEvent = event as { changedKeys?: string[]; state?: { tasks?: unknown } };
       if (!stateEvent.changedKeys?.includes('tasks')) return;
@@ -525,6 +543,51 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     }
 
     await super.switchMode({ modeId });
+  }
+
+  /**
+   * Respond to a pending plan approval.
+   *
+   * When the plan was submitted through the v1 session (durable plan-approval
+   * pending item), route the response to `Session.respondToPlanApproval`:
+   * this unblocks the suspended v1 submit_plan tool and atomically flips the
+   * session mode via the frozen `transitionModeId`. The legacy mode is then
+   * reconciled (which aborts the in-flight run — legacy contract) so the
+   * caller's follow-up "begin executing" signal starts a fresh run in the
+   * target mode.
+   *
+   * Falls back to the legacy resolver map for plans not registered on v1.
+   */
+  async respondToPlanApproval({
+    planId,
+    response,
+  }: {
+    planId: string;
+    response: { action: 'approved' | 'rejected'; feedback?: string };
+  }): Promise<void> {
+    const session = this.#session;
+    const pending = session
+      ?.listPendingItems()
+      .find(item => item.id === planId && item.kind === 'plan-approval' && item.status === 'pending');
+    if (!session || !pending) {
+      return super.respondToPlanApproval({ planId, response });
+    }
+
+    await session.respondToPlanApproval(planId, {
+      approved: response.action === 'approved',
+      ...(response.feedback ? { feedback: response.feedback } : {}),
+    });
+
+    if (response.action === 'approved') {
+      const targetModeId = session.getMode().id;
+      if (targetModeId !== this.getCurrentModeId()) {
+        // Yield so the resolved submit_plan tool result is delivered to the
+        // run before the mode switch aborts it (mirrors legacy timing).
+        await new Promise(resolve => setTimeout(resolve, 0));
+        await this.switchMode({ modeId: targetModeId });
+        await this.waitForCurrentThreadStreamIdle();
+      }
+    }
   }
 
   /**

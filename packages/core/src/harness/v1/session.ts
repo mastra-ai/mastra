@@ -43,6 +43,8 @@ export class Session<TState = {}> {
   readonly #subagentDepth: number;
   readonly #source: HarnessRequestContextSource;
   #pending: HarnessPendingItemRecord[];
+  /** Resolvers for tool boundaries blocked in {@link waitForPendingResponse}. */
+  readonly #pendingResolvers = new Map<string, (response: Record<string, unknown>) => void>();
   #runStatus: 'idle' | 'starting' | 'running' | 'waiting' | 'resuming' = 'idle';
   #currentRunId: string | null = null;
   #currentTraceId: string | null = null;
@@ -283,7 +285,45 @@ export class Session<TState = {}> {
     this.#pending = [...this.#pending, record];
     await this.#storage.appendPendingItem(this.#id, record);
     await this.#reloadRecordProjection();
+    this.#events.emit({ type: 'pending_item_registered', item: { ...record } });
     return { ...record };
+  }
+
+  /**
+   * Wait until a registered pending item receives its response via the
+   * matching `respondTo*` method. Used by blocking human-in-the-loop tool
+   * boundaries (e.g. `submit_plan` pauses the run until the user approves or
+   * rejects the plan). Rejects with an AbortError if `abortSignal` fires
+   * first (run aborted while waiting).
+   */
+  waitForPendingResponse(
+    pendingItemId: string,
+    opts: { abortSignal?: AbortSignal } = {},
+  ): Promise<Record<string, unknown>> {
+    const item = this.#pending.find(item => item.id === pendingItemId);
+    if (!item) {
+      return Promise.reject(new Error(`Harness pending item "${pendingItemId}" was not found on session "${this.#id}"`));
+    }
+    if (item.status !== 'pending') {
+      return Promise.resolve({ ...(item.response ?? {}) });
+    }
+
+    return new Promise<Record<string, unknown>>((resolve, reject) => {
+      const signal = opts.abortSignal;
+      if (signal?.aborted) {
+        reject(new DOMException('Aborted', 'AbortError'));
+        return;
+      }
+      const onAbort = () => {
+        this.#pendingResolvers.delete(pendingItemId);
+        reject(new DOMException('Aborted', 'AbortError'));
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
+      this.#pendingResolvers.set(pendingItemId, response => {
+        signal?.removeEventListener('abort', onAbort);
+        resolve(response);
+      });
+    });
   }
 
   async updatePendingItem(
@@ -885,6 +925,16 @@ export class Session<TState = {}> {
 
     await this.#storage.updatePendingItem(this.#id, pendingItemId, { status: 'responded', response: recordedResponse });
     await this.#reloadRecordProjection();
+
+    // Release any tool boundary blocked in waitForPendingResponse AFTER the
+    // response is durably recorded, so the resumed run observes consistent
+    // pending-item state.
+    const resolveBoundary = this.#pendingResolvers.get(pendingItemId);
+    if (resolveBoundary) {
+      this.#pendingResolvers.delete(pendingItemId);
+      resolveBoundary({ ...recordedResponse });
+    }
+
     const updated = this.#pending.find(item => item.id === pendingItemId);
     if (!updated) {
       throw new Error(`Harness pending item "${pendingItemId}" was not found on session "${this.#id}"`);
