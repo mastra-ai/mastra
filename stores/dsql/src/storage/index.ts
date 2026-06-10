@@ -9,12 +9,13 @@ import { PoolAdapter } from './client';
 import type { DbClient } from './client';
 import type { DsqlDomainClientConfig } from './db';
 import { AgentsDSQL } from './domains/agents';
+import { HarnessDSQL } from './domains/harness';
 import { MemoryDSQL } from './domains/memory';
 import { ObservabilityDSQL } from './domains/observability';
 import { ScoresDSQL } from './domains/scores';
 import { WorkflowsDSQL } from './domains/workflows';
 
-export { AgentsDSQL, MemoryDSQL, ObservabilityDSQL, ScoresDSQL, WorkflowsDSQL };
+export { AgentsDSQL, HarnessDSQL, MemoryDSQL, ObservabilityDSQL, ScoresDSQL, WorkflowsDSQL };
 export { PoolAdapter } from './client';
 export type { DbClient, TxClient, QueryValues, Pool, PoolClient, QueryResult } from './client';
 export type { DsqlDomainConfig, DsqlDomainClientConfig, DsqlDomainPoolConfig, DsqlDomainRestConfig } from './db';
@@ -58,6 +59,7 @@ export class DSQLStore extends MastraStorage {
         memory: new MemoryDSQL(domainConfig),
         observability: new ObservabilityDSQL(domainConfig),
         agents: new AgentsDSQL(domainConfig),
+        harness: new HarnessDSQL(domainConfig),
       };
     } catch (e) {
       throw new MastraError(
