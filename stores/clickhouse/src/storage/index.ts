@@ -3,7 +3,7 @@ import { createClient } from '@clickhouse/client';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageDomains, TABLE_SCHEMAS } from '@mastra/core/storage';
-import { validateReplicationConfig } from './db/replication';
+import { addOnClusterToDDL, validateReplicationConfig } from './db/replication';
 import type { ClickhouseReplicationConfig } from './db/replication';
 import { BackgroundTasksStorageClickhouse } from './domains/background-tasks';
 import { MemoryStorageClickhouse } from './domains/memory';
@@ -183,6 +183,7 @@ const isClientConfig = (config: ClickhouseConfig): config is ClickhouseConfig & 
 export class ClickhouseStore extends MastraCompositeStore {
   protected db: ClickHouseClient;
   protected ttl: ClickhouseConfig['ttl'] = {};
+  protected replication?: ClickhouseReplicationConfig;
 
   stores: StorageDomains;
 
@@ -224,6 +225,7 @@ export class ClickhouseStore extends MastraCompositeStore {
     }
 
     this.ttl = config.ttl;
+    this.replication = config.replication;
 
     const domainConfig = { client: this.db, ttl: this.ttl, replication: config.replication };
     const workflows = new WorkflowsStorageClickhouse(domainConfig);
@@ -243,7 +245,7 @@ export class ClickhouseStore extends MastraCompositeStore {
   async optimizeTable({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       await this.db.command({
-        query: `OPTIMIZE TABLE ${tableName} FINAL`,
+        query: addOnClusterToDDL(`OPTIMIZE TABLE ${tableName} FINAL`, this.replication),
       });
     } catch (error: any) {
       throw new MastraError(
@@ -261,7 +263,7 @@ export class ClickhouseStore extends MastraCompositeStore {
   async materializeTtl({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     try {
       await this.db.command({
-        query: `ALTER TABLE ${tableName} MATERIALIZE TTL;`,
+        query: addOnClusterToDDL(`ALTER TABLE ${tableName} MATERIALIZE TTL`, this.replication) + ';',
       });
     } catch (error: any) {
       throw new MastraError(

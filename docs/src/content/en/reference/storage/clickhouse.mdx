@@ -243,7 +243,7 @@ When `replication` is set, Mastra rewrites its `MergeTree` and `ReplacingMergeTr
 
 Set `cluster` to add `ON CLUSTER` to Mastra-owned DDL such as table creation, materialized view creation, column migrations, TTL changes, and table drops.
 
-If existing Mastra tables use local `MergeTree` or `ReplacingMergeTree` engines, initialization fails while `replication` is enabled. Migrate or recreate those tables manually before enabling replication.
+If existing Mastra tables use local `MergeTree` or `ReplacingMergeTree` engines, initialization fails while `replication` is enabled. Mastra refuses to silently convert local tables because copy-and-swap is unsafe across replicas. To migrate, recreate the affected tables as `Replicated*` (typically: rename the local table, `CREATE TABLE ... ENGINE = ReplicatedMergeTree(...) ON CLUSTER ...`, `INSERT INTO ... SELECT * FROM <renamed_local>`, then drop the renamed local table) before enabling replication.
 
 ### Observability domain options
 

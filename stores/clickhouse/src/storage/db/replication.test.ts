@@ -71,6 +71,27 @@ describe('ClickHouse replication helpers', () => {
     ).toBe("ALTER TABLE mastra_db.mastra_threads ON CLUSTER 'cluster-a' ADD COLUMN IF NOT EXISTS y String");
   });
 
+  it('adds ON CLUSTER to maintenance DDL forms', () => {
+    expect(addOnClusterToDDL('TRUNCATE TABLE mastra_threads', { cluster: 'cluster-a' })).toBe(
+      "TRUNCATE TABLE mastra_threads ON CLUSTER 'cluster-a'",
+    );
+    expect(addOnClusterToDDL('TRUNCATE TABLE IF EXISTS mastra_threads', { cluster: 'cluster-a' })).toBe(
+      "TRUNCATE TABLE IF EXISTS mastra_threads ON CLUSTER 'cluster-a'",
+    );
+    expect(addOnClusterToDDL('OPTIMIZE TABLE mastra_threads FINAL', { cluster: 'cluster-a' })).toBe(
+      "OPTIMIZE TABLE mastra_threads ON CLUSTER 'cluster-a' FINAL",
+    );
+    expect(addOnClusterToDDL('ALTER TABLE mastra_threads MATERIALIZE TTL', { cluster: 'cluster-a' })).toBe(
+      "ALTER TABLE mastra_threads ON CLUSTER 'cluster-a' MATERIALIZE TTL",
+    );
+    expect(addOnClusterToDDL('SYSTEM STOP MERGES mastra_threads', { cluster: 'cluster-a' })).toBe(
+      "SYSTEM STOP MERGES mastra_threads ON CLUSTER 'cluster-a'",
+    );
+    expect(addOnClusterToDDL('SYSTEM START MERGES mastra_threads', { cluster: 'cluster-a' })).toBe(
+      "SYSTEM START MERGES mastra_threads ON CLUSTER 'cluster-a'",
+    );
+  });
+
   it('is idempotent when ON CLUSTER is already present', () => {
     const sql = "CREATE TABLE mastra_threads ON CLUSTER 'cluster-a' (id String)";
     expect(addOnClusterToDDL(sql, { cluster: 'cluster-a' })).toBe(sql);
@@ -100,6 +121,15 @@ ORDER BY id`;
     );
     expect(() => validateReplicationConfig({ replicaName: '' })).toThrow(
       'replication.replicaName must be a non-empty string',
+    );
+    expect(() => validateReplicationConfig({ cluster: 'my cluster' })).toThrow(
+      'replication.cluster must not contain whitespace or quote characters',
+    );
+    expect(() => validateReplicationConfig({ cluster: "evil'); DROP" })).toThrow(
+      'replication.cluster must not contain whitespace or quote characters',
+    );
+    expect(() => validateReplicationConfig({ zookeeperPath: '/path with space' })).toThrow(
+      'replication.zookeeperPath must not contain whitespace or quote characters',
     );
   });
 

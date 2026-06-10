@@ -27,35 +27,42 @@ export function isReplicatedOrSharedEngine(engine?: string | null): boolean {
   return engine.startsWith('Replicated') || engine.startsWith('Shared');
 }
 
+function assertReplicationConfigField(
+  fieldName: 'cluster' | 'zookeeperPath' | 'replicaName',
+  value: string | undefined,
+  errorCode: 'INVALID_CLUSTER' | 'INVALID_ZOOKEEPER_PATH' | 'INVALID_REPLICA_NAME',
+): void {
+  if (value === undefined) return;
+
+  if (value.trim() === '') {
+    throw new MastraError({
+      id: createStorageErrorId('CLICKHOUSE', 'REPLICATION_CONFIG', errorCode),
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: `ClickHouse replication.${fieldName} must be a non-empty string when provided.`,
+    });
+  }
+
+  // Values get interpolated into DDL. Whitespace or quotes will fail at parse
+  // time inside ClickHouse with a confusing error; reject early with a clear
+  // message instead. ClickHouse macros (e.g. `{shard}`, `{replica}`) and path
+  // separators are still allowed.
+  if (/\s/.test(value) || value.includes("'") || value.includes('"') || value.includes('\\')) {
+    throw new MastraError({
+      id: createStorageErrorId('CLICKHOUSE', 'REPLICATION_CONFIG', errorCode),
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      text: `ClickHouse replication.${fieldName} must not contain whitespace or quote characters.`,
+    });
+  }
+}
+
 export function validateReplicationConfig(replication?: ClickhouseReplicationConfig): void {
   if (!replication) return;
 
-  if (replication.cluster !== undefined && replication.cluster.trim() === '') {
-    throw new MastraError({
-      id: createStorageErrorId('CLICKHOUSE', 'REPLICATION_CONFIG', 'INVALID_CLUSTER'),
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.USER,
-      text: 'ClickHouse replication.cluster must be a non-empty string when provided.',
-    });
-  }
-
-  if (replication.zookeeperPath !== undefined && replication.zookeeperPath.trim() === '') {
-    throw new MastraError({
-      id: createStorageErrorId('CLICKHOUSE', 'REPLICATION_CONFIG', 'INVALID_ZOOKEEPER_PATH'),
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.USER,
-      text: 'ClickHouse replication.zookeeperPath must be a non-empty string when provided.',
-    });
-  }
-
-  if (replication.replicaName !== undefined && replication.replicaName.trim() === '') {
-    throw new MastraError({
-      id: createStorageErrorId('CLICKHOUSE', 'REPLICATION_CONFIG', 'INVALID_REPLICA_NAME'),
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.USER,
-      text: 'ClickHouse replication.replicaName must be a non-empty string when provided.',
-    });
-  }
+  assertReplicationConfigField('cluster', replication.cluster, 'INVALID_CLUSTER');
+  assertReplicationConfigField('zookeeperPath', replication.zookeeperPath, 'INVALID_ZOOKEEPER_PATH');
+  assertReplicationConfigField('replicaName', replication.replicaName, 'INVALID_REPLICA_NAME');
 }
 
 function quoteClickhouseString(value: string): string {
@@ -98,18 +105,26 @@ export function buildReplicatedTableEngine(engine: string, replication?: Clickho
  * Covered forms:
  *  - `CREATE TABLE [IF NOT EXISTS] <name>`
  *  - `CREATE MATERIALIZED VIEW [IF NOT EXISTS] <name>`
- *  - `ALTER TABLE <name>` (covers ADD COLUMN, ADD INDEX, MODIFY TTL, etc.)
+ *  - `ALTER TABLE <name>` (covers ADD COLUMN, ADD INDEX, MODIFY TTL,
+ *    MATERIALIZE TTL, UPDATE, DELETE, etc.)
  *  - `DROP TABLE|VIEW [IF EXISTS] <name>`
+ *  - `TRUNCATE TABLE [IF EXISTS] <name>`
+ *  - `OPTIMIZE TABLE <name>`
  *  - `SYSTEM REFRESH VIEW <name>` and `SYSTEM WAIT VIEW <name>`
+ *  - `SYSTEM STOP MERGES <name>` and `SYSTEM START MERGES <name>`
  *
- * Not covered (intentional — these either replicate automatically on
- * ReplicatedMergeTree or should not propagate cluster-wide):
- *  - `TRUNCATE TABLE`, `OPTIMIZE TABLE`, `ALTER TABLE ... UPDATE/DELETE` (replicated)
- *  - `SYSTEM STOP/START MERGES` (intentionally local; pausing merges
- *    cluster-wide would unnecessarily stall other replicas)
- *  - `RENAME TABLE`, `EXCHANGE TABLES`, `ATTACH`, `DETACH` (not emitted by
- *    Mastra under replication; v-next signal migration that uses EXCHANGE
- *    fails fast when replication is configured)
+ * Several of these (TRUNCATE, ALTER UPDATE/DELETE, OPTIMIZE) replicate
+ * automatically on ReplicatedMergeTree via the Keeper queue, so ON CLUSTER is
+ * not strictly required for correctness. We add it anyway for two reasons:
+ *  1. Consistency — when an operator sets `cluster`, maintenance commands
+ *     should fan out the same way DDL does.
+ *  2. Robustness — drift becomes impossible if a table is later swapped to a
+ *     non-replicated engine, or someone runs the command against a node that
+ *     is not yet a replica.
+ *
+ * Not covered (intentional — not emitted by Mastra under replication):
+ *  - `RENAME TABLE`, `EXCHANGE TABLES`, `ATTACH`, `DETACH` — the v-next signal
+ *    migration that uses EXCHANGE fails fast when replication is configured.
  *
  * The `\sON\s+CLUSTER\s` guard makes each rewriter idempotent.
  */
@@ -137,7 +152,10 @@ export function addOnClusterToDDL(sql: string, replication?: ClickhouseReplicati
   out = rewrite(out, /\bCREATE\s+MATERIALIZED\s+VIEW\s+(IF\s+NOT\s+EXISTS\s+)?[^\s(]+/gi);
   out = rewrite(out, /\bALTER\s+TABLE\s+[^\s]+/gi);
   out = rewrite(out, /\bDROP\s+(TABLE|VIEW)\s+(IF\s+EXISTS\s+)?[^\s]+/gi);
+  out = rewrite(out, /\bTRUNCATE\s+TABLE\s+(IF\s+EXISTS\s+)?[^\s]+/gi);
+  out = rewrite(out, /\bOPTIMIZE\s+TABLE\s+[^\s]+/gi);
   out = rewrite(out, /\bSYSTEM\s+(REFRESH|WAIT)\s+VIEW\s+[^\s;]+/gi);
+  out = rewrite(out, /\bSYSTEM\s+(STOP|START)\s+MERGES\s+[^\s;]+/gi);
   return out;
 }
 

@@ -582,7 +582,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
     if (isReplicationConfigured(this.#replication)) {
       throw new MastraError({
-        id: createStorageErrorId('CLICKHOUSE', 'REPLICATION', 'SIGNAL_TABLE_MIGRATION_UNSUPPORTED'),
+        id: createStorageErrorId('CLICKHOUSE', 'REPLICATION', 'SIGNAL_TABLES_MIGRATION_UNSUPPORTED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
         text:
@@ -1346,9 +1346,14 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
 
   override async dangerouslyClearAll(): Promise<void> {
     try {
-      // Truncate all signal tables
+      // Truncate all signal tables. Under replication we fan out via ON CLUSTER
+      // so every replica is cleared rather than only the receiving node.
       await Promise.all(
-        ALL_TABLE_NAMES.map(table => this.#client.command({ query: `TRUNCATE TABLE IF EXISTS ${table}` })),
+        ALL_TABLE_NAMES.map(table =>
+          this.#client.command({
+            query: addOnClusterToDDL(`TRUNCATE TABLE IF EXISTS ${table}`, this.#replication),
+          }),
+        ),
       );
     } catch (error) {
       if (error instanceof MastraError) throw error;
