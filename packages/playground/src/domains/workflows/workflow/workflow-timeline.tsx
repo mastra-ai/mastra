@@ -1,5 +1,5 @@
 import { CheckIcon, CrossIcon, Icon, Txt, cn, useAutoscroll } from '@mastra/playground-ui';
-import { CirclePause, HourglassIcon, Loader2 } from 'lucide-react';
+import { ChevronDown, CirclePause, HourglassIcon, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 
@@ -38,9 +38,10 @@ export function WorkflowTimeline() {
   const { steps } = useCurrentRun();
   const { selectedStepId, hoverStepId, setSelectedStepId, setHoverStepId } = useWorkflowSelectedStep();
   const [now, setNow] = useState(() => Date.now());
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  useAutoscroll(scrollRef, { enabled: true });
+  useAutoscroll(scrollRef, { enabled: !isCollapsed });
 
   const rows = buildTimeline(steps, now);
   const hasRunning = rows.some(row => row.isRunning);
@@ -53,6 +54,19 @@ export function WorkflowTimeline() {
     const interval = setInterval(() => setNow(Date.now()), 100);
     return () => clearInterval(interval);
   }, [hasRunning]);
+
+  useEffect(() => {
+    if (isCollapsed || rows.length === 0) {
+      return;
+    }
+
+    const scrollElement = scrollRef.current;
+    if (!scrollElement) {
+      return;
+    }
+
+    scrollElement.scrollTop = scrollElement.scrollHeight;
+  }, [isCollapsed, rows.length]);
 
   if (rows.length === 0) {
     return null;
@@ -74,53 +88,68 @@ export function WorkflowTimeline() {
           <Txt as="p" variant="ui-md" className="text-neutral3">
             Timeline
           </Txt>
+          <button
+            type="button"
+            aria-label={isCollapsed ? 'Expand timeline' : 'Collapse timeline'}
+            aria-expanded={!isCollapsed}
+            onClick={() => setIsCollapsed(collapsed => !collapsed)}
+            className="rounded-md p-1 text-neutral3 transition-colors hover:bg-surface4 hover:text-neutral6"
+          >
+            <ChevronDown className={cn('h-4 w-4 transition-transform', isCollapsed && '-rotate-90')} />
+          </button>
         </div>
-        <div ref={scrollRef} className="flex min-h-0 flex-col gap-2 overflow-y-auto">
-          {rows.map((row, index) => {
-            const timeDiff = row.durationMs / 1000;
-            const isSelected = selectedStepId === row.stepId;
-            const isHovered = hoverStepId === row.stepId;
+        {!isCollapsed && (
+          <div
+            ref={scrollRef}
+            data-testid="workflow-timeline-list"
+            className="flex min-h-0 flex-col gap-2 overflow-y-auto"
+          >
+            {rows.map((row, index) => {
+              const timeDiff = row.durationMs / 1000;
+              const isSelected = selectedStepId === row.stepId;
+              const isHovered = hoverStepId === row.stepId;
 
-            return (
-              <button
-                key={`timeline-item-${row.stepId}-${index}`}
-                type="button"
-                data-testid="workflow-timeline-row"
-                data-workflow-step-key={row.stepId}
-                data-workflow-step-active={isSelected ? 'true' : undefined}
-                data-workflow-step-hovered={isHovered ? 'true' : undefined}
-                aria-pressed={isSelected}
-                onClick={() => setSelectedStepId(row.stepId)}
-                onMouseEnter={() => setHoverStepId(row.stepId)}
-                onMouseLeave={() => setHoverStepId(null)}
-                className={cn(
-                  'grid grid-cols-[10rem_minmax(0,1fr)_5rem] items-center gap-3 rounded-md border border-transparent px-2 py-1 text-left transition-colors',
-                  isHovered && 'bg-surface4',
-                  isSelected && 'border-accent1',
-                )}
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <StepStatusIcon status={row.status} />
-                  <Txt as="span" variant="ui-sm" className="min-w-0 truncate text-neutral6">
-                    {titleCase(row.stepId)}
+              return (
+                <button
+                  key={`timeline-item-${row.stepId}-${index}`}
+                  type="button"
+                  data-testid="workflow-timeline-row"
+                  data-workflow-step-key={row.stepId}
+                  data-workflow-step-active={isSelected ? 'true' : undefined}
+                  data-workflow-step-hovered={isHovered ? 'true' : undefined}
+                  aria-pressed={isSelected}
+                  onClick={() => setSelectedStepId(row.stepId)}
+                  onMouseEnter={() => setHoverStepId(row.stepId)}
+                  onMouseLeave={() => setHoverStepId(null)}
+                  className={cn(
+                    'grid grid-cols-[10rem_minmax(0,1fr)_5rem] items-center gap-3 rounded-md border border-transparent px-2 py-1 text-left transition-colors',
+                    isHovered && 'bg-surface4',
+                    isSelected && 'border-accent1',
+                  )}
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <StepStatusIcon status={row.status} />
+                    <Txt as="span" variant="ui-sm" className="min-w-0 truncate text-neutral6">
+                      {titleCase(row.stepId)}
+                    </Txt>
+                  </div>
+                  <div className="relative h-2 min-w-0 rounded bg-surface4">
+                    <div
+                      data-testid="workflow-timeline-bar"
+                      data-offset={String(row.offsetPct)}
+                      data-width={String(row.widthPct)}
+                      className={`absolute top-0 h-full rounded ${BAR_TINT[row.status]}`}
+                      style={{ left: `${row.offsetPct}%`, width: `${row.widthPct}%` }}
+                    />
+                  </div>
+                  <Txt as="span" variant="ui-sm" className="text-right text-neutral3 tabular-nums">
+                    {Number(timeDiff.toPrecision(3))}s
                   </Txt>
-                </div>
-                <div className="relative h-2 min-w-0 rounded bg-surface4">
-                  <div
-                    data-testid="workflow-timeline-bar"
-                    data-offset={String(row.offsetPct)}
-                    data-width={String(row.widthPct)}
-                    className={`absolute top-0 h-full rounded ${BAR_TINT[row.status]}`}
-                    style={{ left: `${row.offsetPct}%`, width: `${row.widthPct}%` }}
-                  />
-                </div>
-                <Txt as="span" variant="ui-sm" className="text-right text-neutral3 tabular-nums">
-                  {Number(timeDiff.toPrecision(3))}s
-                </Txt>
-              </button>
-            );
-          })}
-        </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

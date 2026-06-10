@@ -7,6 +7,8 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { baseWorkflow } from '../../components/__tests__/fixtures/workflow';
+import type { Step } from '../../context/use-current-run';
+import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { WorkflowSelectedStepProvider } from '../../context/workflow-selected-step-context';
 import { runWithOnlyInput, runWithTimedSteps } from '../../runs/__tests__/fixtures/workflow-runs';
@@ -59,6 +61,27 @@ function renderRerenderableTimeline(initialRunId?: string) {
     ...rendered,
     rerenderRoute(nextRunId?: string) {
       rendered.rerender(timelineUi(queryClient, nextRunId));
+    },
+  };
+}
+
+function controlledTimelineUi(steps: Record<string, Step>) {
+  return (
+    <WorkflowSelectedStepProvider>
+      <WorkflowRunContext.Provider value={{ result: { steps } } as never}>
+        <WorkflowTimeline />
+      </WorkflowRunContext.Provider>
+    </WorkflowSelectedStepProvider>
+  );
+}
+
+function renderControlledTimeline(steps: Record<string, Step>) {
+  const rendered = render(controlledTimelineUi(steps));
+
+  return {
+    ...rendered,
+    rerenderSteps(nextSteps: Record<string, Step>) {
+      rendered.rerender(controlledTimelineUi(nextSteps));
     },
   };
 }
@@ -119,6 +142,49 @@ describe('WorkflowTimeline', () => {
 
     fireEvent.mouseLeave(firstRow);
     expect(firstRow.getAttribute('data-workflow-step-hovered')).toBeNull();
+  });
+
+  it('collapses and expands timeline rows from the header caret', async () => {
+    stubRunById('run-timeline-1', runWithTimedSteps);
+    stubWorkflow();
+
+    renderTimeline('run-timeline-1');
+
+    expect(await screen.findByText('Step A')).not.toBeNull();
+
+    const collapseButton = screen.getByRole('button', { name: 'Collapse timeline' });
+    expect(collapseButton.getAttribute('aria-expanded')).toBe('true');
+
+    fireEvent.click(collapseButton);
+    expect(screen.queryByTestId('workflow-timeline-row')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Expand timeline' }).getAttribute('aria-expanded')).toBe('false');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand timeline' }));
+    expect(screen.getAllByTestId('workflow-timeline-row').length).toBe(3);
+  });
+
+  it('scrolls to the bottom when the timeline list grows', async () => {
+    const startedAt = new Date(2026, 4, 29, 16, 19, 44).getTime();
+    const firstStep = {
+      'step-a': { status: 'success', startedAt, endedAt: startedAt + 1000 },
+    } satisfies Record<string, Step>;
+    const grownSteps = {
+      ...firstStep,
+      'step-b': { status: 'success', startedAt: startedAt + 1000, endedAt: startedAt + 2000 },
+      'step-c': { status: 'running', startedAt: startedAt + 2000 },
+    } satisfies Record<string, Step>;
+
+    const { rerenderSteps } = renderControlledTimeline(firstStep);
+
+    await screen.findByText('Step A');
+    const list = screen.getByTestId('workflow-timeline-list');
+    Object.defineProperty(list, 'scrollHeight', { configurable: true, value: 420 });
+
+    rerenderSteps(grownSteps);
+
+    await waitFor(() => {
+      expect(list.scrollTop).toBe(420);
+    });
   });
 
   it('clears run timeline rows when returning from a run route to the base workflow route', async () => {
