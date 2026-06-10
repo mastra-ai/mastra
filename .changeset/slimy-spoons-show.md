@@ -1,8 +1,5 @@
 ---
 '@mastra/client-js': patch
-'@mastra/observability': patch
-'@mastra/server': patch
-'@mastra/core': patch
 ---
 
 Added typed tool replay support to dataset experiment APIs.
