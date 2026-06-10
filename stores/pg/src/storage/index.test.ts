@@ -727,3 +727,116 @@ describe('PostgresStore.init() — concurrency & disableInit (issue #18282)', ()
     }
   });
 });
+
+describe('WorkflowsPG step result updates', () => {
+  it('merges foreach array outputs element-wise across sequential updates', async () => {
+    const pool = createTestPool();
+    const workflows = new WorkflowsPG({ pool });
+    const workflowName = `foreach-merge-${Date.now()}`;
+    const runId = `run-${Date.now()}`;
+
+    try {
+      await workflows.init();
+      await workflows.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'running', context: {} } as any,
+      });
+
+      await workflows.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'foreach-step',
+        result: { status: 'running', output: ['first', null, null], payload: {}, startedAt: Date.now() } as any,
+        requestContext: {},
+      });
+
+      const merged = await workflows.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'foreach-step',
+        result: {
+          status: 'success',
+          output: [null, 'second', 'third'],
+          payload: {},
+          startedAt: Date.now(),
+          endedAt: Date.now(),
+        } as any,
+        requestContext: {},
+      });
+
+      expect((merged['foreach-step'] as any).output).toEqual(['first', 'second', 'third']);
+
+      const snapshot = await workflows.loadWorkflowSnapshot({ workflowName, runId });
+      expect((snapshot?.context['foreach-step'] as any).output).toEqual(['first', 'second', 'third']);
+    } finally {
+      await pool.query(`DELETE FROM mastra_workflow_snapshot WHERE workflow_name = $1`, [workflowName]);
+      await pool.end();
+    }
+  });
+
+  it('creates the snapshot when updating results for a new run', async () => {
+    const pool = createTestPool();
+    const workflows = new WorkflowsPG({ pool });
+    const workflowName = `fresh-run-${Date.now()}`;
+    const runId = `run-${Date.now()}`;
+
+    try {
+      await workflows.init();
+
+      const context = await workflows.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'step-1',
+        result: { status: 'success', output: { data: 'ok' }, payload: {}, startedAt: Date.now() } as any,
+        requestContext: { tenant: 'a' },
+      });
+
+      expect((context['step-1'] as any).output).toEqual({ data: 'ok' });
+
+      const snapshot = await workflows.loadWorkflowSnapshot({ workflowName, runId });
+      expect((snapshot?.context['step-1'] as any).status).toBe('success');
+      expect(snapshot?.requestContext).toEqual({ tenant: 'a' });
+    } finally {
+      await pool.query(`DELETE FROM mastra_workflow_snapshot WHERE workflow_name = $1`, [workflowName]);
+      await pool.end();
+    }
+  });
+
+  it('sanitizes problematic unicode in step results written in place', async () => {
+    const pool = createTestPool();
+    const workflows = new WorkflowsPG({ pool });
+    const workflowName = `unicode-fragment-${Date.now()}`;
+    const runId = `run-${Date.now()}`;
+
+    try {
+      await workflows.init();
+      await workflows.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: { status: 'running', context: {} } as any,
+      });
+
+      const context = await workflows.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'step-1',
+        result: {
+          status: 'success',
+          output: { text: 'prefix suffix', escape: 'Omschr\\vijving' },
+          payload: {},
+          startedAt: Date.now(),
+        } as any,
+        requestContext: {},
+      });
+
+      expect((context['step-1'] as any).output.text).toBe('prefixsuffix');
+
+      const snapshot = await workflows.loadWorkflowSnapshot({ workflowName, runId });
+      expect((snapshot?.context['step-1'] as any).output.text).toBe('prefixsuffix');
+    } finally {
+      await pool.query(`DELETE FROM mastra_workflow_snapshot WHERE workflow_name = $1`, [workflowName]);
+      await pool.end();
+    }
+  });
+});
