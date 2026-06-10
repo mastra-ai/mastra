@@ -18,6 +18,21 @@ const meta: Meta<typeof CodeBlock> = {
   ],
   parameters: {
     layout: 'fullscreen',
+    docs: {
+      description: {
+        component: [
+          'Canonical DS surface for static code. Usage rules:',
+          '- Inline `<code>` only for short identifiers, env vars, IDs and paths.',
+          '- `CodeBlock` for any standalone command, source snippet, JSON/text payload or copyable example.',
+          '- `selector="tabs"` for 2–4 peer alternatives users compare often (e.g. curl/Python/Node).',
+          '- `selector="select"` for longer option sets or compact package-manager choices.',
+          '- `overflow="wrap"` (default) for commands and snippets; `overflow="scroll"` for source code where preserving columns matters.',
+          '- Use `CodeEditor`, `DataCodeSection` or `CodeDiff` only for editable content, searchable/large structured data, or diffs.',
+          '',
+          'Syntax colors are CSS-driven: tokens carry `--shiki-light`/`--shiki-dark` variables and the `.shiki-token` class resolves them from the `.light`/`.dark` root class, so light/dark works without a ThemeProvider.',
+        ].join('\n'),
+      },
+    },
   },
 };
 
@@ -116,6 +131,17 @@ export const TabsWithCode: Story = {
       />
     );
   },
+};
+
+export const OverflowScroll: Story = {
+  render: () => (
+    <CodeBlock
+      fileName="src/mastra/workflows/long-lines.ts"
+      lang="typescript"
+      overflow="scroll"
+      code={`const step = createStep({ id: 'fetch-weather', description: 'Fetches the forecast for a given city', inputSchema: z.object({ city: z.string() }), outputSchema: forecastSchema });\nconst workflow = createWorkflow({ id: 'weather-workflow', inputSchema: z.object({ city: z.string() }), outputSchema: forecastSchema }).then(step).commit();`}
+    />
+  ),
 };
 
 export const Highlighted: Story = {
