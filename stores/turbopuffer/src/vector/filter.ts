@@ -32,7 +32,10 @@ export type TurbopufferVectorFilter = VectorFilter<
  * Mastra filters: { field: { $gt: 10 } }
  * Turbopuffer filters: ["And", [["field", "Gt", 10]]]
  */
-export class TurbopufferFilterTranslator extends BaseFilterTranslator<TurbopufferVectorFilter, TurbopufferFilter | undefined> {
+export class TurbopufferFilterTranslator extends BaseFilterTranslator<
+  TurbopufferVectorFilter,
+  TurbopufferFilter | undefined
+> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
       ...BaseFilterTranslator.DEFAULT_OPERATORS,
