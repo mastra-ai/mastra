@@ -51,10 +51,9 @@ export function ChatProvider({
   const [streamErrors, setStreamErrors] = useState<MastraDBMessage[]>([]);
   const [threadSignalsUnsupported, setThreadSignalsUnsupported] = useState(false);
   const threadSignalsUnsupportedRef = useRef(false);
+  const modelSettings = settings?.modelSettings ?? {};
   const threadSignalsEnabled =
-    window.MASTRA_AGENT_SIGNALS !== 'false' &&
-    supportsMemory !== false &&
-    !settings?.modelSettings?.chatWithLegacyStream;
+    window.MASTRA_AGENT_SIGNALS !== 'false' && supportsMemory !== false && !modelSettings.chatWithLegacyStream;
 
   // Clear persisted stream errors when switching threads/agents so they don't
   // leak across conversations.
@@ -202,9 +201,10 @@ export function ChatProvider({
     seed,
     chatWithGenerate,
     chatWithNetwork,
+    chatWithLegacyStream,
     providerOptions,
     requireToolApproval,
-  } = settings?.modelSettings ?? {};
+  } = modelSettings;
 
   const modelSettingsArgs = {
     frequencyPenalty,
@@ -262,9 +262,10 @@ export function ChatProvider({
   );
 
   const isRunning = isRunningStream || isAwaitingToolApproval;
+  const usesSignalStreamTransport = !chatWithGenerate && !chatWithNetwork && !chatWithLegacyStream;
   const canSendWhileStreaming = getCanSendWhileStreaming({
     isSupportedModel,
-    threadSignalsEnabled,
+    threadSignalsEnabled: threadSignalsEnabled && usesSignalStreamTransport,
     threadId,
     threadSignalsUnsupported,
   });

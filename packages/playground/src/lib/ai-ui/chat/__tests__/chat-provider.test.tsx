@@ -237,6 +237,43 @@ describe('ChatProvider', () => {
     expect(seen.hasCancel).toBe(true);
   });
 
+  it.each([
+    ['generate', { chatWithGenerate: true }],
+    ['network', { chatWithNetwork: true }],
+  ] as const)(
+    'disables mid-stream sends for %s transport even when thread signals are enabled',
+    async (_mode, modelSettings) => {
+      delete (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS;
+      server.use(...baseHandlers([]));
+
+      const canSendValues: boolean[] = [];
+      const Probe = () => {
+        const { canSendWhileStreaming } = useChatRunning();
+        canSendValues.push(canSendWhileStreaming);
+        return null;
+      };
+
+      await act(async () => {
+        render(
+          <Wrapper>
+            <ChatProvider
+              agentId="agent-1"
+              threadId="thread-1"
+              initialMessages={[]}
+              modelVersion="v2"
+              supportsMemory
+              settings={{ modelSettings }}
+            >
+              <Probe />
+            </ChatProvider>
+          </Wrapper>,
+        );
+      });
+
+      expect(canSendValues.at(-1)).toBe(false);
+    },
+  );
+
   it('enables thread signals when supported and not opted out', async () => {
     delete (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS;
     const captured: Captured[] = [];
