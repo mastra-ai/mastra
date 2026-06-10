@@ -282,7 +282,7 @@ export function WorkflowTrigger({
 
   return (
     <div className="h-full pt-3 overflow-y-auto">
-      <div className="space-y-4 border-b border-border1/50">
+      <div className={`${isViewingRun ? '' : 'space-y-4'} border-b border-border1/50`}>
         {isSuspendedSteps && isStreamingWorkflow && (
           <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mt-5 border-b border-border1">
             <Icon>
@@ -330,18 +330,14 @@ export function WorkflowTrigger({
         )}
 
         {hasFinished && result && (
-          <div className="px-5 pb-4 pt-2 space-y-3">
-            <Txt as="p" variant="ui-sm" className="text-neutral3">
-              Output
-            </Txt>
-            <div className="flex flex-col gap-2 pl-3 border-l border-dashed border-border1">
+          <div className="px-5 pb-4">
+            <div className="flex flex-col gap-1">
               <WorkflowJsonDialog
                 className="w-full justify-start"
                 variant="ghost"
                 size="sm"
-                triggerIcon={null}
                 data={result}
-                triggerLabel="Entire workflow execution"
+                triggerLabel="Entire workflow execution (JSON)"
                 title="Entire workflow execution (JSON)"
                 description="JSON view of the full workflow execution"
               />
@@ -350,10 +346,9 @@ export function WorkflowTrigger({
                   className="w-full justify-start"
                   variant="ghost"
                   size="sm"
-                  triggerIcon={null}
                   data={{ result: result.result }}
-                  triggerLabel="Workflow result"
-                  title="Workflow result (JSON)"
+                  triggerLabel="Run output"
+                  title="Run output (JSON)"
                   description="JSON view of the final workflow result"
                 />
               )}

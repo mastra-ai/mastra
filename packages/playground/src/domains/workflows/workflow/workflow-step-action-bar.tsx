@@ -70,7 +70,7 @@ export const WorkflowStepActionBar = ({
 
   const workflowStatus = result?.status ?? runSnapshot?.status;
 
-  const dialogContentClass = 'max-w-4xl w-full';
+  const dialogContentClass = 'max-w-3xl w-full';
 
   const showTimeTravel =
     !withoutTimeTravel && stepKey && !mapConfig && workflowStatus !== 'running' && workflowStatus !== 'paused';

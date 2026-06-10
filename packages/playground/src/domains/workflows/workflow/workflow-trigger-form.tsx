@@ -1,6 +1,16 @@
-import { Button, Icon } from '@mastra/playground-ui';
-import { Loader2, Play } from 'lucide-react';
+import {
+  Button,
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  Icon,
+} from '@mastra/playground-ui';
+import { FormInput, Loader2, Play } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 import type { ZodSchema } from 'zod';
 
 import { WorkflowInputData } from './workflow-input-data';
@@ -40,6 +50,53 @@ export function WorkflowTriggerForm({
   inputTypeLabel,
   inputTypeBordered,
 }: WorkflowTriggerFormProps) {
+  const [isInputDialogOpen, setIsInputDialogOpen] = useState(false);
+
+  if (zodSchema && isViewingRun) {
+    return (
+      <div>
+        {headingSlot && <div className="pb-3">{headingSlot}</div>}
+        <div className="flex flex-col gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start"
+            onClick={() => setIsInputDialogOpen(true)}
+          >
+            <FormInput className="shrink-0 text-neutral3" />
+            <span className="truncate">Run input</span>
+          </Button>
+        </div>
+        <Dialog open={isInputDialogOpen} onOpenChange={setIsInputDialogOpen}>
+          <DialogContent className="max-w-3xl">
+            <DialogHeader>
+              <DialogTitle>Workflow input</DialogTitle>
+              <DialogDescription>Input data used for this workflow run.</DialogDescription>
+            </DialogHeader>
+            <DialogBody className="max-h-[90vh]">
+              <WorkflowInputData
+                schema={zodSchema}
+                defaultValues={defaultValues}
+                isSubmitLoading={isStreaming}
+                submitButtonLabel="Run"
+                onSubmit={onExecute}
+                withoutSubmit
+                isReadOnly
+                disableSubmit={disableSubmit}
+                isProcessorWorkflow={isProcessorWorkflow}
+                collapsible={false}
+                hideHeading
+                inputTypeLabel={inputTypeLabel}
+                inputTypeBordered={inputTypeBordered}
+              />
+            </DialogBody>
+          </DialogContent>
+        </Dialog>
+      </div>
+    );
+  }
+
   if (zodSchema) {
     return (
       <WorkflowInputData

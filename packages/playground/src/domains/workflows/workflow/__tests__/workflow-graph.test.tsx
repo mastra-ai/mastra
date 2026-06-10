@@ -1,11 +1,28 @@
 // @vitest-environment jsdom
-import type { GetWorkflowResponse } from '@mastra/client-js';
+import type { GetWorkflowResponse, GetWorkflowRunByIdResponse } from '@mastra/client-js';
 import type { WorkflowRunState } from '@mastra/core/workflows';
-import { cleanup, render, screen } from '@testing-library/react';
+import { MastraReactProvider } from '@mastra/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { WorkflowRunContext } from '../../context/workflow-run-context';
+import { WorkflowRunProvider } from '../../context/workflow-run-provider';
+import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
+import { server } from '@/test/msw-server';
 import { WorkflowGraph } from '../workflow-graph';
+
+const BASE_URL = 'http://localhost:4111';
+const WORKFLOW_ID = 'wf';
+
+function stubWorkflow(response: GetWorkflowResponse = workflow) {
+  server.use(http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}`, () => HttpResponse.json(response)));
+}
+
+function stubRunById(runId: string, response: GetWorkflowRunByIdResponse) {
+  server.use(http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs/${runId}`, () => HttpResponse.json(response)));
+}
 
 afterEach(() => cleanup());
 
@@ -33,6 +50,46 @@ function Harness({ snapshot }: { snapshot: WorkflowRunState }) {
       <WorkflowGraph workflowId="wf" workflow={workflow} />
     </WorkflowRunContext.Provider>
   );
+}
+
+const runWithSuccessfulStep: GetWorkflowRunByIdResponse = {
+  runId: 'run-with-status',
+  workflowName: 'wf',
+  status: 'success',
+  createdAt: new Date(2026, 4, 29, 16, 19, 44),
+  updatedAt: new Date(2026, 4, 29, 16, 19, 44),
+  serializedStepGraph: stepGraph('static-step'),
+  steps: {
+    'static-step': {
+      status: 'success',
+    },
+  },
+};
+
+function providerGraphUi(queryClient: QueryClient, initialRunId?: string) {
+  return (
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <TracingSettingsProvider entityId={WORKFLOW_ID} entityType="workflow">
+          <WorkflowRunProvider workflowId={WORKFLOW_ID} initialRunId={initialRunId}>
+            <WorkflowGraph workflowId={WORKFLOW_ID} workflow={workflow} />
+          </WorkflowRunProvider>
+        </TracingSettingsProvider>
+      </QueryClientProvider>
+    </MastraReactProvider>
+  );
+}
+
+function renderProviderGraph(initialRunId?: string) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const rendered = render(providerGraphUi(queryClient, initialRunId));
+
+  return {
+    ...rendered,
+    rerenderRoute(nextRunId?: string) {
+      rendered.rerender(providerGraphUi(queryClient, nextRunId));
+    },
+  };
 }
 
 describe('WorkflowGraph', () => {
@@ -63,5 +120,23 @@ describe('WorkflowGraph', () => {
     const second = screen.getByText('shared-step');
     // A remount produces a new DOM node for the same label; same node would mean stale state.
     expect(second).not.toBe(first);
+  });
+
+  it('clears run-derived node status when returning from a run route to the base workflow route', async () => {
+    stubRunById('run-with-status', runWithSuccessfulStep);
+    stubWorkflow();
+
+    const { rerenderRoute } = renderProviderGraph('run-with-status');
+
+    await screen.findByTestId('workflow-default-node');
+    await waitFor(() => {
+      expect(screen.getByTestId('workflow-default-node').getAttribute('data-workflow-step-status')).toBe('success');
+    });
+
+    rerenderRoute();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('workflow-default-node').getAttribute('data-workflow-step-status')).toBe('idle');
+    });
   });
 });

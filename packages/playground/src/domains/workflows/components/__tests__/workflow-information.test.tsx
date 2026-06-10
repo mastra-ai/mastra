@@ -390,7 +390,18 @@ describe('WorkflowInformation', () => {
 
       renderInformation('run-success-1');
 
-      expect(await screen.findByText('Input')).not.toBeNull();
+      const inputButton = await screen.findByRole('button', { name: 'Run input' });
+      expect(inputButton.className).toContain('w-full');
+      expect(inputButton.className).toContain('justify-start');
+      expect(inputButton.querySelector('svg')).not.toBeNull();
+      expect(within(screen.getByTestId('workflow-information-top-section')).queryByRole('radiogroup', { name: 'Input type' })).toBeNull();
+
+      fireEvent.click(inputButton);
+
+      const inputDialog = await screen.findByRole('dialog', { name: 'Workflow input' });
+      expect(inputDialog).not.toBeNull();
+      expect(within(inputDialog).getByRole('radiogroup', { name: 'Input type' })).not.toBeNull();
+      expect(within(inputDialog).getByText('Input')).not.toBeNull();
       const statusTitle = await screen.findByText('Success');
       expect(statusTitle.nextElementSibling?.textContent).toBe('run-success-1');
       expect(await screen.findByText('3s')).not.toBeNull();
@@ -405,9 +416,21 @@ describe('WorkflowInformation', () => {
 
       renderInformation('run-success-1');
 
-      expect(await screen.findByRole('button', { name: 'Entire workflow execution' })).not.toBeNull();
-      expect(await screen.findByRole('button', { name: 'Workflow result' })).not.toBeNull();
-      expect(await screen.findByText('Output')).not.toBeNull();
+      expect(await screen.findByRole('button', { name: 'Run input' })).not.toBeNull();
+      expect(await screen.findByRole('button', { name: 'Entire workflow execution (JSON)' })).not.toBeNull();
+      expect(await screen.findByRole('button', { name: 'Run output' })).not.toBeNull();
+      expect(screen.queryByText('Input')).toBeNull();
+      expect(screen.queryByText('Output')).toBeNull();
+
+      for (const button of [
+        screen.getByRole('button', { name: 'Run input' }),
+        screen.getByRole('button', { name: 'Entire workflow execution (JSON)' }),
+        screen.getByRole('button', { name: 'Run output' }),
+      ]) {
+        expect(button.className).toContain('w-full');
+        expect(button.className).toContain('justify-start');
+        expect(button.querySelector('svg')).not.toBeNull();
+      }
     });
 
     it('shows only the entire-execution button when the run has no result', async () => {
@@ -418,8 +441,8 @@ describe('WorkflowInformation', () => {
 
       renderInformation('run-success-1');
 
-      expect(await screen.findByRole('button', { name: 'Entire workflow execution' })).not.toBeNull();
-      expect(screen.queryByRole('button', { name: 'Workflow result' })).toBeNull();
+      expect(await screen.findByRole('button', { name: 'Entire workflow execution (JSON)' })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Run output' })).toBeNull();
     });
 
     it('copies the workflow name to the clipboard via the copy button', async () => {
@@ -521,7 +544,7 @@ describe('WorkflowInformation', () => {
 
       renderInformation('run-success-1');
 
-      expect(await screen.findByText('Input')).not.toBeNull();
+      expect(await screen.findByRole('button', { name: 'Run input' })).not.toBeNull();
       expect(screen.queryByRole('switch', { name: 'Toggle debug' })).toBeNull();
     });
 

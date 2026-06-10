@@ -1,7 +1,7 @@
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { toast } from '@mastra/playground-ui';
 import { useCreateWorkflowRun, useCancelWorkflowRun, useStreamWorkflow } from '@mastra/react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 
 import { convertWorkflowRunStateToStreamResult } from '../utils';
@@ -100,6 +100,7 @@ export function WorkflowRunProvider({
   );
   const [payload, setPayload] = useState<any>(() => snapshot?.context?.input ?? null);
   const [runId, setRunId] = useState<string>(() => initialRunId ?? '');
+  const routeRunIdRef = useRef(initialRunId ?? snapshot?.runId ?? '');
   const [isRunning, setIsRunning] = useState(false);
   const [debugMode, setDebugMode] = useState(false);
 
@@ -163,6 +164,7 @@ export function WorkflowRunProvider({
 
   useEffect(() => {
     if (runSnapshot?.runId) {
+      routeRunIdRef.current = runSnapshot.runId;
       setResult(convertWorkflowRunStateToStreamResult(runSnapshot));
       if (runSnapshot.value && Object.keys(runSnapshot.value).length > 0) {
         setPayload({
@@ -173,8 +175,17 @@ export function WorkflowRunProvider({
         setPayload(runSnapshot.context?.input);
       }
       setRunId(runSnapshot.runId);
+      return;
     }
-  }, [runSnapshot]);
+
+    if (!initialRunId && routeRunIdRef.current) {
+      routeRunIdRef.current = '';
+      setResult(null);
+      setPayload(null);
+      setRunId('');
+      setIsRunning(false);
+    }
+  }, [initialRunId, runSnapshot]);
 
   const value = useMemo<WorkflowRunContextType>(
     () => ({

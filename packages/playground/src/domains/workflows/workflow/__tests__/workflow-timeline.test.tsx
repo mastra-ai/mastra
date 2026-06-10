@@ -24,12 +24,8 @@ function stubRunById(runId: string, response: GetWorkflowRunByIdResponse) {
   server.use(http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs/${runId}`, () => HttpResponse.json(response)));
 }
 
-function renderTimeline(initialRunId?: string) {
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-  });
-
-  return render(
+function timelineUi(queryClient: QueryClient, initialRunId?: string) {
+  return (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <TracingSettingsProvider entityId={WORKFLOW_ID} entityType="workflow">
@@ -38,8 +34,30 @@ function renderTimeline(initialRunId?: string) {
           </WorkflowRunProvider>
         </TracingSettingsProvider>
       </QueryClientProvider>
-    </MastraReactProvider>,
+    </MastraReactProvider>
   );
+}
+
+function renderTimeline(initialRunId?: string) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+
+  return render(timelineUi(queryClient, initialRunId));
+}
+
+function renderRerenderableTimeline(initialRunId?: string) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const rendered = render(timelineUi(queryClient, initialRunId));
+
+  return {
+    ...rendered,
+    rerenderRoute(nextRunId?: string) {
+      rendered.rerender(timelineUi(queryClient, nextRunId));
+    },
+  };
 }
 
 afterEach(cleanup);
@@ -75,6 +93,21 @@ describe('WorkflowTimeline', () => {
 
     const rows = screen.getAllByTestId('workflow-timeline-row');
     expect(rows.length).toBe(3);
+  });
+
+  it('clears run timeline rows when returning from a run route to the base workflow route', async () => {
+    stubRunById('run-timeline-1', runWithTimedSteps);
+    stubWorkflow();
+
+    const { rerenderRoute } = renderRerenderableTimeline('run-timeline-1');
+
+    expect(await screen.findByText('Step A')).not.toBeNull();
+
+    rerenderRoute();
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('workflow-timeline')).toBeNull();
+    });
   });
 
   it('positions and sizes itself from the workflow left panel width variable', async () => {
