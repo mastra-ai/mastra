@@ -325,6 +325,7 @@ export abstract class Bundler extends MastraBundler {
       externals: bundlerOptions.externals ?? [],
       enableEsmShim,
       dynamicPackages: bundlerOptions.dynamicPackages,
+      excludePackages: bundlerOptions.excludePackages,
     };
 
     let analyzedBundleInfo;
@@ -359,9 +360,18 @@ export abstract class Bundler extends MastraBundler {
       );
     }
 
+    const excludedPackages = new Set(internalBundlerOptions.excludePackages ?? []);
     const dependenciesToInstall = new Map<string, string>();
     for (const [dep, depInfo] of analyzedBundleInfo.externalDependencies) {
       if (analyzedBundleInfo.workspaceMap.has(dep) || !isBareModuleSpecifier(dep)) {
+        continue;
+      }
+      // User opt-out: dependency analysis is conservative and may flag packages
+      // that are tree-shaken out of the production bundle (e.g. dev-only
+      // conditional dynamic imports). `excludePackages` lets users force-drop
+      // those entries from the generated package.json. See #16645.
+      if (excludedPackages.has(dep)) {
+        this.logger.debug(`Excluding "${dep}" from generated package.json (excludePackages)`);
         continue;
       }
 

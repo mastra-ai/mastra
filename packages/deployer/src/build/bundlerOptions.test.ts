@@ -17,6 +17,7 @@ describe('getBundlerOptionsConfig', () => {
     ['./plugins/__fixtures__/empty-mastra.js', false],
     ['./__fixtures__/no-bundler.js', false],
     ['./__fixtures__/with-dynamic-packages.js', true],
+    ['./__fixtures__/with-exclude-packages.js', true],
   ] as [string, boolean][])(
     'should be able to extract the bundler options config from %s',
     async ([fileName, hasCustomConfig]) => {
