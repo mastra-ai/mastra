@@ -80,3 +80,67 @@ export interface IUserProvider<TUser extends User = User> {
    */
   getUserProfileUrl?(user: TUser): string;
 }
+
+/**
+ * Options for listing users.
+ */
+export interface ListUsersOptions {
+  /** Search query to filter users by name or email */
+  search?: string;
+  /** Maximum number of users to return */
+  limit?: number;
+  /** Number of users to skip (for pagination) */
+  offset?: number;
+  /** Filter by role */
+  role?: string;
+  /** Filter by organization ID (for listing org members vs all users) */
+  organizationId?: string;
+}
+
+/**
+ * Result of listing users.
+ */
+export interface ListUsersResult<TUser extends User = User> {
+  /** Array of users matching the query */
+  users: TUser[];
+  /** Total count of users (for pagination) */
+  total: number;
+}
+
+/**
+ * Provider interface for listing users.
+ *
+ * Implement this interface to enable:
+ * - Team member listing in Studio (for internal users via studioAuth)
+ * - Customer listing in Studio (for external users via server auth)
+ * - User search and filtering
+ * - Paginated user views
+ *
+ * This interface is separate from IUserProvider because not all auth providers
+ * support listing users (e.g., simple JWT validation doesn't have user storage).
+ *
+ * @example
+ * ```typescript
+ * class WorkOSUserListing implements IUserListing<WorkOSUser> {
+ *   async listUsers(options?: ListUsersOptions) {
+ *     const response = await this.workos.userManagement.listUsers({
+ *       limit: options?.limit ?? 20,
+ *       after: options?.offset ? String(options.offset) : undefined,
+ *     });
+ *     return {
+ *       users: response.data.map(this.mapUser),
+ *       total: response.listMetadata.count,
+ *     };
+ *   }
+ * }
+ * ```
+ */
+export interface IUserListing<TUser extends User = User> {
+  /**
+   * List users with optional filtering and pagination.
+   *
+   * @param options - Optional filtering and pagination options
+   * @returns Paginated list of users with total count
+   */
+  listUsers(options?: ListUsersOptions): Promise<ListUsersResult<TUser>>;
+}

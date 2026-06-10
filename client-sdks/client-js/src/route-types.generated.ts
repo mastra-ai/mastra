@@ -9119,6 +9119,78 @@ export interface GetAuthPermissionPatterns_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /auth/users
+// ============================================================================
+export type GetAuthUsers_QueryParams = {
+  search?: string | undefined;
+  limit?: number | undefined;
+  offset?: number | undefined;
+  role?: string | undefined;
+};
+
+export type GetAuthUsers_Response = {
+  users: {
+    id: string;
+    email?: string | undefined;
+    name?: string | undefined;
+    avatarUrl?: string | undefined;
+    createdAt?: string | undefined;
+    lastActiveAt?: string | undefined;
+  }[];
+  total: number;
+};
+
+export type GetAuthUsers_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetAuthUsers_QueryParams extends never
+      ? {}
+      : {} extends GetAuthUsers_QueryParams
+        ? { query?: GetAuthUsers_QueryParams }
+        : { query: GetAuthUsers_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAuthUsers_RouteContract {
+  pathParams: never;
+  queryParams: GetAuthUsers_QueryParams;
+  body: never;
+  request: GetAuthUsers_Request;
+  response: GetAuthUsers_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /auth/users/:userId
+// ============================================================================
+export type GetAuthUsersUserId_PathParams = {
+  userId: string;
+};
+
+export type GetAuthUsersUserId_Response = {
+  id: string;
+  email?: string | undefined;
+  name?: string | undefined;
+  avatarUrl?: string | undefined;
+  createdAt?: string | undefined;
+  lastActiveAt?: string | undefined;
+};
+
+export type GetAuthUsersUserId_Request = Simplify<
+  (GetAuthUsersUserId_PathParams extends never ? {} : { params: GetAuthUsersUserId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAuthUsersUserId_RouteContract {
+  pathParams: GetAuthUsersUserId_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetAuthUsersUserId_Request;
+  response: GetAuthUsersUserId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /workflows
 // ============================================================================
 export type GetWorkflows_QueryParams = {
@@ -85099,6 +85171,8 @@ export interface RouteTypes {
   'POST /auth/credentials/sign-up': PostAuthCredentialsSignUp_RouteContract;
   'GET /auth/roles/:roleId/permissions': GetAuthRolesRoleIdPermissions_RouteContract;
   'GET /auth/permission-patterns': GetAuthPermissionPatterns_RouteContract;
+  'GET /auth/users': GetAuthUsers_RouteContract;
+  'GET /auth/users/:userId': GetAuthUsersUserId_RouteContract;
   'GET /workflows': GetWorkflows_RouteContract;
   'GET /workflows/:workflowId': GetWorkflowsWorkflowId_RouteContract;
   'GET /workflows/:workflowId/runs': GetWorkflowsWorkflowIdRuns_RouteContract;
@@ -85628,6 +85702,12 @@ export interface Client {
   };
   '/auth/sso/login': {
     GET: GetAuthSsoLogin_RouteContract;
+  };
+  '/auth/users': {
+    GET: GetAuthUsers_RouteContract;
+  };
+  '/auth/users/:userId': {
+    GET: GetAuthUsersUserId_RouteContract;
   };
   '/background-tasks': {
     GET: GetBackgroundTasks_RouteContract;

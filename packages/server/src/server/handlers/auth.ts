@@ -13,6 +13,7 @@ import type {
   ISessionProvider,
   ISSOProvider,
   ICredentialsProvider,
+  IUserListing,
   SSOCallbackResult,
 } from '@mastra/core/auth';
 import type { IRBACProvider, IFGAProvider, EEUser } from '@mastra/core/auth/ee';
@@ -31,6 +32,10 @@ import {
   credentialsSignUpBodySchema,
   refreshResponseSchema,
   permissionPatternsResponseSchema,
+  listUsersQuerySchema,
+  listUsersResponseSchema,
+  userPathSchema,
+  userSchema,
 } from '../schemas/auth';
 import { createPublicRoute, createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
@@ -810,6 +815,101 @@ export const GET_PERMISSION_PATTERNS_ROUTE = createRoute({
 });
 
 // ============================================================================
+// GET /auth/users - List users (external customers)
+// ============================================================================
+
+export const GET_USERS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/users',
+  responseType: 'json',
+  requiresPermission: 'users:read',
+  queryParamSchema: listUsersQuerySchema,
+  responseSchema: listUsersResponseSchema,
+  summary: 'List users',
+  description: 'Lists external users/customers from the server auth provider. Requires users:read permission.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra, search, limit, offset, role } = ctx as any;
+
+    try {
+      // Get server auth provider (users are external customers)
+      const serverConfig = mastra.getServer?.();
+      const auth = serverConfig?.auth;
+
+      if (!auth || !implementsInterface<IUserListing<EEUser>>(auth, 'listUsers')) {
+        throw new HTTPException(404, { message: 'User listing not available' });
+      }
+
+      const result = await auth.listUsers({ search, limit, offset, role });
+
+      return {
+        users: result.users.map((user: EEUser) => ({
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          avatarUrl: user.avatarUrl,
+          createdAt: (user.metadata as any)?.createdAt,
+          lastActiveAt: (user.metadata as any)?.lastActiveAt,
+        })),
+        total: result.total,
+      };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to list users', {
+        error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+      });
+      throw new HTTPException(500, { message: 'Failed to list users' });
+    }
+  },
+});
+
+// ============================================================================
+// GET /auth/users/:userId - Get user detail
+// ============================================================================
+
+export const GET_USER_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/users/:userId',
+  responseType: 'json',
+  requiresPermission: 'users:read',
+  pathParamSchema: userPathSchema,
+  responseSchema: userSchema,
+  summary: 'Get user detail',
+  description: 'Gets details for a specific user/customer. Requires users:read permission.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra, userId } = ctx as any;
+
+    try {
+      const serverConfig = mastra.getServer?.();
+      const auth = serverConfig?.auth;
+
+      if (!auth || !implementsInterface<IUserProvider<EEUser>>(auth, 'getUser')) {
+        throw new HTTPException(404, { message: 'User detail not available' });
+      }
+
+      const user = await auth.getUser(userId);
+      if (!user) {
+        throw new HTTPException(404, { message: 'User not found' });
+      }
+
+      return {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        createdAt: (user.metadata as any)?.createdAt,
+        lastActiveAt: (user.metadata as any)?.lastActiveAt,
+      };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      mastra?.getLogger?.()?.error('Failed to get user', { error, userId });
+      throw new HTTPException(500, { message: 'Failed to get user' });
+    }
+  },
+});
+
+// ============================================================================
 // Export all auth routes
 // ============================================================================
 
@@ -824,4 +924,6 @@ export const AUTH_ROUTES = [
   POST_CREDENTIALS_SIGN_UP_ROUTE,
   GET_ROLE_PERMISSIONS_ROUTE,
   GET_PERMISSION_PATTERNS_ROUTE,
+  GET_USERS_ROUTE,
+  GET_USER_ROUTE,
 ] as const;

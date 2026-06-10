@@ -16,7 +16,7 @@ import {
   WorkflowIcon,
   WorkspacesIcon,
 } from '@mastra/playground-ui';
-import { BookIcon } from 'lucide-react';
+import { BookIcon, Users } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -162,6 +162,19 @@ export const mainNav: NavSection[] = [
         url: '/logs',
         Icon: LogsIcon,
         docs: { href: 'https://mastra.ai/en/docs/observability/logging', label: 'Logs documentation' },
+        isOnMastraPlatform: true,
+      },
+    ],
+  },
+  {
+    key: 'auth',
+    title: 'Auth',
+    items: [
+      {
+        name: 'Users',
+        url: '/users',
+        Icon: Users,
+        activePaths: ['/users'],
         isOnMastraPlatform: true,
       },
     ],

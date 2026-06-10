@@ -144,3 +144,44 @@ export const credentialsResponseSchema = z.object({
 export const permissionPatternsResponseSchema = z.object({
   patterns: z.array(z.string()),
 });
+
+// ============================================================================
+// Users List Schemas
+// ============================================================================
+
+/**
+ * Query parameters for listing users.
+ */
+export const listUsersQuerySchema = z.object({
+  search: z.string().optional(),
+  limit: z.coerce.number().optional(),
+  offset: z.coerce.number().optional(),
+  role: z.string().optional(),
+});
+
+/**
+ * User object in list/detail responses.
+ */
+export const userSchema = z.object({
+  id: z.string(),
+  email: z.string().optional(),
+  name: z.string().optional(),
+  avatarUrl: z.string().optional(),
+  createdAt: z.string().optional(),
+  lastActiveAt: z.string().optional(),
+});
+
+/**
+ * Response schema for GET /auth/users.
+ */
+export const listUsersResponseSchema = z.object({
+  users: z.array(userSchema),
+  total: z.number(),
+});
+
+/**
+ * Path parameters for GET /auth/users/:userId.
+ */
+export const userPathSchema = z.object({
+  userId: z.string(),
+});
