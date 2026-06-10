@@ -9,8 +9,10 @@ export const DATASET_TARGET_TYPE_OPTIONS = [
 
 export type DatasetTargetType = (typeof DATASET_TARGET_TYPE_OPTIONS)[number]['value'];
 
-const DATASET_TARGET_TYPE_VALUES = new Set<DatasetTargetType>(DATASET_TARGET_TYPE_OPTIONS.map(option => option.value));
+const DATASET_TARGET_TYPE_VALUES: ReadonlySet<string> = new Set(
+  DATASET_TARGET_TYPE_OPTIONS.map(option => option.value),
+);
 
 export function isDatasetTargetType(value: string | null | undefined): value is DatasetTargetType {
-  return typeof value === 'string' && DATASET_TARGET_TYPE_VALUES.has(value as DatasetTargetType);
+  return typeof value === 'string' && DATASET_TARGET_TYPE_VALUES.has(value);
 }
