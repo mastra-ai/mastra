@@ -3,7 +3,12 @@ import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 
-import { useStreamMessages, useStreamRunning, useStreamSend } from '../../contexts/stream-chat-context';
+import {
+  useStreamMessages,
+  useStreamRunning,
+  useStreamRunningDebounced,
+  useStreamSend,
+} from '../../contexts/stream-chat-context';
 import { StreamChatProvider } from '../../contexts/stream-chat-provider';
 import { useAgentBuilderTool } from '../../hooks/use-agent-builder-tool';
 import type { AvailableWorkspace } from '../../hooks/use-agent-builder-tool';
@@ -165,7 +170,9 @@ const ConversationMessageList = () => {
 };
 
 const ConversationComposer = () => {
-  const isRunning = useStreamRunning();
+  // Debounced so the composer doesn't flicker enabled/disabled when the stream
+  // flag briefly drops between builder runs — same signal as the layout guard.
+  const isRunning = useStreamRunningDebounced();
   const send = useStreamSend();
   const { draft, setDraft, trimmed, handleFormSubmit, handleKeyDown } = useChatDraft({ onSubmit: send });
 

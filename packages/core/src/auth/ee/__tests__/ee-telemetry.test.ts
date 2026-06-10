@@ -1,4 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+import { RequestContext } from '../../../request-context';
 import type * as PosthogTelemetry from '../../../telemetry/posthog';
 
 const { captureEEEvent } = vi.hoisted(() => ({
@@ -170,6 +171,65 @@ describe('EE telemetry', () => {
     );
     expect(JSON.stringify(captureEEEvent.mock.calls)).not.toContain('license-key-that-is-long-enough-for-tests');
     expect(JSON.stringify(captureEEEvent.mock.calls)).not.toContain('user2@test.com');
+  });
+
+  it('emits FGA feature usage for system actor bypasses', async () => {
+    const fgaProvider = createMockFGAProvider();
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'org-1');
+
+    await checkFGA({
+      fgaProvider,
+      user: undefined,
+      resource: { type: 'workflow', id: 'nightly-workflow' },
+      permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+      requestContext,
+      systemActor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
+    });
+
+    expect(fgaProvider.require).not.toHaveBeenCalled();
+    expect(captureEEEvent).toHaveBeenCalledWith(
+      'ee_feature_used',
+      expect.any(String),
+      expect.objectContaining({
+        feature: 'fga',
+        actor_kind: 'system',
+        resource_type: 'workflow',
+        resource_id: 'nightly-workflow',
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        user_id: null,
+        organization_membership_id: null,
+        source_workflow: 'nightly-workflow',
+      }),
+    );
+  });
+
+  it('uses metadata sourceWorkflow when a system actor omits one', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'org-1');
+
+    await checkFGA({
+      fgaProvider: createMockFGAProvider(),
+      user: undefined,
+      resource: { type: 'workflow', id: 'nightly-workflow' },
+      permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+      requestContext,
+      systemActor: { actorKind: 'system' },
+      context: {
+        metadata: {
+          sourceWorkflow: 'metadata-workflow',
+        },
+      },
+    });
+
+    expect(captureEEEvent).toHaveBeenCalledWith(
+      'ee_feature_used',
+      expect.any(String),
+      expect.objectContaining({
+        actor_kind: 'system',
+        source_workflow: 'metadata-workflow',
+      }),
+    );
   });
 
   it('does not let telemetry failures break FGA checks', async () => {

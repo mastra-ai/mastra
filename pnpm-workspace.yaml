@@ -4,6 +4,7 @@ packages:
   - packages/_vendored/*
   - packages/_internals/*
   - packages/*
+  - embedders/*
   - agent-sdks/*
   - deployers/*
   - stores/*
