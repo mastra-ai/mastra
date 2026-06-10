@@ -285,19 +285,20 @@ describe('tool replay over the experiment trigger API (e2e)', () => {
     });
     expect(triggered.status).toBe('pending');
 
-    // No recording resolves for any item → every call is a miss → item fails.
-    // The run must terminate (no hang) and report a structured error.
+    // No recording resolves for any item → the item fails BEFORE the agent
+    // runs (replay never executes an item silently live). The run must
+    // terminate (no hang) and report a structured error.
     const run = await waitForExperiment(triggered.experimentId);
     expect(run!.status).toBe('failed');
     expect(run!.failedCount).toBe(1);
     expect(liveCalls).toBe(0);
-    // Counterpart to the dry-recording test: with NO recording, the very
-    // first tool call misses, so the model is never asked a second time.
-    expect(modelCounter.modelCalls).toBe(1);
+    // Counterpart to the dry-recording test: with NO recording the agent is
+    // never invoked at all, while a partial recording reaches the model.
+    expect(modelCounter.modelCalls).toBe(0);
 
     const results = await fetchResults(triggered.experimentId);
     expect(results).toHaveLength(1);
-    expect(results[0]!.error).toMatchObject({ code: 'TOOL_REPLAY_MISS' });
+    expect(results[0]!.error).toMatchObject({ code: 'TOOL_REPLAY_NO_RECORDING' });
   });
 
   it("onMiss: 'passthrough' executes exactly the unmatched call live and reports the miss", async () => {
