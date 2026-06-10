@@ -58,7 +58,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.76",
+    "@ai-sdk/anthropic": "^3.0.82",
     "@ai-sdk/openai": "^3.0.63",
     "@ai-sdk/openai-compatible": "^2.0.47",
     "@ast-grep/napi": "^0.42.0",
