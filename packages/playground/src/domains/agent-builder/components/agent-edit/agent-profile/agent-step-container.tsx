@@ -12,6 +12,7 @@ export interface AgentStepContainerProps {
   cta: ReactNode;
   title?: ReactNode;
   description?: ReactNode;
+  contentClassName?: string;
   /**
    * Extra classes applied to the inner surface panel. Lets a step decorate the
    * full panel background (e.g. the "ready" step's animated light sweep) without
@@ -31,6 +32,7 @@ export const AgentStepContainer = ({
   cta,
   title,
   description,
+  contentClassName,
   panelClassName,
   panelOverlay,
 }: AgentStepContainerProps) => {
@@ -77,14 +79,19 @@ export const AgentStepContainer = ({
       >
         {panelOverlay}
         {title && (
-          <div className="px-6 pt-6 pb-4">
+          <div className="border-b border-border1 px-6 pt-6 pb-4" data-testid="agent-step-title-section">
             <h2 className="text-3xl font-semibold text-neutral6 pb-1">{title}</h2>
-            {description && <p className="text-neutral3">{description}</p>}
+            {description && <div className="w-1/2 text-neutral3">{description}</div>}
           </div>
         )}
-        <div className="min-h-0 overflow-y-auto">{children}</div>
+        <div className={cn('min-h-0 overflow-y-auto', contentClassName)} data-testid="agent-step-content">
+          {children}
+        </div>
         {showLastStepCtas ? (
-          <div className="flex justify-center items-center gap-2 shrink-0 pb-6">
+          <div
+            className="flex justify-center items-center gap-2 shrink-0 border-t border-border1 pt-6 pb-6"
+            data-testid="agent-step-footer"
+          >
             {backButton}
             <Button variant="outline" onClick={() => startViewTransition(() => next())} disabled={isStreaming}>
               See agent configuration
@@ -98,7 +105,10 @@ export const AgentStepContainer = ({
             </Button>
           </div>
         ) : (
-          <div className="flex justify-center items-center gap-2 shrink-0 pb-6">
+          <div
+            className="flex justify-center items-center gap-2 shrink-0 border-t border-border1 pt-6 pb-6"
+            data-testid="agent-step-footer"
+          >
             {backButton}
             {cta}
           </div>

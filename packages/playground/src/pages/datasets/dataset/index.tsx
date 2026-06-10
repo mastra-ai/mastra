@@ -212,6 +212,7 @@ function DatasetPage() {
             id: dataset.id,
             name: dataset.name,
             description: dataset?.description || '',
+            targetType: dataset.targetType,
             inputSchema: dataset.inputSchema,
             groundTruthSchema: dataset.groundTruthSchema,
             requestContextSchema: dataset.requestContextSchema,
@@ -227,6 +228,7 @@ function DatasetPage() {
           sourceDatasetId={dataset.id}
           sourceDatasetName={dataset.name}
           sourceDatasetDescription={(dataset as { description?: string }).description}
+          sourceDatasetTargetType={dataset.targetType}
         />
       )}
 
