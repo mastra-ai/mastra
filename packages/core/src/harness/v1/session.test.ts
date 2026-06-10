@@ -544,6 +544,109 @@ describe('Harness events', () => {
       }),
     ]);
   });
+
+  it('emits permission approval events and resolves pending tool approvals', async () => {
+    const events: HarnessEvent[] = [];
+    const onPermissionRequested = vi.fn();
+    const storage = new RecordingHarnessStorage();
+    const toolExecute = vi.fn(async () => ({ ok: true }));
+    const agent = createAgent({
+      listTools: vi.fn().mockResolvedValue({
+        guarded: { id: 'guarded', description: 'guarded', parameters: {} as never, execute: toolExecute },
+      }),
+      getActiveThreadRunId: vi.fn().mockReturnValue('run-1'),
+      sendMessage: vi.fn().mockReturnValue({ accepted: true, runId: 'run-1' }),
+      approveToolCallGenerate: vi.fn().mockResolvedValue({ resumed: true }),
+      declineToolCallGenerate: vi.fn().mockResolvedValue({ declined: true }),
+    } as Partial<Agent>);
+    const harness = new Harness({
+      agent,
+      storage,
+      memory: createMemory(),
+      modes: [{ id: 'build', defaultModelId: 'test-build-model' }],
+      defaultModeId: 'build',
+      defaultPermissionPolicy: 'ask',
+      toolCategories: { guarded: 'execute' },
+      onPermissionRequested,
+    });
+    harness.subscribe(event => {
+      events.push(event);
+    });
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+    await session.sendMessage({ messages: 'call the guarded tool' });
+    events.length = 0;
+
+    const sendTarget = (agent.sendMessage as ReturnType<typeof vi.fn>).mock.calls[0]![1] as {
+      ifIdle: { streamOptions: { toolsets: { harness: Record<string, { execute: (input: unknown, context: never) => Promise<unknown> }> } } };
+    };
+    const result = await sendTarget.ifIdle.streamOptions.toolsets.harness.guarded!.execute(
+      { command: 'ship' },
+      { requestContext: undefined, workspace: undefined } as never,
+    );
+
+    expect(result).toMatchObject({ isError: false, status: 'pending', pendingItemId: expect.any(String) });
+    const pendingItemId = (result as { pendingItemId: string }).pendingItemId;
+    expect(session.listPendingItems()).toEqual([
+      expect.objectContaining({
+        id: pendingItemId,
+        kind: 'tool-approval',
+        status: 'pending',
+        runId: 'run-1',
+        payload: expect.objectContaining({
+          source: 'permission-gate',
+          toolName: 'guarded',
+          category: 'execute',
+          args: { command: 'ship' },
+        }),
+      }),
+    ]);
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'permission.requested',
+        sessionId: session.id,
+        payload: expect.objectContaining({
+          pendingItemId,
+          toolName: 'guarded',
+          category: 'execute',
+          decision: 'pendingApproval',
+          policy: 'ask',
+          reasons: ['policy'],
+        }),
+      }),
+    ]);
+    expect(onPermissionRequested).toHaveBeenCalledWith(
+      expect.objectContaining({
+        pendingItemId,
+        toolName: 'guarded',
+        category: 'execute',
+        result: expect.objectContaining({ decision: 'pendingApproval' }),
+      }),
+    );
+
+    events.length = 0;
+    const updated = await session.approveToolCall(pendingItemId, 'allow');
+
+    expect(updated).toMatchObject({
+      id: pendingItemId,
+      kind: 'tool-approval',
+      status: 'responded',
+      response: { approved: true, resumeResult: { resumed: true } },
+    });
+    expect(agent.approveToolCallGenerate).toHaveBeenCalledWith({
+      runId: 'run-1',
+      toolCallId: undefined,
+      requestContext: expect.any(Object),
+    });
+    expect(toolExecute).not.toHaveBeenCalled();
+    expect(session.getQueueDepth()).toBe(0);
+    expect(events).toEqual([
+      expect.objectContaining({
+        type: 'permission.resolved',
+        sessionId: session.id,
+        payload: { pendingItemId, approved: true, decision: 'allow' },
+      }),
+    ]);
+  });
 });
 
 describe('Harness.listSessions()', () => {
@@ -667,7 +770,10 @@ describe('Harness.ownerId', () => {
       expect.objectContaining({
         resourceId: 'resource-1',
         threadId: 'thread-1',
-        ifIdle: expect.objectContaining({ behavior: 'wake' }),
+        ifIdle: expect.objectContaining({
+          behavior: 'wake',
+          streamOptions: expect.objectContaining({ activeTools: undefined }),
+        }),
       }),
     );
   });

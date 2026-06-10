@@ -7,7 +7,14 @@ import type { HarnessStorage } from '../../storage/domains/harness';
 import type { DynamicArgument } from '../../types';
 import type { Workspace, WorkspaceConfig } from '../../workspace';
 import type { HarnessMode } from './mode';
-import type { PermissionPolicy, ToolCategory, ToolCategoryResolver } from './permissions.types';
+import type {
+  PermissionPolicy,
+  PermissionRequestedCallback,
+  PermissionRules,
+  SessionGrant,
+  ToolCategory,
+  ToolCategoryResolver,
+} from './permissions.types';
 import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
 
 export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
@@ -70,6 +77,15 @@ export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
    * entirely; `'deny'` for a strict allow-list posture. Defaults to `'ask'`.
    */
   defaultPermissionPolicy?: PermissionPolicy;
+
+  /** Session permission rules layered above the default policy. */
+  permissionRules?: PermissionRules;
+
+  /** Initial grants for every session created by this harness. */
+  sessionGrants?: readonly SessionGrant[];
+
+  /** Called whenever a session creates a pending permission approval. */
+  onPermissionRequested?: PermissionRequestedCallback;
 
   /**
    * Resolves a tool name to its category for permission-gate evaluation.

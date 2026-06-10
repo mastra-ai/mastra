@@ -1,3 +1,10 @@
+---
+name: testing-core-processors
+description: >
+  How to write integration tests for error processors in packages/core/src/processors/.
+  Covers MockLanguageModelV2 patterns, stream mock gotchas, and test structure.
+---
+
 # Testing Core Error Processors
 
 How to write integration tests for error processors in `packages/core/src/processors/`.

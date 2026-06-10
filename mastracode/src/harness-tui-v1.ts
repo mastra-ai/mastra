@@ -47,6 +47,7 @@ const codeAgent = new Agent({
   name: 'Code Agent',
   instructions: 'You are a helpful coding assistant.',
   model: modes.find(m => m.id === defaultModeId)!.defaultModelId,
+  workspace: getDynamicWorkspace,
 });
 
 // ─── Storage ────────────────────────────────────────────────────────────
@@ -140,6 +141,24 @@ async function detectOrCreateSession() {
   return await harness.session({ threadId, resourceId });
 }
 
+// ─── Write a single text-delta chunk to stdout ─────────────────────────────
+function writeTextDelta(chunk: unknown) {
+  if (typeof chunk === 'string') {
+    process.stdout.write(chunk);
+    return;
+  }
+  if (!chunk || typeof chunk !== 'object') return;
+  const c = chunk as Record<string, unknown>;
+  if (c.type === 'text-delta') {
+    const text = c.textDelta ?? c.delta ?? (c.payload as Record<string, unknown>)?.text;
+    if (text) process.stdout.write(String(text));
+  } else if (c.text) {
+    process.stdout.write(String(c.text));
+  }
+}
+
+
+
 // ─── TUI main loop ──────────────────────────────────────────────────────────
 async function main() {
   console.info('Starting HarnessV1 TUI...');
@@ -157,137 +176,6 @@ async function main() {
   });
 
   const ask = (question: string): Promise<string> => new Promise(resolve => rl.question(question, resolve));
-
-  // ─── Stream a subscription to stdout (buffered, flushed on newline) ──────
-  async function streamToStdout(stream: AsyncIterable<unknown>) {
-    let buffer = '';
-    let flushTimer: ReturnType<typeof setTimeout> | null = null;
-    const flush = () => {
-      if (buffer) {
-        process.stdout.write(buffer);
-        buffer = '';
-      }
-      if (flushTimer) {
-        clearTimeout(flushTimer);
-        flushTimer = null;
-      }
-    };
-    try {
-      for await (const chunk of stream) {
-        if (typeof chunk === 'string') {
-          buffer += chunk;
-        } else if (chunk && typeof chunk === 'object') {
-          const c = chunk as unknown as Record<string, unknown>;
-          if (c.type === 'text-delta') {
-            if (c.textDelta) {
-              buffer += String(c.textDelta);
-            } else if (c.delta) {
-              buffer += String(c.delta);
-            } else if (c.payload && typeof c.payload === 'object') {
-              const payload = c.payload as Record<string, unknown>;
-              if (payload.text) {
-                buffer += String(payload.text);
-              }
-            }
-          } else if (c.text) {
-            buffer += String(c.text);
-          }
-        }
-        if (buffer.includes('\n')) {
-          flush();
-        } else if (!flushTimer) {
-          flushTimer = setTimeout(flush, 100);
-        }
-      }
-    } catch (err) {
-      if ((err as Error).message !== 'AbortError') {
-        console.error('Stream error:', err);
-      }
-    } finally {
-      flush();
-    }
-  }
-
-  // ─── Prompt ─────────────────────────────────────────────────────────────
-  async function handlePrompt() {
-    const promptText = await ask('Enter prompt: ');
-    if (!promptText.trim()) return;
-
-    console.info('Sending prompt...');
-
-    try {
-      // ─── Subscribe to the session thread for streamed output ────────────
-      const subscription = await session.subscribeToThread();
-
-      // ─── Start the run via queueMessage ─────────────────────────────────
-      const result = await session.queueMessage({ messages: promptText });
-      let isRunning: boolean = result.accepted;
-
-      // ─── Poll activeRunId to detect when the run finishes ───────────────
-      const pollPromise = (async () => {
-        // Wait a tick for the run to register
-        await new Promise<void>(resolve => setTimeout(resolve, 50));
-        while (isRunning) {
-          const runId = subscription.activeRunId();
-          if (!runId) {
-            // No active run — the stream should finish shortly
-            break;
-          }
-          await new Promise<void>(resolve => setTimeout(resolve, 100));
-        }
-        isRunning = false;
-      })();
-
-      // ─── Read streamed chunks ────────────────────────────────────────────
-      const streamPromise = streamToStdout(subscription.stream);
-
-      // ─── Wait for run completion, then unsubscribe to end the stream ─────
-      await pollPromise;
-      subscription.unsubscribe();
-      await streamPromise;
-
-      // ─── Steering loop: stream each follow-up response ──────────────────
-      while (true) {
-        const steerText = await ask('\n  steer: ');
-        const trimmed = steerText.trim();
-        if (!trimmed) break; // Exit on empty input
-        if (trimmed.toLowerCase() === 'exit') break; // Exit on 'exit'
-
-        try {
-          // Re-subscribe and stream the steer response
-          const steerSub = await session.subscribeToThread();
-          const steerResult = await session.sendMessage({ messages: trimmed });
-          if (!steerResult.accepted) {
-            console.info('  → message not accepted');
-            steerSub.unsubscribe();
-            continue;
-          }
-
-          let steerRunning: boolean = true;
-          const steerPoll = (async () => {
-            await new Promise<void>(resolve => setTimeout(resolve, 50));
-            while (steerRunning) {
-              if (!steerSub.activeRunId()) break;
-              await new Promise<void>(resolve => setTimeout(resolve, 100));
-            }
-            steerRunning = false;
-          })();
-
-          const steerStream = streamToStdout(steerSub.stream);
-
-          await steerPoll;
-          steerSub.unsubscribe();
-          await steerStream;
-        } catch (err) {
-          console.error('Steer error:', err);
-        }
-      }
-
-      console.info('\n');
-    } catch (err) {
-      console.error('Error:', err);
-    }
-  }
 
   // ─── Mode ───────────────────────────────────────────────────────────────
   async function handleMode() {
@@ -312,6 +200,40 @@ async function main() {
     }
   }
 
+  async function sendAndStream(text: string) {
+    const subscription = await session.subscribeToThread();
+
+    try {
+      const result = await session.queueMessage({ messages: text });
+
+      if (!result.accepted) {
+        console.info('  → message not accepted');
+        return;
+      }
+
+      const iterator = subscription.stream[Symbol.asyncIterator]();
+      while (true) {
+        const { value: chunk, done } = await iterator.next();
+        if (done) break;
+        writeTextDelta(chunk);
+        if (
+          chunk &&
+          typeof chunk === 'object' &&
+          ((chunk as any).type === 'finish' ||
+            (chunk as any).type === 'error' ||
+            (chunk as any).type === 'abort' ||
+            (chunk as any).type === 'tool-call-suspended')
+        ) {
+          break;
+        }
+      }
+
+      process.stdout.write('\n');
+    } finally {
+      subscription.unsubscribe();
+    }
+  }
+
   // ─── Main loop ────────────────────────────────────────────────────────────
   const prompt = async () => {
     const answer = await ask('\n[p]rompt, [m]ode, [mo]del, [q]uit: ');
@@ -323,7 +245,10 @@ async function main() {
       await flushEventLogWrites();
       process.exit(0);
     } else if (choice === 'p' || choice === 'prompt') {
-      await handlePrompt();
+      const promptText = await ask('Enter prompt: ');
+      if (promptText.trim()) {
+        await sendAndStream(promptText).catch((err: unknown) => console.error('Error:', err));
+      }
     } else if (choice === 'm' || choice === 'mode') {
       await handleMode();
     } else if (choice === 'mo' || choice === 'model') {

@@ -18,7 +18,13 @@ import type { DynamicArgument } from '../../types';
 import type { Workspace } from '../../workspace';
 import type { EventEmitter } from './events';
 import type { HarnessMode } from './mode';
-import type { PermissionPolicy, ToolCategoryResolver } from './permissions.types';
+import type {
+  PermissionPolicy,
+  PermissionRequestedCallback,
+  PermissionRules,
+  SessionGrant,
+  ToolCategoryResolver,
+} from './permissions.types';
 import type { SubagentRegistryConfig } from './subagents.types';
 
 export type CloneSessionOptions = {
@@ -82,6 +88,12 @@ export interface SessionConfig<TState = {}> {
   gateways: Array<MastraModelGatewayInterface>;
   /** Default permission policy applied when no category rule matches. */
   defaultPermissionPolicy?: PermissionPolicy;
+  /** Session permission rules layered above the default policy. */
+  permissionRules?: PermissionRules;
+  /** Initial session grants that suppress policy-driven approval prompts. */
+  sessionGrants?: readonly SessionGrant[];
+  /** Called whenever a permission gate creates a pending approval. */
+  onPermissionRequested?: PermissionRequestedCallback;
   /** Resolves a tool name to its category for permission-gate evaluation. */
   toolCategoryResolver?: ToolCategoryResolver;
   storage: HarnessStorage;
