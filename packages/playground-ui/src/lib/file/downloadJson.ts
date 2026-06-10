@@ -1,9 +1,4 @@
-/**
- * Serialize `data` to pretty-printed JSON and trigger a browser file download.
- *
- * @param filename - Name for the downloaded file (e.g. `trace-abc123.json`).
- * @param data - Any JSON-serializable value.
- */
+// Serialize data to pretty-printed JSON and trigger a browser file download.
 export const downloadJson = (filename: string, data: unknown): void => {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
