@@ -92,7 +92,6 @@ export * from './ds/components/ListSearch';
 export * from './ds/components/ErrorBoundary';
 export * from './ds/components/ErrorState';
 export * from './ds/components/Card';
-export * from './ds/components/ToolCard';
 export * from './ds/components/DataCodeSection';
 export * from './ds/components/DataDetailsPanel';
 export * from './ds/components/DataKeysAndValues';

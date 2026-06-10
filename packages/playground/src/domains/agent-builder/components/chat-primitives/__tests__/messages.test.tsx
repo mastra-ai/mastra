@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -27,16 +27,16 @@ interface BuilderToolInput {
   output?: unknown;
 }
 
-const builderToolPart = ({ toolName, toolCallId, input, output }: BuilderToolInput): ToolPart =>
+const builderToolPart = (toolInput: BuilderToolInput): ToolPart =>
   ({
     type: 'tool-invocation',
     toolInvocation: {
       state: 'result',
       step: 0,
-      toolCallId,
-      toolName,
-      args: input,
-      result: output ?? { success: true },
+      toolCallId: toolInput.toolCallId,
+      toolName: toolInput.toolName,
+      args: toolInput.input,
+      result: 'output' in toolInput ? toolInput.output : { success: true },
     },
   }) as unknown as ToolPart;
 
@@ -168,8 +168,8 @@ describe('MessageRow dynamic-tool rendering', () => {
     expect(container.textContent).not.toContain('Internal signal');
   });
 
-  it('renders the generic shimmer for non-builder dynamic tools', () => {
-    const { container } = renderRow([
+  it('renders the generic fallback for non-builder dynamic tools', () => {
+    const { container, getByRole } = renderRow([
       builderToolPart({
         toolCallId: 'call-5',
         toolName: 'some-other-tool',
@@ -182,6 +182,29 @@ describe('MessageRow dynamic-tool rendering', () => {
     expect(container.textContent).toContain('Executing');
     expect(container.textContent).toContain('some-other-tool');
     expect(container.textContent).not.toContain('Web Search');
+
+    fireEvent.click(getByRole('button'));
+
+    expect(container.textContent).toContain('Input');
+    expect(container.textContent).toContain('"web-search"');
+    expect(container.textContent).toContain('Output');
+    expect(container.textContent).toContain('"success": true');
+  });
+
+  it('omits the generic fallback output panel when there is no output', () => {
+    const { container, getByRole } = renderRow([
+      builderToolPart({
+        toolCallId: 'call-5',
+        toolName: 'some-other-tool',
+        input: { a: 1 },
+        output: undefined,
+      }),
+    ]);
+
+    fireEvent.click(getByRole('button'));
+
+    expect(container.textContent).toContain('Input');
+    expect(container.textContent).not.toContain('Output');
   });
 
   it('renders signal data parts in agent-builder chat messages', () => {
