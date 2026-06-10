@@ -1132,7 +1132,14 @@ describe('createSubagentTool model resolution', () => {
 
     const tool = createSubagentTool({
       subagents: [
-        { id: 'explore', name: 'Explore', description: 'd', instructions: 'i', defaultModel, defaultModelId: 'openai/gpt-5.5' },
+        {
+          id: 'explore',
+          name: 'Explore',
+          description: 'd',
+          instructions: 'i',
+          defaultModel,
+          defaultModelId: 'openai/gpt-5.5',
+        },
       ],
       resolveModel,
     });
