@@ -65,5 +65,9 @@ void tui.run().catch(error => {
     await runtime.waitForScreenText(/e2e_stdio_config \[stdio\] \(error:/i, terminal);
     await runtime.waitForScreenText(/\/mcp reload - Disconnect and reconnect all servers/i, terminal);
     runtime.printScreen('mcp server config status', terminal);
+
+    terminal.keyCtrlC();
+    await runtime.sleep(300);
+    runtime.printScreen('after Ctrl-C', terminal);
   },
 } satisfies McE2eScenario;

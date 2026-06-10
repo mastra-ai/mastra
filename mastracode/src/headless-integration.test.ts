@@ -1208,7 +1208,7 @@ describe('headless mode — thread control', () => {
       lastActivityAt: new Date('2026-01-02T00:00:00.000Z'),
       modeId: 'default',
       modelId: 'openai/custom-thread-model',
-      getMode: vi.fn(() => ({ id: 'default', description: 'Default', agentId: 'test-agent' })),
+      getMode: vi.fn(() => ({ id: 'default', description: 'Default', metadata: { agentId: 'test-agent' } })),
       getModelId: vi.fn(() => 'openai/custom-thread-model'),
       setModelId: vi.fn(),
       getState: vi.fn(() => ({})),
@@ -1217,7 +1217,7 @@ describe('headless mode — thread control', () => {
     const harnessV1 = {
       listSessions: vi.fn(async () => [session]),
       session: vi.fn(async () => session),
-      getMode: vi.fn(() => ({ id: 'default', description: 'Default', agentId: 'test-agent' })),
+      getMode: vi.fn(() => ({ id: 'default', description: 'Default', metadata: { agentId: 'test-agent' } })),
     };
     const harness = new HarnessCompat(
       {

@@ -2,6 +2,7 @@ import type { McE2eScenario } from './types.js';
 
 const PROMPT = 'List the available workspace tool aliases.';
 const RESPONSE = 'Workspace tool aliases verified.';
+const RESPONSE_PATTERN = new RegExp(RESPONSE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 
 function getToolNames(requests: unknown[]): string[] {
   const names = new Set<string>();
@@ -26,7 +27,7 @@ export const workspaceToolNamesScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Resource ID:/i, terminal);
 
     terminal.submit(PROMPT);
-    await runtime.waitForScreenText(new RegExp(RESPONSE), terminal);
+    await runtime.waitForScreenText(RESPONSE_PATTERN, terminal);
 
     terminal.keyCtrlC();
     await runtime.sleep(300);
