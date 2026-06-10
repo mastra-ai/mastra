@@ -1,4 +1,5 @@
-import { Button, SideDialog } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui';
+import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { SelectedToolList } from './selected-tool-list';

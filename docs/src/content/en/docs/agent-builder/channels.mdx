@@ -54,7 +54,7 @@ The Slack provider handles app creation, OAuth, slash commands, and message rout
 
 `SlackProvider` requires one environment variable and accepts one optional override:
 
-- `SLACK_APP_CONFIG_REFRESH_TOKEN` (required): the refresh token from your Slack app configuration tokens, available under **Your App Configuration Tokens** on [api.slack.com/apps](https://api.slack.com/apps). The refresh token does not expire, but the access tokens it issues rotate every 12 hours and are auto-persisted to `Mastra.storage`.
+- `SLACK_APP_CONFIG_REFRESH_TOKEN` (required): the refresh token from your Slack app configuration tokens, available under **Your App Configuration Tokens** on [api.slack.com/apps](https://api.slack.com/apps). The refresh token doesn't expire, but the access tokens it issues rotate every 12 hours and are auto-persisted to `Mastra.storage`.
 - `baseUrl` (optional): the public URL Slack should send events and OAuth callbacks to. Defaults to the running Mastra server's host and port (for example, `http://localhost:4111` in local development). Pass `baseUrl` explicitly when the public URL differs from the server's resolved address — typically a tunnel for local development (`cloudflared tunnel --url http://localhost:4111`) or a deployed URL in production.
 
 ## Storage requirement

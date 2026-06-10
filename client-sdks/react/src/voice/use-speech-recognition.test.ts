@@ -284,7 +284,14 @@ describe('useSpeechRecognition (mastra path)', () => {
 
     await waitFor(() => expect(getSpeakersMock).toHaveBeenCalled());
 
-    act(() => result.current.start());
+    // Retry start() until the hook has switched to the mastra path (getSpeakers
+    // resolving into state is async); the in-flight guard makes extra calls no-ops.
+    await waitFor(() => {
+      act(() => result.current.start());
+      expect(recordMicrophoneToFileMock).toHaveBeenCalledTimes(1);
+    });
+
+    // Second start while the first recordMicrophoneToFile is still pending.
     act(() => result.current.start());
 
     // The in-flight guard should have prevented a second recordMicrophoneToFile call.
@@ -308,8 +315,12 @@ describe('useSpeechRecognition (mastra path)', () => {
 
     await waitFor(() => expect(getSpeakersMock).toHaveBeenCalled());
 
-    act(() => result.current.start());
-    expect(recordMicrophoneToFileMock).toHaveBeenCalledTimes(1);
+    // Retry start() until the hook has switched to the mastra path (getSpeakers
+    // resolving into state is async); the in-flight guard makes extra calls no-ops.
+    await waitFor(() => {
+      act(() => result.current.start());
+      expect(recordMicrophoneToFileMock).toHaveBeenCalledTimes(1);
+    });
 
     act(() => result.current.stop());
 
