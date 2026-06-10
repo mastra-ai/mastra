@@ -21,12 +21,16 @@ export interface HarnessRequestContext<TState = unknown> {
 
 export type BuildHarnessRequestContextOptions<TState> = {
   harnessContext: HarnessRequestContext<TState>;
+  /** Optional caller-provided context whose entries are carried forward before
+   * the harness context is layered on top. */
+  base?: RequestContext;
 };
 
 export function buildHarnessRequestContext<TState>({
   harnessContext,
+  base,
 }: BuildHarnessRequestContextOptions<TState>): RequestContext {
-  const requestContext = new RequestContext<unknown>();
+  const requestContext = base ?? new RequestContext<unknown>();
   requestContext.set('harness', harnessContext);
   return requestContext;
 }

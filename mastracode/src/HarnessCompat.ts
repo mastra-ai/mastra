@@ -2,6 +2,10 @@ import type { Agent } from '@mastra/core/agent';
 import { Harness as HarnessLegacy } from '@mastra/core/harness';
 import type { HarnessConfig, HarnessMode as HarnessModeLegacy, HarnessThread } from '@mastra/core/harness';
 import type { Session, HarnessMode, Harness } from '@mastra/core/harness/v1';
+import type { AgentSignalContents } from '@mastra/core/agent';
+import type { TracingContext, TracingOptions } from '@mastra/core/observability';
+import { randomUUID } from 'node:crypto';
+import type { RequestContext } from '@mastra/core/request-context';
 
 type CloneSessionOptions = {
   sessionId?: string;
@@ -49,6 +53,19 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
   async init(): Promise<void> {
     await super.init();
     await this.#harnessV1.init();
+
+    // Project v1 session state changes into MC's legacy display-event stream.
+    // The v1 built-in task tools persist tasks to session state and emit a
+    // `state_changed` event; MC's TUI consumes a legacy `task_updated` event.
+    // Forward task changes so the task panel reflects real session-owned state.
+    this.#harnessV1.subscribe(event => {
+      if (event.type !== 'state_changed') return;
+      const stateEvent = event as { changedKeys?: string[]; state?: { tasks?: unknown } };
+      if (!stateEvent.changedKeys?.includes('tasks')) return;
+      const tasks = stateEvent.state?.tasks;
+      if (!Array.isArray(tasks)) return;
+      this.emit({ type: 'task_updated', tasks: tasks as never });
+    });
   }
 
   getState(): Readonly<TState> {
@@ -202,6 +219,34 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     // The session is now authoritative for the active model; reconcile legacy
     // read-through to match it.
     await this.#reconcileLegacyModel(session);
+
+    // Replace any legacy-created thread subscription with one owned by the v1
+    // session (created during `super.createThread`'s internal ensure, before
+    // the session was attached).
+    await this.#adoptSessionSubscription(session);
+  }
+
+  /**
+   * Source the agent-thread subscription from the v1 session whenever one is
+   * attached for the target thread. The v1 session owns subscription creation
+   * and run dispatch; the legacy projection loop remains the SINGLE consumer
+   * of the chunk stream during the compat era (two consumers double-emit every
+   * display event — e.g. duplicated `tool_input_delta`s corrupt the partial
+   * tool-args buffer and break live streaming rendering).
+   */
+  protected override async ensureAgentThreadSubscription(agent: Agent, threadId: string): Promise<void> {
+    const session = this.#session;
+    if (session && session.threadId === threadId) {
+      await this.#adoptSessionSubscription(session);
+      return;
+    }
+    return super.ensureAgentThreadSubscription(agent, threadId);
+  }
+
+  async #adoptSessionSubscription(session: HarnessV1Session<TState>): Promise<void> {
+    await this.adoptAgentThreadSubscription(`harness-v1:${session.id}:${session.threadId}`, () =>
+      session.subscribeToThreadStream(),
+    );
   }
 
   /**
@@ -316,6 +361,130 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
       updatedAt: thread.updatedAt,
       metadata: thread.metadata,
     };
+  }
+
+  /**
+   * Route message execution through the v1 session instead of the legacy
+   * agent-thread subscription. The v1 `session.signalStream()` composes the
+   * session's toolsets/mode/model/request-context and streams the agent's
+   * chunks; we project that stream into MC's display events via the base
+   * harness's `projectAgentStream()` (which reuses the established
+   * chunk → event pipeline unchanged).
+   *
+   * Falls back to the legacy path when no v1 session is attached yet.
+   */
+  async sendMessage({
+    content,
+    files,
+    tracingContext,
+    tracingOptions,
+    requestContext,
+  }: {
+    content: string;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
+    tracingContext?: TracingContext;
+    tracingOptions?: TracingOptions;
+    requestContext?: RequestContext;
+  }): Promise<void> {
+    if (!this.#session) {
+      return super.sendMessage({ content, files, tracingContext, tracingOptions, requestContext });
+    }
+
+    const messageInput = this.#buildV1Message({ content, files });
+    const output = (await this.#session.signalStream({
+      messages: messageInput as never,
+    })) as { fullStream: AsyncIterable<unknown> };
+
+    await this.projectAgentStream(output, requestContext);
+  }
+
+  /**
+   * Route idle user-signal execution through the v1 session.
+   *
+   * The interactive TUI submits turns via `sendSignal` (fire-and-accept), not
+   * `sendMessage`. When a v1 session is attached and the current thread is
+   * idle, the session composes and dispatches the run (`session.signalThread`):
+   * v1 toolsets (session-owned task tools), v1 request context, mode/model
+   * resolution, and yolo-aware approval gating. The chunks stream over the
+   * session-owned thread subscription installed by
+   * `ensureAgentThreadSubscription`, where the existing projection loop — the
+   * single consumer — turns them into MC display events.
+   *
+   * Falls back to the legacy path when there is no v1 session, when a run is
+   * already active (interjection/steer routes through the active run), or when
+   * the input is not a simple user-content signal (notifications, raw signals).
+   */
+  sendSignal(
+    input: Parameters<HarnessLegacy<TState>['sendSignal']>[0],
+  ): ReturnType<HarnessLegacy<TState>['sendSignal']> {
+    const hasContent = typeof input === 'object' && input !== null && 'content' in input;
+    const canRouteV1 = Boolean(this.#session) && hasContent && !this.isCurrentThreadStreamActive();
+
+    if (!canRouteV1) {
+      return super.sendSignal(input);
+    }
+
+    const session = this.#session!;
+    const { content, requestContext } = input as {
+      content: AgentSignalContents;
+      requestContext?: RequestContext;
+    };
+    const id = randomUUID();
+
+    const accepted = (async () => {
+      // Make sure the session-owned subscription is installed and being
+      // consumed before the run starts so no chunks are missed.
+      await this.#adoptSessionSubscription(session);
+
+      const { runId } = await session.signalThread({
+        content: typeof content === 'string' ? content : JSON.stringify(content),
+        requestContext,
+      });
+
+      return { accepted: true as const, runId: runId ?? id };
+    })();
+
+    return { id, type: 'user', accepted } as ReturnType<HarnessLegacy<TState>['sendSignal']>;
+  }
+
+  /**
+   * Build a `MessageListInput` for the v1 session from MC's string content +
+   * optional files. Text/JSON files are inlined as fenced blocks; binary files
+   * become file parts (mirrors the legacy `createMessageInput`).
+   */
+  #buildV1Message({
+    content,
+    files,
+  }: {
+    content: string;
+    files?: Array<{ data: string; mediaType: string; filename?: string }>;
+  }): Array<{ role: 'user'; content: string | Array<Record<string, unknown>> }> {
+    if (!files?.length) {
+      return [{ role: 'user', content }];
+    }
+
+    const parts: Array<Record<string, unknown>> = [{ type: 'text', text: content }];
+    for (const f of files) {
+      const isText = f.mediaType.startsWith('text/') || f.mediaType === 'application/json';
+      if (isText) {
+        let textContent = f.data;
+        const base64Match = f.data.match(/^data:[^;]*;base64,(.*)$/);
+        if (base64Match) {
+          try {
+            textContent = Buffer.from(base64Match[1]!, 'base64').toString('utf-8');
+          } catch {
+            // Fall through with raw data.
+          }
+        }
+        const label = f.filename ? `[File: ${f.filename}]` : '[Attached file]';
+        const maxBacktickRun = Math.max(0, ...Array.from(textContent.matchAll(/`+/g), m => m[0].length));
+        const fence = '`'.repeat(Math.max(3, maxBacktickRun + 1));
+        parts.push({ type: 'text', text: `${label}\n${fence}\n${textContent}\n${fence}` });
+      } else {
+        parts.push({ type: 'file', data: f.data, mediaType: f.mediaType, ...(f.filename ? { filename: f.filename } : {}) });
+      }
+    }
+    return [{ role: 'user', content: parts }];
   }
 
   getCurrentMode(): HarnessModeLegacy<TState> {

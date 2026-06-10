@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { RequestContext } from '@internal/core/request-context';
 import type { Agent, ToolsInput } from '../../agent';
+import { createSignal } from '../../agent/signals';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { MastraMemory, StorageThreadType } from '../../memory';
 import { toStandardSchema } from '../../schema';
@@ -45,6 +46,13 @@ export class Session<TState = {}> {
   #runStatus: 'idle' | 'starting' | 'running' | 'waiting' | 'resuming' = 'idle';
   #currentRunId: string | null = null;
   #currentTraceId: string | null = null;
+  /**
+   * Most recent live agent thread subscription created via
+   * {@link subscribeToThreadStream}. The session owns subscription creation;
+   * the consumer (display projection) drains `.stream` exactly once.
+   */
+  #threadSubscription: Awaited<ReturnType<Agent['subscribeToThread']>> | null = null;
+  #abortController: AbortController | null = null;
   readonly #memory: MastraMemory | DynamicArgument<MastraMemory>;
   readonly #events: EventEmitter;
   readonly #stateSchemaInput?: PublicSchema<TState>;
@@ -508,28 +516,152 @@ export class Session<TState = {}> {
         builtInTools: buildHarnessBuiltInTools(this),
       });
       const model = this.#resolveModel ? await this.#resolveModel(this.#modelId) : undefined;
+      // Mirror the legacy execution contract: when the session is in "yolo"
+      // mode, tools execute without an approval gate; otherwise tool calls
+      // require approval (surfaced as pending items). Per-call `options` may
+      // override.
+      const isYolo = (this.#state as { yolo?: unknown }).yolo === true;
       const output = (await agent.stream(messages, {
+        // Multi-step tool round-trips by default so the agent can call a tool,
+        // observe its result, and continue — matching the legacy execution
+        // path. Per-call `options` may override.
+        maxSteps: 1000,
+        savePerStep: false,
+        requireToolApproval: !isYolo,
         ...options,
         runId,
         requestContext,
+        // Bind execution to the session's durable thread so streamed messages
+        // persist and reload (thread history parity with the legacy path).
+        memory: { thread: this.#threadId, resource: this.#resourceId },
         ...(model ? { model } : {}),
         toolsets: { harness: tools },
         activeTools: options.activeTools
           ? [...new Set([...options.activeTools, ...Object.keys(tools)])]
           : Object.keys(tools),
-      })) as { finishReason?: Promise<unknown> };
+      })) as { fullStream: AsyncIterable<unknown> };
 
-      // Return run status to idle once the stream settles, without blocking
-      // the caller from draining `fullStream`.
-      void Promise.resolve(output.finishReason)
-        .catch(() => undefined)
-        .finally(() => this.#markIdle());
+      // Mark the run idle when the caller finishes draining `fullStream`. We
+      // deliberately avoid reading `output.finishReason` here: touching it
+      // eagerly consumes the underlying stream into a buffer, which collapses
+      // incremental chunk timing (e.g. live tool-input deltas) for the
+      // consumer. Instead, wrap the stream so idle is marked once iteration
+      // completes, preserving the agent's natural streaming cadence.
+      const markIdle = () => this.#markIdle();
+      const originalStream = output.fullStream;
+      const wrappedStream = (async function* () {
+        try {
+          for await (const chunk of originalStream) {
+            yield chunk;
+          }
+        } finally {
+          markIdle();
+        }
+      })();
 
-      return output;
+      // Preserve the original output object (and its lazy getters like
+      // `finishReason`/`text`) while substituting the idle-tracking stream.
+      return new Proxy(output as object, {
+        get(target, prop, receiver) {
+          if (prop === 'fullStream') return wrappedStream;
+          return Reflect.get(target, prop, receiver);
+        },
+      });
     } catch (error) {
       this.#markIdle();
       throw error;
     }
+  }
+
+  /**
+   * Dispatch a run through the agent's live thread-stream runtime
+   * (`agent.sendSignal` over the thread PubSub topic) rather than the buffered
+   * `agent.stream()` form used by {@link signalStream}.
+   *
+   * The session composes the run — v1 toolsets (including session-owned task
+   * tools), harness request context, mode/model resolution, and yolo-aware
+   * approval gating — but does NOT subscribe to or consume the thread stream
+   * itself. Exactly one consumer must project the thread's chunk stream into
+   * display events; during the HarnessCompat era that is the legacy harness's
+   * existing agent-thread subscription. Creating a second consumer here would
+   * double-emit every display event (e.g. each `tool_input_delta` appended
+   * twice corrupts the partial-args JSON buffer and breaks live rendering).
+   */
+  async signalThread({
+    content,
+    requestContext: requestContextInput,
+    ifActive,
+    ifIdle,
+  }: {
+    content: string;
+    requestContext?: RequestContext;
+    ifActive?: { attributes?: Record<string, unknown> };
+    ifIdle?: { attributes?: Record<string, unknown> };
+  }): Promise<{ accepted: boolean; runId: string | null }> {
+    if (!this.#resolveAgent) {
+      throw new Error('Harness session cannot signal because no agent resolver is configured');
+    }
+
+    const agent = this.#agent;
+    const signal = createSignal({ type: 'user', tagName: 'user', contents: content });
+    const streamOptions = await this.#buildThreadStreamOptions(requestContextInput);
+
+    const result = agent.sendSignal(signal, {
+      resourceId: this.#resourceId,
+      threadId: this.#threadId,
+      ifActive,
+      ifIdle: { ...ifIdle, streamOptions },
+    } as Parameters<Agent['sendSignal']>[1]);
+
+    return { accepted: true, runId: result.runId ?? null };
+  }
+
+  /**
+   * Create a live subscription to this session's thread stream. The session
+   * owns subscription creation; the caller is the single consumer responsible
+   * for draining `.stream` (projecting chunks into display events) and for
+   * `unsubscribe()`/`abort()` lifecycle. Always returns a fresh subscription —
+   * idempotency/cleanup across thread switches is the consumer's concern.
+   */
+  async subscribeToThreadStream(): Promise<Awaited<ReturnType<Agent['subscribeToThread']>>> {
+    const subscription = await this.#agent.subscribeToThread({
+      resourceId: this.#resourceId,
+      threadId: this.#threadId,
+    });
+    this.#threadSubscription = subscription;
+    return subscription;
+  }
+
+  /** The most recent thread-stream subscription created by this session, if any. */
+  get threadSubscription(): Awaited<ReturnType<Agent['subscribeToThread']>> | null {
+    return this.#threadSubscription;
+  }
+
+  /** Build the per-run stream options for {@link signalThread}, mirroring the
+   * legacy harness contract (composed harness toolsets, request context,
+   * multi-step round-trips, yolo-aware approval gating, abort signal). */
+  async #buildThreadStreamOptions(requestContextInput?: RequestContext): Promise<Record<string, unknown>> {
+    this.#abortController ??= new AbortController();
+    const requestContext = await this.#buildRequestContext(requestContextInput);
+    const agentTools = await this.#agent.listTools({ requestContext });
+    const tools = buildSessionToolsets({
+      agentTools,
+      modeOverrides: this.#getToolOverrides(),
+      builtInTools: buildHarnessBuiltInTools(this),
+    });
+    const model = this.#resolveModel ? await this.#resolveModel(this.#modelId) : undefined;
+    const isYolo = (this.#state as { yolo?: unknown }).yolo === true;
+    return {
+      memory: { thread: this.#threadId, resource: this.#resourceId },
+      abortSignal: this.#abortController.signal,
+      requestContext,
+      maxSteps: 1000,
+      savePerStep: false,
+      requireToolApproval: !isYolo,
+      modelSettings: { temperature: 1 },
+      ...(model ? { model } : {}),
+      toolsets: { harness: tools },
+    };
   }
 
   setMode(mode: HarnessMode) {
@@ -825,8 +957,11 @@ export class Session<TState = {}> {
     return defaults as Partial<TState>;
   }
 
-  async #buildRequestContext(): Promise<RequestContext> {
-    const overlay = buildHarnessRequestContext({ harnessContext: this.#createHarnessContext() });
+  async #buildRequestContext(input?: RequestContext): Promise<RequestContext> {
+    const overlay = buildHarnessRequestContext({
+      harnessContext: this.#createHarnessContext(),
+      ...(input ? { base: input } : {}),
+    });
     await this.#getResolvedWorkspace(overlay);
 
     return overlay;

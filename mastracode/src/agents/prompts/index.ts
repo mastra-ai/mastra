@@ -44,7 +44,7 @@ const modePrompts: Record<string, string | ((ctx: PromptContext) => string)> = {
  */
 export function buildFullPrompt(ctx: PromptContext): string {
   // Determine whether web search tools are available
-  const modelId = ctx.state?.currentModelId as string | undefined;
+  const modelId = (ctx.modelId ?? (ctx.state?.currentModelId as string | undefined)) || undefined;
   const hasWebSearch = hasTavilyKey() || (!!modelId && modelId.startsWith('anthropic/'));
 
   // Collect per-tool deny rules so guidance omits denied tools

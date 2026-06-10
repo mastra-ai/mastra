@@ -1213,12 +1213,29 @@ describe('headless mode — thread control', () => {
       setModelId: vi.fn(),
       getState: vi.fn(() => ({})),
       setState: vi.fn(async () => {}),
+      // Execution routes through the v1 session (Step 4): provide a minimal
+      // drainable stream so the headless `sendMessage('Hello')` completes.
+      signalStream: vi.fn(async () => ({
+        fullStream: (async function* () {
+          yield { type: 'finish', payload: { stepResult: { reason: 'stop' } } };
+        })(),
+      })),
+      // The session owns thread-stream subscription creation; HarnessCompat
+      // adopts it as the single consumed display stream on attach.
+      subscribeToThreadStream: vi.fn(async () => ({
+        stream: (async function* () {})(),
+        activeRunId: () => null,
+        unsubscribe: () => {},
+        abort: () => {},
+      })),
     };
     const harnessV1 = {
       init: vi.fn(async () => {}),
       listSessions: vi.fn(async () => [session]),
       session: vi.fn(async () => session),
       getMode: vi.fn(() => ({ id: 'default', description: 'Default', agentId: 'test-agent' })),
+      // Task-state projection subscribes to the v1 harness in init().
+      subscribe: vi.fn(() => () => {}),
     };
     const harness = new HarnessCompat(
       {

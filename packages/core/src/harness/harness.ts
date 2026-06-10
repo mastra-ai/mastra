@@ -1701,12 +1701,29 @@ export class Harness<TState = {}> {
     return `${agent.id}:${this.resourceId}:${threadId}`;
   }
 
-  private async ensureAgentThreadSubscription(agent: Agent, threadId: string): Promise<void> {
-    const key = this.getAgentThreadSubscriptionKey(agent, threadId);
+  protected async ensureAgentThreadSubscription(agent: Agent, threadId: string): Promise<void> {
+    await this.adoptAgentThreadSubscription(this.getAgentThreadSubscriptionKey(agent, threadId), () =>
+      agent.subscribeToThread({ resourceId: this.resourceId, threadId }),
+    );
+  }
+
+  /**
+   * Install a thread-stream subscription as THE single consumed stream for
+   * display projection. Idempotent per key; replacing cleans up the previous
+   * subscription so exactly one consumer is ever draining a thread's chunks
+   * (a second consumer would double-emit every display event).
+   *
+   * Subclasses (HarnessCompat) use this to adopt a subscription created by a
+   * Harness v1 session instead of one created by this legacy harness.
+   */
+  protected async adoptAgentThreadSubscription(
+    key: string,
+    subscribe: () => Promise<AgentThreadSubscription<any>>,
+  ): Promise<void> {
     if (this.agentThreadSubscriptionKey === key && this.agentThreadSubscription) return;
 
     this.cleanupAgentThreadSubscription();
-    const subscription = await agent.subscribeToThread({ resourceId: this.resourceId, threadId });
+    const subscription = await subscribe();
     this.agentThreadSubscription = subscription;
     this.agentThreadSubscriptionKey = key;
     void this.processSubscribedThreadStream(subscription);
@@ -2513,6 +2530,20 @@ export class Harness<TState = {}> {
       error: new Error(`Observational memory ${operationType} ${stage} failed: ${error}`),
     });
     this.abort();
+  }
+
+  /**
+   * Project an externally-produced agent stream (e.g. from a Harness v1
+   * `session.signalStream()`) through this harness's display-event pipeline.
+   *
+   * Subclasses (HarnessCompat) use this to route execution onto the v1 session
+   * while reusing the established chunk → MC event projection unchanged.
+   */
+  protected async projectAgentStream(
+    response: { fullStream: AsyncIterable<any> },
+    requestContextInput?: RequestContext,
+  ): Promise<{ message: HarnessMessage; suspended?: boolean } | undefined> {
+    return this.processStream(response, requestContextInput);
   }
 
   private async processStream(
@@ -3507,7 +3538,7 @@ export class Harness<TState = {}> {
     };
   }
 
-  private emit(event: HarnessEvent): void {
+  protected emit(event: HarnessEvent): void {
     // Update display state based on the event (before dispatching to listeners)
     this.applyDisplayStateUpdate(event);
 

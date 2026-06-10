@@ -399,12 +399,17 @@ export function resolveModel(
 export function getDynamicModel({ requestContext }: { requestContext: RequestContext }): ResolvedModel {
   const harnessContext = requestContext.get('harness') as HarnessRequestContext<any> | undefined;
 
-  const modelId = harnessContext?.state?.currentModelId;
+  // Read identity state in a way that works under both the legacy harness
+  // (`state.currentModelId`) and Harness v1 (`getState().currentModelId`, with
+  // the authoritative model surfaced as the top-level `modelId` field).
+  const harnessState = harnessContext?.getState?.() ?? harnessContext?.state;
+  const modelId =
+    harnessState?.currentModelId ?? (harnessContext as { modelId?: string } | undefined)?.modelId;
   if (!modelId) {
     throw new Error('No model selected. Use /models to select a model first.');
   }
 
-  const thinkingLevel = harnessContext?.state?.thinkingLevel as ThinkingLevel | undefined;
+  const thinkingLevel = harnessState?.thinkingLevel as ThinkingLevel | undefined;
 
   return resolveModel(modelId, { thinkingLevel, remapForCodexOAuth: true, requestContext });
 }

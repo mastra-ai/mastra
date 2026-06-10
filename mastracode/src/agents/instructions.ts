@@ -10,6 +10,10 @@ export async function getDynamicInstructions({ requestContext }: { requestContex
   const state = harnessContext?.getState?.();
   const modeId = harnessContext?.modeId ?? 'build';
   const projectPath = state?.projectPath ?? process.cwd();
+  // v1 surfaces the authoritative model as the top-level `modelId`; legacy
+  // carries it in `state.currentModelId`. Prefer state, fall back to v1 field.
+  const modelId =
+    state?.currentModelId || (harnessContext as { modelId?: string } | undefined)?.modelId || undefined;
 
   const promptCtx: PromptContext = {
     projectPath,
@@ -19,7 +23,7 @@ export async function getDynamicInstructions({ requestContext }: { requestContex
     commonBinaries: await detectCommonBinariesAsync(),
     date: new Date().toISOString().split('T')[0]!,
     mode: modeId,
-    modelId: state?.currentModelId || undefined,
+    modelId,
     activePlan: state?.activePlan ?? null,
     modeId: modeId,
     currentDate: new Date().toISOString().split('T')[0]!,

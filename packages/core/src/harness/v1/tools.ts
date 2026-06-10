@@ -110,6 +110,42 @@ function taskSummary(tasks: HarnessTaskRecord[]) {
   };
 }
 
+/**
+ * Format a task_check summary into the human-readable `content` string the
+ * MastraCode TUI renders inline. Mirrors the legacy harness task_check output
+ * so display parity holds when execution runs through the v1 session.
+ */
+function formatTaskCheck(summary: ReturnType<typeof taskSummary>): string {
+  const s = summary.summary;
+  if (!s.hasTasks) {
+    return 'No tasks found. Consider using task_write to create a task list for complex work.';
+  }
+
+  const inProgressTasks = summary.tasks.filter(t => t.status === 'in_progress');
+  const pendingTasks = summary.tasks.filter(t => t.status === 'pending');
+
+  let response = `Task Status: [${s.completed}/${s.total} completed]\n`;
+  response += `- Completed: ${s.completed}\n`;
+  response += `- In Progress: ${s.inProgress}\n`;
+  response += `- Pending: ${s.pending}\n`;
+  response += `\nAll tasks completed: ${s.allCompleted ? 'YES' : 'NO'}`;
+
+  if (!s.allCompleted) {
+    response += '\n\nIncomplete tasks:';
+    if (inProgressTasks.length > 0) {
+      response += '\n\nIn Progress:';
+      for (const t of inProgressTasks) response += `\n- ${t.id}: ${t.content}`;
+    }
+    if (pendingTasks.length > 0) {
+      response += '\n\nPending:';
+      for (const t of pendingTasks) response += `\n- ${t.id}: ${t.content}`;
+    }
+    response += '\n\nContinue working on these tasks before ending.';
+  }
+
+  return response;
+}
+
 function getTasks(session: AnySession): HarnessTaskRecord[] {
   const state = session.getState() as TaskState;
   return (state.tasks ?? []).map(task => ({ ...task }));
@@ -190,7 +226,8 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
       execute: async (_input, context) => {
         try {
           assertOwningSession(session, context);
-          return taskSummary(getTasks(session));
+          const summary = taskSummary(getTasks(session));
+          return { content: formatTaskCheck(summary), ...summary };
         } catch (error) {
           return recoverableError(error);
         }
