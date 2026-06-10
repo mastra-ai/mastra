@@ -4,15 +4,31 @@ import type { WorkflowRunState } from '@mastra/core/workflows';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type * as XyFlowReact from '@xyflow/react';
 import { http, HttpResponse } from 'msw';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { useWorkflowSelectedStep } from '../../context/use-workflow-selected-step';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { WorkflowSelectedStepProvider } from '../../context/workflow-selected-step-context';
 import { WorkflowGraph } from '../workflow-graph';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { server } from '@/test/msw-server';
+
+const reactFlowViewport = vi.hoisted(() => ({
+  getNodes: vi.fn(),
+  setCenter: vi.fn(),
+}));
+
+vi.mock('@xyflow/react', async importOriginal => {
+  const actual = (await importOriginal()) as typeof XyFlowReact;
+
+  return {
+    ...actual,
+    useReactFlow: () => reactFlowViewport,
+  };
+});
 
 const BASE_URL = 'http://localhost:4111';
 const WORKFLOW_ID = 'wf';
@@ -25,7 +41,21 @@ function stubRunById(runId: string, response: GetWorkflowRunByIdResponse) {
   server.use(http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs/${runId}`, () => HttpResponse.json(response)));
 }
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  reactFlowViewport.getNodes.mockReset();
+  reactFlowViewport.setCenter.mockReset();
+});
+
+function SelectStepButton({ stepId }: { stepId: string }) {
+  const { setSelectedStepId } = useWorkflowSelectedStep();
+
+  return (
+    <button type="button" onClick={() => setSelectedStepId(stepId)}>
+      Select {stepId}
+    </button>
+  );
+}
 
 function stepGraph(stepId: string): GetWorkflowResponse['stepGraph'] {
   return [{ type: 'step', step: { id: stepId, description: '' } }] as GetWorkflowResponse['stepGraph'];
@@ -43,13 +73,14 @@ const workflow = {
   stepGraph: stepGraph('static-step'),
 } as unknown as GetWorkflowResponse;
 
-function Harness({ snapshot }: { snapshot: WorkflowRunState }) {
+function Harness({ snapshot, selectableStepId }: { snapshot: WorkflowRunState; selectableStepId?: string }) {
   // The graph keys its React Flow node/edge state on the route-driven snapshot.runId,
   // mirroring how WorkflowLayout builds the snapshot from useParams().runId.
   return (
     <WorkflowSelectedStepProvider>
       <WorkflowRunContext.Provider value={{ snapshot } as never}>
         <WorkflowGraph workflowId="wf" workflow={workflow} />
+        {selectableStepId && <SelectStepButton stepId={selectableStepId} />}
       </WorkflowRunContext.Provider>
     </WorkflowSelectedStepProvider>
   );
@@ -127,7 +158,7 @@ describe('WorkflowGraph', () => {
     expect(second).not.toBe(first);
   });
 
-  it('marks graph nodes as hovered from pointer interactions', () => {
+  it('marks graph nodes as hovered from pointer interactions', async () => {
     render(<Harness snapshot={makeSnapshot('run-a', 'step-a')} />);
 
     const node = screen.getByTestId('workflow-default-node');
@@ -135,10 +166,34 @@ describe('WorkflowGraph', () => {
     expect(node.getAttribute('data-workflow-step-hovered')).toBeNull();
 
     fireEvent.mouseEnter(node);
-    expect(node.getAttribute('data-workflow-step-hovered')).toBe('true');
+    await waitFor(() => {
+      expect(screen.getByTestId('workflow-default-node').getAttribute('data-workflow-step-hovered')).toBe('true');
+    });
 
-    fireEvent.mouseLeave(node);
-    expect(node.getAttribute('data-workflow-step-hovered')).toBeNull();
+    fireEvent.mouseLeave(screen.getByTestId('workflow-default-node'));
+    await waitFor(() => {
+      expect(screen.getByTestId('workflow-default-node').getAttribute('data-workflow-step-hovered')).toBeNull();
+    });
+  });
+
+  it('focuses and zooms the graph viewport when a workflow step is selected', async () => {
+    reactFlowViewport.getNodes.mockReturnValue([
+      {
+        id: 'step-a',
+        data: { label: 'step-a' },
+        measured: { width: 300, height: 120 },
+        position: { x: 40, y: 80 },
+      },
+    ] as never);
+
+    render(<Harness snapshot={makeSnapshot('run-a', 'step-a')} selectableStepId="step-a" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select step-a' }));
+
+    await waitFor(() => {
+      expect(reactFlowViewport.setCenter).toHaveBeenCalledWith(190, 140, { duration: 300, zoom: 1 });
+    });
+    expect(document.activeElement).toBe(screen.getByTestId('workflow-graph-viewport'));
   });
 
   it('clears run-derived node status when returning from a run route to the base workflow route', async () => {
