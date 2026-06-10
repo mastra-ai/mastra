@@ -145,7 +145,8 @@ console.log(`Status: ${summary2.status}`)
             name: 'fromExperimentId',
             type: 'string',
             isOptional: true,
-            description: 'Prior experiment whose per-item results supply the source trace for each item ID.',
+            description:
+              'Prior experiment whose per-item results supply the source trace for each item ID. Must reference a live (non-replay) experiment: replay runs record no tool spans, so pointing at one is rejected at setup.',
           },
           {
             name: 'onMiss',
@@ -276,7 +277,7 @@ console.log(`Status: ${summary2.status}`)
                     type: 'ToolReplayReport',
                     isOptional: true,
                     description:
-                      'Tool replay divergence summary. Only present when `toolReplay` was active for the item. Contains `sourceTraceId`, `totalRecorded`, `replayedCount`, `misses`, `unconsumed`, `argMismatches`, plus the recording-quality signals `redactedPayloadCount` (recorded payloads containing the sensitive-data redaction marker) and `staleRecording` (the recording came from an older version of the dataset item). Items that resolve no recording fail with a `TOOL_REPLAY_NO_RECORDING` error; replay misses fail with `TOOL_REPLAY_MISS`.',
+                      'Tool replay divergence summary. Only present when `toolReplay` was active for the item. Contains `sourceTraceId`, `totalRecorded`, `replayedCount`, `misses`, `unconsumed`, `argMismatches`, plus the recording-quality signals `redactedPayloadCount` (recorded payloads containing the sensitive-data redaction marker) and `staleRecording` (the recording came from an older version of the dataset item). Stored results (`listExperimentResults()` and the HTTP API) carry the same report inside the item output as `output.toolReplay` instead of this field. Items that resolve no recording fail with a `TOOL_REPLAY_NO_RECORDING` error; replay misses fail with `TOOL_REPLAY_MISS`. Neither failure is retried.',
                   },
                   {
                     name: 'scores',

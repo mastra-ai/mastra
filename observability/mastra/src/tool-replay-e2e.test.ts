@@ -184,6 +184,86 @@ describe('tool replay end-to-end through the real tracing pipeline', () => {
     expect(serializedResults).toContain('live:second:2');
   });
 
+  it('fails a replay miss with the report and trace link intact through real persistence', async () => {
+    let liveCalls = 0;
+    const makeLookupTool = () =>
+      createTool({
+        id: 'lookup',
+        description: 'Look up a record in an external system',
+        inputSchema: z.object({ recordId: z.string() }),
+        execute: async ({ recordId }) => {
+          liveCalls++;
+          return { value: `live:${recordId}` };
+        },
+      });
+
+    // The recorder makes ONE tool call; the replayer makes TWO — its second
+    // call has no recorded event and must miss.
+    const recorderAgent = new Agent({
+      id: 'replay-miss-recorder',
+      name: 'Replay Miss Recorder',
+      instructions: 'Use the lookup tool.',
+      model: createToolCallingModel('lookup', ['{"recordId":"first"}']),
+      tools: { lookup: makeLookupTool() },
+    });
+    const replayerAgent = new Agent({
+      id: 'replay-miss-replayer',
+      name: 'Replay Miss Replayer',
+      instructions: 'Use the lookup tool.',
+      model: createToolCallingModel('lookup', ['{"recordId":"first"}', '{"recordId":"second"}']),
+      tools: { lookup: makeLookupTool() },
+    });
+
+    const storage = new MockStore();
+    const storageExporter = new MastraStorageExporter({ maxBatchWaitMs: 50 });
+    const mastra = new Mastra({
+      storage,
+      agents: { [recorderAgent.id]: recorderAgent, [replayerAgent.id]: replayerAgent },
+      logger: false,
+      observability: new Observability({
+        configs: { default: { serviceName: 'tool-replay-e2e', exporters: [storageExporter] } },
+      }),
+    });
+
+    const recorded = await runExperiment(mastra, {
+      data: [{ id: 'item-1', input: 'Look up first' }],
+      targetType: 'agent',
+      targetId: 'replay-miss-recorder',
+    });
+    expect(recorded.succeededCount).toBe(1);
+    expect(liveCalls).toBe(1);
+    await storageExporter.flush();
+
+    const replayed = await runExperiment(mastra, {
+      data: [{ id: 'item-1', input: 'Look up first and second' }],
+      targetType: 'agent',
+      targetId: 'replay-miss-replayer',
+      toolReplay: { fromExperimentId: recorded.experimentId },
+    });
+
+    expect(replayed.failedCount).toBe(1);
+    expect(liveCalls).toBe(1); // the miss never executed live
+    const result = replayed.results[0]!;
+    expect(result.error?.code).toBe('TOOL_REPLAY_MISS');
+    expect(result.toolReplay?.replayedCount).toBe(1);
+    expect(result.toolReplay?.misses).toHaveLength(1);
+
+    // The failed item stays debuggable over the API: the persisted row keeps
+    // both the divergence report and the replay run's trace link.
+    const experimentsStore = await storage.getStore('experiments');
+    const persisted = await experimentsStore!.listExperimentResults({
+      experimentId: replayed.experimentId,
+      pagination: { page: 0, perPage: false },
+    });
+    const row = persisted.results[0]!;
+    expect((row.output as { toolReplay?: { misses: unknown[] } }).toolReplay?.misses).toHaveLength(1);
+    expect(row.traceId).toBeTruthy();
+    await storageExporter.flush();
+    const observabilityStore = await storage.getStore('observability');
+    const missTrace = await observabilityStore!.getTrace({ traceId: row.traceId! });
+    expect(missTrace?.spans.length).toBeGreaterThan(0);
+  });
+
   it('replays redacted recordings: sensitive fields are [REDACTED] in spans and replay returns them as recorded', async () => {
     // The default Observability config applies a SensitiveDataFilter to span
     // payloads (fields like apiKey, token, secret, key, ...). Recordings are

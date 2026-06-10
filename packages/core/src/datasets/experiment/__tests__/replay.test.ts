@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { RETHROWN_TOOL_ERROR_NAMES } from '../../../loop/workflows/agentic-execution/rethrown-error-names';
+import { RETHROWN_TOOL_ERROR_NAMES } from '../../../loop/workflows/errors';
 import { SpanType } from '../../../observability';
 import type { SpanRecord } from '../../../storage/domains/observability/tracing';
 import type { ToolHookContext } from '../../../tools/types';
@@ -14,6 +14,8 @@ function makeSpan(partial: Partial<SpanRecord> & { spanId: string }): SpanRecord
     spanType: SpanType.TOOL_CALL,
     isEvent: false,
     startedAt: new Date('2026-01-01T00:00:00Z'),
+    // Completed by default — extraction skips un-ended (in-flight) spans.
+    endedAt: new Date('2026-01-01T00:00:01Z'),
     createdAt: new Date('2026-01-01T00:00:00Z'),
     updatedAt: new Date('2026-01-01T00:00:00Z'),
     ...partial,
@@ -111,6 +113,25 @@ describe('extractToolReplayEvents', () => {
     ]);
 
     expect(events.map(e => e.toolName)).toEqual(['lookup']);
+  });
+
+  it('falls back to entityId when entityName is an empty string', () => {
+    const events = extractToolReplayEvents([
+      makeSpan({ spanId: 'named-by-id', entityId: 'lookup', entityName: '', startedAt: new Date(1000) }),
+    ]);
+
+    expect(events.map(e => e.toolName)).toEqual(['lookup']);
+  });
+
+  it('skips un-ended spans — a crashed or in-flight recording must not replay empty outputs', () => {
+    const events = extractToolReplayEvents([
+      // Exporters persist span creates immediately; a crash before SPAN_ENDED
+      // leaves endedAt null and output null.
+      toolSpan('in-flight', 'lookup', 1000, { endedAt: null, output: null }),
+      toolSpan('done', 'lookup', 2000, { output: { value: 'ok' } }),
+    ]);
+
+    expect(events.map(e => e.spanId)).toEqual(['done']);
   });
 
   it('counts recorded payloads carrying the sensitive-data redaction marker', () => {

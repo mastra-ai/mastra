@@ -1,4 +1,4 @@
-import { RETHROWN_TOOL_ERROR_NAMES } from '../../loop/workflows/agentic-execution/rethrown-error-names';
+import { RETHROWN_TOOL_ERROR_NAMES } from '../../loop/workflows/errors';
 import { SpanType } from '../../observability';
 import type { SpanRecord } from '../../storage/domains/observability/tracing';
 import type { ToolHooks } from '../../tools/types';
@@ -187,7 +187,16 @@ export function extractToolReplayEvents(spans: SpanRecord[]): ToolReplayEvent[] 
     spansById.set(span.spanId, span);
   }
 
-  const toolSpans = spans.filter(span => isToolSpan(span) && !hasToolSpanAncestor(span, spansById));
+  const toolSpans = spans.filter(
+    span =>
+      isToolSpan(span) &&
+      // Exporters persist span creates immediately, so a crashed or still-running
+      // recorded run leaves tool spans with endedAt null and no output. Replaying
+      // those would feed the agent fabricated empty observations — skip them; the
+      // resulting miss (or unconsumed gap) is visible in the report instead.
+      span.endedAt != null &&
+      !hasToolSpanAncestor(span, spansById),
+  );
 
   // Adapter sort order is not contractual — order by startedAt defensively.
   // startedAt has ms resolution, so parallel calls can tie; break ties by
@@ -201,7 +210,9 @@ export function extractToolReplayEvents(spans: SpanRecord[]): ToolReplayEvent[] 
 
   const events: ToolReplayEvent[] = [];
   for (const span of toolSpans) {
-    const toolName = span.entityName ?? span.entityId;
+    // `||` not `??`: an empty-string entityName should fall back to entityId
+    // rather than dropping the event.
+    const toolName = span.entityName || span.entityId;
     if (!toolName) continue;
     events.push({
       toolName,
