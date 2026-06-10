@@ -11,3 +11,15 @@ configurable idle timeout, `ISOLATED`/`PRIVATE` network isolation, custom base
 images via the Railway template builder, forking a running sandbox into a new
 one, and reattaching to an existing sandbox by ID. Also exports
 `railwaySandboxProvider` for registration with `MastraEditor`.
+
+```typescript
+import { Workspace } from '@mastra/core/workspace';
+import { RailwaySandbox } from '@mastra/railway';
+
+const workspace = new Workspace({
+  sandbox: new RailwaySandbox({
+    idleTimeoutMinutes: 30,
+    networkIsolation: 'PRIVATE',
+  }),
+});
+```

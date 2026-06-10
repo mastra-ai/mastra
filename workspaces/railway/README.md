@@ -106,17 +106,17 @@ await handle.kill();
 
 ## Options
 
-| Option               | Type                       | Description                                                                                  |
-| -------------------- | -------------------------- | -------------------------------------------------------------------------------------------- |
-| `token`              | `string`                   | Railway API token. Falls back to `RAILWAY_API_TOKEN`.                                         |
-| `environmentId`      | `string`                   | Railway environment ID. Falls back to `RAILWAY_ENVIRONMENT_ID`.                              |
-| `sandboxId`          | `string`                   | Reattach to an existing Railway sandbox by ID instead of creating one.                        |
-| `idleTimeoutMinutes` | `number`                   | Minutes a sandbox can sit idle before Railway destroys it. Range/default depend on the plan. |
-| `networkIsolation`   | `'ISOLATED' \| 'PRIVATE'`  | Network mode. `ISOLATED` (default) is outbound-only; `PRIVATE` joins the private network.     |
-| `env`                | `Record<string, string>`   | Environment variables baked into the sandbox.                                                 |
+| Option               | Type                                           | Description                                                                                      |
+| -------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `token`              | `string`                                       | Railway API token. Falls back to `RAILWAY_API_TOKEN`.                                            |
+| `environmentId`      | `string`                                       | Railway environment ID. Falls back to `RAILWAY_ENVIRONMENT_ID`.                                  |
+| `sandboxId`          | `string`                                       | Reattach to an existing Railway sandbox by ID instead of creating one.                           |
+| `idleTimeoutMinutes` | `number`                                       | Minutes a sandbox can sit idle before Railway destroys it. Range/default depend on the plan.     |
+| `networkIsolation`   | `'ISOLATED' \| 'PRIVATE'`                      | Network mode. `ISOLATED` (default) is outbound-only; `PRIVATE` joins the private network.        |
+| `env`                | `Record<string, string>`                       | Environment variables baked into the sandbox.                                                    |
 | `template`           | `SandboxTemplate \| (base) => SandboxTemplate` | Provision from a custom base image built with the Railway template builder. Ignored on reattach. |
-| `timeout`            | `number`                   | Default command timeout in milliseconds. Commands run until they exit when omitted.           |
-| `instructions`       | `string \| (opts) => string` | Override the default agent instructions.                                                    |
+| `timeout`            | `number`                                       | Default command timeout in milliseconds. Commands run until they exit when omitted.              |
+| `instructions`       | `string \| (opts) => string`                   | Override the default agent instructions.                                                         |
 
 ## Editor provider
 

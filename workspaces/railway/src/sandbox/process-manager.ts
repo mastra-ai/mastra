@@ -24,11 +24,7 @@ export const LOG_PREFIX = '[RailwaySandbox]';
  * variables, since Railway's `exec` takes neither per-call. Env vars are
  * exported via `env` so they apply to the command's process group.
  */
-export function buildSpawnCommand(
-  command: string,
-  cwd?: string,
-  env: Record<string, string> = {},
-): string {
+export function buildSpawnCommand(command: string, cwd?: string, env: Record<string, string> = {}): string {
   const envAssignments = Object.entries(env)
     .map(([key, value]) => `${key}=${shellQuote(value)}`)
     .join(' ');

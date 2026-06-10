@@ -258,10 +258,7 @@ export class RailwaySandbox extends MastraSandbox {
    * pre-built `SandboxTemplate` or a builder callback over `Sandbox.template()`.
    * Calls `.build()` so the recipe is materialised before `Sandbox.create()`.
    */
-  private async _resolveTemplate(buildOptions: {
-    token?: string;
-    environmentId?: string;
-  }): Promise<SandboxTemplate> {
+  private async _resolveTemplate(buildOptions: { token?: string; environmentId?: string }): Promise<SandboxTemplate> {
     const option = this._templateOption!;
     const template = typeof option === 'function' ? option(Sandbox.template()) : option;
     this.logger.debug(`${LOG_PREFIX} Building Railway sandbox template for: ${this.id}`);

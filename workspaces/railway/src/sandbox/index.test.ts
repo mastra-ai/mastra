@@ -18,94 +18,87 @@ import { RailwaySandbox } from './index';
 // Mock the Railway SDK
 // =============================================================================
 
-const {
-  mockSandbox,
-  mockForkedSandbox,
-  mockTemplate,
-  mockCreate,
-  mockConnect,
-  mockTemplateFactory,
-  makeExecHandle,
-} = vi.hoisted(() => {
-  /**
-   * Build a fake ExecHandle: a Promise that resolves to an ExecResult and
-   * exposes `kill`. Invokes onStdout/onStderr asynchronously to mimic the
-   * real SDK, which streams chunks after the handle is returned.
-   */
-  const makeExecHandle = (
-    result: { exitCode: number | null; stdout?: string; stderr?: string; timedOut?: boolean; truncated?: boolean },
-    opts?: { onStdout?: (c: string) => void; onStderr?: (c: string) => void },
-  ) => {
-    queueMicrotask(() => {
-      if (result.stdout) opts?.onStdout?.(result.stdout);
-      if (result.stderr) opts?.onStderr?.(result.stderr);
-    });
-    const execResult = {
-      exitCode: result.exitCode,
-      stdout: result.stdout ?? '',
-      stderr: result.stderr ?? '',
-      truncated: result.truncated ?? false,
-      timedOut: result.timedOut ?? false,
+const { mockSandbox, mockForkedSandbox, mockTemplate, mockCreate, mockConnect, mockTemplateFactory, makeExecHandle } =
+  vi.hoisted(() => {
+    /**
+     * Build a fake ExecHandle: a Promise that resolves to an ExecResult and
+     * exposes `kill`. Invokes onStdout/onStderr asynchronously to mimic the
+     * real SDK, which streams chunks after the handle is returned.
+     */
+    const makeExecHandle = (
+      result: { exitCode: number | null; stdout?: string; stderr?: string; timedOut?: boolean; truncated?: boolean },
+      opts?: { onStdout?: (c: string) => void; onStderr?: (c: string) => void },
+    ) => {
+      queueMicrotask(() => {
+        if (result.stdout) opts?.onStdout?.(result.stdout);
+        if (result.stderr) opts?.onStderr?.(result.stderr);
+      });
+      const execResult = {
+        exitCode: result.exitCode,
+        stdout: result.stdout ?? '',
+        stderr: result.stderr ?? '',
+        truncated: result.truncated ?? false,
+        timedOut: result.timedOut ?? false,
+      };
+      const promise = Promise.resolve(execResult) as Promise<typeof execResult> & {
+        kill: ReturnType<typeof vi.fn>;
+      };
+      promise.kill = vi.fn().mockResolvedValue(true);
+      return promise;
     };
-    const promise = Promise.resolve(execResult) as Promise<typeof execResult> & {
-      kill: ReturnType<typeof vi.fn>;
+
+    const mockForkedSandbox = {
+      id: 'rw-forked-456',
+      status: 'RUNNING',
+      environmentId: 'env-1',
+      region: 'us-west',
+      networkIsolation: 'ISOLATED',
+      idleTimeoutMinutes: 30,
+      createdAt: '2026-01-02T00:00:00.000Z',
+      exec: vi.fn((_command: string, options?: { onStdout?: (c: string) => void; onStderr?: (c: string) => void }) =>
+        makeExecHandle({ exitCode: 0, stdout: 'ok' }, options),
+      ),
+      destroy: vi.fn().mockResolvedValue(undefined),
     };
-    promise.kill = vi.fn().mockResolvedValue(true);
-    return promise;
-  };
 
-  const mockForkedSandbox = {
-    id: 'rw-forked-456',
-    status: 'RUNNING',
-    environmentId: 'env-1',
-    region: 'us-west',
-    networkIsolation: 'ISOLATED',
-    idleTimeoutMinutes: 30,
-    createdAt: '2026-01-02T00:00:00.000Z',
-    exec: vi.fn((_command: string, options?: { onStdout?: (c: string) => void; onStderr?: (c: string) => void }) =>
-      makeExecHandle({ exitCode: 0, stdout: 'ok' }, options),
-    ),
-    destroy: vi.fn().mockResolvedValue(undefined),
-  };
+    const mockSandbox = {
+      id: 'rw-sandbox-123',
+      status: 'RUNNING',
+      environmentId: 'env-1',
+      region: 'us-west',
+      networkIsolation: 'ISOLATED',
+      idleTimeoutMinutes: 30,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      exec: vi.fn((_command: string, options?: { onStdout?: (c: string) => void; onStderr?: (c: string) => void }) =>
+        makeExecHandle({ exitCode: 0, stdout: 'ok' }, options),
+      ),
+      fork: vi.fn().mockResolvedValue(mockForkedSandbox),
+      destroy: vi.fn().mockResolvedValue(undefined),
+    };
 
-  const mockSandbox = {
-    id: 'rw-sandbox-123',
-    status: 'RUNNING',
-    environmentId: 'env-1',
-    region: 'us-west',
-    networkIsolation: 'ISOLATED',
-    idleTimeoutMinutes: 30,
-    createdAt: '2026-01-01T00:00:00.000Z',
-    exec: vi.fn((_command: string, options?: { onStdout?: (c: string) => void; onStderr?: (c: string) => void }) =>
-      makeExecHandle({ exitCode: 0, stdout: 'ok' }, options),
-    ),
-    fork: vi.fn().mockResolvedValue(mockForkedSandbox),
-    destroy: vi.fn().mockResolvedValue(undefined),
-  };
+    // Chainable template builder mock.
+    const mockTemplate = {
+      run: vi.fn(() => mockTemplate),
+      withPackages: vi.fn(() => mockTemplate),
+      withEnv: vi.fn(() => mockTemplate),
+      workdir: vi.fn(() => mockTemplate),
+      build: vi.fn(() => Promise.resolve(mockTemplate)),
+    };
 
-  // Chainable template builder mock.
-  const mockTemplate = {
-    run: vi.fn(() => mockTemplate),
-    withPackages: vi.fn(() => mockTemplate),
-    withEnv: vi.fn(() => mockTemplate),
-    workdir: vi.fn(() => mockTemplate),
-    build: vi.fn(() => Promise.resolve(mockTemplate)),
-  };
+    const mockCreate = vi.fn().mockResolvedValue(mockSandbox);
+    const mockConnect = vi.fn().mockResolvedValue(mockSandbox);
+    const mockTemplateFactory = vi.fn(() => mockTemplate);
 
-  const mockCreate = vi.fn().mockResolvedValue(mockSandbox);
-  const mockConnect = vi.fn().mockResolvedValue(mockSandbox);
-  const mockTemplateFactory = vi.fn(() => mockTemplate);
-
-  return {
-    mockSandbox,
-    mockForkedSandbox,
-    mockTemplate,
-    mockCreate,
-    mockConnect,
-    mockTemplateFactory,
-    makeExecHandle,
-  };
-});
+    return {
+      mockSandbox,
+      mockForkedSandbox,
+      mockTemplate,
+      mockCreate,
+      mockConnect,
+      mockTemplateFactory,
+      makeExecHandle,
+    };
+  });
 
 vi.mock('railway', () => ({
   Sandbox: {
@@ -324,7 +317,13 @@ describe('RailwaySandbox', () => {
       let killable: ReturnType<typeof makeExecHandle>;
       mockSandbox.exec.mockImplementationOnce(() => {
         // A handle that never resolves on its own, only via kill.
-        type ExecResultShape = { exitCode: number | null; stdout: string; stderr: string; truncated: boolean; timedOut: boolean };
+        type ExecResultShape = {
+          exitCode: number | null;
+          stdout: string;
+          stderr: string;
+          truncated: boolean;
+          timedOut: boolean;
+        };
         const promise = new Promise<ExecResultShape>(() => {}) as Promise<ExecResultShape> & {
           kill: ReturnType<typeof vi.fn>;
         };
