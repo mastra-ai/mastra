@@ -15,6 +15,7 @@ import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 import { bottomNav, mainNav } from '@/lib/nav/nav-items';
 import type { NavItem } from '@/lib/nav/nav-items';
+import { getStudioPluginNavSections } from '@/plugins';
 
 declare global {
   interface Window {
@@ -138,7 +139,7 @@ export function AppSidebar() {
       <ImpersonationBanner />
 
       <MainSidebar.Nav>
-        {mainNav.map(section => {
+        {[...mainNav, ...getStudioPluginNavSections()].map(section => {
           const filtered = section.items.filter(filterItem);
           const anySubActive = filtered.some(item => getIsLinkActive(item, pathname));
           const isHeaderActive = !!(section.href && pathname === section.href && !anySubActive);

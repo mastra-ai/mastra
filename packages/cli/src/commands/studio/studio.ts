@@ -36,6 +36,20 @@ function normalizeBasePath(basePath: string): string {
   return normalized;
 }
 
+function escapeHtmlAttribute(value: string): string {
+  return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+}
+
+function getStudioPluginScriptTags(): string {
+  const scripts = process.env.MASTRA_STUDIO_PLUGIN_SCRIPTS ?? '';
+  const srcs = scripts
+    .split(',')
+    .map(src => src.trim())
+    .filter(Boolean);
+
+  return srcs.map(src => `<script type="module" src="${escapeHtmlAttribute(src)}"></script>`).join('\n    ');
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -117,7 +131,8 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
     .replaceAll('%%MASTRA_TELEMETRY_DISABLED%%', process.env.MASTRA_TELEMETRY_DISABLED ?? '')
     .replaceAll('%%MASTRA_REQUEST_CONTEXT_PRESETS%%', escapeJsonForHtml(requestContextPresetsJson))
     .replaceAll('%%MASTRA_EXPERIMENTAL_UI%%', experimentalUI)
-    .replaceAll('%%MASTRA_AGENT_SIGNALS%%', agentSignals);
+    .replaceAll('%%MASTRA_AGENT_SIGNALS%%', agentSignals)
+    .replaceAll('%%MASTRA_STUDIO_PLUGIN_SCRIPTS%%', getStudioPluginScriptTags());
 
   // Pre-compress the HTML shell since it's served for every non-asset request
   const compressedHtml = gzipSync(Buffer.from(html));

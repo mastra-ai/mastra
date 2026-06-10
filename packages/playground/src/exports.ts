@@ -11,6 +11,14 @@ export {
 
 export { PlaygroundQueryClient } from './lib/tanstack-query';
 
+export {
+  getStudioPlugins,
+  registerStudioPlugin,
+  type StudioPlugin,
+  type StudioPluginNavItem,
+  type StudioPluginRoute,
+} from './plugins';
+
 export { usePlaygroundStore, useTheme, type Theme, type ResolvedTheme } from '@mastra/playground-ui';
 
 export { isWorkspaceV1Supported } from '@mastra/playground-ui/utils';

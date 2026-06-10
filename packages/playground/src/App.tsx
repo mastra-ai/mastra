@@ -109,6 +109,7 @@ import type { CrumbDef, RouteHeaderHandle } from '@/lib/route-header';
 import { PlaygroundQueryClient } from '@/lib/tanstack-query';
 import { Processors } from '@/pages/processors';
 import { Processor } from '@/pages/processors/processor';
+import { getStudioPluginRoutes } from '@/plugins';
 import Tools from '@/pages/tools';
 
 // Extend window type for Mastra config
@@ -655,6 +656,21 @@ export const routes: RouteObject[] = [
   },
 ];
 
+// eslint-disable-next-line react-refresh/only-export-components -- route metadata is covered by regression tests.
+export function getStudioRoutes(): RouteObject[] {
+  const pluginRoutes = getStudioPluginRoutes();
+  if (pluginRoutes.length === 0) return routes;
+
+  return routes.map(route => {
+    if (!route.children?.some(child => child.path === '/agents')) return route;
+
+    return {
+      ...route,
+      children: [...pluginRoutes, ...route.children],
+    };
+  });
+}
+
 function App() {
   const studioBasePath = window.MASTRA_STUDIO_BASE_PATH || '';
   const { baseUrl, headers, apiPrefix, isLoading } = useStudioConfig();
@@ -665,7 +681,7 @@ function App() {
     [baseUrl, apiPrefix],
   );
   const studioHeaders = useMemo(() => ({ ...headers, 'x-mastra-client-type': 'studio' }), [headers]);
-  const router = useMemo(() => createBrowserRouter(routes, { basename: studioBasePath }), [studioBasePath]);
+  const router = useMemo(() => createBrowserRouter(getStudioRoutes(), { basename: studioBasePath }), [studioBasePath]);
 
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
