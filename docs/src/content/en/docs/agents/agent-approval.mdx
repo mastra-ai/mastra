@@ -109,7 +109,7 @@ const stream = await agent.stream('Clean up old records', {
 })
 ```
 
-A tool's own `requireApproval` setting still takes precedence: if a tool defines its own approval rule, that rule decides for that tool and the function above does not override it. If the function throws, the call requires approval (fail-safe).
+A tool's own `requireApproval` setting still takes precedence: if a tool defines its own approval rule, that rule decides for that tool and the function above doesn't override it. If the function throws, the call requires approval (fail-safe).
 
 :::note
 
@@ -125,7 +125,7 @@ The stream emits a `tool-call-suspended` chunk with a custom payload defined by 
 
 :::note
 
-`suspend()` does not throw — return immediately after calling it (e.g. `return await suspend({ ... })`). Code after `await suspend(...)` still runs before the tool pauses.
+`suspend()` doesn't throw — return immediately after calling it (e.g. `return await suspend({ ... })`). Code after `await suspend(...)` still runs before the tool pauses.
 
 :::
 

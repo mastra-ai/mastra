@@ -1,5 +1,5 @@
 import { Button, Spinner } from '@mastra/playground-ui';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { FormProvider, useForm, useFormContext, useFormState, useWatch } from 'react-hook-form';
 import { Navigate, useNavigate, useParams } from 'react-router';
 import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu';
@@ -36,6 +36,7 @@ import { AgentBuilderEditLayout } from '@/domains/agent-builder/layouts/agent-bu
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { storedAgentToFormValues } from '@/domains/agent-builder/services/stored-agent-to-form-values';
 import { useAuthCapabilities } from '@/domains/auth/hooks/use-auth-capabilities';
+import { useAllProviderTools } from '@/domains/tool-providers/hooks/use-all-provider-tools';
 import { startViewTransition } from '@/lib/routing';
 
 export default function AgentBuilderAgentEdit() {
@@ -50,17 +51,13 @@ export default function AgentBuilderAgentEdit() {
 }
 
 const EditPageGate = () => {
-  const { agentId, storedAgent, isReady, isOwner, canWrite, initialUserMessage } = useAgentPrimitives();
+  const { agentId, storedAgent, isReady, isOwner, canWrite } = useAgentPrimitives();
 
   if (!isReady) return <AgentBuilderAgentEditSkeleton />;
   if (!storedAgent) return <Navigate to="/agent-builder/agents" replace />;
   if (!canWrite || !isOwner) return <Navigate to={`/agent-builder/agents/${agentId}/view`} replace />;
 
-  return (
-    <WizardProvider initialStep={initialUserMessage ? 'ready' : 'end'}>
-      <EditPageForm />
-    </WizardProvider>
-  );
+  return <EditPageForm />;
 };
 
 const EditPageForm = () => {
@@ -78,7 +75,8 @@ const EditPageForm = () => {
 };
 
 const EditPageBody = () => {
-  const { agentId, storedAgent, toolsData, agentsData, workflowsData, isOwner } = useAgentPrimitives();
+  const { agentId, storedAgent, toolsData, agentsData, workflowsData, isOwner, initialUserMessage } =
+    useAgentPrimitives();
   const navigate = useNavigate();
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const selectedTools = useWatch({ control, name: 'tools' });
@@ -95,18 +93,29 @@ const EditPageBody = () => {
     excludeAgentId: agentId,
   });
 
+  // While integration tools are still loading, treat tools as potentially
+  // available so the wizard's tools step isn't dropped prematurely (parity
+  // with the Tools tab gating). React Query dedupes this with the identical
+  // queries issued by `useAvailableAgentTools`.
+  const { isLoading: isIntegrationToolsLoading } = useAllProviderTools();
+
   const handleModeToggle = isOwner
     ? () => navigate(`/agent-builder/agents/${agentId}/view`, { viewTransition: true })
     : undefined;
 
   return (
-    <EditPageProvider
-      storedAgent={storedAgent!}
-      availableAgentTools={availableAgentTools}
-      onModeToggle={handleModeToggle}
+    <WizardProvider
+      initialStep={initialUserMessage ? 'ready' : 'end'}
+      hasAgentTools={availableAgentTools.length > 0 || isIntegrationToolsLoading}
     >
-      <EditPageLayout />
-    </EditPageProvider>
+      <EditPageProvider
+        storedAgent={storedAgent!}
+        availableAgentTools={availableAgentTools}
+        onModeToggle={handleModeToggle}
+      >
+        <EditPageLayout />
+      </EditPageProvider>
+    </WizardProvider>
   );
 };
 
@@ -149,17 +158,8 @@ const EditPageLayout = () => {
   // re-centers the layout.
   const shouldBeCentered = (step === 'ready' && !isBuilderReady) || (step === 'identity' && !hasMandatoryFields);
 
-  const [variant, setVariant] = useState<'centered' | 'split'>(shouldBeCentered ? 'centered' : 'split');
-
-  useEffect(() => {
-    const next = shouldBeCentered ? 'centered' : 'split';
-    if (next === variant) return;
-    startViewTransition(() => {
-      setVariant(next);
-    });
-  }, [shouldBeCentered, variant]);
-
-  const isCentered = variant === 'centered';
+  const variant = shouldBeCentered ? 'centered' : 'split';
+  const isCentered = shouldBeCentered;
   const showMobileInitialCtas = step === 'identity' && hasMandatoryFields && !isStreamRunning;
 
   return (
