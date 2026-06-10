@@ -1,4 +1,5 @@
 import type { Agent } from '../../agent';
+import type { MastraModelGateway, MastraModelGatewayInterface } from '../../llm';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
 import type { PublicSchema } from '../../schema';
@@ -7,7 +8,14 @@ import type { HarnessStorage } from '../../storage/domains/harness';
 import type { DynamicArgument } from '../../types';
 import type { Workspace, WorkspaceConfig } from '../../workspace';
 import type { HarnessMode } from './mode';
-import type { PermissionPolicy, ToolCategory, ToolCategoryResolver } from './permissions.types';
+import type {
+  PermissionPolicy,
+  PermissionRequestedCallback,
+  PermissionRules,
+  SessionGrant,
+  ToolCategory,
+  ToolCategoryResolver,
+} from './permissions.types';
 import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
 
 export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
@@ -46,6 +54,8 @@ export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
    */
   workspace?: DynamicArgument<Workspace | undefined> | WorkspaceConfig;
 
+  gateways?: Array<MastraModelGatewayInterface>;
+
   /**
    * Session lifecycle policy. `maxSubagentDepth` caps durable child session
    * creation across all subagent entry points and defaults to `1`.
@@ -63,18 +73,20 @@ export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
   subagents?: SubagentRegistryConfig;
 
   /**
-   * Resolves a model id string to a `LanguageModel`. Required when the
-   * built-in `subagent` tool is exposed (i.e. when {@link subagents} is set)
-   * so that fresh subagent runs can instantiate their model.
-   */
-  resolveModel?: ModelResolver;
-
-  /**
    * Default permission policy applied when a tool's resolved category has no
    * rule and no per-tool override. Set to `'allow'` to opt out of the gate
    * entirely; `'deny'` for a strict allow-list posture. Defaults to `'ask'`.
    */
   defaultPermissionPolicy?: PermissionPolicy;
+
+  /** Session permission rules layered above the default policy. */
+  permissionRules?: PermissionRules;
+
+  /** Initial grants for every session created by this harness. */
+  sessionGrants?: readonly SessionGrant[];
+
+  /** Called whenever a session creates a pending permission approval. */
+  onPermissionRequested?: PermissionRequestedCallback;
 
   /**
    * Resolves a tool name to its category for permission-gate evaluation.

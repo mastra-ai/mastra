@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import type { Agent } from '../../agent';
+import { MastraGateway } from '../../llm';
+import type { MastraModelGatewayInterface } from '../../llm';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
 import type { MastraCompositeStore } from '../../storage';
@@ -12,7 +14,13 @@ import { EventEmitter, sessionCreatedPayload } from './events';
 import type { HarnessEventListener, HarnessEventUnsubscribe } from './events';
 import type { HarnessConfig } from './harness.types';
 import type { HarnessMode } from './mode';
-import type { PermissionPolicy, ToolCategoryResolver } from './permissions.types';
+import type {
+  PermissionPolicy,
+  PermissionRequestedCallback,
+  PermissionRules,
+  SessionGrant,
+  ToolCategoryResolver,
+} from './permissions.types';
 import { Session } from './session';
 import type { CloneSessionOptions } from './session.types';
 import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
@@ -50,10 +58,13 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
   readonly #workspace?: DynamicArgument<Workspace | undefined>;
   readonly #agent: Agent;
   readonly #subagents?: SubagentRegistryConfig;
-  readonly #resolveModel?: ModelResolver;
   readonly #runtimeCompatibilityGeneration?: string | null;
   readonly #defaultPermissionPolicy: PermissionPolicy;
+  readonly #permissionRules?: PermissionRules;
+  readonly #sessionGrants: readonly SessionGrant[];
+  readonly #onPermissionRequested?: PermissionRequestedCallback;
   readonly #toolCategoryResolver?: ToolCategoryResolver;
+  readonly #gateways: Array<MastraModelGatewayInterface>;
 
   constructor(config: HarnessConfig<MODES, TState>) {
     if (!config.modes.length) {
@@ -91,9 +102,6 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
 
     if (config.subagents) {
       const entries = Object.entries(config.subagents.types ?? {});
-      if (entries.length > 0 && !config.resolveModel) {
-        throw new Error('Harness "subagents" requires a "resolveModel" function to instantiate subagent models');
-      }
       for (const [typeId, def] of entries) {
         if (!def?.agentId) {
           throw new Error(`Subagent "${typeId}" must declare an "agentId"`);
@@ -111,9 +119,16 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       }
       this.#subagents = { ...config.subagents, maxDepth };
     }
-    this.#resolveModel = config.resolveModel;
+    this.#gateways = config.gateways
+      ? config.gateways.length
+        ? config.gateways
+        : [new MastraGateway()]
+      : [new MastraGateway()];
 
     this.#defaultPermissionPolicy = config.defaultPermissionPolicy ?? 'ask';
+    this.#permissionRules = config.permissionRules;
+    this.#sessionGrants = config.sessionGrants ?? [];
+    this.#onPermissionRequested = config.onPermissionRequested;
     if (config.toolCategoryResolver) {
       this.#toolCategoryResolver = config.toolCategoryResolver;
     } else if (config.toolCategories) {
@@ -146,11 +161,11 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
     return this.#events.emit(event);
   }
 
+  async shutdown(): Promise<void> {}
+
   async init(): Promise<void> {
     await this.#requireStorage();
   }
-
-  async shutdown(): Promise<void> {}
 
   listModes(): HarnessMode[] {
     return [...this.#modesById.values()];
@@ -168,6 +183,11 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
   async listSessions(): Promise<SessionRecord[]> {
     const storage = await this.#requireStorage();
     return storage.listSessions();
+  }
+
+  async getSessionRecord(opts: SessionByIdOptions): Promise<SessionRecord> {
+    const storage = await this.#requireStorage();
+    return this.#loadSessionRecord(storage, opts.sessionId, opts.resourceId);
   }
 
   async session(opts: SessionOptions): Promise<Session<TState>> {
@@ -316,8 +336,11 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       subagents: this.#subagents,
       resolveAgent: agentId => this.#resolveAgent(agentId),
       resolveMode: modeId => this.#resolveMode(modeId),
-      resolveModel: this.#resolveModel,
+      gateways: this.#gateways,
       defaultPermissionPolicy: this.#defaultPermissionPolicy,
+      permissionRules: this.#permissionRules,
+      sessionGrants: this.#sessionGrants,
+      onPermissionRequested: this.#onPermissionRequested,
       toolCategoryResolver: this.#toolCategoryResolver,
     });
   }

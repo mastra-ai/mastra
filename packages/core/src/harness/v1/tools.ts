@@ -14,9 +14,19 @@ import { z } from 'zod';
 import type { ToolsInput } from '../../agent/types';
 import { createTool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools';
-import type { PermissionPolicy } from './permissions.types';
+import { evaluatePermission } from './permissions';
+import type {
+  PermissionCheckResult,
+  PermissionPolicy,
+  PermissionRules,
+  SessionGrant,
+  ToolCategory,
+  ToolCategoryResolver,
+} from './permissions.types';
 import type { HarnessRequestContext } from './request-context';
 import type { Session } from './session';
+
+export type { PermissionRules } from './permissions.types';
 
 type AnySession = Session<any>;
 
@@ -29,12 +39,19 @@ type HarnessTaskRecord = {
 
 type TaskState = { tasks?: HarnessTaskRecord[] };
 
-export interface PermissionRules {
-  /**
-   * Per-tool override map. `'allow'` exposes the tool unconditionally,
-   * `'deny'` strips it from the toolset, `'ask'` defers to the runtime gate.
-   */
-  tools?: Record<string, PermissionPolicy>;
+interface PermissionRuntimeContext {
+  permissionRules?: PermissionRules;
+  sessionGrants?: readonly SessionGrant[];
+  defaultPermissionPolicy?: PermissionPolicy;
+  toolCategoryResolver?: ToolCategoryResolver;
+  yolo?: boolean;
+  onPendingApproval?: (input: {
+    toolName: string;
+    category: ToolCategory | null;
+    args: unknown;
+    context: ToolExecutionContext;
+    result: PermissionCheckResult;
+  }) => Promise<{ pendingItemId: string; status: string }>;
 }
 
 export interface BuildSessionToolsetsOptions {
@@ -44,10 +61,11 @@ export interface BuildSessionToolsetsOptions {
   modeOverrides?: { tools?: ToolsInput; additionalTools?: ToolsInput };
   /** Harness built-in tools (ask_user, submit_plan, task_*, subagent, etc). */
   builtInTools?: ToolsInput;
-  /** Optional per-tool permission policy. `deny` filters the tool out. */
+  /** Optional permission policy. `deny` filters the tool out. */
   permissionRules?: PermissionRules;
   /** Tool ids the caller has explicitly disabled. */
   disabledTools?: readonly string[];
+  permissions?: Omit<PermissionRuntimeContext, 'permissionRules'>;
 }
 
 const taskSchema = z.object({
@@ -286,9 +304,83 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
   } as ToolsInput;
 }
 
+type ToolRecord = {
+  execute?: (input: unknown, context: ToolExecutionContext) => Promise<unknown>;
+  requireApproval?: boolean | ((input: unknown, context?: Record<string, unknown>) => boolean | Promise<boolean>);
+  needsApprovalFn?: (input: unknown, context?: Record<string, unknown>) => boolean | Promise<boolean>;
+};
+
+function getToolRecord(tool: unknown): ToolRecord | null {
+  return tool && typeof tool === 'object' ? (tool as ToolRecord) : null;
+}
+
+function isStaticToolApprovalRequired(tool: unknown): boolean {
+  return getToolRecord(tool)?.requireApproval === true;
+}
+
+async function isDynamicToolApprovalRequired(
+  tool: unknown,
+  input: unknown,
+  context: ToolExecutionContext,
+): Promise<boolean> {
+  const record = getToolRecord(tool);
+  const approvalContext = { requestContext: context.requestContext, workspace: context.workspace };
+  if (typeof record?.needsApprovalFn === 'function') {
+    return Boolean(await record.needsApprovalFn(input, approvalContext));
+  }
+  if (typeof record?.requireApproval === 'function') {
+    return Boolean(await record.requireApproval(input, approvalContext));
+  }
+  return false;
+}
+
+function wrapToolWithPermissionGate(
+  name: string,
+  tool: unknown,
+  permissions: PermissionRuntimeContext,
+): unknown {
+  const record = getToolRecord(tool);
+  if (!record?.execute) return tool;
+
+  const category = permissions.toolCategoryResolver?.(name) ?? null;
+  const originalExecute = record.execute.bind(tool);
+
+  record.execute = async (input: unknown, context: ToolExecutionContext) => {
+    const result = evaluatePermission({
+      toolName: name,
+      category,
+      args: input,
+      gate: 'pre-action',
+      permissionRules: permissions.permissionRules,
+      sessionGrants: permissions.sessionGrants,
+      defaultPermissionPolicy: permissions.defaultPermissionPolicy,
+      yolo: permissions.yolo,
+      toolConfigRequiresApproval: isStaticToolApprovalRequired(tool),
+      toolFnRequiresApproval: await isDynamicToolApprovalRequired(tool, input, context),
+    });
+
+    if (result.decision === 'deny') {
+      return recoverableError(new Error(`Tool "${name}" is denied by harness permission policy`), 'harness.permission_denied');
+    }
+
+    if (result.decision === 'pendingApproval') {
+      const pending = await permissions.onPendingApproval?.({ toolName: name, category, args: input, context, result });
+      return {
+        isError: false,
+        pendingItemId: pending?.pendingItemId,
+        status: pending?.status ?? 'pending',
+        permission: result,
+      };
+    }
+
+    return originalExecute(input, context);
+  };
+
+  return tool;
+}
+
 /**
- * Produce the final toolset visible to the agent on this request. Pure
- * function — no IO, no side effects.
+ * Produce the final toolset visible to the agent on this request.
  *
  * Layering order:
  *  1. Agent tools (or mode `tools` replacement)
@@ -297,7 +389,7 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
  *  4. Apply `permissionRules.deny` + `disabledTools` filters
  */
 export function buildSessionToolsets(opts: BuildSessionToolsetsOptions = {}): ToolsInput {
-  const { agentTools, modeOverrides, builtInTools, permissionRules, disabledTools } = opts;
+  const { agentTools, modeOverrides, builtInTools, permissionRules, disabledTools, permissions } = opts;
 
   const base: Record<string, unknown> = modeOverrides?.tools
     ? { ...(modeOverrides.tools as Record<string, unknown>) }
@@ -311,13 +403,42 @@ export function buildSessionToolsets(opts: BuildSessionToolsetsOptions = {}): To
     Object.assign(base, builtInTools);
   }
 
-  const denySet = new Set<string>(disabledTools ?? []);
-  for (const [name, policy] of Object.entries(permissionRules?.tools ?? {})) {
-    if (policy === 'deny') denySet.add(name);
-  }
+  const disabledSet = new Set<string>(disabledTools ?? []);
+  const runtimePermissions: PermissionRuntimeContext = { ...permissions, permissionRules };
+  const usePermissionGate = Boolean(
+    permissionRules ||
+      permissions?.defaultPermissionPolicy ||
+      permissions?.sessionGrants?.length ||
+      permissions?.toolCategoryResolver ||
+      permissions?.yolo,
+  );
 
-  for (const name of denySet) {
-    delete base[name];
+  for (const [name, tool] of Object.entries(base)) {
+    if (disabledSet.has(name)) {
+      delete base[name];
+      continue;
+    }
+
+    if (!usePermissionGate) continue;
+
+    const category = permissions?.toolCategoryResolver?.(name) ?? null;
+    const result = evaluatePermission({
+      toolName: name,
+      category,
+      gate: 'pre-exposure',
+      permissionRules,
+      sessionGrants: permissions?.sessionGrants,
+      defaultPermissionPolicy: permissions?.defaultPermissionPolicy,
+      yolo: permissions?.yolo,
+      toolConfigRequiresApproval: isStaticToolApprovalRequired(tool),
+    });
+
+    if (result.decision === 'deny') {
+      delete base[name];
+      continue;
+    }
+
+    base[name] = wrapToolWithPermissionGate(name, tool, runtimePermissions);
   }
 
   return base as ToolsInput;

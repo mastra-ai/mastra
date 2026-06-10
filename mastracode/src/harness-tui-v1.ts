@@ -1,11 +1,15 @@
 import { createHash } from 'node:crypto';
+import { appendFile } from 'node:fs/promises';
 import { hostname } from 'node:os';
+import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { Agent } from '@mastra/core/agent';
 import { Harness as HarnessV1 } from '@mastra/core/harness/v1';
-import type { HarnessMode as HarnessModeV1 } from '@mastra/core/harness/v1';
+import type { HarnessEvent, HarnessMode as HarnessModeV1 } from '@mastra/core/harness/v1';
 import { InMemoryHarness } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
+import z from 'zod';
+import { getDynamicWorkspace } from './agents/workspace';
 
 // ─── Hash helper (same as mastracode uses) ────────────────────────────────
 function hash(input: string): string {
@@ -43,6 +47,7 @@ const codeAgent = new Agent({
   name: 'Code Agent',
   instructions: 'You are a helpful coding assistant.',
   model: modes.find(m => m.id === defaultModeId)!.defaultModelId,
+  workspace: getDynamicWorkspace,
 });
 
 // ─── Storage ────────────────────────────────────────────────────────────
@@ -60,6 +65,41 @@ const cwd = process.cwd();
 const ownerId = `harness-tui-${hash(`${hostname()}\0${cwd}`)}`;
 const resourceId = `resource-${hash(cwd)}`;
 
+// ─── Event log ──────────────────────────────────────────────────────────────
+let activeSessionId: string | undefined;
+const pendingEventLogs: HarnessEvent[] = [];
+const eventLogWrites = new Map<string, Promise<void>>();
+
+function eventLogPath(sessionId: string): string {
+  return join(cwd, `events-${sessionId}.log`);
+}
+
+function queueEventLog(event: HarnessEvent): void {
+  const sessionId = event.sessionId ?? activeSessionId;
+  if (!sessionId) {
+    pendingEventLogs.push(event);
+    return;
+  }
+
+  const path = eventLogPath(sessionId);
+  const line = `${JSON.stringify(event)}\n`;
+  const previousWrite = eventLogWrites.get(path) ?? Promise.resolve();
+  const nextWrite = previousWrite.catch(() => undefined).then(() => appendFile(path, line, 'utf8'));
+  eventLogWrites.set(path, nextWrite);
+  nextWrite.catch(err => console.error(`Failed to write event log ${path}:`, err));
+}
+
+function flushPendingEventLogs(): void {
+  while (pendingEventLogs.length > 0) {
+    const event = pendingEventLogs.shift()!;
+    queueEventLog(event);
+  }
+}
+
+async function flushEventLogWrites(): Promise<void> {
+  await Promise.all([...eventLogWrites.values()].map(write => write.catch(() => undefined)));
+}
+
 // ─── Create HarnessV1 ───────────────────────────────────────────────────────
 const harness = new HarnessV1({
   ownerId,
@@ -68,7 +108,17 @@ const harness = new HarnessV1({
   modes,
   defaultModeId,
   storage: harnessStorage,
+  workspace: getDynamicWorkspace,
+
+  stateSchema: z.object({
+    projectPath: z.string(),
+  }),
+  initialState: {
+    projectPath: process.cwd(),
+  },
 });
+
+harness.subscribe(queueEventLog);
 
 // ─── Session detection ────────────────────────────────────────────────────
 async function detectOrCreateSession() {
@@ -91,12 +141,33 @@ async function detectOrCreateSession() {
   return await harness.session({ threadId, resourceId });
 }
 
+// ─── Write a single text-delta chunk to stdout ─────────────────────────────
+function writeTextDelta(chunk: unknown) {
+  if (typeof chunk === 'string') {
+    process.stdout.write(chunk);
+    return;
+  }
+  if (!chunk || typeof chunk !== 'object') return;
+  const c = chunk as Record<string, unknown>;
+  if (c.type === 'text-delta') {
+    const text = c.textDelta ?? c.delta ?? (c.payload as Record<string, unknown>)?.text;
+    if (text) process.stdout.write(String(text));
+  } else if (c.text) {
+    process.stdout.write(String(c.text));
+  }
+}
+
+
+
 // ─── TUI main loop ──────────────────────────────────────────────────────────
 async function main() {
   console.info('Starting HarnessV1 TUI...');
 
   const session = await detectOrCreateSession();
+  activeSessionId = session.id;
+  flushPendingEventLogs();
   console.info(`Session created: ${session.id}`);
+  console.info(`Event log: ${eventLogPath(session.id)}`);
   console.info(`Mode: ${session.getMode().id}, Model: ${session.getModelId()}`);
 
   const rl = createInterface({
@@ -105,23 +176,6 @@ async function main() {
   });
 
   const ask = (question: string): Promise<string> => new Promise(resolve => rl.question(question, resolve));
-
-  // ─── Prompt ─────────────────────────────────────────────────────────────
-  async function handlePrompt() {
-    const promptText = await ask('Enter prompt: ');
-    if (!promptText.trim()) return;
-
-    console.info('Sending prompt...');
-    try {
-      const stream = await codeAgent.stream([{ role: 'user', content: promptText }], { model: session.getModelId() });
-      for await (const chunk of stream.textStream) {
-        process.stdout.write(chunk);
-      }
-      console.info();
-    } catch (err) {
-      console.error('Error:', err);
-    }
-  }
 
   // ─── Mode ───────────────────────────────────────────────────────────────
   async function handleMode() {
@@ -146,6 +200,40 @@ async function main() {
     }
   }
 
+  async function sendAndStream(text: string) {
+    const subscription = await session.subscribeToThread();
+
+    try {
+      const result = await session.queueMessage({ messages: text });
+
+      if (!result.accepted) {
+        console.info('  → message not accepted');
+        return;
+      }
+
+      const iterator = subscription.stream[Symbol.asyncIterator]();
+      while (true) {
+        const { value: chunk, done } = await iterator.next();
+        if (done) break;
+        writeTextDelta(chunk);
+        if (
+          chunk &&
+          typeof chunk === 'object' &&
+          ((chunk as any).type === 'finish' ||
+            (chunk as any).type === 'error' ||
+            (chunk as any).type === 'abort' ||
+            (chunk as any).type === 'tool-call-suspended')
+        ) {
+          break;
+        }
+      }
+
+      process.stdout.write('\n');
+    } finally {
+      subscription.unsubscribe();
+    }
+  }
+
   // ─── Main loop ────────────────────────────────────────────────────────────
   const prompt = async () => {
     const answer = await ask('\n[p]rompt, [m]ode, [mo]del, [q]uit: ');
@@ -154,9 +242,13 @@ async function main() {
     if (choice === 'q' || choice === 'quit') {
       console.info('Goodbye!');
       rl.close();
+      await flushEventLogWrites();
       process.exit(0);
     } else if (choice === 'p' || choice === 'prompt') {
-      await handlePrompt();
+      const promptText = await ask('Enter prompt: ');
+      if (promptText.trim()) {
+        await sendAndStream(promptText).catch((err: unknown) => console.error('Error:', err));
+      }
     } else if (choice === 'm' || choice === 'mode') {
       await handleMode();
     } else if (choice === 'mo' || choice === 'model') {
