@@ -10,11 +10,12 @@ vi.mock('execa', () => ({
   execa: vi.fn(),
 }));
 
-vi.mock('@expo/devcert', () => ({
+vi.mock('selfsigned', () => ({
   default: {
-    certificateFor: vi.fn().mockResolvedValue({
-      key: Buffer.from('mock-key'),
-      cert: Buffer.from('mock-cert'),
+    generate: vi.fn().mockReturnValue({
+      private: '-----BEGIN RSA PRIVATE KEY-----\nmock-key\n-----END RSA PRIVATE KEY-----',
+      cert: '-----BEGIN CERTIFICATE-----\nmock-cert\n-----END CERTIFICATE-----',
+      public: '-----BEGIN PUBLIC KEY-----\nmock-pub\n-----END PUBLIC KEY-----',
     }),
   },
 }));
@@ -475,5 +476,165 @@ describe('dev command - inspect flag behavior', () => {
       expect(commands).toContain('--inspect-brk');
       expect(commands.some(cmd => cmd.startsWith('--inspect-brk='))).toBe(false);
     });
+  });
+});
+
+describe('dev command - certificate generation with selfsigned', () => {
+  let execaMock: any;
+  let mockChildProcess: MockChildProcess;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+
+    mockChildProcess = new MockChildProcess();
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('server unavailable')));
+
+    const { execa } = await import('execa');
+    execaMock = vi.mocked(execa);
+    execaMock.mockReturnValue(mockChildProcess as unknown as ChildProcess);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+    vi.clearAllMocks();
+  });
+
+  it('should generate self-signed certificate with correct hostname when --https flag is passed', async () => {
+    const { getServerOptions } = await import('@mastra/deployer/build');
+    vi.mocked(getServerOptions).mockResolvedValue({
+      port: 4111,
+      host: 'localhost',
+    } as any);
+
+    const { dev } = await import('./dev');
+
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: true,
+      debug: false,
+    });
+
+    const selfsignedModule = await import('selfsigned');
+    const generateMock = vi.mocked(selfsignedModule.default.generate);
+
+    expect(generateMock).toHaveBeenCalledWith(
+      [{ name: 'commonName', value: 'localhost' }],
+      expect.objectContaining({
+        days: 365,
+        keySize: 2048,
+        algorithm: 'sha256',
+      })
+    );
+  });
+
+  it('should include localhost IP addresses in Subject Alternative Names', async () => {
+    const { getServerOptions } = await import('@mastra/deployer/build');
+    vi.mocked(getServerOptions).mockResolvedValue({
+      port: 4111,
+      host: 'localhost',
+    } as any);
+
+    const { dev } = await import('./dev');
+
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: true,
+      debug: false,
+    });
+
+    const selfsignedModule = await import('selfsigned');
+    const generateMock = vi.mocked(selfsignedModule.default.generate);
+    const callArgs = generateMock.mock.calls[0];
+    const extensions = callArgs[1]?.extensions;
+
+    expect(extensions).toContainEqual(
+      expect.objectContaining({
+        name: 'subjectAltName',
+        altNames: expect.arrayContaining([
+          expect.objectContaining({ type: 2, value: 'localhost' }),
+          expect.objectContaining({ type: 7, ip: '127.0.0.1' }),
+          expect.objectContaining({ type: 7, ip: '::1' }),
+        ]),
+      })
+    );
+  });
+
+  it('should pass generated certificate to server process', async () => {
+    const { getServerOptions } = await import('@mastra/deployer/build');
+    vi.mocked(getServerOptions).mockResolvedValue({
+      port: 4111,
+      host: 'localhost',
+    } as any);
+
+    const { dev } = await import('./dev');
+
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: true,
+      debug: false,
+    });
+
+    expect(execaMock).toHaveBeenCalled();
+    const callArgs = execaMock.mock.calls[0];
+    const env = callArgs[2]?.env;
+
+    expect(env).toBeDefined();
+    expect(env.MASTRA_HTTPS_KEY).toBeDefined();
+    expect(env.MASTRA_HTTPS_CERT).toBeDefined();
+  });
+
+  it('should use IP SAN type when host is an IP address', async () => {
+    const { getServerOptions } = await import('@mastra/deployer/build');
+    vi.mocked(getServerOptions).mockResolvedValue({
+      port: 4111,
+      host: '192.168.1.100',
+    } as any);
+
+    const { dev } = await import('./dev');
+
+    await dev({
+      dir: undefined,
+      root: process.cwd(),
+      tools: undefined,
+      env: undefined,
+      inspect: false,
+      inspectBrk: false,
+      customArgs: undefined,
+      https: true,
+      debug: false,
+    });
+
+    const selfsignedModule = await import('selfsigned');
+    const generateMock = vi.mocked(selfsignedModule.default.generate);
+    const callArgs = generateMock.mock.calls[0];
+    const extensions = callArgs[1]?.extensions;
+    const sanExt = extensions?.find((e: any) => e.name === 'subjectAltName');
+
+    expect(sanExt?.altNames).toContainEqual(
+      expect.objectContaining({ type: 7, ip: '192.168.1.100' })
+    );
+    expect(sanExt?.altNames).not.toContainEqual(
+      expect.objectContaining({ type: 2, value: '192.168.1.100' })
+    );
   });
 });

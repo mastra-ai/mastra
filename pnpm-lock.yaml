@@ -3326,9 +3326,6 @@ importers:
       '@clack/prompts':
         specifier: ^1.1.0
         version: 1.3.0
-      '@expo/devcert':
-        specifier: ^1.2.1
-        version: 1.2.1
       '@mastra/deployer':
         specifier: workspace:^
         version: link:../deployer
@@ -3365,6 +3362,9 @@ importers:
       posthog-node:
         specifier: ^5.30.6
         version: 5.33.4(rxjs@7.8.1)
+      selfsigned:
+        specifier: ^2.4.1
+        version: 2.4.1
       semver:
         specifier: ^7.7.4
         version: 7.8.0
@@ -12187,12 +12187,6 @@ packages:
     peerDependenciesMeta:
       '@noble/hashes':
         optional: true
-
-  '@expo/devcert@1.2.1':
-    resolution: {integrity: sha512-qC4eaxmKMTmJC2ahwyui6ud8f3W60Ss7pMkpBq40Hu3zyiAaugPXnZ24145U7K36qO9UHdZUVxsCvIpz2RYYCA==}
-
-  '@expo/sudo-prompt@9.3.2':
-    resolution: {integrity: sha512-HHQigo3rQWKMDzYDLkubN5WQOYXJJE2eNqIQC2axC2iO3mHdwnIR7FgZVvHWtBwAdzBgAP0ECp8KqS8TiMKvgw==}
 
   '@fastify/accept-negotiator@2.0.1':
     resolution: {integrity: sha512-/c/TW2bO/v9JeEgoD/g1G5GxGeCF1Hafdf79WPmUlgYiBXummY0oX3VVq4yFkKKVBKDNlaDUYoab7g38RpPqCQ==}
@@ -26621,6 +26615,10 @@ packages:
   select-hose@2.0.0:
     resolution: {integrity: sha512-mEugaLK+YfkijB4fx0e6kImuJdCIt2LxCRcbEYPqRGCs4F2ogyfZU5IAZRdjCP8JPq2AtdNoC/Dux63d9Kiryg==}
 
+  selfsigned@2.4.1:
+    resolution: {integrity: sha512-th5B4L2U+eGLq1TVh7zNRGBapioSORUeymIydxgFpwww9d2qyKvtuPU2jJuHvYAwwqi2Y596QBL3eEqcPEYL8Q==}
+    engines: {node: '>=10'}
+
   selfsigned@5.5.0:
     resolution: {integrity: sha512-ftnu3TW4+3eBfLRFnDEkzGxSF/10BJBkaLJuBHZX0kiPS7bRdlpZGu6YGt4KngMkdTwJE6MbjavFpqHvqVt+Ew==}
     engines: {node: '>=18'}
@@ -34229,15 +34227,6 @@ snapshots:
   '@exodus/bytes@1.15.1(@noble/hashes@2.0.1)':
     optionalDependencies:
       '@noble/hashes': 2.0.1
-
-  '@expo/devcert@1.2.1':
-    dependencies:
-      '@expo/sudo-prompt': 9.3.2
-      debug: 3.2.7
-    transitivePeerDependencies:
-      - supports-color
-
-  '@expo/sudo-prompt@9.3.2': {}
 
   '@fastify/accept-negotiator@2.0.1': {}
 
@@ -52126,6 +52115,11 @@ snapshots:
   secure-json-parse@4.1.0: {}
 
   select-hose@2.0.0: {}
+
+  selfsigned@2.4.1:
+    dependencies:
+      '@types/node-forge': 1.3.14
+      node-forge: 1.4.0
 
   selfsigned@5.5.0:
     dependencies:

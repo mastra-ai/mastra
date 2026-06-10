@@ -1,13 +1,14 @@
 import type { ChildProcess } from 'node:child_process';
 import { mkdir, writeFile } from 'node:fs/promises';
+import { isIP } from 'node:net';
 import { join } from 'node:path';
 import process from 'node:process';
-import devcert from '@expo/devcert';
 import { FileService } from '@mastra/deployer';
 import { getServerOptions, normalizeStudioBase } from '@mastra/deployer/build';
 import { execa } from 'execa';
 import getPort from 'get-port';
 import pc from 'picocolors';
+import selfsigned from 'selfsigned';
 import { getAnalytics } from '../../analytics/index.js';
 import { checkMastraPeerDeps, getUpdateCommand, logPeerDepWarnings } from '../../utils/check-peer-deps.js';
 import type { PeerDepMismatch } from '../../utils/check-peer-deps.js';
@@ -498,8 +499,20 @@ export async function dev({
   if (serverOptions?.https) {
     httpsOptions = serverOptions.https;
   } else if (https) {
-    const { key, cert } = await devcert.certificateFor(serverOptions?.host ?? 'localhost');
-    httpsOptions = { key, cert };
+    const hostname = hostToUse;
+    const attrs = [{ name: 'commonName', value: hostname }];
+    const pems = selfsigned.generate(attrs, {
+      days: 365,
+      keySize: 2048,
+      algorithm: 'sha256',
+      extensions: [
+        { name: 'subjectAltName', altNames: [
+          ...(isIP(hostname) ? [{ type: 7, ip: hostname }] : [{ type: 2, value: hostname }]),
+          ...(hostname === 'localhost' ? [{ type: 7, ip: '127.0.0.1' }, { type: 7, ip: '::1' }] : []),
+        ]},
+      ],
+    });
+    httpsOptions = { key: Buffer.from(pems.private), cert: Buffer.from(pems.cert) };
   }
 
   // Extract mastra packages from the project's package.json
