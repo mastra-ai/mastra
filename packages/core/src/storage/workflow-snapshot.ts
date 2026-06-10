@@ -169,7 +169,10 @@ export function mergeWorkflowStepResult({
 
   snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
   try {
-    const runtimeContext = JSON.parse(JSON.stringify(snapshot.context));
+    // Clone the other entries and the raw merged result separately — the stored
+    // [stepId] entry would be cloned only to be overwritten.
+    const { [stepId]: _storedEntry, ...otherEntries } = snapshot.context;
+    const runtimeContext: Record<string, StepResult<any, any, any, any>> = JSON.parse(JSON.stringify(otherEntries));
     runtimeContext[stepId] = JSON.parse(JSON.stringify(mergedResult));
     return runtimeContext;
   } catch {

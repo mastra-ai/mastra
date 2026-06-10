@@ -134,6 +134,15 @@ export function getComparableMessageKey(message: unknown): string | undefined {
  * iteration with a mix of live and rehydrated steps.
  */
 export function restoreCumulativeStepResponseMessages(steps: any[], responseMessages: any[]): void {
+  // Key computation stringifies every message; skip it entirely when no step
+  // needs restoring (live DefaultStepResults or already-restored steps).
+  const needsRestore = steps.some(
+    step => Array.isArray(step?.response?.messages) && typeof step?.[WORKFLOW_SNAPSHOT_SERIALIZER] !== 'function',
+  );
+  if (!needsRestore) {
+    return;
+  }
+
   const responseMessageKeys = responseMessages.map(getComparableMessageKey);
   let lastMatchedIndex = -1;
   let lastStoredMessageCount = 0;
