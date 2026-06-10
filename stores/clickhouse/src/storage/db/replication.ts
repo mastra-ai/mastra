@@ -129,7 +129,6 @@ export function buildReplicatedTableEngine(engine: string, replication?: Clickho
  *  - `TRUNCATE TABLE [IF EXISTS] <name>`
  *  - `OPTIMIZE TABLE <name>`
  *  - `SYSTEM REFRESH VIEW <name>` and `SYSTEM WAIT VIEW <name>`
- *  - `SYSTEM STOP MERGES <name>` and `SYSTEM START MERGES <name>`
  *
  * Several of these (TRUNCATE, ALTER UPDATE/DELETE, OPTIMIZE) replicate
  * automatically on ReplicatedMergeTree via the Keeper queue, so ON CLUSTER is
@@ -143,6 +142,10 @@ export function buildReplicatedTableEngine(engine: string, replication?: Clickho
  * Not covered (intentional — not emitted by Mastra under replication):
  *  - `RENAME TABLE`, `EXCHANGE TABLES`, `ATTACH`, `DETACH` — the v-next signal
  *    migration that uses EXCHANGE fails fast when replication is configured.
+ *  - `SYSTEM STOP/START MERGES` — these are intentionally per-node. Pausing
+ *    merges fleet-wide because `clearTable` wants to TRUNCATE one table is
+ *    operational overreach; the per-node pause is enough since TRUNCATE
+ *    itself replicates via Keeper. See `ClickhouseDB.clearTable`.
  *
  * The `\sON\s+CLUSTER\s` guard makes each rewriter idempotent.
  */
@@ -173,7 +176,6 @@ export function addOnClusterToDDL(sql: string, replication?: ClickhouseReplicati
   out = rewrite(out, /\bTRUNCATE\s+TABLE\s+(IF\s+EXISTS\s+)?[^\s]+/gi);
   out = rewrite(out, /\bOPTIMIZE\s+TABLE\s+[^\s]+/gi);
   out = rewrite(out, /\bSYSTEM\s+(REFRESH|WAIT)\s+VIEW\s+[^\s;]+/gi);
-  out = rewrite(out, /\bSYSTEM\s+(STOP|START)\s+MERGES\s+[^\s;]+/gi);
   return out;
 }
 

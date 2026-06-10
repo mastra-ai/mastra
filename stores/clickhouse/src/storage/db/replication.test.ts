@@ -84,11 +84,13 @@ describe('ClickHouse replication helpers', () => {
     expect(addOnClusterToDDL('ALTER TABLE mastra_threads MATERIALIZE TTL', { cluster: 'cluster-a' })).toBe(
       "ALTER TABLE mastra_threads ON CLUSTER 'cluster-a' MATERIALIZE TTL",
     );
+    // SYSTEM STOP/START MERGES are intentionally NOT clustered — see the
+    // addOnClusterToDDL doc comment and ClickhouseDB.clearTable for rationale.
     expect(addOnClusterToDDL('SYSTEM STOP MERGES mastra_threads', { cluster: 'cluster-a' })).toBe(
-      "SYSTEM STOP MERGES mastra_threads ON CLUSTER 'cluster-a'",
+      'SYSTEM STOP MERGES mastra_threads',
     );
     expect(addOnClusterToDDL('SYSTEM START MERGES mastra_threads', { cluster: 'cluster-a' })).toBe(
-      "SYSTEM START MERGES mastra_threads ON CLUSTER 'cluster-a'",
+      'SYSTEM START MERGES mastra_threads',
     );
   });
 
@@ -113,8 +115,6 @@ describe('ClickHouse replication helpers', () => {
     ['OPTIMIZE TABLE', "OPTIMIZE TABLE mastra_t ON CLUSTER 'c' FINAL"],
     ['SYSTEM REFRESH VIEW', "SYSTEM REFRESH VIEW mastra_mv ON CLUSTER 'c'"],
     ['SYSTEM WAIT VIEW', "SYSTEM WAIT VIEW mastra_mv ON CLUSTER 'c'"],
-    ['SYSTEM STOP MERGES', "SYSTEM STOP MERGES mastra_t ON CLUSTER 'c'"],
-    ['SYSTEM START MERGES', "SYSTEM START MERGES mastra_t ON CLUSTER 'c'"],
   ])('addOnClusterToDDL is idempotent for %s', (_label, sql) => {
     expect(addOnClusterToDDL(sql, { cluster: 'c' })).toBe(sql);
   });

@@ -655,18 +655,19 @@ export class ClickhouseDB extends MastraBase {
     try {
       // Stop background merges before TRUNCATE. TRUNCATE acquires an exclusive
       // write lock that blocks until in-flight merges complete. Pausing merges
-      // first avoids this lock contention. Under replication we fan all three
-      // commands out via ON CLUSTER so every replica is paused/truncated/resumed
-      // consistently rather than only the receiving node.
-      await this.client.command({
-        query: addOnClusterToDDL(`SYSTEM STOP MERGES ${tableName}`, this.replication),
-      });
+      // first avoids this lock contention.
+      //
+      // Under replication TRUNCATE is wrapped with ON CLUSTER so every replica
+      // truncates consistently. SYSTEM STOP/START MERGES are intentionally NOT
+      // clustered — fan-out would pause merges on every replica in the cluster
+      // just because one Mastra TRUNCATE wants to land, which is operational
+      // overreach. The per-node pause is enough since TRUNCATE itself
+      // replicates via the Keeper queue.
+      await this.client.command({ query: `SYSTEM STOP MERGES ${tableName}` });
       await this.client.command({
         query: addOnClusterToDDL(`TRUNCATE TABLE ${tableName}`, this.replication),
       });
-      await this.client.command({
-        query: addOnClusterToDDL(`SYSTEM START MERGES ${tableName}`, this.replication),
-      });
+      await this.client.command({ query: `SYSTEM START MERGES ${tableName}` });
     } catch (error: any) {
       throw new MastraError(
         {
