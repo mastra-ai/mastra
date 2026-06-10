@@ -251,7 +251,7 @@ describe('MastraAuthAuth0', () => {
   // =========================================================================
 
   describe('SSO - getLoginUrl', () => {
-    it('should build correct Auth0 OAuth URL', () => {
+    it('should build correct Auth0 OAuth URL with signed state token', () => {
       const auth0 = new MastraAuthAuth0(mockSSOOptions) as any;
       const url = auth0.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'test-state');
 
@@ -260,14 +260,37 @@ describe('MastraAuthAuth0', () => {
       expect(url).toContain('response_type=code');
       expect(url).toContain('scope=openid+profile+email');
       expect(url).toContain('redirect_uri=http%3A%2F%2Flocalhost%3A4111%2Fapi%2Fauth%2Fsso%2Fcallback');
-      expect(url).toContain('state=test-state');
+      // State is now a signed JWT-like token (payload.signature format)
+      const parsedUrl = new URL(url);
+      const state = parsedUrl.searchParams.get('state');
+      expect(state).toBeTruthy();
+      expect(state!.split('.').length).toBe(2); // payload.signature format
     });
 
-    it('should handle composite state (uuid|redirect)', () => {
+    it('should produce signed state that round-trips through handleCallback', async () => {
       const auth0 = new MastraAuthAuth0(mockSSOOptions) as any;
-      const url = auth0.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'abc-uuid|%2Fstudio');
+      const redirectUri = 'http://localhost:4111/api/auth/sso/callback';
+      const url = auth0.getLoginUrl(redirectUri, 'test-uuid|%2Fstudio');
+      const signedState = new URL(url).searchParams.get('state')!;
 
-      expect(url).toContain('state=abc-uuid%7C%252Fstudio');
+      // Mock token exchange
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          access_token: 'at',
+          id_token: 'it',
+          expires_in: 3600,
+          token_type: 'bearer',
+        }),
+      });
+      (createRemoteJWKSet as any).mockReturnValue(vi.fn());
+      (jwtVerify as any).mockResolvedValue({
+        payload: { sub: 'auth0|user', email: 'test@example.com' },
+      });
+
+      // handleCallback should not throw if state is valid
+      const result = await auth0.handleCallback('code', signedState);
+      expect(result.user.id).toBe('auth0|user');
     });
   });
 
@@ -287,7 +310,7 @@ describe('MastraAuthAuth0', () => {
       const auth0 = new MastraAuthAuth0(mockSSOOptions) as any;
 
       await expect(auth0.handleCallback('code123', 'invalid-state')).rejects.toThrow(
-        'Invalid or expired state parameter',
+        'Invalid state token format',
       );
     });
 
@@ -296,12 +319,14 @@ describe('MastraAuthAuth0', () => {
       try {
         const auth0 = new MastraAuthAuth0(mockSSOOptions) as any;
 
-        auth0.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'expired-state');
+        // Generate login URL which returns signed state token
+        const loginUrl = auth0.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'expired-state');
+        const signedState = new URL(loginUrl).searchParams.get('state')!;
 
         // Advance time past state expiry (10 minutes + 1ms)
         vi.advanceTimersByTime(10 * 60 * 1000 + 1);
 
-        await expect(auth0.handleCallback('code123', 'expired-state')).rejects.toThrow('State parameter has expired');
+        await expect(auth0.handleCallback('code123', signedState)).rejects.toThrow('State token has expired');
       } finally {
         vi.useRealTimers();
       }
@@ -310,8 +335,9 @@ describe('MastraAuthAuth0', () => {
     it('should exchange code for tokens and return user with session cookie', async () => {
       const auth0 = new MastraAuthAuth0(mockSSOOptions) as any;
 
-      // First generate login URL to store state
-      auth0.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'valid-state');
+      // Generate login URL which returns signed state token
+      const loginUrl = auth0.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'valid-state');
+      const signedState = new URL(loginUrl).searchParams.get('state')!;
 
       // Mock token exchange response
       mockFetch.mockResolvedValueOnce({
@@ -337,7 +363,7 @@ describe('MastraAuthAuth0', () => {
         },
       });
 
-      const result = await auth0.handleCallback('auth-code-123', 'valid-state');
+      const result = await auth0.handleCallback('auth-code-123', signedState);
 
       // Verify token exchange was called correctly
       expect(mockFetch).toHaveBeenCalledWith(
@@ -378,7 +404,9 @@ describe('MastraAuthAuth0', () => {
     it('should fall back to userinfo endpoint when no id_token', async () => {
       const auth0 = new MastraAuthAuth0(mockSSOOptions) as any;
 
-      auth0.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'state-no-idtoken');
+      // Generate login URL which returns signed state token
+      const loginUrl = auth0.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'state-no-idtoken');
+      const signedState = new URL(loginUrl).searchParams.get('state')!;
 
       // Token exchange - no id_token
       mockFetch.mockResolvedValueOnce({
@@ -401,7 +429,7 @@ describe('MastraAuthAuth0', () => {
         }),
       });
 
-      const result = await auth0.handleCallback('code-456', 'state-no-idtoken');
+      const result = await auth0.handleCallback('code-456', signedState);
 
       expect(result.user.id).toBe('auth0|user456');
       expect(result.user.email).toBe('user@example.com');
@@ -419,7 +447,9 @@ describe('MastraAuthAuth0', () => {
     it('should fall back to userinfo on id_token verification failure', async () => {
       const auth0 = new MastraAuthAuth0(mockSSOOptions) as any;
 
-      auth0.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'state-idtoken-fail');
+      // Generate login URL which returns signed state token
+      const loginUrl = auth0.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'state-idtoken-fail');
+      const signedState = new URL(loginUrl).searchParams.get('state')!;
 
       // Token exchange - has id_token
       mockFetch.mockResolvedValueOnce({
@@ -446,7 +476,7 @@ describe('MastraAuthAuth0', () => {
         }),
       });
 
-      const result = await auth0.handleCallback('code-789', 'state-idtoken-fail');
+      const result = await auth0.handleCallback('code-789', signedState);
 
       expect(result.user.id).toBe('auth0|user789');
       expect(result.user.email).toBe('fallback@example.com');
@@ -455,14 +485,16 @@ describe('MastraAuthAuth0', () => {
     it('should throw on failed token exchange', async () => {
       const auth0 = new MastraAuthAuth0(mockSSOOptions) as any;
 
-      auth0.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'state-fail');
+      // Generate login URL which returns signed state token
+      const loginUrl = auth0.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'state-fail');
+      const signedState = new URL(loginUrl).searchParams.get('state')!;
 
       mockFetch.mockResolvedValueOnce({
         ok: false,
         text: async () => 'invalid_grant',
       });
 
-      await expect(auth0.handleCallback('bad-code', 'state-fail')).rejects.toThrow('Token exchange failed');
+      await expect(auth0.handleCallback('bad-code', signedState)).rejects.toThrow('Token exchange failed');
     });
   });
 
@@ -539,7 +571,9 @@ describe('MastraAuthAuth0', () => {
       // We need a real session cookie, so create one via handleCallback
       const auth0 = new MastraAuthAuth0(mockSSOOptions) as any;
 
-      auth0.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'cookie-test-state');
+      // Generate login URL which returns signed state token
+      const loginUrl = auth0.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'cookie-test-state');
+      const signedState = new URL(loginUrl).searchParams.get('state')!;
 
       // Mock token exchange
       mockFetch.mockResolvedValueOnce({
@@ -562,7 +596,7 @@ describe('MastraAuthAuth0', () => {
         },
       });
 
-      const callbackResult = await auth0.handleCallback('code', 'cookie-test-state');
+      const callbackResult = await auth0.handleCallback('code', signedState);
 
       // Extract the cookie value from the set-cookie header
       const cookieHeader = callbackResult.cookies[0];
