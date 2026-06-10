@@ -37,7 +37,7 @@ export const EditTopBar = ({
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 pt-4 md:px-10">
       <Breadcrumb label="Agent navigation" className="min-w-0" listClassName="min-w-0">
-        <Crumb as={Link} to="/agent-builder/agents">
+        <Crumb as={Link} to="/agent-builder/agents" data-testid="agent-builder-back-to-list">
           Agent list
         </Crumb>
         <Crumb as="span" isCurrent>

@@ -32,6 +32,7 @@ export interface SafeLicenseSummary {
 // Cached license validation result
 let cachedLicense: LicenseInfo | null = null;
 let cacheTimestamp = 0;
+let hasWarnedAboutDevLicense = false;
 const CACHE_TTL = 60 * 1000; // 1 minute
 
 /**
@@ -141,12 +142,24 @@ export function getSafeLicenseSummary(): SafeLicenseSummary {
   };
 }
 
+export function warnIfDevEENeedsLicense(): void {
+  if (hasWarnedAboutDevLicense || !isDevEnvironment() || isLicenseValid()) {
+    return;
+  }
+
+  hasWarnedAboutDevLicense = true;
+  console.warn(
+    '[mastra/auth-ee] Mastra Enterprise features are enabled for local development, but no valid MASTRA_EE_LICENSE is configured. These features will be disabled in production without a valid license. Contact us to get a production license: https://mastra.ai/contact',
+  );
+}
+
 /**
  * Clear the license cache (useful for testing).
  */
 export function clearLicenseCache(): void {
   cachedLicense = null;
   cacheTimestamp = 0;
+  hasWarnedAboutDevLicense = false;
 }
 
 /**
@@ -167,6 +180,7 @@ export function isDevEnvironment(): boolean {
  */
 export function isEEEnabled(): boolean {
   if (isDevEnvironment()) {
+    warnIfDevEENeedsLicense();
     return true;
   }
   return isLicenseValid();
