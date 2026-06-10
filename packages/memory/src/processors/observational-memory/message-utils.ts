@@ -82,6 +82,102 @@ export function isMessageAtOrBeforeCursor(msg: MastraDBMessage, cursor: { create
   return false;
 }
 
+function collectPendingToolResultIds(allMessages: MastraDBMessage[], observedIds?: Set<string>): Set<string> {
+  const pendingToolResultIds = new Set<string>();
+
+  for (const msg of allMessages) {
+    if (!msg?.id) continue;
+    if (observedIds?.has(msg.id)) continue;
+
+    const parts = (msg.content as any)?.parts;
+    if (!Array.isArray(parts)) continue;
+
+    for (const part of parts) {
+      if (
+        (part as any)?.type === 'tool-invocation' &&
+        (part as any)?.toolInvocation?.state === 'result'
+      ) {
+        const id = (part as any)?.toolInvocation?.toolCallId;
+        if (id) pendingToolResultIds.add(id);
+      }
+    }
+  }
+
+  return pendingToolResultIds;
+}
+
+function hasPendingToolResultPair(message: MastraDBMessage, pendingToolResultIds: Set<string>): boolean {
+  if (pendingToolResultIds.size === 0) return false;
+
+  const parts = (message.content as any)?.parts;
+  if (!Array.isArray(parts)) return false;
+
+  return parts.some(
+    (part: any) =>
+      part?.type === 'tool-invocation' &&
+      part?.toolInvocation?.state === 'call' &&
+      pendingToolResultIds.has(part?.toolInvocation?.toolCallId),
+  );
+}
+
+function collectPendingToolResultIdsAfterMarker(
+  allMessages: MastraDBMessage[],
+  markerMessageIndex: number,
+  markerMessage: MastraDBMessage,
+): Set<string> {
+  const pendingToolResultIds = new Set<string>();
+  const unobservedMarkerParts = getUnobservedParts(markerMessage);
+
+  if (unobservedMarkerParts.length > 0) {
+    collectPendingToolResultIds(
+      [{ ...markerMessage, content: { ...markerMessage.content, parts: unobservedMarkerParts } }],
+      undefined,
+    ).forEach(id => pendingToolResultIds.add(id));
+  }
+
+  collectPendingToolResultIds(allMessages.slice(markerMessageIndex + 1), undefined).forEach(id =>
+    pendingToolResultIds.add(id),
+  );
+
+  return pendingToolResultIds;
+}
+
+function getUnobservedPartsPreservingToolCallPairs(message: MastraDBMessage): MastraDBMessage['content']['parts'] {
+  const parts = message.content?.parts;
+  if (!parts || !Array.isArray(parts)) return [];
+
+  const endMarkerIndex = findLastCompletedObservationBoundary(message);
+  if (endMarkerIndex === -1) {
+    return getUnobservedParts(message);
+  }
+
+  const unobservedParts = getUnobservedParts(message);
+  const unobservedResultIds = new Set<string>();
+
+  for (const part of unobservedParts) {
+    if (
+      (part as any)?.type === 'tool-invocation' &&
+      (part as any)?.toolInvocation?.state === 'result'
+    ) {
+      const id = (part as any)?.toolInvocation?.toolCallId;
+      if (id) unobservedResultIds.add(id);
+    }
+  }
+
+  if (unobservedResultIds.size === 0) {
+    return unobservedParts;
+  }
+
+  const preservedCalls = parts.slice(0, endMarkerIndex).filter(
+    (part: any) =>
+      part?.type === 'tool-invocation' &&
+      part?.toolInvocation?.state === 'call' &&
+      unobservedResultIds.has(part?.toolInvocation?.toolCallId),
+  );
+
+  return preservedCalls.length > 0 ? [...preservedCalls, ...unobservedParts] : unobservedParts;
+}
+
 /**
  * Safely extract buffered observation chunks from a record.
  * Handles both array and JSON-string formats, returning empty array if malformed.
@@ -104,6 +200,7 @@ export function filterObservedMessages(opts: {
   const allMessages = messageList.get.all.db();
   const useMarkerBoundaryPruning = opts.useMarkerBoundaryPruning ?? true;
   const preserveMessageIds = opts.preserveMessageIds ?? new Set<string>();
+  const observedIds = new Set<string>(Array.isArray(record?.observedMessageIds) ? record.observedMessageIds : []);
 
   let markerMessageIndex = -1;
   let markerMessage: MastraDBMessage | null = null;
@@ -119,10 +216,16 @@ export function filterObservedMessages(opts: {
   }
 
   if (useMarkerBoundaryPruning && markerMessage && markerMessageIndex !== -1) {
+    const pendingToolResultIds = collectPendingToolResultIdsAfterMarker(allMessages, markerMessageIndex, markerMessage);
     const messagesToRemove: string[] = [];
     for (let i = 0; i < markerMessageIndex; i++) {
       const msg = allMessages[i];
-      if (msg?.id && msg.id !== 'om-continuation' && !preserveMessageIds.has(msg.id)) {
+      if (
+        msg?.id &&
+        msg.id !== 'om-continuation' &&
+        !preserveMessageIds.has(msg.id) &&
+        !hasPendingToolResultPair(msg, pendingToolResultIds)
+      ) {
         messagesToRemove.push(msg.id);
       }
     }
@@ -131,30 +234,14 @@ export function filterObservedMessages(opts: {
       messageList.removeByIds(messagesToRemove);
     }
 
-    const unobserved = getUnobservedParts(markerMessage);
+    const unobserved = getUnobservedPartsPreservingToolCallPairs(markerMessage);
     if (unobserved.length === 0) {
       if (markerMessage.id) messageList.removeByIds([markerMessage.id]);
     } else if (unobserved.length < (markerMessage.content?.parts?.length ?? 0)) {
       markerMessage.content.parts = unobserved;
     }
   } else if (record) {
-    const observedIds = new Set<string>(Array.isArray(record.observedMessageIds) ? record.observedMessageIds : []);
-
-    // Collect toolCallIds that have a pending result in a non-observed message
-    const pendingToolResultIds = new Set<string>();
-    for (const msg of allMessages) {
-      if (!msg?.id || observedIds.has(msg.id)) continue;
-      const parts = (msg.content as any)?.parts;
-      if (!Array.isArray(parts)) continue;
-      for (const part of parts) {
-        if ((part as any)?.type === 'tool-invocation' &&
-            (part as any)?.toolInvocation?.state === 'result') {
-          const id = (part as any)?.toolInvocation?.toolCallId;
-          if (id) pendingToolResultIds.add(id);
-        }
-      }
-    }
-
+    const pendingToolResultIds = collectPendingToolResultIds(allMessages, observedIds);
     const derivedCursor =
       opts.fallbackCursor ??
       getLastObservedMessageCursor(allMessages.filter(msg => !!msg?.id && observedIds.has(msg.id) && !!msg.createdAt));
@@ -165,16 +252,8 @@ export function filterObservedMessages(opts: {
       if (!msg?.id || msg.id === 'om-continuation' || preserveMessageIds.has(msg.id)) continue;
 
       if (observedIds.has(msg.id)) {
-        if (pendingToolResultIds.size > 0) {
-          const parts = (msg.content as any)?.parts;
-          if (Array.isArray(parts)) {
-            const hasOrphanedCall = parts.some((part: any) =>
-              part?.type === 'tool-invocation' &&
-              part?.toolInvocation?.state === 'call' &&
-              pendingToolResultIds.has(part?.toolInvocation?.toolCallId),
-            );
-            if (hasOrphanedCall) continue;
-          }
+        if (hasPendingToolResultPair(msg, pendingToolResultIds)) {
+          continue;
         }
         messagesToRemove.push(msg.id);
         continue;
