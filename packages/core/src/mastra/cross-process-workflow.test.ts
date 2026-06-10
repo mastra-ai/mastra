@@ -171,6 +171,64 @@ describe('cross-process workflow event guard', () => {
     await mastraOther.shutdown();
   });
 
+  it('skips nested workflow events whose root parent belongs to a different instance', async () => {
+    const sharedPubSub = new PushOnlyPubSub();
+
+    const mastraOwner = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: {} as any,
+      pubsub: sharedPubSub,
+    });
+    const mastraOther = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: {} as any,
+      pubsub: sharedPubSub,
+    });
+
+    mastraOwner.__registerInternalWorkflow(makeNoopWorkflow('execution-workflow') as any, 'run-owner');
+
+    await mastraOwner.startWorkers();
+    await mastraOther.startWorkers();
+
+    const spyOwner = vi.spyOn(mastraOwner, 'handleWorkflowEvent');
+    const spyOther = vi.spyOn(mastraOther, 'handleWorkflowEvent');
+
+    // Simulate a nested workflow event (agentic-loop inside execution-workflow)
+    // whose root parentWorkflow points to owner's execution-workflow run.
+    const nestedEvent: Event = {
+      type: 'workflow.step.run',
+      runId: 'nested-run-1',
+      data: {
+        workflowId: 'agentic-loop',
+        runId: 'nested-run-1',
+        executionPath: [0],
+        stepResults: {},
+        prevResult: { status: 'success', output: {} },
+        activeSteps: {},
+        requestContext: {},
+        parentWorkflow: {
+          workflowId: 'execution-workflow',
+          runId: 'run-owner',
+          executionPath: [0],
+          stepResults: {},
+          resume: false,
+          stepId: 'stream',
+          stepGraph: [],
+        },
+      },
+    } as Event;
+
+    await sharedPubSub.publish('workflows', nestedEvent);
+    await vi.waitFor(() => expect(spyOwner).toHaveBeenCalled(), { timeout: 1000, interval: 10 });
+    // The non-owning instance must NOT process nested events
+    expect(spyOther).not.toHaveBeenCalled();
+
+    await mastraOwner.shutdown();
+    await mastraOther.shutdown();
+  });
+
   it('skips events where runId does not match any registered internal workflow', async () => {
     const sharedPubSub = new PushOnlyPubSub();
 

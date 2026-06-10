@@ -2406,9 +2406,23 @@ export class Mastra<
   #ownsWorkflow(workflowId: string, runId: string, parentWorkflow: unknown): boolean {
     // 1. Internal registry (run-scoped execution-workflow, agentic-loop, etc.)
     if (this.__hasInternalWorkflow(workflowId, runId)) return true;
-    // 2. Nested workflow — parentWorkflow present means the parent dispatched
-    //    this step; let the WEP resolve via the parent's step graph.
-    if (parentWorkflow) return true;
+    // 2. Nested workflow — walk up the parentWorkflow chain to the root and
+    //    verify that the root workflow is owned by this instance. Without this
+    //    check, cross-process subscribers would process foreign nested events
+    //    (the parentWorkflow field is truthy on both processes) and publish
+    //    spurious workflow.fail events that kill the correct owner's run.
+    if (parentWorkflow) {
+      let root = parentWorkflow as { workflowId?: string; runId?: string; parentWorkflow?: unknown };
+      while (root.parentWorkflow) {
+        root = root.parentWorkflow as typeof root;
+      }
+      const rootId = root.workflowId as string | undefined;
+      const rootRunId = root.runId as string | undefined;
+      if (rootId && rootRunId) {
+        return this.#ownsWorkflow(rootId, rootRunId, undefined);
+      }
+      // Malformed chain — fall through to public registry check below.
+    }
     // 3. Public workflow registry — direct lookup to avoid telemetry noise
     //    from getWorkflowById() on the expected "foreign workflow" path.
     const workflows = this.#workflows as Record<string, AnyWorkflow> | undefined;

@@ -69,6 +69,31 @@ describe('UnixSocketPubSub', () => {
     expect(secondCb.mock.calls[0]![0].type).toBe('hello');
   });
 
+  it('relays client-published events back to the publishing client', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const client = new UnixSocketPubSub(path);
+    pubsubs.push(broker, client);
+
+    const brokerCb = vi.fn();
+    const clientCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb);
+    await client.subscribe('topic-a', clientCb);
+
+    expect(broker.isBroker).toBe(true);
+    expect(client.isBroker).toBe(false);
+
+    // Client publishes — broker should relay back to the client
+    await client.publish('topic-a', makeEvent({ type: 'from-client' }));
+
+    await waitFor(() => {
+      expect(brokerCb).toHaveBeenCalledTimes(1);
+      expect(clientCb).toHaveBeenCalledTimes(1);
+    });
+    expect(brokerCb.mock.calls[0]![0].type).toBe('from-client');
+    expect(clientCb.mock.calls[0]![0].type).toBe('from-client');
+  });
+
   it('allows a temporarily backpressured remote client to catch up below the queue cap', async () => {
     const path = await socketPath();
     const broker = new UnixSocketPubSub(path, { maxRemoteClientQueuedBytes: 1024 * 1024 });

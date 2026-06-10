@@ -157,4 +157,21 @@ describe('SignalsPubSub', () => {
     expect(mocks.instances[0]?.socketPath).toBe(`/tmp/mc/${resourceId}/workflows.sock`);
     expect(mocks.instances[1]?.socketPath).toBe(`/tmp/mc/${resourceId}/workflows-finish.sock`);
   });
+
+  it('hashes long socket paths that would exceed macOS sun_path limit', async () => {
+    const { createSignalsPubSub } = await import('../signals-pubsub.js');
+    const resourceId = '11111111-1111-4111-8111-111111111111';
+    // Simulate a scheduler-generated runId that produces a path > 104 bytes
+    const longTopic = 'workflow_events_v2_sched_wf___mastra_notification_dispatcher__dispatch_1781048760000';
+
+    const pubsub = createSignalsPubSub(resourceId);
+    await pubsub.publish(longTopic, event);
+
+    expect(mocks.instances).toHaveLength(1);
+    const socketPath = mocks.instances[0]?.socketPath;
+    // The full path must be ≤ 104 bytes (macOS sun_path limit)
+    expect(Buffer.byteLength(socketPath!)).toBeLessThanOrEqual(104);
+    // Should use a hash-based filename instead of the raw topic
+    expect(socketPath).toMatch(/\/tmp\/mc\/[^/]+\/[a-f0-9]{16}\.sock$/);
+  });
 });

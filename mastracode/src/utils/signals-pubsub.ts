@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -95,10 +96,18 @@ class SignalsPubSub extends PubSub {
   }
 
   async #socketPath(topic: string): Promise<string> {
-    const key = this.#topicKey(topic);
+    let key = this.#topicKey(topic);
     const dir = join('/tmp/mc', this.#resourceId);
     await mkdir(dir, { recursive: true });
-    return join(dir, `${key}.sock`);
+    const candidate = join(dir, `${key}.sock`);
+    // macOS sun_path limit is 104 bytes; Linux is 108. Use 104 as the
+    // conservative bound. When the path is too long, replace the key with
+    // a short hash so the socket can still be created.
+    if (Buffer.byteLength(candidate) > 104) {
+      key = createHash('sha256').update(key).digest('hex').slice(0, 16);
+      return join(dir, `${key}.sock`);
+    }
+    return candidate;
   }
 
   /**
