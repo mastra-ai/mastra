@@ -10,10 +10,6 @@ import type { MastraCodeState } from '../schema';
 import { getOmScope } from '../utils/project';
 import { resolveModel } from './model';
 
-let cachedMemory: Memory | null = null;
-let cachedMemoryKey: string | null = null;
-let cachedMemoryOverride: LanguageModel | undefined;
-
 /**
  * Read harness state from requestContext.
  * Used by both the memory factory and the OM model functions.
@@ -88,6 +84,8 @@ export function getDynamicMemory(
   vector?: MastraVector,
   observationalModel?: LanguageModel,
 ) {
+  let cachedMemory: Memory | null = null;
+  let cachedMemoryKey: string | null = null;
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const state = getHarnessState(requestContext);
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
@@ -99,7 +97,7 @@ export function getDynamicMemory(
     const observerPreviousObservationTokens = 1000;
     const observeAttachments = state?.observeAttachments;
     const cacheKey = `${obsThreshold}:${refThreshold}:${omScope}:${observerPreviousObservationTokens}:${caveman ? 1 : 0}:${observeAttachments}`;
-    if (cachedMemory && cachedMemoryKey === cacheKey && cachedMemoryOverride === observationalModel) {
+    if (cachedMemory && cachedMemoryKey === cacheKey) {
       return cachedMemory;
     }
 
@@ -145,7 +143,6 @@ export function getDynamicMemory(
       },
     });
     cachedMemoryKey = cacheKey;
-    cachedMemoryOverride = observationalModel;
 
     return cachedMemory;
   };

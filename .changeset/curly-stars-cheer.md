@@ -2,7 +2,7 @@
 'mastracode': minor
 ---
 
-Configure subagent and observational-memory models with provider model instances, not just string IDs. This lets you point those models at a provider that needs configuration a string ID can't carry, such as a Vertex AI project, region, or credentials, which is what automated environments like continuous integration (CI) need.
+Added support for configuring subagent and observational-memory models with provider model instances instead of string IDs, so they work with providers that need extra configuration (for example, a Vertex AI project, region, or credentials) in continuous integration environments.
 
 Subagents now accept a `defaultModel` instance, and the new `observationalModel` option sets the observational-memory model (observer and reflector):
 

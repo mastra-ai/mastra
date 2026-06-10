@@ -132,8 +132,8 @@ export interface HarnessSubagent {
    * instructions and tools, preserving prompt-cache prefix.
    *
    * The parent's `instructions`, `tools`, `allowedHarnessTools`,
-   * `allowedWorkspaceTools`, and `defaultModelId` fields on the definition
-   * are ignored when a run is forked — the parent agent is used as-is.
+   * `allowedWorkspaceTools`, `defaultModelId`, and `defaultModel` fields on the
+   * definition are ignored when a run is forked — the parent agent is used as-is.
    *
    * Callers can override per-invocation by passing `forked` in the tool
    * input. Forked subagents require memory to be configured on the Harness.
