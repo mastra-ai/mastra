@@ -372,7 +372,7 @@ export class ClickhouseDB extends MastraBase {
                 SELECT ${selectExpressions}
                 FROM ${backupTableName}
                 ORDER BY traceId, spanId,
-                         (endedAt IS NOT NULL AND endedAt != '') DESC,
+                         (endedAt IS NOT NULL) DESC,
                          COALESCE(updatedAt, createdAt) DESC,
                          createdAt DESC
                 LIMIT 1 BY traceId, spanId`,
