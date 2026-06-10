@@ -6,17 +6,15 @@ Playwright-based browser viewer for Mastra workspaces with CLI provider support.
 
 `@mastra/browser-viewer` provides `BrowserViewer`, which launches Chrome via Playwright and exposes the CDP URL for CLI tools (agent-browser, browser-use, or browse) to connect. This gives you:
 
-- **Full screencast support** — Direct page-level CDP sessions
-- **Input injection** — Mouse and keyboard events work correctly
-- **Browser lifecycle control** — Browser starts/stops with the server
-- **CLI flexibility** — Agent uses skills + workspace commands to drive any CLI
+- **Full screencast support**: Direct page-level CDP sessions
+- **Input injection**: Mouse and keyboard events work correctly
+- **Browser lifecycle control**: Browser starts/stops with the server
+- **CLI flexibility**: Agent uses skills + workspace commands to drive any CLI
 
 ## Installation
 
 ```bash
 npm install @mastra/browser-viewer
-# or
-pnpm add @mastra/browser-viewer
 ```
 
 ## Usage
@@ -91,9 +89,9 @@ const workspace = new Workspace({
 
 ## Supported CLIs
 
-- **agent-browser** — Vercel's browser automation CLI (`--cdp <port>`)
-- **browser-use** — Python-based browser automation (`--cdp-url <url>`)
-- **browse** — Browserbase's CLI (`--ws <url>`)
+- **agent-browser**: Vercel's browser automation CLI (`--cdp <port>`)
+- **browser-use**: Python-based browser automation (`--cdp-url <url>`)
+- **browse**: Browserbase's CLI (`--ws <url>`)
 
 ## License
 
