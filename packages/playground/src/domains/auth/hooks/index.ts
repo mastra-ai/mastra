@@ -7,4 +7,3 @@ export * from './use-credentials-login';
 export * from './use-credentials-signup';
 export * from './use-permissions';
 export * from './use-role-impersonation';
-export * from './use-users';

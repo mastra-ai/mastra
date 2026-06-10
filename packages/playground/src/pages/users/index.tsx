@@ -1,4 +1,6 @@
 import {
+  Avatar,
+  Button,
   ErrorState,
   ListSearch,
   NoDataPageLayout,
@@ -7,21 +9,119 @@ import {
   SessionExpired,
   is401UnauthorizedError,
   is403ForbiddenError,
+  Skeleton,
 } from '@mastra/playground-ui';
+import { ExternalLinkIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { useUsers } from '@/domains/team/hooks';
+import type { User } from '@/domains/team/hooks';
 
-import { useUsers } from '@/domains/auth/hooks/use-users';
+function formatLastActive(date?: string): string {
+  if (!date) return 'Never';
+  const d = new Date(date);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
 
-/**
- * Users list page - shows all server users (external customers).
- *
- * Users can click on a user to view their detail page,
- * which links to their activity traces.
- */
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins} min ago`;
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+  if (diffDays < 7) return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  return d.toLocaleDateString();
+}
+
+function UserRow({ user }: { user: User }) {
+  return (
+    <Link
+      to={`/users/${user.id}`}
+      className="flex items-center gap-3 p-3 border-b border-border1 last:border-b-0 hover:bg-surface1 transition-colors cursor-pointer"
+    >
+      <Avatar src={user.avatarUrl} name={user.name || user.email || user.id} size="sm" />
+
+      {/* Name/Email column */}
+      <div className="flex-1 min-w-0">
+        <div className="font-medium text-text1 truncate">{user.name || user.email || user.id}</div>
+        {user.email && user.name && <div className="text-sm text-text2 truncate">{user.email}</div>}
+      </div>
+
+      {/* Last active column */}
+      <div className="w-32 text-sm text-text2 text-right">{formatLastActive(user.lastActiveAt)}</div>
+
+      {/* Actions */}
+      <div className="flex items-center gap-2" onClick={e => e.preventDefault()}>
+        <Link to={`/observability?filterUserId=${user.id}`}>
+          <Button variant="outline" size="sm">
+            <ExternalLinkIcon className="h-3 w-3 mr-1" />
+            Traces
+          </Button>
+        </Link>
+      </div>
+    </Link>
+  );
+}
+
+function UsersTable({ users, isLoading, search }: { users: User[]; isLoading: boolean; search: string }) {
+  const filteredUsers = search
+    ? users.filter(
+        u =>
+          u.name?.toLowerCase().includes(search.toLowerCase()) || u.email?.toLowerCase().includes(search.toLowerCase()),
+      )
+    : users;
+
+  if (isLoading) {
+    return (
+      <div className="border border-border1 rounded-lg overflow-hidden">
+        {/* Header skeleton */}
+        <div className="flex items-center gap-3 p-3 border-b border-border1 bg-surface1">
+          <div className="w-8" />
+          <div className="flex-1 text-xs font-medium text-text2 uppercase tracking-wide">User</div>
+          <div className="w-32 text-xs font-medium text-text2 uppercase tracking-wide text-right">Last Active</div>
+          <div className="w-24" />
+        </div>
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="flex items-center gap-3 p-3 border-b border-border1 last:border-b-0">
+            <Skeleton className="h-8 w-8 rounded-full" />
+            <div className="flex-1 space-y-1">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-3 w-48" />
+            </div>
+            <Skeleton className="h-4 w-20" />
+            <Skeleton className="h-8 w-20" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (filteredUsers.length === 0) {
+    return (
+      <div className="text-center py-8 text-text2">{search ? `No users match "${search}"` : 'No users found'}</div>
+    );
+  }
+
+  return (
+    <div className="border border-border1 rounded-lg overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-3 p-3 border-b border-border1 bg-surface1">
+        <div className="w-8" />
+        <div className="flex-1 text-xs font-medium text-text2 uppercase tracking-wide">User</div>
+        <div className="w-32 text-xs font-medium text-text2 uppercase tracking-wide text-right">Last Active</div>
+        <div className="w-24" />
+      </div>
+      {filteredUsers.map(user => (
+        <UserRow key={user.id} user={user} />
+      ))}
+    </div>
+  );
+}
+
 function Users() {
+  const { data, isLoading, error } = useUsers();
   const [search, setSearch] = useState('');
-  const { data, isLoading, error } = useUsers({ search: search || undefined });
+  const users = data?.users ?? [];
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -47,16 +147,12 @@ function Users() {
     );
   }
 
-  const users = data?.users || [];
-
-  if (users.length === 0 && !isLoading && !search) {
+  if (users.length === 0 && !isLoading) {
     return (
       <NoDataPageLayout>
-        <div className="flex flex-col items-center justify-center gap-4 text-center">
-          <h2 className="text-lg font-semibold">No Users</h2>
-          <p className="text-mastra-el-3 max-w-md">
-            No users found. Users will appear here once they authenticate with your server auth provider.
-          </p>
+        <div className="text-center space-y-4">
+          <h2 className="text-xl font-semibold text-text1">No Users</h2>
+          <p className="text-text2">Users (customers) will appear here when they authenticate with your API.</p>
         </div>
       </NoDataPageLayout>
     );
@@ -70,76 +166,9 @@ function Users() {
         </div>
       </PageLayout.TopArea>
 
-      <div className="flex flex-col gap-2">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-8">
-            <span className="text-mastra-el-3">Loading users...</span>
-          </div>
-        ) : users.length === 0 ? (
-          <div className="flex items-center justify-center py-8">
-            <span className="text-mastra-el-3">No users match your search</span>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-1">
-            {users.map(user => (
-              <Link
-                key={user.id}
-                to={`/users/${user.id}`}
-                className="bg-mastra-bg-2 hover:bg-mastra-bg-3 rounded-lg p-4 transition-colors border border-mastra-border-1"
-              >
-                <div className="flex items-center gap-4">
-                  {user.avatarUrl ? (
-                    <img src={user.avatarUrl} alt="" className="w-10 h-10 rounded-full" />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-mastra-bg-4 flex items-center justify-center text-mastra-el-3">
-                      {(user.name || user.email || 'U').charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-mastra-el-1 truncate">{user.name || user.email || user.id}</div>
-                    {user.name && user.email && <div className="text-sm text-mastra-el-3 truncate">{user.email}</div>}
-                  </div>
-                  {user.lastActiveAt && (
-                    <div className="text-sm text-mastra-el-3">Last active: {formatRelativeTime(user.lastActiveAt)}</div>
-                  )}
-                </div>
-              </Link>
-            ))}
-          </div>
-        )}
-
-        {data?.total && data.total > users.length && (
-          <div className="text-sm text-mastra-el-3 text-center py-2">
-            Showing {users.length} of {data.total} users
-          </div>
-        )}
-      </div>
+      <UsersTable users={users} isLoading={isLoading} search={search} />
     </PageLayout>
   );
-}
-
-/**
- * Format a date string to a relative time (e.g., "2 hours ago")
- */
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSecs = Math.floor(diffMs / 1000);
-  const diffMins = Math.floor(diffSecs / 60);
-  const diffHours = Math.floor(diffMins / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  if (diffDays > 0) {
-    return `${diffDays} day${diffDays === 1 ? '' : 's'} ago`;
-  }
-  if (diffHours > 0) {
-    return `${diffHours} hour${diffHours === 1 ? '' : 's'} ago`;
-  }
-  if (diffMins > 0) {
-    return `${diffMins} minute${diffMins === 1 ? '' : 's'} ago`;
-  }
-  return 'Just now';
 }
 
 export { Users };

@@ -85,8 +85,8 @@ import SchedulesPage from './pages/workflows/schedules';
 import { Workflow } from './pages/workflows/workflow';
 import Workspace from './pages/workspace';
 import WorkspaceSkillDetailPage from './pages/workspace/skills/[skillName]';
-import Users from './pages/users';
-import UserDetail from './pages/users/user';
+import { Users } from './pages/users';
+import { UserDetail } from './pages/users/[id]';
 import { Layout } from '@/components/layout';
 import { MinimalLayout } from '@/components/minimal-layout';
 import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layouts/agent-builder-layout';
@@ -387,7 +387,7 @@ export const routes: RouteObject[] = [
       { path: '/resources', element: <Resources />, handle: navHandle('/resources') },
       { path: '/users', element: <Users />, handle: navHandle('/users') },
       {
-        path: '/users/:userId',
+        path: '/users/:id',
         element: <UserDetail />,
         handle: navHandleWithChildren('/users', [{ id: 'user', label: 'User' }]),
       },
