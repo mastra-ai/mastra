@@ -88,6 +88,25 @@ function rowToSession(row: HarnessSessionRow): SessionRecord {
   return record;
 }
 
+function pendingItemToDocument(item: HarnessPendingItemRecord): HarnessPendingItemRow {
+  const doc: HarnessPendingItemRow = {
+    id: item.id,
+    kind: item.kind,
+    status: item.status,
+    sessionId: item.sessionId,
+    createdAt: new Date(item.createdAt),
+    updatedAt: new Date(item.updatedAt),
+  };
+  if (item.runId !== undefined) doc.runId = item.runId;
+  if (item.traceId !== undefined) doc.traceId = item.traceId;
+  if (item.runtimeCompatibilityGeneration !== undefined) {
+    doc.runtimeCompatibilityGeneration = item.runtimeCompatibilityGeneration;
+  }
+  if (item.payload !== undefined) doc.payload = cloneJson(item.payload);
+  if (item.response !== undefined) doc.response = cloneJson(item.response);
+  return doc;
+}
+
 function sessionToDocument(record: SessionRecord): HarnessSessionRow {
   return {
     id: record.id,
@@ -104,13 +123,7 @@ function sessionToDocument(record: SessionRecord): HarnessSessionRow {
     title: record.title,
     metadata: cloneJson(record.metadata),
     state: cloneJson(record.state),
-    pending: record.pending?.map(item => ({
-      ...item,
-      payload: cloneJson(item.payload),
-      response: cloneJson(item.response),
-      createdAt: new Date(item.createdAt),
-      updatedAt: new Date(item.updatedAt),
-    })),
+    pending: record.pending?.map(pendingItemToDocument),
     createdAt: new Date(record.createdAt),
     lastActivityAt: new Date(record.lastActivityAt),
     closingAt: record.closingAt ? new Date(record.closingAt) : record.closingAt,
