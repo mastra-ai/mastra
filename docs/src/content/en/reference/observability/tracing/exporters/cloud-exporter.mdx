@@ -150,7 +150,7 @@ async onMetricEvent(event: MetricEvent): Promise<void>
 
 Processes metric signals for Cloud export.
 
-Every `MetricEvent` passed to this handler is buffered and exported to the Cloud metrics endpoint derived from the configured base endpoint. Additional filtering by metric subtype or status inside `CloudExporter` is not performed; the exporter forwards every metric event it receives unless it's disabled.
+Every `MetricEvent` passed to this handler is buffered and exported to the Cloud metrics endpoint derived from the configured base endpoint. Additional filtering by metric subtype or status inside `CloudExporter` isn't performed; the exporter forwards every metric event it receives unless it's disabled.
 
 <PropertiesTable
   props={[

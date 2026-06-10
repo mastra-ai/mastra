@@ -130,7 +130,7 @@ Vercel
 Visual Studio Code
 Vectorize
 (?i)Vitest
-VNext
+(?i)VNext
 WebSocket
 WhatsApp
 (?i)WorkOS
