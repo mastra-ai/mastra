@@ -1,7 +1,6 @@
 import { ChevronRight, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-
 import { Card } from '../Card';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../Collapsible';
 import { Txt } from '../Txt';

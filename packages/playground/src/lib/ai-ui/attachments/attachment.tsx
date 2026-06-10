@@ -5,8 +5,8 @@ import { useEffect, useState } from 'react';
 
 import { useLoadBrowserFile } from '../hooks/use-load-browser-file';
 import { ImageEntry, TxtEntry, PdfEntry } from './attachment-preview-dialog';
-import { useComposerAttachments  } from './composer-attachments';
-import type {ComposerAttachment} from './composer-attachments';
+import { useComposerAttachments } from './composer-attachments';
+import type { ComposerAttachment } from './composer-attachments';
 
 const ComposerTxtAttachment = ({ file }: { file: File }) => {
   const { isLoading, text } = useLoadBrowserFile(file);

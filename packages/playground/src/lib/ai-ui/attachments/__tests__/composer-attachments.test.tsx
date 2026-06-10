@@ -4,8 +4,8 @@ import { http, HttpResponse } from 'msw';
 import { useEffect } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ComposerAttachmentsProvider, useComposerAttachments  } from '../composer-attachments';
-import type {ComposerAttachment} from '../composer-attachments';
+import { ComposerAttachmentsProvider, useComposerAttachments } from '../composer-attachments';
+import type { ComposerAttachment } from '../composer-attachments';
 import { server } from '@/test/msw-server';
 
 afterEach(() => cleanup());
