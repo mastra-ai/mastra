@@ -7,6 +7,8 @@
  * and do not import any Node.js dependencies.
  */
 
+import type { MastraUnion } from '../../action';
+import type { AgentSignalInput } from '../../agent/signals';
 import type { WorkspaceToolName, WORKSPACE_TOOLS } from '../constants';
 
 // =============================================================================
@@ -145,6 +147,18 @@ export interface WorkspaceToolConfig {
 export interface BackgroundProcessMeta {
   pid: string;
   toolCallId?: string;
+  /**
+   * The Mastra instance, when the tool was invoked from an agent run.
+   * Use with `agentId` to resolve the invoking agent (e.g. to call
+   * `mastra.getAgentById(agentId).sendSignal(...)`).
+   */
+  mastra?: MastraUnion;
+  /** Agent that invoked the tool, when invoked from an agent run. */
+  agentId?: string;
+  /** Thread the invoking agent run is bound to, when available. */
+  threadId?: string;
+  /** Resource (user) the invoking agent run is bound to, when available. */
+  resourceId?: string;
 }
 
 /** Metadata passed to the onExit callback. */
@@ -177,6 +191,25 @@ export interface BackgroundProcessConfig {
    *   Use this for cloud sandboxes (e.g. E2B) where processes should survive agent shutdown.
    */
   abortSignal?: AbortSignal | null | false;
+  /**
+   * When a background process exits, send an `agent.sendSignal` to the
+   * invoking agent's thread (waking it if idle). Defaults to `true`.
+   *
+   * - `true` (default): fires a built-in `system-reminder` signal containing
+   *   the exit code and (truncated) stdout/stderr.
+   * - `false`: do not fire any signal automatically — useful if you handle
+   *   exit notification yourself in `onExit`.
+   * - function: build a custom signal payload. Return `undefined` to skip
+   *   firing for this exit (e.g. only signal on non-zero exit codes).
+   *
+   * The signal only fires when the tool was invoked from an agent run
+   * (i.e. `mastra`, `agentId`, `threadId`, and `resourceId` are all
+   * available on the exit meta). It uses the default `ifIdle: 'wake'`
+   * behavior of `agent.sendSignal`.
+   *
+   * @experimental — depends on the experimental agent-signals API.
+   */
+  signalOnExit?: boolean | ((exit: BackgroundProcessExitMeta) => AgentSignalInput | undefined | void);
 }
 
 // =============================================================================
@@ -282,7 +315,18 @@ export interface ReadFileToolConfig extends WorkspaceToolConfig {
  *       requireApproval: true,
  *       backgroundProcesses: {
  *         onStdout: (data, { pid }) => console.log(`[PID ${pid}]`, data),
- *         onExit: ({ pid, exitCode }) => console.log(`Process ${pid} exited: ${exitCode}`),
+ *         // By default, when a background process exits the invoking agent
+ *         // is woken with a `system-reminder` signal describing the exit.
+ *         // Pass `signalOnExit: false` to opt out, or a function to build a
+ *         // custom payload (return `undefined` to skip firing for this exit).
+ *         signalOnExit: (exit) =>
+ *           exit.exitCode === 0
+ *             ? undefined
+ *             : {
+ *                 type: 'system-reminder',
+ *                 contents: `pid ${exit.pid} failed (${exit.exitCode}): ${exit.stderr}`,
+ *                 attributes: { pid: exit.pid, exitCode: exit.exitCode },
+ *               },
  *       },
  *     },
  *   },

@@ -205,6 +205,38 @@ const workspace = new Workspace({
 
 These callbacks fire for all background processes started by the agent through the `execute_command` tool.
 
+### Signal on exit
+
+When a background process exits, the invoking agent is woken with a `system-reminder` signal describing the exit. This means an agent that stops talking while a long-running task is still running resumes the moment the task finishes. The signal only fires when `execute_command` is invoked from an agent run.
+
+Control this with the `signalOnExit` option:
+
+- **`true`** (default): Fires a built-in `system-reminder` signal with the pid, exit code, and (truncated) stdout/stderr.
+- **`false`**: Skip the signal — useful if you handle exit notification yourself in `onExit`.
+- **function**: Build a custom signal payload. Return `undefined` to skip firing for a given exit (for example, only signal on non-zero exit codes).
+
+```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  tools: {
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      backgroundProcesses: {
+        signalOnExit: exit =>
+          exit.exitCode === 0
+            ? undefined
+            : {
+                type: 'system-reminder',
+                contents: `pid ${exit.pid} failed (${exit.exitCode}): ${exit.stderr}`,
+                attributes: { pid: exit.pid, exitCode: exit.exitCode },
+              },
+      },
+    },
+  },
+})
+```
+
 ### Abort signal
 
 By default, background processes inherit the agent's abort signal and are killed when the agent disconnects. Control this behavior with the `abortSignal` option:

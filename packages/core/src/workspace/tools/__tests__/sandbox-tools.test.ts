@@ -311,6 +311,201 @@ describe('execute_command tool', () => {
         }),
       );
     });
+
+    it('forwards agent context (mastra, agentId, threadId, resourceId) to background callbacks', async () => {
+      const onStdout = vi.fn();
+      const onStderr = vi.fn();
+      const onExit = vi.fn();
+      const handle = createMockHandle({ pid: '99' });
+      // Simulate streamed chunks so onStdout/onStderr are exercised too.
+      // Real spawn resolves before any data events fire (Node event loop
+      // guarantee — see comment in execute-command.ts). Match that here by
+      // deferring the emits via queueMicrotask, otherwise the handle closure
+      // inside the production wrapper is still undefined.
+      const spawn = vi.fn().mockImplementation(async (_cmd: string, opts: any) => {
+        setTimeout(() => {
+          opts.onStdout?.('hello stdout');
+          opts.onStderr?.('hello stderr');
+        }, 0);
+        return handle;
+      });
+      const sandbox = createMockSandbox({ processes: { spawn } });
+      const workspace = new Workspace({
+        sandbox,
+        tools: {
+          [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+            // Opt out of the default sendSignal-on-exit so this test stays
+            // focused on meta forwarding. The mastra sentinel below has no
+            // real `getAgentById`, so leaving signalOnExit at its default
+            // would route through the signal dispatch path.
+            backgroundProcesses: { onStdout, onStderr, onExit, signalOnExit: false },
+          },
+        },
+      });
+
+      const mastraSentinel = { __marker: 'mastra' } as any;
+      await executeCommandWithBackgroundTool.execute(
+        { command: 'sleep 1', background: true },
+        {
+          workspace,
+          mastra: mastraSentinel,
+          agent: { agentId: 'a1', toolCallId: 'tc1', threadId: 't1', resourceId: 'r1' },
+        },
+      );
+      await vi.waitFor(() => {
+        expect(onStdout).toHaveBeenCalled();
+        expect(onStderr).toHaveBeenCalled();
+        expect(onExit).toHaveBeenCalled();
+      });
+
+      const expectedAgentMeta = {
+        mastra: mastraSentinel,
+        agentId: 'a1',
+        threadId: 't1',
+        resourceId: 'r1',
+      };
+
+      expect(onStdout).toHaveBeenCalledWith('hello stdout', expect.objectContaining(expectedAgentMeta));
+      expect(onStderr).toHaveBeenCalledWith('hello stderr', expect.objectContaining(expectedAgentMeta));
+      expect(onExit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pid: '99',
+          toolCallId: 'tc1',
+          ...expectedAgentMeta,
+        }),
+      );
+    });
+
+    describe('signalOnExit', () => {
+      function createMockMastra({ sendSignal, logger }: { sendSignal?: any; logger?: any } = {}) {
+        const sendSignalMock = sendSignal ?? vi.fn().mockResolvedValue(undefined);
+        const agent = { sendSignal: sendSignalMock };
+        const getAgentById = vi.fn().mockReturnValue(agent);
+        const loggerMock = logger ?? { error: vi.fn() };
+        const mastra = {
+          getAgentById,
+          getLogger: () => loggerMock,
+        } as any;
+        return { mastra, getAgentById, sendSignal: sendSignalMock, agent, logger: loggerMock };
+      }
+
+      async function spawnBgWithSignalConfig(
+        signalConfig: { backgroundProcesses?: any } | undefined,
+        contextOverrides: { mastra?: any; agent?: any } = {},
+      ) {
+        const handle = createMockHandle({
+          pid: '7',
+          waitResult: {
+            exitCode: 0,
+            success: true,
+            stdout: 'ok',
+            stderr: '',
+          },
+        });
+        const sandbox = createMockSandbox({
+          processes: { spawn: vi.fn().mockResolvedValue(handle) },
+        });
+        const workspace = new Workspace({
+          sandbox,
+          tools: signalConfig ? { [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: signalConfig } : undefined,
+        });
+        await executeCommandWithBackgroundTool.execute(
+          { command: 'sleep 1', background: true },
+          {
+            workspace,
+            agent: { agentId: 'a1', toolCallId: 'tc1', threadId: 't1', resourceId: 'r1' },
+            ...contextOverrides,
+          },
+        );
+        return { handle };
+      }
+
+      it('fires the default system-reminder signal when a background process exits', async () => {
+        const { mastra, getAgentById, sendSignal } = createMockMastra();
+        await spawnBgWithSignalConfig(undefined, { mastra });
+
+        await vi.waitFor(() => expect(sendSignal).toHaveBeenCalled());
+
+        expect(getAgentById).toHaveBeenCalledWith('a1');
+        expect(sendSignal).toHaveBeenCalledTimes(1);
+        const [signal, target] = sendSignal.mock.calls[0];
+        expect(signal.type).toBe('system-reminder');
+        expect(signal.contents).toContain('Background process 7 exited with code 0');
+        expect(signal.contents).toContain('stdout:\nok');
+        expect(signal.attributes).toEqual({ pid: '7', exitCode: 0 });
+        expect(target).toEqual({ resourceId: 'r1', threadId: 't1' });
+      });
+
+      it('does not fire a signal when signalOnExit is false', async () => {
+        const { mastra, sendSignal } = createMockMastra();
+        await spawnBgWithSignalConfig({ backgroundProcesses: { signalOnExit: false } }, { mastra });
+        // Wait a tick to let any pending dispatch run.
+        await new Promise(resolve => setTimeout(resolve, 10));
+        expect(sendSignal).not.toHaveBeenCalled();
+      });
+
+      it('uses a custom signal payload built by the signalOnExit function', async () => {
+        const { mastra, sendSignal } = createMockMastra();
+        await spawnBgWithSignalConfig(
+          {
+            backgroundProcesses: {
+              signalOnExit: (exit: any) => ({
+                type: 'system-reminder',
+                contents: `custom ${exit.pid}`,
+                attributes: { custom: true },
+              }),
+            },
+          },
+          { mastra },
+        );
+        await vi.waitFor(() => expect(sendSignal).toHaveBeenCalled());
+        const [signal] = sendSignal.mock.calls[0];
+        expect(signal.contents).toBe('custom 7');
+        expect(signal.attributes).toEqual({ custom: true });
+      });
+
+      it('skips firing when the signalOnExit function returns undefined', async () => {
+        const { mastra, sendSignal } = createMockMastra();
+        await spawnBgWithSignalConfig(
+          {
+            backgroundProcesses: { signalOnExit: () => undefined },
+          },
+          { mastra },
+        );
+        await new Promise(resolve => setTimeout(resolve, 10));
+        expect(sendSignal).not.toHaveBeenCalled();
+      });
+
+      it('skips the signal when no agent context is present', async () => {
+        const { mastra, getAgentById, sendSignal } = createMockMastra();
+        // Build a workspace + handle but invoke without `agent` / `mastra` in context.
+        const handle = createMockHandle({ pid: '11' });
+        const sandbox = createMockSandbox({
+          processes: { spawn: vi.fn().mockResolvedValue(handle) },
+        });
+        const workspace = new Workspace({ sandbox });
+        await executeCommandWithBackgroundTool.execute({ command: 'sleep 1', background: true }, { workspace } as any);
+        await new Promise(resolve => setTimeout(resolve, 10));
+        expect(getAgentById).not.toHaveBeenCalled();
+        expect(sendSignal).not.toHaveBeenCalled();
+        // Silence unused-var lint.
+        void mastra;
+      });
+
+      it('logs and swallows errors thrown by sendSignal', async () => {
+        const { mastra, sendSignal, logger } = createMockMastra({
+          sendSignal: vi.fn().mockRejectedValue(new Error('agent gone')),
+        });
+        await spawnBgWithSignalConfig(undefined, { mastra });
+        await vi.waitFor(() => expect(sendSignal).toHaveBeenCalled());
+        // Give the rejection handler a tick to run.
+        await new Promise(resolve => setTimeout(resolve, 10));
+        expect(logger.error).toHaveBeenCalled();
+        const [msg, ctx] = logger.error.mock.calls[0];
+        expect(msg).toMatch(/signalOnExit dispatch failed/);
+        expect(ctx).toMatchObject({ pid: '7', exitCode: 0 });
+      });
+    });
   });
 });
 

@@ -751,6 +751,13 @@ The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle 
             isOptional: true,
           },
           {
+            name: 'signalOnExit',
+            type: 'boolean | ((exit: BackgroundProcessExitMeta) => AgentSignalInput | undefined | void)',
+            description:
+              'When a background process exits, wake the invoking agent with a system-reminder signal. Defaults to true. Pass false to opt out, or a function to build a custom signal payload (return undefined to skip firing for a given exit). Only fires when the tool was invoked from an agent run.',
+            isOptional: true,
+          },
+          {
             name: 'abortSignal',
             type: 'AbortSignal | null | false',
             description:
