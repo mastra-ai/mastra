@@ -156,6 +156,25 @@ export interface DurableAgentConfig<
 }
 
 /**
+ * One ephemeral Mastra per pubsub instance.
+ *
+ * The evented workflow engine assumes a single worker set per pubsub: the
+ * orchestration worker subscribes to the shared `workflows` topic and every
+ * published event is delivered to every subscriber. If two standalone agents
+ * that share a pubsub each spun up their own ephemeral Mastra (and therefore
+ * their own orchestration worker), both workers would receive — and try to
+ * drive — every workflow event on the bus, double-processing each run and
+ * deadlocking continuation. Keying the ephemeral Mastra by pubsub guarantees
+ * those agents share a single worker set; each run stays isolated via the
+ * run-scoped (`${workflowId}:${runId}`) internal-workflow registration.
+ *
+ * The value is the in-flight creation promise so concurrent first calls reuse
+ * the same instance instead of racing to create two. Entries are cleared when
+ * a real Mastra is registered (see {@link DurableAgent.__registerMastra}).
+ */
+const ephemeralMastraByPubsub = new WeakMap<PubSub, Promise<Mastra>>();
+
+/**
  * DurableAgent wraps an existing Agent with durable execution capabilities.
  *
  * Key features:
@@ -329,16 +348,27 @@ export class DurableAgent<
 
     if (this.#ephemeralMastra) return this.#ephemeralMastra;
 
-    // Imported lazily: a static import of `../../mastra` would pull the evented
-    // workflow engine into this module's init-time graph and form an ESM cycle.
-    const { Mastra: MastraClass } = await import('../../mastra');
-    const ephemeral = new MastraClass({
-      logger: false,
-      // Inherit storage from user's Mastra when available, otherwise use in-memory.
-      storage: this.#mastra?.getStorage() ?? new InMemoryStore(),
-      pubsub: this.#innerPubsub,
-    });
-    await ephemeral.startWorkers();
+    // Reuse (or create) the single ephemeral Mastra shared by all agents on this
+    // pubsub, so the bus has exactly one orchestration worker (see
+    // `ephemeralMastraByPubsub`). The promise is cached so concurrent callers
+    // don't each build their own instance.
+    let creation = ephemeralMastraByPubsub.get(this.#innerPubsub);
+    if (!creation) {
+      const storage = this.#mastra?.getStorage() ?? new InMemoryStore();
+      const pubsub = this.#innerPubsub;
+      creation = (async () => {
+        // Imported lazily: a static import of `../../mastra` would pull the
+        // evented workflow engine into this module's init-time graph and form
+        // an ESM cycle.
+        const { Mastra: MastraClass } = await import('../../mastra');
+        const ephemeral = new MastraClass({ logger: false, storage, pubsub });
+        await ephemeral.startWorkers();
+        return ephemeral;
+      })();
+      ephemeralMastraByPubsub.set(this.#innerPubsub, creation);
+    }
+
+    const ephemeral = await creation;
     this.#ephemeralMastra = ephemeral;
     return ephemeral;
   }
@@ -982,8 +1012,11 @@ export class DurableAgent<
     // Also set on wrapped agent
     this.#wrappedAgent.__registerMastra(mastra);
 
-    // Tear down ephemeral Mastra if a real one is being registered.
+    // Tear down ephemeral Mastra if a real one is being registered. Also drop
+    // the shared per-pubsub entry so a stopped instance is never handed out
+    // again (a fresh one is lazily rebuilt on the next execution if needed).
     if (this.#ephemeralMastra) {
+      ephemeralMastraByPubsub.delete(this.#innerPubsub);
       void this.#ephemeralMastra.stopWorkers().catch(() => {});
       this.#ephemeralMastra = undefined;
     }
