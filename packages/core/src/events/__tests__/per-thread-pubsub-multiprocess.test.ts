@@ -450,9 +450,7 @@ parentPort.postMessage({ type: 'ready', data: { started: true } });
     for (let attempt = 0; attempt < 50; attempt++) {
       const warmupType = `warmup-${attempt}`;
       const warmupPromises = clients.map(worker =>
-        waitForMessage(worker, 'event-received', 100, msg => msg.data?.eventType === warmupType).catch(
-          () => undefined,
-        ),
+        waitForMessage(worker, 'event-received', 100, msg => msg.data?.eventType === warmupType).catch(() => undefined),
       );
       publisher.postMessage({ type: 'publish', eventType: warmupType });
       await waitForMessage(publisher, 'ready');
