@@ -103,11 +103,17 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                           <span className="block w-full min-w-0 truncate text-xs">
                             {formatRunTitle(run.snapshot, run.runId)}
                           </span>
-                          {run?.snapshot && typeof run.snapshot === 'object' && run.snapshot.timestamp && (
-                            <span className="text-neutral3 block w-full max-w-full truncate text-xs">
-                              {formatDate(run.snapshot.timestamp, 'MMM d, yyyy h:mm a')}
-                            </span>
-                          )}
+                          <span className="text-neutral3 flex w-full min-w-0 items-center gap-1 text-xs">
+                            <span className="shrink-0">#{run.runId.slice(0, 6)}</span>
+                            {run?.snapshot && typeof run.snapshot === 'object' && run.snapshot.timestamp && (
+                              <>
+                                <span className="shrink-0">·</span>
+                                <span className="truncate">
+                                  {formatDate(run.snapshot.timestamp, 'MMM d, yyyy h:mm a')}
+                                </span>
+                              </>
+                            )}
+                          </span>
                         </span>
                       </span>
                     </ThreadListItem>

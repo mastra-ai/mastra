@@ -116,6 +116,15 @@ describe('WorkflowRecentRuns', () => {
     expect(screen.queryByText('SUCCESS')).toBeNull();
   });
 
+  it('shows the run id prefix (first 6 chars) before the date', async () => {
+    stubCapabilities();
+    stubRuns(oneSuccessfulRun);
+
+    renderRunList();
+
+    expect(await screen.findByText('#run-su')).not.toBeNull();
+  });
+
   it('renders the "Recent runs" section title', async () => {
     stubCapabilities();
     stubRuns(oneSuccessfulRun);
