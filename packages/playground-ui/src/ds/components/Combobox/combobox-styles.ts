@@ -1,6 +1,7 @@
 import { buttonVariants } from '../Button/Button';
+import type { TextButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
-import type { ControlSize, ControlTriggerVisualVariant } from '@/ds/primitives/control-size';
+import type { ControlTriggerVisualVariant } from '@/ds/primitives/control-size';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -33,7 +34,7 @@ export function comboboxTriggerClass({
   className,
 }: {
   variant: ComboboxVariant;
-  size: ControlSize;
+  size: TextButtonSize;
   error?: boolean;
   className?: string;
 }): string {
