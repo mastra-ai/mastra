@@ -181,6 +181,43 @@ describe('Drawer', () => {
     expect(popup?.classList.contains('pointer-events-auto')).toBe(false);
   });
 
+  it('renders a floating drawer without a backdrop', () => {
+    render(
+      <Drawer side="right" variant="floating" defaultOpen>
+        <DrawerContent>
+          <DrawerTitle>Floating drawer</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    const viewport = document.querySelector('[data-slot="drawer-viewport"]');
+    const popup = document.querySelector('[data-slot="drawer-popup"]');
+    expect(document.querySelector('[data-slot="drawer-backdrop"]')).toBeNull();
+    expect(viewport?.getAttribute('data-variant')).toBe('floating');
+    expect(viewport?.classList.contains('pointer-events-none')).toBe(true);
+    expect(viewport?.classList.contains('p-3')).toBe(true);
+    expect(popup?.getAttribute('data-variant')).toBe('floating');
+    expect(popup?.classList.contains('drawer-popup-floating')).toBe(true);
+    expect(popup?.classList.contains('pointer-events-auto')).toBe(true);
+    expect(popup?.classList.contains('w-[32rem]')).toBe(true);
+  });
+
+  it('supports the floating variant on DrawerContent without changing the root', () => {
+    render(
+      <Drawer side="right" defaultOpen>
+        <DrawerContent variant="floating">
+          <DrawerTitle>Floating content</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    const viewport = document.querySelector('[data-slot="drawer-viewport"]');
+    const popup = document.querySelector('[data-slot="drawer-popup"]');
+    expect(document.querySelector('[data-slot="drawer-backdrop"]')).toBeNull();
+    expect(viewport?.getAttribute('data-variant')).toBe('floating');
+    expect(popup?.getAttribute('data-variant')).toBe('floating');
+  });
+
   // Non-modal escape hatch: viewport opts out of pointer events, popup opts back in, no backdrop.
   it('opts the viewport out of pointer events for a non-modal drawer', () => {
     render(
