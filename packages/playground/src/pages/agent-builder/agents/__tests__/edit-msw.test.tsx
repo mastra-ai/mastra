@@ -65,6 +65,9 @@ vi.mock('@/domains/agent-builder/components/agent-edit/conversation-panel', () =
 const useStreamRunningMock = vi.fn(() => false);
 vi.mock('@/domains/agent-builder/contexts/stream-chat-context', () => ({
   useStreamRunning: () => useStreamRunningMock(),
+  // No debounce in these suites: they assert steady running/idle states, not the idle-gap
+  // grace period (covered by edit-onboarding.msw.test.tsx with the real debounce hook).
+  useStreamRunningDebounced: () => useStreamRunningMock(),
   useStreamMessages: () => [],
   useStreamSend: () => () => {},
 }));

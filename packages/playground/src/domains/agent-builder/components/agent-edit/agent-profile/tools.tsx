@@ -1,12 +1,14 @@
-import { Checkbox, Txt, cn } from '@mastra/playground-ui';
-import type { CSSProperties, ReactNode } from 'react';
-import { useState } from 'react';
-import { useFormContext } from 'react-hook-form';
-import { useAgentColor } from '../../../contexts/agent-color-context';
-import type { AgentBuilderEditFormValues } from '../../../schemas';
+import { useMemo, useState } from 'react';
+import { useAllProviderTools } from '../../../../tool-providers/hooks/use-all-provider-tools';
+import { useToolProviders } from '../../../../tool-providers/hooks/use-tool-providers';
 import type { AgentTool } from '../../../types/agent-tool';
-import { AgentSearchbar } from '../agent-searchbar';
-import { AgentSelectableCard } from '../agent-selectable-card';
+import { TwoPanePickerSkeleton } from './two-pane-picker-skeleton';
+import { ToolGrid, ToolListEmptyState } from './tool-grid';
+import { getEmptyStateDetails, getVisibleTools } from './tool-visibility';
+import { ToolkitFilterPane } from './toolkit-filter-pane';
+import { useProviderToolkitGroups } from './use-provider-toolkit-groups';
+import { useToolSelection } from './use-tool-selection';
+import { useToolkitSelection } from './use-toolkit-selection';
 
 interface ToolsProps {
   editable?: boolean;
@@ -14,120 +16,75 @@ interface ToolsProps {
 }
 
 export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps) => {
-  const { setValue, getValues } = useFormContext<AgentBuilderEditFormValues>();
-  const agentColor = useAgentColor();
   const [search, setSearch] = useState('');
   const [onlySelected, setOnlySelected] = useState(false);
 
-  const filterCheckboxStyle: CSSProperties | undefined = onlySelected
-    ? {
-        backgroundColor: agentColor.background,
-        borderColor: agentColor.background,
-        color: agentColor.foreground,
-      }
-    : undefined;
+  // Provider grouping + toolkit ids derive synchronously from the prefetched
+  // tools; each provider section fetches its own toolkit display names lazily.
+  const { builtIn, providers, allToolkitIds, isProvidersLoading } = useProviderToolkitGroups(availableAgentTools);
 
-  const toggle = (item: AgentTool, next: boolean) => {
-    const fieldName = item.type === 'agent' ? 'agents' : item.type === 'workflow' ? 'workflows' : 'tools';
-    const current = getValues(fieldName) ?? {};
-    setValue(fieldName, { ...current, [item.id]: next }, { shouldDirty: true });
-  };
+  const toolkits = useToolkitSelection(allToolkitIds);
+  const { toggle } = useToolSelection();
+
+  // Per-provider capability lookup so the toolkit pane knows whether multiple
+  // connections per toolkit are allowed for a given provider.
+  const providersQuery = useToolProviders();
+  const multipleAllowedByProvider = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const provider of providersQuery.data?.providers ?? []) {
+      map.set(provider.id, provider.capabilities?.multipleConnectionsPerToolkit ?? false);
+    }
+    return map;
+  }, [providersQuery.data?.providers]);
+
+  // Integration tools stream in asynchronously; while they may still arrive,
+  // show the structural skeleton (mirroring the Models loading layout) instead
+  // of flashing the "no tools" empty state.
+  const { isLoading: isIntegrationToolsLoading } = useAllProviderTools();
 
   if (availableAgentTools.length === 0) {
-    return <ToolListEmptyState details={'No tools available in this project'} />;
-  }
-
-  const visibleTools = getVisibleTools(availableAgentTools, search, onlySelected);
-  const trimmedSearch = search.trim();
-
-  let emptyStateDetails: ReactNode;
-  if (onlySelected && trimmedSearch === '') {
-    emptyStateDetails = 'No tools selected yet';
-  } else if (onlySelected) {
-    emptyStateDetails = <>No selected tools match "{trimmedSearch}"</>;
-  } else {
-    emptyStateDetails = (
-      <>
-        No tools match <strong>"${trimmedSearch}"</strong>
-      </>
+    if (isIntegrationToolsLoading) {
+      return <TwoPanePickerSkeleton testId="tools-card-picker-loading" />;
+    }
+    return (
+      <div className="px-6 py-6" data-testid="tools-empty-state">
+        <ToolListEmptyState details={'No tools available in this project'} />
+      </div>
     );
   }
 
-  return (
-    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 px-6" data-testid="tools-card-picker">
-      <div className="flex shrink-0 items-center justify-between gap-4">
-        <div data-testid="tools-card-picker-search" className="max-w-[30ch] flex-1">
-          <AgentSearchbar
-            onSearch={setSearch}
-            label="Search tools"
-            placeholder="Search tools..."
-            size="lg"
-            debounceMs={0}
-          />
-        </div>
-
-        <label
-          data-testid="tools-only-selected-filter"
-          className={cn(
-            'inline-flex items-center gap-2 text-ui-xs text-neutral3 select-none cursor-pointer',
-            !editable && 'cursor-not-allowed opacity-60',
-          )}
-        >
-          <Checkbox
-            checked={onlySelected}
-            onCheckedChange={value => setOnlySelected(value === true)}
-            disabled={!editable}
-            data-testid="tools-only-selected-filter-checkbox"
-            style={filterCheckboxStyle}
-            className="h-3 w-3 shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5 data-[state=checked]:shadow-none"
-          />
-          <span>Show only selected</span>
-        </label>
-      </div>
-
-      {visibleTools.length === 0 ? (
-        <ToolListEmptyState details={emptyStateDetails} />
-      ) : (
-        <div className="grid min-h-0 grid-cols-1 content-start gap-2 lg:gap-6 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
-          {visibleTools.map(item => (
-            <AgentSelectableCard
-              key={`${item.type}__${item.id}`}
-              title={item.name}
-              subtitle={item.description || 'No description provided'}
-              isSelected={item.isChecked}
-              disabled={!editable}
-              onClick={() => toggle(item, !item.isChecked)}
-              ariaLabel={item.name}
-              testId={`tool-card-${item.type}-${item.id}`}
-              checkTestId={`tool-card-check-${item.type}-${item.id}`}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-interface ToolListEmptyStateProps {
-  details: ReactNode;
-}
-
-const ToolListEmptyState = ({ details }: ToolListEmptyStateProps) => {
-  return (
-    <div className="flex min-h-0 items-center justify-center px-3 py-6">
-      <Txt variant="ui-md" className="text-neutral3">
-        {details}
-      </Txt>
-    </div>
-  );
-};
-
-function getVisibleTools(availableAgentTools: AgentTool[], search: string, onlySelected: boolean) {
-  const term = search.trim().toLowerCase();
-
-  return availableAgentTools.filter(item => {
-    if (onlySelected && !item.isChecked) return false;
-    if (!term) return true;
-    return item.name.toLowerCase().includes(term) || (item.description?.toLowerCase().includes(term) ?? false);
+  const visibleTools = getVisibleTools(availableAgentTools, search, onlySelected, toolkits.selected);
+  const emptyStateDetails = getEmptyStateDetails({
+    allToolkitsUnchecked: toolkits.allUnchecked,
+    onlySelected,
+    search,
   });
-}
+
+  return (
+    <div className="grid h-full min-h-0 grid-cols-[280px_minmax(0,1fr)]" data-testid="tools-card-picker">
+      {(isProvidersLoading || allToolkitIds.length > 0) && (
+        <ToolkitFilterPane
+          builtIn={builtIn}
+          providers={providers}
+          isProvidersLoading={isProvidersLoading}
+          isChecked={toolkits.isChecked}
+          onToggle={toolkits.toggle}
+          onSelectAll={toolkits.selectAll}
+          onClearAll={toolkits.clearAll}
+          disabled={!editable}
+          multipleAllowedByProvider={multipleAllowedByProvider}
+        />
+      )}
+
+      <ToolGrid
+        tools={visibleTools}
+        editable={editable}
+        onlySelected={onlySelected}
+        onOnlySelectedChange={setOnlySelected}
+        onSearch={setSearch}
+        emptyStateDetails={emptyStateDetails}
+        onToggle={toggle}
+      />
+    </div>
+  );
+};

@@ -2,10 +2,12 @@
 import { TooltipProvider } from '@mastra/playground-ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, cleanup } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { setupServer } from 'msw/node';
 import { FormProvider, useForm } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AgentColorProvider } from '../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
@@ -118,8 +120,23 @@ vi.mock('@/domains/agent-builder/hooks/use-agent-builder-allowed-models', () => 
 
 let formMethodsRef: UseFormReturn<AgentBuilderEditFormValues> | null = null;
 
+// MSW for the integration-tool fan-out used by useAllProviderTools.
+const server = setupServer(http.get('http://localhost/api/tool-providers', () => HttpResponse.json({ providers: [] })));
+
+beforeAll(() => server.listen({ onUnhandledRequest: 'bypass' }));
+afterAll(() => server.close());
+
+const createQueryClient = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  // Pre-seed the integrations query so useAllProviderTools resolves
+  // synchronously and tests that synchronously inspect sent messages still work.
+  queryClient.setQueryData(['tool-providers'], { providers: [] });
+  return queryClient;
+};
+
 const FormWrapper = ({ children }: { children: React.ReactNode }) => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
       name: 'Initial',
@@ -129,7 +146,7 @@ const FormWrapper = ({ children }: { children: React.ReactNode }) => {
   });
   formMethodsRef = methods;
   return (
-    <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={createQueryClient()}>
       <TooltipProvider>
         <MemoryRouter>
           <FormProvider {...methods}>
