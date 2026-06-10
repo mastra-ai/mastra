@@ -15,7 +15,7 @@ Complete this migration in the same change that bumps your Mastra packages, and 
 
 :::note[Exporter rename]
 
-`MastraPlatformExporter` (sends data to Mastra platform) replaces the previous `CloudExporter`, and `MastraStorageExporter` (persists data to Mastra Storage) replaces the previous `DefaultExporter`. The original classes still ship from `@mastra/observability` and behave identically, but they are deprecated. New code should use `MastraPlatformExporter` and `MastraStorageExporter`; existing imports of `CloudExporter`/`DefaultExporter` continue to work until they are removed in a future major version.
+`MastraPlatformExporter` (sends data to Mastra platform) replaces the previous `CloudExporter`, and `MastraStorageExporter` (persists data to Mastra Storage) replaces the previous `DefaultExporter`. The original classes still ship from `@mastra/observability` and behave identically, but they're deprecated. New code should use `MastraPlatformExporter` and `MastraStorageExporter`; existing imports of `CloudExporter`/`DefaultExporter` continue to work until they're removed in a future major version.
 
 :::
 
