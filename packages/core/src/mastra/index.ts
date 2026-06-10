@@ -18,6 +18,7 @@ import type { MastraScorer } from '../evals';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
+import type { Harness, HarnessMode } from '../harness/v1';
 import { AvailableHooks, registerHook } from '../hooks';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { getGatewayId } from '../llm/model/gateways';
@@ -78,6 +79,7 @@ function createUndefinedPrimitiveError(
     | 'mcp-server'
     | 'gateway'
     | 'memory'
+    | 'harness'
     | 'workspace',
   value: null | undefined,
   key?: string,
@@ -215,6 +217,8 @@ function metadataEqual(a: Record<string, unknown> | null | undefined, b: Record<
  * });
  * ```
  */
+type MastraHarness = Harness<HarnessMode[], any>;
+
 export interface Config<
   TAgents extends Record<string, Agent<any>> = Record<string, Agent<any>>,
   TWorkflows extends Record<string, AnyWorkflow> = Record<string, AnyWorkflow>,
@@ -230,6 +234,7 @@ export interface Config<
   TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
   TChannels extends Record<string, ChannelProvider> = Record<string, ChannelProvider>,
+  THarnesses extends Record<string, MastraHarness> = Record<string, MastraHarness>,
 > {
   /**
    * Agents are autonomous systems that can make decisions and take actions.
@@ -361,6 +366,11 @@ export interface Config<
    * Keys are used to look up memory instances when resolving stored agent configurations.
    */
   memory?: TMemory;
+
+  /**
+   * Harness runtimes that can be accessed by server routes and tooling.
+   */
+  harnesses?: THarnesses;
 
   /**
    * Global workspace for file storage, skills, and code execution.
@@ -537,6 +547,7 @@ export class Mastra<
   TProcessors extends Record<string, Processor<any>> = Record<string, Processor<any>>,
   TMemory extends Record<string, MastraMemory> = Record<string, MastraMemory>,
   TChannels extends Record<string, ChannelProvider> = Record<string, ChannelProvider>,
+  THarnesses extends Record<string, MastraHarness> = Record<string, MastraHarness>,
 > {
   #vectors?: TVectors;
   #agents: TAgents;
@@ -558,6 +569,7 @@ export class Mastra<
   #processorConfigurations: Map<string, Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>> =
     new Map();
   #memory?: TMemory;
+  #harnesses?: THarnesses;
   #workspace?: Workspace;
   #workspaces: Record<string, RegisteredWorkspace> = {};
   #server?: ServerConfig;
@@ -910,7 +922,8 @@ export class Mastra<
       TTools,
       TProcessors,
       TMemory,
-      TChannels
+      TChannels,
+      THarnesses
     >,
   ) {
     // Register AsyncLocalStorage-backed context resolvers so that DualLogger
@@ -1089,6 +1102,7 @@ export class Mastra<
     this.#tools = {} as TTools;
     this.#processors = {} as TProcessors;
     this.#memory = {} as TMemory;
+    this.#harnesses = {} as THarnesses;
     this.#workflows = {} as TWorkflows;
     this.#gateways = {} as Record<string, MastraModelGatewayInterface>;
 
@@ -1116,6 +1130,14 @@ export class Mastra<
       Object.entries(config.memory).forEach(([key, memory]) => {
         if (memory != null) {
           this.addMemory(memory, key);
+        }
+      });
+    }
+
+    if (config?.harnesses) {
+      Object.entries(config.harnesses).forEach(([key, harness]) => {
+        if (harness != null) {
+          this.addHarness(harness, key);
         }
       });
     }
@@ -3186,6 +3208,81 @@ export class Mastra<
     }
 
     memoryRegistry[memoryKey] = memory;
+  }
+
+  /**
+   * Retrieves a registered harness by its registry key.
+   */
+  public getHarness<THarnessName extends keyof THarnesses>(name: THarnessName): THarnesses[THarnessName] {
+    if (!this.#harnesses || !this.#harnesses[name]) {
+      const error = new MastraError({
+        id: 'MASTRA_GET_HARNESS_BY_KEY_NOT_FOUND',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Harness with key ${String(name)} not found`,
+        details: {
+          status: 404,
+          harnessKey: String(name),
+          harnesses: Object.keys(this.#harnesses ?? {}).join(', '),
+        },
+      });
+      this.#logger?.trackException(error);
+      throw error;
+    }
+    return this.#harnesses[name];
+  }
+
+  /**
+   * Retrieves a registered harness by its owner id.
+   */
+  public getHarnessById(id: string): MastraHarness {
+    const allHarnesses = this.#harnesses;
+    if (allHarnesses) {
+      for (const [, harness] of Object.entries(allHarnesses)) {
+        if (harness.ownerId === id) {
+          return harness;
+        }
+      }
+    }
+
+    const error = new MastraError({
+      id: 'MASTRA_GET_HARNESS_BY_ID_NOT_FOUND',
+      domain: ErrorDomain.MASTRA,
+      category: ErrorCategory.USER,
+      text: `Harness with id ${id} not found`,
+      details: {
+        status: 404,
+        harnessId: id,
+        availableIds: Object.values(allHarnesses ?? {})
+          .map(harness => harness.ownerId)
+          .join(', '),
+      },
+    });
+    this.#logger?.trackException(error);
+    throw error;
+  }
+
+  /**
+   * Returns all registered harnesses as a record keyed by their names.
+   */
+  public listHarnesses(): THarnesses | undefined {
+    return this.#harnesses;
+  }
+
+  /**
+   * Adds a new harness to the Mastra instance.
+   */
+  public addHarness<H extends MastraHarness>(harness: H, key?: string): void {
+    if (!harness) {
+      throw createUndefinedPrimitiveError('harness', harness, key);
+    }
+    const harnessKey = key || harness.ownerId;
+    const harnessRegistry = this.#harnesses as Record<string, MastraHarness>;
+    if (harnessRegistry[harnessKey]) {
+      return;
+    }
+
+    harnessRegistry[harnessKey] = harness;
   }
 
   /**

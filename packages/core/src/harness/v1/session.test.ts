@@ -3,8 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { MastraMemory } from '../../memory';
+import { MastraCompositeStore } from '../../storage';
 import type { StorageCloneThreadInput } from '../../storage';
-import { HarnessStorage } from '../../storage/domains/harness';
+import { HarnessStorage, InMemoryHarness } from '../../storage/domains/harness';
 import type { SessionRecord } from '../../storage/domains/harness';
 import type { HarnessEvent } from './events';
 import { Harness } from './harness';
@@ -131,6 +132,28 @@ describe('Harness.session()', () => {
         lastActivityAt: expect.any(Date),
       }),
     ]);
+  });
+
+  it('accepts a composite storage adapter directly', async () => {
+    const storage = new InMemoryHarness();
+    const harness = new Harness({
+      agent: createAgent(),
+      storage: new MastraCompositeStore({
+        id: 'test-composite',
+        domains: { harness: storage },
+      }),
+      memory: createMemory(),
+      modes: [{ id: 'build', defaultModelId: 'test-build-model' }],
+      defaultModeId: 'build',
+    });
+
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+    await expect(storage.loadSession(session.id)).resolves.toMatchObject({
+      id: session.id,
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+    });
   });
 
   it('loads the existing record for the same resource and thread', async () => {
@@ -577,12 +600,16 @@ describe('Harness events', () => {
     events.length = 0;
 
     const sendTarget = (agent.sendMessage as ReturnType<typeof vi.fn>).mock.calls[0]![1] as {
-      ifIdle: { streamOptions: { toolsets: { harness: Record<string, { execute: (input: unknown, context: never) => Promise<unknown> }> } } };
+      ifIdle: {
+        streamOptions: {
+          toolsets: { harness: Record<string, { execute: (input: unknown, context: never) => Promise<unknown> }> };
+        };
+      };
     };
-    const result = await sendTarget.ifIdle.streamOptions.toolsets.harness.guarded!.execute(
-      { command: 'ship' },
-      { requestContext: undefined, workspace: undefined } as never,
-    );
+    const result = await sendTarget.ifIdle.streamOptions.toolsets.harness.guarded!.execute({ command: 'ship' }, {
+      requestContext: undefined,
+      workspace: undefined,
+    } as never);
 
     expect(result).toMatchObject({ isError: false, status: 'pending', pendingItemId: expect.any(String) });
     const pendingItemId = (result as { pendingItemId: string }).pendingItemId;
@@ -665,6 +692,19 @@ describe('Harness.listSessions()', () => {
     const { harness } = createHarness(createMemory());
     const sessions = await harness.listSessions();
     expect(sessions).toEqual([]);
+  });
+
+  it('returns a persisted session record by id', async () => {
+    const { harness } = createHarness(createMemory());
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1', modeId: 'build' });
+
+    const record = await harness.getSessionRecord({ sessionId: session.id, resourceId: 'resource-1' });
+    expect(record).toMatchObject({
+      id: session.id,
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      modeId: 'build',
+    });
   });
 });
 
