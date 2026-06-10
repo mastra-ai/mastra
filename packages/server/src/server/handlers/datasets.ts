@@ -617,6 +617,16 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         versions?: { agents?: Record<string, { versionId: string } | { status: 'draft' | 'published' }> };
         toolReplay?: { fromExperimentId?: string; onMiss?: 'error' | 'passthrough' };
       };
+      // Belt and braces with the body-schema refinement: adapters merge
+      // unvalidated query params into handler params, so the schema-level
+      // check alone can be bypassed (e.g. toolReplay supplied as a query
+      // param). The route is fire-and-forget — reject here instead of
+      // returning 200/pending and failing the experiment in the background.
+      if (toolReplay && targetType !== 'agent') {
+        throw new HTTPException(400, {
+          message: `toolReplay is only supported for agent targets (got targetType '${targetType}')`,
+        });
+      }
       // The adapter middleware merges body + query requestContext into a RequestContext instance.
       // startExperimentAsync expects a plain Record, so convert it.
       const requestContext = rawRequestContext instanceof RequestContext ? rawRequestContext.all : rawRequestContext;

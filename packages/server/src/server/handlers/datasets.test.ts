@@ -115,6 +115,26 @@ describe('Datasets Handlers', () => {
       );
     });
 
+    it('rejects toolReplay for non-agent targets in the handler (covers the query-param merge path)', async () => {
+      // Adapters merge unvalidated query params into handler params, so the
+      // body-schema refinement alone can be bypassed — the handler guard must
+      // hold on its own. Direct handler invocation skips schema validation,
+      // which is exactly the bypass scenario.
+      const startSpy = vi.spyOn(Dataset.prototype, 'startExperimentAsync');
+      const dataset = await mastra.datasets.create({ name: 'Bypass Dataset' });
+
+      await expect(
+        TRIGGER_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          targetType: 'workflow',
+          targetId: 'my-workflow',
+          toolReplay: { fromExperimentId: 'prior-exp' },
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(startSpy).not.toHaveBeenCalled();
+    });
+
     it('omits toolReplay from the config when not provided', async () => {
       const startSpy = vi.spyOn(Dataset.prototype, 'startExperimentAsync').mockResolvedValue({
         experimentId: 'exp-2',

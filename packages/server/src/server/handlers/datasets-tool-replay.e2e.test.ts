@@ -26,13 +26,18 @@ import { createTestServerContext } from './test-utils';
  * hang), and onMiss: 'passthrough' mixing exactly the unmatched call live.
  */
 
-/** Model that issues two same-tool calls then answers — modulo-based so every run behaves identically. */
+/**
+ * Model that issues two same-tool calls then answers — modulo-based so every
+ * run behaves identically. Exposes the call counter: failed replay items don't
+ * persist the divergence report, so model-step counts are how the tests
+ * distinguish "replayed once, then ran dry" from "never had a recording".
+ */
 function createTwoToolCallModel() {
-  let modelCalls = 0;
-  return new MockLanguageModelV2({
+  const counter = { modelCalls: 0 };
+  const model = new MockLanguageModelV2({
     doGenerate: async () => {
-      modelCalls++;
-      const step = ((modelCalls - 1) % 3) + 1;
+      counter.modelCalls++;
+      const step = ((counter.modelCalls - 1) % 3) + 1;
       if (step < 3) {
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
@@ -43,7 +48,7 @@ function createTwoToolCallModel() {
             {
               type: 'tool-call' as const,
               toolCallType: 'function' as const,
-              toolCallId: `call-${modelCalls}`,
+              toolCallId: `call-${counter.modelCalls}`,
               toolName: 'lookup',
               input: step === 1 ? '{"recordId":"first"}' : '{"recordId":"second"}',
             },
@@ -59,12 +64,14 @@ function createTwoToolCallModel() {
       };
     },
   });
+  return { model, counter };
 }
 
 describe('tool replay over the experiment trigger API (e2e)', () => {
   let storage: InMemoryStore;
   let mastra: Mastra;
   let liveCalls: number;
+  let modelCounter: { modelCalls: number };
   let datasetId: string;
   let itemId: string;
 
@@ -83,11 +90,13 @@ describe('tool replay over the experiment trigger API (e2e)', () => {
       },
     });
 
+    const { model, counter } = createTwoToolCallModel();
+    modelCounter = counter;
     const agent = new Agent({
       id: 'replay-api-agent',
       name: 'Replay API Agent',
       instructions: 'Use the lookup tool.',
-      model: createTwoToolCallModel(),
+      model,
       tools: { lookup: lookupTool },
     });
 
@@ -212,10 +221,14 @@ describe('tool replay over the experiment trigger API (e2e)', () => {
     // The external world stayed frozen — no live executions during replay.
     expect(liveCalls).toBe(0);
 
+    // Three model steps: two replayed tool results + the final answer.
+    expect(modelCounter.modelCalls).toBe(3);
+
     // The divergence report survives the results route's response serialization
     // (output is the only place the report persists).
     const results = await fetchResults(triggered.experimentId);
     expect(results).toHaveLength(1);
+    expect(results[0]!.itemId).toBe(itemId);
     const output = results[0]!.output as {
       text?: string;
       toolReplay?: { sourceTraceId: string; replayedCount: number; misses: unknown[]; unconsumed: unknown[] };
@@ -245,9 +258,17 @@ describe('tool replay over the experiment trigger API (e2e)', () => {
 
     const run = await waitForExperiment(triggered.experimentId);
     expect(run!.status).toBe('failed'); // single item, deterministic failure
+    expect(run!.failedCount).toBe(1);
+    expect(run!.succeededCount).toBe(0);
     expect(liveCalls).toBe(0); // the miss never fell through to a live call
+    // Failed items don't persist the divergence report, so distinguish
+    // "replayed once, then ran dry" from "never had a recording" by model
+    // steps: the first call must have RETURNED a replayed result for the
+    // model to be asked again (call 1 → replayed, call 2 → miss aborts).
+    expect(modelCounter.modelCalls).toBe(2);
 
     const results = await fetchResults(triggered.experimentId);
+    expect(results).toHaveLength(1);
     expect(results[0]!.error).toMatchObject({ code: 'TOOL_REPLAY_MISS' });
     expect(results[0]!.error!.message).toContain("Tool replay miss for 'lookup'");
     // Deterministic failure — the retry loop must not have re-run it.
@@ -268,9 +289,14 @@ describe('tool replay over the experiment trigger API (e2e)', () => {
     // The run must terminate (no hang) and report a structured error.
     const run = await waitForExperiment(triggered.experimentId);
     expect(run!.status).toBe('failed');
+    expect(run!.failedCount).toBe(1);
     expect(liveCalls).toBe(0);
+    // Counterpart to the dry-recording test: with NO recording, the very
+    // first tool call misses, so the model is never asked a second time.
+    expect(modelCounter.modelCalls).toBe(1);
 
     const results = await fetchResults(triggered.experimentId);
+    expect(results).toHaveLength(1);
     expect(results[0]!.error).toMatchObject({ code: 'TOOL_REPLAY_MISS' });
   });
 
