@@ -1,4 +1,3 @@
-import type { DataMessagePartProps } from '@assistant-ui/react';
 import { Bell, Database, Radio } from 'lucide-react';
 
 import { getNotificationMetadata, isRecord, isSignalData } from './signal-data';
@@ -127,5 +126,3 @@ export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
 
   return null;
 };
-
-export const SignalDataPart = ({ data }: DataMessagePartProps<SignalData>) => <SignalBadge signal={data} />;

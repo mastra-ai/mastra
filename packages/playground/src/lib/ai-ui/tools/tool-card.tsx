@@ -1,6 +1,3 @@
-import type { ToolCallMessagePartProps } from '@assistant-ui/react';
-import { useAui } from '@assistant-ui/react';
-
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
@@ -21,43 +18,73 @@ import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result'
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
+import { useChatSend } from '@/lib/ai-ui/chat/chat-context';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
-export interface ToolFallbackProps extends ToolCallMessagePartProps<any, any> {
-  metadata?: MessageMetadata;
+/**
+ * Plain-prop tool dispatcher for the main agent chat, replacing assistant-ui's
+ * `ToolFallback` (which read `ToolCallMessagePartProps`/`useAui`). `MessageRow`
+ * normalizes both v4 `ToolInvocation` and v5 `DynamicTool` parts into this shape.
+ *
+ * It is a real component (not a render function) on purpose: it must host hooks —
+ * notably `useWorkflowStream(output)` inside `WorkflowRunProvider` so a streaming
+ * workflow run keeps animating a live `WorkflowGraph`, exactly as before.
+ */
+/**
+ * A `data`-typed message part emitted by the agent via `writer.custom`, scoped to
+ * a tool call by `data.toolCallId`. `MessageRow` collects these from the parent
+ * `MastraDBMessage` and forwards them so badges (file-tree, sandbox) can read live
+ * streaming metadata without reaching into assistant-ui state.
+ */
+export interface DataMessagePart {
+  type: string;
+  name?: string;
+  data?: any;
 }
 
-export const ToolFallback = ({ toolName, result, args, ...props }: ToolFallbackProps) => {
+export interface ToolCardProps {
+  toolName: string;
+  input: any;
+  output: any;
+  toolCallId: string;
+  /** Part state: v5 `output-available`/`output-error`/`input-available`, or v4 `result`/`call`. */
+  state?: string;
+  metadata?: MessageMetadata;
+  /** `data`-typed parts from the parent message, for badges that read live streaming metadata. */
+  dataParts?: ReadonlyArray<DataMessagePart>;
+}
+
+export const ToolCard = (props: ToolCardProps) => {
   return (
     <WorkflowRunProvider workflowId={''} withoutTimeTravel>
-      <ToolFallbackInner toolName={toolName} result={result} args={args} {...props} />
+      <ToolCardInner {...props} />
     </WorkflowRunProvider>
   );
 };
 
-const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...props }: ToolFallbackProps) => {
-  // All hooks must be called unconditionally before any conditional returns
+export const ToolCardInner = ({ toolName, input, output, toolCallId, state, metadata, dataParts }: ToolCardProps) => {
+  // All hooks must run unconditionally before any conditional returns.
   const browserCtx = useBrowserToolCallsSafe();
   const isBrowser = isBrowserTool(toolName);
   const { activateSkill } = useActivatedSkills();
   const { data: mcpAppToolsMap } = useMcpAppTools();
-  const aui = useAui();
+  const send = useChatSend();
   const queryClient = useQueryClient();
+
+  const args = input;
+  const result = output;
+  const isComplete = state === 'output-available' || state === 'result';
 
   const handleMcpAppSendMessage = useCallback(
     (content: string) => {
-      aui.thread().append({
-        role: 'user',
-        content: [{ type: 'text', text: content }],
-      });
+      send({ message: content });
     },
-    [aui],
+    [send],
   );
 
   useEffect(() => {
     if (!isBrowser || !browserCtx) return;
 
-    // Determine status: pending if no result, error if result indicates failure, else complete
     let status: 'pending' | 'complete' | 'error' = 'pending';
     if (result !== undefined) {
       status = isBrowserToolError(result) ? 'error' : 'complete';
@@ -73,17 +100,10 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
     });
 
     // Seeing any browser tool call means the server has an active session for
-    // this thread, so the probe can flip to `hasSession: true` immediately
-    // without polling or a network round trip. `setQueriesData` always notifies
-    // observers (even on reference-equal updates), so calling it on every
-    // render would feed back into the provider → consumer re-render loop. Read
-    // the cache synchronously first via `getQueriesData` (no notify) and only
-    // write entries that actually need to change.
-    //
-    // Important: preserve each probe's existing `screencastAvailable`. The
-    // deployer fallback returns `screencastAvailable: false` when ws packages
-    // aren't installed; clobbering that to `true` would make the client try to
-    // open a WebSocket the server can't accept.
+    // this thread, so the probe can flip to `hasSession: true` immediately.
+    // `setQueriesData` always notifies observers, so read synchronously via
+    // `getQueriesData` first and only write entries that need to change.
+    // Preserve each probe's existing `screencastAvailable`.
     const cachedProbes = queryClient.getQueriesData<BrowserSessionProbe>({
       queryKey: ['browser-session-probe'],
     });
@@ -98,30 +118,25 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
     }
   }, [isBrowser, toolCallId, toolName, args, result, browserCtx, queryClient]);
 
-  // Detect skill activation tool calls
+  // Detect skill activation tool calls.
   useEffect(() => {
     if (toolName !== 'skill') return;
     if (!args?.name) return;
-    if (props.status?.type !== 'complete') return;
+    if (!isComplete) return;
     activateSkill(args.name);
-  }, [toolName, args?.name, props.status?.type, activateSkill]);
+  }, [toolName, args?.name, isComplete, activateSkill]);
 
   useWorkflowStream(result);
 
-  // Handle OM observation markers - render as ObservationMarkerBadge
+  // OM observation markers render as ObservationMarkerBadge.
   if (toolName === 'mastra-memory-om-observation') {
     return <ObservationMarkerBadge toolName={toolName} args={args} metadata={metadata} />;
   }
-
-  // We need to handle the stream data even if the workflow is not resolved yet
-  // The response from the fetch request resolving the workflow might theoretically
-  // be resolved after we receive the first stream event
 
   const isAgent = (metadata?.mode === 'network' && metadata.from === 'AGENT') || toolName.startsWith('agent-');
   const isWorkflow = (metadata?.mode === 'network' && metadata.from === 'WORKFLOW') || toolName.startsWith('workflow-');
 
   const isNetwork = metadata?.mode === 'network';
-  const isComplete = props.status?.type === 'complete';
 
   const agentToolName = toolName.startsWith('agent-') ? toolName.substring('agent-'.length) : toolName;
   const workflowToolName = toolName.startsWith('workflow-') ? toolName.substring('workflow-'.length) : toolName;
@@ -142,10 +157,10 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
   const toolCalled = metadata?.mode === 'network' && metadata?.hasMoreMessages ? true : undefined;
 
   const isBackgroundTaskResult =
-    result && typeof result === 'string' && (result as string)?.toLowerCase()?.includes('background task');
+    result && typeof result === 'string' && result.toLowerCase().includes('background task');
 
   if (toolName === 'updateWorkingMemory') {
-    // We want to hide the updateWorkingMemory tool call in the UI
+    // Hide the updateWorkingMemory tool call in the UI.
     return null;
   }
 
@@ -203,7 +218,6 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
     );
   }
 
-  // Use custom tree UI for list_files tool
   const isListFiles = toolName === WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES;
 
   if (isListFiles) {
@@ -217,11 +231,11 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         toolApprovalMetadata={toolApprovalMetadata}
         isNetwork={isNetwork ?? false}
         toolCalled={toolCalled}
+        dataParts={dataParts}
       />
     );
   }
 
-  // Use custom terminal UI for sandbox execution tools
   const isSandboxExecution =
     toolName === WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND ||
     toolName === WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT ||
@@ -238,6 +252,7 @@ const ToolFallbackInner = ({ toolName, result, args, metadata, toolCallId, ...pr
         toolApprovalMetadata={toolApprovalMetadata}
         isNetwork={isNetwork}
         toolCalled={toolCalled}
+        dataParts={dataParts}
       />
     );
   }
