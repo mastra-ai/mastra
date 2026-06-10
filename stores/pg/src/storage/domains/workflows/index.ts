@@ -165,6 +165,45 @@ export class WorkflowsPG extends WorkflowsStorage {
     await this.#db.clearTable({ tableName: TABLE_WORKFLOW_SNAPSHOT });
   }
 
+  /**
+   * Writes a single step result into the snapshot with jsonb_set instead of
+   * round-tripping the whole row through the client. Only valid when the step
+   * result is a plain replacement: foreach results (array output) need the
+   * element-wise merge in the transactional path. Returns undefined when the
+   * row does not exist yet or has no context object.
+   */
+  async #updateStepResultInPlace({
+    workflowName,
+    runId,
+    stepId,
+    result,
+    requestContext,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepId: string;
+    result: StepResult<any, any, any, any>;
+    requestContext: Record<string, any>;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | undefined> {
+    const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
+    const sanitizedResult = sanitizeJsonForPg(JSON.stringify(result));
+    const sanitizedRequestContext = sanitizeJsonForPg(JSON.stringify(requestContext ?? {}));
+    const row = await this.#db.client.oneOrNone<{ context: Record<string, StepResult<any, any, any, any>> }>(
+      `UPDATE ${tableName}
+       SET snapshot = jsonb_set(
+             jsonb_set(snapshot, ARRAY['context', $3::text], $4::jsonb, true),
+             '{requestContext}',
+             COALESCE(snapshot->'requestContext', '{}'::jsonb) || $5::jsonb,
+             true
+           ),
+           "updatedAt" = $6
+       WHERE workflow_name = $1 AND run_id = $2 AND jsonb_typeof(snapshot->'context') = 'object'
+       RETURNING snapshot->'context' AS context`,
+      [workflowName, runId, stepId, sanitizedResult, sanitizedRequestContext, new Date()],
+    );
+    return row?.context;
+  }
+
   async updateWorkflowResults({
     workflowName,
     runId,
@@ -179,6 +218,13 @@ export class WorkflowsPG extends WorkflowsStorage {
     requestContext: Record<string, any>;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     try {
+      if (!Array.isArray((result as { output?: unknown })?.output)) {
+        const context = await this.#updateStepResultInPlace({ workflowName, runId, stepId, result, requestContext });
+        if (context) {
+          return context;
+        }
+      }
+
       // Use a transaction with row-level locking to ensure atomicity
       return await this.#db.client.tx(async t => {
         const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
@@ -256,41 +302,30 @@ export class WorkflowsPG extends WorkflowsStorage {
     opts: UpdateWorkflowStateOptions;
   }): Promise<WorkflowRunState | undefined> {
     try {
-      // Use a transaction with row-level locking to ensure atomicity
-      return await this.#db.client.tx(async t => {
-        const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
+      const tableName = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) });
 
-        // Load existing snapshot within transaction with FOR UPDATE to lock the row
-        // This prevents concurrent updates from reading stale data
-        const existingSnapshotResult = await t.oneOrNone<{ snapshot: WorkflowRunState }>(
-          `SELECT snapshot FROM ${tableName} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
-          [workflowName, runId],
-        );
+      // Merge the options into the snapshot in place; only the option fragment
+      // crosses the wire instead of the full row
+      const sanitizedOpts = sanitizeJsonForPg(JSON.stringify(opts));
+      const row = await this.#db.client.oneOrNone<{ snapshot: WorkflowRunState }>(
+        `UPDATE ${tableName}
+         SET snapshot = snapshot || $3::jsonb, "updatedAt" = $4
+         WHERE workflow_name = $1 AND run_id = $2 AND jsonb_typeof(snapshot->'context') = 'object'
+         RETURNING snapshot`,
+        [workflowName, runId, sanitizedOpts, new Date()],
+      );
+      if (row) {
+        return row.snapshot;
+      }
 
-        if (!existingSnapshotResult) {
-          return undefined;
-        }
-
-        // Parse existing snapshot
-        const existingSnapshot = existingSnapshotResult.snapshot;
-        const snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
-
-        if (!snapshot || !snapshot?.context) {
-          throw new Error(`Snapshot not found for runId ${runId}`);
-        }
-
-        // Merge the new options with the existing snapshot
-        const updatedSnapshot = { ...snapshot, ...opts };
-
-        // Update the snapshot within the same transaction
-        const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(updatedSnapshot));
-        await t.none(
-          `UPDATE ${tableName} SET snapshot = $1, "updatedAt" = $2 WHERE workflow_name = $3 AND run_id = $4`,
-          [sanitizedSnapshot, new Date(), workflowName, runId],
-        );
-
-        return updatedSnapshot;
-      });
+      const existing = await this.#db.client.oneOrNone(
+        `SELECT 1 FROM ${tableName} WHERE workflow_name = $1 AND run_id = $2`,
+        [workflowName, runId],
+      );
+      if (!existing) {
+        return undefined;
+      }
+      throw new Error(`Snapshot not found for runId ${runId}`);
     } catch (error) {
       throw new MastraError(
         {
