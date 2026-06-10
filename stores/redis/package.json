@@ -31,7 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "redis": "5.10.0"
+    "redis": "5.12.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -43,7 +43,7 @@
     "@vitest/ui": "catalog:",
     "dotenv": "^17.0.0",
     "eslint": "^9.39.4",
-    "ioredis": "^5.6.1",
+    "ioredis": "^5.11.1",
     "tsup": "^8.5.0",
     "tsx": "catalog:",
     "typescript": "catalog:",
