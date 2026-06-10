@@ -5,6 +5,7 @@ This document explains how Mastra integrates with WorkOS for authentication and 
 ## Overview
 
 Mastra Auth v2 uses WorkOS for:
+
 - **Authentication** — User login via AuthKit (SSO, OAuth, passwords, magic links)
 - **RBAC** — Organization-level role-based access control
 - **FGA** — Fine-grained authorization with hierarchical resource access
@@ -133,24 +134,26 @@ workos role delete team-viewer --org-id=org_123
 2. Click **Model resource types**
 3. Create each resource type:
 
-| Resource Type | Parent | Description |
-|--------------|--------|-------------|
-| `team` | `organization` | Groups agents/workflows together |
-| `agent` | `team` or `organization` | Individual AI agents |
-| `workflow` | `team` or `organization` | Workflow definitions |
-| `tool` | `organization` | Tool definitions |
-| `memory` | `organization` | Memory/thread access |
+| Resource Type | Parent                   | Description                      |
+| ------------- | ------------------------ | -------------------------------- |
+| `team`        | `organization`           | Groups agents/workflows together |
+| `agent`       | `team` or `organization` | Individual AI agents             |
+| `workflow`    | `team` or `organization` | Workflow definitions             |
+| `tool`        | `organization`           | Tool definitions                 |
+| `memory`      | `organization`           | Memory/thread access             |
 
 4. For each resource type, define relations (e.g., `owner`, `editor`, `viewer`)
 
 ### Why This Matters
 
 The FGA schema defines:
+
 - What resource types exist (agent, workflow, team, etc.)
 - How they relate hierarchically (team contains agents)
 - What relations are possible (owner, editor, viewer)
 
 Without this schema, Mastra can create permissions and roles, but can't:
+
 - Register resources with proper types
 - Use hierarchical permission inheritance
 - Support the authorship pattern (owner → editor → viewer)
@@ -169,7 +172,8 @@ Without this schema, Mastra can create permissions and roles, but can't:
 
 **Gap:** Cannot fetch what resource types are defined in WorkOS.
 
-**Impact:** 
+**Impact:**
+
 - Can't validate that Mastra `resourceMapping` matches WorkOS Dashboard
 - Can't warn users about misconfigurations
 - Resource type dropdowns rely on hardcoded config
@@ -215,6 +219,7 @@ Without this schema, Mastra can create permissions and roles, but can't:
    - memory (parent: organization)
 
 3. **Create seed file** with permissions and roles:
+
    ```bash
    workos seed --init  # Creates workos-seed.yml template
    # Edit the file with your permissions/roles
@@ -234,7 +239,7 @@ Without this schema, Mastra can create permissions and roles, but can't:
        tool: { fgaResourceType: 'tool' },
        memory: { fgaResourceType: 'memory' },
      },
-   });
+   })
    ```
 
 ### Ongoing Maintenance
@@ -242,6 +247,7 @@ Without this schema, Mastra can create permissions and roles, but can't:
 When adding new features that need new permissions:
 
 1. **Add to seed file:**
+
    ```yaml
    permissions:
      - name: Execute MCP
@@ -249,9 +255,11 @@ When adding new features that need new permissions:
    ```
 
 2. **Re-run seed:**
+
    ```bash
    workos seed --file=workos-seed.yml
    ```
+
    (Existing resources are skipped, new ones created)
 
 3. **Update Mastra config** if adding new resource types (requires Dashboard first)
