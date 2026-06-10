@@ -1094,3 +1094,120 @@ describe('createSubagentTool forked subagent behavior', () => {
     expect(streamOpts.memory).toBeUndefined();
   });
 });
+
+describe('createSubagentTool model resolution', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // The instance must reach the Agent verbatim so provider config (e.g. Vertex AI) is preserved.
+  it('uses a subagent `defaultModel` instance directly without calling resolveModel', async () => {
+    mockStream.mockResolvedValue(createMockStreamResponse('ok'));
+    const defaultModel = { modelId: 'vertex-gemini', specificationVersion: 'v2' } as any;
+    const resolveModel = vi.fn().mockReturnValue({ modelId: 'gateway-model' });
+
+    const tool = createSubagentTool({
+      subagents: [{ id: 'explore', name: 'Explore', description: 'd', instructions: 'i', defaultModel }],
+      resolveModel,
+    });
+
+    const result = await (tool as any).execute(
+      { agentType: 'explore', task: 'task' },
+      { requestContext: new RequestContext(), agent: { toolCallId: 'tc-1' } },
+    );
+
+    expect(result.isError).toBe(false);
+    expect(resolveModel).not.toHaveBeenCalled();
+    expect(MockAgent.lastConstructorOpts.model).toBe(defaultModel);
+  });
+
+  it('prefers a `defaultModel` instance over a `defaultModelId` string', async () => {
+    mockStream.mockResolvedValue(createMockStreamResponse('ok'));
+    const defaultModel = { modelId: 'vertex-gemini', specificationVersion: 'v2' } as any;
+    const resolveModel = vi.fn().mockReturnValue({ modelId: 'gateway-model' });
+
+    const tool = createSubagentTool({
+      subagents: [
+        { id: 'explore', name: 'Explore', description: 'd', instructions: 'i', defaultModel, defaultModelId: 'openai/gpt-5.5' },
+      ],
+      resolveModel,
+    });
+
+    await (tool as any).execute(
+      { agentType: 'explore', task: 'task' },
+      { requestContext: new RequestContext(), agent: { toolCallId: 'tc-2' } },
+    );
+
+    expect(resolveModel).not.toHaveBeenCalled();
+    expect(MockAgent.lastConstructorOpts.model).toBe(defaultModel);
+  });
+
+  it('lets an explicit per-invocation model override the `defaultModel` instance', async () => {
+    mockStream.mockResolvedValue(createMockStreamResponse('ok'));
+    const defaultModel = { modelId: 'vertex-gemini', specificationVersion: 'v2' } as any;
+    const resolved = { modelId: 'gateway-model' };
+    const resolveModel = vi.fn().mockReturnValue(resolved);
+
+    const tool = createSubagentTool({
+      subagents: [{ id: 'explore', name: 'Explore', description: 'd', instructions: 'i', defaultModel }],
+      resolveModel,
+    });
+
+    await (tool as any).execute(
+      { agentType: 'explore', task: 'task', modelId: 'openai/gpt-5.5' },
+      { requestContext: new RequestContext(), agent: { toolCallId: 'tc-3' } },
+    );
+
+    expect(resolveModel).toHaveBeenCalledWith('openai/gpt-5.5');
+    expect(MockAgent.lastConstructorOpts.model).toBe(resolved);
+  });
+
+  it('lets the model picker (getSubagentModelId) override the `defaultModel` instance', async () => {
+    mockStream.mockResolvedValue(createMockStreamResponse('ok'));
+    const defaultModel = { modelId: 'vertex-gemini', specificationVersion: 'v2' } as any;
+    const resolved = { modelId: 'gateway-model' };
+    const resolveModel = vi.fn().mockReturnValue(resolved);
+
+    const tool = createSubagentTool({
+      subagents: [{ id: 'explore', name: 'Explore', description: 'd', instructions: 'i', defaultModel }],
+      resolveModel,
+    });
+
+    const requestContext = new RequestContext();
+    const harnessCtx: Partial<HarnessRequestContext> = {
+      emitEvent: vi.fn(),
+      getSubagentModelId: () => 'anthropic/claude-sonnet-4-6',
+    };
+    requestContext.set('harness', harnessCtx);
+
+    await (tool as any).execute(
+      { agentType: 'explore', task: 'task' },
+      { requestContext, agent: { toolCallId: 'tc-4' } },
+    );
+
+    expect(resolveModel).toHaveBeenCalledWith('anthropic/claude-sonnet-4-6');
+    expect(MockAgent.lastConstructorOpts.model).toBe(resolved);
+  });
+
+  it('errors when a subagent has neither a model instance, a model ID, nor a fallback', async () => {
+    const resolveModel = vi.fn();
+
+    const tool = createSubagentTool({
+      subagents: [{ id: 'explore', name: 'Explore', description: 'd', instructions: 'i' }],
+      resolveModel,
+    });
+
+    const result = await (tool as any).execute(
+      { agentType: 'explore', task: 'task' },
+      { requestContext: new RequestContext(), agent: { toolCallId: 'tc-5' } },
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain('No model available for subagent');
+    expect(resolveModel).not.toHaveBeenCalled();
+  });
+});

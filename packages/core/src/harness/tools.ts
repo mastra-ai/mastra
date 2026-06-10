@@ -799,7 +799,7 @@ export interface CreateSubagentToolOptions {
   resolveModel: (modelId: string) => MastraLanguageModel;
   /** Resolved harness tools (already evaluated from DynamicArgument) */
   harnessTools?: ToolsInput;
-  /** Fallback model ID when subagent definition has no defaultModelId */
+  /** Fallback model ID when a subagent definition has no `defaultModel` instance or `defaultModelId` */
   fallbackModelId?: string;
   /** Returns the parent model ID for display when a subagent call is forked. */
   getParentModelId?: () => string;
@@ -1015,22 +1015,41 @@ Use this tool when:
           }
         }
 
-        // Resolve model: explicit arg → harness setting → subagent default → fallback
+        // Resolve model: explicit arg / picker → subagent defaultModel instance → defaultModelId string → fallback
         const harnessModelId = harnessCtx?.getSubagentModelId?.({ agentType }) ?? undefined;
-        const maybeModelId = modelId ?? harnessModelId ?? definition.defaultModelId ?? fallbackModelId;
-        if (!maybeModelId) {
-          return { content: 'No model ID available for subagent. Configure defaultModelId.', isError: true };
-        }
-        resolvedModelId = maybeModelId;
+        const explicitModelId = modelId ?? harnessModelId;
 
         let model: MastraLanguageModel;
-        try {
-          model = resolveModel(resolvedModelId);
-        } catch (err) {
-          return {
-            content: `Failed to resolve model "${resolvedModelId}": ${err instanceof Error ? err.message : String(err)}`,
-            isError: true,
-          };
+        if (explicitModelId) {
+          resolvedModelId = explicitModelId;
+          try {
+            model = resolveModel(explicitModelId);
+          } catch (err) {
+            return {
+              content: `Failed to resolve model "${explicitModelId}": ${err instanceof Error ? err.message : String(err)}`,
+              isError: true,
+            };
+          }
+        } else if (definition.defaultModel) {
+          model = definition.defaultModel;
+          resolvedModelId = definition.defaultModel.modelId ?? `${definition.id}-model`; // display only
+        } else {
+          const fallbackId = definition.defaultModelId ?? fallbackModelId;
+          if (!fallbackId) {
+            return {
+              content: 'No model available for subagent. Configure `defaultModel` or `defaultModelId`.',
+              isError: true,
+            };
+          }
+          resolvedModelId = fallbackId;
+          try {
+            model = resolveModel(fallbackId);
+          } catch (err) {
+            return {
+              content: `Failed to resolve model "${fallbackId}": ${err instanceof Error ? err.message : String(err)}`,
+              isError: true,
+            };
+          }
         }
 
         subagentToRun = new Agent({

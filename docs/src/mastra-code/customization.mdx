@@ -131,6 +131,52 @@ const { harness } = await createMastraCode({
 })
 ```
 
+By default a subagent picks up the model from its mode, or you can set a `defaultModelId` string. When the model needs provider configuration a string ID can't carry, such as a Vertex AI project, region, or credentials, pass a configured model instance through `defaultModel` instead. This is the way to wire subagents to a specific provider in automated environments like continuous integration (CI), where there's no interactive model picker.
+
+```typescript title="src/subagent-model-instance.ts"
+import { createMastraCode } from 'mastracode'
+import { createVertex } from '@ai-sdk/google-vertex'
+
+const vertex = createVertex({
+  project: process.env.GCP_PROJECT_ID,
+  location: 'us-central1',
+})
+
+const { harness } = await createMastraCode({
+  subagents: [
+    {
+      id: 'explore',
+      name: 'Explore',
+      description: 'Read-only codebase exploration',
+      instructions: 'You are an expert code explorer.',
+      defaultModel: vertex('__AI_SDK_GOOGLE_MODEL__'),
+    },
+  ],
+})
+```
+
+`defaultModel` takes precedence over `defaultModelId`, but an explicit model chosen at runtime through the model picker still wins.
+
+## Observational memory model
+
+Observational memory uses a background model to write and condense notes about each session. Set its model with a string ID through the `observerModelId` and `reflectorModelId` state fields. When that model needs provider configuration a string ID can't carry, pass a configured instance through `observationalModel`:
+
+```typescript title="src/observational-model-instance.ts"
+import { createMastraCode } from 'mastracode'
+import { createVertex } from '@ai-sdk/google-vertex'
+
+const vertex = createVertex({
+  project: process.env.GCP_PROJECT_ID,
+  location: 'us-central1',
+})
+
+const { harness } = await createMastraCode({
+  observationalModel: vertex('__AI_SDK_GOOGLE_MODEL__'),
+})
+```
+
+`observationalModel` applies to both the observer and reflector roles, and overrides the `observerModelId` and `reflectorModelId` state, so the observational-memory model can no longer be switched at runtime. To use different models for the observer and reflector, pass a custom `memory` instance instead.
+
 ## Custom storage
 
 Connect to a remote database instead of the default local SQLite:

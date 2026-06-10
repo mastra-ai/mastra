@@ -184,6 +184,15 @@ export interface MastraCodeConfig {
    * that mastracode's `resolveModel` cannot resolve.
    */
   memory?: HarnessConfig<MastraCodeState>['memory'];
+  /**
+   * Model instance for observational memory (used for both the observer and reflector roles).
+   * Use this when the observational-memory model needs provider configuration a string ID can't
+   * carry (e.g. a Vertex AI project, region, or credentials in CI/CD). When set, it overrides the
+   * `observerModelId` / `reflectorModelId` state, so the observational-memory model can no longer be
+   * switched at runtime. To use different models for the observer and reflector, pass a custom
+   * `memory` instance instead. Ignored when `memory` is also provided.
+   */
+  observationalModel?: LanguageModel;
   /** Browser provider for browser automation tools. When set, the agent gains access to browser tools. */
   browser?: HarnessConfig<MastraCodeState>['browser'];
   /** PubSub for signal routing. When crossProcessPubSub is true, thread locks are disabled. */
@@ -398,7 +407,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   // Vector store for recall search (separate DB file to avoid bloating main storage)
   const vectorStore = await createVectorStore(storageConfig, storageResult.backend);
 
-  const memory = config?.memory ?? getDynamicMemory(storage, vectorStore);
+  const memory = config?.memory ?? getDynamicMemory(storage, vectorStore, config?.observationalModel);
 
   // MCP
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, configDir, config?.mcpServers);
@@ -612,7 +621,8 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         };
       }
     }
-    return model ? { ...filtered, defaultModelId: model } : filtered;
+    // Don't inject a mode-default model ID over a subagent that supplies its own model instance.
+    return model && !sa.defaultModel ? { ...filtered, defaultModelId: model } : filtered;
   });
 
   // Build initial state with global preferences

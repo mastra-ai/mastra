@@ -103,6 +103,14 @@ export interface HarnessSubagent {
   /** Default model ID for this subagent type (e.g., "anthropic/claude-sonnet-4-20250514") */
   defaultModelId?: string;
 
+  /**
+   * Default model instance for this subagent type. Use this when the model needs
+   * provider configuration a string ID can't carry (e.g. a Vertex AI project,
+   * region, or credentials). Takes precedence over `defaultModelId`, but an
+   * explicit runtime override (a per-invocation model or the model picker) still wins.
+   */
+  defaultModel?: MastraLanguageModel;
+
   /** Optional maximum number of steps for this subagent's execution loop */
   maxSteps?: number;
 
