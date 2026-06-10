@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': patch
 ---
 
 Removed the `default` Button size. Buttons now use `md` when no size is provided, and the previous `default` styling is available as `lg`.
