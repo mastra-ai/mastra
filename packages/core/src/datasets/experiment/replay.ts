@@ -67,6 +67,18 @@ export interface ToolReplayReport {
   unconsumed: { toolName: string; count: number }[];
   /** Calls replayed in order but with args differing from the recording (diagnostic only). */
   argMismatches: ToolReplayArgMismatch[];
+  /**
+   * Number of recorded payloads containing the sensitive-data redaction marker.
+   * Redacted recordings replay redacted values — a non-zero count means the
+   * agent received '[REDACTED]' strings instead of the original data.
+   */
+  redactedPayloadCount?: number;
+  /**
+   * True when the recording came from a different version of this dataset item
+   * (the item was edited after the recording) — old observations are paired
+   * with the item's new input.
+   */
+  staleRecording?: boolean;
 }
 
 /** Mutable per-attempt replay state. Create a fresh one for every execution attempt. */
@@ -78,6 +90,8 @@ export interface ToolReplayState {
   replayedCount: number;
   misses: ToolReplayMiss[];
   argMismatches: ToolReplayArgMismatch[];
+  /** Recorded payloads containing the sensitive-data redaction marker. */
+  redactedPayloadCount: number;
 }
 
 const TOOL_SPAN_TYPES: ReadonlySet<SpanType> = new Set([SpanType.TOOL_CALL, SpanType.MCP_TOOL_CALL]);
@@ -202,6 +216,18 @@ export function extractToolReplayEvents(spans: SpanRecord[]): ToolReplayEvent[] 
   return events;
 }
 
+/** Marker the SensitiveDataFilter span processor writes over redacted fields. */
+const REDACTION_MARKER = '[REDACTED]';
+
+function containsRedactionMarker(payload: unknown): boolean {
+  if (payload == null) return false;
+  try {
+    return (JSON.stringify(payload) ?? '').includes(REDACTION_MARKER);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Fresh per-attempt state: per-tool FIFO queues plus report accumulators.
  * Queue keys are formatted tool names — spans record original tool names while
@@ -210,6 +236,7 @@ export function extractToolReplayEvents(spans: SpanRecord[]): ToolReplayEvent[] 
  */
 export function createReplayState(events: ToolReplayEvent[], sourceTraceId: string | null): ToolReplayState {
   const queues = new Map<string, ToolReplayEvent[]>();
+  let redactedPayloadCount = 0;
   for (const event of events) {
     const key = formatToolName(event.toolName);
     const queue = queues.get(key);
@@ -217,6 +244,9 @@ export function createReplayState(events: ToolReplayEvent[], sourceTraceId: stri
       queue.push(event);
     } else {
       queues.set(key, [event]);
+    }
+    if (containsRedactionMarker(event.input) || containsRedactionMarker(event.output)) {
+      redactedPayloadCount++;
     }
   }
   return {
@@ -226,6 +256,7 @@ export function createReplayState(events: ToolReplayEvent[], sourceTraceId: stri
     replayedCount: 0,
     misses: [],
     argMismatches: [],
+    redactedPayloadCount,
   };
 }
 
@@ -298,5 +329,6 @@ export function finalizeReplayReport(state: ToolReplayState): ToolReplayReport {
     misses: [...state.misses],
     unconsumed,
     argMismatches: [...state.argMismatches],
+    ...(state.redactedPayloadCount > 0 ? { redactedPayloadCount: state.redactedPayloadCount } : {}),
   };
 }

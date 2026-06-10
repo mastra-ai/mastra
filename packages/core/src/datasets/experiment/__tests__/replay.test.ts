@@ -113,6 +113,20 @@ describe('extractToolReplayEvents', () => {
     expect(events.map(e => e.toolName)).toEqual(['lookup']);
   });
 
+  it('counts recorded payloads carrying the sensitive-data redaction marker', () => {
+    const events = extractToolReplayEvents([
+      toolSpan('r1', 'auth', 1000, { input: { apiKey: '[REDACTED]' }, output: { ok: true } }),
+      toolSpan('r2', 'auth', 2000, { input: { q: 'safe' }, output: { token: '[REDACTED]', ttl: 60 } }),
+      toolSpan('r3', 'auth', 3000, { input: { q: 'safe' }, output: { ok: true } }),
+    ]);
+    const state = createReplayState(events, TRACE_ID);
+
+    expect(finalizeReplayReport(state).redactedPayloadCount).toBe(2);
+
+    const clean = createReplayState(extractToolReplayEvents([toolSpan('c1', 'auth', 1000, { output: 1 })]), TRACE_ID);
+    expect(finalizeReplayReport(clean).redactedPayloadCount).toBeUndefined();
+  });
+
   it('normalizes recorded errors from string and object shapes', () => {
     const events = extractToolReplayEvents([
       toolSpan('e1', 'flaky', 1000, { error: 'boom' }),
@@ -218,6 +232,36 @@ describe('buildReplayHooks', () => {
     const report = finalizeReplayReport(state);
     expect(report.misses).toEqual([{ toolName: 'lookup', action: 'passthrough', input: { key: 'x' } }]);
     expect(report.replayedCount).toBe(0);
+  });
+
+  it('stays in parity with Agent.formatTools for every name shape it normalizes', async () => {
+    // formatToolName mirrors the agent's private formatTools — if the agent's
+    // rules ever change without this module following, every affected tool
+    // silently stops matching its queue. This test pins the two together.
+    const { Agent } = await import('../../../agent');
+    const agent = new Agent({
+      id: 'parity-agent',
+      name: 'Parity Agent',
+      instructions: 'n/a',
+      model: {} as never,
+    });
+    const formatViaAgent = (name: string): string => {
+      const tools: Record<string, { execute: () => void }> = { [name]: { execute: () => {} } };
+      (agent as unknown as { formatTools: (t: typeof tools) => typeof tools }).formatTools(tools);
+      return Object.keys(tools)[0]!;
+    };
+
+    const shapes = ['plain_tool', 'my.namespaced.tool', '1starts-with-digit', 'has spaces & chars!', 'x'.repeat(80)];
+    for (const name of shapes) {
+      const agentFormatted = formatViaAgent(name);
+      const events = extractToolReplayEvents([toolSpan('p1', name, 1000, { output: { ok: true } })]);
+      const state = createReplayState(events, TRACE_ID);
+      const hooks = buildReplayHooks(state, { onMiss: 'error' });
+      expect(callHook(hooks, agentFormatted, {}), `tool name '${name}' → '${agentFormatted}'`).toEqual({
+        proceed: false,
+        output: { ok: true },
+      });
+    }
   });
 
   it('matches spans recorded under original tool names against agent-formatted hook names', () => {

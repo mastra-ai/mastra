@@ -5,7 +5,6 @@ import type { DatasetRecord } from '../../storage/types';
 import { executeTarget } from './executor';
 import type { Target, ExecutionResult, ToolReplayExecutionOptions } from './executor';
 import { extractToolReplayEvents } from './replay';
-import type { ToolReplayEvent } from './replay';
 import { resolveScorers, resolveStepScorers, runScorersForItem, runStepScorersForItem } from './scorer';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
@@ -223,7 +222,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       }
 
       // itemId → traceId from the prior experiment's results
-      let traceIdByItemId: Map<string, string> | undefined;
+      let recordingByItemId: Map<string, { traceId: string; itemDatasetVersion: number | null }> | undefined;
       if (toolReplay.fromExperimentId) {
         if (!experimentsStore) {
           throw new MastraError({
@@ -237,36 +236,65 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           experimentId: toolReplay.fromExperimentId,
           pagination: { page: 0, perPage: false },
         });
-        traceIdByItemId = new Map(
-          priorResults.results.filter(r => r.traceId).map(r => [r.itemId, r.traceId as string]),
+        recordingByItemId = new Map(
+          priorResults.results
+            .filter(r => r.traceId)
+            .map(r => [r.itemId, { traceId: r.traceId as string, itemDatasetVersion: r.itemDatasetVersion }]),
         );
       }
 
       const onMiss = toolReplay.onMiss ?? 'error';
       // Memoized per item so the retry loop doesn't refetch the trace
-      const cache = new Map<string, Promise<{ events: ToolReplayEvent[]; sourceTraceId: string | null }>>();
+      const cache = new Map<string, Promise<Omit<ToolReplayExecutionOptions, 'onMiss'> & { found: boolean }>>();
       resolveToolReplay = async (item: ExperimentItem) => {
         let pending = cache.get(item.id);
         if (!pending) {
           pending = (async () => {
+            const mapped = recordingByItemId?.get(item.id);
             const traceId =
               item.replayTraceId ??
               (typeof item.metadata?.replayTraceId === 'string' ? item.metadata.replayTraceId : undefined) ??
-              traceIdByItemId?.get(item.id) ??
+              mapped?.traceId ??
               null;
-            if (!traceId) return { events: [], sourceTraceId: null };
+            if (!traceId) return { events: [], sourceTraceId: null, found: false };
             const trace = await observabilityStore.getTrace({ traceId });
+            // A resolved traceId whose trace is missing/empty is a lost
+            // recording (purged retention, unflushed exporter) — distinct from
+            // a recording that legitimately contains zero tool calls.
+            if (!trace?.spans?.length) return { events: [], sourceTraceId: traceId, found: false };
+            // Recording came from a different version of this item — the item
+            // was edited after the recording was made.
+            const staleRecording =
+              mapped?.traceId === traceId &&
+              mapped.itemDatasetVersion != null &&
+              item.datasetVersion != null &&
+              mapped.itemDatasetVersion !== item.datasetVersion;
             return {
-              events: trace?.spans?.length ? extractToolReplayEvents(trace.spans) : [],
+              events: extractToolReplayEvents(trace.spans),
               sourceTraceId: traceId,
+              found: true,
+              ...(staleRecording ? { staleRecording } : {}),
             };
           })();
           cache.set(item.id, pending);
           // Don't cache failures — a transient storage error should be retryable
           pending.catch(() => cache.delete(item.id));
         }
-        const { events, sourceTraceId } = await pending;
-        return { events, sourceTraceId, onMiss };
+        const { found, ...resolved } = await pending;
+        if (!found) {
+          // Never run silently live (or silently all-miss) when there is no
+          // recording — that defeats the point of replay. If live execution is
+          // wanted, run without toolReplay.
+          throw new MastraError({
+            id: 'EXPERIMENT_TOOL_REPLAY_NO_RECORDING',
+            text: resolved.sourceTraceId
+              ? `Tool replay recording not found for item ${item.id}: trace ${resolved.sourceTraceId} is missing or empty (purged retention or unflushed exporter?)`
+              : `No tool replay recording resolved for item ${item.id}. Inline data items need explicit ids for fromExperimentId mapping; otherwise set replayTraceId on the item.`,
+            domain: 'STORAGE',
+            category: 'USER',
+          });
+        }
+        return { ...resolved, onMiss };
       };
     }
 
@@ -307,10 +335,17 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           globalRequestContext || item.requestContext ? { ...globalRequestContext, ...item.requestContext } : undefined;
         let itemToolReplay: ToolReplayExecutionOptions | undefined;
         if (resolveToolReplay) {
-          // A failed trace fetch fails the item, not the whole experiment
+          // A failed resolution fails the item, not the whole experiment
           try {
             itemToolReplay = await resolveToolReplay(item);
           } catch (err: unknown) {
+            if (err instanceof MastraError && err.id === 'EXPERIMENT_TOOL_REPLAY_NO_RECORDING') {
+              return {
+                output: null,
+                error: { message: err.message, code: 'TOOL_REPLAY_NO_RECORDING' },
+                traceId: null,
+              };
+            }
             return {
               output: null,
               error: {
@@ -381,6 +416,16 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   // Resolve per-step scorers (keyed by step ID) for workflow targets
   const stepScorers = resolveStepScorers(mastra, stepsConfigInput);
 
+  // Mark replay experiments in their metadata so stored runs are
+  // distinguishable from live runs (dashboards and score comparisons must
+  // never silently mix the two).
+  const experimentMetadata = toolReplay
+    ? {
+        ...metadata,
+        toolReplay: { fromExperimentId: toolReplay.fromExperimentId, onMiss: toolReplay.onMiss ?? 'error' },
+      }
+    : metadata;
+
   // 5. Create experiment record (if storage available and not pre-created)
   if (experimentsStore) {
     if (!providedExperimentId) {
@@ -389,7 +434,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         id: experimentId,
         name,
         description,
-        metadata,
+        metadata: experimentMetadata,
         datasetId: datasetId ?? null,
         datasetVersion,
         targetType: targetType ?? 'agent',
@@ -401,11 +446,15 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     // Update status to running (both sync and async paths)
     // Also set totalItems — needed for the async path where the experiment
     // was created with totalItems: 0 before items were resolved.
+    // The replay marker is re-set here so the async path (record pre-created
+    // without it) gets stamped too; runExperiment receives the same metadata,
+    // so the replace is lossless.
     await experimentsStore.updateExperiment({
       id: experimentId,
       status: 'running',
       totalItems: items.length,
       startedAt,
+      ...(toolReplay ? { metadata: experimentMetadata } : {}),
     });
   }
 
@@ -530,11 +579,17 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           try {
             // The replay report rides inside the stored output column (no
             // storage schema change) — merged here, AFTER scoring, so scorers
-            // never see replay metadata in the output they evaluate.
-            const persistedOutput =
-              execResult.toolReplay && execResult.output && typeof execResult.output === 'object'
-                ? { ...(execResult.output as Record<string, unknown>), toolReplay: execResult.toolReplay }
-                : execResult.output;
+            // never see replay metadata in the output they evaluate. Failed
+            // items (output null) keep their report too: failures are when
+            // the report is most needed for debugging over the API.
+            const persistedOutput = execResult.toolReplay
+              ? {
+                  ...(execResult.output && typeof execResult.output === 'object'
+                    ? (execResult.output as Record<string, unknown>)
+                    : {}),
+                  toolReplay: execResult.toolReplay,
+                }
+              : execResult.output;
             await experimentsStore.addExperimentResult({
               experimentId,
               itemId: item.id,
