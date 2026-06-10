@@ -104,6 +104,35 @@ export class SimpleAuth<TUser> extends MastraAuthProvider<TUser> {
   }
 
   /**
+   * List all users with optional search/pagination.
+   * Implements IUserListing interface.
+   */
+  async listUsers(options?: { search?: string; limit?: number; offset?: number }): Promise<{ users: TUser[]; total: number }> {
+    let users = this.users;
+
+    // Filter by search term (searches name and email fields)
+    if (options?.search) {
+      const search = options.search.toLowerCase();
+      users = users.filter(u => {
+        const user = u as any;
+        return (
+          user?.name?.toLowerCase?.()?.includes(search) ||
+          user?.email?.toLowerCase?.()?.includes(search)
+        );
+      });
+    }
+
+    const total = users.length;
+
+    // Apply pagination
+    const offset = options?.offset ?? 0;
+    const limit = options?.limit ?? users.length;
+    users = users.slice(offset, offset + limit);
+
+    return { users, total };
+  }
+
+  /**
    * Sign in with token (passed as password field).
    * The email field is ignored - only the token matters.
    */
