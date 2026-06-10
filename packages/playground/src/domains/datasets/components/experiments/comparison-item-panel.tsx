@@ -1,16 +1,7 @@
 'use client';
 
 import type { CompareExperimentsResponse } from '@mastra/client-js';
-import {
-  Button,
-  ButtonsGroup,
-  Chip,
-  Column,
-  MainHeader,
-  Notice,
-  Sections,
-  SideDialog,
-} from '@mastra/playground-ui';
+import { Button, ButtonsGroup, Chip, Column, MainHeader, Notice, Sections, SideDialog } from '@mastra/playground-ui';
 import { PrevNextNav } from '@mastra/playground-ui/components/PrevNextNav';
 import { FileCodeIcon, FileInputIcon, FileOutputIcon, TargetIcon, XIcon } from 'lucide-react';
 import { ScoreDelta } from './score-delta';
