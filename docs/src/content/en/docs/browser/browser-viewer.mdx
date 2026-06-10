@@ -84,6 +84,15 @@ When the agent runs a CLI command like `browser-use open https://example.com`, M
 
 BrowserViewer supports three CLI providers. Each CLI must be installed separately in your workspace environment. Each CLI also publishes a [skill](/docs/workspace/skills) that teaches the agent its commands and workflows.
 
+Set the `cli` option to match the CLI your agent uses:
+
+```typescript
+const viewer = new BrowserViewer({
+  cli: 'browser-use',
+  headless: false,
+})
+```
+
 ### `agent-browser`
 
 ```bash
@@ -110,15 +119,6 @@ browse skills install
 ```
 
 CDP flag: `--ws`
-
-Set the `cli` option to match the CLI your agent uses:
-
-```typescript
-const viewer = new BrowserViewer({
-  cli: 'browser-use',
-  headless: false,
-})
-```
 
 :::note
 
