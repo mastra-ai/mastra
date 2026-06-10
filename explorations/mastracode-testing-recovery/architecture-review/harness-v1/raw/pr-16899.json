@@ -1,0 +1,72 @@
+{
+  "additions": 407,
+  "baseRefName": "feat/harness-v1-session-suspensions",
+  "commits": [
+    {
+      "authoredDate": "2026-05-21T11:28:53Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T11:28:53Z",
+      "messageBody": "Adds Harness v1 built-in ask_user, submit_plan, task_write, and task_check tools under the harness/v1 subpath, then injects them into session execution as the harness:builtin toolset.\n\nKeeps the built-ins out of the top-level core tools export per review feedback and adds tests for direct tool behavior plus session toolset wiring.",
+      "messageHeadline": "feat(core): add Harness v1 built-in tools",
+      "oid": "c30701d90c3ab397668da0e3828f0ee2ceb49032"
+    }
+  ],
+  "deletions": 5,
+  "files": [
+    {
+      "path": ".changeset/honest-sides-rescue.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/index.ts",
+      "additions": 17,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.message.test.ts",
+      "additions": 1,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.signal.test.ts",
+      "additions": 1,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 4,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/tools.test.ts",
+      "additions": 154,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/tools.ts",
+      "additions": 225,
+      "deletions": 0,
+      "changeType": "ADDED"
+    }
+  ],
+  "headRefName": "feat/harness-v1-built-in-tools",
+  "mergedAt": null,
+  "number": 16899,
+  "state": "CLOSED",
+  "title": "feat(core): add Harness v1 built-in tools",
+  "url": "https://github.com/mastra-ai/mastra/pull/16899"
+}

@@ -1,0 +1,1866 @@
+{
+  "additions": 106368,
+  "baseRefName": "main",
+  "commits": [
+    {
+      "authoredDate": "2026-05-20T11:05:15Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T14:27:00Z",
+      "messageBody": "Rename the existing core Harness implementation to HarnessLegacy while preserving the temporary Harness export alias for downstream consumers. Update legacy harness tests to use the renamed class and add the core changeset for the migration step.",
+      "messageHeadline": "chore(core): rename legacy harness class",
+      "oid": "3abcdd2da7c3c5a4b6d49e39beaf29c7d39d0f16"
+    },
+    {
+      "authoredDate": "2026-05-20T14:53:33Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T14:27:00Z",
+      "messageBody": "",
+      "messageHeadline": "feat(core): add harness v1 subpath scaffold (#16818)",
+      "oid": "8550d38d14c18778c45ad76f139e206a5e975a31"
+    },
+    {
+      "authoredDate": "2026-05-21T04:09:22Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T14:27:00Z",
+      "messageBody": "Remove the Harness v1 scaffold from the legacy rename branch so this PR only renames the existing implementation to HarnessLegacy and keeps the temporary Harness compatibility alias. The v1 subpath scaffold belongs in the next stacked PR.",
+      "messageHeadline": "chore(core): keep harness legacy rename scoped",
+      "oid": "2adf3c923022bc3d5bebabdb310212a540d614cc"
+    },
+    {
+      "authoredDate": "2026-05-21T13:36:32Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T16:34:52Z",
+      "messageBody": "Add the full core Harness v1 runtime on top of the legacy rename branch, including durable sessions, event replay, channels, wakeups, storage domains, server routes, and libsql/pg adapters. Keep mastracode out of this core PR and preserve the HarnessLegacy compatibility alias.",
+      "messageHeadline": "feat(core): add Harness v1 runtime",
+      "oid": "a150b4c885af0913c388596f8a38f280ffb45eab"
+    },
+    {
+      "authoredDate": "2026-05-21T21:22:13Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-21T21:22:13Z",
+      "messageBody": "",
+      "messageHeadline": "Merge remote-tracking branch 'origin/main' into pr-16912-parent-stack",
+      "oid": "34b5991fe7457d2cb82b7c4f15a51d1710ac62eb"
+    },
+    {
+      "authoredDate": "2026-05-21T22:01:18Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-21T22:01:18Z",
+      "messageBody": "",
+      "messageHeadline": "feat(core): harden harness v1 parent stack",
+      "oid": "2cebe7729ae72ba8bc6c96e9901a8f4f9956c7f2"
+    },
+    {
+      "authoredDate": "2026-05-21T22:05:25Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-21T22:05:25Z",
+      "messageBody": "# Conflicts:\n#\tpackages/core/src/harness/signal-messages.test.ts",
+      "messageHeadline": "Merge remote-tracking branch 'origin/main' into pr-16912-parent-stack",
+      "oid": "7c76149ce932d350ec931e7f875324f987f89a10"
+    },
+    {
+      "authoredDate": "2026-05-21T22:17:20Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-21T22:17:20Z",
+      "messageBody": "",
+      "messageHeadline": "fix(storage): register harness workspace actions table",
+      "oid": "fccb74624abea228af2048256c1409ef4378979d"
+    },
+    {
+      "authoredDate": "2026-05-21T22:29:26Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-21T22:29:26Z",
+      "messageBody": "",
+      "messageHeadline": "fix(core): resolve subagent model ids explicitly",
+      "oid": "18d952147ccdcb40d158725fe5634743aa9846c2"
+    },
+    {
+      "authoredDate": "2026-05-21T23:19:02Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-21T23:19:02Z",
+      "messageBody": "",
+      "messageHeadline": "fix(core): defer harness runtime ids for workers",
+      "oid": "265929c3079c270b58d78684f56a039e5d5c2ea7"
+    },
+    {
+      "authoredDate": "2026-05-21T23:35:51Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-21T23:35:51Z",
+      "messageBody": "",
+      "messageHeadline": "fix(core): retry stale unix pubsub writes",
+      "oid": "3d448a6c5ad7feb45c43ebc556eeecd589165f6a"
+    },
+    {
+      "authoredDate": "2026-05-22T07:57:19Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T07:57:19Z",
+      "messageBody": "# Conflicts:\n#\tpackages/core/src/agent/__tests__/agent-signals.test.ts\n#\tpackages/core/src/agent/thread-stream-runtime.ts\n#\tpackages/core/src/events/unix-socket-pubsub.ts\n#\tpackages/core/src/harness/harness.ts\n#\tpackages/core/src/processors/tool-result-reminder.ts",
+      "messageHeadline": "Merge remote-tracking branch 'origin/main' into pr-16912-parent-stack",
+      "oid": "3bd182e2cdd0801fd9f742782e8761bab0f19a6c"
+    },
+    {
+      "authoredDate": "2026-05-22T08:19:56Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T08:19:56Z",
+      "messageBody": "",
+      "messageHeadline": "fix(core): await shared stream consumption before memory recall",
+      "oid": "aae56acae409eccb6b6a6163365d7c9ca6e19291"
+    },
+    {
+      "authoredDate": "2026-05-22T08:30:25Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T08:30:25Z",
+      "messageBody": "",
+      "messageHeadline": "test(lance): await vector table cleanup",
+      "oid": "f865918962b7b874249e40bcfeb35db4e128a44e"
+    },
+    {
+      "authoredDate": "2026-05-22T12:46:41Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T12:46:41Z",
+      "messageBody": "",
+      "messageHeadline": "Merge remote-tracking branch 'origin/main' into pr-16912-parent-stack",
+      "oid": "44380987e7bb27884491b55c2076d41d0096b7da"
+    },
+    {
+      "authoredDate": "2026-05-22T12:52:09Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code"
+        }
+      ],
+      "committedDate": "2026-05-22T12:52:09Z",
+      "messageBody": "Lift the parent-owned Harness v1 runtime hardening out of the MastraCode child branch: built-in request-context tools, prepareStep forwarding and conflict checks, richer signal/message inputs, spawn_subagent workspace filtering, and Postgres provider callback binding storage parity. This keeps MastraCode adoption thin and prevents core/storage fixes from living only in the stacked MC PR.\n\nCo-Authored-By: Mastra Code <noreply@mastra.ai>",
+      "messageHeadline": "fix(harness): move runtime compatibility into parent stack",
+      "oid": "671100a09795fb6480d2182e8bfcb0b1b59555d6"
+    },
+    {
+      "authoredDate": "2026-05-22T13:21:33Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T13:21:33Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): expose turn model in request context",
+      "oid": "fe3cab97e8388702a88767133de3cacd247947ee"
+    },
+    {
+      "authoredDate": "2026-05-22T13:30:17Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T13:30:17Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): bridge observational memory events in v1",
+      "oid": "c8608ae28a8158e83dedf73437c2c63fc6da309a"
+    },
+    {
+      "authoredDate": "2026-05-22T14:26:29Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T14:26:29Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): honor yolo for v1 tool approvals",
+      "oid": "4a802aa86b46986019229f3d6bae8526e5ca58fb"
+    },
+    {
+      "authoredDate": "2026-05-22T14:45:08Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T14:45:08Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): support forked v1 subagents",
+      "oid": "3e37674156d37cde5a87f564bb5a6610ea274e44"
+    },
+    {
+      "authoredDate": "2026-05-22T15:08:40Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T15:08:40Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): resolve v1 tool permissions per call",
+      "oid": "3d6762b445150c21b8afc6aa95728dfc204d5e4f"
+    },
+    {
+      "authoredDate": "2026-05-22T15:42:35Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T15:42:35Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): preserve late om stream events",
+      "oid": "a374f2681d5f9d8894b97d7f74e84d4a22d4be53"
+    },
+    {
+      "authoredDate": "2026-05-22T15:47:10Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T15:47:10Z",
+      "messageBody": "",
+      "messageHeadline": "feat(harness): expose live signal route",
+      "oid": "4d4aaf8afa24c2a46be4c17395feb32e01179165"
+    },
+    {
+      "authoredDate": "2026-05-22T15:51:53Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T15:51:53Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): validate custom event emission",
+      "oid": "3b70b5d1d6d986bfa2ee52e29b1a3bcb4d995ffe"
+    },
+    {
+      "authoredDate": "2026-05-22T16:01:29Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T16:01:29Z",
+      "messageBody": "# Conflicts:\n#\tpackages/core/src/agent/__tests__/agent-signals.test.ts\n#\tpackages/core/src/agent/thread-stream-runtime.ts",
+      "messageHeadline": "Merge remote-tracking branch 'origin/main' into pr-16912-parent-stack",
+      "oid": "c84d19153bec15f6f844ecd5b8f26510cd4dd258"
+    },
+    {
+      "authoredDate": "2026-05-22T16:04:58Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T16:04:58Z",
+      "messageBody": "",
+      "messageHeadline": "docs(harness): document storage capability boundaries",
+      "oid": "687d16cf435fbf898e899eada82eb3a0979c594f"
+    },
+    {
+      "authoredDate": "2026-05-22T16:14:18Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T16:14:18Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): replay events for closed sessions",
+      "oid": "b44605369192c77c40a7590c60942b1a75019600"
+    },
+    {
+      "authoredDate": "2026-05-22T16:19:02Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T16:19:02Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): bridge om activation events",
+      "oid": "48ac420d5073e7542714dc2d6910149f69807e33"
+    },
+    {
+      "authoredDate": "2026-05-22T16:26:52Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T16:26:52Z",
+      "messageBody": "",
+      "messageHeadline": "chore(harness): update generated route metadata",
+      "oid": "c974e1d362ce359be91089b9e3b4065149481053"
+    },
+    {
+      "authoredDate": "2026-05-22T17:59:22Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T17:59:22Z",
+      "messageBody": "",
+      "messageHeadline": "feat(harness): filter workspace action journal entries",
+      "oid": "021afb8bf8a165664603afc33714488c89799674"
+    },
+    {
+      "authoredDate": "2026-05-22T19:08:21Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T19:08:21Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): harden v1 runtime leases and journaling",
+      "oid": "9c465e5e92130b5196bb55b62830f2b0d34e2fa4"
+    },
+    {
+      "authoredDate": "2026-05-22T21:53:03Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T21:53:03Z",
+      "messageBody": "# Conflicts:\n#\tpackages/core/src/auth/ee/interfaces/permissions.generated.ts\n#\tpackages/server/src/server/schemas/index.ts",
+      "messageHeadline": "Merge remote-tracking branch 'origin/main' into pr-16912-parent-stack",
+      "oid": "0ca8714ed8c52df53c53c85be618f7978164b4c1"
+    },
+    {
+      "authoredDate": "2026-05-22T22:03:52Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T22:03:52Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): harden reconnect evidence and replay",
+      "oid": "a22cb247d47cabe69c49b08af471e9203c8a373f"
+    },
+    {
+      "authoredDate": "2026-05-22T22:21:18Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T22:21:18Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): keep attachment delete as raw response",
+      "oid": "0b06ad38b6af65c7bb2f378122b6f2e8a8050c6b"
+    },
+    {
+      "authoredDate": "2026-05-22T22:34:49Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T22:34:49Z",
+      "messageBody": "",
+      "messageHeadline": "feat(client-js): add remote harness session resource",
+      "oid": "796179ec62252b696f703604865cf48fb27131c8"
+    },
+    {
+      "authoredDate": "2026-05-22T22:46:09Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T22:46:09Z",
+      "messageBody": "",
+      "messageHeadline": "fix(server-adapters): forward headers to route handlers",
+      "oid": "729b7bca93c389ada1b80d742bbbc437e07b19d4"
+    },
+    {
+      "authoredDate": "2026-05-22T22:49:31Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T22:49:31Z",
+      "messageBody": "",
+      "messageHeadline": "fix(client-js): parse harness SSE CRLF frames",
+      "oid": "1b62ed87a4608342708332b9f7971b74e4f2ffc5"
+    },
+    {
+      "authoredDate": "2026-05-22T22:52:05Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-22T22:52:05Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): tighten remote session recovery contracts",
+      "oid": "f418f4856721eb7f3352fcb6715bc95bf52d7c5f"
+    },
+    {
+      "authoredDate": "2026-05-23T05:34:42Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-23T05:34:42Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): tighten remote recovery surface",
+      "oid": "4b7544b83c38e4b2432255bb824d2186775c6a79"
+    },
+    {
+      "authoredDate": "2026-05-23T07:02:51Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-23T07:02:51Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): consolidate replay and workspace action taxonomy",
+      "oid": "9091ebf0f459dde9b7808252a0110d84e3e3163b"
+    },
+    {
+      "authoredDate": "2026-05-23T07:11:32Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-23T07:11:32Z",
+      "messageBody": "",
+      "messageHeadline": "fix(server): keep harness event parser peer compatible",
+      "oid": "967afbf06f8fec8e3721b46a2ff6a41ef75a024e"
+    },
+    {
+      "authoredDate": "2026-05-23T07:33:55Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-23T07:33:55Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): harden session resolution and workspace evidence",
+      "oid": "68aa8e9ab010e7834f6c340c0cadae3a19d2dc0a"
+    },
+    {
+      "authoredDate": "2026-05-23T08:09:05Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-23T08:09:05Z",
+      "messageBody": "",
+      "messageHeadline": "fix(harness): harden runtime history and workspace evidence",
+      "oid": "9e42158e42267ac39c7dd15b6196f7598c54ff4c"
+    },
+    {
+      "authoredDate": "2026-05-23T08:37:15Z",
+      "authors": [
+        {
+          "email": "codex@openai.com",
+          "id": "U_kgDOD-0LXg",
+          "login": "codex",
+          "name": "Codex"
+        }
+      ],
+      "committedDate": "2026-05-23T08:37:15Z",
+      "messageBody": "",
+      "messageHeadline": "Merge remote-tracking branch 'origin/main' into pr-16912-parent-stack",
+      "oid": "0bc44cb88de8d1d2542d09dfcf073b936cb80d44"
+    },
+    {
+      "authoredDate": "2026-05-23T14:13:00Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-23T14:58:53Z",
+      "messageBody": "Three coupled defects let per-session `tokenUsage` reset to zero on reopen\nand drift away from its parts within a session:\n\n- The Session constructor never read `SessionRecord.tokenUsage`, so the\n live `_tokenUsage` counter restarted at zero on every reopen after\n eviction or process restart.\n- Per-turn increments lived only on `_tokenUsage`; nothing overlaid the\n counter into the next `_flushUpdate` write, and turns without a\n follow-up save never persisted at all.\n- `_recordTurnCompletion` only updated `totalTokens` when the provider\n emitted one. Providers that only return `inputTokens` / `outputTokens`\n left the total stale relative to its parts.\n\nFixes:\n\n- Seed `_tokenUsage` from `internals.record.tokenUsage` in the\n constructor, coercing each field through `?? 0` so partially-populated\n legacy rows do not poison subsequent `+=` into `NaN`.\n- Overlay `tokenUsage: { ...this._tokenUsage }` into both the in-flight\n CAS save and the post-save record assignment in `_flushUpdate`, so every\n write carries the latest counter even when concurrent increments arrive\n while the save awaits storage.\n- Schedule a trailing no-op `_flushUpdate(prev => prev)` from\n `_recordTurnCompletion` so increments persist even when no other state\n change follows the turn. Non-lifecycle storage failures latch onto\n `_pendingTokenUsageFlushError` so shutdown and tests surface them via\n `_internalAwaitFlushChain()` instead of silently dropping data.\n- Reorder `_finalizeCompletedQueuedTurn` to call `_recordTurnCompletion`\n before `_markQueuedPostRunFinalized`, so the no-replay marker's CAS\n write piggybacks the new counter via the overlay. A crash between the\n two writes would otherwise resume with the marker set and never\n re-account the turn.\n- Derive `totalTokens` from `(prompt ?? 0) + (completion ?? 0)` when the\n provider omits it, leaving the explicit-totalTokens branch untouched.\n- Have `harness.shutdown` await each live session's flush chain before\n releasing the lease so the trailing persist lands before a fresh owner\n hydrates.\n\nTests in `token-usage.test.ts` cover the constructor seed path, the\nshutdown+rehydrate roundtrip, the queued-turn marker/accumulator\nordering, and four cases of the `totalTokens` derivation branch.",
+      "messageHeadline": "fix(core/harness): persist token usage across rehydration",
+      "oid": "44fb7e656c7857fc2bd1e93cded4944f119c1fed"
+    },
+    {
+      "authoredDate": "2026-05-23T14:29:19Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-23T17:49:24Z",
+      "messageBody": "`harness.deleteSession(...)` removed storage rows but never asked the\nworkspace provider to clean up when the session was no longer live in\n`_perSession` (closed-but-not-resumed, or evicted in a previous harness\ngeneration). For per-session resumable providers that keep on-disk state\nbetween releases, the per-session directory leaked on every delete that\nhappened outside the original Session's lifetime.\n\nFixes:\n\n- Add `WorkspaceRegistry.releaseDormant(opts)` that materializes the\n workspace through `provider.resume({...persistedState})`, runs\n `provider.destroy(workspace, ctx)` (or `workspace.destroy()`), and emits\n the matching `workspace_status_changed` / `workspace_error` events.\n Idempotent via an in-flight `_dormantReleasing` map; resolves to a\n no-op for sessions still live in `_perSession`, for non-per-session\n configs, and when no persisted state is on the record.\n- Have `acquirePerSession` await any in-flight `_dormantReleasing` promise\n before resuming so a concurrent acquire never collides with a dormant\n resume+destroy on the same session.\n- Throw `HarnessWorkspaceProviderMismatchError` from `releaseDormant`\n when the persisted `providerId` does not match the configured one, and\n let the error propagate out of `_deleteClosedTree` to abort the delete.\n Swallowing here would erase the breadcrumb the original provider needs\n to clean its filesystem state; the operator must reconfigure the\n matching provider and retry.\n- Call `releaseDormant` from `_deleteClosedTree` for every per-session\n node in the bottom-up tree before storage rows are removed. Errors\n other than the mismatch error are absorbed (the registry already\n emitted `workspace_error`).\n\nTests in `workspace-registry.test.ts` cover the dormant teardown path\nacross two harness generations, the no-double-destroy invariant when the\nworkspace was already released on close, and the mismatch-aborts-delete\ninvariant (record stays so the operator can recover).",
+      "messageHeadline": "fix(core/harness): tear down dormant per-session workspaces on delete",
+      "oid": "cfb19d7d2f41f1e43ec317d0d2030e32e7752ec9"
+    },
+    {
+      "authoredDate": "2026-05-23T15:04:50Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-23T17:49:24Z",
+      "messageBody": "Today, optional Harness storage features (`appendWorkspaceActionJournalEntry`,\n`appendSessionEvent` / `getSessionEventReplayState` / `listSessionEvents`)\nadvertise support by throwing per-feature `Unsupported*Error` from the\nbase class. Every consumer that wants to know whether the feature is wired\nhas to call the method and `try/catch`. Route handlers, the Session\nruntime, A2A, channels, and release-time compatibility tooling can't\ndistinguish \"feature not configured\" from \"feature failed at runtime.\"\n\nFixes:\n\n- Add `HarnessStorageCapabilities` (`base.ts`): a structural map with seven\n boolean keys — `workspaceActionJournal`, `sessionEventReplay`,\n `admissionConflictDetection`, `attachmentBlobs`, `channelOutbox`,\n `wakeups`, `proactiveWakeups`. Static; callers may cache.\n- Add `HarnessStorage.capabilities(): HarnessStorageCapabilities`. Default\n uses the same prototype-detection idiom as `supportsAtomicDeleteSessions`:\n a feature family counts as supported only when EVERY method in the\n family is overridden on the adapter's prototype. The five abstract\n families (admission, attachments, channelOutbox, wakeups, proactive)\n default to `true` because any concrete adapter implements them.\n- Wire `session._enqueueSessionEventPersistence` to short-circuit up front\n when `capabilities().sessionEventReplay` is false. The legacy `instanceof`\n catch on `HarnessStorageSessionEventReplayUnsupportedError` stays as\n defense-in-depth.\n- Wire `session._recordWorkspaceAction` to short-circuit up front when\n `capabilities().workspaceActionJournal` is false. Emits the one-shot\n `workspace_action_journal_unsupported` event and returns without\n attempting the append. Existing `instanceof` catch retained.\n\nWhy prototype detection rather than declaring booleans by hand: the libsql\nand pg adapters live in separate packages and already override every\nmethod in both optional families. With prototype detection their\n`capabilities()` automatically reports `workspaceActionJournal: true` and\n`sessionEventReplay: true` without any change to those packages. Adapters\nwith config-driven toggles override `capabilities()` directly.\n\nTests:\n\n- `capabilities.test.ts`: InMemoryHarness reports all-true; a fixture that\n reassigns optional methods back to the base prototype reports the\n matching feature as unsupported; a half-implemented family (write but\n not read) reports unsupported; explicit `capabilities()` overrides take\n precedence.\n- `workspace-runtime.test.ts`: a `NoJournalAdapter` whose `capabilities()`\n returns `workspaceActionJournal: false` emits the one-shot unsupported\n event AND never calls `appendWorkspaceActionJournalEntry`. A\n `NoReplayAdapter` whose `capabilities()` returns `sessionEventReplay:\n false` never calls `appendSessionEvent`.\n\nOut of scope:\n\n- Boot-time capability sanity check.\n- Release-matrix generation from `capabilities()`.\n- `libsql` / `pg` adapter capability overrides — covered automatically by\n the prototype-detection default.\n- The third family of unsupported errors (`HarnessStorageProviderCallbackBindingUnsupportedError`,\n `HarnessStorageChannelDiagnosticsUnsupportedError`,\n `HarnessStorageThreadDeleteFenceUnsupportedError`) — same pattern is\n trivial to add once consumers need declarative probes.",
+      "messageHeadline": "feat(core/harness): declare storage capability matrix as runtime API",
+      "oid": "698dd503addce19dc6623b06ecd8aed528e5e086"
+    },
+    {
+      "authoredDate": "2026-05-23T19:05:45Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-23T19:05:45Z",
+      "messageBody": "…ycle\n\nToday a `session.message(...)` turn that spawns a background process via\nthe `execute_command` workspace tool (`sandbox.processes.spawn(...)` with\n`background: true`) leaves that OS process alive when the session is\nlater closed, evicted, or hard-deleted. The sandbox process manager\nalready tracks live handles, but the Harness layer has no signal that\nfires on session lifecycle, so accumulated background processes leak\nacross the host as long-running MastraCode deployments run.\n\nForeground commands are safe — their lifetime is already bounded by the\nturn's `abortSignal` via the sandbox process manager's abort-to-kill\nwiring (see process-manager.ts:81-97).\n\nFixes:\n\n- Add `registerBackgroundProcess?: (handle: ProcessHandle) => () => void`\n  to `HarnessRequestContext`. Tools that spawn long-lived processes call\n  it via `context.requestContext.get('harness').registerBackgroundProcess(handle)`.\n- Add `Session._backgroundProcesses`, a Symbol-keyed map of registered\n  handles. Symbol keys avoid an OS-pid-reuse race where a stale\n  `unregister` callback could delete a newer registration that happens\n  to reuse the same OS pid.\n- Add `Session._registerBackgroundProcess(handle)`. In `live` / `closing`\n  states it stores the entry and wires `handle.wait().then(unreg, unreg)`\n  so normal exits and wait() rejections both clean up. In any terminal\n  state it kills the handle immediately and returns a no-op unregister\n  so a register-arrives-after-close race cannot leak.\n- Add `Session._reapBackgroundProcesses()` invoked at the top of\n  `_markClosed`, `_markEvicted`, and `_markDeleted`. Snapshots the map,\n  clears it, then issues fire-and-forget `handle.kill()` per entry.\n  Idempotent.\n- Wire the slot method in `_buildRequestContext` alongside the existing\n  `recordWorkspaceAction` slot.\n- `execute-command.ts` background branch: after `sandbox.processes.spawn`,\n  optionally call the harness slot's `registerBackgroundProcess`. The\n  call is best-effort — tools outside the Harness runtime see no slot\n  and the registration is a no-op.\n\n`Session.abort()` does NOT call reap. Background processes spawned by\nthe active turn already use `context.abortSignal` (the turn's\ncontroller), and the sandbox process manager wires `abortSignal` to\n`handle.kill()` natively. Reaping on abort would additionally kill\nlong-lived watchdog processes spawned by previous turns, which is\ndestructive and outside the minimal-first scope.\n\nOut of scope for this commit:\n- Persisting tracked pids to storage (cross-harness reap).\n- A `persistAcrossEviction` opt-in for dev-server-style background\n  processes that should outlive eviction.\n- A public `background_processes_reaped` event (deferred to a follow-up\n  to avoid session-event-persistence ordering concerns at `_markEvicted`\n  / `_markDeleted` paths).\n\nTests in `background-process-reap.test.ts` cover registration,\nauto-unregister on both successful exit and `wait()` rejection, reap on\nclose / evict / delete, no-op when no processes registered, the\nforeground-not-tracked invariant, the race-window kill-on-register-after-\nclose path, and a regression guard for the OS-pid-reuse race that\nmotivated the symbol-keyed map.",
+      "messageHeadline": "feat(core/harness): reap orphan background processes on session lifec…",
+      "oid": "32dd7e3a11608391efc6deee7bb7214ababb850f"
+    },
+    {
+      "authoredDate": "2026-05-23T19:43:25Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-23T19:43:25Z",
+      "messageBody": "Today the Harness runs a periodic heartbeat at TTL/3 (min 1s) that renews\neach live session's storage lease. Under event-loop starvation (CPU-bound\nJS) or a tool that holds the session past the default TTL, the heartbeat\ncan miss its deadline and another Harness instance can take over the\nsession via `acquireSessionLease`. The CAS contract on `saveSession`\nrejects late writes from the original owner, but the window is observable\nand tools have no way to push the storage expiry forward ahead of work\nthey KNOW will exceed the default TTL.\n\nFixes:\n\n- Add `Session.extendLease(opts: { ttlMs: number }): Promise<void>` and a\n  convenience wrapper `Session.withExtendedLease(fn, opts)`. Tools that\n  expect to exceed the default lease TTL can push the storage expiry\n  forward before the blocking work; subsequent heartbeat renewals respect\n  the extension via `_getEffectiveLeaseTtlMs`.\n- Validate `ttlMs`: must be a positive integer; reject non-finite,\n  non-integer, ≤0, and values above `MAX_LEASE_EXTENSION_MS` (24h cap).\n- Clamp `ttlMs` upward inside the chained step against (a) the harness\n  default TTL and (b) the remaining extension window. A second\n  `extendLease(shorter)` while a longer extension is still active must\n  NOT shrink the lease.\n- Per-session lease-write serialization via `_leaseRenewalChain`. Both\n  `extendLease` and the heartbeat per-session arm queue their work on the\n  same chain so a default-TTL heartbeat in flight cannot overwrite a\n  longer extension. Mirrors the `_flushChain` idiom used elsewhere.\n- Lifecycle guard on the chain: queued renewers become no-ops once the\n  session is no longer `live`/`closing`. Prevents the heartbeat (or a\n  late chain entry) from re-extending a lease for a session the harness\n  has already terminalized.\n- Clear `_leaseExtensionDeadline` on `_markClosed` / `_markEvicted` /\n  `_markDeleted`.\n- Expose `extendLease` on the `HarnessRequestContext` slot so tools call\n  it via `context.requestContext.get('harness').extendLease({...})`.\n- Refactor `_renewLiveSessionLeases` to route per-session renewals through\n  `session._enqueueLeaseRenewal(...)` so a concurrent `extendLease`\n  cannot race with the heartbeat against `storage.renewSessionLease`.\n  Effective TTL is computed inside the chained step so it reflects the\n  latest extension deadline.\n- Add `Harness._internalLeaseTtlMs` getter for the Session-side clamp.\n\nThe existing `session_evicted` event with `reason: 'lease_lost'`\n(events.ts:86) already covers the observability requirement for\nlease-loss; no event taxonomy expansion in this commit.\n\nOut of scope:\n- Persisting the extension deadline to storage (in-memory only; on\n  restart the lease reverts to whatever storage has).\n- Auto-extension based on turn duration heuristics.\n- Cross-platform lease semantics changes.\n\nTests in `session.lease.test.ts` cover argument validation, storage-side\nexpiry bump, deadline bookkeeping, no-shrink-against-default,\nno-shrink-against-existing-extension (regression), heartbeat-preserves-\nextension via the chain, effective-TTL semantics under all branches\n(default, longer-than-default, expired, non-finite), the convenience\nwrapper, the terminal-state guard for queued renewers, and a two-Harness\ntakeover scenario where an extended lease blocks `HarnessSessionLockedError`.",
+      "messageHeadline": "feat(core/harness): lease-extension API + heartbeat coordination",
+      "oid": "108da25163401a615d9c51960624b4a3eb693dd8"
+    },
+    {
+      "authoredDate": "2026-05-23T20:07:59Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-23T20:07:59Z",
+      "messageBody": "Today `_runGoalJudge` catches every exception from `_callJudge` and emits\n`goal_paused` with the catch-all `reason: 'judge_failed'`. `_callJudge`\ncasts the judge's structured output without validating against the\nverdict schema, so a malformed verdict that happens to type-check loosely\ncan fall through as `'continue'` and keep the loop enqueuing turns based\non a nonsense decision.\n\nFixes:\n\n- Define a four-way `GoalJudgeFailureKind` taxonomy\n  (`'timeout' | 'provider_error' | 'invalid_verdict' | 'max_turns'`) on\n  `storage/domains/harness/types.ts`, along with a `GoalJudgeFailure`\n  record `{ kind, message?, failedAt }` persisted on\n  `GoalState.lastFailure` so a recovered session can introspect what\n  went wrong.\n- Replace `GoalPausedEvent.reason: 'judge_failed'` with three taxonomy\n  variants: `'judge_timeout'`, `'judge_provider_error'`,\n  `'judge_invalid_verdict'`. The legacy union member is retired.\n  Subscribers can now distinguish a transient timeout from a non-\n  transient provider error from a malformed verdict.\n- Add `HarnessGoalJudgeFailedError` carrying `kind`. Thrown from\n  `_callJudge` after schema validation or classification; caught by\n  `_runGoalJudge`.\n- `_callJudge` now runs `GoalJudgeSchema.safeParse(full.object)` and\n  throws `HarnessGoalJudgeFailedError({ kind: 'invalid_verdict' })` on\n  schema failure. Invalid verdicts can no longer fall through as\n  `'continue'`.\n- `_callJudgeWithRetry` retries `'timeout'`-class failures once with a\n  1s backoff before giving up. `AbortError` name OR message matches\n  for `timeout|timed[ -]out|ECONNRESET|ETIMEDOUT` qualify as timeout\n  class; everything else is `'provider_error'` and fails fast.\n- `_runGoalJudge`'s catch path classifies the thrown value into a\n  `GoalJudgeFailure`, stamps it on the goal record via `_flushUpdate`,\n  and emits `goal_paused` with the reason mapped from the kind.\n- Successful judge verdicts clear any prior `lastFailure` via a\n  destructure-strip so a pause-then-resume-then-success cycle leaves\n  the goal in a clean state instead of carrying stale failure metadata.\n- The existing budget-exhausted branch now stamps\n  `lastFailure.kind: 'max_turns'` so the introspection surface is\n  uniform across all pause paths.\n\nOut of scope (per the issue's tightened scope):\n- Silent queue-full backpressure on goal continuations (covered by a\n  separate durable-queue-scheduling issue).\n- Changes to the judge's prompt or context-building.\n\nTests in `session.goal-judge-taxonomy.test.ts` cover: AbortError →\nretry → pause with `judge_timeout` + `lastFailure.kind: 'timeout'`;\nnetwork-timeout error message → retry; generic Error → no retry, pause\nwith `judge_provider_error`; `HarnessGoalJudgeFailedError('invalid_verdict')`\n→ pause with `judge_invalid_verdict` + regression guard that the pending\nqueue stays empty (no fall-through to `'continue'`); `max_turns`\nexhausted → `lastFailure.kind: 'max_turns'`; pause-then-resume-then-\nsuccess clears `lastFailure`; happy-path `'done'`/`'continue'`/`'waiting'`\nunchanged. The pre-existing `session.goal.test.ts` \"judge throws\" test\nis updated to assert the new `judge_provider_error` reason and the\npopulated `lastFailure`.",
+      "messageHeadline": "feat(core/harness): goal-judge failure mode taxonomy",
+      "oid": "c19a2fdbddc774c14a29153033960b79e341c9bb"
+    },
+    {
+      "authoredDate": "2026-05-23T21:37:41Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-23T21:37:41Z",
+      "messageBody": "Today every `spawn_subagent` invocation creates a fresh child session via\n`harness.session(...)` with `origin: 'subagent-tool'` and only `close()`s\nit in the finally block. `close()` flips lifecycle state but does NOT\ndelete storage rows, so heavy fan-out workloads (parallel explore\nsubagents, large review/migration runs, or any remote/A2A path that\nspawns many short-lived subagents per task) accumulate closed-but-\nundeleted session rows indefinitely.\n\nFixes:\n\n- Add `retain?: boolean` to `SubagentDefinition`. Default `false`\n  (ephemeral). When `true`, the spawned subagent session is preserved\n  across `subagent_end` for re-attach scenarios.\n- In `spawn-subagent-tool.ts` main `finally` block, AFTER\n  `parent._emitSubagentEvent({type:'subagent_end'})` (so subscribers see\n  the event before the row vanishes), if `def.retain !== true` then\n  best-effort `await harness.deleteSession({sessionId, resourceId}).catch(()=>{})`.\n- Mirror the same cleanup at the workspace-tool-construction early-\n  return error path so a failed spawn does not accumulate closed\n  children when the same workflow fans out hundreds of them.\n- Update the spawn-subagent test setup helper to default `retain: true`\n  for the test subagent type because the existing test suite inspects\n  the child session row after the tool returns to verify configuration\n  (mode/model/parent linkage); under production default `retain: false`\n  the row would be gone before those assertions could run. New tests\n  that exercise the ephemeral-cleanup contract explicitly pass\n  `retain: false`.\n\nKNOWN GAPS (deferred to follow-ups; documented for operators):\n- `deleteSession` does NOT cascade to thread/message rows.\n  `harness.threads.delete(...)` is the right surface for that, but\n  layering it on top of the existing override-aware MemoryStorage\n  guards needs its own commit. Today's commit cleans the session row;\n  the cloned thread (forked path) and the freshly-minted thread\n  (default path) plus their message rows remain until a follow-up.\n- Forked-thread cleanup when `threads.clone()` succeeds but\n  `harness.session()` then throws is not handled (no child exists).\n  Narrow window; will land with the thread-cleanup follow-up.\n- TTL sweep for crashed subagents (never receive `subagent_end`).\n  Separate commit; orthogonal to the inline-cleanup contract here.\n- Per-call `spawn_subagent({retain:true})` override — only the\n  per-type SubagentDefinition flag exists today.\n\nTests in `session.spawn-subagent.test.ts` cover: default ephemeral\ncleanup deletes the row; `retain: true` preserves the row + closedAt;\n`subagent_end` event still emitted before cleanup; workspace-tool\nconstruction error path cleans the row (regression for codex review\nfinding); bulk 25 sequential spawns leave zero child rows under that\nparent.",
+      "messageHeadline": "feat(core/harness): subagent session retention policy",
+      "oid": "cbb3c3343d87b9529df38716a99b86daa731c9bd"
+    },
+    {
+      "authoredDate": "2026-05-23T22:02:56Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-23T22:02:56Z",
+      "messageBody": "The Harness storage layer and `workspace-policy.ts` evaluators already\naccept `'network'` and `'mcp'` as `actionKind` values, but the\nclassifier in `workspace-actions.ts` only ever produced `'file'` /\n`'command'` kinds. MCP and network tool calls therefore escaped both\nthe durable workspace-action journal and the policy engine — every\n`<serverKey>_<toolName>` MCP invocation and every URL-bearing tool call\nslipped past the audit surface.\n\nFixes:\n\n- Extend `HarnessWorkspaceActionKind` to `'file' | 'command' | 'network'\n  | 'mcp'`, matching the storage type and the policy evaluator. Widen\n  the `workspace_action_journal_unsupported` event's `actionKind`\n  union to match.\n- Add `mcpServerKeys?: readonly string[]` to\n  `classifyHarnessWorkspaceToolAction`. Tool names shaped\n  `<key>_<rest>` resolve to `actionKind: 'mcp'` with\n  `{ serverId, toolName: rest }`. Longest-prefix match wins so\n  overlapping keys (e.g. `weather`, `weather_eu`) classify\n  deterministically.\n- Add lightweight network detection: when no file/command/mcp match,\n  inspect the tool args for a top-level `url` / `endpoint` / `uri`\n  string. Parse via `new URL(...)` and journal as `'network'` with\n  `host` / `port` / `protocol` / `url` / `method?` payload. Default\n  ports for `http`/`https`/`ws`/`wss` are filled in when omitted.\n- Restrict network classification to host-bearing network schemes\n  (`http`/`https`/`ws`/`wss`). Schemes like `file:`, `data:`,\n  `mailto:`, `blob:` parse cleanly through `new URL()` but their\n  host/port payload is meaningless, so they are NOT journaled as\n  network actions (regression guard added for this codex finding).\n- Wire `mcpServerKeys: harness._listMcpServerKeys()` through\n  `Session._mapWorkspaceToolAction`. Add a thin `_listMcpServerKeys()`\n  helper on `Harness` that reads the same registry already used by\n  `_listMcpServers()`.\n\nClassifier precedence is: static file/command descriptor > MCP\nnamespace match > network URL match > undefined. Static descriptors\nkeep their existing semantics — no regression on file/command tools.\n\nOut of scope (separate follow-up):\n- Policy enforcement of `network` / `mcp` allow/ask/deny rules\n  (Linear ticket's second sub-deliverable; lands after the journaling\n  half).\n- Nested URL fields in args (e.g. `args.config.url`) — only top-level\n  `url` / `endpoint` / `uri` are inspected.\n- IPv6 literals and non-standard ports beyond what `new URL` natively\n  supports.\n\nTests in `workspace-actions.test.ts` cover: MCP namespace match\n(simple, longest-prefix, no-match, empty-suffix rejection, mixed-content\nkey list); network URL detection via `url` / `endpoint` / `uri` aliases,\ndefault ports per scheme, HTTP method capture, non-string url rejection,\nunparseable url rejection, non-network-scheme rejection (codex\nregression); classifier precedence (file/command beats MCP, MCP beats\nnetwork). Pre-existing file/command behavior is unchanged.",
+      "messageHeadline": "feat(core/harness): classify network and MCP workspace actions",
+      "oid": "7f167553db93c65e5ffeba30aabf764e2aa942c9"
+    },
+    {
+      "authoredDate": "2026-05-23T22:40:03Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-23T22:40:03Z",
+      "messageBody": "…/mcp actions\n\n`workspace-policy.ts`'s `evaluateWorkspacePolicy` was exported but never\ninvoked from runtime. Every workspace-action journal entry recorded the\ncaller-passed `policyDecision` verbatim with a stock reason and empty\nmatchedRules — operators had no way to observe whether a tool call\nrespected a configured allow/ask/deny policy, and the new `network`/`mcp`\nclassifier kinds (the previous commit) carried no policy verdict at all.\n\nFixes:\n\n- Add `policy?: WorkspacePolicy` to every variant of `HarnessWorkspaceConfig`\n  (`shared`, `per-resource`, `per-session`).\n- Store the policy on `Harness._workspacePolicy` and expose via the\n  `_internalGetWorkspacePolicy()` accessor.\n- In `Session._recordWorkspaceAction`, if a policy is configured AND the\n  classifier output translates cleanly via `_toPolicyAction(mapped)`,\n  call `evaluateWorkspacePolicy(policy, policyAction)` and overlay its\n  decision + reasons + (JSON-sanitized) matched rules onto the journal\n  entry.\n- `_toPolicyAction` strict guards (per codex review):\n  - file: only the policy's `WorkspaceFileOperation` set\n    (`read`/`write`/`delete`/`rename`/`patch`); the classifier's\n    already-resolved absolute path is preferred over the raw input so\n    nested policy roots (e.g. `/ws` + `/ws/readonly`) cannot mis-match a\n    relative tail (codex regression test added). `toPath` resolved the\n    same way; rename actions carry both.\n  - command: requires `mapped.action.command` to be a non-empty string —\n    skips `get_process_output`/`kill_process` and similar shapes that\n    don't fit the policy's command action.\n  - network: requires a non-empty string host; port flows through only\n    when a finite number, protocol only when a string.\n  - mcp: requires a non-empty serverId; toolName is optional.\n- Caller-passed `params.policyDecision` is preserved on the journal entry\n  under `actor.callerDecision` so operators can compare caller intent vs.\n  policy verdict on every row.\n- When a policy is configured but the action can't be mapped (e.g.\n  `get_process_output`), the runtime falls back to the caller-driven\n  decision and tags the entry with\n  `harness.policy_unmappable_<kind>_<operation>` so the surface gap is\n  visible.\n\nBehavior change is evidence-only: the runtime does NOT block tool calls\nbased on the policy verdict. Gating is a separate behavior change tied\nto the permission-profiles ticket.\n\nTests in `session.workspace-policy.test.ts` cover: file deny rule\noverlay (with the absolute-path anchoring); the nested-roots regression\nfrom the codex review; command actions without a string command fall\nback to caller decision with the\n`harness.policy_unmappable_command_read_output` reason; network deny\nrule overlay; an unrecognized MCP-shaped tool name does not journal\n(the integration with a registered MCP server is documented as a\nfollow-up); no policy configured = legacy behavior unchanged.\n\nChangeset: patch on `@mastra/core`.",
+      "messageHeadline": "feat(core/harness): enforce workspace policy for file/command/network…",
+      "oid": "f272f9c1cb32930b9e206ab1301ce86d65bd7c5e"
+    },
+    {
+      "authoredDate": "2026-05-23T23:00:01Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-23T23:00:01Z",
+      "messageBody": "…ssion\n\nThe previous subagent-retention commit cleaned the closed session row on\n`subagent_end` but explicitly deferred thread + message-row cleanup as a\nknown gap. Heavy fan-out workloads (parallel explore subagents, large\nreview/migration runs, A2A delegations that spawn many short-lived\nsubagents) therefore kept accumulating per-spawn thread rows and their\nmessage history under the resource's MemoryStorage, even when the\nsession record was already gone.\n\nFix:\n\n- In `spawn-subagent-tool.ts`, after the existing best-effort\n  `harness.deleteSession({sessionId, resourceId})`, also call\n  `harness.threads.delete({resourceId, threadId: child.threadId})`.\n  Cleans BOTH the fresh-path thread (minted by\n  `harness.session({threadId: {fresh: true}, ...})`) and the forked-path\n  thread (cloned by `harness.threads.clone(...)`) — both belong\n  exclusively to this child.\n- Mirror the same `threads.delete` call at the workspace-tool-construction\n  early-return path so partial-spawn failures don't leak a thread either.\n- Both calls remain `.catch(() => {})` best-effort. `harness.threads.delete`\n  refuses in setups where a separate session-storage override has marked\n  the thread as externally-attached (harness.ts:3433 guard); in those\n  environments the session row is still cleaned, and the worst case is a\n  leftover thread + messages — strictly better than the pre-fix state.\n- `retain: true` continues to suppress both deletions for subagents\n  intended for re-attach.\n\nTests in `session.spawn-subagent.test.ts`:\n- Default ephemeral spawn → asserts `harness.threads.delete` was called\n  with `{resourceId, threadId}` matching the child (not the parent).\n- `retain: true` → asserts `harness.threads.delete` is NOT called.\n- Workspace-tool-construction early-return path → asserts\n  `harness.threads.delete` IS called for the partially-created child.\n\nKnown gap still deferred: when `harness.threads.clone(...)` succeeds and\n`harness.session(...)` then throws (the outer catch in spawn-subagent-tool),\nno `child` exists and no thread cleanup runs. Narrow window; will land\nwith the broader clone-without-session cleanup pass.",
+      "messageHeadline": "feat(core/harness): clean subagent thread + message rows alongside se…",
+      "oid": "8c309a1ca42e7fe725090e2f48af1e215d5e1c31"
+    },
+    {
+      "authoredDate": "2026-05-23T23:10:46Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-23T23:10:46Z",
+      "messageBody": "…/v1/workspace/\n\nFive workspace-related modules lived at `packages/core/src/harness/v1/`\nroot (`workspace-actions.ts`, `workspace-policy.ts`, `workspace-provider.ts`,\n`workspace-registry.ts` plus their co-located tests) and continued to\naccumulate alongside unrelated harness internals. The mechanical-cleanup\nroadmap item calls for collecting them under a sibling `workspace/`\nfolder so future workspace work (policy gating, classifier extensions,\nprovider variants) lands in a consistent location.\n\nPure file moves + import-path updates. No behavior change.\n\nChanges:\n\n- `workspace-actions.ts` → `workspace/actions.ts`\n- `workspace-actions.test.ts` → `workspace/actions.test.ts`\n- `workspace-policy.ts` → `workspace/policy.ts`\n- `workspace-policy.test.ts` → `workspace/policy.test.ts`\n- `workspace-provider.ts` → `workspace/provider.ts`\n- `workspace-registry.ts` → `workspace/registry.ts`\n- `workspace-registry.test.ts` → `workspace/registry.test.ts`\n- Update internal imports in `index.ts`, `session.ts`, `harness.ts`,\n  `types.ts`, the cross-cutting `workspace-runtime.test.ts`, and the\n  cross-cutting `workspace-session.test.ts`.\n- Cross-imports inside `workspace/` collapse from `./workspace-X` to\n  `./X` since the modules now share a folder.\n\n`workspace-runtime.test.ts` and `workspace-session.test.ts` stay at\n`harness/v1/` root because they're cross-cutting session+workspace\ntests rather than workspace-internal ones.\n\nThe package-level public surface (`@mastra/core/harness/v1` exports\nthrough `harness/v1/index.ts`) is unchanged — no consumer imports a\ndeep `harness/v1/workspace-*` path, verified by grep across packages\nand stores.\n\nVitest 1246/1246 in the harness/v1 + workspace/tools focused run.\nTypecheck clean.",
+      "messageHeadline": "refactor(core/harness): consolidate workspace-* modules under harness…",
+      "oid": "40334d8cc22ff669ff98de9b9b1a4c2d447c95b3"
+    },
+    {
+      "authoredDate": "2026-05-23T23:14:28Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-23T23:14:28Z",
+      "messageBody": "Every other built-in tool lives under `harness/v1/builtin-tools/`\n(`ask-user.ts`, `submit-plan.ts`, `task-check.ts`, `task-write.ts`).\n`spawn-subagent-tool.ts` was the lone outlier at `harness/v1/` root\nfor no documented reason. Moving it for consistency.\n\nPure file rename + import-path updates. No behavior change.\n\n- `harness/v1/spawn-subagent-tool.ts` → `harness/v1/builtin-tools/spawn-subagent.ts`\n  (dropping the redundant `-tool` suffix matches the existing\n  builtin-tools naming convention: `ask-user.ts`, not `ask-user-tool.ts`).\n- Update internal imports in `session.ts`, `session.spawn-subagent.test.ts`,\n  and `workspace-runtime.test.ts`.\n- Cross-imports inside the moved file: `'./errors'` → `'../errors'`,\n  `'./session'` → `'../session'`, `'../../tools/tool'` →\n  `'../../../tools/tool'`, `'../../workspace/tools'` →\n  `'../../../workspace/tools'`.\n\nThe exported symbol names (`createSpawnSubagentTool`,\n`SPAWN_SUBAGENT_TOOL_ID`) are unchanged; no external consumer imports\nthe deep path (verified by grep across packages and stores).\n\nVitest 1246/1246 in the harness/v1 + workspace/tools focused run.\nTypecheck and prettier clean.",
+      "messageHeadline": "refactor(core/harness): move spawn-subagent tool under builtin-tools/",
+      "oid": "f8fb7ba8ad993c7d9a8ab039f1e66db23181cbfa"
+    },
+    {
+      "authoredDate": "2026-05-24T09:16:38Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T09:16:38Z",
+      "messageBody": "`EventEmitter.subscribe()` returns an unsubscribe closure that mutates\n`this.listeners` via `splice()`. The dispatcher iterates the same array\nwith `for...of`, so a listener that calls its own (or a sibling's)\n`unsubscribe()` synchronously during dispatch shifts later entries down\nunder the cursor — the listener that occupied the freed slot is skipped\nfor the in-flight emit.\n\nThis is a latent correctness bug today and a hard blocker for the\nupcoming terminal-event work: subscribers commonly unsubscribe\non `session_closed`/`session_evicted`/`session_deleted`, which would\ncause sibling listeners to miss the terminal notification.\n\nFix: iterate a one-shot copy (`[...this.listeners]`) so the live array\nmutation cannot perturb the in-flight dispatch.\n\nTwo regression tests pin the contract:\n- Self-unsubscribe during dispatch delivers to all siblings on the\n  current emit; the removed listener is skipped on subsequent emits.\n- Cross-listener unsubscribe encodes snapshot semantics: a listener\n  removed by another listener mid-dispatch still receives the in-flight\n  event (snapshot was already taken), and is excluded from the next\n  emit.\n\nPlain Array snapshot (not Set) preserves duplicate-listener semantics\nsince `subscribe()` is array-append. No public-API change.",
+      "messageHeadline": "fix(core/harness): snapshot EventEmitter listeners before dispatch",
+      "oid": "7759e1acb3a170ec2b6c6ff92fd8111a45294ec1"
+    },
+    {
+      "authoredDate": "2026-05-24T10:28:29Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T10:28:29Z",
+      "messageBody": "… event\n\n`EventEmitter` mints sequences starting at `0` (events.ts: post-increment\non emit). Storage backends — in-memory, libsql, pg — filter with\n`event.sequence > afterSequence`. Together, this means callers need\n`afterSequence: -1` to receive sequence `0`. But the public\n`Session.listEventsAfter()` validation rejected `afterSequence < 0`,\nmaking the first event unreachable through the documented API.\n\nRelax the lower bound to `-1`. Storage is unchanged because all\nbackends already use the strict-greater semantics. `Harness.listSessionEventsAfter()`\nneeds no change either — it forwards `opts.afterSequence` straight to\nstorage with no validation.\n\nRegression tests pin the contract end-to-end:\n- `Session.listEventsAfter({afterSequence: -1})` returns sequence 0;\n  the same call with `afterSequence: 0` excludes sequence 0 and yields\n  one fewer row.\n- `Harness.listSessionEventsAfter({afterSequence: -1})` returns\n  sequence 0 (pass-through path).\n- `afterSequence: -2` still rejected with a clear error.\n\nThis is the cursor-shape prerequisite for the upcoming replay\nbridge: \"from the beginning\" must be a first-class request, not a hack.",
+      "messageHeadline": "fix(core/harness/v1): allow afterSequence=-1 to replay from the first…",
+      "oid": "ffe7272269032d5e83372a558fbc311a2b1c1eda"
+    },
+    {
+      "authoredDate": "2026-05-24T10:42:05Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T10:42:05Z",
+      "messageBody": "…play APIs\n\nBefore this change, the four replay-aware public APIs leaked the\nstorage-internal `HarnessStorageSessionEventReplayUnsupportedError`\nwhen the storage adapter did not support the durable event ledger.\nThat error is not in the public error registry and is not what server\nroutes, A2A `tasks/resubscribe`, headless workers, or any other\nconsumer should catch.\n\nThe Linear scope addition spells this out: when an adapter\ndeclares `sessionEventReplay: false`, replay-aware subscribe paths\nmust surface an explicit, typed error — not degrade silently and not\nleak storage internals.\n\nThis commit introduces `HarnessEventReplayUnsupportedError`\n(public error code `harness.event_replay_unsupported`) and raises it\nfrom all four public surfaces:\n\n- `Session.getEventReplayState()`\n- `Session.listEventsAfter()`\n- `Harness.getSessionEventReplayState()`\n- `Harness.listSessionEventsAfter()`\n\nEach surface uses two layers:\n\n1. Upfront capability check — read `storage.capabilities().sessionEventReplay`\n   and throw the typed error immediately when the adapter declares no\n   replay support.\n\n2. Defense-in-depth try/catch — translate any\n   `HarnessStorageSessionEventReplayUnsupportedError` that slips through\n   (e.g. an adapter that declares replay but throws on a specific call\n   shape, or that develops a future regression). Preserves the typed\n   contract even for misdeclared adapters.\n\nRegression tests pin both branches:\n- A NoReplayHarness subclass (overrides the three replay methods back\n  to the base no-ops, flipping the capability prototype-detection to\n  false) exercises the upfront-check path on all four surfaces.\n- A stubbed-throw test forces the storage-internal error from a\n  replay-declared adapter and verifies all four surfaces still\n  translate to the typed public error.",
+      "messageHeadline": "feat(core/harness/v1): typed HarnessEventReplayUnsupportedError on re…",
+      "oid": "2d48301225dde5528385ef47e98a5896402e14b7"
+    },
+    {
+      "authoredDate": "2026-05-24T10:58:04Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T10:58:04Z",
+      "messageBody": "…son: error\n\nFive of the seven `agent_end` emit sites in session.ts collapsed\n`full.finishReason === 'error'` into `reason: 'complete'` via a 2-way\nternary, hiding failure from durable replay and remote stream\nconsumers. The TUI dispatcher, headless exit code, A2A\n`tasks/resubscribe`, and any other downstream consumer that reads\n`agent_end.reason` would treat a failed run as a successful one.\n\nAcceptance criterion #5 requires completed/failed stream\nsemantics to be observable. This commit standardizes a single\n`mapFinishToAgentEndReason()` helper that does the deliberately lossy\n3-way projection (`'suspended' | 'error' | 'complete'`) and applies it\nat every emit site so the contract is uniform.\n\nThe helper's docstring makes the projection lossy by design — any\nfuture richer taxonomy (timeout vs provider error vs aborted) belongs\non a new `agent_end` payload field or sibling event shape, not buried\ninside this helper.\n\nRegression tests cover all three turn paths:\n- `message()` — direct emit at session.ts:3565.\n- `queue()` — drains a queued turn through the post-run finalization\n  emit site.\n- resume after suspension — exercises the resumed-run emit site at\n  session.ts:6665 (where the previous implementation already used a\n  3-way ternary, but unification must not regress it).\n\nInternal session callers of `agent_end.reason` were audited:\n`_runGoalJudge` gates on `turn.finishReason === 'suspended'` directly,\nnot on `agent_end.reason`, so the helper change is a no-op for\ninternal behavior. The downstream change is only visible to external\nevent consumers (TUI, headless, A2A) — which is the point.",
+      "messageHeadline": "fix(core/harness/v1): propagate agent error finishes as agent_end.rea…",
+      "oid": "2e7f134a245513457259c7c1c12aac73705a97e6"
+    },
+    {
+      "authoredDate": "2026-05-24T11:25:34Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T11:25:34Z",
+      "messageBody": "Close and evict already emit `session_closed` / `session_evicted`\nbefore the in-memory emitter is torn down. Hard-delete had no parity\nevent — subscribers saw the session go silent without a terminal\nsignal, breaking durable replay / remote stream consumers that need\nto distinguish \"session closed but record still exists\" from \"session\nrecord gone forever\".\n\nThis commit adds a `session_deleted` event with reason `'requested' |\n'cascade'`. The root of the requested delete (tree[0]) gets\n`'requested'`; every descendant cleaned up alongside it as part of\nthe subtree cascade gets `'cascade'`.\n\nEmission ordering:\n- After `storage.deleteSessions()` / `storage.deleteSession()`\n  succeeds, so we never claim a delete that failed (atomic-failure\n  recovery branch still emits only after verifying the row is gone).\n- Before `live._markDeleted()` tears down the Session's emitter, so\n  any session-level subscribers still receive the final lifecycle.\n\nCoverage rules in `_markDeletedSession`:\n- Live Session present + bridge still subscribed: emit via\n  `live._emit()`; harness subscribers see it through the bridge.\n- Live Session present + bridge already torn down (force-delete\n  cascades close-first, which tears the bridge before\n  `_deleteClosedTree` runs): emit on the session emitter for\n  session-level subscribers AND directly on the harness emitter\n  (with `sessionId` override) for harness-level subscribers, since\n  the bridge can no longer forward.\n- No live Session: emit only on the harness emitter (the session-\n  level subscribers were torn down with the Session during close).\n\nThe emit is wrapped in a best-effort try/catch — the terminal\nlifecycle must never block the delete path.\n\nRegression tests cover:\n- Normal close-then-delete: reason `'requested'` reaches harness\n  subscribers (no-live path).\n- Force-delete: reason `'requested'` reaches harness subscribers even\n  though the bridge was torn down by the implicit close.\n- Cascade: parent reason `'requested'` + child reason `'cascade'`\n  when deleting a parent with closed descendants.\n\nNo double-delivery in any path — verified by tracing the live/bridge\nbranching against the close+delete lifecycle.",
+      "messageHeadline": "feat(core/harness/v1): emit session_deleted on hard-delete lifecycle",
+      "oid": "02f3d93f84a0f113e9f01cade260adf6b3c99cd4"
+    },
+    {
+      "authoredDate": "2026-05-24T12:02:38Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T12:02:38Z",
+      "messageBody": "Adds the production entry point for replay-then-live event consumption:\nserver routes, A2A `tasks/resubscribe`, headless workers, and IDE\nextensions that need durable resume semantics without reinventing the\ncatch-up logic.\n\n`bridgeReplayAndLive(harness, opts)` is an `AsyncGenerator<HarnessEvent>`\nthat:\n\n  1. Subscribes to the live harness emitter first (no event loss\n     during the replay phase).\n  2. Optionally reads stored events from `opts.sinceCursor`\n     (`'beginning'` | `{epoch, afterSequence}`) to the current head,\n     paging by `opts.replayPageSize` (default 256).\n  3. Switches to live, deduping the overlap by sequence so no event is\n     delivered twice and none is missed.\n  4. Filters by `opts.sessionId` so a single bridge only sees its\n     session's events.\n\nComposes the existing public surfaces (`Harness.subscribe`,\n`Harness.getSessionEventReplayState`, `Harness.listSessionEventsAfter`)\n— no private-field access into Harness or Session.\n\nTyped errors with `harness.event_replay_*` codes registered in\n`HARNESS_PUBLIC_ERROR_CODES` so transport adapters can map them to\nwire shapes:\n\n- `HarnessEventReplayStaleCursorError` — cursor older than oldest\n  stored sequence; data loss unrecoverable.\n- `HarnessEventReplayEpochMismatchError` — emitter regenerated since\n  cursor was issued.\n- `HarnessEventReplayFutureCursorError` — cursor ahead of newest\n  stored sequence.\n- `HarnessEventReplayBufferOverflowError` — live buffer exceeded\n  `maxBufferedLive` (default 1000) during slow replay catch-up.\n- `HarnessEventReplayAbortedError` — `opts.signal` aborted.\n\nCancellation: `opts.signal` is the canonical mechanism (immediate\ncleanup via finally). `for await ... break` also cleans up but only\nafter the next yield point — pure async-generator semantics, documented\nin the helper's docstring.\n\nBridge correctness pinned by 12 tests:\n- 'beginning' replay covers every sequence from 0.\n- Resume from a mid-sequence cursor yields strictly after it.\n- Epoch mismatch / stale cursor / future cursor each throw the typed\n  error.\n- No-cursor path skips replay, starts from live.\n- Replay → live dedupe: monotonic sequences, no duplicates, no gap.\n- Cross-session events filtered out.\n- Signal abort mid-iteration + already-aborted-signal cases.\n- Buffer overflow under tight capacity during catch-up.\n- Post-yield consumer break unsubscribes the harness listener.",
+      "messageHeadline": "feat(core/harness/v1): add bridgeReplayAndLive replay-aware event stream",
+      "oid": "91282db1c1991558b847224f7a75b0324896c61c"
+    },
+    {
+      "authoredDate": "2026-05-24T12:28:54Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T12:28:54Z",
+      "messageBody": "Adds `projectHarnessEventForPublicView` and wires it into\n`bridgeReplayAndLive` via a new `publicView` option. The projector is\nthe canonical filter for events that must be safe to forward to a\nremote/untrusted consumer (HTTP SSE, A2A `tasks/resubscribe`,\nchannel webhooks). In-process callers default to raw events — full\nfidelity drives the local UI.\n\nDefault redaction policy. Strips every event field that can carry\nsecrets, user-supplied schema, or model-generated rationale:\n\n- Tool I/O: `tool_input_delta.argsTextDelta`, `tool_start.args`,\n  `tool_end.result`, `tool_update.partialResult`,\n  `shell_output.output`.\n- Subagent: `subagent_start.task`, `subagent_text_delta.delta`,\n  `subagent_tool_start.args`, `subagent_tool_end.output`,\n  `subagent_end.output`.\n- Observational memory: `om_observation_end` (observations,\n  currentTask, suggestedResponse), `om_reflection_end.observations`,\n  `om_buffering_end.observations`, the `error` field on every\n  `om_*_failed` shape, `om_thread_title_updated` titles.\n- Threads: titles on `thread_created` / `thread_renamed` /\n  `thread_cloned`; `thread_settings_changed.patch` and\n  `.removedKeys`.\n- Goal: `goal_set.goal`, `goal_judged.decision`,\n  `goal_done.reason`.\n- State: `state_changed.changedKeys`.\n- Workspace: `workspace_error.error.message` (preserves\n  `error.name` so consumers can still route on error class).\n- Tasks: every `task_updated.tasks[].content` / `.activeForm`.\n- Custom events (`<ns>.<name>` shape, non-reserved): `payload`\n  redacted. Detection uses the shared `isCustomEventType` predicate\n  so a future reserved dotted-namespace event cannot accidentally\n  trip the custom path.\n\nPreserves:\n- Every id (`id`, `sessionId`, `runId`, `toolCallId`, …).\n- Every lifecycle reason / status (`isError`, `finishReason`,\n  `reason`, `phase`).\n- Assistant `message_update.delta` — the user-visible streaming\n  text; redacting it would defeat streaming UX. Subagent\n  `subagent_text_delta.delta` is redacted because subagent\n  transcripts may include tool transcripts not intended for a\n  remote consumer; a transport can opt back in via `opts.redactor`.\n\nPurity contract: input never mutated, return value is always a\nfresh shallow clone — caller / redactor cannot mutate the caller's\nevent.\n\nCustomization: `PublicViewProjectionOptions.redactor` runs AFTER\nthe default policy. The redactor receives the projected event and\nmay return a tightened version, a loosened version (e.g. un-redact\nan allowlisted tool's args), or `null` to drop the event from the\npublic stream entirely. The bridge advances its dedupe cursor on\ndropped events so the live phase still cannot deliver them twice.\n\nWired into the bridge:\n- `BridgeReplayOptions.publicView: boolean` — when true, every\n  replay row AND every live event is projected before yielding.\n- `BridgeReplayOptions.publicViewOptions?: PublicViewProjectionOptions`\n  — forwarded to the projector per call.\n\n24 new tests pin the default policy (every redaction listed\nabove), the customization seam (allowlist + drop), and the bridge\nintegration (replay + live + dedupe on drop).",
+      "messageHeadline": "feat(core/harness/v1): public-view event projector + bridge opt-in",
+      "oid": "e0c17e51bdc5ca52e15a24bea8565965108238a7"
+    },
+    {
+      "authoredDate": "2026-05-24T13:13:21Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T13:13:21Z",
+      "messageBody": "Adds the missing primitive between in-flight session events and the\ndurable record of work products — plans, diffs, test reports,\nscreenshots, patches, review output. Artifacts are immutable,\nversioned, content-addressed via the existing attachment store, and\nqueryable through a typed public API.\n\nStorage substrate (`storage/domains/harness/{base,types,inmemory}.ts`):\n\n- `HarnessArtifactRecord` — `{ artifactId, lineageRootId,\n  parentArtifactId?, version, artifactType, attachmentId, mimeType,\n  bytes, sha256, schemaUri?, createdAt, createdBy, metadata? }`.\n  `lineageRootId === artifactId` for v1; subsequent writes set it from\n  the parent so lineage walks are O(1) on the (sessionId, lineageRootId)\n  index.\n- `HarnessStorageCapabilities.harnessArtifacts: boolean` with\n  prototype-detection over the four artifact methods, mirroring the\n  workspace-journal / event-replay capability pattern.\n- Base stubs throw `HarnessStorageArtifactsUnsupportedError` — adapters\n  fail loud rather than silently degrading.\n- In-memory implementation enforces: caller-supplied `artifactId`\n  uniqueness; `parentArtifactId` lives in the same `(sessionId,\n  resourceId)`; CAS guard on `(lineageRootId, version)`; attachment\n  must exist on the same session, with `mimeType` / `bytes` / `sha256`\n  copied from the attachment record so artifacts capture canonical\n  immutable values.\n- Session hard-delete now drops matching artifact rows alongside\n  attachment bytes (and `dangerouslyClearAll` too), so deleted\n  sessions cannot leave dangling rows pointing at vanished\n  attachments.\n\nSix typed storage errors (`HarnessStorageArtifactsUnsupportedError`,\n`HarnessStorageArtifactNotFoundError`,\n`HarnessStorageArtifactLineageMismatchError`,\n`HarnessStorageArtifactVersionConflictError`,\n`HarnessStorageArtifactDuplicateIdError`,\n`HarnessStorageArtifactAttachmentMissingError`) map to six public\ntyped errors registered in `HARNESS_PUBLIC_ERROR_CODES`.\n\nPublic API (`harness.ts`):\n\n- `harness.artifacts.write({ sessionId, resourceId, threadId,\n  artifactId, artifactType, attachmentId, parentArtifactId?,\n  schemaUri?, createdBy?, metadata? })`. Caller uploads bytes via\n  `harness.attachments.upload()` first, then passes the\n  resulting `attachmentId` to `write`. Hash/MIME/bytes are\n  authoritative-from-attachment, not caller-supplied.\n- `harness.artifacts.get({ sessionId, resourceId, artifactId })`.\n- `harness.artifacts.list({ sessionId, resourceId, artifactType?,\n  limit?, cursor? })`.\n- `harness.artifacts.versions({ sessionId, resourceId, artifactId })`\n  — walks the lineage from any anchor in version order.\n\n`artifact_created` event:\n\n- New shape `{ type: 'artifact_created'; artifactId; artifactType;\n  lineageRootId; parentArtifactId?; version; mimeType; sha256; bytes }`.\n- Added to `HarnessEvent` union and `RESERVED_EVENT_TYPES`.\n- Emitted on the live session's emitter when a Session handle exists\n  (bridge forwards to harness-level subscribers); falls back to the\n  harness emitter with a `sessionId` override when the caller writes\n  against a closed/non-live session (e.g. a server route).\n- Public-view projection passes through unchanged — every field is\n  safe metadata (no payload bytes).\n\nWhy no `taskId` / `runId` columns: the canonical Task / Run primitives\nhave not been defined yet. Consumers that need to associate artifacts\nwith a task or run use the opaque `metadata` map until the canonical\nschema lands.\n\nWhy no inline content: attachments already provide MIME + sha256 +\nimmutable IDs + references; inline JSON would inflate row size and\nduplicate the redaction policy that public-view applies to attachment\nreferences. The single-source-of-truth content live in the attachment\nstore.\n\nWhy no approval/denial or workspace-mutation evidence: inbox response\nreceipts and the workspace action journal already cover those\ncategories. The artifact substrate is the missing piece, not the\nexisting evidence surfaces.\n\nComprehensive coverage:\n- Storage tests pin write/load/list/versions, lineage CAS, duplicate\n  rejection, missing-attachment rejection, capability-false adapter,\n  capability prototype detection.\n- Harness-level tests pin every public surface against typed-error\n  translation, `artifact_created` reaching both session-level and\n  harness-level subscribers via the bridge, the no-live-session emit\n  fallback, and cascade cleanup on hard-delete.\n\n12 storage tests + 13 harness tests; 1010 total tests across harness/v1\n+ storage domain pass; typecheck clean; codex pass ×2 + coderabbit\nclean before commit.",
+      "messageHeadline": "feat(core/harness/v1): durable artifact substrate",
+      "oid": "6b9332fbc7a33e54217a6f684bcee7dbd3cee5f7"
+    },
+    {
+      "authoredDate": "2026-05-24T13:53:51Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T13:53:51Z",
+      "messageBody": "…lyProfile\n\nAdds the named-policy-profile substrate that makes Harness v1 safe to\nexpose beyond a trusted local CLI. Server/A2A/channel entrypoints can\nnow declare a non-YOLO baseline (read-only review, approval-gated\npatch, ci-fixer) that the local CLI's lenient defaults cannot bypass.\n\nModule `harness/v1/permission-profiles.ts`:\n\n- `HarnessPermissionProfile` — purely declarative bundle of per-category\n  baseline + per-tool overrides + session grants + operator-visible tags.\n- `HARNESS_PERMISSION_PROFILES` — frozen registry of 4 presets:\n  - `readOnlyReview`: read=allow; edit/execute/mcp/other=deny. Tagged\n    `remote-safe`.\n  - `approvalGatedPatch`: read=allow; everything else=ask. Tagged\n    `remote-safe`.\n  - `ciFixer`: read=allow; everything else=ask. Tagged `remote-safe`.\n    Args-aware allowlisting deferred (the runtime resolver hook drops\n    per-call args before reaching the session resolver, so any\n    declarative `execute: allow` would over-permit — operators layer\n    a workspace-policy rule for the specific commands their CI uses).\n  - `trustedLocalYolo`: every category=allow + grants every category.\n    Tagged `local-only` — never default for a remote route.\n- `rulesFromProfile(profile, opts?)` / `grantsFromProfile(profile)`\n  helpers, reusable by future surfaces (subagent profile binding,\n  per-actor grants).\n\nPublic API:\n\n- `session.permissions.applyProfile({ profileName,\n  preserveCallerDenies? })`. REPLACE semantics for both\n  `permissionRules` and `sessionGrants` — a profile reset never carries\n  stale rules forward when the posture changes. `preserveCallerDenies:\n  true` overlays only `policy === 'deny'` entries from the prior rule\n  set on top of the new profile so safety overrides survive.\n- `harness.permissions.profiles.{get,list}` — static registry lookup.\n- `harness.permissions.applyProfile({ sessionId, resourceId,\n  profileName, preserveCallerDenies? })` — convenience wrapper for\n  server-route callers that don't already hold a Session handle.\n- `HarnessPermissionProfileNotFoundError` (public-error registry).\n\nEvent `permission_profile_applied`:\n\n- `{ profileName; previousProfileName?; mode: 'replace' |\n  'replace-preserve-denies'; categories: ...; preservedToolDenies }`.\n- Emitted on the session emitter so subscribers + the durable event\n  ledger record an auditable snapshot of every policy reset.\n- Public-view passes through unchanged (no payload bytes; safe to\n  forward to remote subscribers).\n\nStorage:\n\n- `SessionRecord.appliedPermissionProfile?: string` — opaque slot for\n  the last-applied profile name, used by audit/replay consumers and\n  by the event payload's `previousProfileName`. Legacy records (no\n  profile applied) load as `undefined`.\n\nAnti-drift / accuracy:\n\n- Every preset populates every {@link ToolCategory} explicitly. A\n  profile that left a category undefined would fall through to the\n  harness-level `defaultPermissionPolicy`, breaking `readOnlyReview`\n  on a harness configured with `'allow'` as the default.\n- Workspace-policy fragments are intentionally NOT in this slice —\n  the harness workspace policy is constructor-only and a\n  session-scoped overlay is a separate substrate.\n- `_permApplyProfile` computes every snapshot from `prev` INSIDE the\n  serialized `_flushUpdate` callback. The earlier draft read\n  `this._record` synchronously above the await, which would have\n  dropped a caller-set deny added between the synchronous read and\n  the queued flush (see the concurrent-setPolicy regression test).\n\n16 tests pin the contract:\n- Every preset populates all 5 categories.\n- Each preset's category map matches the documented posture.\n- Replace semantics drop stale caller grants/rules.\n- `preserveCallerDenies: true` keeps `deny` entries; default mode\n  drops them.\n- `permission_profile_applied` reaches both session-level and\n  harness-level subscribers.\n- `previousProfileName` set on second consecutive apply.\n- Unknown profile name → `HarnessPermissionProfileNotFoundError`.\n- Resolution semantics: `readOnlyReview` denies edit even when the\n  harness `defaultPermissionPolicy` is `'allow'`.\n- `harness.permissions.profiles.{get,list}` + the\n  harness-level `applyProfile` convenience.\n- Concurrent `setPolicy` (queued first) + `applyProfile` with\n  `preserveCallerDenies: true` (queued second) — the regression test\n  for the race the earlier draft would have failed.\n\nDeferred to follow-up slices on this branch:\n- Per-actor / per-channel grants (SessionRecord schema change).\n- Subagent profile binding (subagent type config wires a profile,\n  applied on spawn).\n- Sandbox access request API.\n- Args-aware permission resolution.\n\n1026 tests pass across harness/v1 + storage. Codex pass × 4 +\nCodeRabbit clean.",
+      "messageHeadline": "feat(core/harness/v1): permission profile primitive + 4 presets + app…",
+      "oid": "37f85835272a1737734e51c325c85e513f0f867e"
+    },
+    {
+      "authoredDate": "2026-05-24T15:02:47Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T15:02:47Z",
+      "messageBody": "…ions\n\nOne session can be served by many EXTERNAL callers concurrently —\nmultiple A2A agents on a shared task, multiple channel users on a\nSlack thread, the CLI plus a server route on the same workspace.\nThis commit makes per-actor grants a first-class primitive so each\ncaller can hold a distinct grant posture without affecting the\nothers.\n\nStorage:\n\n- `SessionRecord.actorGrants?: Record<string, SessionGrants>` —\n  keys are stable composite actor identities. Undefined on legacy\n  records (the resolver falls back to `sessionGrants`, preserving\n  every pre-change behavior).\n\nTypes:\n\n- `HarnessActorIdentity { kind: 'a2a' | 'channel' | 'cli' |\n  'server'; id; displayName? }`. Subagents are NOT a kind here —\n  internal execution topology stays in the action journal payload\n  (`actor.source: 'subagent'` + `parentSessionId`), confirmed by\n  codex + agy. A `'subagent'` kind would mix permission identity\n  with execution structure and be unstable across ephemeral child\n  sessions.\n- `actorKey(actor): string` — deterministic `${kind}:${id}` stable\n  across processes.\n\nResolver:\n\n- `Session._resolveToolPermissionPolicy(toolName, opts?: { args?;\n  actor? })`. When an actor is supplied, the resolver checks\n  `actorGrants[actorKey(actor)]` BEFORE falling back to\n  `sessionGrants`. The signature accepts `args?` for the imminent\n  Slice 5 wire-up so the signature ships once, not twice.\n\nWire-up:\n\n- `HarnessRequestContext.actor?: HarnessActorIdentity` — populated\n  by the harness slot from persisted channel context via a new\n  `deriveActorFromChannel(channel)` helper. The composite key\n  includes provider, tenant, channel, and platformUserId so the\n  same Slack user id on two different workspaces / providers\n  resolves to distinct actor keys (anti-collision).\n- The slot's `resolveToolPermission` callback prefers a\n  caller-supplied actor and falls back to the channel-derived\n  actor, so every channel-originated tool call routes through the\n  actor grant overlay automatically without dispatcher changes.\n\nPublic API:\n\n- `session.permissions.grantTool({ toolName, actor? })`,\n  `grantCategory`, `revokeTool`, `revokeCategory` —\n  actor-optional. Session-level paths are byte-compatible with the\n  pre-change API.\n- `getGrants({ actor? })` — with an actor, returns ONLY that\n  actor's overlay (not the union). Documented overlay semantics.\n\nEvents:\n\n- `permission_granted` and `permission_revoked` event shapes\n  extended with optional `actor?: HarnessActorIdentity`.\n  Subscribers and audit consumers can now distinguish an actor\n  overlay change from a baseline session-grant change — without\n  this, mirrored permission state would drift silently.\n\nRace-safety:\n\n- The pre-existing outer pre-check + serialized flush pattern was\n  vulnerable to a concurrent-call race (two identical grants both\n  pass the outer check, both rebuild the map, both emit).\n  Reworked to: dedupe inside the `_flushUpdate` callback against\n  `prev`, gate emit on a `changed` closure flag set only when the\n  callback actually returned a different record.\n- Applied uniformly across all 8 mutator paths (4 session-level +\n  4 actor-scoped). Two regression tests pin the no-double-emit and\n  no-double-append behavior under `Promise.all([grant, grant])`.\n\n`applyProfile` clears every per-actor grant alongside the\nsession-level reset inside the same `_flushUpdate`. A profile\ntransition cannot leave stale per-caller privilege from a stronger\nprior posture (e.g. an `a2a:malicious-agent` grant surviving a\nswitch to `readOnlyReview`).\n\n17 tests pin the contract:\n- `actorKey` composite produces deterministic keys; anti-collision\n  for same user id on different tenants.\n- `deriveActorFromChannel` returns undefined for missing context,\n  builds the full composite when present.\n- Per-actor grant suppresses `ask` for that actor only; other\n  actors / session-level resolution unchanged.\n- Per-actor revoke removes only that actor; cleanup of empty\n  entries prevents map bloat.\n- Session-level path remains byte-compatible with pre-change\n  callers.\n- `applyProfile` drops actorGrants; subsequent resolution against\n  the previously-granted actor returns the profile's per-category\n  posture.\n- `permission_granted` / `permission_revoked` events carry the\n  actor identity on the actor-scoped path; omitted on session-\n  level path (legacy shape).\n- Harness-level subscribers see the event with the actor\n  preserved (bridge forwards verbatim).\n- Two concurrent identical grants emit ONE event (race-safe).\n\nCodex pass × 4 + CodeRabbit pass × 3 all clean before commit. 1041\ntests pass across harness/v1 + storage.",
+      "messageHeadline": "feat(core/harness/v1): per-actor permission grants on Harness v1 sess…",
+      "oid": "66aa6384587802e5de6cce71a909c583a253250c"
+    },
+    {
+      "authoredDate": "2026-05-24T15:15:16Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T15:15:16Z",
+      "messageBody": "…lver\n\nThe harness slot's `resolveToolPermission` hook receives per-call\n`args` from the agent runtime's tool dispatcher (`tool-call-step.ts`\npasses `args ?? {}`), but the slot previously dropped them on the\nfloor when forwarding to `Session._resolveToolPermissionPolicy`. The\nsession resolver signature already accepted `args?` from the\npermission-profiles slice — only the wire-up was missing.\n\nThis commit closes the gap: the slot now forwards `params.args` to\nthe session resolver when present. The session-level resolver does\nnot introspect args itself today — workspace-policy rules\n(file/command/network/mcp) produce the args-aware verdict recorded\non the action journal post-execution — but the signature is now\nplumbed so a future profile-side resolver hook, operator override,\nor pre-execution-gate slice can read them without another wire-up\ncommit.\n\nDocstring updates correct an inaccurate claim about workspace policy\nbeing a pre-execution gate. It is currently a post-execution journal\noverlay; that's documented in the permission-profiles module\ndocstring + the slot wire-up comment + the test comments so future\ncontributors don't mistake the audit-side verdict for enforcement.\n\nOne regression test pins the contract: `_resolveToolPermissionPolicy`\naccepts `opts.args` and resolution still returns the declarative\nverdict (no args-based override applied yet, by design).\n\nCodex pass × 5 + CodeRabbit clean before commit. 1042 tests pass.",
+      "messageHeadline": "feat(core/harness/v1): wire per-call args through the permission reso…",
+      "oid": "c97fa73c8f3ed5e4d974065e2a4ff35a5c38c831"
+    },
+    {
+      "authoredDate": "2026-05-24T15:31:52Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T15:31:52Z",
+      "messageBody": "A subagent type can now declare a permission profile that the spawn\npath applies to every child session it creates. `allowedWorkspaceTools`\nonly filtered the workspace tools visible to the model — it did not\nprevent the child from calling custom tools, MCP tools, channel\nactions, or any non-workspace tool. This commit closes that gap:\n\n- `SubagentDefinition.profile?: HarnessPermissionProfileName` (the\n  type is imported directly from `./permission-profiles` so a profile\n  added or removed in the registry catches drift at every use site\n  through the compiler — no local duplicate union, no silent skew).\n\n- `spawn-subagent` applies the profile to the child session AFTER\n  installing the parent's subagent-event bridge and BEFORE the first\n  agent turn runs. The resulting `permission_profile_applied` event\n  reaches the harness emitter (with the child session's id), so\n  audit consumers see the lifecycle without any new event shape.\n\n- Apply-profile failure tears down the bridge subscriber (`unsub()`)\n  before closing/deleting the child session, mirroring the workspace-\n  tools init failure path so the parent never holds a dangling\n  listener on a closed child emitter.\n\nWhy profile binding matters: a true read-only or approval-gated\nsubagent posture requires the child resolver to gate EVERY tool call,\nnot just workspace ones. Apply-profile drops both `permissionRules`\nand `sessionGrants` in a replace-not-merge reset, so the child cannot\nescalate via session-level grants either. Per-actor grants from the\nparent's channel context are NOT carried into the child — subagent\nexecution is its own permission scope by design.\n\n3 tests pin the contract:\n- A subagent type with `profile: 'readOnlyReview'` produces a child\n  session whose persisted rules and grants reflect the profile\n  (read=allow, every other category=deny, empty grants).\n- A `permission_profile_applied` event for the child fires on the\n  harness emitter (audit-visible).\n- A subagent type without `profile` leaves the child session's rules\n  untouched — legacy behavior preserved byte-for-byte.\n\nCodex pass × 2 + CodeRabbit clean before commit. 1047 tests pass\nacross harness/v1 + storage.",
+      "messageHeadline": "feat(core/harness/v1): subagent type profile binding",
+      "oid": "1b2c450122adbbe2b99eca3f95af2c73a8285903"
+    },
+    {
+      "authoredDate": "2026-05-24T16:11:37Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T16:11:37Z",
+      "messageBody": "A tool can now request structured sandbox-level approval from inside\nits execute() body via `ctx.registerSandboxAccess(...)`. The harness\nrecords a typed `pendingResume.kind: 'sandbox-access'`, emits a\n`sandbox_access_requested` event, and suspends the turn until the\napprover calls `session.respondToSandboxAccess({approved, reason?})`.\n\nThis is the APPROVAL workflow primitive — the harness itself does not\nenforce sandbox access at the OS / process layer. Sandbox-aware\nruntimes wire `ctx.registerSandboxAccess` into their access-request\npath so every privileged operation suspends with structured evidence\non the action journal + event ledger.\n\nSchema:\n\n- `PendingResume.kind` extended with `'sandbox-access'`. The\n  `payload.sandboxAccess` carries `{ semanticType, reason?, payload? }`\n  where `semanticType ∈ 'file' | 'command' | 'network' | 'mcp' |\n  'custom'`. The four non-custom values are aligned with\n  `WorkspacePolicyActionKind` so existing workspace-policy renderers\n  can render the prompt without a translation layer; `'custom'`\n  covers caller-defined sandbox surfaces that don't fit the four.\n- `InboxResponseResult.kind` union extended with `'sandbox-access'`\n  so inbox-receipt callers can route on the discriminator.\n\nEvents:\n\n- `SandboxAccessRequestedEvent { requestId, toolCallId, semanticType,\n  reason?, payload? }` — emitted after pending-resume registration\n  alongside the existing `suspension_required`.\n- `SandboxAccessResolvedEvent { requestId, toolCallId, semanticType,\n  approved }` — emitted from inside `_resume` AFTER the CAS commit\n  on `pendingResume.resumedAt` AND before the tool resumes. Invalid\n  responses, duplicate receipts, and concurrent losers do NOT emit\n  this event, so audit consumers can treat it as an authoritative\n  verdict.\n\nPublic + ctx API:\n\n- `RegisterSandboxAccessParams` — tool-side request shape.\n- `HarnessRequestContext.registerSandboxAccess?` — tool hook that\n  delegates to `Session._registerSandboxAccess`.\n- `Session.respondToSandboxAccess({ approved, reason? })` — routes\n  through the same `_resume` machinery as every other respond-* API,\n  inheriting itemId/responseId conflict handling, idempotency, and\n  inbox-receipt support.\n\nAnti-drift defenses landed in the implementation pass:\n\n- Strict JSON validation on `params.payload` via the same\n  `assertJsonValue` helper used by inbox-receipt admission hashing —\n  rejects functions, Dates, NaN/Infinity, BigInt, sparse arrays, and\n  class instances. Same validator across every harness surface that\n  accepts a tool-supplied JSON payload.\n- Idempotency check on re-registration matches the existing pending\n  by either `toolCallId` OR `itemId` so a caller passing a custom\n  `toolCallId` with the same `requestId` is still a no-op (not a\n  throw).\n- The `sandbox_access_resolved` event fires inside `_resume` after\n  the CAS commit on `pendingResume.resumedAt`. Pre-CAS branches\n  (duplicate receipt, mismatched item id, already-resumed pending)\n  return before the emit, so audit consumers never see a false or\n  duplicate resolved event.\n\n9 tests pin the contract:\n- Pending resume is registered with the supplied payload preserved\n  verbatim through the round-trip.\n- `sandbox_access_requested` and `suspension_required` fire on\n  registration.\n- Unknown semanticType / empty requestId / missing runId all raise\n  `HarnessValidationError`.\n- Non-JSON payload (function, Date, NaN) raises\n  `HarnessValidationError` BEFORE persistence — no malformed value\n  reaches storage or the event ledger.\n- Idempotent re-registration with the same id is a no-op.\n- `respondToSandboxAccess({approved})` emits\n  `sandbox_access_resolved` with the verdict; works for both\n  approve and deny paths.\n\nCodex pass × 5 + CodeRabbit pass × 2 all clean before commit. 1055\ntests pass across harness/v1 + storage.",
+      "messageHeadline": "feat(core/harness/v1): sandbox-access request API",
+      "oid": "cdfdc1e8c8b289805fdf8d80e1869efe7bd855a4"
+    },
+    {
+      "authoredDate": "2026-05-24T16:36:05Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T16:39:46Z",
+      "messageBody": "Frees the `Task` name for the upcoming canonical work-unit primitive.\nThe in-thread todo type and its schema were called `TaskItem` /\n`taskItemSchema`; both are now `HarnessTodo` / `harnessTodoSchema`.\n\nScope is internal-only. None of the operator-visible surface changes:\nthe `task_write` / `task_check` tool ids stay, the persisted\nthread-metadata key (`thread.metadata.mastra.tasks`) stays, and the\n`task_updated` event-type wire string stays. Only the TS interface\nelement type on `TaskUpdatedEvent.tasks` is renamed.\n\nNo behavior change. Existing task-write / task-check tests pass\nunchanged on the new names; the broader 973-test harness/v1 suite is\ngreen.",
+      "messageHeadline": "refactor(core/harness/v1): rename TaskItem to HarnessTodo (prep)",
+      "oid": "48706db66a264c40b8124b1fa83f4b4349776dd7"
+    },
+    {
+      "authoredDate": "2026-05-24T16:41:20Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T16:45:43Z",
+      "messageBody": "Type-only this slice. Defines `HarnessTask` and `HarnessRun` —\nthe canonical work-unit and execution-attempt primitives the\nHarness v1 substrate uses across user / A2A / channel / CLI /\nserver / system entrypoints. Also ships `TaskIndexEntry`, the\ndurable mapping row shape (sessionId / runId / queuedItemId /\na2aTaskId) that the cancellation umbrella will materialize.\n\nThe file-level docblock includes the PF-631 §2 field-mapping\ntable — every pre-existing identifier (sessionId, threadId, runId,\nadmissionId, signalId, queuedItemId, workspaceActionId,\nsubagentSessionId, goalId, pendingResume.itemId, A2A task.id,\nA2A task.contextId) is now documented against its canonical\nprimitive, so downstream code stops inventing parallel vocabulary.\n\nNo storage schema changes, no new APIs, no event types. The\ncontracts compile under the existing tsconfig; the seven-case\ncontracts.test.ts pins the field set so accidental renames or\nwidening break the build.",
+      "messageHeadline": "feat(core/harness/v1): add canonical Task / Run type contracts",
+      "oid": "2aaf995965b113bf8a8c9c6a15e05ecb54f694fb"
+    },
+    {
+      "authoredDate": "2026-05-24T16:47:59Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T16:53:01Z",
+      "messageBody": "…pe rename\n\nTwo related changes against the canonical-contracts slice:\n\n1. Renamed the storage union `OperationAdmissionEvidence` to\n   `HarnessOperationAdmissionEvidence`. The body is unchanged —\n   the rename only makes its narrow admission-only scope explicit\n   so downstream readers don't confuse it with the broader public\n   evidence shape. The old name stays exported as a `@deprecated`\n   alias, so every existing import keeps compiling.\n\n2. Added `HarnessEvidence`, a tagged-union public contract over\n   the three durable proof rows a Harness v1 session can hand\n   back: admission evidence (the storage union above), workspace\n   journal entries, and inbox response receipts. The `evidenceKind`\n   discriminator lets consumers narrow on one stable field instead\n   of property-presence checks, which is what every current\n   consumer already does (see `harness-wakeup-worker.ts`).\n\nThe two only existing callsites that referenced the old name by\ntype (`base.ts:42`, `base.ts:818`) are migrated to the new\ncanonical name. Adapter packages (libsql / pg / inmemory) keep\ntheir structural typing through the deprecated alias and stay\ngreen.\n\nType-only. No writer paths touched, no storage rows mutated.\nPinned by ten cases in `contracts.test.ts`, and the storage +\nsession.message suites (131 tests) remain green on the alias.",
+      "messageHeadline": "feat(core/harness/v1): canonical HarnessEvidence union + admission ty…",
+      "oid": "b704ddae97e098750f0ace102df464ae0363a5e1"
+    },
+    {
+      "authoredDate": "2026-05-24T16:54:27Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T16:57:13Z",
+      "messageBody": "Surfaces the durable wait-point primitive under its canonical\nPF-631 name on the public v1 entry point. `PendingResume` (already\nshipping with five `kind`s after the sandbox-access slice) is the\ninternal/storage symbol; `PendingInteraction` is the public alias\nthe canonical-contracts ticket calls for.\n\nStructurally identical — `PendingInteraction = PendingResume`.\nNo fields rename, no runtime change. One pin in contracts.test.ts\nasserts the two names are freely interchangeable both directions.\n\nCloses the four schema-side slices of PF-631 (rename of the\nin-thread todo, canonical Task/Run types, evidence vocabulary\ncleanup, and this alias). The fifth slice — boot-warn for unknown\nHarnessConfig keys — lands separately and is independent of the\nscheduler umbrella.",
+      "messageHeadline": "feat(core/harness/v1): re-export PendingResume as PendingInteraction",
+      "oid": "fc381917afdfb4d035cba7e137c007c8e06f280b"
+    },
+    {
+      "authoredDate": "2026-05-24T16:59:20Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T16:59:20Z",
+      "messageBody": "…tion\n\nCloses the last canonical-contracts slice: catch typo'd or stale\ntop-level config keys at boot instead of silently ignoring them.\nThe constructor walks `Object.keys(config)` once before reading\nany field, and emits a structured `console.warn` for each key\nthat isn't in the locally-defined `HARNESS_CONFIG_KNOWN_KEYS` set\n(every documented `HarnessConfigCommon` field plus the\n`mastra` / `agents` / `storage` discriminants).\n\nWarn-only on purpose — `HarnessConfigCommon` still carries the\n`[key: string]: unknown` index signature, and removing it is a\ntyped-breaking change for downstream consumers that we explicitly\ndeferred during plan review. A future release can lift the warn\nto a hard error once the migration window has passed.\n\nPinned by three cases in `harness.config-keys.test.ts`: one warn\nper unknown key, no warn on a fully-known config, and an inverse\npin asserting every documented top-level key passes through\ncleanly. The broader 128-test `harness.test.ts` suite is green\nunchanged.",
+      "messageHeadline": "feat(core/harness/v1): warn on unknown HarnessConfig keys at construc…",
+      "oid": "06e845ae1e87c4e8eae54e776563eb1ee7976f7d"
+    },
+    {
+      "authoredDate": "2026-05-24T17:27:13Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T17:27:13Z",
+      "messageBody": "Adds `Session.cancel({reason?, requestedBy?})` and\n`Session.cancelQueuedItem({queuedItemId, reason?})` — the first\ndurable cancellation primitives on Harness v1 sessions. The\nexisting `Session.abort(...)` only cancels the in-flight turn's\nAbortController; the new methods persist a `cancelRequest` marker\non SessionRecord so a crash mid-cancel cannot silently resurrect\nthe work.\n\nBehavior:\n\n  * `cancel(...)` is idempotent — the first call wins; the second\n    is a no-op preserving the original reason / requestedAt /\n    requestedBy.\n  * Inside the same CAS write, every pending queued item is\n    removed from `pendingQueue`. Their resolvers reject with\n    `HarnessSessionCancelledError`, carrying the cancel reason.\n  * After the marker is durable the in-flight turn is aborted via\n    the existing controller.\n  * Two new events: `task_cancellation_requested` (one per cancel)\n    and `queue_item_cancelled` (one per removed queued turn).\n  * The harness heartbeat short-circuits lease renewal when the\n    marker is present — cancelled sessions age out naturally and\n    release their lease instead of being kept alive forever.\n\n`cancelQueuedItem(...)` is the fine-grained sibling — drops a\nsingle queued turn without marking the session-wide\n`cancelRequest`. Idempotent over unknown ids.\n\nStorage:\n\n  * New `cancel_request` JSONB column on the harness sessions\n    table (constants.ts). The libsql + pg adapters declare it in\n    their column lists and ifNotExists alterTable migration, so\n    existing deployments pick it up at next `init()`.\n  * In-memory + libsql + pg adapters all round-trip the field.\n\n10 cases in session.cancel.test.ts pin the primitive end-to-end:\npersistence, idempotency, event emission, queue resolver\nrejection, in-flight abort delegation, and the heartbeat\nshort-circuit. The broader 997-test harness/v1 suite + the\nlibsql harness suite (789 tests) remain green unchanged.\n\nSubagent-tree propagation and resume gating ship in the next\nsub-slice (PF-665 part B).",
+      "messageHeadline": "feat(core/harness/v1): durable session cancellation primitive",
+      "oid": "711a891eb80bc186e592a9b895706e23403e4073"
+    },
+    {
+      "authoredDate": "2026-05-24T17:32:18Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T17:32:18Z",
+      "messageBody": "Closes PF-665. The cancellation primitive landed in the previous\ncommit now propagates through the live subagent tree and gates\nthe resume path.\n\nSubagent propagation:\n\n  * After `Session.cancel(...)` commits its CAS write, it walks\n    `_activeSubagents` and calls `child.cancel({reason})` on every\n    live child. Recursion is automatic — each child's own cancel\n    walks its own subagent tree.\n  * Children see `requestedBy === parent.id` on their\n    `cancelRequest`, so audit can reconstruct the cascade.\n  * Cancellation does NOT propagate upward. A subagent cancelling\n    itself cannot take down the parent. Tested.\n  * Child lookups go through a new\n    `Harness._internalGetLiveSession(sessionId)` shim — `Session`\n    can't reach `_liveSessions` directly because the field is\n    private.\n\nResume gating:\n\n  * Inside `_resume(...)`'s CAS callback, if a durable\n    `cancelRequest` committed BEFORE the resume reached the CAS\n    and the pending interaction wasn't already marked `resumedAt`,\n    refuse to mark `resumedAt` and surface\n    `HarnessSessionCancelledError` to the caller.\n  * Already-resumed paths are unaffected — the abort path handles\n    in-flight cancellation separately. The new precedence rule is\n    \"cancel wins before resumedAt is stamped\".\n  * Applies uniformly to every public resume entry point\n    (`respondToToolApproval`, `respondToToolSuspension`,\n    `respondToQuestion`, `respondToPlanApproval`,\n    `respondToSandboxAccess`).\n\nThree new cases in session.cancel.test.ts pin the cascade\ndirection, the no-bubble-up guarantee, and the resume rejection.\nThe full 1000-test harness/v1 suite stays green.",
+      "messageHeadline": "feat(core/harness/v1): cancellation tree propagation + resume gating",
+      "oid": "a7d456e338bd0587fedd22dc8477d40b07d1b4f4"
+    },
+    {
+      "authoredDate": "2026-05-24T17:38:36Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T17:38:36Z",
+      "messageBody": "Three correctness fixes from deep review of the cancellation\nprimitive landed in the previous two commits:\n\n1. Concurrent cancels no longer double-emit or double-abort.\n   The post-commit emit / abort / subagent-propagation path now\n   only runs on the CAS winner — losers see `cancelRequest`\n   already set inside the callback, return `prev`, and bail out\n   via a `wasWinner` flag check.\n\n2. The currently-running queued turn (`_currentQueuedItemId`) is\n   no longer removed from `pendingQueue` during cancel. It stays\n   in place so the existing abort/failure flow can settle it\n   normally. Without this guard, `isBusy()` and\n   `lookupQueueResult()` saw the active turn vanish under them.\n\n3. `queueAdmissionReceipts` for cancelled items are marked\n   `failed` (with the durable cancel error projected via\n   `projectHarnessPublicError`) in the same CAS write that\n   clears them from `pendingQueue`. Without this, follow-up\n   admissions saw `status: 'queued'` and treated the receipt as\n   live work, defeating dedupe.\n\nSame active-head + failed-receipt treatment applied to\n`cancelQueuedItem(...)` so the single-item path doesn't drift\nfrom the session-wide path.\n\nPlus a tiny audit fix: `HarnessSessionCancelledError` now has\nits public wire code (`harness.session_cancelled`) wired in\n`HARNESS_PUBLIC_ERROR_CODES`, so SDK / route layers serializing\nthe error see a stable code instead of `undefined`.\n\nThree new cases on the cancel test file pin the fixes:\nconcurrent cancels emit exactly once, cancelled items show\n`failed` status on their receipts, and the active head is kept\nacross cancel. The full 1000-test harness/v1 suite is green.",
+      "messageHeadline": "fix(core/harness/v1): cancel race, active head, receipt audit gaps",
+      "oid": "3ab00a94c2c5852d333fa2e90bb68d9d4884ca07"
+    },
+    {
+      "authoredDate": "2026-05-24T17:49:46Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T17:49:46Z",
+      "messageBody": "Adds two optional scheduling hints to `QueuedItem`:\n\n  * `priority?: number` — higher values drain first; defaults to 0.\n    Same-priority items keep their `enqueuedAt` order, so the\n    legacy FIFO contract is preserved for callers that opt out.\n  * `deadline?: number` — epoch ms past which the item must not\n    start. The scheduler drops expired items, emits a new\n    `queue_item_expired` event, marks the queue admission receipt\n    `failed` (with `projectHarnessPublicError`), and rejects the\n    original `session.queue(...)` promise — all in a single CAS\n    write so a crash mid-drop is replay-safe.\n\nThe drain step itself stays head-of-line — the new\n`_scheduleNextQueueHead()` runs once per drain iteration to\nrotate the highest-priority survivor into `pendingQueue[0]`\nbefore the existing recovery + post-run finalize code reads it.\nThat preserves the long-standing `pendingQueue[0]` invariant\nacross crash recovery.\n\nStorage: no schema change — the new optional fields ride along\ninside the existing `pending_queue` JSONB column.\n\nAlso strips a few stale internal-ticket references from code\ncomments that landed during earlier work; they should never have\nshipped in the source tree.\n\nSix new cases in `session.scheduler.test.ts` pin priority\nrotation, FIFO tie-break, default-priority handling, deadline\nexpiry behavior + receipt audit, and the no-op contract on empty\nqueues. The full 1009-test harness/v1 suite stays green.",
+      "messageHeadline": "feat(core/harness/v1): priority + deadline on the durable queue",
+      "oid": "0df0d195b3eea64874a4dfe650ccb751e8c5fde6"
+    },
+    {
+      "authoredDate": "2026-05-24T18:01:34Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T18:01:34Z",
+      "messageBody": "… changeset\n\nTwo follow-up fixes from review of the prior priority/deadline\ncommit:\n\n  * The no-op short-circuit in `_scheduleNextQueueHead` previously\n    compared `nextQueue === queue`, which never matched because\n    `nextQueue` was always a fresh array built from filtered\n    survivors. Replaced with explicit \"did anything change?\"\n    flags (`didExpire`, `rotated`, `receiptsChanged`) so a queue\n    with nothing expired and the right head already in place\n    skips the storage write instead of incurring an unnecessary\n    version bump.\n\n  * Rewrote the priority/deadline changeset in caller-facing\n    terms (`session.queue({priority, deadline})`) with concrete\n    usage examples for the two surfaces. The internal mechanics\n    (storage column, CAS write) stay out of the customer-facing\n    line.\n\nThe six scheduler tests still pin priority rotation, FIFO\ntie-break, default-priority, deadline expiry, future-deadline\nkeep, and the empty-queue no-op.",
+      "messageHeadline": "fix(core/harness/v1): correct scheduler no-op short-circuit + clearer…",
+      "oid": "176806bab6740b5734983cd5816d0d8612782ba5"
+    },
+    {
+      "authoredDate": "2026-05-24T17:59:20Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T18:02:58Z",
+      "messageBody": "Enforce workspace policy before side effects, make URL attachment admission idempotent at the route boundary, expose actor-scoped permission mutations remotely, correct Harness route metadata and response types, and recover replay state from the latest event epoch.\n\nAlso removes internal PF-* references from source comments, test names, and changeset filenames.",
+      "messageHeadline": "fix(core): harden harness runtime contracts",
+      "oid": "e57ec7a54b5f28491030d11854922cadd14a36bb"
+    },
+    {
+      "authoredDate": "2026-05-24T18:18:00Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-24T18:18:00Z",
+      "messageBody": "Pin the fixture Vitest version and override tinyexec to the version already used by the repo lockfile. This prevents pnpm trust-policy failures before the type assertions run.",
+      "messageHeadline": "test(e2e): stabilize type-check fixture install",
+      "oid": "11c4f5ca4fb0dba05e8112957f88da38899c2154"
+    },
+    {
+      "authoredDate": "2026-05-27T07:15:36Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-27T07:15:36Z",
+      "messageBody": "Resolve conflicts by keeping main's channel signal/subscription runtime and adapter route behavior while preserving Harness v1 resume ownership checks. Combine Harness workflow-run resource lookup with main's suspended snapshot polling for resume reliability.",
+      "messageHeadline": "Merge branch 'main' into feat/harness-v1-complete-core",
+      "oid": "3737bc0c7df760d1ee3d1650eb9442f9fd268306"
+    },
+    {
+      "authoredDate": "2026-05-27T07:19:53Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-27T07:19:53Z",
+      "messageBody": "",
+      "messageHeadline": "Merge branch 'main' into feat/harness-v1-complete-core",
+      "oid": "d84e6d393fc31363e983c838af4569be8db8fb90"
+    }
+  ],
+  "deletions": 4062,
+  "files": [
+    {
+      "path": ".changeset/action-catalog.md",
+      "additions": 13,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/afraid-regions-deny.md",
+      "additions": 6,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/busy-brooms-pump.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/cozy-crews-live.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/dry-jokes-tickle.md",
+      "additions": 7,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/famous-mammals-appear.md",
+      "additions": 19,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/five-points-fix.md",
+      "additions": 7,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/funny-tools-lie.md",
+      "additions": 23,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/harness-audit-fixes.md",
+      "additions": 15,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/harness-reconnect-evidence.md",
+      "additions": 12,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/harness-v1-core-compatibility.md",
+      "additions": 7,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/harness-v1-runtime-hardening.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/lucky-times-raise.md",
+      "additions": 9,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/mastra-readiness-lifecycle.md",
+      "additions": 15,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/nine-ideas-rule.md",
+      "additions": 7,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/orange-hands-dream.md",
+      "additions": 8,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/plenty-nails-heal.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/proud-papers-fall.md",
+      "additions": 11,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/quick-heads-own.md",
+      "additions": 13,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/rare-rats-wish.md",
+      "additions": 9,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/runtime-compatibility-generation.md",
+      "additions": 14,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/server-readiness.md",
+      "additions": 10,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/spotty-hotels-draw.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/tall-cameras-lose.md",
+      "additions": 11,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/workspace-action-journal.md",
+      "additions": 26,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/workspace-journal-filters.md",
+      "additions": 26,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "client-sdks/client-js/src/client.ts",
+      "additions": 3,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "client-sdks/client-js/src/resources/harness.test.ts",
+      "additions": 270,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "client-sdks/client-js/src/resources/harness.ts",
+      "additions": 452,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "client-sdks/client-js/src/resources/index.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "client-sdks/client-js/src/route-types.generated.ts",
+      "additions": 2151,
+      "deletions": 92,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "client-sdks/react/src/agent/hooks.ts",
+      "additions": 2,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "docs/src/content/en/reference/harness/harness-class.mdx",
+      "additions": 31,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "e2e-tests/type-check/template/package.json",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/cli/src/commands/api/route-metadata.generated.ts",
+      "additions": 2860,
+      "deletions": 1704,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/package.json",
+      "additions": 10,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/scripts/generate-model-docs.ts",
+      "additions": 5,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/__tests__/agent-fga.test.ts",
+      "additions": 1525,
+      "deletions": 26,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/__tests__/agent-signals.test.ts",
+      "additions": 3576,
+      "deletions": 985,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/__tests__/request-context-schema.test.ts",
+      "additions": 152,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/__tests__/thread-stream-runtime-global-scope.test.ts",
+      "additions": 28,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/agent/__tests__/tool-concurrency.test.ts",
+      "additions": 6,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/agent-legacy.ts",
+      "additions": 41,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/agent-network.test.ts",
+      "additions": 476,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/agent.ts",
+      "additions": 1355,
+      "deletions": 243,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/agent.types.ts",
+      "additions": 20,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/durable/preparation.ts",
+      "additions": 17,
+      "deletions": 4,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/durable/utils/resolve-runtime.ts",
+      "additions": 19,
+      "deletions": 16,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/durable/utils/serialize-state.test.ts",
+      "additions": 79,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/agent/durable/utils/serialize-state.ts",
+      "additions": 12,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/durable/workflows/steps/tool-call.ts",
+      "additions": 6,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/message-list/message-list.ts",
+      "additions": 43,
+      "deletions": 11,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/stream-until-idle.ts",
+      "additions": 10,
+      "deletions": 4,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/thread-stream-runtime.ts",
+      "additions": 805,
+      "deletions": 124,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/types.ts",
+      "additions": 9,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/workflows/prepare-stream/index.ts",
+      "additions": 4,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/workflows/prepare-stream/prepare-tools-step.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/workflows/prepare-stream/stream-step.ts",
+      "additions": 3,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/auth/ee/interfaces/permissions.generated.ts",
+      "additions": 25,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/background-tasks/manager.test.ts",
+      "additions": 434,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/background-tasks/manager.ts",
+      "additions": 220,
+      "deletions": 14,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/background-tasks/shutdown.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/background-tasks/workflow.ts",
+      "additions": 29,
+      "deletions": 16,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/channels/__tests__/integration.test.ts",
+      "additions": 42,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/events/unix-socket-pubsub.ts",
+      "additions": 92,
+      "deletions": 19,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/__tests__/harness-tool-suspension.test.ts",
+      "additions": 5,
+      "deletions": 5,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/_shared/message-conversion.ts",
+      "additions": 287,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/clone-thread.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/display-state.test.ts",
+      "additions": 18,
+      "deletions": 18,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/fork-clone-metadata.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/get-om-record.test.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/harness.ts",
+      "additions": 123,
+      "deletions": 37,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/index.ts",
+      "additions": 10,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/list-threads-fork-filter.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/mode-model-persistence.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/om-failure-abort.test.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/om-threshold-persistence.test.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/resource-id.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/signal-history.test.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/signal-messages.test.ts",
+      "additions": 30,
+      "deletions": 28,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/switch-model.test.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/task-tools.test.ts",
+      "additions": 13,
+      "deletions": 42,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/thread-locking.test.ts",
+      "additions": 72,
+      "deletions": 7,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/token-usage.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/tools.ts",
+      "additions": 15,
+      "deletions": 30,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/tracing-propagation.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/__test-utils__/fake-output.ts",
+      "additions": 76,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/__test-utils__/index.ts",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/__test-utils__/mock-agent.ts",
+      "additions": 349,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/__test-utils__/setup.ts",
+      "additions": 83,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/attachments.test.ts",
+      "additions": 402,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/background-process-reap.test.ts",
+      "additions": 262,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/builtin-tools/__tests__/ask-user.test.ts",
+      "additions": 124,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/builtin-tools/__tests__/submit-plan.test.ts",
+      "additions": 132,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/builtin-tools/__tests__/task-check.test.ts",
+      "additions": 124,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/builtin-tools/__tests__/task-write.test.ts",
+      "additions": 109,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/builtin-tools/ask-user.ts",
+      "additions": 77,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/builtin-tools/index.ts",
+      "additions": 17,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/builtin-tools/shared.ts",
+      "additions": 44,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/builtin-tools/spawn-subagent.ts",
+      "additions": 468,
+      "deletions": 0,
+      "changeType": "ADDED"
+    }
+  ],
+  "headRefName": "feat/harness-v1-complete-core",
+  "mergedAt": null,
+  "number": 16912,
+  "state": "CLOSED",
+  "title": "feat(core): add Harness v1 runtime",
+  "url": "https://github.com/mastra-ai/mastra/pull/16912"
+}

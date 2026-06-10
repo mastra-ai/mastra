@@ -1,0 +1,186 @@
+{
+  "additions": 94,
+  "baseRefName": "main",
+  "commits": [
+    {
+      "authoredDate": "2026-05-20T11:05:15Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T09:24:38Z",
+      "messageBody": "Rename the existing core Harness implementation to HarnessLegacy while preserving the temporary Harness export alias for downstream consumers. Update legacy harness tests to use the renamed class and add the core changeset for the migration step.",
+      "messageHeadline": "chore(core): rename legacy harness class",
+      "oid": "cccd21436a57bc891e8451cae9eecda5baf216c3"
+    },
+    {
+      "authoredDate": "2026-05-20T14:53:33Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T09:24:38Z",
+      "messageBody": "",
+      "messageHeadline": "feat(core): add harness v1 subpath scaffold (#16818)",
+      "oid": "0e3014aa22bca97a666dd2c5d8c40905b9acc326"
+    },
+    {
+      "authoredDate": "2026-05-21T04:09:22Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T09:24:38Z",
+      "messageBody": "Remove the Harness v1 scaffold from the legacy rename branch so this PR only renames the existing implementation to HarnessLegacy and keeps the temporary Harness compatibility alias. The v1 subpath scaffold belongs in the next stacked PR.",
+      "messageHeadline": "chore(core): keep harness legacy rename scoped",
+      "oid": "f89d1f74f0ca62d5e245318f78a8609d56b8a8e8"
+    }
+  ],
+  "deletions": 79,
+  "files": [
+    {
+      "path": ".changeset/rare-rats-wish.md",
+      "additions": 9,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/__tests__/harness-tool-suspension.test.ts",
+      "additions": 5,
+      "deletions": 5,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/clone-thread.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/display-state.test.ts",
+      "additions": 18,
+      "deletions": 18,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/fork-clone-metadata.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/get-om-record.test.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/harness.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/index.ts",
+      "additions": 7,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/list-threads-fork-filter.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/mode-model-persistence.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/om-failure-abort.test.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/om-threshold-persistence.test.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/resource-id.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/signal-history.test.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/signal-messages.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/switch-model.test.ts",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/task-tools.test.ts",
+      "additions": 4,
+      "deletions": 4,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/thread-locking.test.ts",
+      "additions": 5,
+      "deletions": 5,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/token-usage.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/tracing-propagation.test.ts",
+      "additions": 3,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/workspace-resolution.test.ts",
+      "additions": 10,
+      "deletions": 10,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "chore/harness-legacy-rename",
+  "mergedAt": null,
+  "number": 16817,
+  "state": "CLOSED",
+  "title": "chore(core): rename legacy harness class",
+  "url": "https://github.com/mastra-ai/mastra/pull/16817"
+}

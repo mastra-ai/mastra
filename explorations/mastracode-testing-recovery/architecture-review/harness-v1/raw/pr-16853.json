@@ -1,0 +1,54 @@
+{
+  "additions": 335,
+  "baseRefName": "feat/harness-v1-session-operations",
+  "commits": [
+    {
+      "authoredDate": "2026-05-20T18:11:54Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T09:27:24Z",
+      "messageBody": "Add thread-stream runtime lookup and waiter APIs for signal-started runs so Harness v1 can recover the MastraModelOutput after Agent.sendSignal reserves a run.\n\nWaiters now resolve on registration and reject on abort or idle wake setup failure, with focused coverage for the timing windows.",
+      "messageHeadline": "feat(core): expose agent thread run outputs",
+      "oid": "18cd8d1e92a93a3a5a825cc0f74825ec0a5e2bad"
+    }
+  ],
+  "deletions": 2,
+  "files": [
+    {
+      "path": ".changeset/calm-showers-build.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/agent/__tests__/agent-thread-run-output.test.ts",
+      "additions": 202,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/agent/agent.ts",
+      "additions": 36,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/agent/thread-stream-runtime.ts",
+      "additions": 92,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "feat/harness-v1-agent-run-output",
+  "mergedAt": null,
+  "number": 16853,
+  "state": "CLOSED",
+  "title": "feat(core): expose agent thread run outputs",
+  "url": "https://github.com/mastra-ai/mastra/pull/16853"
+}

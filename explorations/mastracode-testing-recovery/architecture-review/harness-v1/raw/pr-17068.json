@@ -1,0 +1,96 @@
+{
+  "additions": 954,
+  "baseRefName": "fix/mastracode-v1-project-path-workspace",
+  "commits": [
+    {
+      "authoredDate": "2026-05-26T12:32:22Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-26T12:32:22Z",
+      "messageBody": "A crashed or killed MastraCode used to block the next launch with an opaque\nHarnessSessionLockedError because the dead process left its v1 session lease\nin storage until TTL. The runtime now catches that, waits for the lease to\nexpire (up to 60s on startup, 2s mid-session), and adopts the previous\nsession once acquirable, emitting info status messages while it retries.\n\nAfter 5s of waiting on a TTY, an interactive (W)ait / (F)orce-claim /\n(N)ew thread / (Q)uit prompt is shown with a 30s response budget so an\nunattended terminal still recovers automatically.\n\nMASTRACODE_LEASE_RECOVERY=wait|force-claim|new-thread|quit skips the\nprompt programmatically. Force-claim semantics persist across owner-change\nraces. On exhaustion the runtime throws a new MastraCodeSessionLeaseRecoveryError\n(exported from mastracode) carrying the underlying HarnessSessionLockedError\nas cause.\n\nAlso fixes a related terminal-state bug surfaced by the same crash scenario:\npi-tui's extended keyboard modes used to stick around after a SIGKILL'd\nmastracode, leaving the parent shell stuck emitting raw CSI-u keypress\nsequences. main.ts now emits the restore sequence on every trappable exit\nsignal and once at launch so the next invocation heals any prior breakage.\n\nCloses MASTRA-4344.",
+      "messageHeadline": "fix(mastracode): recover from stale Harness v1 session leases on startup",
+      "oid": "0bcc4d540116bcde23b51069042d8b322e4bc981"
+    }
+  ],
+  "deletions": 31,
+  "files": [
+    {
+      "path": ".changeset/cute-mails-brush.md",
+      "additions": 24,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/README.md",
+      "additions": 19,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/__tests__/index.test.ts",
+      "additions": 4,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/harness/config.ts",
+      "additions": 18,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/harness/index.ts",
+      "additions": 7,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/harness/lease-recovery-prompt.ts",
+      "additions": 62,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/harness/runtime.test.ts",
+      "additions": 424,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/harness/runtime.ts",
+      "additions": 326,
+      "deletions": 27,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/index.ts",
+      "additions": 21,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/main.ts",
+      "additions": 33,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/tui/mastra-tui.ts",
+      "additions": 16,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "mohamed/mastra-4344-recover-gracefully-from-stale-harness-v1-session-leases-on",
+  "mergedAt": "2026-05-26T21:51:10Z",
+  "number": 17068,
+  "state": "MERGED",
+  "title": "fix(mastracode): recover from stale Harness v1 session leases on startup",
+  "url": "https://github.com/mastra-ai/mastra/pull/17068"
+}

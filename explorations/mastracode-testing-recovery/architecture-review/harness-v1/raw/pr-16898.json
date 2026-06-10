@@ -1,0 +1,54 @@
+{
+  "additions": 499,
+  "baseRefName": "feat/harness-v1-session-permissions",
+  "commits": [
+    {
+      "authoredDate": "2026-05-21T11:19:09Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T11:19:09Z",
+      "messageBody": "Adds focused Harness v1 suspension capture and resume handling. Suspended agent output now persists PendingResume, emits suspension events, exposes typed respondTo* methods, and parks queued turns until the pending run is resumed.\n\nIncludes tests for tool approval, question and plan classification, mode transitions, wrong-kind rejection, and queued suspension completion.",
+      "messageHeadline": "feat(core): add Harness v1 session suspensions",
+      "oid": "2573f905a67750d0eb837f4fb3bd69e21a6f1115"
+    }
+  ],
+  "deletions": 0,
+  "files": [
+    {
+      "path": ".changeset/icy-mangos-stand.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.suspension.test.ts",
+      "additions": 259,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 233,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/storage/domains/harness/types.ts",
+      "additions": 2,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "feat/harness-v1-session-suspensions",
+  "mergedAt": null,
+  "number": 16898,
+  "state": "CLOSED",
+  "title": "feat(core): add Harness v1 session suspensions",
+  "url": "https://github.com/mastra-ai/mastra/pull/16898"
+}

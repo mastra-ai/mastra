@@ -1,0 +1,66 @@
+{
+  "additions": 272,
+  "baseRefName": "mohamed/mastra-4340-multiselect-questions",
+  "commits": [
+    {
+      "authoredDate": "2026-05-26T18:31:00Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-26T18:31:00Z",
+      "messageBody": "…s v1 mode agents\n\nLegacy Harness centrally wired memory, workspace, browser, and pubsub to every\nstatic mode agent that did not own its own. The v1 runtime only propagated\nworkspace and browser, so custom modes whose agents did not own memory or\npubsub silently lost observation persistence and signal routing.\n\nThis restores the missing leg of the legacy contract:\n\n  - Adds pubsub to MastraCodeRuntimeConfig.\n  - createMastraCode now passes signalsPubSub into the runtime.\n  - MastraCodeHarnessRuntime gains propagateRuntimeServicesToAgents, called\n    once in the constructor over the v1 agent map with a Set<Agent> dedupe\n    and hasOwnMemory / hasOwnPubSub guards.\n\nSubagents and the default code-agent already inherit these services via\npre-injection in createMastraCode; the runtime guard makes the runtime pass\nidempotent for those instances while finally covering custom mode agents.\n\nBrowser propagation and dynamic mode-agent re-resolution are intentionally\nout of scope; the former lives in the browser-ownership rework, the latter\nis a separate v1 compatibility concern.\n\nAdds nine tests in mastracode/src/harness/runtime.test.ts covering memory +\npubsub propagation, owned-service preservation, dedupe across reused mode\nagents and across config.agents + config.modes, dynamic-mode skip, and the\nno-op when neither service is configured.",
+      "messageHeadline": "fix(mastracode): propagate runtime memory and pubsub to custom Harnes…",
+      "oid": "89e28a1a04b04afc5e0607086926098f729a60cb"
+    }
+  ],
+  "deletions": 40,
+  "files": [
+    {
+      "path": ".changeset/pretty-carrots-rest.md",
+      "additions": 31,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/harness/config.ts",
+      "additions": 2,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/harness/index.ts",
+      "additions": 1,
+      "deletions": 5,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/harness/runtime.test.ts",
+      "additions": 201,
+      "deletions": 6,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/harness/runtime.ts",
+      "additions": 29,
+      "deletions": 19,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/index.ts",
+      "additions": 8,
+      "deletions": 10,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "mohamed/mastra-4342-runtime-service-propagation",
+  "mergedAt": null,
+  "number": 17090,
+  "state": "CLOSED",
+  "title": "fix(mastracode): propagate runtime memory and pubsub to custom Harness v1 mode agents",
+  "url": "https://github.com/mastra-ai/mastra/pull/17090"
+}

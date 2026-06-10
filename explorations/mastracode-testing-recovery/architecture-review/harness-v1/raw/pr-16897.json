@@ -1,0 +1,48 @@
+{
+  "additions": 369,
+  "baseRefName": "feat/harness-v1-session-queue",
+  "commits": [
+    {
+      "authoredDate": "2026-05-21T11:11:04Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T11:11:04Z",
+      "messageBody": "Adds the Session.permissions namespace for Harness v1, backed by the existing SessionRecord sessionGrants and permissionRules fields. Permission grants, revokes, policy writes, validation, snapshots, and events now match the forked v1 surface.\n\nIncludes focused tests for grants, revokes, policy changes, validation, persistence, and harness tool category configuration.",
+      "messageHeadline": "feat(core): add Harness v1 session permissions",
+      "oid": "54c3c734d4c260e51550558f63ce75f95e582220"
+    }
+  ],
+  "deletions": 1,
+  "files": [
+    {
+      "path": ".changeset/dirty-lizards-obey.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.permissions.test.ts",
+      "additions": 207,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 157,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "feat/harness-v1-session-permissions",
+  "mergedAt": null,
+  "number": 16897,
+  "state": "CLOSED",
+  "title": "feat(core): add Harness v1 session permissions",
+  "url": "https://github.com/mastra-ai/mastra/pull/16897"
+}

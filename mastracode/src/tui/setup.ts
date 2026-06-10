@@ -422,9 +422,11 @@ export function setupAutocomplete(state: TUIState): void {
 
 export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
   try {
+    const configDir = state.harness.getState()?.configDir;
+
     // Load from all sources (global and local)
-    const globalCommands = await loadCustomCommands();
-    const localCommands = await loadCustomCommands(process.cwd());
+    const globalCommands = await loadCustomCommands(undefined, configDir);
+    const localCommands = await loadCustomCommands(process.cwd(), configDir);
 
     // Merge commands, with local taking precedence over global for same names
     const commandMap = new Map<string, (typeof globalCommands)[number]>();

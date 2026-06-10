@@ -1,0 +1,84 @@
+{
+  "additions": 1603,
+  "baseRefName": "chore/harness-v1-subpath-scaffold",
+  "commits": [
+    {
+      "authoredDate": "2026-05-20T12:14:37Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-20T12:33:59Z",
+      "messageBody": "Add the public Harness v1 type, config, context, error, and event surface behind the existing @mastra/core/harness/v1 subpath. Keep this slice compile-only so the storage domain and runtime behavior can land in the next stacked PRs.",
+      "messageHeadline": "feat(core): add harness v1 type layer",
+      "oid": "7a49669dce227713bfa7c4a209ce3d3e8dc0069c"
+    }
+  ],
+  "deletions": 2,
+  "files": [
+    {
+      "path": ".changeset/fuzzy-cities-throw.md",
+      "additions": 9,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/config.ts",
+      "additions": 111,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/context.ts",
+      "additions": 42,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/errors.ts",
+      "additions": 227,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/events.ts",
+      "additions": 592,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.ts",
+      "additions": 11,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/index.ts",
+      "additions": 160,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 2,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/types.ts",
+      "additions": 449,
+      "deletions": 0,
+      "changeType": "ADDED"
+    }
+  ],
+  "headRefName": "feat/harness-v1-type-layer",
+  "mergedAt": "2026-05-20T13:19:27Z",
+  "number": 16822,
+  "state": "MERGED",
+  "title": "feat(core): add harness v1 type layer",
+  "url": "https://github.com/mastra-ai/mastra/pull/16822"
+}

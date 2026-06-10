@@ -1,0 +1,54 @@
+{
+  "additions": 533,
+  "baseRefName": "feat/harness-v1-registry",
+  "commits": [
+    {
+      "authoredDate": "2026-05-20T16:48:39Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T09:27:03Z",
+      "messageBody": "Ports the forked Session state, mode, and model-selection layer into the stacked Harness v1 implementation. Adds CAS-backed persistence, state change events, model override events, and regression coverage for record version and lease-renewal behavior.",
+      "messageHeadline": "feat(core): add harness v1 session state",
+      "oid": "fed2453107985ceb18a7bd55f028055c568a7456"
+    }
+  ],
+  "deletions": 3,
+  "files": [
+    {
+      "path": ".changeset/solid-news-open.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.mode-state.test.ts",
+      "additions": 164,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.models.test.ts",
+      "additions": 201,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 163,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "feat/harness-v1-session-state",
+  "mergedAt": null,
+  "number": 16845,
+  "state": "CLOSED",
+  "title": "feat(core): add Harness v1 session state",
+  "url": "https://github.com/mastra-ai/mastra/pull/16845"
+}

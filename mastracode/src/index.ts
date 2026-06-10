@@ -105,11 +105,13 @@ function legacyModeToV1(mode: HarnessMode<MastraCodeState>, fallbackAgent: Agent
   const agent = typeof mode.agent === 'function' ? mode.agent({} as MastraCodeState) : mode.agent;
   return {
     id: mode.id,
-    agentId: (agent ?? fallbackAgent).id,
     defaultModelId: mode.defaultModelId ?? 'openai/gpt-5.5',
     description: mode.name,
     ...(mode.id === 'plan' ? { transitionsTo: 'build' } : {}),
     metadata: {
+      // Harness v1 modes no longer pin a backing agent (#17534); carry the
+      // agent association through mode metadata instead.
+      agentId: (agent ?? fallbackAgent).id,
       color: mode.color,
       default: mode.default,
       name: mode.name,
@@ -418,6 +420,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const githubSignals: GithubSignals | undefined = globalSettings.signals?.experimentalGithubSignals
     ? new GithubSignals({
         cwd: project.rootPath,
+        gitcrawlCommand:
+          process.env.MASTRACODE_GITCRAWL_BIN ??
+          process.env.GITCRAWL_BIN ??
+          process.env.MASTRACODE_GITCRAWL_COMMAND ??
+          process.env.GITCRAWL_COMMAND,
         getNotificationStreamOptions: ({ resourceId, threadId }) => {
           const requestContext = new RequestContext();
           const harnessContext: HarnessRequestContext = {
@@ -485,30 +492,30 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const defaultModesV1: HarnessModeV1[] = [
     {
       id: 'build',
-      agentId: CODE_AGENT_ID,
       description: 'Build',
       defaultModelId: 'anthropic/claude-opus-4-7',
       metadata: {
+        agentId: CODE_AGENT_ID,
         color: mastra.green,
         default: true,
       },
     },
     {
       id: 'plan',
-      agentId: CODE_AGENT_ID,
       description: 'Plan',
       transitionsTo: 'build',
       defaultModelId: 'openai/gpt-5.5',
       metadata: {
+        agentId: CODE_AGENT_ID,
         color: mastra.purple,
       },
     },
     {
       id: 'fast',
-      agentId: CODE_AGENT_ID,
       description: 'Fast',
       defaultModelId: 'cerebras/zai-glm-4.7',
       metadata: {
+        agentId: CODE_AGENT_ID,
         color: mastra.orange,
       },
     },

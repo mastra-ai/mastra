@@ -1,0 +1,144 @@
+{
+  "additions": 410,
+  "baseRefName": "main",
+  "commits": [
+    {
+      "authoredDate": "2026-06-01T09:16:47Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (zai-coding-plan/glm-5.1)"
+        }
+      ],
+      "committedDate": "2026-06-01T11:42:26Z",
+      "messageBody": "Add Session.message() and Session.queue() for agent execution:\n- message() delegates to agent.generate()/agent.stream() with lifecycle events\n- queue() provides in-memory FIFO sequential execution\n- Wire agent resolution from Harness into Session via getAgentForMode()\n- Add AgentStartEvent/AgentEndEvent to event system\n- Add focused tests for generate, stream, error, and queue behavior\n\nCo-Authored-By: Mastra Code (zai-coding-plan/glm-5.1) <noreply@mastra.ai>",
+      "messageHeadline": "feat(core): add harness v1 session message and queue APIs",
+      "oid": "cc17fbeadce06c98a63b781e8245d6e775e1d827"
+    },
+    {
+      "authoredDate": "2026-06-01T11:27:55Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (openai/gpt-5.5)"
+        }
+      ],
+      "committedDate": "2026-06-01T11:42:26Z",
+      "messageBody": "Use sendMessage and queueMessage to match the requested Harness V1 API naming.\n\nCo-Authored-By: Mastra Code (openai/gpt-5.5) <noreply@mastra.ai>",
+      "messageHeadline": "refactor(core): rename harness session messaging methods",
+      "oid": "0317443b10c6ad2e1da31999f9708dbe3f672974"
+    },
+    {
+      "authoredDate": "2026-06-01T13:03:13Z",
+      "authors": [
+        {
+          "email": "ward@coding-tech.com",
+          "id": "MDQ6VXNlcjExMjA5MjY=",
+          "login": "wardpeet",
+          "name": "wardpeet"
+        },
+        {
+          "email": "noreply@mastra.ai",
+          "id": "",
+          "login": "",
+          "name": "Mastra Code (zai-coding-plan/glm-5-turbo)"
+        }
+      ],
+      "committedDate": "2026-06-01T13:03:13Z",
+      "messageBody": "Bridge sendMessage/queueMessage on HarnessCompat to delegate to v1\nSession.sendMessage/queueMessage instead of falling through to legacy\nHarnessLegacy. Add #ensureSession helper for lazy v1 session creation.\n\nCo-Authored-By: Mastra Code (zai-coding-plan/glm-5-turbo) <noreply@mastra.ai>",
+      "messageHeadline": "feat(mastracode): route HarnessCompat messages through v1 session",
+      "oid": "ac0c601e5d140953d9357b4ef32f326e2494fb63"
+    }
+  ],
+  "deletions": 20,
+  "files": [
+    {
+      "path": ".changeset/eager-beers-sip.md",
+      "additions": 2,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": ".changeset/floppy-colts-know.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/HarnessCompat.ts",
+      "additions": 33,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/events.ts",
+      "additions": 26,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.ts",
+      "additions": 16,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.types.ts",
+      "additions": 1,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/index.ts",
+      "additions": 8,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/mode.test.ts",
+      "additions": 16,
+      "deletions": 9,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.test.ts",
+      "additions": 143,
+      "deletions": 3,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 134,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.types.ts",
+      "additions": 26,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "wardpeet/harness-v1-p3",
+  "mergedAt": null,
+  "number": 17402,
+  "state": "OPEN",
+  "title": "feat(core): add harness v1 session message and queue APIs",
+  "url": "https://github.com/mastra-ai/mastra/pull/17402"
+}

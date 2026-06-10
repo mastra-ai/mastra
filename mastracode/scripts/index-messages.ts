@@ -1,4 +1,5 @@
 #!/usr/bin/env npx tsx
+/* eslint-disable import/order, no-console, unicorn/prefer-node-protocol */
 /**
  * One-time migration script to index MastraCode's existing observation groups
  * into the vector store for semantic search via recall mode="search".

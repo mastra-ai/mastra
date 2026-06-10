@@ -1,0 +1,150 @@
+{
+  "additions": 1242,
+  "baseRefName": "feat/mastracode-harness-v1-runtime",
+  "commits": [
+    {
+      "authoredDate": "2026-05-27T13:41:11Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-27T13:41:11Z",
+      "messageBody": "Move MastraCode heartbeat ownership into Harness v1, wire gateway sync as a configured handler, and preserve disabled-tool filtering for idle signals.\n\nAlso harden shutdown teardown so workspace cleanup still runs when session flushes fail.",
+      "messageHeadline": "feat: add harness heartbeat handlers",
+      "oid": "c7ca272908250350142dd33738893706375a0580"
+    },
+    {
+      "authoredDate": "2026-05-27T14:02:14Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-27T14:02:14Z",
+      "messageBody": "Clarify heartbeat timer ownership in Harness v1 docs and assert the wrapped storage error shape for MastraCode destroy teardown.",
+      "messageHeadline": "test: align destroy error expectation",
+      "oid": "b83a005544061a0ca26f7cecc19a6572f1049c73"
+    },
+    {
+      "authoredDate": "2026-05-27T14:13:53Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-27T14:13:53Z",
+      "messageBody": "Reject heartbeat intervals above Node's maximum timer delay so large values cannot silently clamp to a near-immediate interval.",
+      "messageHeadline": "fix: validate heartbeat timer intervals",
+      "oid": "d3ebaf4fa90850ab075b34e3f0c254baa237b169"
+    }
+  ],
+  "deletions": 114,
+  "files": [
+    {
+      "path": ".changeset/harness-v1-heartbeat-handlers.md",
+      "additions": 26,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": ".changeset/mastracode-harness-heartbeats.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "mastracode/src/__tests__/index.test.ts",
+      "additions": 47,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/harness/config.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/harness/runtime.test.ts",
+      "additions": 137,
+      "deletions": 8,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/harness/runtime.ts",
+      "additions": 32,
+      "deletions": 47,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/index.ts",
+      "additions": 2,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.config-keys.test.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.ts",
+      "additions": 279,
+      "deletions": 57,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/heartbeat.test.ts",
+      "additions": 659,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/index.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.signal.test.ts",
+      "additions": 14,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 1,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/types.ts",
+      "additions": 16,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/workspace-runtime.test.ts",
+      "additions": 21,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "fix/pr-16943-runtime-refresh",
+  "mergedAt": null,
+  "number": 17141,
+  "state": "CLOSED",
+  "title": "feat: add harness heartbeat handlers",
+  "url": "https://github.com/mastra-ai/mastra/pull/17141"
+}

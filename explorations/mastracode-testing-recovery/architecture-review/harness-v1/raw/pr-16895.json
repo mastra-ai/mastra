@@ -1,0 +1,48 @@
+{
+  "additions": 300,
+  "baseRefName": "feat/harness-v1-session-message",
+  "commits": [
+    {
+      "authoredDate": "2026-05-21T10:45:05Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T10:45:05Z",
+      "messageBody": "Add Session.signal and injectSystemReminder to the Harness v1 runtime. Both routes dispatch created agent signals with Harness request context, forward mode/tool overrides where applicable, emit turn events, and settle session bookkeeping through the existing message turn helpers.",
+      "messageHeadline": "feat(core): add Harness v1 session signals",
+      "oid": "acff8c1321ce7191afbdb06e2ca80a63c3b9299b"
+    }
+  ],
+  "deletions": 0,
+  "files": [
+    {
+      "path": ".changeset/late-rice-peel.md",
+      "additions": 5,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.signal.test.ts",
+      "additions": 168,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 127,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "feat/harness-v1-session-signals",
+  "mergedAt": null,
+  "number": 16895,
+  "state": "CLOSED",
+  "title": "feat(core): add Harness v1 session signals",
+  "url": "https://github.com/mastra-ai/mastra/pull/16895"
+}

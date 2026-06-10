@@ -1,0 +1,54 @@
+{
+  "additions": 52,
+  "baseRefName": "main",
+  "commits": [
+    {
+      "authoredDate": "2026-06-03T20:18:00Z",
+      "authors": [
+        {
+          "email": "158243242+devin-ai-integration[bot]@users.noreply.github.com",
+          "id": "BOT_kgDOCW6Zqg",
+          "login": "devin-ai-integration[bot]",
+          "name": "Devin AI"
+        },
+        {
+          "email": "tylerdbarnes@gmail.com",
+          "id": "MDQ6VXNlcjE0MTkwNzQz",
+          "login": "TylerBarnes",
+          "name": "tyler"
+        }
+      ],
+      "committedDate": "2026-06-03T20:18:00Z",
+      "messageBody": "The base Harness.updateState path (used by task tools like task_write,\ntask_complete) writes to the base state via applyStateUpdates but does\nnot go through HarnessCompat.setState, so the V1 session never receives\nthe update.  HarnessCompat.getState() merges session state over base\nstate, causing the session's stale tasks:[] default to shadow the real\ntask list.\n\nFix:\n- Make Harness.applyStateUpdates protected so subclasses can intercept\n  state writes from both setState and updateState paths.\n- Override applyStateUpdates in HarnessCompat to forward non-session\n  fields to the V1 session, keeping both stores in sync.\n\nCo-Authored-By: tyler <tylerdbarnes@gmail.com>",
+      "messageHeadline": "fix: sync task state to V1 session in HarnessCompat",
+      "oid": "f31fbe60a41f29d8d4a51b0f42373d13d02179e4"
+    }
+  ],
+  "deletions": 1,
+  "files": [
+    {
+      "path": "mastracode/src/HarnessCompat.test.ts",
+      "additions": 27,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "mastracode/src/HarnessCompat.ts",
+      "additions": 24,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/harness.ts",
+      "additions": 1,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    }
+  ],
+  "headRefName": "devin/1780517871-fix-task-state-divergence",
+  "mergedAt": null,
+  "number": 17541,
+  "state": "OPEN",
+  "title": "fix: sync task state to V1 session in HarnessCompat",
+  "url": "https://github.com/mastra-ai/mastra/pull/17541"
+}

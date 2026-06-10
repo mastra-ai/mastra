@@ -1,0 +1,96 @@
+{
+  "additions": 3360,
+  "baseRefName": "feat/harness-storage-domain",
+  "commits": [
+    {
+      "authoredDate": "2026-05-20T16:27:58Z",
+      "authors": [
+        {
+          "email": "mbenhamd@gmail.com",
+          "id": "MDQ6VXNlcjE2NzIwNDY3",
+          "login": "mbenhamd",
+          "name": "Mohamed BEN HAMDOUNE"
+        }
+      ],
+      "committedDate": "2026-05-21T09:26:45Z",
+      "messageBody": "Extracts the forked Harness v1 registry slice into @mastra/core/harness/v1, including durable session resolution, leases, lifecycle, model discovery, thread utilities, workspace provider registration, and focused regression coverage.",
+      "messageHeadline": "feat(core): add harness v1 registry",
+      "oid": "602c385cbb2b7089aac0cc7f67ba5754876d0245"
+    }
+  ],
+  "deletions": 31,
+  "files": [
+    {
+      "path": ".changeset/lucky-flies-fail.md",
+      "additions": 32,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/config.ts",
+      "additions": 23,
+      "deletions": 19,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/events.ts",
+      "additions": 1,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.test.ts",
+      "additions": 1007,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/harness.ts",
+      "additions": 1546,
+      "deletions": 6,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/index.ts",
+      "additions": 8,
+      "deletions": 0,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/session.ts",
+      "additions": 161,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/shared.ts",
+      "additions": 16,
+      "deletions": 2,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/types.ts",
+      "additions": 17,
+      "deletions": 1,
+      "changeType": "MODIFIED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/workspace-provider.ts",
+      "additions": 31,
+      "deletions": 0,
+      "changeType": "ADDED"
+    },
+    {
+      "path": "packages/core/src/harness/v1/workspace-registry.ts",
+      "additions": 518,
+      "deletions": 0,
+      "changeType": "ADDED"
+    }
+  ],
+  "headRefName": "feat/harness-v1-registry",
+  "mergedAt": null,
+  "number": 16842,
+  "state": "CLOSED",
+  "title": "feat(core): add Harness v1 registry",
+  "url": "https://github.com/mastra-ai/mastra/pull/16842"
+}

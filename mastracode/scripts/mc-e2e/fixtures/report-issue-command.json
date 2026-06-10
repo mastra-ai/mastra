@@ -1,0 +1,14 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "userMessage": "The user wants to report a GitHub issue on mastra-ai/mastra. Help them through this process.\n\nThe user provided this initial context: \"startup hangs\"\n\n## Step 1: Understand the problem\n\nAsk the user to describe the issue in their own words. Ask follow-up questions to gather:\n- What happened / what's wrong\n- What they expected to happen\n- Steps to reproduce (if applicable)\n\nAlso gather environment info by running:\n```\nmastracode --version 2>/dev/null || echo \"unknown\"\nnode --version\nuname -s\n```\n\nUse the conversation history for additional context about what the user was working on when they hit this issue.\n\n## Step 2: Check for duplicates\n\nOnce you understand the problem, search for similar existing issues:\n```\ngh issue list --repo mastra-ai/mastra --label mastracode --state open --limit 50 --json number,title,body\n```\n\nAlso search more broadly:\n```\ngh search issues --repo mastra-ai/mastra --state open \"<relevant keywords>\" --limit 20 --json number,title,body,labels\n```\n\nIf you find similar issue(s):\n- Present them with their number, title, and a brief summary\n- Ask the user whether they'd like to add a comment on an existing issue instead of opening a new one\n- If they choose to comment, draft the comment, show it to the user for approval, then run:\n```\ngh issue comment <number> --repo mastra-ai/mastra --body \"<comment>\"\n```\nThen stop here.\n\n## Step 3: Draft the issue\n\nBased on what you've gathered, write a clear, well-structured issue with:\n- A concise, descriptive title\n- A body covering: description, expected behavior, steps to reproduce, and environment info\n\n**Show the full title and body to the user and ask for their approval before creating it.** Let them suggest edits.\n\n## Step 4: Create the issue\n\nOnly after the user approves, create the issue:\n```\ngh issue create --repo mastra-ai/mastra --label mastracode --title \"<title>\" --body \"<body>\"\n```\n\nReport the created issue URL back to the user.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "MC report issue e2e response: I will gather details before drafting a mastracode GitHub issue."
+      }
+    }
+  ]
+}
