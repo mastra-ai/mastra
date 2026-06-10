@@ -194,8 +194,10 @@ describe('Drawer', () => {
     const popup = document.querySelector('[data-slot="drawer-popup"]');
     expect(document.querySelector('[data-slot="drawer-backdrop"]')).toBeNull();
     expect(viewport?.getAttribute('data-variant')).toBe('floating');
-    expect(viewport?.classList.contains('pointer-events-none')).toBe(true);
+    expect(viewport?.classList.contains('pointer-events-none')).toBe(false);
     expect(viewport?.classList.contains('p-3')).toBe(true);
+    expect(viewport?.classList.contains('right-0')).toBe(true);
+    expect(viewport?.classList.contains('w-[calc(32rem+1.5rem)]')).toBe(true);
     expect(popup?.getAttribute('data-variant')).toBe('floating');
     expect(popup?.classList.contains('drawer-popup-floating')).toBe(true);
     expect(popup?.classList.contains('pointer-events-auto')).toBe(true);
