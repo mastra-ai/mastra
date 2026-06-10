@@ -246,9 +246,69 @@ export const weatherTool = createTool({
 
 Use `transform` when a tool returns raw data your application needs, but browser-facing streams or user-visible transcript messages should receive a smaller or safer shape. `transform` is separate from `toModelOutput`: `toModelOutput` shapes the payload sent back to the model, while `transform` shapes tool input, output, errors, approval payloads, and suspension payloads for `display` and `transcript` targets.
 
-If a transform is configured and it fails, Mastra does not fall back to the raw payload for display or transcript targets. Input deltas are suppressed when no safe `inputDelta` transform is available.
+If a transform is configured and it fails, Mastra doesn't fall back to the raw payload for display or transcript targets. Input deltas are suppressed when no safe `inputDelta` transform is available.
 
 See the [`createTool()` reference](/reference/tools/create-tool#example-with-transform) for a `transform` example. For shared rules across several tools, configure the agent-level `transform` policy in the [`Agent` constructor](/reference/agents/agent#constructor-parameters).
+
+## Run logic around tool calls
+
+Use `hooks` to run custom logic before and after every tool call an agent makes. Hooks apply to all tool sources: assigned tools, memory tools, toolsets, client tools, agent and workflow tools, and [workspace tools](/docs/workspace/overview#tool-hooks). Common uses include logging, auditing, input validation, and blocking specific calls.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const supportAgent = new Agent({
+  name: 'support-agent',
+  instructions: 'Help users with their questions.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  // highlight-start
+  hooks: {
+    beforeToolCall: ({ toolName, input }) => {
+      console.log(`Running ${toolName}`, input)
+    },
+    afterToolCall: ({ toolName, output, error }) => {
+      console.log(`Finished ${toolName}`, { output, error })
+    },
+  },
+  // highlight-end
+})
+```
+
+`beforeToolCall` runs before the tool executes and receives the tool name, input, and execution context. Return `{ proceed: false, output }` to skip the tool call entirely — the agent receives `output` as the tool result:
+
+```typescript
+const guardedAgent = new Agent({
+  name: 'guarded-agent',
+  instructions: 'Run shell commands for the user.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  hooks: {
+    beforeToolCall: ({ toolName, input }) => {
+      const command = (input as { command?: string }).command ?? ''
+      if (toolName === 'execute_command' && command.includes('rm -rf')) {
+        return { proceed: false, output: 'Command blocked by policy.' }
+      }
+    },
+  },
+})
+```
+
+`afterToolCall` runs after the tool finishes, whether it succeeded or failed. On success it receives `output`; if the tool threw, it receives `error` instead and the error is re-thrown after the hook runs.
+
+### Per-execution hooks
+
+Pass `hooks` to `.generate()` or `.stream()` to set hooks for a single execution. Per-execution hooks override matching agent-level hooks:
+
+```typescript
+await supportAgent.generate('Look up the order status', {
+  hooks: {
+    beforeToolCall: ({ toolName }) => {
+      console.log(`This run only: ${toolName}`)
+    },
+  },
+})
+```
+
+Agent-level and per-execution hooks merge per key: passing only `beforeToolCall` at execution time keeps the agent-level `afterToolCall`.
 
 ## Control tool selection
 

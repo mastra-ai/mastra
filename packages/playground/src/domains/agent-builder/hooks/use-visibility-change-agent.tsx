@@ -1,9 +1,11 @@
+import { DialogBody } from '@mastra/playground-ui';
 import { useFormContext } from 'react-hook-form';
 
+import { AgentImpactWarnings } from '../components/agent-edit/agent-impact-warnings';
 import type { AgentBuilderEditFormValues } from '../schemas';
 import { useVisibilityChangeDialog } from './use-visibility-change-dialog';
 import type { UseVisibilityChangeDialogResult, VisibilityCopy } from './use-visibility-change-dialog';
-import { useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
+import { useStoredAgentDependents, useStoredAgentMutations } from '@/domains/agents/hooks/use-stored-agents';
 
 type Visibility = NonNullable<AgentBuilderEditFormValues['visibility']>;
 
@@ -27,6 +29,7 @@ export type UseVisibilityChange = UseVisibilityChangeDialogResult<Visibility>;
 export function useVisibilityChange(agentId: string): UseVisibilityChange {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
   const { updateStoredAgent } = useStoredAgentMutations(agentId);
+  const { isLoading: isDependentsLoading } = useStoredAgentDependents(agentId);
 
   return useVisibilityChangeDialog<Visibility>({
     copy: COPY,
@@ -40,5 +43,12 @@ export function useVisibilityChange(agentId: string): UseVisibilityChange {
       cancel: 'agent-builder-visibility-confirm-cancel',
       confirm: 'agent-builder-visibility-confirm-yes',
     },
+    renderExtraContent: pending =>
+      pending === 'private' ? (
+        <DialogBody className="pt-0">
+          <AgentImpactWarnings agentId={agentId} variant="make-private" />
+        </DialogBody>
+      ) : null,
+    confirmDisabled: pending => pending === 'private' && isDependentsLoading,
   });
 }

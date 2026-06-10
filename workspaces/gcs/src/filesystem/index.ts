@@ -612,6 +612,8 @@ export class GCSFilesystem extends MastraFilesystem {
         path,
         type: 'file',
         size: Number(metadata.size) || 0,
+        // read_file tool gates the native media-part path on `stat.mimeType`.
+        mimeType: typeof metadata.contentType === 'string' ? metadata.contentType : getMimeType(path),
         createdAt: metadata.timeCreated ? new Date(metadata.timeCreated) : new Date(),
         modifiedAt: metadata.updated ? new Date(metadata.updated) : new Date(),
       };

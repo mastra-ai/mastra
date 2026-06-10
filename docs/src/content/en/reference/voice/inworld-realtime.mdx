@@ -62,7 +62,7 @@ await voice.send(microphoneStream)
 voice.close()
 ```
 
-> Inworld API keys ship pre-Basic-encoded. Paste them verbatim into `INWORLD_API_KEY`; the package does not re-encode them.
+> Inworld API keys ship pre-Basic-encoded. Paste them verbatim into `INWORLD_API_KEY`; the package doesn't re-encode them.
 
 ## Constructor parameters
 
@@ -256,7 +256,7 @@ Use the typed `session` field for documented Inworld realtime options. Fields co
 
 ### `providerData` (Inworld extensions)
 
-`providerData` is a typed object for Inworld-specific realtime extensions. It is sent under `session.providerData` on every `session.update`, and composes with any `session.providerData` you set via the `session` field — the constructor `providerData` wins on key collisions.
+`providerData` is a typed object for Inworld-specific realtime extensions. It's sent under `session.providerData` on every `session.update`, and composes with any `session.providerData` you set via the `session` field — the constructor `providerData` wins on key collisions.
 
 It has five branches plus two session-level fields:
 
@@ -661,12 +661,12 @@ Any voice ID from [Inworld's voice catalog](https://docs.inworld.ai/quickstart-t
 
 ## Notes
 
-- API keys can be provided via constructor options or the `INWORLD_API_KEY` environment variable. Keys are pre-Basic-encoded; do not re-encode them.
+- API keys can be provided via constructor options or the `INWORLD_API_KEY` environment variable. Keys are pre-Basic-encoded; don't re-encode them.
 - The WebSocket URL appends `?key=<sessionId>&protocol=realtime`. The model is configured via the initial `session.update`, not the URL.
-- Per-call `speak(input, { speaker })` scopes the voice override to a single response (via the flat `response.voice` field) and does NOT mutate the session.
+- Per-call `speak(input, { speaker })` scopes the voice override to a single response (via the flat `response.voice` field) and doesn't mutate the session.
 - Audio output defaults to PCM16 at 24 kHz. Telephony `audio/pcmu` and `audio/pcma` at 8 kHz, and `audio/float32`, are also supported via `session.audio.output.format`.
 - Use `connect()` before any send, speak, or listen call. Events sent before the WebSocket is open are queued and flushed once the server acknowledges `session.updated`.
 - The voice instance must be closed with `close()` or `disconnect()` to release the WebSocket.
-- `audio.input.turn_detection` defaults to semantic VAD when `session` does not supply it. Override with your own object, or pass `null` to disable turn detection entirely.
+- `audio.input.turn_detection` defaults to semantic VAD when `session` doesn't supply it. Override with your own object, or pass `null` to disable turn detection entirely.
 - `audio.input.transcription` defaults to `{ model: 'inworld/inworld-stt-1' }`, so user-side `writing` events fire out of the box. Override with your own object, or pass `null` to disable user-side transcription.
 - `on()` and `off()` are typed against `InworldVoiceEventMap` — known event names yield a typed callback payload, unknown names fall back to `unknown`.

@@ -30,6 +30,8 @@ interface AgentChatMeta {
 
 const AgentChatMetaContext = createContext<AgentChatMeta>({ isConversationLoading: false });
 
+const EMPTY_MESSAGES: never[] = [];
+
 const STARTER_PROMPTS = [
   {
     title: 'What can you do?',
@@ -73,10 +75,7 @@ export const AgentChatPanelProvider = ({
     memory: true,
   });
 
-  // Stable empty array per agentId.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const emptyMessages = useMemo(() => [] as never[], [agentId]);
-  const storedMessages = data?.messages ?? emptyMessages;
+  const storedMessages = data?.messages ?? EMPTY_MESSAGES;
 
   const meta = useMemo<AgentChatMeta>(
     () => ({ isConversationLoading, agentName, agentDescription, agentAvatarUrl }),
@@ -84,7 +83,7 @@ export const AgentChatPanelProvider = ({
   );
 
   return (
-    <StreamChatProvider agentId={agentId} threadId={threadId} initialMessages={storedMessages}>
+    <StreamChatProvider key={threadId} agentId={agentId} threadId={threadId} initialMessages={storedMessages}>
       <AgentChatMetaContext.Provider value={meta}>{children}</AgentChatMetaContext.Provider>
     </StreamChatProvider>
   );

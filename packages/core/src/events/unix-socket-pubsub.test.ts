@@ -69,6 +69,119 @@ describe('UnixSocketPubSub', () => {
     expect(secondCb.mock.calls[0]![0].type).toBe('hello');
   });
 
+  it('relays client-published events back to the publishing client', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const client = new UnixSocketPubSub(path);
+    pubsubs.push(broker, client);
+
+    const brokerCb = vi.fn();
+    const clientCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb);
+    await client.subscribe('topic-a', clientCb);
+
+    expect(broker.isBroker).toBe(true);
+    expect(client.isBroker).toBe(false);
+
+    // Client publishes — broker should relay back to the client
+    await client.publish('topic-a', makeEvent({ type: 'from-client' }));
+
+    await waitFor(() => {
+      expect(brokerCb).toHaveBeenCalledTimes(1);
+      expect(clientCb).toHaveBeenCalledTimes(1);
+    });
+    expect(brokerCb.mock.calls[0]![0].type).toBe('from-client');
+    expect(clientCb.mock.calls[0]![0].type).toBe('from-client');
+  });
+
+  it('_localOnly events are delivered locally but only relayed to the publishing client', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const clientA = new UnixSocketPubSub(path);
+    const clientB = new UnixSocketPubSub(path);
+    pubsubs.push(broker, clientA, clientB);
+
+    const brokerCb = vi.fn();
+    const clientACb = vi.fn();
+    const clientBCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb);
+    await clientA.subscribe('topic-a', clientACb);
+    await clientB.subscribe('topic-a', clientBCb);
+
+    // ClientA publishes a localOnly event — broker delivers locally,
+    // echoes back to clientA, but does NOT fan out to clientB.
+    await clientA.publish('topic-a', makeEvent({ type: 'internal' }), { localOnly: true });
+
+    await waitFor(() => {
+      expect(brokerCb).toHaveBeenCalledTimes(1);
+      expect(clientACb).toHaveBeenCalledTimes(1);
+    });
+    // Allow extra time for any unintended relay to clientB
+    await new Promise(r => setTimeout(r, 100));
+    expect(clientBCb).not.toHaveBeenCalled();
+  });
+
+  it('_localOnly events published by the broker are only delivered locally', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const client = new UnixSocketPubSub(path);
+    pubsubs.push(broker, client);
+
+    const brokerCb = vi.fn();
+    const clientCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb);
+    await client.subscribe('topic-a', clientCb);
+
+    // Broker publishes localOnly — should NOT relay to the client
+    await broker.publish('topic-a', makeEvent({ type: 'internal' }), { localOnly: true });
+
+    await waitFor(() => {
+      expect(brokerCb).toHaveBeenCalledTimes(1);
+    });
+    await new Promise(r => setTimeout(r, 100));
+    expect(clientCb).not.toHaveBeenCalled();
+  });
+
+  it('localOnly prevents large payloads from crossing the wire to non-owning clients', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const clientA = new UnixSocketPubSub(path);
+    const clientB = new UnixSocketPubSub(path);
+    pubsubs.push(broker, clientA, clientB);
+
+    const brokerCb = vi.fn();
+    const clientACb = vi.fn();
+    const clientBCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb);
+    await clientA.subscribe('topic-a', clientACb);
+    await clientB.subscribe('topic-a', clientBCb);
+
+    // Simulate the real problem: a 2 MB cumulative stepResults payload
+    const largePayload = 'x'.repeat(2 * 1024 * 1024);
+
+    // With localOnly: large event is delivered to broker + clientA, NOT clientB
+    await clientA.publish('topic-a', makeEvent({ type: 'step.end', data: { stepResults: largePayload } }), {
+      localOnly: true,
+    });
+
+    await waitFor(() => {
+      expect(brokerCb).toHaveBeenCalledTimes(1);
+      expect(clientACb).toHaveBeenCalledTimes(1);
+    });
+    await new Promise(r => setTimeout(r, 200));
+    expect(clientBCb).not.toHaveBeenCalled();
+
+    // Without localOnly: same large event DOES reach clientB (proving the filter is the difference)
+    await clientA.publish('topic-a', makeEvent({ type: 'step.end', data: { stepResults: largePayload } }));
+
+    await waitFor(() => {
+      expect(clientBCb).toHaveBeenCalledTimes(1);
+    });
+    // broker and clientA also received it (2nd time each)
+    expect(brokerCb).toHaveBeenCalledTimes(2);
+    expect(clientACb).toHaveBeenCalledTimes(2);
+  });
+
   it('allows a temporarily backpressured remote client to catch up below the queue cap', async () => {
     const path = await socketPath();
     const broker = new UnixSocketPubSub(path, { maxRemoteClientQueuedBytes: 1024 * 1024 });

@@ -1,64 +1,66 @@
 // @vitest-environment jsdom
-import type { BuilderAvailableModelsResponse } from '@mastra/client-js';
+import type {
+  BuilderSettingsResponse,
+  ChannelPlatformInfo,
+  ListToolProvidersResponse,
+  StoredSkillResponse,
+} from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui';
+import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, render, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
+
 import { AgentColorProvider } from '../../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
+import type { AgentTool } from '../../../../types/agent-tool';
 import { AgentProfileTabs } from '../agent-profile-tabs';
+import {
+  allAgentFeatures,
+  makeBuilderSettings,
+  nativeTool,
+  noBuilderModels,
+  noToolProviders,
+  slackConfigured,
+  slackUnconfigured,
+  storedSkill,
+} from './fixtures/agent-profile-tabs';
+import { server } from '@/test/msw-server';
 
-const builderFeatures = {
-  tools: true,
-  memory: true,
-  workflows: true,
-  agents: true,
-  skills: true,
-  avatarUpload: true,
-  model: true,
-  favorites: true,
-  browser: false,
+const BASE_URL = 'http://localhost:4111';
+
+interface HandlerOptions {
+  settings?: BuilderSettingsResponse;
+  platforms?: ChannelPlatformInfo[];
+  toolProviders?: ListToolProvidersResponse | Promise<ListToolProvidersResponse>;
+}
+
+const useHandlers = ({
+  settings = makeBuilderSettings(),
+  platforms = [],
+  toolProviders = noToolProviders,
+}: HandlerOptions = {}) => {
+  server.use(
+    http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(settings)),
+    http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json(platforms)),
+    http.get(`${BASE_URL}/api/tool-providers`, async () => HttpResponse.json(await toolProviders)),
+    http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json(noBuilderModels)),
+  );
 };
 
-const defaultTabsProps = {
-  agentId: 'agent-1',
+/** Deferred used to hold the tool-providers response pending until released. */
+const createGate = () => {
+  let release!: (value: ListToolProvidersResponse) => void;
+  const response = new Promise<ListToolProvidersResponse>(resolve => {
+    release = resolve;
+  });
+  return { response, release };
 };
 
-const channelPlatforms: Array<{ id: string; isConfigured: boolean }> = [];
-
-const modelPolicy = {
-  active: false,
-  allowed: undefined as unknown,
-  pickerVisible: true,
-  default: undefined as unknown,
-};
-
-vi.mock('@/domains/agent-builder/hooks/use-builder-agent-features', () => ({
-  useBuilderAgentFeatures: () => builderFeatures,
-}));
-
-vi.mock('@/domains/agent-builder', () => ({
-  useBuilderModelPolicy: () => modelPolicy,
-}));
-
-vi.mock('@/domains/llm', () => ({
-  useAllModels: () => [],
-  ProviderLogo: () => null,
-  cleanProviderId: (id: string) => id,
-}));
-
-vi.mock('@mastra/react', () => ({
-  useMastraClient: () => ({
-    getBuilderAvailableModels: async (): Promise<BuilderAvailableModelsResponse> => ({ providers: [] }),
-  }),
-}));
-
-vi.mock('@/domains/agents/hooks/use-channels', () => ({
-  useChannelPlatforms: () => ({ data: channelPlatforms, isLoading: false }),
-}));
-
-const Wrapper = ({ children }: { children: React.ReactNode }) => {
+const Wrapper = ({ children }: { children: ReactNode }) => {
   const methods = useForm<AgentBuilderEditFormValues>({
     defaultValues: {
       name: 'My agent',
@@ -66,136 +68,147 @@ const Wrapper = ({ children }: { children: React.ReactNode }) => {
       instructions: '',
       tools: {},
       skills: {},
-    } as AgentBuilderEditFormValues,
+    },
   });
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  queryClient.setQueryData(['builder-available-models'], { providers: [] });
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <FormProvider {...methods}>
-          <AgentColorProvider agentId="agent_test">{children}</AgentColorProvider>
-        </FormProvider>
-      </TooltipProvider>
-    </QueryClientProvider>
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <FormProvider {...methods}>
+            <AgentColorProvider agentId="agent_test">{children}</AgentColorProvider>
+          </FormProvider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    </MastraReactProvider>
   );
 };
 
-const setFeatures = (overrides: Partial<typeof builderFeatures>) => {
-  Object.assign(builderFeatures, overrides);
-};
+const renderTabs = ({
+  availableAgentTools = [],
+  availableSkills = [],
+}: {
+  availableAgentTools?: AgentTool[];
+  availableSkills?: StoredSkillResponse[];
+} = {}) =>
+  render(
+    <Wrapper>
+      <AgentProfileTabs agentId="agent-1" availableAgentTools={availableAgentTools} availableSkills={availableSkills} />
+    </Wrapper>,
+  );
+
+const tabLabels = (container: HTMLElement) =>
+  Array.from(container.querySelectorAll('[role="tab"]')).map(tab => tab.textContent);
 
 describe('AgentProfileTabs', () => {
-  beforeEach(() => {
-    setFeatures({
-      tools: true,
-      memory: true,
-      workflows: true,
-      agents: true,
-      skills: true,
-      avatarUpload: true,
-      model: true,
-      favorites: true,
-      browser: false,
-    });
-    modelPolicy.active = false;
-    modelPolicy.pickerVisible = true;
-    channelPlatforms.length = 0;
-  });
-
   afterEach(() => {
     cleanup();
   });
 
-  it('renders Model, Tools, Instructions, and Skills tabs in wizard order when features are enabled and items are available', () => {
-    const { getAllByRole } = render(
-      <Wrapper>
-        <AgentProfileTabs
-          {...defaultTabsProps}
-          availableAgentTools={[{ id: 'tool-a', name: 'tool-a', isChecked: false, type: 'tool' }]}
-          availableSkills={[{ id: 'skill-a', name: 'skill-a' } as never]}
-        />
-      </Wrapper>,
-    );
+  it('renders Model, Tools, Instructions, and Skills tabs in wizard order when features are enabled and items are available', async () => {
+    useHandlers();
+    const { container } = renderTabs({ availableAgentTools: [nativeTool], availableSkills: [storedSkill] });
 
-    const tabs = getAllByRole('tab').map(tab => tab.textContent);
-    expect(tabs).toEqual(['Model', 'Tools', 'Instructions', 'Skills']);
+    await waitFor(() => {
+      expect(tabLabels(container)).toEqual(['Model', 'Tools', 'Instructions', 'Skills']);
+    });
   });
 
-  it('hides the Tools tab when no tools are available', () => {
-    const { getAllByRole } = render(
-      <Wrapper>
-        <AgentProfileTabs {...defaultTabsProps} availableAgentTools={[]} availableSkills={[]} />
-      </Wrapper>,
-    );
+  it('hides the Tools tab when no tools are available after provider tools resolve', async () => {
+    useHandlers();
+    const { container } = renderTabs();
 
-    const tabs = getAllByRole('tab').map(tab => tab.textContent);
-    expect(tabs).not.toContain('Tools');
-    expect(tabs).not.toContain('Skills');
+    await waitFor(() => {
+      expect(tabLabels(container)).toContain('Model');
+    });
+    await waitFor(() => {
+      expect(tabLabels(container)).not.toContain('Tools');
+    });
+    expect(tabLabels(container)).not.toContain('Skills');
   });
 
-  it('hides the Skills tab when the skills feature is disabled', () => {
-    setFeatures({ skills: false });
-    const { getAllByRole } = render(
-      <Wrapper>
-        <AgentProfileTabs
-          {...defaultTabsProps}
-          availableAgentTools={[]}
-          availableSkills={[{ id: 'skill-a', name: 'skill-a' } as never]}
-        />
-      </Wrapper>,
-    );
+  it('hides the Skills tab when the skills feature is disabled', async () => {
+    useHandlers({ settings: makeBuilderSettings({ ...allAgentFeatures, skills: false }) });
+    const { container } = renderTabs({ availableSkills: [storedSkill] });
 
-    const tabs = getAllByRole('tab').map(tab => tab.textContent);
-    expect(tabs).not.toContain('Skills');
+    await waitFor(() => {
+      expect(tabLabels(container)).toContain('Model');
+    });
+    expect(tabLabels(container)).not.toContain('Skills');
   });
 
-  it('hides the Model tab when the model feature is off and no policy is active', () => {
-    setFeatures({ model: false });
-    const { getAllByRole } = render(
-      <Wrapper>
-        <AgentProfileTabs {...defaultTabsProps} availableAgentTools={[]} availableSkills={[]} />
-      </Wrapper>,
-    );
+  it('hides the Model tab when the model feature is off and no policy is active', async () => {
+    useHandlers({ settings: makeBuilderSettings({ ...allAgentFeatures, model: false }) });
+    const { container } = renderTabs({ availableAgentTools: [nativeTool] });
 
-    const tabs = getAllByRole('tab').map(tab => tab.textContent);
-    expect(tabs).not.toContain('Model');
-    expect(tabs).toContain('Instructions');
+    await waitFor(() => {
+      expect(tabLabels(container)).toContain('Tools');
+    });
+    expect(tabLabels(container)).not.toContain('Model');
+    expect(tabLabels(container)).toContain('Instructions');
   });
 
-  it('shows the Integrations tab when Slack is configured', () => {
-    channelPlatforms.push({ id: 'slack', isConfigured: true });
-    const { getAllByRole } = render(
-      <Wrapper>
-        <AgentProfileTabs {...defaultTabsProps} availableAgentTools={[]} availableSkills={[]} />
-      </Wrapper>,
-    );
+  it('shows the Model tab when the model feature is off but the admin policy is active', async () => {
+    useHandlers({ settings: makeBuilderSettings({ ...allAgentFeatures, model: false }, { active: true }) });
+    const { container } = renderTabs({ availableAgentTools: [nativeTool] });
 
-    const tabs = getAllByRole('tab').map(tab => tab.textContent);
-    expect(tabs).toContain('Integrations');
+    await waitFor(() => {
+      expect(tabLabels(container)).toContain('Model');
+    });
   });
 
-  it('hides the Integrations tab when Slack is not configured', () => {
-    channelPlatforms.push({ id: 'slack', isConfigured: false });
-    const { getAllByRole } = render(
-      <Wrapper>
-        <AgentProfileTabs {...defaultTabsProps} availableAgentTools={[]} availableSkills={[]} />
-      </Wrapper>,
-    );
+  it('shows the Tools tab while integration tools are loading, then hides it when none exist', async () => {
+    const gate = createGate();
+    useHandlers({ toolProviders: gate.response });
+    const { container } = renderTabs();
 
-    const tabs = getAllByRole('tab').map(tab => tab.textContent);
-    expect(tabs).not.toContain('Integrations');
+    // Tool availability is unknown while provider tools load — keep the tab.
+    await waitFor(() => {
+      expect(tabLabels(container)).toContain('Model');
+    });
+    expect(tabLabels(container)).toContain('Tools');
+
+    gate.release(noToolProviders);
+
+    await waitFor(() => {
+      expect(tabLabels(container)).not.toContain('Tools');
+    });
   });
 
-  it('always renders the Instructions tab', () => {
-    setFeatures({ model: false, tools: false, agents: false, workflows: false, skills: false });
-    const { getAllByRole } = render(
-      <Wrapper>
-        <AgentProfileTabs {...defaultTabsProps} availableAgentTools={[]} availableSkills={[]} />
-      </Wrapper>,
-    );
+  it('shows the Integrations tab when Slack is configured', async () => {
+    useHandlers({ platforms: slackConfigured });
+    const { container } = renderTabs();
 
-    const tabs = getAllByRole('tab').map(tab => tab.textContent);
-    expect(tabs).toEqual(['Instructions']);
+    await waitFor(() => {
+      expect(tabLabels(container)).toContain('Integrations');
+    });
+  });
+
+  it('hides the Integrations tab when Slack is not configured', async () => {
+    useHandlers({ platforms: slackUnconfigured });
+    const { container } = renderTabs();
+
+    await waitFor(() => {
+      expect(tabLabels(container)).toContain('Model');
+    });
+    expect(tabLabels(container)).not.toContain('Integrations');
+  });
+
+  it('always renders the Instructions tab', async () => {
+    useHandlers({
+      settings: makeBuilderSettings({
+        ...allAgentFeatures,
+        model: false,
+        tools: false,
+        agents: false,
+        workflows: false,
+        skills: false,
+      }),
+    });
+    const { container } = renderTabs();
+
+    await waitFor(() => {
+      expect(tabLabels(container)).toEqual(['Instructions']);
+    });
   });
 });
