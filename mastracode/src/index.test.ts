@@ -15,13 +15,19 @@ vi.mock('@mastra/core/agent', () => ({
   SignalProvider: class {},
 }));
 
-vi.mock('@mastra/core/harness', () => ({
-  Harness: class {
-    subscribe() {}
-  },
-  taskWriteTool: {},
-  taskCheckTool: {},
-}));
+vi.mock('@mastra/core/harness', async importOriginal => {
+  if (process.env.MASTRACODE_TEST_HARNESS_BACKEND === 'v1-compat') {
+    return importOriginal();
+  }
+
+  return {
+    Harness: class {
+      subscribe() {}
+    },
+    taskWriteTool: {},
+    taskCheckTool: {},
+  };
+});
 
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {},

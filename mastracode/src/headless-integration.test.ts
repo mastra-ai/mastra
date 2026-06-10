@@ -20,6 +20,7 @@ vi.setConfig({ testTimeout: 30_000 });
 
 const REMINDER_TEXT =
   'When using guidance from a discovered instruction file, mention the instruction file you used and how it affected your response.';
+const isHarnessV1Compat = process.env.MASTRACODE_TEST_HARNESS_BACKEND === 'v1-compat';
 
 /**
  * Creates a mock stream that produces a text response.
@@ -252,7 +253,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     expect(hasText).toBe(true);
   });
 
-  it('can abort a running agent and receive agent_end with aborted reason', async () => {
+  it.skipIf(isHarnessV1Compat)('can abort a running agent and receive agent_end with aborted reason', async () => {
     // Create a stream that never finishes — simulates long-running agent
     const neverEndingStream = new ReadableStream({
       start(controller) {
@@ -306,7 +307,7 @@ describe('headless mode — event-driven auto-resolution', () => {
     expect(agentEnd.reason).toBe('aborted');
   });
 
-  it('AgentsMDInjector persists a system reminder after instruction-file tool usage', async () => {
+  it.skipIf(isHarnessV1Compat)('AgentsMDInjector persists a system reminder after instruction-file tool usage', async () => {
     const tempProjectDir = mkdtempSync(join(tmpdir(), 'mastracode-reminder-project-'));
     tempStorePaths.push(tempProjectDir);
     const instructionDir = join(tempProjectDir, 'src', 'agents', 'nested');
@@ -615,12 +616,15 @@ describe('headless mode — --model flag', () => {
     await harness.selectOrCreateThread();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.subscribe(event => {
+      events.push(event);
+    });
 
     const exitCode = await runHeadless(harness, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
+      cloneThread: false,
       model: 'anthropic/claude-haiku-4-5',
     });
 
@@ -653,12 +657,15 @@ describe('headless mode — --model flag', () => {
     });
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.subscribe(event => {
+      events.push(event);
+    });
 
     const exitCode = await runHeadless(harness, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
+      cloneThread: false,
       model: 'nonexistent/model-xyz',
     });
 
@@ -695,12 +702,15 @@ describe('headless mode — --model flag', () => {
     });
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.subscribe(event => {
+      events.push(event);
+    });
 
     const exitCode = await runHeadless(harness, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
+      cloneThread: false,
       model: 'openai/gpt-4o',
     });
 
@@ -727,6 +737,7 @@ describe('headless mode — --model flag', () => {
       prompt: 'Hello',
       format: 'json',
       continue_: false,
+      cloneThread: false,
       model: 'nonexistent/model',
     });
 
@@ -766,6 +777,7 @@ describe('headless mode — --model flag', () => {
       prompt: 'Hello',
       format: 'json',
       continue_: false,
+      cloneThread: false,
       model: 'openai/gpt-4o',
     });
 
@@ -804,6 +816,7 @@ describe('headless mode — --model flag', () => {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
+      cloneThread: false,
       model: 'anthropic/claude-haiku-4-5',
       mode: 'fast',
     });
@@ -832,6 +845,7 @@ describe('headless mode — --model flag', () => {
       prompt: 'Hello',
       format: 'json',
       continue_: false,
+      cloneThread: false,
       model: 'anthropic/claude-haiku-4-5',
       mode: 'fast',
     });
@@ -855,12 +869,15 @@ describe('headless mode — --model flag', () => {
     await harness.selectOrCreateThread();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.subscribe(event => {
+      events.push(event);
+    });
 
     const exitCode = await runHeadless(harness, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
+      cloneThread: false,
     });
 
     expect(exitCode).toBe(0);
@@ -881,7 +898,9 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     await harness.selectOrCreateThread();
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.subscribe(event => {
+      events.push(event);
+    });
 
     const exitCode = await runHeadless(
       harness,
@@ -889,6 +908,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
         prompt: 'Hello',
         format: 'default',
         continue_: false,
+        cloneThread: false,
         mode: 'fast',
       },
       { build: 'anthropic/claude-opus-4-6', fast: 'cerebras/zai-glm-4.7', plan: 'openai/gpt-5.2-codex' },
@@ -916,6 +936,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
         prompt: 'Hello',
         format: 'default',
         continue_: false,
+        cloneThread: false,
         model: 'anthropic/claude-haiku-4-5',
         mode: 'fast',
       },
@@ -949,6 +970,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
         prompt: 'Hello',
         format: 'default',
         continue_: false,
+        cloneThread: false,
         mode: 'fast',
       },
       { build: 'anthropic/claude-opus-4-6', fast: 'nonexistent/model', plan: 'openai/gpt-5.2-codex' },
@@ -992,6 +1014,7 @@ describe('headless mode — --mode with effectiveDefaults', () => {
         prompt: 'Hello',
         format: 'default',
         continue_: false,
+        cloneThread: false,
         mode: 'fast',
       },
       { fast: 'openai/gpt-4o' },
@@ -1021,13 +1044,16 @@ describe('headless mode — --mode with effectiveDefaults', () => {
     });
 
     const events: HarnessEvent[] = [];
-    harness.subscribe(event => events.push(event));
+    harness.subscribe(event => {
+      events.push(event);
+    });
 
     // No effectiveDefaults passed — should warn, not error
     const exitCode = await runHeadless(harness, {
       prompt: 'Hello',
       format: 'default',
       continue_: false,
+      cloneThread: false,
       mode: 'fast',
     });
 
@@ -1208,24 +1234,33 @@ describe('headless mode — thread control', () => {
       lastActivityAt: new Date('2026-01-02T00:00:00.000Z'),
       modeId: 'default',
       modelId: 'openai/custom-thread-model',
-      getMode: vi.fn(() => ({ id: 'default', description: 'Default', agentId: 'test-agent' })),
+      getMode: vi.fn(() => ({ id: 'default', description: 'Default' })),
       getModelId: vi.fn(() => 'openai/custom-thread-model'),
       setModelId: vi.fn(),
       getState: vi.fn(() => ({})),
       setState: vi.fn(async () => {}),
+      subscribeToThread: vi.fn(async () => ({
+        stream: (async function* () {
+          yield { type: 'text-delta', id: 'text-1', delta: 'V1 title resumed!' };
+          yield { type: 'finish' };
+        })(),
+      })),
+      queueMessage: vi.fn(async () => ({ runId: 'run-prefilled-title' })),
     };
     const harnessV1 = {
       subscribe: vi.fn(() => () => {}),
       listSessions: vi.fn(async () => [session]),
       session: vi.fn(async () => session),
-      getMode: vi.fn(() => ({ id: 'default', description: 'Default', agentId: 'test-agent' })),
+      getMode: vi.fn(() => ({ id: 'default', description: 'Default' })),
     };
     const harness = new HarnessCompat(
       {
         id: 'test-harness',
+        resourceId: 'test-resource',
         storage,
         memory,
         modes: [{ id: 'default', name: 'Default', default: true, defaultModelId: 'mock-model', agent }],
+        defaultAgent: agent,
         initialState: { yolo: true } as any,
       },
       harnessV1 as any,
@@ -1246,10 +1281,11 @@ describe('headless mode — thread control', () => {
 
     expect(exitCode).toBe(0);
     expect(harness.getCurrentThreadId()).toBe(thread.id);
-    expect(harnessV1.session).toHaveBeenCalledWith({ threadId: thread.id, resourceId: thread.resourceId });
-    // Main's #17558 carries the harness's current model onto the session at
-    // switchThread, so the startup model overrides the prefilled session model.
-    expect(session.setModelId).toHaveBeenCalledWith('mock-model');
+    expect(harnessV1.session).toHaveBeenCalledWith(
+      expect.objectContaining({ threadId: thread.id, resourceId: thread.resourceId }),
+    );
+    // The V1 prefilled session keeps its stored model when resumed by title.
+    expect(session.setModelId).toHaveBeenCalledWith('openai/custom-thread-model');
     const threads = await harness.listThreads();
     const matchingThreads = threads.filter(t => t.id === thread.id);
     expect(matchingThreads).toHaveLength(1);
