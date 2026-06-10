@@ -4,13 +4,25 @@ import { useBuilderAgentFeatures } from '../hooks/use-builder-agent-features';
 import { useAgentPrimitives } from './agent-primitives-context';
 import { useChannelPlatforms } from '@/domains/agents/hooks/use-channels';
 
-export type WizardStep = 'initial' | 'end' | 'tools' | 'model' | 'instructions' | 'browser' | 'integrations' | 'skills';
+export type WizardStep =
+  | 'ready'
+  | 'identity'
+  | 'end'
+  | 'tools'
+  | 'model'
+  | 'instructions'
+  | 'browser'
+  | 'integrations'
+  | 'skills'
+  | 'library';
 
 export interface WizardContextValue {
   /** The current step the wizard is on. */
   step: WizardStep;
   /** Advance to the next step in the resolved nav tree. No-op at `end`. */
   next: () => void;
+  /** Go back to the previous step in the resolved nav tree. No-op on the first step. */
+  prev: () => void;
   /** The resolved nav tree: ordered list of steps the wizard will walk. */
   steps: WizardStep[];
   /**
@@ -22,12 +34,14 @@ export interface WizardContextValue {
 }
 
 const STEP_ORDER: WizardStep[] = [
-  'initial',
+  'ready',
+  'identity',
   'model',
   'tools',
   'instructions',
   'skills',
   'browser',
+  'library',
   'integrations',
   'end',
 ];
@@ -48,7 +62,9 @@ const buildWizardSteps = ({
   const result: WizardStep[] = [];
   for (const step of STEP_ORDER) {
     switch (step) {
-      case 'initial':
+      case 'ready':
+      case 'identity':
+      case 'library':
         if (includeInitial) result.push(step);
         break;
       case 'model':
@@ -86,7 +102,7 @@ interface WizardProviderProps {
   /**
    * Where to start the wizard. Defaults to `"end"`, meaning the wizard is
    * effectively dormant (e.g. when editing an existing thread with no starter
-   * user message). Pass `"initial"` to begin from the top of the tree.
+   * user message). Pass `"ready"` to begin from the top of the onboarding tree.
    */
   initialStep?: WizardStep;
   children: ReactNode;
@@ -96,8 +112,9 @@ interface WizardProviderProps {
  * Owns the agent-builder wizard navigation state.
  *
  * Builds an ordered, feature-gate-aware list of steps and walks it via
- * `next()`. The `initial` step only appears when the provider is created
- * with `initialStep="initial"`; `end` is always present and `next()` is a
+ * `next()`/`prev()`. The onboarding-only steps (`ready`, `identity`,
+ * `library`) only appear when the provider is created with
+ * `initialStep="ready"`; `end` is always present and `next()` is a
  * no-op once we reach it. The resolved `steps` list is recomputed on each
  * render from the live feature flags and channel platforms — if the current
  * step disappears from the tree (e.g. a feature flag flipped off), the
@@ -116,7 +133,7 @@ export const WizardProvider = ({ initialStep = 'end', children }: WizardProvider
         features,
         hasConfiguredIntegration,
         hasSkills,
-        includeInitial: initialStep === 'initial',
+        includeInitial: initialStep === 'ready',
       }),
     [features, hasConfiguredIntegration, hasSkills, initialStep],
   );
@@ -144,9 +161,20 @@ export const WizardProvider = ({ initialStep = 'end', children }: WizardProvider
     });
   }, [steps]);
 
+  const prev = useCallback(() => {
+    setStep(current => {
+      const idx = steps.indexOf(current);
+      if (idx <= 0) return current;
+      return steps[idx - 1];
+    });
+  }, [steps]);
+
   const isLast = steps.length >= 2 && steps[steps.length - 2] === step;
 
-  const value = useMemo<WizardContextValue>(() => ({ step, next, steps, isLast }), [step, next, steps, isLast]);
+  const value = useMemo<WizardContextValue>(
+    () => ({ step, next, prev, steps, isLast }),
+    [step, next, prev, steps, isLast],
+  );
 
   return <WizardContext.Provider value={value}>{children}</WizardContext.Provider>;
 };
@@ -155,5 +183,5 @@ export const WizardProvider = ({ initialStep = 'end', children }: WizardProvider
 export const useWizard = (): WizardContextValue => {
   const ctx = useContext(WizardContext);
 
-  return ctx ?? { step: 'end', next: () => {}, steps: [], isLast: false };
+  return ctx ?? { step: 'end', next: () => {}, prev: () => {}, steps: [], isLast: false };
 };

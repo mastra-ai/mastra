@@ -67,6 +67,7 @@ vi.mock('@/domains/agent-builder/components/agent-edit/conversation-panel', () =
 
 vi.mock('@/domains/agent-builder/contexts/stream-chat-context', () => ({
   useStreamRunning: () => false,
+  useStreamRunningDebounced: () => false,
   useStreamMessages: () => [],
   useStreamSend: () => () => {},
 }));
@@ -177,6 +178,9 @@ const commonHandlers = (overrides?: { agent?: Partial<typeof storedAgent>; meDel
     return HttpResponse.json({ id: 'user-1' });
   }),
   http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json({ ...storedAgent, ...overrides?.agent })),
+  http.get(`${BASE_URL}/api/stored/agents/agent-123/dependents`, () =>
+    HttpResponse.json({ dependents: [], hiddenCount: 0 }),
+  ),
   http.get(`${BASE_URL}/api/stored/workspaces`, () => HttpResponse.json({ workspaces: [] })),
   http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json([])),
   http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({})),
@@ -383,6 +387,7 @@ describe('AgentBuilderAgentEdit — navigation, header, autosave', () => {
     fireEvent.click(deleteButton);
 
     const confirm = await screen.findByTestId('agent-builder-delete-agent-confirm');
+    await waitFor(() => expect((confirm as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(confirm);
 
     await waitFor(() => expect(deleteCount).toBe(1));
