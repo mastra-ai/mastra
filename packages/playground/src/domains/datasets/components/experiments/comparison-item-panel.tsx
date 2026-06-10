@@ -8,10 +8,10 @@ import {
   Column,
   MainHeader,
   Notice,
-  PrevNextNav,
   Sections,
   SideDialog,
 } from '@mastra/playground-ui';
+import { PrevNextNav } from '@mastra/playground-ui/components/PrevNextNav';
 import { FileCodeIcon, FileInputIcon, FileOutputIcon, TargetIcon, XIcon } from 'lucide-react';
 import { ScoreDelta } from './score-delta';
 

@@ -71,7 +71,6 @@ export * from './ds/components/MainSidebar';
 export * from './ds/components/PageHeader';
 export * from './ds/components/Section';
 export * from './ds/components/SectionCard';
-export * from './ds/components/SettingsRow';
 export * from './ds/components/SideDialog';
 export * from './ds/components/Steps';
 export * from './ds/components/Tabs';
@@ -100,9 +99,7 @@ export * from './ds/components/DataPanel';
 export * from './ds/components/DateTimeRangePicker';
 export * from './ds/components/HorizontalBars';
 export * from './ds/components/MetricsDataTable';
-export * from './ds/components/MetricsKpiCard';
 export * from './ds/components/MetricsLineChart';
-export * from './ds/components/PrevNextNav';
 export * from './ds/components/ScrollableContainer';
 export * from './ds/components/StatusBadge';
 
