@@ -168,6 +168,67 @@ describe('MessageRow dynamic-tool rendering', () => {
     expect(container.textContent).not.toContain('Internal signal');
   });
 
+  it('renders user text through the shared MarkdownRenderer in a right-aligned bubble', () => {
+    const { container } = renderMessage({
+      id: 'user-md-1',
+      role: 'user',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'hello **world**' }],
+      },
+    } as unknown as MastraDBMessage);
+
+    expect(container.querySelector('.justify-end')).not.toBeNull();
+    expect(container.querySelector('strong')?.textContent).toBe('world');
+  });
+
+  it('renders assistant text through the shared MarkdownRenderer', () => {
+    const { container } = renderMessage(buildMessage([{ type: 'text', text: 'reply **bold**' } as ToolPart]));
+
+    expect(container.querySelector('strong')?.textContent).toBe('bold');
+  });
+
+  it('routes assistant text through the shared MessageText error-prefix handling', () => {
+    const { container } = renderMessage(buildMessage([{ type: 'text', text: 'Error: it broke' } as ToolPart]));
+
+    // The shared MessageText turns an `Error:`-prefixed body into a destructive notice.
+    expect(container.textContent).toContain('it broke');
+    expect(container.querySelector('[class*="destructive"]')).not.toBeNull();
+  });
+
+  it('renders a tripwire-status message through the shared TripwireNotice', () => {
+    const { container } = renderMessage({
+      id: 'assistant-tripwire-1',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'blocked for safety' }],
+        metadata: { mode: 'stream', status: 'tripwire' },
+      },
+    } as unknown as MastraDBMessage);
+
+    expect(container.textContent).toContain('Content Blocked');
+    expect(container.textContent).toContain('blocked for safety');
+  });
+
+  it('renders a warning-status message through the shared warning notice', () => {
+    const { container } = renderMessage({
+      id: 'assistant-warning-1',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'heads up about this' }],
+        metadata: { mode: 'stream', status: 'warning' },
+      },
+    } as unknown as MastraDBMessage);
+
+    expect(container.textContent).toContain('Warning');
+    expect(container.textContent).toContain('heads up about this');
+  });
+
   it('renders the generic shimmer for non-builder dynamic tools', () => {
     const { container } = renderRow([
       builderToolPart({
