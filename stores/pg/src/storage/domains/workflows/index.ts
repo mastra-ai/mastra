@@ -1,6 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
-  mergeWorkflowStepResult,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
