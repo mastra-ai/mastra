@@ -640,7 +640,7 @@ export class Mastra<
       const raw = this.#pubsub;
       const self = this;
       this.#pubsubProxy = new Proxy(raw, {
-        get(target, prop, receiver) {
+        get(target, prop, _receiver) {
           if (prop === 'publish') {
             return function publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>) {
               // Internal execution-workflows / agentic-loops are run-scoped:
@@ -661,7 +661,14 @@ export class Mastra<
               return target.publish(topic, event);
             };
           }
-          return Reflect.get(target, prop, receiver);
+          // Bind methods to `target` so private field access (#subscribers etc.)
+          // works correctly — JS Proxies set `this` to the proxy, which breaks
+          // private fields since they are scoped to the declaring class instance.
+          const val = Reflect.get(target, prop, target);
+          if (typeof val === 'function') {
+            return val.bind(target);
+          }
+          return val;
         },
       }) as PubSub;
     }
