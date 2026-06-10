@@ -100,6 +100,7 @@ type AgentThreadStreamRuntimeEvent =
   | { type: 'run-completed'; runId: string }
   | { type: 'run-suspended'; runId: string }
   | { type: 'run-aborted'; runId: string }
+  | { type: 'run-failed'; runId: string; error: string }
   | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string; preRun?: boolean };
 
 function createRuntimeState(): AgentThreadRuntimeState {
@@ -659,12 +660,17 @@ export class AgentThreadStreamRuntime {
           }
         }
       })
-      .catch(() => {
+      .catch(err => {
         state.threadKeysByRunId.delete(pending.runId);
         this.#cleanupPreparedRun(state, pending.runId);
         if (state.activeThreadRunIds.get(key) === pending.runId) {
           state.activeThreadRunIds.delete(key);
         }
+        this.#publish(pubsub, key, {
+          type: 'run-failed',
+          runId: pending.runId,
+          error: err instanceof Error ? err.message : String(err),
+        });
         void this.#drainPendingContinuations(state, pubsub, key).then(started => {
           if (!started) {
             void this.#drainPendingIdleSignals(state, pubsub, key);
@@ -736,12 +742,18 @@ export class AgentThreadStreamRuntime {
           this.#watchThreadRunCompletion(state, pubsub, key, nextRecord);
         }
       }
-    } catch {
+    } catch (err) {
       state.threadKeysByRunId.delete(pendingIdle.runId);
       this.#cleanupPreparedRun(state, pendingIdle.runId);
       if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
         state.activeThreadRunIds.delete(key);
       }
+      this.#publish(pubsub, key, {
+        type: 'run-failed',
+        runId: pendingIdle.runId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      void this.#drainPendingIdleSignals(state, pubsub, key);
     }
   }
 
@@ -804,7 +816,10 @@ export class AgentThreadStreamRuntime {
     await new Promise<void>(resolve => {
       const onEvent: EventCallback = event => {
         const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
-        if ((data?.type === 'run-completed' || data?.type === 'run-aborted') && data.runId === runId) {
+        if (
+          (data?.type === 'run-completed' || data?.type === 'run-aborted' || data?.type === 'run-failed') &&
+          data.runId === runId
+        ) {
           void resolvedPubSub.unsubscribe(topic, onEvent).catch(() => {});
           resolve();
         }
@@ -944,6 +959,25 @@ export class AgentThreadStreamRuntime {
         const queue = signalsByThread.get(key) ?? [];
         queue.push(createSignal(data.signal));
         signalsByThread.set(key, queue);
+        return;
+      }
+      if (data.type === 'run-failed') {
+        if (state.activeThreadRunIds.get(key) === data.runId) {
+          state.activeThreadRunIds.delete(key);
+        }
+        const errorRun = createRemoteRun(data.runId);
+        const remoteRun = remoteRuns.get(data.runId);
+        if (remoteRun) {
+          remoteRun.parts.push({ type: 'error', payload: { error: new Error(data.error) } });
+          remoteRun.done = true;
+          while (remoteRun.waiters.length) remoteRun.waiters.shift()?.();
+          while (remoteRun.finishWaiters.length) remoteRun.finishWaiters.shift()?.();
+          remoteRuns.delete(data.runId);
+        }
+        enqueueRun(errorRun);
+        seenRunIds.delete(data.runId);
+        void this.#drainPendingIdleSignals(state, resolvedPubSub, key);
+        wake();
         return;
       }
       if (data.type === 'run-completed' || data.type === 'run-aborted' || data.type === 'run-suspended') {
@@ -1368,12 +1402,18 @@ export class AgentThreadStreamRuntime {
         runId,
         memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
       })
-      .catch(() => {
+      .catch(err => {
         state.threadKeysByRunId.delete(runId);
         this.#cleanupPreparedRun(state, runId);
         if (state.activeThreadRunIds.get(key) === runId) {
           state.activeThreadRunIds.delete(key);
         }
+        this.#publish(pubsub, key, {
+          type: 'run-failed',
+          runId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        void this.#drainPendingIdleSignals(state, pubsub, key);
       });
 
     return { accepted: true, runId, signal };
