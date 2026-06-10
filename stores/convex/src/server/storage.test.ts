@@ -227,8 +227,8 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       output: [
         null,
         null,
-        null,
-        null,
+        { status: 'suspended', suspendPayload: { token: 'tok' }, suspendedAt: 4 },
+        { status: 'suspended', startedAt: 5, suspendedAt: 6 },
         { status: 'success', output: 'done-4' },
         { status: 'failed', error: 'failed-5' },
         { status: 'waiting' },
@@ -430,7 +430,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       context: {
         foreach: {
           status: 'success',
-          output: [{ status: 'suspended', reason: 'user-domain-status' }, 2],
+          output: [{ status: 'suspended', suspendedAt: 1, suspendPayload: { reason: 'user-domain-status' } }, 2],
           payload: ['a', 'b'],
         },
       },
@@ -446,7 +446,7 @@ describe('mastraStorage workflow snapshot merge operations', () => {
       result: JSON.stringify({
         __mastra_foreach__: true,
         status: 'success',
-        output: [{ status: 'suspended', reason: 'new-user-domain-status' }],
+        output: [{ status: 'suspended', suspendedAt: 2, suspendPayload: { reason: 'new-user-domain-status' } }],
         payload: ['a', 'b'],
       }),
       requestContext: JSON.stringify({}),
@@ -455,7 +455,9 @@ describe('mastraStorage workflow snapshot merge operations', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error(result.error);
     const patchedSnapshot = JSON.parse(testCtx.patches[0]?.data.snapshot as string);
-    expect(patchedSnapshot.context.foreach.output).toEqual([{ status: 'suspended', reason: 'new-user-domain-status' }]);
+    expect(patchedSnapshot.context.foreach.output).toEqual([
+      { status: 'suspended', suspendedAt: 2, suspendPayload: { reason: 'new-user-domain-status' } },
+    ]);
   });
 
   it('allows completed forEach iterations to store null as user output', async () => {

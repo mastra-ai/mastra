@@ -175,7 +175,9 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         local function is_suspended_step_result(value)
           return type(value) == 'table'
             and value.status == 'suspended'
-            and (value.suspendedAt ~= nil or value.suspendPayload ~= nil)
+            and type(value.suspendedAt) == 'number'
+            and type(value.suspendPayload) == 'table'
+            and type(value.suspendPayload.__workflow_meta) == 'table'
         end
 
         local function can_reset_with_pending_marker(value)

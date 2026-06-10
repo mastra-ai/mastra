@@ -189,8 +189,8 @@ describe('mergeWorkflowStepResult', () => {
       output: [
         null,
         null,
-        null,
-        null,
+        { status: 'suspended', suspendPayload: { token: 'tok' }, suspendedAt: 4 },
+        { status: 'suspended', startedAt: 5, suspendedAt: 6 },
         { status: 'success', output: 'done-4' },
         { status: 'failed', error: 'failed-5' },
         { status: 'waiting' },
@@ -257,7 +257,7 @@ describe('mergeWorkflowStepResult', () => {
     const snapshot = createEmptyWorkflowSnapshot('run-1');
     snapshot.context.foreach = {
       status: 'success',
-      output: [{ status: 'suspended', reason: 'user-domain-status' }, 2],
+      output: [{ status: 'suspended', suspendedAt: 1, suspendPayload: { reason: 'user-domain-status' } }, 2],
       payload: ['a', 'b'],
     } as any;
 
@@ -267,13 +267,15 @@ describe('mergeWorkflowStepResult', () => {
       result: {
         __mastra_foreach__: true,
         status: 'success',
-        output: [{ status: 'suspended', reason: 'new-user-domain-status' }],
+        output: [{ status: 'suspended', suspendedAt: 2, suspendPayload: { reason: 'new-user-domain-status' } }],
         payload: ['a', 'b'],
       } as any,
       requestContext: {},
     });
 
-    expect(snapshot.context.foreach?.output).toEqual([{ status: 'suspended', reason: 'new-user-domain-status' }]);
+    expect(snapshot.context.foreach?.output).toEqual([
+      { status: 'suspended', suspendedAt: 2, suspendPayload: { reason: 'new-user-domain-status' } },
+    ]);
   });
 
   it('allows a completed forEach iteration to overwrite an older value with null output', () => {

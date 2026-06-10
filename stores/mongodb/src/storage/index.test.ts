@@ -228,6 +228,49 @@ describe('WorkflowsStorageMongoDB workflow snapshot merge operations', () => {
     }
   });
 
+  it('does not treat user outputs shaped like suspended results as partial foreach markers', async () => {
+    const workflowDomain = new WorkflowsStorageMongoDB(TEST_CONFIG);
+    const workflowName = `workflow-user-status-${randomUUID()}`;
+    const runId = `run-${randomUUID()}`;
+
+    try {
+      await workflowDomain.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          context: {
+            foreach: {
+              status: 'success',
+              output: [{ status: 'suspended', suspendedAt: 1, suspendPayload: { reason: 'user-domain-status' } }, 2],
+              payload: ['a', 'b'],
+            },
+          },
+        } as any,
+      });
+
+      const context = await workflowDomain.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'foreach',
+        result: {
+          __mastra_foreach__: true,
+          status: 'success',
+          output: [{ status: 'suspended', suspendedAt: 2, suspendPayload: { reason: 'new-user-domain-status' } }],
+          payload: ['a', 'b'],
+        } as any,
+        requestContext: {},
+      });
+
+      expect(context.foreach?.output).toEqual([
+        { status: 'suspended', suspendedAt: 2, suspendPayload: { reason: 'new-user-domain-status' } },
+      ]);
+    } finally {
+      await workflowDomain.deleteWorkflowRunById({ workflowName, runId });
+    }
+  });
+
   it('does not clear completed foreach values from stale pending-marker writes', async () => {
     const workflowDomain = new WorkflowsStorageMongoDB(TEST_CONFIG);
     const workflowName = `workflow-pending-marker-${randomUUID()}`;
@@ -263,7 +306,10 @@ describe('WorkflowsStorageMongoDB workflow snapshot merge operations', () => {
         requestContext: {},
       });
 
-      expect(context.foreach?.output).toEqual([{ value: 'done' }, null]);
+      expect(context.foreach?.output).toEqual([
+        { value: 'done' },
+        { status: 'suspended', suspendedAt: 1, suspendPayload: {} },
+      ]);
       expect(context.foreach?.payload).toEqual(['a', 'b']);
     } finally {
       await workflowDomain.deleteWorkflowRunById({ workflowName, runId });

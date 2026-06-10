@@ -350,6 +350,66 @@ describe('PostgresStore pool integration', () => {
 });
 
 describe('WorkflowsPG snapshot sanitization', () => {
+  it('persists serialized workflow step results instead of live cumulative message history', async () => {
+    const pool = createTestPool();
+    const workflows = new WorkflowsPG({ pool });
+    const workflowName = `snapshot-serialization-${Date.now()}`;
+    const runId = `run-${Date.now()}`;
+    const workflowSnapshotSerializer = Symbol.for('mastra.workflowSnapshotSerializer');
+    const cumulativeMessages = Array.from({ length: 20 }, (_, index) => ({
+      role: 'assistant',
+      content: `message-${index}-${'x'.repeat(100)}`,
+    }));
+    const liveStep = {
+      response: { messages: cumulativeMessages },
+      [workflowSnapshotSerializer]: () => ({
+        response: { messages: cumulativeMessages.slice(-1) },
+      }),
+    };
+
+    try {
+      await workflows.init();
+      await workflows.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          context: {},
+          activePaths: [],
+          activeStepsPath: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          serializedStepGraph: [],
+          value: {},
+          waitingPaths: {},
+        } as any,
+      });
+
+      await workflows.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'agent-step',
+        result: {
+          status: 'success',
+          output: { steps: [liveStep] },
+        } as any,
+        requestContext: {},
+      });
+
+      const loadedSnapshot = await workflows.loadWorkflowSnapshot({ workflowName, runId });
+      const storedMessages = (loadedSnapshot as any)?.context?.['agent-step']?.output?.steps?.[0]?.response?.messages;
+
+      expect(storedMessages).toEqual([cumulativeMessages.at(-1)]);
+      expect(JSON.stringify(loadedSnapshot).length).toBeLessThan(
+        JSON.stringify({ response: { messages: cumulativeMessages } }).length,
+      );
+    } finally {
+      await workflows.deleteWorkflowRunById({ workflowName, runId });
+      await pool.end();
+    }
+  });
+
   it('round-trips workflow-executed backslash content and strips null characters', async () => {
     const pool = createTestPool();
     const store = new PostgresStore({ id: `pg-sanitize-${Date.now()}`, pool });

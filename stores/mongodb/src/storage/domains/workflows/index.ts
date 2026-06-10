@@ -55,6 +55,13 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     const hasCompletedIndex = (indexes: unknown, idx: unknown) => ({
       $cond: [{ $isArray: indexes }, { $in: [idx, indexes] }, false],
     });
+    const hasWorkflowMetaSuspendPayload = (value: unknown) => ({
+      $cond: [
+        isObject(getField(value, 'suspendPayload')),
+        { $eq: [{ $type: getField(getField(value, 'suspendPayload'), '__workflow_meta') }, 'object'] },
+        false,
+      ],
+    });
     const stripForeachStepResultMarker = (value: unknown) => ({
       $arrayToObject: {
         $filter: {
@@ -82,12 +89,8 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
         {
           $and: [
             { $eq: [getField(value, 'status'), 'suspended'] },
-            {
-              $or: [
-                { $ne: [{ $type: getField(value, 'suspendedAt') }, 'missing'] },
-                { $ne: [{ $type: getField(value, 'suspendPayload') }, 'missing'] },
-              ],
-            },
+            { $in: [{ $type: getField(value, 'suspendedAt') }, ['int', 'long', 'double', 'decimal']] },
+            hasWorkflowMetaSuspendPayload(value),
           ],
         },
         false,

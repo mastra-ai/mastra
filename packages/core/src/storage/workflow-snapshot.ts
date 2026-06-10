@@ -20,19 +20,19 @@ function isPendingMarker(val: unknown): boolean {
   );
 }
 
-// Suspended forEach iteration results may come from multiple engines. Treat
-// StepResult-shaped suspended entries as resettable without relying only on
-// evented __workflow_meta, but avoid matching plain user outputs with only
-// status/payload fields.
 function isSuspendedStepResult(val: unknown): boolean {
   const result = val as Record<string, unknown> | null;
+  const suspendPayload = result?.suspendPayload;
 
   return (
     val !== null &&
     typeof val === 'object' &&
     'status' in val &&
     result?.status === 'suspended' &&
-    ('suspendPayload' in val || 'suspendedAt' in val)
+    typeof result.suspendedAt === 'number' &&
+    suspendPayload !== null &&
+    typeof suspendPayload === 'object' &&
+    '__workflow_meta' in suspendPayload
   );
 }
 
