@@ -2752,6 +2752,57 @@ describe('ObservabilityStorageClickhouseVNext', () => {
         await adminClient.close();
       }
     });
+
+    it('emits replicated engines for v-next signal tables when replication is enabled', async () => {
+      const adminClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+      });
+      const database = `replication_positive_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      await adminClient.command({ query: `CREATE DATABASE ${database}` });
+
+      const scopedClient = createClient({
+        url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+        username: process.env.CLICKHOUSE_USERNAME || 'default',
+        password: process.env.CLICKHOUSE_PASSWORD || 'password',
+        database,
+      });
+
+      try {
+        // Cluster omitted so this runs against the single-node test container.
+        // The engine-rewrite path still applies — it produces ReplicatedMergeTree
+        // tables coordinated via the embedded Keeper.
+        const replicatedStorage = new ObservabilityStorageClickhouseVNext({
+          client: scopedClient,
+          replication: {
+            zookeeperPath: `/clickhouse/tables/test/${database}/{table}`,
+            replicaName: 'replica1',
+          },
+        });
+
+        await replicatedStorage.init();
+
+        const engines = (await (
+          await scopedClient.query({
+            query: `SELECT name, engine FROM system.tables WHERE database = currentDatabase() AND name LIKE 'mastra_%' AND name NOT LIKE 'mastra_mv_%' ORDER BY name`,
+            format: 'JSONEachRow',
+          })
+        ).json()) as Array<{ name: string; engine: string }>;
+
+        expect(engines.length).toBeGreaterThan(0);
+        for (const { name, engine } of engines) {
+          expect(
+            engine.startsWith('Replicated') || engine.startsWith('Shared'),
+            `expected replicated/shared engine for ${name}, got ${engine}`,
+          ).toBe(true);
+        }
+      } finally {
+        await scopedClient.close();
+        await adminClient.command({ query: `DROP DATABASE IF EXISTS ${database} SYNC` });
+        await adminClient.close();
+      }
+    });
   });
 
   // ==========================================================================

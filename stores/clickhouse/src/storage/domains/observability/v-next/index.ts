@@ -537,11 +537,21 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       // Trigger an immediate refresh so discovery data is available right away
       // instead of waiting for the first scheduled refresh cycle.
       // SYSTEM REFRESH VIEW kicks off the refresh; SYSTEM WAIT VIEW blocks
-      // until it finishes (or re-throws if the refresh failed).
-      await this.#client.command({ query: `SYSTEM REFRESH VIEW ${MV_DISCOVERY_VALUES}` });
-      await this.#client.command({ query: `SYSTEM WAIT VIEW ${MV_DISCOVERY_VALUES}` });
-      await this.#client.command({ query: `SYSTEM REFRESH VIEW ${MV_DISCOVERY_PAIRS}` });
-      await this.#client.command({ query: `SYSTEM WAIT VIEW ${MV_DISCOVERY_PAIRS}` });
+      // until it finishes (or re-throws if the refresh failed). Under
+      // replication these run ON CLUSTER so every replica's refreshable MV
+      // schedule is kicked, not just the coordinator's.
+      await this.#client.command({
+        query: addOnClusterToDDL(`SYSTEM REFRESH VIEW ${MV_DISCOVERY_VALUES}`, this.#replication),
+      });
+      await this.#client.command({
+        query: addOnClusterToDDL(`SYSTEM WAIT VIEW ${MV_DISCOVERY_VALUES}`, this.#replication),
+      });
+      await this.#client.command({
+        query: addOnClusterToDDL(`SYSTEM REFRESH VIEW ${MV_DISCOVERY_PAIRS}`, this.#replication),
+      });
+      await this.#client.command({
+        query: addOnClusterToDDL(`SYSTEM WAIT VIEW ${MV_DISCOVERY_PAIRS}`, this.#replication),
+      });
     } catch {
       // Discovery MVs may fail on ClickHouse versions without refreshable MV support.
       // Discovery methods will return empty results until the MVs are created and refreshed.

@@ -55,6 +55,25 @@ describe('ClickHouse replication helpers', () => {
     expect(addOnClusterToDDL('DROP TABLE IF EXISTS mastra_threads', { cluster: 'cluster-a' })).toBe(
       "DROP TABLE IF EXISTS mastra_threads ON CLUSTER 'cluster-a'",
     );
+    expect(addOnClusterToDDL('DROP VIEW IF EXISTS mastra_mv', { cluster: 'cluster-a' })).toBe(
+      "DROP VIEW IF EXISTS mastra_mv ON CLUSTER 'cluster-a'",
+    );
+    expect(addOnClusterToDDL('SYSTEM REFRESH VIEW mastra_mv', { cluster: 'cluster-a' })).toBe(
+      "SYSTEM REFRESH VIEW mastra_mv ON CLUSTER 'cluster-a'",
+    );
+    expect(addOnClusterToDDL('SYSTEM WAIT VIEW mastra_mv', { cluster: 'cluster-a' })).toBe(
+      "SYSTEM WAIT VIEW mastra_mv ON CLUSTER 'cluster-a'",
+    );
+    expect(
+      addOnClusterToDDL('ALTER TABLE mastra_db.mastra_threads ADD COLUMN IF NOT EXISTS y String', {
+        cluster: 'cluster-a',
+      }),
+    ).toBe("ALTER TABLE mastra_db.mastra_threads ON CLUSTER 'cluster-a' ADD COLUMN IF NOT EXISTS y String");
+  });
+
+  it('is idempotent when ON CLUSTER is already present', () => {
+    const sql = "CREATE TABLE mastra_threads ON CLUSTER 'cluster-a' (id String)";
+    expect(addOnClusterToDDL(sql, { cluster: 'cluster-a' })).toBe(sql);
   });
 
   it('rewrites table DDL engines and cluster together', () => {

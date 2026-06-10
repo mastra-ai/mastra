@@ -14,7 +14,6 @@ const DEFAULT_ZOOKEEPER_PATH = '/clickhouse/tables/{shard}/{database}/{table}';
 const DEFAULT_REPLICA_NAME = '{replica}';
 
 const REPLICATED_ENGINE_NAMES = new Set(['ReplicatedMergeTree', 'ReplicatedReplacingMergeTree']);
-const SHARED_ENGINE_NAMES = new Set(['SharedMergeTree', 'SharedReplacingMergeTree']);
 const SUPPORTED_ENGINE_NAMES = new Set(['MergeTree', 'ReplacingMergeTree', ...REPLICATED_ENGINE_NAMES]);
 
 export function isReplicationConfigured(
@@ -63,6 +62,13 @@ function quoteClickhouseString(value: string): string {
   return `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 }
 
+/**
+ * Splits an engine clause into name and args. Assumes engine args do not
+ * contain nested parentheses — true for every engine currently emitted by
+ * Mastra (see TABLE_ENGINES in db/utils.ts) and for every v-next DDL. If a
+ * future engine uses nested parens (e.g. `ReplacingMergeTree(ver, CAST(...))`),
+ * this parser must be extended.
+ */
 function getEngineNameAndArgs(engine: string): { name: string; args: string } | null {
   const trimmed = engine.trim();
   const match = trimmed.match(/^(\w+)\s*(?:\((.*)\))?$/s);
@@ -77,7 +83,7 @@ export function buildReplicatedTableEngine(engine: string, replication?: Clickho
 
   const parsed = getEngineNameAndArgs(engine);
   if (!parsed || !SUPPORTED_ENGINE_NAMES.has(parsed.name)) return engine;
-  if (REPLICATED_ENGINE_NAMES.has(parsed.name) || SHARED_ENGINE_NAMES.has(parsed.name)) return engine;
+  if (isReplicatedOrSharedEngine(parsed.name)) return engine;
 
   const zookeeperPath = quoteClickhouseString(replication.zookeeperPath ?? DEFAULT_ZOOKEEPER_PATH);
   const replicaName = quoteClickhouseString(replication.replicaName ?? DEFAULT_REPLICA_NAME);
@@ -86,24 +92,53 @@ export function buildReplicatedTableEngine(engine: string, replication?: Clickho
   return `${replicatedName}(${args})`;
 }
 
+/**
+ * Injects `ON CLUSTER '<cluster>'` into Mastra-owned DDL when a cluster is configured.
+ *
+ * Covered forms:
+ *  - `CREATE TABLE [IF NOT EXISTS] <name>`
+ *  - `CREATE MATERIALIZED VIEW [IF NOT EXISTS] <name>`
+ *  - `ALTER TABLE <name>` (covers ADD COLUMN, ADD INDEX, MODIFY TTL, etc.)
+ *  - `DROP TABLE|VIEW [IF EXISTS] <name>`
+ *  - `SYSTEM REFRESH VIEW <name>` and `SYSTEM WAIT VIEW <name>`
+ *
+ * Not covered (intentional — these either replicate automatically on
+ * ReplicatedMergeTree or should not propagate cluster-wide):
+ *  - `TRUNCATE TABLE`, `OPTIMIZE TABLE`, `ALTER TABLE ... UPDATE/DELETE` (replicated)
+ *  - `SYSTEM STOP/START MERGES` (intentionally local; pausing merges
+ *    cluster-wide would unnecessarily stall other replicas)
+ *  - `RENAME TABLE`, `EXCHANGE TABLES`, `ATTACH`, `DETACH` (not emitted by
+ *    Mastra under replication; v-next signal migration that uses EXCHANGE
+ *    fails fast when replication is configured)
+ *
+ * The `\sON\s+CLUSTER\s` guard makes each rewriter idempotent.
+ */
 export function addOnClusterToDDL(sql: string, replication?: ClickhouseReplicationConfig): string {
   const cluster = replication?.cluster?.trim();
   if (!cluster) return sql;
 
   const quotedCluster = quoteClickhouseString(cluster);
-  return sql
-    .replace(/\bCREATE\s+TABLE\s+(IF\s+NOT\s+EXISTS\s+)?([^\s(]+)/gi, match =>
-      /\sON\s+CLUSTER\s/i.test(match) ? match : match.replace(/([^\s(]+)$/i, `$1 ON CLUSTER ${quotedCluster}`),
-    )
-    .replace(/\bCREATE\s+MATERIALIZED\s+VIEW\s+(IF\s+NOT\s+EXISTS\s+)?([^\s(]+)/gi, match =>
-      /\sON\s+CLUSTER\s/i.test(match) ? match : match.replace(/([^\s(]+)$/i, `$1 ON CLUSTER ${quotedCluster}`),
-    )
-    .replace(/\bALTER\s+TABLE\s+([^\s]+)/gi, match =>
-      /\sON\s+CLUSTER\s/i.test(match) ? match : match.replace(/([^\s]+)$/i, `$1 ON CLUSTER ${quotedCluster}`),
-    )
-    .replace(/\bDROP\s+(TABLE|VIEW)\s+(IF\s+EXISTS\s+)?([^\s]+)/gi, match =>
-      /\sON\s+CLUSTER\s/i.test(match) ? match : match.replace(/([^\s]+)$/i, `$1 ON CLUSTER ${quotedCluster}`),
-    );
+  const onClusterSuffix = ` ON CLUSTER ${quotedCluster}`;
+
+  const rewrite = (input: string, pattern: RegExp): string => {
+    return input.replace(pattern, (...args: unknown[]) => {
+      const match = args[0] as string;
+      // The last two trailing args are (offset, source); any others are capture groups.
+      const source = args[args.length - 1] as string;
+      const offset = args[args.length - 2] as number;
+      const tail = source.slice(offset + match.length);
+      if (/^\s+ON\s+CLUSTER\s/i.test(tail)) return match;
+      return match + onClusterSuffix;
+    });
+  };
+
+  let out = sql;
+  out = rewrite(out, /\bCREATE\s+TABLE\s+(IF\s+NOT\s+EXISTS\s+)?[^\s(]+/gi);
+  out = rewrite(out, /\bCREATE\s+MATERIALIZED\s+VIEW\s+(IF\s+NOT\s+EXISTS\s+)?[^\s(]+/gi);
+  out = rewrite(out, /\bALTER\s+TABLE\s+[^\s]+/gi);
+  out = rewrite(out, /\bDROP\s+(TABLE|VIEW)\s+(IF\s+EXISTS\s+)?[^\s]+/gi);
+  out = rewrite(out, /\bSYSTEM\s+(REFRESH|WAIT)\s+VIEW\s+[^\s;]+/gi);
+  return out;
 }
 
 export function applyReplicationToDDL(sql: string, replication?: ClickhouseReplicationConfig): string {
