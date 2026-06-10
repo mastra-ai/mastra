@@ -30,9 +30,9 @@ import type {
 import { consumeIsloStream } from './sse';
 
 const ENV_API_KEY = 'ISLO_API_KEY';
-const ENV_BASE_URL = 'ISLO_BASE_URL';
+const ENV_CONTROL_URL = 'ISLO_CONTROL_URL';
 const ENV_COMPUTE_URL = 'ISLO_COMPUTE_URL';
-const DEFAULT_BASE_URL = 'https://api.islo.dev';
+const DEFAULT_CONTROL_URL = 'https://api.islo.dev';
 const DEFAULT_COMPUTE_URL = 'https://ca.compute.islo.dev';
 
 /**
@@ -60,17 +60,10 @@ export interface IsloSandboxOptions extends Omit<MastraSandboxOptions, 'processe
    */
   apiKey?: string;
   /**
-   * Control API URL used for token exchange. Falls back to `baseUrl`,
-   * `ISLO_BASE_URL`, then `https://api.islo.dev`.
+   * Control API URL used for token exchange. Falls back to `ISLO_CONTROL_URL`,
+   * then `https://api.islo.dev`.
    */
   controlUrl?: string;
-  /**
-   * Backwards-compatible alias for `controlUrl`.
-   *
-   * @deprecated Use `controlUrl` for the control API and `computeUrl` for
-   * sandbox operations.
-   */
-  baseUrl?: string;
   /**
    * Compute API URL used for sandbox lifecycle, files, and exec operations.
    * Falls back to `ISLO_COMPUTE_URL`, then `https://ca.compute.islo.dev`.
@@ -116,10 +109,7 @@ export class IsloSandbox extends MastraSandbox {
         `IsloSandbox: missing ${ENV_API_KEY}; set the env var or pass { apiKey } to the constructor`,
       );
     }
-    const controlUrl = (options.controlUrl ?? options.baseUrl ?? process.env[ENV_BASE_URL] ?? DEFAULT_BASE_URL).replace(
-      /\/$/,
-      '',
-    );
+    const controlUrl = (options.controlUrl ?? process.env[ENV_CONTROL_URL] ?? DEFAULT_CONTROL_URL).replace(/\/$/, '');
     const computeUrl = (options.computeUrl ?? process.env[ENV_COMPUTE_URL] ?? DEFAULT_COMPUTE_URL).replace(/\/$/, '');
 
     this.id = options.id ?? generateIsloSandboxInstanceId();

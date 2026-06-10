@@ -31,7 +31,7 @@ const agent = new Agent({
 });
 ```
 
-`apiKey` falls back to the `ISLO_API_KEY` environment variable. `controlUrl` falls back to `baseUrl`, `ISLO_BASE_URL`, then `https://api.islo.dev`. `computeUrl` falls back to `ISLO_COMPUTE_URL`, then `https://ca.compute.islo.dev`. Token exchange happens on the control API; sandbox lifecycle and exec calls happen on the compute API.
+`apiKey` falls back to the `ISLO_API_KEY` environment variable. `controlUrl` falls back to `ISLO_CONTROL_URL`, then `https://api.islo.dev`. `computeUrl` falls back to `ISLO_COMPUTE_URL`, then `https://ca.compute.islo.dev`. Token exchange happens on the control API; sandbox lifecycle and exec calls happen on the compute API.
 
 ## Lifecycle
 
@@ -66,8 +66,7 @@ When you pass a `sandboxName` that already exists and is still live, `start()` r
 | `gatewayProfile` | Gateway profile name or id | tenant default |
 | `env` | Environment variables for sandbox creation | `{}` |
 | `apiKey` | islo API key (`ak_...`) | `ISLO_API_KEY` env var |
-| `controlUrl` | Control API URL for token exchange | `ISLO_BASE_URL` or `https://api.islo.dev` |
-| `baseUrl` | Deprecated alias for `controlUrl` | `ISLO_BASE_URL` or `https://api.islo.dev` |
+| `controlUrl` | Control API URL for token exchange | `ISLO_CONTROL_URL` or `https://api.islo.dev` |
 | `computeUrl` | Compute API URL for sandbox operations | `ISLO_COMPUTE_URL` or `https://ca.compute.islo.dev` |
 | `deleteOnDestroy` | Delete sandbox record during `destroy()` | `true` |
 | `timeout` | Default per-command timeout (ms) | `300000` |

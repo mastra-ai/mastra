@@ -56,7 +56,7 @@ afterEach(() => {
   vi.clearAllMocks();
   globalThis.fetch = realFetch;
   delete process.env.ISLO_API_KEY;
-  delete process.env.ISLO_BASE_URL;
+  delete process.env.ISLO_CONTROL_URL;
   delete process.env.ISLO_COMPUTE_URL;
 });
 
@@ -89,7 +89,7 @@ describe('IsloSandbox', () => {
 
     it('configures token exchange on control URL and sandbox calls on compute URL', () => {
       const sb = new IsloSandbox({
-        baseUrl: 'https://control.example.com/',
+        controlUrl: 'https://control.example.com/',
         computeUrl: 'https://compute.example.com/',
       });
       expect(sb.processes).toBeUndefined();
@@ -105,8 +105,8 @@ describe('IsloSandbox', () => {
       );
     });
 
-    it('resolves ISLO_BASE_URL and ISLO_COMPUTE_URL independently', () => {
-      process.env.ISLO_BASE_URL = 'https://control.env.example.com/';
+    it('resolves ISLO_CONTROL_URL and ISLO_COMPUTE_URL independently', () => {
+      process.env.ISLO_CONTROL_URL = 'https://control.env.example.com/';
       process.env.ISLO_COMPUTE_URL = 'https://compute.env.example.com/';
       new IsloSandbox();
       expect(tokenProviderConstructorMock).toHaveBeenCalledWith({

@@ -26,7 +26,6 @@ interface IsloProviderConfig {
   env?: Record<string, string>;
   apiKey?: string;
   controlUrl?: string;
-  baseUrl?: string;
   computeUrl?: string;
   deleteOnDestroy?: boolean;
   timeout?: number;
@@ -50,8 +49,7 @@ export const isloSandboxProvider: SandboxProvider<IsloProviderConfig> = {
         additionalProperties: { type: 'string' },
       },
       apiKey: { type: 'string', description: 'islo API key (falls back to ISLO_API_KEY)' },
-      controlUrl: { type: 'string', description: 'islo control API URL (falls back to ISLO_BASE_URL)' },
-      baseUrl: { type: 'string', description: 'Deprecated alias for controlUrl' },
+      controlUrl: { type: 'string', description: 'islo control API URL (falls back to ISLO_CONTROL_URL)' },
       computeUrl: { type: 'string', description: 'islo compute API URL (falls back to ISLO_COMPUTE_URL)' },
       deleteOnDestroy: {
         type: 'boolean',
