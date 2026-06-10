@@ -42,9 +42,9 @@
     "test:e2e:setup": "node ./e2e/scripts/info.js && pnpm install --dir ./e2e/kitchen-sink && playwright install chromium"
   },
   "dependencies": {
-    "@assistant-ui/react": "^0.14.0",
-    "@assistant-ui/react-markdown": "^0.12.11",
-    "@assistant-ui/react-syntax-highlighter": "^0.12.9",
+    "@assistant-ui/react": "^0.14.14",
+    "@assistant-ui/react-markdown": "^0.14.1",
+    "@assistant-ui/react-syntax-highlighter": "^0.14.1",
     "@assistant-ui/react-ui": "^0.2.1",
     "@autoform/core": "^3.0.0",
     "@autoform/react": "^4.0.0",
