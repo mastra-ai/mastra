@@ -605,6 +605,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         maxConcurrency,
         requestContext: rawRequestContext,
         versions,
+        toolReplay,
       } = params as {
         targetType: 'agent' | 'workflow' | 'scorer';
         targetId: string;
@@ -614,6 +615,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         maxConcurrency?: number;
         requestContext?: Record<string, unknown> | RequestContext;
         versions?: { agents?: Record<string, { versionId: string } | { status: 'draft' | 'published' }> };
+        toolReplay?: { fromExperimentId?: string; onMiss?: 'error' | 'passthrough' };
       };
       // The adapter middleware merges body + query requestContext into a RequestContext instance.
       // startExperimentAsync expects a plain Record, so convert it.
@@ -628,6 +630,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         maxConcurrency,
         requestContext,
         versions,
+        toolReplay,
       });
       // Return shape matching experimentSummaryResponseSchema
       return {

@@ -275,27 +275,58 @@ export const updateItemBodySchema = z.object({
   source: datasetItemSourceSchema,
 });
 
-export const triggerExperimentBodySchema = z.object({
-  targetType: z.enum(['agent', 'workflow', 'scorer']).describe('Type of target to run against'),
-  targetId: z.string().describe('ID of the target'),
-  scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
-  version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
-  agentVersion: z.string().optional().describe('Agent version ID to use for experiment'),
-  maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
-  requestContext: z.record(z.string(), z.unknown()).optional().describe('Global request context passed to the target'),
-  versions: z
-    .object({
-      agents: z
-        .record(
-          z.string(),
-          z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
-        )
-        .optional(),
-      defaultStatus: z.enum(['draft', 'published']).optional(),
-    })
-    .optional()
-    .describe('Version overrides for sub-agent delegation during experiment execution'),
-});
+export const triggerExperimentBodySchema = z
+  .object({
+    targetType: z.enum(['agent', 'workflow', 'scorer']).describe('Type of target to run against'),
+    targetId: z.string().describe('ID of the target'),
+    scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
+    version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
+    agentVersion: z.string().optional().describe('Agent version ID to use for experiment'),
+    maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
+    requestContext: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe('Global request context passed to the target'),
+    versions: z
+      .object({
+        agents: z
+          .record(
+            z.string(),
+            z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
+          )
+          .optional(),
+        defaultStatus: z.enum(['draft', 'published']).optional(),
+      })
+      .optional()
+      .describe('Version overrides for sub-agent delegation during experiment execution'),
+    toolReplay: z
+      .object({
+        fromExperimentId: z
+          .string()
+          .optional()
+          .describe('Prior experiment whose per-item results supply the source trace for each item'),
+        onMiss: z
+          .enum(['error', 'passthrough'])
+          .optional()
+          .describe("Behavior when a tool call has no remaining recorded event (default: 'error')"),
+      })
+      .optional()
+      .describe(
+        'Replay recorded tool outputs from prior traced runs instead of executing live tools. Agent targets only.',
+      ),
+  })
+  // The trigger route is fire-and-forget — without this boundary check, a
+  // non-agent target with toolReplay would return 200/pending and only fail
+  // the experiment in the background.
+  .superRefine((body, ctx) => {
+    if (body.toolReplay && body.targetType !== 'agent') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['toolReplay'],
+        message: `toolReplay is only supported for agent targets (got targetType '${body.targetType}')`,
+      });
+    }
+  });
 
 export const compareExperimentsBodySchema = z.object({
   experimentIdA: z.string().describe('ID of baseline experiment'),
