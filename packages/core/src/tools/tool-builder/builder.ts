@@ -62,8 +62,8 @@ function mergeRequestContexts(
   execRC: RequestContext | undefined,
 ): RequestContext {
   if (!closureRC && !execRC) return new RequestContext();
-  if (!closureRC) return execRC!;
-  if (!execRC || execRC.size() === 0) return closureRC;
+  if (!closureRC) return execRC instanceof RequestContext ? execRC : new RequestContext();
+  if (!execRC || !(execRC instanceof RequestContext) || execRC.size() === 0) return closureRC;
 
   const merged = new RequestContext();
   // Start with the evented engine's serialised snapshot
