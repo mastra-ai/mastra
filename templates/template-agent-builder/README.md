@@ -21,6 +21,7 @@ A minimal [Mastra](https://mastra.ai) Agent Builder template with safe defaults.
 ## Quickstart
 
 1. **Create the project**
+
    ```bash
    npx create-mastra@latest --template agent-builder
    ```
@@ -33,6 +34,7 @@ A minimal [Mastra](https://mastra.ai) Agent Builder template with safe defaults.
    - `WORKOS_REDIRECT_URI` — defaults to `http://localhost:4111/api/auth/callback`.
 
 3. **Start Mastra**
+
    ```bash
    npm run dev
    ```
