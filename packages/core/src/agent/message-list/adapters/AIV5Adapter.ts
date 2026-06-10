@@ -658,7 +658,7 @@ export class AIV5Adapter {
         if (p.type === 'reasoning') {
           return {
             type: 'reasoning' as const,
-            reasoning: '',
+            reasoning: p.text,
             details: [
               {
                 type: 'text' as const,
@@ -897,7 +897,7 @@ export class AIV5Adapter {
       } else if (part.type === 'reasoning') {
         const v2ReasoningPart: MastraDBMessage['content']['parts'][number] = {
           type: 'reasoning',
-          reasoning: '',
+          reasoning: part.text,
           details: [{ type: 'text', text: part.text }],
         };
         if (part.providerOptions) {
