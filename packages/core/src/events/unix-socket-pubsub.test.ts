@@ -160,7 +160,9 @@ describe('UnixSocketPubSub', () => {
     const largePayload = 'x'.repeat(2 * 1024 * 1024);
 
     // With localOnly: large event is delivered to broker + clientA, NOT clientB
-    await clientA.publish('topic-a', makeEvent({ type: 'step.end', data: { stepResults: largePayload } }), { localOnly: true });
+    await clientA.publish('topic-a', makeEvent({ type: 'step.end', data: { stepResults: largePayload } }), {
+      localOnly: true,
+    });
 
     await waitFor(() => {
       expect(brokerCb).toHaveBeenCalledTimes(1);
