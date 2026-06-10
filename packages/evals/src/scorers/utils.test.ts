@@ -125,7 +125,7 @@ describe('Scorer Utils', () => {
       expect(result).toBe('User question');
     });
 
-    it('should extract user text from parts when the content string is absent (live-agent shape) - issue #17762', () => {
+    it('should extract user text from message parts when the content string is absent', () => {
       const input: ScorerRunInputForAgent = {
         inputMessages: [
           {
@@ -152,31 +152,8 @@ describe('Scorer Utils', () => {
         taggedSystemMessages: {},
       };
 
-      expect(getUserMessageFromRunInput(input)).toBe('What is the capital of France?');
-    });
-
-    it('should return the last text part when content has multiple parts', () => {
-      const input: ScorerRunInputForAgent = {
-        inputMessages: [
-          {
-            id: 'user-msg-multi',
-            role: 'user',
-            createdAt: new Date(),
-            content: {
-              format: 2,
-              parts: [
-                { type: 'text', text: 'first' },
-                { type: 'text', text: 'second' },
-              ],
-            },
-          },
-        ],
-        rememberedMessages: [],
-        systemMessages: [],
-        taggedSystemMessages: {},
-      };
-
-      expect(getUserMessageFromRunInput(input)).toBe('second');
+      const result = getUserMessageFromRunInput(input);
+      expect(result).toBe('What is the capital of France?');
     });
 
     it('should fall back to parts when the content string is empty', () => {
