@@ -22,15 +22,17 @@ import { createTestServerContext } from './test-utils';
  *       response serialization (output is the only place the report persists)
  *
  * Edge cases covered: recording runs dry over the API (deterministic failure,
- * no retries), nonexistent fromExperimentId (graceful per-item failure, no
- * hang), and onMiss: 'passthrough' mixing exactly the unmatched call live.
+ * no retries), nonexistent fromExperimentId (async trigger reports pending,
+ * then the experiment fails at setup with zero items run), and
+ * onMiss: 'passthrough' mixing exactly the unmatched call live.
  */
 
 /**
  * Model that issues two same-tool calls then answers — modulo-based so every
- * run behaves identically. Exposes the call counter: failed replay items don't
- * persist the divergence report, so model-step counts are how the tests
- * distinguish "replayed once, then ran dry" from "never had a recording".
+ * run behaves identically. Exposes the call counter as an execution-side
+ * signal independent of the persisted report: model-step counts distinguish
+ * "replayed once, then ran dry" (the model was asked again after a replayed
+ * result) from "never had a recording" (the agent never ran at all).
  */
 function createTwoToolCallModel() {
   const counter = { modelCalls: 0 };
@@ -261,10 +263,9 @@ describe('tool replay over the experiment trigger API (e2e)', () => {
     expect(run!.failedCount).toBe(1);
     expect(run!.succeededCount).toBe(0);
     expect(liveCalls).toBe(0); // the miss never fell through to a live call
-    // Failed items don't persist the divergence report, so distinguish
-    // "replayed once, then ran dry" from "never had a recording" by model
-    // steps: the first call must have RETURNED a replayed result for the
-    // model to be asked again (call 1 → replayed, call 2 → miss aborts).
+    // Execution-side cross-check, independent of the persisted report: the
+    // first call must have RETURNED a replayed result for the model to be
+    // asked again (call 1 → replayed, call 2 → miss aborts).
     expect(modelCounter.modelCalls).toBe(2);
 
     const results = await fetchResults(triggered.experimentId);
@@ -273,9 +274,16 @@ describe('tool replay over the experiment trigger API (e2e)', () => {
     expect(results[0]!.error!.message).toContain("Tool replay miss for 'lookup'");
     // Deterministic failure — the retry loop must not have re-run it.
     expect(results[0]!.retryCount).toBe(0);
+    // Failed items keep their divergence report through the route's response
+    // serialization — failures are when API consumers need it most.
+    const failedOutput = results[0]!.output as {
+      toolReplay?: { replayedCount: number; misses: { toolName: string }[] };
+    };
+    expect(failedOutput.toolReplay?.replayedCount).toBe(1);
+    expect(failedOutput.toolReplay?.misses).toEqual([expect.objectContaining({ toolName: 'lookup' })]);
   });
 
-  it('fails items gracefully when fromExperimentId does not exist', async () => {
+  it('fails the experiment at setup when fromExperimentId does not exist', async () => {
     const triggered = await TRIGGER_EXPERIMENT_ROUTE.handler({
       ...createTestServerContext({ mastra }),
       datasetId,
@@ -285,20 +293,18 @@ describe('tool replay over the experiment trigger API (e2e)', () => {
     });
     expect(triggered.status).toBe('pending');
 
-    // No recording resolves for any item → the item fails BEFORE the agent
-    // runs (replay never executes an item silently live). The run must
-    // terminate (no hang) and report a structured error.
+    // A nonexistent source experiment is rejected at setup, before any item
+    // runs. The async trigger has already returned pending, so the API
+    // surface is a terminal 'failed' experiment with zero results (the
+    // setup reason is currently only logged server-side).
     const run = await waitForExperiment(triggered.experimentId);
     expect(run!.status).toBe('failed');
-    expect(run!.failedCount).toBe(1);
     expect(liveCalls).toBe(0);
-    // Counterpart to the dry-recording test: with NO recording the agent is
-    // never invoked at all, while a partial recording reaches the model.
+    // The agent is never invoked at all — no item ever started.
     expect(modelCounter.modelCalls).toBe(0);
 
     const results = await fetchResults(triggered.experimentId);
-    expect(results).toHaveLength(1);
-    expect(results[0]!.error).toMatchObject({ code: 'TOOL_REPLAY_NO_RECORDING' });
+    expect(results).toHaveLength(0);
   });
 
   it("onMiss: 'passthrough' executes exactly the unmatched call live and reports the miss", async () => {

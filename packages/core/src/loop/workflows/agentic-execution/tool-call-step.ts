@@ -25,9 +25,8 @@ import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
-import { serializeToolError, ToolNotFoundError } from '../errors';
+import { RETHROWN_TOOL_ERROR_NAMES, serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
-import { RETHROWN_TOOL_ERROR_NAMES } from './rethrown-error-names';
 
 type AddToolMetadataOptions = {
   toolCallId: string;
@@ -1168,7 +1167,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         return { result, ...inputData };
       } catch (error) {
-        // Re-throw FGA authorization errors instead of swallowing them
+        // Re-throw errors whose names are registered as run-fatal (e.g. FGA
+        // authorization denials) instead of serializing them into a
+        // model-visible tool-error result
         if (error instanceof Error && RETHROWN_TOOL_ERROR_NAMES.has(error.name)) {
           throw error;
         }
