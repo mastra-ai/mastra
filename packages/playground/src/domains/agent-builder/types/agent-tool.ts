@@ -1,4 +1,4 @@
-export type AgentToolType = 'tool' | 'agent' | 'workflow';
+export type AgentToolType = 'tool' | 'agent' | 'workflow' | 'integration';
 
 export interface AgentTool {
   id: string;
@@ -6,6 +6,19 @@ export interface AgentTool {
   description?: string;
   isChecked: boolean;
   type: AgentToolType;
+  // Populated only when `type === 'integration'`. The runtime fan-out groups
+  // selected slugs by `toolkit` — Composio returns flat slugs like
+  // `GMAIL_FETCH_EMAILS`, so we cannot assume a `<toolkit>.<tool>` convention.
+  providerId?: string;
+  toolkit?: string;
+  // True when the caller has at least one existing connection for the
+  // `(providerId, toolkit)` pair. Only meaningful for `type === 'integration'`.
+  // Unconnected integration rows cannot be selected in the picker.
+  hasConnection?: boolean;
+  // Display names of the active connections for this tool's `(providerId,
+  // toolkit)` pair. Only meaningful for `type === 'integration'`; rendered as
+  // badges under the tool card so users can see which connection(s) it uses.
+  connectionLabels?: string[];
 }
 
 export interface AvailableToolsRecord {
@@ -101,6 +114,10 @@ export const splitAgentTools = (items: AgentTool[]): SplitAgentToolsResult => {
   const workflows: Record<string, true> = {};
   for (const item of items) {
     if (!item.isChecked) continue;
+    // Integration items live in `toolProviders`, not in the native `tools` map.
+    // Skip them so checked Composio rows never leak into the agent's native
+    // tool allowlist on save.
+    if (item.type === 'integration') continue;
     if (item.type === 'agent') {
       agents[item.id] = true;
     } else if (item.type === 'workflow') {

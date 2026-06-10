@@ -21,6 +21,7 @@ import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { buildFormSnapshotInstructions } from '@/domains/agent-builder/services/build-form-snapshot';
 import type { AgentTool } from '@/domains/agent-builder/types/agent-tool';
+import { useAllProviderTools } from '@/domains/tool-providers/hooks/use-all-provider-tools';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
 
 interface ConversationPanelProviderProps {
@@ -67,7 +68,12 @@ export const ConversationPanelProvider = ({
   const { models, isLoading: isLoadingModels } = useAgentBuilderAllowedModels();
 
   const availableModels = features.model ? models : [];
-  const initialMessageToolsReady = toolsReady && (!features.model || !isLoadingModels);
+  // `useAllProviderTools` fans out per (provider, toolkit). Until it settles
+  // the `availableAgentTools` list (and therefore the builder tool's
+  // description + enum) is missing integration ids — block the LLM from
+  // calling the tool until the catalog is ready.
+  const { isLoading: isLoadingIntegrationTools } = useAllProviderTools();
+  const initialMessageToolsReady = toolsReady && (!features.model || !isLoadingModels) && !isLoadingIntegrationTools;
 
   const agentBuilderTools = useAgentBuilderTool({
     features,
@@ -75,6 +81,7 @@ export const ConversationPanelProvider = ({
     availableWorkspaces,
     availableSkills,
     availableModels,
+    integrationToolsLoading: isLoadingIntegrationTools,
   });
 
   const { control } = useFormContext<AgentBuilderEditFormValues>();

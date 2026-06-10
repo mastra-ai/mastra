@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { StoredSkillResponse } from '@mastra/client-js';
+import type { BuilderSettingsResponse, StoredSkillResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
@@ -49,6 +49,15 @@ const usePlatformsHandler = (platforms: PlatformsFixture[]) => {
   server.use(http.get('*/api/channels/platforms', () => HttpResponse.json(platforms)));
 };
 
+const useBuilderSettingsHandler = (settings: BuilderSettingsResponse) => {
+  server.use(http.get('*/editor/builder/settings', () => HttpResponse.json(settings)));
+};
+
+const INACTIVE_SETTINGS: BuilderSettingsResponse = {
+  enabled: true,
+  modelPolicy: { active: false },
+};
+
 const Probe = () => {
   const { step, next, prev, steps, isLast } = useWizard();
   return (
@@ -68,16 +77,20 @@ const Probe = () => {
 
 const renderWizard = ({
   initialStep,
+  hasAgentTools,
   children,
 }: {
   initialStep?: WizardStep;
+  hasAgentTools?: boolean;
   children?: ReactNode;
 } = {}) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <WizardProvider initialStep={initialStep}>{children ?? <Probe />}</WizardProvider>
+        <WizardProvider initialStep={initialStep} hasAgentTools={hasAgentTools}>
+          {children ?? <Probe />}
+        </WizardProvider>
       </QueryClientProvider>
     </MastraReactProvider>,
   );
@@ -90,6 +103,7 @@ describe('WizardProvider', () => {
     featuresMock = { ...DEFAULT_FEATURES };
     skillsMock = [];
     usePlatformsHandler([]);
+    useBuilderSettingsHandler(INACTIVE_SETTINGS);
   });
 
   afterEach(() => {
@@ -247,6 +261,46 @@ describe('WizardProvider', () => {
     expect(getByTestId('steps').textContent).toBe('ready>identity>instructions>skills>library>end');
   });
 
+  describe('gating parity with agent-profile-tabs', () => {
+    it('includes model when features.model is off but the admin model policy is active', async () => {
+      featuresMock = { ...DEFAULT_FEATURES, model: false };
+      useBuilderSettingsHandler({ enabled: true, modelPolicy: { active: true } });
+
+      const { getByTestId } = renderWizard({ initialStep: 'ready' });
+
+      await waitFor(() => {
+        expect(getByTestId('steps').textContent).toBe('ready>identity>model>instructions>library>end');
+      });
+    });
+
+    it('includes tools when only features.agents is on and agent tools exist', async () => {
+      featuresMock = { ...DEFAULT_FEATURES, agents: true };
+
+      const { getByTestId } = renderWizard({ initialStep: 'ready', hasAgentTools: true });
+      await flushPlatforms();
+
+      expect(getByTestId('steps').textContent).toBe('ready>identity>tools>instructions>library>end');
+    });
+
+    it('includes tools when only features.workflows is on and agent tools exist', async () => {
+      featuresMock = { ...DEFAULT_FEATURES, workflows: true };
+
+      const { getByTestId } = renderWizard({ initialStep: 'ready', hasAgentTools: true });
+      await flushPlatforms();
+
+      expect(getByTestId('steps').textContent).toBe('ready>identity>tools>instructions>library>end');
+    });
+
+    it('excludes tools when the feature is on but no agent tools are available', async () => {
+      featuresMock = { ...DEFAULT_FEATURES, tools: true };
+
+      const { getByTestId } = renderWizard({ initialStep: 'ready', hasAgentTools: false });
+      await flushPlatforms();
+
+      expect(getByTestId('steps').textContent).toBe('ready>identity>instructions>library>end');
+    });
+  });
+
   it('excludes integrations when no platform is configured', async () => {
     usePlatformsHandler([{ id: 'slack', name: 'Slack', isConfigured: false }]);
 
@@ -257,15 +311,28 @@ describe('WizardProvider', () => {
     });
   });
 
-  it('includes integrations when at least one platform is configured', async () => {
+  it('includes integrations when a configured Slack platform exists', async () => {
+    usePlatformsHandler([
+      { id: 'slack', name: 'Slack', isConfigured: true },
+      { id: 'discord', name: 'Discord', isConfigured: false },
+    ]);
+
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
+    await waitFor(() => {
+      expect(getByTestId('steps').textContent).toBe('ready>identity>instructions>library>integrations>end');
+    });
+  });
+
+  it('excludes integrations when only a non-Slack platform is configured (parity with tabs)', async () => {
     usePlatformsHandler([
       { id: 'slack', name: 'Slack', isConfigured: false },
       { id: 'discord', name: 'Discord', isConfigured: true },
     ]);
 
     const { getByTestId } = renderWizard({ initialStep: 'ready' });
+    await flushPlatforms();
     await waitFor(() => {
-      expect(getByTestId('steps').textContent).toBe('ready>identity>instructions>library>integrations>end');
+      expect(getByTestId('steps').textContent).toBe('ready>identity>instructions>library>end');
     });
   });
 
