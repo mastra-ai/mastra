@@ -2,6 +2,7 @@ import type {
   BuilderSettingsResponse,
   ChannelPlatformInfo,
   ListStoredWorkspacesResponse,
+  StoredAgentDependentsResponse,
   StoredAgentResponse,
 } from '@mastra/client-js';
 
@@ -66,6 +67,8 @@ export const emptyWorkspaces: ListStoredWorkspacesResponse = {
 };
 
 export const noPlatforms: ChannelPlatformInfo[] = [];
+
+export const noDependents: StoredAgentDependentsResponse = { dependents: [], hiddenCount: 0 };
 
 /** A configured integration keeps the `integrations` step after `library`. */
 export const configuredSlackPlatform: ChannelPlatformInfo[] = [{ id: 'slack', name: 'Slack', isConfigured: true }];

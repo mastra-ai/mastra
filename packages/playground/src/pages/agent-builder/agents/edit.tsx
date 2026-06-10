@@ -280,7 +280,7 @@ const ProfileSlot = () => {
   }
 
   if (step === 'library') {
-    return <AgentProfileLibraryStep />;
+    return <AgentProfileLibraryStep agentId={agentId} />;
   }
 
   if (step === 'model') {

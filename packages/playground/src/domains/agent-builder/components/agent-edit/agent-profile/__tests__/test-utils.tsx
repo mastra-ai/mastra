@@ -4,11 +4,15 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
+import { useState } from 'react';
+import { FormProvider, useForm } from 'react-hook-form';
 import { MemoryRouter, Route, Routes } from 'react-router';
 
 import { AgentColorProvider } from '../../../../contexts/agent-color-context';
-import { AgentPrimitivesProvider } from '../../../../contexts/agent-primitives-context';
+import { AgentPrimitivesProvider, useAgentPrimitives } from '../../../../contexts/agent-primitives-context';
 import { WizardProvider } from '../../../../contexts/wizard-context';
+import type { AgentBuilderEditFormValues } from '../../../../schemas';
+import { storedAgentToFormValues } from '../../../../services/stored-agent-to-form-values';
 import {
   TEST_AGENT_ID,
   authCapabilities,
@@ -16,6 +20,7 @@ import {
   buildStoredAgent,
   currentUser,
   emptyWorkspaces,
+  noDependents,
   noPlatforms,
 } from './fixtures/builder';
 import { server } from '@/test/msw-server';
@@ -45,9 +50,29 @@ export const registerStepHandlers = ({
     http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authCapabilities)),
     http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json(currentUser)),
     http.get(`${BASE_URL}/api/stored/agents/${TEST_AGENT_ID}`, () => HttpResponse.json(storedAgent)),
+    http.get(`${BASE_URL}/api/stored/agents/${TEST_AGENT_ID}/dependents`, () => HttpResponse.json(noDependents)),
     http.get(`${BASE_URL}/api/stored/workspaces`, () => HttpResponse.json(emptyWorkspaces)),
     http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json(platforms)),
   );
+};
+
+/**
+ * Mirrors `EditPageGate` + `EditPageForm`: waits for the agent primitives to
+ * be ready, then seeds a `react-hook-form` provider once from the fetched
+ * stored agent, so steps reading form state (e.g. the library step watching
+ * `visibility`) work as in the app.
+ */
+const StepFormProvider = ({ children }: { children: ReactNode }) => {
+  const { isReady } = useAgentPrimitives();
+  if (!isReady) return null;
+  return <ReadyStepForm>{children}</ReadyStepForm>;
+};
+
+const ReadyStepForm = ({ children }: { children: ReactNode }) => {
+  const { storedAgent } = useAgentPrimitives();
+  const [defaultValues] = useState(() => storedAgentToFormValues(storedAgent));
+  const formMethods = useForm<AgentBuilderEditFormValues>({ defaultValues });
+  return <FormProvider {...formMethods}>{children}</FormProvider>;
 };
 
 interface RenderStepOptions {
@@ -76,7 +101,9 @@ export const renderStep = (ui: ReactNode, { extraRoutes }: RenderStepOptions = {
               element={
                 <AgentColorProvider agentId={TEST_AGENT_ID}>
                   <AgentPrimitivesProvider agentId={TEST_AGENT_ID}>
-                    <WizardProvider initialStep="ready">{ui}</WizardProvider>
+                    <StepFormProvider>
+                      <WizardProvider initialStep="ready">{ui}</WizardProvider>
+                    </StepFormProvider>
                   </AgentPrimitivesProvider>
                 </AgentColorProvider>
               }
@@ -96,5 +123,15 @@ export const renderStep = (ui: ReactNode, { extraRoutes }: RenderStepOptions = {
   };
 };
 
-/** Flushes pending microtasks/timers so React Query settles its fetches. */
-export const flush = () => act(async () => new Promise(resolve => setTimeout(resolve, 0)));
+/**
+ * Flushes pending microtasks/timers so React Query settles its fetches. Runs
+ * several rounds because the readiness gate (`StepFormProvider`) only mounts
+ * the step once every provider query has resolved, which takes more than one
+ * fetch round-trip.
+ */
+export const flush = () =>
+  act(async () => {
+    for (let round = 0; round < 10; round++) {
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  });
