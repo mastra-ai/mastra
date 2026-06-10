@@ -399,7 +399,8 @@ export function resolveModel(
 export function getDynamicModel({ requestContext }: { requestContext: RequestContext }): ResolvedModel {
   const harnessContext = requestContext.get('harness') as HarnessRequestContext<any> | undefined;
 
-  const modelId = harnessContext?.state?.currentModelId;
+  // V1 harness context exposes `modelId` directly; legacy harness uses `state.currentModelId`
+  const modelId = (harnessContext as any)?.modelId ?? harnessContext?.state?.currentModelId;
   if (!modelId) {
     throw new Error('No model selected. Use /models to select a model first.');
   }

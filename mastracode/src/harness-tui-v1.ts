@@ -10,6 +10,8 @@ import { InMemoryHarness } from '@mastra/core/storage';
 import { Memory } from '@mastra/memory';
 import z from 'zod';
 import { getDynamicWorkspace } from './agents/workspace';
+import { loadCustomCommands } from './utils/slash-command-loader.js';
+import { processSlashCommand } from './utils/slash-command-processor.js';
 
 // ─── Hash helper (same as mastracode uses) ────────────────────────────────
 function hash(input: string): string {
@@ -170,6 +172,12 @@ async function main() {
   console.info(`Event log: ${eventLogPath(session.id)}`);
   console.info(`Mode: ${session.getMode().id}, Model: ${session.getModelId()}`);
 
+  // Load custom slash commands from .mastracode/commands, .claude/commands, etc.
+  const customCommands = await loadCustomCommands(process.cwd());
+  if (customCommands.length > 0) {
+    console.info(`Loaded ${customCommands.length} custom command(s): ${customCommands.map(c => `//${c.name}`).join(', ')}`);
+  }
+
   const rl = createInterface({
     input: process.stdin,
     output: process.stdout,
@@ -234,27 +242,75 @@ async function main() {
     }
   }
 
-  // ─── Main loop ────────────────────────────────────────────────────────────
-  const prompt = async () => {
-    const answer = await ask('\n[p]rompt, [m]ode, [mo]del, [q]uit: ');
-    const choice = answer.trim().toLowerCase();
+  // ─── Custom command execution ─────────────────────────────────────────────
+  async function handleCustomCommand(cmdName: string, cmdArgs: string[]) {
+    const cmd = customCommands.find(c => c.name === cmdName);
+    if (!cmd) {
+      console.info(`Unknown custom command: ${cmdName}. Available: ${customCommands.map(c => `//${c.name}`).join(', ')}`);
+      return;
+    }
+    try {
+      const processed = await processSlashCommand(cmd, cmdArgs, process.cwd());
+      if (processed.trim()) {
+        console.info(`\n--- //${cmd.name} ---`);
+        await sendAndStream(processed.trim());
+      } else {
+        console.info(`Executed //${cmd.name} (no output)`);
+      }
+    } catch (err) {
+      console.error(`Error executing //${cmd.name}:`, err instanceof Error ? err.message : err);
+    }
+  }
 
-    if (choice === 'q' || choice === 'quit') {
+  // ─── Main loop ────────────────────────────────────────────────────────────
+  const cmdHint = customCommands.length > 0 ? ', [c]ommands' : '';
+  const prompt = async () => {
+    const answer = await ask(`\n[p]rompt, [m]ode, [mo]del${cmdHint}, [q]uit: `);
+    const choice = answer.trim();
+    const lower = choice.toLowerCase();
+
+    if (lower === 'q' || lower === 'quit') {
       console.info('Goodbye!');
       rl.close();
       await flushEventLogWrites();
       process.exit(0);
-    } else if (choice === 'p' || choice === 'prompt') {
+    } else if (lower === 'p' || lower === 'prompt') {
       const promptText = await ask('Enter prompt: ');
       if (promptText.trim()) {
         await sendAndStream(promptText).catch((err: unknown) => console.error('Error:', err));
       }
-    } else if (choice === 'm' || choice === 'mode') {
+    } else if (lower === 'm' || lower === 'mode') {
       await handleMode();
-    } else if (choice === 'mo' || choice === 'model') {
+    } else if (lower === 'mo' || lower === 'model') {
       await handleModel();
+    } else if (lower === 'c' || lower === 'commands') {
+      if (customCommands.length === 0) {
+        console.info('No custom commands found.');
+      } else {
+        console.info('Available custom commands:');
+        for (const cmd of customCommands) {
+          const desc = cmd.description ? ` — ${cmd.description}` : '';
+          console.info(`  //${cmd.name}${desc}`);
+        }
+        const cmdInput = await ask('Enter command (e.g. //critique-pr): ');
+        const trimmed = cmdInput.trim();
+        if (trimmed.startsWith('//')) {
+          const parts = trimmed.slice(2).split(/\s+/);
+          const cmdName = parts[0]!;
+          const cmdArgs = parts.slice(1);
+          await handleCustomCommand(cmdName, cmdArgs);
+        }
+      }
+    } else if (choice.startsWith('//')) {
+      const parts = choice.slice(2).split(/\s+/);
+      const cmdName = parts[0]!;
+      const cmdArgs = parts.slice(1);
+      await handleCustomCommand(cmdName, cmdArgs);
     } else {
-      console.info('Unknown command');
+      // Treat any other input as a direct prompt
+      if (choice.trim()) {
+        await sendAndStream(choice).catch((err: unknown) => console.error('Error:', err));
+      }
     }
     await prompt();
   };

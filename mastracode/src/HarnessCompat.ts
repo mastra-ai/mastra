@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Agent } from '@mastra/core/agent';
+import type { Agent, AgentSignal, SendAgentSignalOptions } from '@mastra/core/agent';
 import type {
   AvailableModel,
   CustomModelCatalogProvider,
@@ -15,8 +15,8 @@ import type {
   ModelUseCountProvider,
   ModelUseCountTracker,
 } from '@mastra/core/harness';
-import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { Session, HarnessMode, Harness, PermissionPolicy, PermissionRules, ToolCategory } from '@mastra/core/harness/v1';
+import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
@@ -73,6 +73,35 @@ export type HarnessCompatConfig<TState = {}> = {
 type StreamSubscription = {
   stream: AsyncIterable<unknown>;
   unsubscribe?: () => void | Promise<void>;
+};
+
+type SendSignalResult = {
+  id: string;
+  type: string;
+  accepted: Promise<{ accepted: true; runId: string }>;
+};
+
+type ThreadScopedSignalOptions<OUTPUT = unknown> = Extract<
+  SendAgentSignalOptions<OUTPUT>,
+  { resourceId: string; threadId: string }
+>;
+
+type NormalizedSignal = {
+  id: string;
+  type: string;
+  signal: AgentSignal;
+  options: Pick<ThreadScopedSignalOptions, 'ifActive' | 'ifIdle' | 'runId'>;
+};
+
+type SignalCapableSession<TState> = Session<TState> & {
+  sendSignal<OUTPUT = unknown>(
+    options: { signal: AgentSignal } & Pick<ThreadScopedSignalOptions<OUTPUT>, 'ifActive' | 'ifIdle' | 'runId'>,
+  ): Promise<{ accepted: true; runId: string }>;
+};
+
+type StreamMessageState = {
+  textContentById: Map<string, number>;
+  thinkingContentById: Map<string, number>;
 };
 
 export function v1ModeToLegacy<TState = {}>(mode: HarnessMode, agent: Agent): HarnessModeLegacy<TState> {
@@ -197,14 +226,36 @@ function toHarnessMessage(message: unknown): HarnessMessage | undefined {
   };
 }
 
+function getChunkPayload(chunk: unknown): Record<string, unknown> | undefined {
+  if (!chunk || typeof chunk !== 'object') return undefined;
+  const record = chunk as Record<string, unknown>;
+  return record.payload && typeof record.payload === 'object' ? (record.payload as Record<string, unknown>) : record;
+}
+
 function extractTextDelta(chunk: unknown): string | undefined {
   if (typeof chunk === 'string') return chunk;
   if (!chunk || typeof chunk !== 'object') return undefined;
   const c = chunk as Record<string, unknown>;
   if (c.type !== 'text-delta') return undefined;
-  const payload = c.payload && typeof c.payload === 'object' ? (c.payload as Record<string, unknown>) : undefined;
-  const text = c.textDelta ?? c.delta ?? payload?.text;
+  const payload = getChunkPayload(chunk);
+  const text = payload?.text ?? payload?.textDelta ?? payload?.delta ?? c.text ?? c.textDelta ?? c.delta;
   return typeof text === 'string' ? text : undefined;
+}
+
+function getStringField(record: Record<string, unknown> | undefined, ...keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === 'string' && value.length > 0) return value;
+  }
+  return undefined;
+}
+
+function getBooleanField(record: Record<string, unknown> | undefined, ...keys: string[]): boolean | undefined {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === 'boolean') return value;
+  }
+  return undefined;
 }
 
 function getChunkType(chunk: unknown): string | undefined {
@@ -216,6 +267,84 @@ function getChunkType(chunk: unknown): string | undefined {
 function isTerminalChunk(chunk: unknown): boolean {
   const type = getChunkType(chunk);
   return type === 'finish' || type === 'error' || type === 'abort' || type === 'tool-call-suspended';
+}
+
+function getSignalId(signal: unknown): string {
+  if (signal && typeof signal === 'object') {
+    const id = (signal as Record<string, unknown>).id;
+    if (typeof id === 'string' && id.length > 0) return id;
+  }
+  return randomUUID();
+}
+
+function getSignalType(signal: unknown): string {
+  if (signal && typeof signal === 'object') {
+    const type = (signal as Record<string, unknown>).type;
+    if (type === 'user-message') return 'user';
+    if (type === 'system-reminder') return 'reactive';
+    if (typeof type === 'string' && type.length > 0) return type;
+  }
+  return 'user';
+}
+
+function normalizeSignal(signalInput: unknown): NormalizedSignal {
+  const id = getSignalId(signalInput);
+
+  if (!signalInput || typeof signalInput !== 'object' || Array.isArray(signalInput)) {
+    const signal: AgentSignal = {
+      id,
+      type: 'user-message',
+      contents: typeof signalInput === 'string' ? signalInput : String(signalInput ?? ''),
+    };
+    return { id, type: getSignalType(signal), signal, options: {} };
+  }
+
+  const {
+    ifActive,
+    ifIdle,
+    runId,
+    content,
+    ...signalFields
+  } = signalInput as Record<string, unknown> & Pick<ThreadScopedSignalOptions, 'ifActive' | 'ifIdle' | 'runId'>;
+  const type = typeof signalFields.type === 'string' && signalFields.type.length > 0 ? signalFields.type : 'user-message';
+  const contents = 'contents' in signalFields ? signalFields.contents : content;
+  const signal = {
+    ...signalFields,
+    id,
+    type,
+    contents: contents ?? '',
+  } as AgentSignal;
+
+  return {
+    id,
+    type: getSignalType(signal),
+    signal,
+    options: { ifActive, ifIdle, runId },
+  };
+}
+
+function errorFromValue(value: unknown): Error | undefined {
+  if (value instanceof Error) return value;
+  if (typeof value === 'string') return new Error(value);
+  if (!value || typeof value !== 'object') return undefined;
+
+  const message = (value as Record<string, unknown>).message;
+  return typeof message === 'string' ? new Error(message) : undefined;
+}
+
+function extractStreamError(chunk: unknown): Error {
+  if (!chunk || typeof chunk !== 'object') return new Error('Stream failed');
+
+  const record = chunk as Record<string, unknown>;
+  const payload = record.payload && typeof record.payload === 'object' ? (record.payload as Record<string, unknown>) : undefined;
+
+  return (
+    errorFromValue(record.error) ??
+    errorFromValue(record.message) ??
+    errorFromValue(payload?.error) ??
+    errorFromValue(payload?.message) ??
+    new Error('Stream failed')
+  );
 }
 
 function providerFromModelId(modelId: string): string {
@@ -424,20 +553,26 @@ export class HarnessCompat<TState = {}> {
       metadata,
     });
 
-    this.#session = await this.#harnessV1.session({ threadId: thread.id, resourceId: thread.resourceId });
-    const previousThreadId = this.#currentThreadId;
+    const modeId = this.#state.modeId ?? this.getCurrentModeId();
+    const modelId = this.getCurrentModelId();
+    this.#session = await this.#harnessV1.session({ threadId: thread.id, resourceId: thread.resourceId, modeId, modelId });
     this.#currentThreadId = thread.id;
 
     const harnessThread = this.#toHarnessThread(thread, this.#session);
     this.#emit({ type: 'thread_created', thread: harnessThread });
-    this.#emit({ type: 'thread_changed', threadId: thread.id, previousThreadId });
     return harnessThread;
   }
 
   async switchThread({ threadId, resourceId }: { threadId: string; resourceId?: string }): Promise<void> {
     const previousThreadId = this.#currentThreadId;
+    const currentModeId = this.#state.modeId ?? this.getCurrentModeId();
     const currentModelId = (this.getState() as SessionStateFields).currentModelId;
-    this.#session = await this.#harnessV1.session({ threadId, resourceId: resourceId ?? this.#resourceId });
+    this.#session = await this.#harnessV1.session({
+      threadId,
+      resourceId: resourceId ?? this.#resourceId,
+      modeId: currentModeId,
+      modelId: currentModelId,
+    });
     this.#currentThreadId = threadId;
     this.#resourceId = this.#session.resourceId;
 
@@ -692,7 +827,7 @@ export class HarnessCompat<TState = {}> {
   }
 
   isCurrentThreadStreamActive(): boolean {
-    return this.isRunning();
+    return Boolean(this.#session?.getCurrentRunId());
   }
 
   getCurrentRunId(): string | null {
@@ -832,10 +967,70 @@ export class HarnessCompat<TState = {}> {
     const session = await this.#ensureSession();
     const subscription = (await session.subscribeToThread()) as StreamSubscription;
 
+    this.#startStreamRun();
+
+    try {
+      await session.queueMessage({ messages: content });
+    } catch (error) {
+      await this.#failStreamStart(subscription, error);
+      throw error;
+    }
+
+    await this.#consumeSignalSubscription(subscription);
+  }
+
+  sendSignal(signalInput: unknown): SendSignalResult {
+    const { id, type, signal, options } = normalizeSignal(signalInput);
+    const accepted = (async () => {
+      const session = (await this.#ensureSession()) as SignalCapableSession<TState>;
+
+      if (this.isCurrentThreadStreamActive()) {
+        const result = await session.sendSignal({ signal, ...options });
+        return { accepted: true as const, runId: result.runId };
+      }
+
+      const subscription = (await session.subscribeToThread()) as StreamSubscription;
+      this.#startStreamRun();
+
+      let streamOwned = false;
+      try {
+        const result = await session.sendSignal({ signal, ...options });
+        streamOwned = true;
+        await this.#consumeSignalSubscription(subscription, { rejectOnTerminalError: true });
+        return { accepted: true as const, runId: result.runId };
+      } catch (error) {
+        if (!streamOwned) {
+          await this.#failStreamStart(subscription, error);
+        }
+        throw error;
+      }
+    })();
+
+    return { id, type, accepted };
+  }
+
+  async sendNotificationSignal(signal: unknown): Promise<void> {
+    await this.sendSignal(signal).accepted;
+  }
+
+  #startStreamRun(): void {
     this.#displayState = { ...this.#displayState, isRunning: true };
     this.#emit({ type: 'agent_start' });
     this.#emitDisplayState();
+  }
 
+  async #failStreamStart(subscription: StreamSubscription, error: unknown): Promise<void> {
+    this.#emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
+    this.#emit({ type: 'agent_end', reason: 'error' });
+    this.#displayState = { ...this.#displayState, isRunning: false, currentMessage: null };
+    await subscription.unsubscribe?.();
+    this.#emitDisplayState();
+  }
+
+  async #consumeSignalSubscription(
+    subscription: StreamSubscription,
+    options: { rejectOnTerminalError?: boolean } = {},
+  ): Promise<void> {
     const assistantMessage: HarnessMessage = {
       id: randomUUID(),
       role: 'assistant',
@@ -843,48 +1038,103 @@ export class HarnessCompat<TState = {}> {
       createdAt: new Date(),
     };
     let started = false;
+    let terminalChunk: unknown;
+    let rejection: unknown;
+    const streamState: StreamMessageState = {
+      textContentById: new Map(),
+      thinkingContentById: new Map(),
+    };
 
     try {
-      await session.queueMessage({ messages: content });
       for await (const chunk of subscription.stream) {
-        if (this.#handleStreamChunk(chunk, assistantMessage, started)) {
+        if (this.#handleStreamChunk(chunk, assistantMessage, started, streamState)) {
           started = true;
         }
-        if (isTerminalChunk(chunk)) break;
+        if (isTerminalChunk(chunk)) {
+          terminalChunk = chunk;
+          break;
+        }
+      }
+
+      const terminalType = getChunkType(terminalChunk);
+      if (terminalType === 'error') {
+        const streamError = extractStreamError(terminalChunk);
+        this.#emit({ type: 'error', error: streamError });
+        if (options.rejectOnTerminalError) rejection = streamError;
       }
       if (started) this.#emit({ type: 'message_end', message: assistantMessage });
+
       this.#emit({
         type: 'agent_end',
-        reason: getChunkType({ type: 'finish' }) === 'finish' ? 'complete' : 'complete',
+        reason:
+          terminalType === 'error'
+            ? 'error'
+            : terminalType === 'abort'
+              ? 'aborted'
+              : terminalType === 'tool-call-suspended'
+                ? 'suspended'
+                : 'complete',
       });
     } catch (error) {
+      rejection = error;
       this.#emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
       this.#emit({ type: 'agent_end', reason: 'error' });
-      throw error;
     } finally {
       this.#displayState = { ...this.#displayState, isRunning: false, currentMessage: null };
       await subscription.unsubscribe?.();
       this.#emitDisplayState();
     }
+
+    if (rejection) throw rejection;
   }
 
-  async sendSignal(signal: unknown): Promise<void> {
-    const text = typeof signal === 'string' ? signal : JSON.stringify(signal);
-    await this.sendMessage(text);
-  }
+  #handleStreamChunk(
+    chunk: unknown,
+    assistantMessage: HarnessMessage,
+    started: boolean,
+    streamState: StreamMessageState,
+  ): boolean {
+    if (!chunk || typeof chunk !== 'object') {
+      const textDelta = extractTextDelta(chunk);
+      if (!textDelta) return started;
+      assistantMessage.content.push({ type: 'text', text: textDelta });
+      this.#displayState = { ...this.#displayState, currentMessage: assistantMessage };
+      this.#emit({ type: started ? 'message_update' : 'message_start', message: assistantMessage });
+      this.#emitDisplayState();
+      return true;
+    }
 
-  async sendNotificationSignal(signal: unknown): Promise<void> {
-    await this.sendSignal(signal);
-  }
+    const record = chunk as Record<string, unknown>;
+    const payload = getChunkPayload(chunk);
+    const type = record.type;
+    const chunkId = getStringField(payload, 'id', 'textId') ?? getStringField(record, 'id', 'textId');
+    const toolCallId = getStringField(payload, 'toolCallId', 'id') ?? getStringField(record, 'toolCallId', 'id');
+    const toolName = getStringField(payload, 'toolName', 'name') ?? getStringField(record, 'toolName', 'name') ?? 'tool';
 
-  #handleStreamChunk(chunk: unknown, assistantMessage: HarnessMessage, started: boolean): boolean {
+    if (type === 'text-start') {
+      const text = getStringField(payload, 'text') ?? getStringField(record, 'text') ?? '';
+      const index = assistantMessage.content.push({ type: 'text', text }) - 1;
+      if (chunkId) streamState.textContentById.set(chunkId, index);
+      this.#displayState = { ...this.#displayState, currentMessage: assistantMessage };
+      this.#emit({ type: started ? 'message_update' : 'message_start', message: assistantMessage });
+      this.#emitDisplayState();
+      return true;
+    }
+
     const textDelta = extractTextDelta(chunk);
-    if (textDelta) {
-      const last = assistantMessage.content[assistantMessage.content.length - 1];
-      if (last?.type === 'text') {
-        last.text += textDelta;
+    if (typeof textDelta === 'string' && textDelta.length > 0) {
+      const textIndex = chunkId ? streamState.textContentById.get(chunkId) : undefined;
+      const textContent = typeof textIndex === 'number' ? assistantMessage.content[textIndex] : undefined;
+      if (textContent?.type === 'text') {
+        textContent.text += textDelta;
       } else {
-        assistantMessage.content.push({ type: 'text', text: textDelta });
+        const last = assistantMessage.content[assistantMessage.content.length - 1];
+        if (last?.type === 'text') {
+          last.text += textDelta;
+        } else {
+          const index = assistantMessage.content.push({ type: 'text', text: textDelta }) - 1;
+          if (chunkId) streamState.textContentById.set(chunkId, index);
+        }
       }
       this.#displayState = { ...this.#displayState, currentMessage: assistantMessage };
       this.#emit({ type: started ? 'message_update' : 'message_start', message: assistantMessage });
@@ -892,24 +1142,82 @@ export class HarnessCompat<TState = {}> {
       return true;
     }
 
-    if (!chunk || typeof chunk !== 'object') return started;
-    const record = chunk as Record<string, unknown>;
-    const type = record.type;
-    const toolCallId = String(record.toolCallId ?? record.id ?? '');
-    const toolName = String(record.toolName ?? record.name ?? 'tool');
+    if (type === 'reasoning-start') {
+      const thinking = getStringField(payload, 'text', 'thinking') ?? getStringField(record, 'text', 'thinking') ?? '';
+      const index = assistantMessage.content.push({ type: 'thinking', thinking }) - 1;
+      if (chunkId) streamState.thinkingContentById.set(chunkId, index);
+      this.#displayState = { ...this.#displayState, currentMessage: assistantMessage };
+      this.#emit({ type: 'message_update', message: assistantMessage });
+      this.#emitDisplayState();
+      return true;
+    }
 
-    if ((type === 'tool-call' || type === 'tool-call-delta') && toolCallId) {
-      const args = record.args ?? record.input ?? {};
-      assistantMessage.content.push({ type: 'tool_call', id: toolCallId, name: toolName, args });
-      this.#emit({ type: 'tool_start', toolCallId, toolName, args });
+    if (type === 'reasoning-delta') {
+      const thinkingDelta =
+        getStringField(payload, 'textDelta', 'delta', 'text', 'thinking') ??
+        getStringField(record, 'textDelta', 'delta', 'text', 'thinking');
+      if (!thinkingDelta) return started;
+      const thinkingIndex = chunkId ? streamState.thinkingContentById.get(chunkId) : undefined;
+      const thinkingContent = typeof thinkingIndex === 'number' ? assistantMessage.content[thinkingIndex] : undefined;
+      if (thinkingContent?.type === 'thinking') {
+        thinkingContent.thinking += thinkingDelta;
+      } else {
+        const index = assistantMessage.content.push({ type: 'thinking', thinking: thinkingDelta }) - 1;
+        if (chunkId) streamState.thinkingContentById.set(chunkId, index);
+      }
+      this.#displayState = { ...this.#displayState, currentMessage: assistantMessage };
+      this.#emit({ type: 'message_update', message: assistantMessage });
+      this.#emitDisplayState();
+      return true;
+    }
+
+    if (type === 'tool-call-input-streaming-start' && toolCallId) {
+      this.#emit({ type: 'tool_input_start', toolCallId, toolName });
+      this.#emitDisplayState();
       return started;
     }
 
+    if (type === 'tool-call-delta' && toolCallId) {
+      const argsTextDelta =
+        getStringField(payload, 'argsTextDelta', 'inputTextDelta', 'textDelta', 'delta') ??
+        getStringField(record, 'argsTextDelta', 'inputTextDelta', 'textDelta', 'delta') ??
+        '';
+      this.#emit({ type: 'tool_input_delta', toolCallId, toolName, argsTextDelta });
+      this.#emitDisplayState();
+      return started;
+    }
+
+    if (type === 'tool-call-input-streaming-end' && toolCallId) {
+      this.#emit({ type: 'tool_input_end', toolCallId });
+      this.#emitDisplayState();
+      return started;
+    }
+
+    if (type === 'tool-call' && toolCallId) {
+      const args = payload?.args ?? payload?.input ?? record.args ?? record.input ?? {};
+      assistantMessage.content.push({ type: 'tool_call', id: toolCallId, name: toolName, args });
+      this.#displayState = { ...this.#displayState, currentMessage: assistantMessage };
+      this.#emit({ type: 'tool_start', toolCallId, toolName, args });
+      this.#emit({ type: 'message_update', message: assistantMessage });
+      this.#emitDisplayState();
+      return true;
+    }
+
     if ((type === 'tool-result' || type === 'tool-call-result') && toolCallId) {
-      const result = record.result ?? record.output;
-      const isError = record.isError === true;
+      const result = payload?.result ?? payload?.output ?? record.result ?? record.output;
+      const isError = getBooleanField(payload, 'isError') ?? getBooleanField(record, 'isError') ?? false;
       assistantMessage.content.push({ type: 'tool_result', id: toolCallId, name: toolName, result, isError });
+      this.#displayState = { ...this.#displayState, currentMessage: assistantMessage };
       this.#emit({ type: 'tool_end', toolCallId, result, isError });
+      this.#emit({ type: 'message_update', message: assistantMessage });
+      this.#emitDisplayState();
+      return true;
+    }
+
+    if (type === 'tool-error' && toolCallId) {
+      const result = payload?.error ?? record.error;
+      this.#emit({ type: 'tool_end', toolCallId, result, isError: true });
+      this.#emitDisplayState();
       return started;
     }
 
@@ -918,9 +1226,28 @@ export class HarnessCompat<TState = {}> {
         type: 'tool_suspended',
         toolCallId,
         toolName,
-        args: record.args,
-        suspendPayload: record.suspendPayload,
+        args: payload?.args ?? record.args,
+        suspendPayload: payload?.suspendPayload ?? record.suspendPayload,
+        resumeSchema: getStringField(payload, 'resumeSchema') ?? getStringField(record, 'resumeSchema'),
       });
+      this.#emitDisplayState();
+      return started;
+    }
+
+    if (type === 'data-sandbox-stdout' || type === 'data-sandbox-stderr') {
+      const data = record.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : payload;
+      const output = getStringField(data, 'output') ?? getStringField(payload, 'output') ?? '';
+      const sandboxToolCallId = getStringField(data, 'toolCallId') ?? toolCallId;
+      if (sandboxToolCallId && output) {
+        this.#emit({
+          type: 'shell_output',
+          toolCallId: sandboxToolCallId,
+          output,
+          stream: type === 'data-sandbox-stdout' ? 'stdout' : 'stderr',
+        });
+        this.#emitDisplayState();
+      }
+      return started;
     }
 
     return started;
@@ -1031,8 +1358,25 @@ export class HarnessCompat<TState = {}> {
   async resolveWorkspace(): Promise<unknown> {
     if (this.#workspaceResolved) return this.#resolvedWorkspace;
     const workspace = this.#config.workspace;
-    this.#resolvedWorkspace =
-      typeof workspace === 'function' ? await workspace({ mastra: this.#config.mastra }) : workspace;
+    if (typeof workspace === 'function') {
+      // Build a request context with harness state so dynamic workspace
+      // factories (e.g. getDynamicWorkspace) can read projectPath, configDir,
+      // etc. from the harness context — matching the legacy harness behavior.
+      const requestContext = new RequestContext();
+      const harnessContext = {
+        harnessId: this.id,
+        state: this.getState(),
+        getState: () => this.getState(),
+        setState: (updates: Partial<TState>) => this.setState(updates),
+        threadId: this.#currentThreadId ?? undefined,
+        resourceId: this.#resourceId,
+        modeId: this.getCurrentModeId(),
+      };
+      requestContext.set('harness', harnessContext);
+      this.#resolvedWorkspace = await workspace({ requestContext, mastra: this.#config.mastra });
+    } else {
+      this.#resolvedWorkspace = workspace;
+    }
     this.#workspaceResolved = true;
     return this.#resolvedWorkspace;
   }

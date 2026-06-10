@@ -422,9 +422,13 @@ export function setupAutocomplete(state: TUIState): void {
 
 export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
   try {
-    // Load from all sources (global and local)
+    // Load from all sources (global and local).
+    // Use the harness project path (git repo root) rather than process.cwd(),
+    // which may be a subdirectory (e.g. when running `pnpm --dir mastracode`).
+    const harnessState = state.harness.getState() as Record<string, unknown> | undefined;
+    const projectDir = (harnessState?.projectPath as string | undefined) || process.cwd();
     const globalCommands = await loadCustomCommands();
-    const localCommands = await loadCustomCommands(process.cwd());
+    const localCommands = await loadCustomCommands(projectDir);
 
     // Merge commands, with local taking precedence over global for same names
     const commandMap = new Map<string, (typeof globalCommands)[number]>();

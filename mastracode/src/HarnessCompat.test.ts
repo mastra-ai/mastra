@@ -5,9 +5,32 @@ import { HarnessCompat } from './HarnessCompat.js';
 const buildMode = { id: 'build', defaultModelId: 'default-model', metadata: { name: 'Build' } };
 const planMode = { id: 'plan', defaultModelId: 'plan-model', metadata: { name: 'Plan' } };
 
-function createSession(initialModelId = 'session-model', threadId = 'thread-id') {
+async function* streamChunks(chunks: unknown[]) {
+  for (const chunk of chunks) yield chunk;
+}
+
+const flush = () => new Promise(resolve => setTimeout(resolve, 0));
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>(next => {
+    resolve = next;
+  });
+  return { promise, resolve };
+}
+
+function toStream(chunks: unknown[] | AsyncIterable<unknown>): AsyncIterable<unknown> {
+  return Symbol.asyncIterator in Object(chunks) ? (chunks as AsyncIterable<unknown>) : streamChunks(chunks as unknown[]);
+}
+
+function createSession(
+  initialModelId = 'session-model',
+  threadId = 'thread-id',
+  chunks: unknown[] | AsyncIterable<unknown> = [],
+) {
   let modelId = initialModelId;
   let mode = buildMode;
+  let activeRunId: string | null = null;
   let state: Record<string, unknown> = { projectPath: '/session-repo' };
   const thread = {
     id: threadId,
@@ -35,8 +58,15 @@ function createSession(initialModelId = 'session-model', threadId = 'thread-id')
     setMode: vi.fn(next => {
       mode = next;
     }),
+    getCurrentRunId: vi.fn(() => activeRunId),
     getThread: vi.fn(async () => thread),
     getMessages: vi.fn(async () => []),
+    subscribeToThread: vi.fn(async () => ({ stream: toStream(chunks), unsubscribe: vi.fn(async () => {}) })),
+    sendSignal: vi.fn(async ({ signal }) => ({ accepted: true, runId: 'run-1', signal })),
+    queueMessage: vi.fn(async () => {
+      activeRunId = 'run-queued';
+      return { accepted: true, queued: true };
+    }),
     listSessionGrants: vi.fn(() => [
       { id: 'grant-category', category: 'read' },
       { id: 'grant-tool', toolName: 'write_file' },
@@ -108,7 +138,12 @@ describe('HarnessCompat standalone V1 adapter', () => {
       currentModelId: 'session-model',
       modeId: 'build',
     });
-    expect(harnessV1.session).toHaveBeenCalledWith({ threadId: 'thread-id', resourceId: 'resource-id' });
+    expect(harnessV1.session).toHaveBeenCalledWith({
+      threadId: 'thread-id',
+      resourceId: 'resource-id',
+      modeId: 'build',
+      modelId: undefined,
+    });
   });
 
   it('preserves the current model when switching threads', async () => {
@@ -122,6 +157,37 @@ describe('HarnessCompat standalone V1 adapter', () => {
 
     expect(secondSession.setModelId).toHaveBeenCalledWith('selected-model');
     expect(harness.getState()).toMatchObject({ currentModelId: 'selected-model' });
+  });
+
+  it('preserves the selected mode and model when creating a new thread', async () => {
+    const currentSession = createSession('current-model', 'current-thread');
+    const newThreadSession = createSession('fallback-model', 'new-thread');
+    const { harness, harnessV1 } = createHarness(currentSession);
+    harnessV1.session.mockResolvedValueOnce(currentSession).mockImplementationOnce(async (...args: unknown[]) => {
+      const opts = args[0] as { modeId?: string; modelId?: string };
+      if (opts.modeId === 'plan') newThreadSession.setMode(planMode);
+      if (opts.modelId) newThreadSession.setModelId(opts.modelId);
+      return newThreadSession;
+    });
+
+    await harness.switchThread({ threadId: 'current-thread' });
+    await harness.setState({ modeId: 'plan', currentModelId: 'selected-plan-model' } as never);
+    const events: Array<{ type: string }> = [];
+    harness.subscribe(event => {
+      events.push({ type: event.type });
+    });
+
+    const thread = await harness.createThread();
+
+    expect(harnessV1.session).toHaveBeenLastCalledWith({
+      threadId: thread.id,
+      resourceId: 'resource-id',
+      modeId: 'plan',
+      modelId: 'selected-plan-model',
+    });
+    expect(thread.metadata).toMatchObject({ modeId: 'plan', modelId: 'selected-plan-model' });
+    expect(harness.getState()).toMatchObject({ modeId: 'plan', currentModelId: 'selected-plan-model' });
+    expect(events.map(event => event.type)).toEqual(['thread_created']);
   });
 
   it('routes session-derived setState fields to the V1 session and stores adapter state locally', async () => {
@@ -202,6 +268,388 @@ describe('HarnessCompat standalone V1 adapter', () => {
     expect(harness.getSessionGrants()).toEqual({ categories: ['read'], tools: ['write_file'] });
   });
 
+  it('returns a legacy signal handle with accepted delivery promise', async () => {
+    const session = createSession('session-model', 'thread-id', [{ type: 'finish' }]);
+    const { harness } = createHarness(session);
+    await harness.switchThread({ threadId: 'thread-id' });
+
+    const signal = harness.sendSignal({ id: 'signal-1', type: 'user-message', contents: 'hello' });
+
+    expect(signal).toMatchObject({ id: 'signal-1', type: 'user' });
+    expect(signal.accepted.catch).toEqual(expect.any(Function));
+    await expect(signal.accepted).resolves.toEqual({ accepted: true, runId: 'run-1' });
+    expect(session.sendSignal).toHaveBeenCalledWith({
+      signal: { id: 'signal-1', type: 'user-message', contents: 'hello' },
+    });
+    expect(session.queueMessage).not.toHaveBeenCalled();
+  });
+
+  it('normalizes legacy content signals and preserves delivery options', async () => {
+    const session = createSession('session-model', 'thread-id', [{ type: 'finish' }]);
+    const { harness } = createHarness(session);
+    await harness.switchThread({ threadId: 'thread-id' });
+
+    const signal = harness.sendSignal({
+      id: 'signal-1',
+      content: [
+        { type: 'text', text: 'hello' },
+        { type: 'file', data: 'data:image/png;base64,abc', mediaType: 'image/png' },
+      ],
+      ifActive: { attributes: { delivery: 'while-active' } },
+      ifIdle: { attributes: { delivery: 'message' } },
+    });
+
+    await signal.accepted;
+
+    expect(session.sendSignal).toHaveBeenCalledWith({
+      signal: {
+        id: 'signal-1',
+        type: 'user-message',
+        contents: [
+          { type: 'text', text: 'hello' },
+          { type: 'file', data: 'data:image/png;base64,abc', mediaType: 'image/png' },
+        ],
+      },
+      ifActive: { attributes: { delivery: 'while-active' } },
+      ifIdle: { attributes: { delivery: 'message' } },
+    });
+    expect(session.queueMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not open a duplicate stream subscription for active signal delivery', async () => {
+    let finish!: () => void;
+    const finishPromise = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    async function* activeStream() {
+      await finishPromise;
+      yield { type: 'finish' };
+    }
+    const session = createSession('session-model', 'thread-id', activeStream());
+    const { harness } = createHarness(session);
+    await harness.switchThread({ threadId: 'thread-id' });
+
+    const running = harness.sendMessage('already running');
+    await flush();
+    expect(harness.isCurrentThreadStreamActive()).toBe(true);
+
+    const signal = harness.sendSignal({
+      id: 'signal-active',
+      content: 'while active',
+      ifActive: { attributes: { delivery: 'while-active' } },
+      ifIdle: { attributes: { delivery: 'message' } },
+    });
+
+    await signal.accepted;
+    expect(session.subscribeToThread).toHaveBeenCalledTimes(1);
+    expect(session.sendSignal).toHaveBeenCalledWith({
+      signal: { id: 'signal-active', type: 'user-message', contents: 'while active' },
+      ifActive: { attributes: { delivery: 'while-active' } },
+      ifIdle: { attributes: { delivery: 'message' } },
+    });
+
+    finish();
+    await running;
+  });
+
+  it('does not treat stale display running state as active signal delivery', async () => {
+    const pending = deferred();
+    async function* pendingStream() {
+      await pending.promise;
+      yield { type: 'finish' };
+    }
+    const session = createSession('session-model', 'thread-id', []);
+    session.queueMessage.mockResolvedValueOnce({ accepted: true, queued: true });
+    session.subscribeToThread
+      .mockResolvedValueOnce({ stream: pendingStream(), unsubscribe: vi.fn(async () => {}) })
+      .mockResolvedValueOnce({ stream: toStream([{ type: 'finish' }]), unsubscribe: vi.fn(async () => {}) });
+    const { harness } = createHarness(session);
+    await harness.switchThread({ threadId: 'thread-id' });
+
+    const running = harness.sendMessage('stale running');
+    await flush();
+    expect(harness.isRunning()).toBe(true);
+    expect(harness.isCurrentThreadStreamActive()).toBe(false);
+
+    const signal = harness.sendSignal({ id: 'signal-idle', content: 'idle despite display state' });
+    await signal.accepted;
+
+    expect(session.subscribeToThread).toHaveBeenCalledTimes(2);
+    expect(session.sendSignal).toHaveBeenCalledWith({
+      signal: { id: 'signal-idle', type: 'user-message', contents: 'idle despite display state' },
+    });
+
+    pending.resolve();
+    await running;
+  });
+
+  it('streams payload-shaped idle signal responses through the compat event bridge', async () => {
+    const session = createSession('session-model', 'thread-id', [
+      { type: 'tool-call', payload: { toolCallId: 'tool-1', toolName: 'read_file', args: { path: 'README.md' } } },
+      { type: 'tool-result', payload: { toolCallId: 'tool-1', toolName: 'read_file', result: 'contents', isError: false } },
+      { type: 'text-delta', payload: { id: 'text-1', text: 'hello' } },
+      { type: 'finish' },
+    ]);
+    const { harness } = createHarness(session);
+    const events: Array<Record<string, unknown>> = [];
+    harness.subscribe(event => {
+      events.push(event as unknown as Record<string, unknown>);
+    });
+    await harness.switchThread({ threadId: 'thread-id' });
+    events.length = 0;
+
+    const signal = harness.sendSignal({ id: 'signal-idle', content: 'hello' });
+    await signal.accepted;
+    await flush();
+
+    const lifecycleEvents = events.filter(event => event.type !== 'display_state_changed');
+    expect(lifecycleEvents.map(event => event.type)).toEqual([
+      'agent_start',
+      'tool_start',
+      'message_update',
+      'tool_end',
+      'message_update',
+      'message_update',
+      'message_end',
+      'agent_end',
+    ]);
+    expect(lifecycleEvents[1]).toMatchObject({
+      type: 'tool_start',
+      toolCallId: 'tool-1',
+      toolName: 'read_file',
+      args: { path: 'README.md' },
+    });
+    expect(lifecycleEvents[3]).toMatchObject({
+      type: 'tool_end',
+      toolCallId: 'tool-1',
+      result: 'contents',
+      isError: false,
+    });
+    expect(lifecycleEvents[6]?.message).toMatchObject({
+      content: [
+        { type: 'tool_call', id: 'tool-1', name: 'read_file', args: { path: 'README.md' } },
+        { type: 'tool_result', id: 'tool-1', name: 'read_file', result: 'contents', isError: false },
+        { type: 'text', text: 'hello' },
+      ],
+    });
+    expect(lifecycleEvents[7]).toMatchObject({ type: 'agent_end', reason: 'complete' });
+    expect(harness.getDisplayState()).toMatchObject({ isRunning: false, currentMessage: null });
+  });
+
+  it('streams real V1 data-part chunks through the compat event bridge', async () => {
+    const session = createSession('session-model', 'thread-id', [
+      { type: 'text-start', id: 'text-1' },
+      { type: 'text-delta', id: 'text-1', delta: 'Hello' },
+      { type: 'tool-call-input-streaming-start', toolCallId: 'tool-1', toolName: 'run_shell' },
+      { type: 'tool-call-delta', toolCallId: 'tool-1', toolName: 'run_shell', argsTextDelta: '{"cmd":"echo hi"}' },
+      { type: 'tool-call-input-streaming-end', toolCallId: 'tool-1', toolName: 'run_shell' },
+      { type: 'tool-call', toolCallId: 'tool-1', toolName: 'run_shell', args: { cmd: 'echo hi' } },
+      { type: 'data-sandbox-stdout', data: { toolCallId: 'tool-1', output: 'hi\n' } },
+      { type: 'tool-result', toolCallId: 'tool-1', toolName: 'run_shell', result: 'hi\n' },
+      { type: 'text-delta', id: 'text-1', delta: ' there' },
+      { type: 'finish' },
+    ]);
+    const { harness } = createHarness(session);
+    const events: Array<Record<string, unknown>> = [];
+    harness.subscribe(event => {
+      events.push(event as unknown as Record<string, unknown>);
+    });
+    await harness.switchThread({ threadId: 'thread-id' });
+    events.length = 0;
+
+    await harness.sendSignal({ id: 'signal-v1-chunks', content: 'hello' }).accepted;
+
+    const lifecycleEvents = events.filter(event => event.type !== 'display_state_changed');
+    expect(lifecycleEvents.map(event => event.type)).toEqual([
+      'agent_start',
+      'message_start',
+      'message_update',
+      'tool_input_start',
+      'tool_input_delta',
+      'tool_input_end',
+      'tool_start',
+      'message_update',
+      'shell_output',
+      'tool_end',
+      'message_update',
+      'message_update',
+      'message_end',
+      'agent_end',
+    ]);
+    expect(lifecycleEvents[4]).toMatchObject({
+      type: 'tool_input_delta',
+      toolCallId: 'tool-1',
+      argsTextDelta: '{"cmd":"echo hi"}',
+    });
+    expect(lifecycleEvents[8]).toMatchObject({
+      type: 'shell_output',
+      toolCallId: 'tool-1',
+      output: 'hi\n',
+      stream: 'stdout',
+    });
+    expect(lifecycleEvents[12]?.message).toMatchObject({
+      content: [
+        { type: 'text', text: 'Hello there' },
+        { type: 'tool_call', id: 'tool-1', name: 'run_shell', args: { cmd: 'echo hi' } },
+        { type: 'tool_result', id: 'tool-1', name: 'run_shell', result: 'hi\n', isError: false },
+      ],
+    });
+  });
+
+  it('drives delayed idle signal streams before resolving delivery', async () => {
+    const firstDelta = deferred();
+    const finish = deferred();
+    async function* delayedStream() {
+      await firstDelta.promise;
+      yield { type: 'text-delta', payload: { id: 'text-1', text: 'hello' } };
+      await finish.promise;
+      yield { type: 'text-delta', payload: { id: 'text-1', text: ' world' } };
+      yield { type: 'finish' };
+    }
+    const session = createSession('session-model', 'thread-id', delayedStream());
+    const { harness } = createHarness(session);
+    const events: Array<Record<string, unknown>> = [];
+    harness.subscribe(event => {
+      events.push(event as unknown as Record<string, unknown>);
+    });
+    await harness.switchThread({ threadId: 'thread-id' });
+    events.length = 0;
+
+    let acceptedResolved = false;
+    const signal = harness.sendSignal({ id: 'signal-delayed', content: 'hello' });
+    void signal.accepted.then(() => {
+      acceptedResolved = true;
+    });
+    await flush();
+
+    expect(acceptedResolved).toBe(false);
+    expect(events.filter(event => event.type !== 'display_state_changed').map(event => event.type)).toEqual(['agent_start']);
+    expect(harness.getDisplayState()).toMatchObject({ isRunning: true });
+
+    firstDelta.resolve();
+    await flush();
+    await flush();
+
+    let lifecycleEvents = events.filter(event => event.type !== 'display_state_changed');
+    expect(lifecycleEvents.map(event => event.type)).toEqual(['agent_start', 'message_start']);
+    expect(lifecycleEvents[1]?.message).toMatchObject({ content: [{ type: 'text', text: 'hello' }] });
+    expect(harness.getDisplayState()).toMatchObject({ isRunning: true, currentMessage: expect.any(Object) });
+    expect(acceptedResolved).toBe(false);
+
+    finish.resolve();
+    await expect(signal.accepted).resolves.toEqual({ accepted: true, runId: 'run-1' });
+
+    lifecycleEvents = events.filter(event => event.type !== 'display_state_changed');
+    expect(lifecycleEvents.map(event => event.type)).toEqual([
+      'agent_start',
+      'message_start',
+      'message_update',
+      'message_end',
+      'agent_end',
+    ]);
+    expect(lifecycleEvents[3]?.message).toMatchObject({ content: [{ type: 'text', text: 'hello world' }] });
+    expect(lifecycleEvents[4]).toMatchObject({ type: 'agent_end', reason: 'complete' });
+    expect(harness.getDisplayState()).toMatchObject({ isRunning: false, currentMessage: null });
+  });
+
+  it('rejects idle signal delivery when the owned stream fails', async () => {
+    const session = createSession('session-model', 'thread-id', [{ type: 'error', error: { message: 'model failed' } }]);
+    const { harness } = createHarness(session);
+    const events: Array<Record<string, unknown>> = [];
+    harness.subscribe(event => {
+      events.push(event as unknown as Record<string, unknown>);
+    });
+    await harness.switchThread({ threadId: 'thread-id' });
+    events.length = 0;
+
+    const signal = harness.sendSignal({ id: 'signal-error', content: 'hello' });
+
+    await expect(signal.accepted).rejects.toThrow('model failed');
+
+    const lifecycleEvents = events.filter(event => event.type !== 'display_state_changed');
+    expect(lifecycleEvents.map(event => event.type)).toEqual(['agent_start', 'error', 'agent_end']);
+    expect(lifecycleEvents[1]?.error).toBeInstanceOf(Error);
+    expect((lifecycleEvents[1]?.error as Error).message).toBe('model failed');
+    expect(lifecycleEvents[2]).toMatchObject({ type: 'agent_end', reason: 'error' });
+    expect(harness.getDisplayState()).toMatchObject({ isRunning: false, currentMessage: null });
+  });
+
+  it('emits error terminal chunks as failed agent runs', async () => {
+    const session = createSession('session-model', 'thread-id', [{ type: 'error', error: { message: 'model failed' } }]);
+    const { harness } = createHarness(session);
+    const events: Array<Record<string, unknown>> = [];
+    harness.subscribe(event => {
+      events.push(event as unknown as Record<string, unknown>);
+    });
+    await harness.switchThread({ threadId: 'thread-id' });
+    events.length = 0;
+
+    await harness.sendMessage('hello');
+
+    const lifecycleEvents = events.filter(event => event.type !== 'display_state_changed');
+    expect(session.queueMessage).toHaveBeenCalledWith({ messages: 'hello' });
+    expect(lifecycleEvents.map(event => event.type)).toEqual(['agent_start', 'error', 'agent_end']);
+    expect(lifecycleEvents[1]?.error).toBeInstanceOf(Error);
+    expect((lifecycleEvents[1]?.error as Error).message).toBe('model failed');
+    expect(lifecycleEvents[2]).toMatchObject({ type: 'agent_end', reason: 'error' });
+    expect(harness.getDisplayState()).toMatchObject({ isRunning: false, currentMessage: null });
+  });
+
+  it('emits abort terminal chunks as aborted agent runs', async () => {
+    const session = createSession('session-model', 'thread-id', [{ type: 'abort' }]);
+    const { harness } = createHarness(session);
+    const events: Array<Record<string, unknown>> = [];
+    harness.subscribe(event => {
+      events.push(event as unknown as Record<string, unknown>);
+    });
+    await harness.switchThread({ threadId: 'thread-id' });
+    events.length = 0;
+
+    await harness.sendMessage('hello');
+
+    const lifecycleEvents = events.filter(event => event.type !== 'display_state_changed');
+    expect(lifecycleEvents.map(event => event.type)).toEqual(['agent_start', 'agent_end']);
+    expect(lifecycleEvents[1]).toMatchObject({ type: 'agent_end', reason: 'aborted' });
+    expect(harness.getDisplayState()).toMatchObject({ isRunning: false, currentMessage: null });
+  });
+
+  it('emits tool suspension terminal chunks as suspended agent runs', async () => {
+    const session = createSession('session-model', 'thread-id', [
+      {
+        type: 'tool-call-suspended',
+        payload: {
+          toolCallId: 'tool-1',
+          toolName: 'confirm',
+          args: { action: 'deploy' },
+          suspendPayload: { question: 'Proceed?' },
+          resumeSchema: '{"type":"object"}',
+        },
+      },
+    ]);
+    const { harness } = createHarness(session);
+    const events: Array<Record<string, unknown>> = [];
+    harness.subscribe(event => {
+      events.push(event as unknown as Record<string, unknown>);
+    });
+    await harness.switchThread({ threadId: 'thread-id' });
+    events.length = 0;
+
+    await harness.sendMessage('hello');
+
+    const lifecycleEvents = events.filter(event => event.type !== 'display_state_changed');
+    expect(lifecycleEvents.map(event => event.type)).toEqual(['agent_start', 'tool_suspended', 'agent_end']);
+    expect(lifecycleEvents[1]).toMatchObject({
+      type: 'tool_suspended',
+      toolCallId: 'tool-1',
+      toolName: 'confirm',
+      args: { action: 'deploy' },
+      suspendPayload: { question: 'Proceed?' },
+      resumeSchema: '{"type":"object"}',
+    });
+    expect(lifecycleEvents[2]).toMatchObject({ type: 'agent_end', reason: 'suspended' });
+    expect(harness.getDisplayState()).toMatchObject({ isRunning: false, currentMessage: null });
+  });
+
   it('selects, switches, and renames threads through V1 storage', async () => {
     const { harness, memory, harnessV1 } = createHarness();
     const thread = {
@@ -217,7 +665,12 @@ describe('HarnessCompat standalone V1 adapter', () => {
 
     const selected = await harness.selectOrCreateThread();
     expect(selected.id).toBe('memory-thread');
-    expect(harnessV1.session).toHaveBeenCalledWith({ threadId: 'memory-thread', resourceId: 'resource-id' });
+    expect(harnessV1.session).toHaveBeenCalledWith({
+      threadId: 'memory-thread',
+      resourceId: 'resource-id',
+      modeId: 'build',
+      modelId: undefined,
+    });
 
     await harness.switchCurrentThread('memory-thread');
     expect(harness.getCurrentThreadId()).toBe('memory-thread');

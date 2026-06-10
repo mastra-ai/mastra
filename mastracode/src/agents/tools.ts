@@ -98,7 +98,8 @@ export function createDynamicTools(
     const ctx = requestContext.get('harness') as HarnessRequestContext<MastraCodeComposedState> | undefined;
     const state = ctx?.getState?.();
 
-    const modelId = state?.currentModelId;
+    // V1 harness context exposes `modelId` directly; legacy uses `state.currentModelId`
+    const modelId = (ctx as any)?.modelId ?? state?.currentModelId;
     const isAnthropicModel = modelId?.startsWith('anthropic/');
     const isOpenAIModel = modelId?.startsWith('openai/');
 

@@ -384,6 +384,40 @@ describe('resolveModel', () => {
         headers: undefined,
       });
     });
+
+    it('reads modelId from V1 harness context (no state property)', () => {
+      const values = new Map<string, unknown>();
+      const requestContext = {
+        get: (key: string) => values.get(key),
+        set: (key: string, value: unknown) => values.set(key, value),
+      } as any;
+      // V1 harness context has modelId directly, no state property
+      requestContext.set('harness', {
+        modelId: 'anthropic/claude-opus-4-7',
+        modeId: 'build',
+        getState: () => ({}),
+      });
+
+      const result = getDynamicModel({ requestContext });
+      expect(result).toBeDefined();
+    });
+
+    it('prefers modelId over state.currentModelId when both exist', () => {
+      const values = new Map<string, unknown>();
+      const requestContext = {
+        get: (key: string) => values.get(key),
+        set: (key: string, value: unknown) => values.set(key, value),
+      } as any;
+      requestContext.set('harness', {
+        modelId: 'anthropic/claude-opus-4-7',
+        state: { currentModelId: 'openai/gpt-5.5' },
+        getState: () => ({ currentModelId: 'openai/gpt-5.5' }),
+      });
+
+      const result = getDynamicModel({ requestContext });
+      // Should use modelId from V1 context
+      expect(result).toBeDefined();
+    });
   });
 
   describe('other providers', () => {

@@ -81,6 +81,7 @@ const createAgent = (overrides: Partial<Agent> = {}) =>
       stream: (async function* () {})(),
     }),
     sendMessage: vi.fn().mockReturnValue({ accepted: true }),
+    sendSignal: vi.fn().mockReturnValue({ accepted: true, runId: 'run-1' }),
     queueMessage: vi.fn().mockReturnValue({ accepted: true, queued: true }),
     ...overrides,
   }) as unknown as Agent;
@@ -742,12 +743,12 @@ describe('Harness.ownerId', () => {
     expect(session.ownerId).not.toBe(reader.ownerId);
   });
 
-  it('exposes sendMessage instead of signal', async () => {
+  it('exposes message and signal APIs', async () => {
     const { harness } = createHarness(createMemory());
     const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
 
     expect(typeof session.sendMessage).toBe('function');
-    expect((session as unknown as { signal?: unknown }).signal).toBeUndefined();
+    expect(typeof session.sendSignal).toBe('function');
   });
 
   it('subscribes to the session thread through the backing agent', async () => {
@@ -784,6 +785,40 @@ describe('Harness.ownerId', () => {
       }),
     );
     expect(agent.generate).not.toHaveBeenCalled();
+  });
+
+  it('sends signals through the agent thread runtime with session-scoped targets', async () => {
+    const signal = {
+      type: 'user-message' as const,
+      contents: 'hello',
+    };
+    const agent = createAgent({
+      sendSignal: vi.fn().mockReturnValue({ accepted: true, runId: 'run-1', signal }),
+    });
+    const { harness } = createHarness(createMemory(), new RecordingHarnessStorage(), undefined, agent);
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+    await expect(
+      session.sendSignal({
+        signal,
+        ifActive: { attributes: { delivery: 'while-active' } },
+        ifIdle: { attributes: { delivery: 'message' } },
+      }),
+    ).resolves.toEqual({ accepted: true, runId: 'run-1', signal });
+
+    expect(agent.sendSignal).toHaveBeenCalledWith(
+      signal,
+      expect.objectContaining({
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        ifActive: expect.objectContaining({ attributes: { delivery: 'while-active' } }),
+        ifIdle: expect.objectContaining({
+          behavior: 'wake',
+          attributes: { delivery: 'message' },
+          streamOptions: expect.objectContaining({ activeTools: undefined }),
+        }),
+      }),
+    );
   });
 
   it('queues messages through the agent thread runtime', async () => {

@@ -2,12 +2,15 @@ import type {
   Agent,
   AgentExecutionOptionsBase,
   AgentMessageInput,
+  AgentSignal,
   AgentSubscribeToThreadOptions,
   AgentThreadSubscription,
   QueueAgentMessageOptions,
   QueueAgentMessageResult,
   SendAgentMessageOptions,
   SendAgentMessageResult,
+  SendAgentSignalOptions,
+  SendAgentSignalResult,
 } from '../../agent';
 import type { MessageListInput } from '../../agent/message-list';
 import type { MastraModelGatewayInterface } from '../../llm';
@@ -44,21 +47,28 @@ export type CloneSessionOptions = {
 export type HarnessAgentResolver = (agentId: string) => Agent | Promise<Agent>;
 export type HarnessModeResolver = (modeId: string) => HarnessMode | Promise<HarnessMode>;
 
-type SessionScopedMessageOptions<OUTPUT = unknown> = Omit<
-  Extract<SendAgentMessageOptions<OUTPUT>, { resourceId: string; threadId: string }>,
+type SessionScopedTargetOptions<
+  OUTPUT = unknown,
+  TOptions extends SendAgentSignalOptions<OUTPUT> = SendAgentSignalOptions<OUTPUT>,
+> = Omit<
+  Extract<TOptions, { resourceId: string; threadId: string }>,
   'resourceId' | 'threadId' | 'ifIdle'
 > & {
-  ifIdle?: Omit<
-    NonNullable<Extract<SendAgentMessageOptions<OUTPUT>, { resourceId: string; threadId: string }>['ifIdle']>,
-    'streamOptions'
-  > & {
+  ifIdle?: Omit<NonNullable<Extract<TOptions, { resourceId: string; threadId: string }>['ifIdle']>, 'streamOptions'> & {
     streamOptions?: Omit<AgentExecutionOptionsBase<OUTPUT>, 'requestContext' | 'toolsets' | 'model'>;
   };
 };
 
+type SessionScopedMessageOptions<OUTPUT = unknown> = SessionScopedTargetOptions<OUTPUT, SendAgentMessageOptions<OUTPUT>>;
+export type SessionScopedSignalOptions<OUTPUT = unknown> = SessionScopedTargetOptions<
+  OUTPUT,
+  SendAgentSignalOptions<OUTPUT>
+>;
+
 export type SessionSubscribeToThreadOptions = Omit<AgentSubscribeToThreadOptions, 'resourceId' | 'threadId'>;
 export type SessionThreadSubscription<OUTPUT = unknown> = AgentThreadSubscription<OUTPUT>;
 export type SessionSendMessageResult = SendAgentMessageResult;
+export type SessionSendSignalResult = SendAgentSignalResult;
 export type SessionQueueMessageResult = QueueAgentMessageResult;
 export type SessionQueueMessageOptions<OUTPUT = unknown> = Omit<
   Extract<QueueAgentMessageOptions<OUTPUT>, { resourceId: string; threadId: string }>,
@@ -67,10 +77,16 @@ export type SessionQueueMessageOptions<OUTPUT = unknown> = Omit<
   Pick<SessionScopedMessageOptions<OUTPUT>, 'ifIdle'>;
 
 export type SessionMessageInput = AgentMessageInput | MessageListInput;
-export type SessionMessageOptions<OUTPUT = unknown> = Omit<
+type SessionExecutionOptions<OUTPUT = unknown> = Omit<
   AgentExecutionOptionsBase<OUTPUT>,
   'requestContext' | 'toolsets' | 'model'
-> &
+>;
+
+export type SessionSignalOptions<OUTPUT = unknown> = SessionExecutionOptions<OUTPUT> &
+  SessionScopedSignalOptions<OUTPUT> & {
+    signal: AgentSignal;
+  };
+export type SessionMessageOptions<OUTPUT = unknown> = SessionExecutionOptions<OUTPUT> &
   SessionScopedMessageOptions<OUTPUT> & {
     messages: SessionMessageInput;
   };

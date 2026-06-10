@@ -1,7 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
 import { RequestContext } from '@internal/core/request-context';
-import type { Agent, AgentMessageInput, QueueAgentMessageOptions, SendAgentMessageOptions, ToolsInput } from '../../agent';
+import type {
+  Agent,
+  AgentMessageInput,
+  QueueAgentMessageOptions,
+  SendAgentMessageOptions,
+  SendAgentSignalOptions,
+  ToolsInput,
+} from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { MastraModelGatewayInterface } from '../../llm';
 import type { MastraMemory, StorageThreadType } from '../../memory';
@@ -36,6 +43,8 @@ import type {
   SessionMessageOptions,
   SessionQueueMessageResult,
   SessionSendMessageResult,
+  SessionSendSignalResult,
+  SessionSignalOptions,
   SessionSubscribeToThreadOptions,
   SessionThreadSubscription,
 } from './session.types';
@@ -129,6 +138,12 @@ export class Session<TState = {}> {
     this.#toolCategoryResolver = config.toolCategoryResolver;
     this.#agent = config.agent;
     this.#gateways = config.gateways;
+
+    // Propagate workspace to agent if it doesn't have its own (mirrors legacy harness)
+    // Guard for test mocks that may not be full Agent instances
+    if (config.workspace && config.agent && 'hasOwnWorkspace' in config.agent && !config.agent.hasOwnWorkspace()) {
+      config.agent.__setWorkspace(config.workspace);
+    }
   }
 
   get id(): string {
@@ -517,6 +532,14 @@ export class Session<TState = {}> {
     return result;
   }
 
+  async sendSignal<OUTPUT = unknown>({ signal, ...options }: SessionSignalOptions<OUTPUT>): Promise<SessionSendSignalResult> {
+    const agent = await this.#resolveSessionAgent();
+    const target = await this.#buildMessageTarget(agent, options);
+    const result = agent.sendSignal<OUTPUT>(signal, target);
+    void this.#persistSession({});
+    return result;
+  }
+
   async queueMessage<OUTPUT = unknown>({ messages, ...options }: SessionMessageOptions<OUTPUT>): Promise<SessionQueueMessageResult> {
     const agent = await this.#resolveSessionAgent();
     const target = await this.#buildMessageTarget(agent, options);
@@ -596,8 +619,8 @@ export class Session<TState = {}> {
 
   async #buildMessageTarget<OUTPUT>(
     agent: Agent,
-    options: Omit<SessionMessageOptions<OUTPUT>, 'messages'>,
-  ): Promise<SendAgentMessageOptions<OUTPUT> & QueueAgentMessageOptions<OUTPUT>> {
+    options: Omit<SessionMessageOptions<OUTPUT>, 'messages'> | Omit<SessionSignalOptions<OUTPUT>, 'signal'>,
+  ): Promise<SendAgentMessageOptions<OUTPUT> & QueueAgentMessageOptions<OUTPUT> & SendAgentSignalOptions<OUTPUT>> {
     const { ifActive, ifIdle, runId, ...executionOptions } = options;
     const { tools, harnessToolNames } = await this.#buildToolsets(agent);
     const modeInstructions = this.#mode.instructions;
@@ -628,7 +651,7 @@ export class Session<TState = {}> {
       },
     };
 
-    return target as unknown as SendAgentMessageOptions<OUTPUT> & QueueAgentMessageOptions<OUTPUT>;
+    return target as unknown as SendAgentMessageOptions<OUTPUT> & QueueAgentMessageOptions<OUTPUT> & SendAgentSignalOptions<OUTPUT>;
   }
 
   #toAgentMessageInput(messages: SessionMessageOptions['messages']): AgentMessageInput {
