@@ -81,6 +81,40 @@ export const Right: Story = {
   ),
 };
 
+export const FloatingRight: Story = {
+  render: () => (
+    <Drawer side="right" variant="floating">
+      <DrawerTrigger asChild>
+        <Button>Open floating drawer</Button>
+      </DrawerTrigger>
+      <DrawerContent>
+        <DrawerHeader>
+          <DrawerTitle>Repository setup</DrawerTitle>
+          <DrawerDescription>Select the repository and branch to attach to this project.</DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody className="grid gap-4">
+          <div className="grid gap-1.5">
+            <Label htmlFor="drawer-repository">Repository</Label>
+            <Input id="drawer-repository" defaultValue="mastra-ai/mastra" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="drawer-branch">Branch</Label>
+            <Input id="drawer-branch" defaultValue="main" />
+          </div>
+        </DrawerBody>
+        <DrawerFooter>
+          <DrawerClose asChild>
+            <Button variant="outline">Cancel</Button>
+          </DrawerClose>
+          <DrawerClose asChild>
+            <Button>Save</Button>
+          </DrawerClose>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
+  ),
+};
+
 export const Left: Story = {
   render: () => (
     <Drawer side="left">
