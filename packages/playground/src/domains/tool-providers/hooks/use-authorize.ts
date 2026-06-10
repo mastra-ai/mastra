@@ -57,9 +57,10 @@ export const useAuthorize = (options: UseAuthorizeOptions = {}) => {
   return useMutation<AuthorizeResult, Error, AuthorizeArgs>({
     mutationFn: async ({ providerId, toolkit, connectionId, config, label, scope }) => {
       const integration = client.getToolProvider(providerId);
+      const normalizedConnectionId = connectionId?.trim();
       const { url, authId } = await integration.authorize({
         toolkit,
-        ...(connectionId ? { connectionId } : {}),
+        ...(normalizedConnectionId ? { connectionId: normalizedConnectionId } : {}),
         ...(config ? { config } : {}),
         ...(label !== undefined ? { label } : {}),
         ...(scope ? { scope } : {}),

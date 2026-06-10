@@ -15,6 +15,7 @@ export const composioToolkits: ListToolProviderToolkitsResponse = {
 export const adminConnections: ListToolProviderConnectionsResponse = {
   items: [
     { connectionId: 'conn_shared', status: 'active', authorId: 'shared', label: 'Shared' },
+    { connectionId: 'conn_unknown', status: 'active', label: 'Unknown author' },
     { connectionId: 'conn_b', status: 'active', authorId: 'user_B', label: 'B' },
     { connectionId: 'conn_a', status: 'active', authorId: 'user_A', label: 'A' },
   ],

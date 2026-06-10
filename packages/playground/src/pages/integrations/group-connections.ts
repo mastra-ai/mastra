@@ -1,17 +1,19 @@
 import type { ConnectionItem, GroupedConnections } from './types';
 
+const getAuthorGroupKey = (connection: ConnectionItem) => connection.authorId?.trim() || 'shared';
+
 export const getGroupedConnectionsByAuthor = (
   connections: ConnectionItem[],
   isAdmin: boolean,
 ): GroupedConnections | null => {
   if (!isAdmin) return null;
 
-  const authors = new Set(connections.flatMap(connection => (connection.authorId ? [connection.authorId] : [])));
+  const authors = new Set(connections.map(getAuthorGroupKey));
   if (authors.size <= 1) return null;
 
   const groups = new Map<string, ConnectionItem[]>();
   for (const connection of connections) {
-    const key = connection.authorId ?? '(unknown)';
+    const key = getAuthorGroupKey(connection);
     groups.set(key, [...(groups.get(key) ?? []), connection]);
   }
 
