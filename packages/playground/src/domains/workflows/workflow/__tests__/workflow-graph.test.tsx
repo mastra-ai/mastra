@@ -3,15 +3,16 @@ import type { GetWorkflowResponse, GetWorkflowRunByIdResponse } from '@mastra/cl
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
+import { WorkflowSelectedStepProvider } from '../../context/workflow-selected-step-context';
+import { WorkflowGraph } from '../workflow-graph';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
 import { server } from '@/test/msw-server';
-import { WorkflowGraph } from '../workflow-graph';
 
 const BASE_URL = 'http://localhost:4111';
 const WORKFLOW_ID = 'wf';
@@ -46,9 +47,11 @@ function Harness({ snapshot }: { snapshot: WorkflowRunState }) {
   // The graph keys its React Flow node/edge state on the route-driven snapshot.runId,
   // mirroring how WorkflowLayout builds the snapshot from useParams().runId.
   return (
-    <WorkflowRunContext.Provider value={{ snapshot } as never}>
-      <WorkflowGraph workflowId="wf" workflow={workflow} />
-    </WorkflowRunContext.Provider>
+    <WorkflowSelectedStepProvider>
+      <WorkflowRunContext.Provider value={{ snapshot } as never}>
+        <WorkflowGraph workflowId="wf" workflow={workflow} />
+      </WorkflowRunContext.Provider>
+    </WorkflowSelectedStepProvider>
   );
 }
 
@@ -71,9 +74,11 @@ function providerGraphUi(queryClient: QueryClient, initialRunId?: string) {
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <TracingSettingsProvider entityId={WORKFLOW_ID} entityType="workflow">
-          <WorkflowRunProvider workflowId={WORKFLOW_ID} initialRunId={initialRunId}>
-            <WorkflowGraph workflowId={WORKFLOW_ID} workflow={workflow} />
-          </WorkflowRunProvider>
+          <WorkflowSelectedStepProvider>
+            <WorkflowRunProvider workflowId={WORKFLOW_ID} initialRunId={initialRunId}>
+              <WorkflowGraph workflowId={WORKFLOW_ID} workflow={workflow} />
+            </WorkflowRunProvider>
+          </WorkflowSelectedStepProvider>
         </TracingSettingsProvider>
       </QueryClientProvider>
     </MastraReactProvider>
@@ -120,6 +125,20 @@ describe('WorkflowGraph', () => {
     const second = screen.getByText('shared-step');
     // A remount produces a new DOM node for the same label; same node would mean stale state.
     expect(second).not.toBe(first);
+  });
+
+  it('marks graph nodes as hovered from pointer interactions', () => {
+    render(<Harness snapshot={makeSnapshot('run-a', 'step-a')} />);
+
+    const node = screen.getByTestId('workflow-default-node');
+    expect(node.getAttribute('data-workflow-step-key')).toBe('step-a');
+    expect(node.getAttribute('data-workflow-step-hovered')).toBeNull();
+
+    fireEvent.mouseEnter(node);
+    expect(node.getAttribute('data-workflow-step-hovered')).toBe('true');
+
+    fireEvent.mouseLeave(node);
+    expect(node.getAttribute('data-workflow-step-hovered')).toBeNull();
   });
 
   it('clears run-derived node status when returning from a run route to the base workflow route', async () => {

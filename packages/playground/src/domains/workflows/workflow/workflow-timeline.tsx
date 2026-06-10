@@ -1,10 +1,11 @@
-import { CheckIcon, CrossIcon, Icon, Txt, useAutoscroll } from '@mastra/playground-ui';
+import { CheckIcon, CrossIcon, Icon, Txt, cn, useAutoscroll } from '@mastra/playground-ui';
 import { CirclePause, HourglassIcon, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 
 import { useCurrentRun } from '../context/use-current-run';
 import type { Step } from '../context/use-current-run';
+import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 import { buildTimeline } from './workflow-timeline-utils';
 
 const StepStatusIcon = ({ status }: { status: Step['status'] }) => (
@@ -35,6 +36,7 @@ function titleCase(stepId: string): string {
 
 export function WorkflowTimeline() {
   const { steps } = useCurrentRun();
+  const { selectedStepId, hoverStepId, setSelectedStepId, setHoverStepId } = useWorkflowSelectedStep();
   const [now, setNow] = useState(() => Date.now());
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -76,12 +78,26 @@ export function WorkflowTimeline() {
         <div ref={scrollRef} className="flex min-h-0 flex-col gap-2 overflow-y-auto">
           {rows.map((row, index) => {
             const timeDiff = row.durationMs / 1000;
+            const isSelected = selectedStepId === row.stepId;
+            const isHovered = hoverStepId === row.stepId;
 
             return (
-              <div
+              <button
                 key={`timeline-item-${row.stepId}-${index}`}
+                type="button"
                 data-testid="workflow-timeline-row"
-                className="grid grid-cols-[10rem_minmax(0,1fr)_5rem] items-center gap-3"
+                data-workflow-step-key={row.stepId}
+                data-workflow-step-active={isSelected ? 'true' : undefined}
+                data-workflow-step-hovered={isHovered ? 'true' : undefined}
+                aria-pressed={isSelected}
+                onClick={() => setSelectedStepId(row.stepId)}
+                onMouseEnter={() => setHoverStepId(row.stepId)}
+                onMouseLeave={() => setHoverStepId(null)}
+                className={cn(
+                  'grid grid-cols-[10rem_minmax(0,1fr)_5rem] items-center gap-3 rounded-md border border-transparent px-2 py-1 text-left transition-colors',
+                  isHovered && 'bg-surface4',
+                  isSelected && 'border-accent1',
+                )}
               >
                 <div className="flex min-w-0 items-center gap-2">
                   <StepStatusIcon status={row.status} />
@@ -101,7 +117,7 @@ export function WorkflowTimeline() {
                 <Txt as="span" variant="ui-sm" className="text-right text-neutral3 tabular-nums">
                   {Number(timeDiff.toPrecision(3))}s
                 </Txt>
-              </div>
+              </button>
             );
           })}
         </div>

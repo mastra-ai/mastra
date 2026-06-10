@@ -2,12 +2,13 @@
 import type { GetWorkflowRunByIdResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { baseWorkflow } from '../../components/__tests__/fixtures/workflow';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
+import { WorkflowSelectedStepProvider } from '../../context/workflow-selected-step-context';
 import { runWithOnlyInput, runWithTimedSteps } from '../../runs/__tests__/fixtures/workflow-runs';
 import { WorkflowTimeline } from '../workflow-timeline';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
@@ -29,9 +30,11 @@ function timelineUi(queryClient: QueryClient, initialRunId?: string) {
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <TracingSettingsProvider entityId={WORKFLOW_ID} entityType="workflow">
-          <WorkflowRunProvider workflowId={WORKFLOW_ID} initialRunId={initialRunId}>
-            <WorkflowTimeline />
-          </WorkflowRunProvider>
+          <WorkflowSelectedStepProvider>
+            <WorkflowRunProvider workflowId={WORKFLOW_ID} initialRunId={initialRunId}>
+              <WorkflowTimeline />
+            </WorkflowRunProvider>
+          </WorkflowSelectedStepProvider>
         </TracingSettingsProvider>
       </QueryClientProvider>
     </MastraReactProvider>
@@ -93,6 +96,29 @@ describe('WorkflowTimeline', () => {
 
     const rows = screen.getAllByTestId('workflow-timeline-row');
     expect(rows.length).toBe(3);
+    expect(rows[0].tagName).toBe('BUTTON');
+  });
+
+  it('marks timeline rows as hovered and selected from pointer and click interactions', async () => {
+    stubRunById('run-timeline-1', runWithTimedSteps);
+    stubWorkflow();
+
+    renderTimeline('run-timeline-1');
+
+    await screen.findByText('Step A');
+
+    const firstRow = screen.getAllByTestId('workflow-timeline-row')[0];
+    expect(firstRow.getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.mouseEnter(firstRow);
+    expect(firstRow.getAttribute('data-workflow-step-hovered')).toBe('true');
+
+    fireEvent.click(firstRow);
+    expect(firstRow.getAttribute('aria-pressed')).toBe('true');
+    expect(firstRow.getAttribute('data-workflow-step-active')).toBe('true');
+
+    fireEvent.mouseLeave(firstRow);
+    expect(firstRow.getAttribute('data-workflow-step-hovered')).toBeNull();
   });
 
   it('clears run timeline rows when returning from a run route to the base workflow route', async () => {

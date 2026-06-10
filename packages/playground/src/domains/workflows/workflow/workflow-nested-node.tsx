@@ -5,6 +5,7 @@ import type { NodeProps, Node } from '@xyflow/react';
 import { CircleDashed, HourglassIcon, Loader2, PauseIcon, ShieldAlert } from 'lucide-react';
 
 import { useCurrentRun } from '../context/use-current-run';
+import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 import { Clock } from './workflow-clock';
 import { BADGE_COLORS, BADGE_ICONS, getNodeBadgeInfo } from './workflow-node-badges';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
@@ -37,6 +38,7 @@ export function WorkflowNestedNode({
   stepsFlow,
 }: NodeProps<NestedNode> & WorkflowNestedNodeProps) {
   const { steps } = useCurrentRun();
+  const { selectedStepId, hoverStepId, setHoverStepId } = useWorkflowSelectedStep();
 
   const {
     label,
@@ -53,6 +55,8 @@ export function WorkflowNestedNode({
 
   const fullLabel = parentWorkflowName ? `${parentWorkflowName}.${label}` : label;
   const stepKey = parentWorkflowName ? `${parentWorkflowName}.${stepId || label}` : stepId || label;
+  const isSelected = selectedStepId === stepKey;
+  const isHovered = hoverStepId === stepKey;
 
   const step = steps[stepKey];
 
@@ -74,9 +78,14 @@ export function WorkflowNestedNode({
       <div
         data-testid="workflow-nested-node"
         data-workflow-node
-        data-workflow-step-status={displayStatus}
+        data-workflow-step-key={stepKey}
+        data-workflow-step-status={displayStatus ?? 'idle'}
+        data-workflow-step-active={isSelected ? 'true' : undefined}
+        data-workflow-step-hovered={isHovered ? 'true' : undefined}
+        onMouseEnter={() => setHoverStepId(stepKey)}
+        onMouseLeave={() => setHoverStepId(null)}
         className={cn(
-          'bg-surface3 rounded-lg w-[274px] border border-border1',
+          'bg-surface3 rounded-lg w-[274px] border border-border1 transition-colors',
           hasSpecialBadge ? 'pt-0' : 'pt-2',
           displayStatus === 'success' && 'bg-accent1Darker',
           displayStatus === 'failed' && 'bg-accent2Darker',
@@ -84,6 +93,8 @@ export function WorkflowNestedNode({
           displayStatus === 'suspended' && 'bg-accent3Darker',
           displayStatus === 'waiting' && 'bg-accent5Darker',
           displayStatus === 'running' && 'bg-accent6Darker',
+          isHovered && 'border-neutral6',
+          isSelected && 'border-accent1',
         )}
       >
         {hasSpecialBadge && (
