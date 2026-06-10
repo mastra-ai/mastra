@@ -177,7 +177,7 @@ await voice.connect()
 When you use a resolver:
 
 - Each call to `getVoice()` returns a new instance, so concurrent sessions never share state.
-- Mastra does not add tools or instructions to a resolver instance. Configure those inside the resolver or on the provider.
+- Mastra doesn't add tools or instructions to a resolver instance. Configure those inside the resolver or on the provider.
 - You own the lifecycle of the returned instance, so call `disconnect()` or `close()` when the session ends.
 
 The `agent.voice` getter has no request context, so it throws when `voice` is a resolver. Use `agent.getVoice({ requestContext })` instead.

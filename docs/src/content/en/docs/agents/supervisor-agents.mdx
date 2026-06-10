@@ -185,7 +185,7 @@ The callback receives `messages` (the full conversation history), `primitiveId` 
 
 ## Subagent result context
 
-When a subagent completes, the supervisor model receives the subagent's text response in later iterations. Nested tool calls and subagent metadata, such as thread and resource IDs, are not added to the supervisor model context.
+When a subagent completes, the supervisor model receives the subagent's text response in later iterations. Nested tool calls and subagent metadata, such as thread and resource IDs, aren't added to the supervisor model context.
 
 Application code and UI integrations can still inspect the raw delegation result, including `subAgentToolResults`, from the tool result payload. This keeps debugging and display data available without sending nested tool arguments or outputs back into the supervisor's next model call.
 
