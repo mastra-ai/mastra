@@ -16,7 +16,9 @@ export const requireEnterpriseLicense = () => {
   const license = requiredEnv('MASTRA_EE_LICENSE');
 
   if (license.length < 32) {
-    throw new Error('Agent Builder requires a valid MASTRA_EE_LICENSE with at least 32 characters. Add it to .env before starting.');
+    throw new Error(
+      'Agent Builder requires a valid MASTRA_EE_LICENSE with at least 32 characters. Add it to .env before starting.',
+    );
   }
 
   return license;
