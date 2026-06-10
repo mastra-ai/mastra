@@ -8,6 +8,7 @@ import type * as XyFlowReact from '@xyflow/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { baseWorkflow } from '../../components/__tests__/fixtures/workflow';
 import { useWorkflowSelectedStep } from '../../context/use-workflow-selected-step';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
@@ -68,10 +69,34 @@ function makeSnapshot(runId: string, stepId: string): WorkflowRunState {
   } as WorkflowRunState;
 }
 
-const workflow = {
+const workflow: GetWorkflowResponse = {
+  ...baseWorkflow,
   name: 'Wf',
+  steps: {
+    'static-step': {
+      id: 'static-step',
+      description: '',
+      inputSchema: baseWorkflow.inputSchema,
+      outputSchema: baseWorkflow.outputSchema,
+      resumeSchema: baseWorkflow.steps['step-1'].resumeSchema,
+      suspendSchema: baseWorkflow.steps['step-1'].suspendSchema,
+      stateSchema: baseWorkflow.stateSchema,
+    },
+  },
+  allSteps: {
+    'static-step': {
+      id: 'static-step',
+      description: '',
+      inputSchema: baseWorkflow.inputSchema,
+      outputSchema: baseWorkflow.outputSchema,
+      resumeSchema: baseWorkflow.allSteps['step-1'].resumeSchema,
+      suspendSchema: baseWorkflow.allSteps['step-1'].suspendSchema,
+      stateSchema: baseWorkflow.stateSchema,
+      isWorkflow: false,
+    },
+  },
   stepGraph: stepGraph('static-step'),
-} as unknown as GetWorkflowResponse;
+};
 
 function Harness({ snapshot, selectableStepId }: { snapshot: WorkflowRunState; selectableStepId?: string }) {
   // The graph keys its React Flow node/edge state on the route-driven snapshot.runId,

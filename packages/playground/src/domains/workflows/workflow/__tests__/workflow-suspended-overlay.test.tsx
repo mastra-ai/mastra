@@ -8,7 +8,7 @@ import { delay, http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { useContext, useEffect } from 'react';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { baseWorkflow } from '../../components/__tests__/fixtures/workflow';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
@@ -27,8 +27,13 @@ function stubWorkflow() {
   server.use(http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}`, () => HttpResponse.json(baseWorkflow)));
 }
 
-function stubRunById(runId: string, response: GetWorkflowRunByIdResponse) {
-  server.use(http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs/${runId}`, () => HttpResponse.json(response)));
+function stubRunById(runId: string, response: GetWorkflowRunByIdResponse, onRequest?: () => void) {
+  server.use(
+    http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs/${runId}`, () => {
+      onRequest?.();
+      return HttpResponse.json(response);
+    }),
+  );
 }
 
 function createQueryClient() {
@@ -93,13 +98,19 @@ afterEach(cleanup);
 
 describe('WorkflowSuspendedOverlay', () => {
   it('renders nothing when there is no suspended step', async () => {
-    stubRunById('run-timeline-1', runWithTimedSteps);
+    const onRunRequest = vi.fn();
+    stubRunById('run-timeline-1', runWithTimedSteps, onRunRequest);
     stubWorkflow();
 
-    const { container } = renderOverlay('run-timeline-1');
+    const queryClient = createQueryClient();
+    const { container } = render(
+      <Providers initialRunId="run-timeline-1" queryClient={queryClient}>
+        <WorkflowSuspendedOverlay />
+      </Providers>,
+    );
 
-    // Let the run-by-id query resolve, then assert the overlay never appears.
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await waitFor(() => expect(onRunRequest).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     expect(container.querySelector('[data-testid="workflow-suspended-overlay"]')).toBeNull();
   });
@@ -125,9 +136,14 @@ describe('WorkflowSuspendedOverlay', () => {
     // `result` still holds the previous (suspended) steps while the route already
     // points at the finished run. The overlay must hide based on the run-accurate
     // snapshot status, not the lagging `result`.
+    let resolveFinishedRun: () => void = () => {};
+    const finishedRunResolved = new Promise<void>(resolve => {
+      resolveFinishedRun = resolve;
+    });
     server.use(
       http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs/run-timeline-1`, async () => {
         await delay(150);
+        resolveFinishedRun();
         return HttpResponse.json(runWithTimedSteps);
       }),
     );
@@ -160,8 +176,8 @@ describe('WorkflowSuspendedOverlay', () => {
     expect(screen.queryByTestId('workflow-suspended-overlay')).toBeNull();
 
     // It stays hidden after the finished snapshot resolves too.
-    await waitFor(() => expect(screen.queryByTestId('workflow-suspended-overlay')).toBeNull());
-    await new Promise(resolve => setTimeout(resolve, 200));
+    await finishedRunResolved;
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     expect(screen.queryByTestId('workflow-suspended-overlay')).toBeNull();
   });
 
@@ -176,7 +192,12 @@ describe('WorkflowSuspendedOverlay', () => {
       status: 'suspended',
       value: {},
       context: {
-        'step-1': { status: 'suspended', suspendPayload: { reason: 'needs approval' } },
+        'step-1': {
+          status: 'suspended',
+          payload: { reason: 'needs approval' },
+          startedAt: Date.now(),
+          suspendedAt: Date.now(),
+        },
       },
       serializedStepGraph: [],
       activePaths: [],

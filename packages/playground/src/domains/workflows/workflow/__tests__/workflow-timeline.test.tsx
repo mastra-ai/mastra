@@ -4,7 +4,7 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { baseWorkflow } from '../../components/__tests__/fixtures/workflow';
 import type { Step } from '../../context/use-current-run';
@@ -23,8 +23,13 @@ function stubWorkflow() {
   server.use(http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}`, () => HttpResponse.json(baseWorkflow)));
 }
 
-function stubRunById(runId: string, response: GetWorkflowRunByIdResponse) {
-  server.use(http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs/${runId}`, () => HttpResponse.json(response)));
+function stubRunById(runId: string, response: GetWorkflowRunByIdResponse, onRequest?: () => void) {
+  server.use(
+    http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs/${runId}`, () => {
+      onRequest?.();
+      return HttpResponse.json(response);
+    }),
+  );
 }
 
 function timelineUi(queryClient: QueryClient, initialRunId?: string) {
@@ -48,7 +53,7 @@ function renderTimeline(initialRunId?: string) {
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
 
-  return render(timelineUi(queryClient, initialRunId));
+  return { ...render(timelineUi(queryClient, initialRunId)), queryClient };
 }
 
 function renderRerenderableTimeline(initialRunId?: string) {
@@ -97,13 +102,14 @@ describe('WorkflowTimeline', () => {
   });
 
   it('renders nothing when the run has no non-input steps', async () => {
-    stubRunById('run-timeline-empty', runWithOnlyInput);
+    const onRunRequest = vi.fn();
+    stubRunById('run-timeline-empty', runWithOnlyInput, onRunRequest);
     stubWorkflow();
 
-    const { container } = renderTimeline('run-timeline-empty');
+    const { container, queryClient } = renderTimeline('run-timeline-empty');
 
-    // Give the query a tick to resolve, then assert still empty.
-    await new Promise(resolve => setTimeout(resolve, 50));
+    await waitFor(() => expect(onRunRequest).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     expect(container.querySelector('[data-testid="workflow-timeline"]')).toBeNull();
   });
 

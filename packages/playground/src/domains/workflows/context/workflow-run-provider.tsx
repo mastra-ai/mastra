@@ -122,7 +122,7 @@ export function WorkflowRunProvider({
           context: {
             input: runExecutionResult?.payload,
             ...runExecutionResult?.steps,
-          } as any,
+          },
           status: runExecutionResult?.status,
           result: runExecutionResult?.result,
           error: runExecutionResult?.error,
