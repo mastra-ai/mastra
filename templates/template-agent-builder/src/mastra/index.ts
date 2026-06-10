@@ -95,7 +95,9 @@ export const mastra = new Mastra({
   storage,
   workspace,
   agents: {
-    builderAgent: createBuilderAgent(),
+    builderAgent: createBuilderAgent({
+      model: 'openai/gpt-5',
+    }),
   },
   bundler: {
     sourcemap: true,
