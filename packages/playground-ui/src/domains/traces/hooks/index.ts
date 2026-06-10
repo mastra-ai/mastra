@@ -1,5 +1,6 @@
 export { getAllSpanIds, getSpanDescendantIds } from './get-all-span-ids';
 export { useBranch, type UseBranchArgs } from './use-branch';
+export { useDownloadTraceJson } from './use-download-trace-json';
 export { useSpanDetail } from './use-span-detail';
 export { useTraceLightSpans } from './use-trace-light-spans';
 export {
