@@ -156,7 +156,11 @@ export class UnixSocketPubSub extends PubSub {
     return this.#isBroker ? this.#brokerClients.size : 0;
   }
 
-  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>, options?: { localOnly?: boolean }): Promise<void> {
+  async publish(
+    topic: string,
+    event: Omit<Event, 'id' | 'createdAt'>,
+    options?: { localOnly?: boolean },
+  ): Promise<void> {
     await this.#ensureStarted();
     if (this.#isBroker) {
       await this.#publishFromBroker(topic, event, undefined, options?.localOnly);
