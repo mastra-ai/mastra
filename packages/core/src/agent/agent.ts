@@ -4117,7 +4117,13 @@ export class Agent<
           ? undefined
           : (output: z.infer<typeof agentOutputSchema>) => ({
               type: 'text' as const,
-              value: output.text,
+              // When a sub-agent invocation is dispatched as a background task, the agentic loop
+              // returns a placeholder result of the shape `{ result: string }` (see
+              // tool-call-step.ts) instead of the agentOutputSchema shape. That placeholder has no
+              // `text`, so `output.text` is undefined here, producing a tool message with null
+              // content that providers (e.g. Anthropic) reject with a 500. Fall back to the
+              // placeholder's `result` so the tool message always carries non-empty content.
+              value: output.text ?? (output as { result?: string }).result ?? '',
             });
 
         const toolObj = createTool({
