@@ -67,7 +67,7 @@ describe('isZodType', () => {
     expect(isZodType('hello')).toBe(false);
   });
 
-  it('returns false for a plain object without Zod internals', () => {
+  it('returns true for a plain object that duck-types Zod internals', () => {
     expect(isZodType({ _def: {}, parse: () => {}, safeParse: () => {} })).toBe(true);
   });
 
