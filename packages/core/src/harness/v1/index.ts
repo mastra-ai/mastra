@@ -5,6 +5,21 @@ export type { HarnessEvent, HarnessEventListener, HarnessEventUnsubscribe } from
 export type { HarnessMode } from './mode';
 export type { HarnessSkill, HarnessSkillMetadata } from './skills.types';
 export { HarnessSkillNotFoundError } from './skills.types';
+export { composeReason, evaluatePermission, resolveEffectivePolicy } from './permissions';
 export type { ModelResolver, SubagentDefinition, SubagentRegistryConfig } from './subagents.types';
-export type { PermissionPolicy, ToolCategory, ToolCategoryResolver } from './permissions.types';
+export type {
+  PermissionCheckInput,
+  PermissionCheckResult,
+  PermissionDecision,
+  PermissionGate,
+  PermissionPolicy,
+  PermissionReason,
+  PermissionRequestedCallback,
+  PermissionRequestedEvent,
+  PermissionRule,
+  PermissionRules,
+  SessionGrant,
+  ToolCategory,
+  ToolCategoryResolver,
+} from './permissions.types';
 export type { HarnessRequestContext, HarnessRequestContextSource } from './request-context';

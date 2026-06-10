@@ -14,7 +14,13 @@ import { EventEmitter, sessionCreatedPayload } from './events';
 import type { HarnessEventListener, HarnessEventUnsubscribe } from './events';
 import type { HarnessConfig } from './harness.types';
 import type { HarnessMode } from './mode';
-import type { PermissionPolicy, ToolCategoryResolver } from './permissions.types';
+import type {
+  PermissionPolicy,
+  PermissionRequestedCallback,
+  PermissionRules,
+  SessionGrant,
+  ToolCategoryResolver,
+} from './permissions.types';
 import { Session } from './session';
 import type { CloneSessionOptions } from './session.types';
 import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
@@ -54,6 +60,9 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
   readonly #subagents?: SubagentRegistryConfig;
   readonly #runtimeCompatibilityGeneration?: string | null;
   readonly #defaultPermissionPolicy: PermissionPolicy;
+  readonly #permissionRules?: PermissionRules;
+  readonly #sessionGrants: readonly SessionGrant[];
+  readonly #onPermissionRequested?: PermissionRequestedCallback;
   readonly #toolCategoryResolver?: ToolCategoryResolver;
   readonly #gateways: Array<MastraModelGatewayInterface>;
 
@@ -117,6 +126,9 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       : [new MastraGateway()];
 
     this.#defaultPermissionPolicy = config.defaultPermissionPolicy ?? 'ask';
+    this.#permissionRules = config.permissionRules;
+    this.#sessionGrants = config.sessionGrants ?? [];
+    this.#onPermissionRequested = config.onPermissionRequested;
     if (config.toolCategoryResolver) {
       this.#toolCategoryResolver = config.toolCategoryResolver;
     } else if (config.toolCategories) {
@@ -147,10 +159,6 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
 
   emit(event: Parameters<EventEmitter['emit']>[0]): ReturnType<EventEmitter['emit']> {
     return this.#events.emit(event);
-  }
-
-  async init(): Promise<void> {
-    await this.#requireStorage();
   }
 
   async shutdown(): Promise<void> {}
@@ -321,6 +329,9 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       resolveMode: modeId => this.#resolveMode(modeId),
       gateways: this.#gateways,
       defaultPermissionPolicy: this.#defaultPermissionPolicy,
+      permissionRules: this.#permissionRules,
+      sessionGrants: this.#sessionGrants,
+      onPermissionRequested: this.#onPermissionRequested,
       toolCategoryResolver: this.#toolCategoryResolver,
     });
   }

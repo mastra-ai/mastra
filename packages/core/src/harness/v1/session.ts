@@ -19,7 +19,15 @@ import type { Skill as WorkspaceSkill, SkillMetadata as WorkspaceSkillMetadata }
 import { sessionCreatedPayload } from './events';
 import type { EventEmitter } from './events';
 import type { HarnessMode } from './mode';
-import type { PermissionPolicy, ToolCategoryResolver } from './permissions.types';
+import type {
+  PermissionCheckResult,
+  PermissionPolicy,
+  PermissionRequestedCallback,
+  PermissionRules,
+  SessionGrant,
+  ToolCategory,
+  ToolCategoryResolver,
+} from './permissions.types';
 import { buildHarnessRequestContext } from './request-context';
 import type { HarnessRequestContext, HarnessRequestContextSource } from './request-context';
 import type {
@@ -74,6 +82,9 @@ export class Session<TState = {}> {
   readonly #subagents?: SubagentRegistryConfig;
   readonly #gateways: Array<MastraModelGatewayInterface>;
   readonly #defaultPermissionPolicy: PermissionPolicy;
+  readonly #permissionRules?: PermissionRules;
+  #sessionGrants: SessionGrant[];
+  readonly #onPermissionRequested?: PermissionRequestedCallback;
   readonly #toolCategoryResolver?: ToolCategoryResolver;
   // readonly parentSessionId?: string;
   // readonly subagentDepth: number;
@@ -112,6 +123,9 @@ export class Session<TState = {}> {
     this.#workspace = config.workspace;
     this.#subagents = config.subagents;
     this.#defaultPermissionPolicy = config.defaultPermissionPolicy ?? 'ask';
+    this.#permissionRules = config.permissionRules;
+    this.#sessionGrants = [...(config.sessionGrants ?? [])];
+    this.#onPermissionRequested = config.onPermissionRequested;
     this.#toolCategoryResolver = config.toolCategoryResolver;
     this.#agent = config.agent;
     this.#gateways = config.gateways;
@@ -179,6 +193,36 @@ export class Session<TState = {}> {
 
   listPendingItems(): HarnessPendingItemRecord[] {
     return this.#pending.map(item => ({ ...item }));
+  }
+
+  addSessionGrant(grant: SessionGrant): SessionGrant {
+    const record: SessionGrant = { ...grant, id: grant.id ?? randomUUID() };
+    this.#sessionGrants = [...this.#sessionGrants, record];
+    return { ...record };
+  }
+
+  removeSessionGrant(grantId: string): boolean {
+    const before = this.#sessionGrants.length;
+    this.#sessionGrants = this.#sessionGrants.filter(grant => grant.id !== grantId);
+    return this.#sessionGrants.length !== before;
+  }
+
+  listSessionGrants(): SessionGrant[] {
+    return this.#sessionGrants.filter(grant => this.#isSessionGrantActive(grant)).map(grant => ({ ...grant }));
+  }
+
+  async approveToolCall(approvalId: string, decision: 'allow' | 'deny'): Promise<HarnessPendingItemRecord> {
+    const approved = decision === 'allow';
+    const item = await this.respondToToolApproval(approvalId, { approved });
+    this.#events.emit({
+      type: 'permission.resolved',
+      payload: {
+        pendingItemId: item.id,
+        approved,
+        decision,
+      },
+    });
+    return item;
   }
 
   async spawnSubagentSession(opts: { agentType: string; prompt: string; modelId?: string; forked?: boolean }): Promise<
@@ -360,6 +404,9 @@ export class Session<TState = {}> {
       resolveMode: this.#resolveMode,
       gateways: this.#gateways,
       defaultPermissionPolicy: this.#defaultPermissionPolicy,
+      permissionRules: this.#permissionRules,
+      sessionGrants: this.#sessionGrants,
+      onPermissionRequested: this.#onPermissionRequested,
       toolCategoryResolver: this.#toolCategoryResolver,
     });
 
@@ -482,19 +529,78 @@ export class Session<TState = {}> {
     return this.#agent;
   }
 
-  async #buildMessageTarget<OUTPUT>(
-    agent: Agent,
-    options: Omit<SessionMessageOptions<OUTPUT>, 'messages'>,
-  ): Promise<SendAgentMessageOptions<OUTPUT> & QueueAgentMessageOptions<OUTPUT>> {
-    const { ifActive, ifIdle, runId, ...executionOptions } = options;
+  async #buildToolsets(agent: Agent): Promise<{ tools: ToolsInput; harnessToolNames: string[] }> {
     const requestContext = await this.#buildRequestContext();
     const agentTools = await agent.listTools({ requestContext });
     const tools = buildSessionToolsets({
       agentTools,
       modeOverrides: this.#getToolOverrides(),
       builtInTools: buildHarnessBuiltInTools(this),
+      permissionRules: this.#permissionRules,
+      permissions: {
+        sessionGrants: this.listSessionGrants(),
+        defaultPermissionPolicy: this.#defaultPermissionPolicy,
+        toolCategoryResolver: this.#toolCategoryResolver,
+        yolo: this.#isYoloEnabled(),
+        onPendingApproval: input => this.#registerPermissionApproval(input),
+      },
     });
-    const harnessToolNames = Object.keys(tools);
+    return { tools, harnessToolNames: Object.keys(tools) };
+  }
+
+  async #registerPermissionApproval(input: {
+    toolName: string;
+    category: ToolCategory | null;
+    args: unknown;
+    result: PermissionCheckResult;
+  }): Promise<{ pendingItemId: string; status: string }> {
+    const pending = await this.registerPendingItem({
+      id: randomUUID(),
+      kind: 'tool-approval',
+      status: 'pending',
+      runId: this.#getActiveThreadRunId() ?? this.#currentRunId ?? undefined,
+      traceId: this.#currentTraceId ?? undefined,
+      payload: {
+        source: 'permission-gate',
+        toolName: input.toolName,
+        category: input.category,
+        args: input.args,
+        permission: input.result,
+      },
+    });
+
+    const event = {
+      pendingItemId: pending.id,
+      toolName: input.toolName,
+      category: input.category,
+      result: input.result,
+    };
+    const metadata = Object.fromEntries(
+      Object.entries(input.result.metadata).filter(([, value]) => value !== undefined),
+    );
+    this.#events.emit({
+      type: 'permission.requested',
+      payload: {
+        pendingItemId: pending.id,
+        toolName: input.toolName,
+        category: input.category,
+        decision: input.result.decision,
+        policy: input.result.policy,
+        reasons: input.result.reasons,
+        metadata,
+      },
+    });
+    await this.#onPermissionRequested?.(event);
+    return { pendingItemId: pending.id, status: pending.status };
+  }
+
+  async #buildMessageTarget<OUTPUT>(
+    agent: Agent,
+    options: Omit<SessionMessageOptions<OUTPUT>, 'messages'>,
+  ): Promise<SendAgentMessageOptions<OUTPUT> & QueueAgentMessageOptions<OUTPUT>> {
+    const { ifActive, ifIdle, runId, ...executionOptions } = options;
+    const { tools, harnessToolNames } = await this.#buildToolsets(agent);
+    const modeInstructions = this.#mode.instructions;
     const userStreamOptions = ifIdle?.streamOptions ?? {};
     const requestedActiveTools = userStreamOptions.activeTools ?? executionOptions.activeTools;
 
@@ -507,13 +613,17 @@ export class Session<TState = {}> {
         ...ifIdle,
         behavior: ifIdle?.behavior ?? 'wake',
         streamOptions: {
+          // Mode instructions as base (overrides agent's default)
+          ...(modeInstructions ? { instructions: modeInstructions } : {}),
+          // User execution options override mode instructions
           ...executionOptions,
+          // ifIdle.streamOptions overrides everything
           ...userStreamOptions,
-          requestContext,
+          requestContext: await this.#buildRequestContext(),
           toolsets: { harness: tools },
           activeTools: requestedActiveTools
             ? [...new Set([...requestedActiveTools, ...harnessToolNames])]
-            : harnessToolNames,
+            : undefined,
         },
       },
     };
@@ -765,6 +875,16 @@ export class Session<TState = {}> {
       state: this.#state as Record<string, unknown>,
       changedKeys,
     });
+  }
+
+  #isSessionGrantActive(grant: SessionGrant): boolean {
+    if (!grant.expiresAt) return true;
+    const expiresAt = grant.expiresAt instanceof Date ? grant.expiresAt.getTime() : new Date(grant.expiresAt).getTime();
+    return Number.isFinite(expiresAt) && expiresAt > Date.now();
+  }
+
+  #isYoloEnabled(): boolean {
+    return (this.#state as Record<string, unknown>).yolo === true;
   }
 
   #isBusySnapshot(): boolean {
