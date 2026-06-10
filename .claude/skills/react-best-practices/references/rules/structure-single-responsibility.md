@@ -58,10 +58,7 @@ export function useProductSearch() {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<Category | null>(null);
   const filtered = useMemo(
-    () =>
-      (products ?? []).filter(
-        p => p.name.includes(query) && (!category || p.category === category),
-      ),
+    () => (products ?? []).filter(p => p.name.includes(query) && (!category || p.category === category)),
     [products, query, category],
   );
   return { filtered, query, setQuery, category, setCategory };
@@ -74,7 +71,9 @@ export function ProductList({ products, onSelect }: ProductListProps) {
   return (
     <ul>
       {products.map(p => (
-        <li key={p.id} onClick={() => onSelect(p.id)}>{p.name}</li>
+        <li key={p.id} onClick={() => onSelect(p.id)}>
+          {p.name}
+        </li>
       ))}
     </ul>
   );
