@@ -528,12 +528,19 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         // Persist result with scores (if storage available)
         if (experimentsStore) {
           try {
+            // The replay report rides inside the stored output column (no
+            // storage schema change) — merged here, AFTER scoring, so scorers
+            // never see replay metadata in the output they evaluate.
+            const persistedOutput =
+              execResult.toolReplay && execResult.output && typeof execResult.output === 'object'
+                ? { ...(execResult.output as Record<string, unknown>), toolReplay: execResult.toolReplay }
+                : execResult.output;
             await experimentsStore.addExperimentResult({
               experimentId,
               itemId: item.id,
               itemDatasetVersion: item.datasetVersion,
               input: item.input,
-              output: execResult.output,
+              output: persistedOutput,
               groundTruth: item.groundTruth ?? null,
               error: execResult.error,
               startedAt: itemStartedAt,

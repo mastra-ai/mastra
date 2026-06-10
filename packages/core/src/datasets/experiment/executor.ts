@@ -317,8 +317,11 @@ async function executeAgent(
 
   // Only persist fields relevant to experiment evaluation — drop provider metadata,
   // duplicate messages, steps trace, and other debugging internals.
-  // The replay report rides inside output so it persists via the existing
-  // experiment-result output column without a storage schema change.
+  // The replay report is deliberately NOT part of output: scorers receive
+  // output, and replay metadata would make replay runs score differently
+  // than baselines for any output-shape-sensitive scorer. The report lives
+  // on ExecutionResult.toolReplay and is merged into the stored output
+  // column at persistence time (see runExperiment).
   const trimmedOutput = {
     text: result.text,
     object: result.object,
@@ -330,7 +333,6 @@ async function executeAgent(
     reasoningText: result.reasoningText,
     traceId,
     error: result.error ?? null,
-    ...(replayReport ? { toolReplay: replayReport } : {}),
   };
 
   return {
