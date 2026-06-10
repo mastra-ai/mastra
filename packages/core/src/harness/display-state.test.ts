@@ -39,7 +39,6 @@ describe('defaultDisplayState', () => {
     expect(ds.toolInputBuffers).toBeInstanceOf(Map);
     expect(ds.toolInputBuffers.size).toBe(0);
     expect(ds.pendingApproval).toBeNull();
-    expect(ds.pendingQuestion).toBeNull();
     expect(ds.pendingPlanApproval).toBeNull();
     expect(ds.activeSubagents).toBeInstanceOf(Map);
     expect(ds.activeSubagents.size).toBe(0);
@@ -76,7 +75,6 @@ describe('Harness.getDisplayState()', () => {
     expect(ds.tokenUsage).toEqual(createEmptyTokenUsage());
     expect(ds.activeTools.size).toBe(0);
     expect(ds.pendingApproval).toBeNull();
-    expect(ds.pendingQuestion).toBeNull();
     expect(ds.pendingPlanApproval).toBeNull();
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.modifiedFiles.size).toBe(0);
@@ -137,14 +135,6 @@ describe('agent lifecycle', () => {
 
     emit(harness, { type: 'agent_end', reason: 'complete' });
     expect(harness.getDisplayState().isRunning).toBe(false);
-  });
-
-  it('clears pendingQuestion on agent_end', () => {
-    emit(harness, { type: 'ask_question', questionId: 'q1', question: 'What?', options: [] });
-    expect(harness.getDisplayState().pendingQuestion).not.toBeNull();
-
-    emit(harness, { type: 'agent_end', reason: 'complete' });
-    expect(harness.getDisplayState().pendingQuestion).toBeNull();
   });
 
   it('clears pendingPlanApproval on agent_end', () => {
@@ -680,20 +670,18 @@ describe('interactive prompts', () => {
     harness = createHarness();
   });
 
-  it('sets pendingQuestion on ask_question', () => {
+  it('sets pendingSuspension on tool_suspended', () => {
     emit(harness, {
-      type: 'ask_question',
-      questionId: 'q1',
-      question: 'Which option?',
-      options: [{ label: 'A' }, { label: 'B' }],
-      selectionMode: 'multi_select',
+      type: 'tool_suspended',
+      toolCallId: 'call-1',
+      toolName: 'ask_user',
+      args: {},
+      suspendPayload: { question: 'Which option?' },
     });
-    const q = harness.getDisplayState().pendingQuestion;
-    expect(q).not.toBeNull();
-    expect(q!.questionId).toBe('q1');
-    expect(q!.question).toBe('Which option?');
-    expect(q!.options).toHaveLength(2);
-    expect(q!.selectionMode).toBe('multi_select');
+    const s = harness.getDisplayState().pendingSuspension;
+    expect(s).not.toBeNull();
+    expect(s!.toolCallId).toBe('call-1');
+    expect(s!.toolName).toBe('ask_user');
   });
 
   it('sets pendingPlanApproval on plan_approval_required', () => {
@@ -1356,7 +1344,6 @@ describe('resetThreadDisplayState', () => {
     // Populate various state
     emit(harness, { type: 'tool_start', toolCallId: 't1', toolName: 'read_file', args: {} });
     emit(harness, { type: 'tool_input_start', toolCallId: 't2', toolName: 'write_file' });
-    emit(harness, { type: 'ask_question', questionId: 'q1', question: 'Q?', options: [] });
     emit(harness, { type: 'plan_approval_required', planId: 'p1', title: 'P', plan: '#' });
     emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 't', modelId: 'm' });
     emit(harness, {
@@ -1373,7 +1360,6 @@ describe('resetThreadDisplayState', () => {
     expect(ds.activeTools.size).toBe(0);
     expect(ds.toolInputBuffers.size).toBe(0);
     expect(ds.pendingApproval).toBeNull();
-    expect(ds.pendingQuestion).toBeNull();
     expect(ds.pendingPlanApproval).toBeNull();
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.currentMessage).toBeNull();
@@ -1585,7 +1571,7 @@ describe('Harness.subscribeDisplayState()', () => {
     expect(listener.mock.calls[1]?.[0].isRunning).toBe(false);
   });
 
-  it('flushes immediately for approvals, suspensions, questions, plans, errors, and state changes', () => {
+  it('flushes immediately for approvals, suspensions, plans, errors, and state changes', () => {
     const listener = vi.fn();
     harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
 
@@ -1609,35 +1595,27 @@ describe('Harness.subscribeDisplayState()', () => {
     expect(listener.mock.calls[1]?.[0].pendingSuspension?.toolCallId).toBe('t2');
 
     emit(harness, {
-      type: 'ask_question',
-      questionId: 'q1',
-      question: 'Proceed?',
-    });
-    expect(listener).toHaveBeenCalledTimes(3);
-    expect(listener.mock.calls[2]?.[0].pendingQuestion?.questionId).toBe('q1');
-
-    emit(harness, {
       type: 'plan_approval_required',
       planId: 'p1',
       title: 'Plan',
       plan: '# Plan',
     });
-    expect(listener).toHaveBeenCalledTimes(4);
-    expect(listener.mock.calls[3]?.[0].pendingPlanApproval?.planId).toBe('p1');
+    expect(listener).toHaveBeenCalledTimes(3);
+    expect(listener.mock.calls[2]?.[0].pendingPlanApproval?.planId).toBe('p1');
 
     emit(harness, {
       type: 'error',
       error: new Error('boom'),
     });
-    expect(listener).toHaveBeenCalledTimes(5);
+    expect(listener).toHaveBeenCalledTimes(4);
 
     emit(harness, {
       type: 'state_changed',
       state: { observationThreshold: 12_000 },
       changedKeys: ['observationThreshold'],
     });
-    expect(listener).toHaveBeenCalledTimes(6);
-    expect(listener.mock.calls[5]?.[0].omProgress.threshold).toBe(12_000);
+    expect(listener).toHaveBeenCalledTimes(5);
+    expect(listener.mock.calls[4]?.[0].omProgress.threshold).toBe(12_000);
   });
 
   it('critical events emit one latest post-critical snapshot when state is pending', () => {

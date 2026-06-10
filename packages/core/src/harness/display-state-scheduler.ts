@@ -12,7 +12,6 @@ export const CRITICAL_DISPLAY_STATE_EVENT_TYPES: ReadonlySet<HarnessEvent['type'
   'error',
   'tool_approval_required',
   'tool_suspended',
-  'ask_question',
   'plan_approval_required',
   'plan_approved',
   'thread_changed',
@@ -109,12 +108,6 @@ function cloneDisplayState(state: HarnessDisplayState): HarnessDisplayState {
           ...state.pendingSuspension,
           args: cloneUnknown(state.pendingSuspension.args),
           suspendPayload: cloneUnknown(state.pendingSuspension.suspendPayload),
-        }
-      : null,
-    pendingQuestion: state.pendingQuestion
-      ? {
-          ...state.pendingQuestion,
-          options: state.pendingQuestion.options?.map(option => cloneUnknown(option)),
         }
       : null,
     pendingPlanApproval: state.pendingPlanApproval ? { ...state.pendingPlanApproval } : null,
