@@ -51,6 +51,18 @@
   background-color: var(--sidebar-nav-active);
 }
 
+@layer utilities {
+  .shiki-token {
+    color: var(--shiki-light, var(--neutral6));
+    background-color: var(--shiki-light-bg, transparent);
+  }
+
+  .dark .shiki-token {
+    color: var(--shiki-dark, var(--neutral6));
+    background-color: var(--shiki-dark-bg, transparent);
+  }
+}
+
 @layer base {
   * {
     border-color: var(--border1);
