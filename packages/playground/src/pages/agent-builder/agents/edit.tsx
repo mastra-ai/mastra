@@ -32,6 +32,7 @@ import { useWizard, WizardProvider } from '@/domains/agent-builder/contexts/wiza
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
 import { useChannelConnectToast } from '@/domains/agent-builder/hooks/use-channel-connect-toast';
+import { useAllProviderTools } from '@/domains/tool-providers/hooks/use-all-provider-tools';
 import { AgentBuilderEditLayout } from '@/domains/agent-builder/layouts/agent-builder-edit-layout';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import { storedAgentToFormValues } from '@/domains/agent-builder/services/stored-agent-to-form-values';
@@ -50,17 +51,13 @@ export default function AgentBuilderAgentEdit() {
 }
 
 const EditPageGate = () => {
-  const { agentId, storedAgent, isReady, isOwner, canWrite, initialUserMessage } = useAgentPrimitives();
+  const { agentId, storedAgent, isReady, isOwner, canWrite } = useAgentPrimitives();
 
   if (!isReady) return <AgentBuilderAgentEditSkeleton />;
   if (!storedAgent) return <Navigate to="/agent-builder/agents" replace />;
   if (!canWrite || !isOwner) return <Navigate to={`/agent-builder/agents/${agentId}/view`} replace />;
 
-  return (
-    <WizardProvider initialStep={initialUserMessage ? 'ready' : 'end'}>
-      <EditPageForm />
-    </WizardProvider>
-  );
+  return <EditPageForm />;
 };
 
 const EditPageForm = () => {
@@ -78,7 +75,8 @@ const EditPageForm = () => {
 };
 
 const EditPageBody = () => {
-  const { agentId, storedAgent, toolsData, agentsData, workflowsData, isOwner } = useAgentPrimitives();
+  const { agentId, storedAgent, toolsData, agentsData, workflowsData, isOwner, initialUserMessage } =
+    useAgentPrimitives();
   const navigate = useNavigate();
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const selectedTools = useWatch({ control, name: 'tools' });
@@ -95,18 +93,29 @@ const EditPageBody = () => {
     excludeAgentId: agentId,
   });
 
+  // While integration tools are still loading, treat tools as potentially
+  // available so the wizard's tools step isn't dropped prematurely (parity
+  // with the Tools tab gating). React Query dedupes this with the identical
+  // queries issued by `useAvailableAgentTools`.
+  const { isLoading: isIntegrationToolsLoading } = useAllProviderTools();
+
   const handleModeToggle = isOwner
     ? () => navigate(`/agent-builder/agents/${agentId}/view`, { viewTransition: true })
     : undefined;
 
   return (
-    <EditPageProvider
-      storedAgent={storedAgent!}
-      availableAgentTools={availableAgentTools}
-      onModeToggle={handleModeToggle}
+    <WizardProvider
+      initialStep={initialUserMessage ? 'ready' : 'end'}
+      hasAgentTools={availableAgentTools.length > 0 || isIntegrationToolsLoading}
     >
-      <EditPageLayout />
-    </EditPageProvider>
+      <EditPageProvider
+        storedAgent={storedAgent!}
+        availableAgentTools={availableAgentTools}
+        onModeToggle={handleModeToggle}
+      >
+        <EditPageLayout />
+      </EditPageProvider>
+    </WizardProvider>
   );
 };
 

@@ -2,7 +2,7 @@ import type { StoredSkillResponse } from '@mastra/client-js';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui';
 import type { CSSProperties } from 'react';
 import { useAgentColor } from '../../../contexts/agent-color-context';
-import { useBuilderAgentFeatures } from '../../../hooks/use-builder-agent-features';
+import { useBuilderPaneGates } from '../../../hooks/use-builder-pane-gates';
 import type { AgentTool } from '../../../types/agent-tool';
 import { Browser } from './browser';
 import { Instructions } from './instructions';
@@ -10,8 +10,7 @@ import { Integrations } from './integrations';
 import { Models } from './models';
 import { Skills } from './skills';
 import { Tools } from './tools';
-import { useBuilderModelPolicy } from '@/domains/agent-builder';
-import { useChannelPlatforms } from '@/domains/agents/hooks/use-channels';
+import { useAllProviderTools } from '@/domains/tool-providers/hooks/use-all-provider-tools';
 
 export interface AgentProfileTabsProps {
   agentId: string;
@@ -33,18 +32,24 @@ export const AgentProfileTabs = ({
   disabled = false,
   fallbackInstructions,
 }: AgentProfileTabsProps) => {
-  const features = useBuilderAgentFeatures();
-  const policy = useBuilderModelPolicy();
-  const { data: channelPlatforms = [] } = useChannelPlatforms();
   const agentColor = useAgentColor();
 
   const tabListStyle = { '--tab-indicator-color': agentColor.background } as CSSProperties;
 
-  const modelTabEnabled = features.model || policy.active;
-  const toolsTabEnabled = (features.tools || features.agents || features.workflows) && availableAgentTools.length > 0;
-  const skillsTabEnabled = features.skills && availableSkills.length > 0;
-  const browserTabEnabled = features.browser;
-  const integrationsTabEnabled = channelPlatforms.some(platform => platform.id === 'slack' && platform.isConfigured);
+  // Cache-only re-read: the Tools pane issues the same queries, so React Query
+  // dedupes the network requests. Treat "still loading" as "tools may exist"
+  // so the tab isn't hidden prematurely.
+  const { isLoading: isIntegrationToolsLoading } = useAllProviderTools();
+  const gates = useBuilderPaneGates({
+    hasAgentTools: availableAgentTools.length > 0 || isIntegrationToolsLoading,
+    hasSkills: availableSkills.length > 0,
+  });
+
+  const modelTabEnabled = gates.model;
+  const toolsTabEnabled = gates.tools;
+  const skillsTabEnabled = gates.skills;
+  const browserTabEnabled = gates.browser;
+  const integrationsTabEnabled = gates.integrations;
 
   const tabContentClassName = 'h-full min-h-0 pb-6 pt-6';
   // The Model/Tools tabs use a two-pane layout whose left filter pane must run

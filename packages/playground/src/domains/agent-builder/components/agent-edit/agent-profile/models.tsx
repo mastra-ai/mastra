@@ -1,4 +1,4 @@
-import { Skeleton, Txt } from '@mastra/playground-ui';
+import { Txt } from '@mastra/playground-ui';
 import { LockIcon, TriangleAlertIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
@@ -6,6 +6,7 @@ import type { AgentBuilderEditFormValues } from '../../../schemas';
 import { AgentSearchbar } from '../agent-searchbar';
 import { AgentSelectableCard } from '../agent-selectable-card';
 import { FilterableList } from './filterable-list';
+import { TwoPanePickerSkeleton } from './two-pane-picker-skeleton';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
 import { ProviderLogo, cleanProviderId } from '@/domains/llm';
@@ -23,7 +24,11 @@ export const Models = ({ editable = true }: Modelprops) => {
     const policyProvider = policy.default?.provider;
     const policyModelId = policy.default?.modelId;
 
-    return <LockedModelChip provider={policyProvider} modelId={policyModelId} />;
+    return (
+      <div className="px-6 py-6">
+        <LockedModelChip provider={policyProvider} modelId={policyModelId} />
+      </div>
+    );
   }
 
   return (
@@ -98,43 +103,7 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
   );
 
   if (isLoading) {
-    return (
-      <div className="h-full min-h-0 overflow-hidden">
-        <div
-          className="grid h-full min-h-0 grid-cols-[280px_minmax(0,1fr)] overflow-hidden"
-          data-testid="model-card-picker-loading"
-        >
-          <div className="flex h-full min-h-0 flex-col gap-3 border-r border-border1 py-6 px-6">
-            <Skeleton className="h-10 w-full rounded-md" />
-            <Skeleton className="h-4 w-28" />
-            <Skeleton className="h-7 w-full rounded-md" />
-            <Skeleton className="h-7 w-full rounded-md" />
-            <Skeleton className="h-7 w-full rounded-md" />
-            <Skeleton className="h-7 w-full rounded-md" />
-          </div>
-
-          <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 px-6 py-6">
-            <div className="shrink-0 max-w-[30ch]">
-              <Skeleton className="h-10 w-full rounded-md" />
-            </div>
-
-            <div className="flex min-h-0 flex-col gap-6 overflow-y-auto">
-              <div className="flex flex-col gap-3">
-                <Skeleton className="h-4 w-24" />
-                <div className="grid grid-cols-1 content-start gap-2 lg:gap-6 sm:grid-cols-2 2xl:grid-cols-3">
-                  <Skeleton className="h-20 rounded-lg" />
-                  <Skeleton className="h-20 rounded-lg" />
-                  <Skeleton className="h-20 rounded-lg" />
-                  <Skeleton className="h-20 rounded-lg" />
-                  <Skeleton className="h-20 rounded-lg" />
-                  <Skeleton className="h-20 rounded-lg" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <TwoPanePickerSkeleton testId="model-card-picker-loading" />;
   }
 
   const provider = cleanProviderId(model?.provider ?? '');
@@ -166,7 +135,7 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
           />
         )}
 
-        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 px-6 py-6">
+        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 px-6 py-6">
           <div data-testid="model-card-picker-search" className="shrink-0 max-w-[30ch]">
             <AgentSearchbar
               onSearch={setSearch}
@@ -269,7 +238,7 @@ interface StaleWarningProps {
 const StaleWarning = ({ provider, modelId }: StaleWarningProps) => {
   return (
     <div
-      className="flex items-start gap-2 rounded-md border border-accent6 bg-accent6Dark/40 px-3 py-2 text-accent6"
+      className="mx-6 mb-6 flex items-start gap-2 rounded-md border border-accent6 bg-accent6Dark/40 px-3 py-2 text-accent6"
       data-testid="model-detail-stale-warning"
       role="alert"
     >

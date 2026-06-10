@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
+import { useAllProviderTools } from '../../../../tool-providers/hooks/use-all-provider-tools';
 import { useToolProviders } from '../../../../tool-providers/hooks/use-tool-providers';
 import type { AgentTool } from '../../../types/agent-tool';
+import { TwoPanePickerSkeleton } from './two-pane-picker-skeleton';
 import { ToolGrid, ToolListEmptyState } from './tool-grid';
 import { getEmptyStateDetails, getVisibleTools } from './tool-visibility';
 import { ToolkitFilterPane } from './toolkit-filter-pane';
@@ -35,8 +37,20 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
     return map;
   }, [providersQuery.data?.providers]);
 
+  // Integration tools stream in asynchronously; while they may still arrive,
+  // show the structural skeleton (mirroring the Models loading layout) instead
+  // of flashing the "no tools" empty state.
+  const { isLoading: isIntegrationToolsLoading } = useAllProviderTools();
+
   if (availableAgentTools.length === 0) {
-    return <ToolListEmptyState details={'No tools available in this project'} />;
+    if (isIntegrationToolsLoading) {
+      return <TwoPanePickerSkeleton testId="tools-card-picker-loading" />;
+    }
+    return (
+      <div className="px-6 py-6" data-testid="tools-empty-state">
+        <ToolListEmptyState details={'No tools available in this project'} />
+      </div>
+    );
   }
 
   const visibleTools = getVisibleTools(availableAgentTools, search, onlySelected, toolkits.selected);
