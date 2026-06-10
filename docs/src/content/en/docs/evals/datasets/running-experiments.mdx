@@ -205,7 +205,7 @@ console.log(report.unconsumed) // recorded events the agent never requested
 console.log(report.argMismatches) // replayed calls whose args differed from the recording
 ```
 
-The report also persists inside the item result's `output`, so it is available from [`listExperimentResults()`](/reference/datasets/listExperimentResults).
+For stored results, the report is merged into the item's `output` after scoring, so it is available from [`listExperimentResults()`](/reference/datasets/listExperimentResults). Scorers never see it: the output they evaluate stays free of replay metadata, so replay runs score the same way as baseline runs.
 
 Treat divergence as a trust signal for scores. An entry in `argMismatches` means the agent received a re-paired recorded observation: matching is per-tool and ordered, so the replayed output came from a call whose original arguments differed. A `passthrough` miss means a live observation entered the run. In either case, inspect the report before trusting the item's scores.
 
@@ -217,6 +217,9 @@ Treat divergence as a trust signal for scores. An entry in `argMismatches` means
 - Replay uses per-execution tool hooks, which override agent-level `hooks` (such as a configured `beforeToolCall`) for the replayed runs.
 - Recordings inherit tracing's sensitive-data filtering. Redacted input fields surface as `argMismatches` in the report, and redacted output fields replay as `[REDACTED]` values. If a tool returns sensitive values that replay needs, adjust the `sensitiveDataFilter` option on your observability config.
 - Traces are exported asynchronously. When replaying immediately after a recording run in the same process, ensure the tracing exporter has flushed before starting the replay; an incomplete trace replays as missing events.
+- Tools that require approval are not replayed: the approval gate runs before tool execution, so the run suspends for approval before the replay hook can return the recorded output. Avoid `toolReplay` with approval-required tools.
+- A source trace should contain a single top-level agent run. A trace spanning several runs contributes all of their tool calls to the replay queues.
+- Replay runs emit no tool spans, so an experiment that was itself replayed cannot serve as a recording — replaying from it finds zero events and every call follows the `onMiss` policy.
 
 :::note
 

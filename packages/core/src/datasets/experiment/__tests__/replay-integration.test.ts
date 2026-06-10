@@ -201,9 +201,12 @@ describe('tool replay integration', () => {
     const output = summary.results[0]?.output as { text?: string; toolResults?: unknown[]; toolReplay?: unknown };
     expect(output.text).toBe('Done with lookups.');
     expect(JSON.stringify(output.toolResults)).toContain('recorded:first');
-    expect(output.toolReplay).toBeDefined();
+    // The in-memory output stays CLEAN of replay metadata — scorers receive
+    // this object, and replay runs must score identically to baselines.
+    expect(output.toolReplay).toBeUndefined();
 
-    // The report persists through the experiment-result output column.
+    // The report persists through the experiment-result output column
+    // (merged after scoring, for API consumers).
     const persisted = await experimentsStorage.listExperimentResults({
       experimentId: summary.experimentId,
       pagination: { page: 0, perPage: false },
