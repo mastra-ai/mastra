@@ -77,6 +77,19 @@ describe('WorkflowTimeline', () => {
     expect(rows.length).toBe(3);
   });
 
+  it('positions and sizes itself from the workflow left panel width variable', async () => {
+    stubRunById('run-timeline-1', runWithTimedSteps);
+    stubWorkflow();
+
+    renderTimeline('run-timeline-1');
+
+    await screen.findByText('Step A');
+
+    const timeline = screen.getByTestId('workflow-timeline');
+    expect(timeline.style.marginLeft).toBe('var(--workflow-left-panel-width, 0px)');
+    expect(timeline.style.width).toBe('calc(100% - var(--workflow-left-panel-width, 0px))');
+  });
+
   it('positions and sizes each bar from step timing', async () => {
     stubRunById('run-timeline-1', runWithTimedSteps);
     stubWorkflow();

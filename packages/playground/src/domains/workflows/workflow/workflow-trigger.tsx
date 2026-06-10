@@ -86,6 +86,55 @@ function useSyncStreamResultToWorkflowRunContext(streamResult: WorkflowRunStream
   }, [setResult, streamResult]);
 }
 
+function formatRunStatus(status?: WorkflowRunStatus) {
+  if (!status) return 'Run';
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function formatRunDuration(durationMs?: number) {
+  if (durationMs === undefined) return '—';
+  if (durationMs < 1000) return `${durationMs}ms`;
+
+  const seconds = durationMs / 1000;
+  if (seconds < 60) return `${Number(seconds.toPrecision(3))}s`;
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
+  return remainingSeconds ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+}
+
+function formatRelativeTime(ms?: number) {
+  if (!ms || ms <= 0) return '—';
+  const diff = ms - Date.now();
+  const abs = Math.abs(diff);
+  const seconds = Math.floor(abs / 1000);
+  if (seconds < 60) return diff >= 0 ? `in ${seconds}s` : `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return diff >= 0 ? `in ${minutes}m` : `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return diff >= 0 ? `in ${hours}h` : `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return diff >= 0 ? `in ${days}d` : `${days}d ago`;
+}
+
+function getRunDuration(result: WorkflowRunStreamResult | null, status?: WorkflowRunStatus) {
+  const stepTimes: Array<{ startedAt: number; endedAt?: number }> = Object.values(result?.steps ?? {}).flatMap(step => {
+    const startedAt = 'startedAt' in step ? step.startedAt : undefined;
+    if (typeof startedAt !== 'number') return [];
+    const endedAt = 'endedAt' in step ? step.endedAt : undefined;
+    return [{ startedAt, ...(typeof endedAt === 'number' ? { endedAt } : {}) }];
+  });
+
+  if (stepTimes.length === 0) return undefined;
+
+  const startedAt = Math.min(...stepTimes.map(step => step.startedAt));
+  const endedTimes = stepTimes.flatMap(step => (step.endedAt ? [step.endedAt] : []));
+  const endedAt = endedTimes.length > 0 ? Math.max(...endedTimes) : undefined;
+  const isActive = status === 'running' || status === 'suspended' || status === 'waiting';
+  const effectiveEndedAt = endedAt ?? (isActive ? Date.now() : undefined);
+  return effectiveEndedAt === undefined ? undefined : effectiveEndedAt - startedAt;
+}
+
 export function WorkflowTrigger({
   workflowId,
   paramsRunId,
@@ -103,7 +152,14 @@ export function WorkflowTrigger({
 }: WorkflowTriggerProps) {
   const requestContext = useMergedRequestContext();
 
-  const { result, setResult, payload, setPayload, setRunId: setContextRunId } = useContext(WorkflowRunContext);
+  const {
+    result,
+    setResult,
+    payload,
+    setPayload,
+    setRunId: setContextRunId,
+    runSnapshot,
+  } = useContext(WorkflowRunContext);
   useSyncStreamResultToWorkflowRunContext(streamResult);
   const { canExecute } = usePermissions();
 
@@ -195,19 +251,32 @@ export function WorkflowTrigger({
     </div>
   );
 
+  const runDuration = getRunDuration(streamResultToUse, runStatus);
+  const runTimestamp = runSnapshot?.timestamp;
+
   const runHeadingSlot = (
-    <div className="flex w-full items-center gap-2">
-      <Icon className="shrink-0 text-neutral4">
-        <WorkflowIcon />
-      </Icon>
-      <Txt as="span" variant="ui-md" className="text-neutral5 font-semibold truncate" title={activeRunId}>
-        {activeRunId}
-      </Txt>
+    <div className="flex w-full items-start gap-3">
       {runStatus && (
-        <span className="ml-auto shrink-0">
+        <span className="shrink-0 pt-1">
           <WorkflowRunStatusIcon status={runStatus} />
         </span>
       )}
+      <div className="min-w-0 flex-1">
+        <Txt as="span" variant="ui-md" className="block truncate font-semibold text-neutral5">
+          {formatRunStatus(runStatus)}
+        </Txt>
+        <Txt as="span" variant="ui-xs" className="block truncate text-neutral3" title={activeRunId}>
+          {activeRunId}
+        </Txt>
+      </div>
+      <div className="shrink-0 text-right">
+        <Txt as="span" variant="ui-xs" className="block font-medium text-neutral5">
+          {formatRunDuration(runDuration)}
+        </Txt>
+        <Txt as="span" variant="ui-xs" className="block text-neutral3">
+          {formatRelativeTime(runTimestamp)}
+        </Txt>
+      </div>
     </div>
   );
 

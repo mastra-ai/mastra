@@ -10,6 +10,12 @@ import type { WorkflowRunContextType, WorkflowRunStreamResult } from './workflow
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 import { useWorkflow, useWorkflowRun } from '@/hooks';
 
+function getRunTimestamp(value: Date | string | number | undefined): number | undefined {
+  if (!value) return undefined;
+  const timestamp = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  return Number.isFinite(timestamp) ? timestamp : undefined;
+}
+
 function useWorkflowStreamActions({
   debugMode,
   tracingOptions,
@@ -121,6 +127,7 @@ export function WorkflowRunProvider({
           error: runExecutionResult?.error,
           runId: initialRunId,
           serializedStepGraph: runExecutionResult?.serializedStepGraph,
+          timestamp: getRunTimestamp(runExecutionResult?.updatedAt) ?? getRunTimestamp(runExecutionResult?.createdAt),
           value: runExecutionResult?.initialState,
         } as WorkflowRunState)
       : undefined;

@@ -1,15 +1,16 @@
 // @vitest-environment jsdom
-import type { GetWorkflowResponse, ListWorkflowRunsResponse } from '@mastra/client-js';
+import type { GetWorkflowResponse, GetWorkflowRunByIdResponse, ListWorkflowRunsResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { AnchorHTMLAttributes } from 'react';
-import { forwardRef } from 'react';
+import { forwardRef, useContext, useEffect } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
-import { emptyWorkflowRuns, oneSuccessfulRun } from '../../runs/__tests__/fixtures/workflow-runs';
+import { emptyWorkflowRuns, oneSuccessfulRun, runWithTimedSteps } from '../../runs/__tests__/fixtures/workflow-runs';
 import { WorkflowInformation } from '../workflow-information';
 import { fullAccessAuthCapabilities } from './fixtures/auth';
 import { baseWorkflow, workflowWithRequestContext } from './fixtures/workflow';
@@ -82,22 +83,41 @@ function stubRuns(response: ListWorkflowRunsResponse) {
   server.use(http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs`, () => HttpResponse.json(response)));
 }
 
-function stubRunById(runId: string, result?: unknown) {
+function stubRunById(
+  runId: string,
+  result?: Record<string, unknown>,
+  overrides: Partial<Omit<GetWorkflowRunByIdResponse, 'result'>> = {},
+) {
   server.use(
     http.get(`${BASE_URL}/api/workflows/${WORKFLOW_ID}/runs/${runId}`, () =>
       HttpResponse.json({
         runId,
         workflowName: WORKFLOW_ID,
         status: 'success',
+        createdAt: new Date(2026, 4, 29, 16, 19, 44),
+        updatedAt: new Date(2026, 4, 29, 16, 19, 44),
         steps: {},
         serializedStepGraph: [],
         ...(result !== undefined ? { result } : {}),
-      }),
+        ...overrides,
+      } satisfies GetWorkflowRunByIdResponse),
     ),
   );
 }
 
-function renderInformation(initialRunId?: string) {
+function CurrentRunSetter({ runId }: { runId?: string }) {
+  const { setRunId } = useContext(WorkflowRunContext);
+
+  useEffect(() => {
+    if (runId) {
+      setRunId(runId);
+    }
+  }, [runId, setRunId]);
+
+  return null;
+}
+
+function renderInformation(initialRunId?: string, currentRunId?: string) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -109,6 +129,7 @@ function renderInformation(initialRunId?: string) {
           <TracingSettingsProvider entityId={WORKFLOW_ID} entityType="workflow">
             <SchemaRequestContextProvider>
               <WorkflowRunProvider workflowId={WORKFLOW_ID} initialRunId={initialRunId}>
+                <CurrentRunSetter runId={currentRunId} />
                 <WorkflowInformation workflowId={WORKFLOW_ID} initialRunId={initialRunId} />
               </WorkflowRunProvider>
             </SchemaRequestContextProvider>
@@ -152,6 +173,17 @@ describe('WorkflowInformation', () => {
       stubRunById('run-success-1');
 
       renderInformation('run-success-1');
+
+      const button = await screen.findByText('New workflow run');
+      expect(button.closest('a')?.getAttribute('href')).toBe(paths.workflowLink(WORKFLOW_ID));
+    });
+
+    it('shows the "New workflow run" button while the sidebar is showing the current execution', async () => {
+      stubCapabilities();
+      stubWorkflow(baseWorkflow);
+      stubRuns(emptyWorkflowRuns);
+
+      renderInformation(undefined, 'current-run-1');
 
       const button = await screen.findByText('New workflow run');
       expect(button.closest('a')?.getAttribute('href')).toBe(paths.workflowLink(WORKFLOW_ID));
@@ -280,8 +312,8 @@ describe('WorkflowInformation', () => {
     });
   });
 
-  describe('collapsible sections', () => {
-    it('renders the trigger header non-collapsible with "Recent runs" expanded by default', async () => {
+  describe('sections', () => {
+    it('renders the trigger and recent runs headers as non-collapsible sections', async () => {
       stubCapabilities();
       stubWorkflow(baseWorkflow);
       stubRuns(emptyWorkflowRuns);
@@ -292,12 +324,29 @@ describe('WorkflowInformation', () => {
       expect(await screen.findByText('Demo Workflow')).not.toBeNull();
       expect(screen.queryByRole('button', { name: 'Trigger a run' })).toBeNull();
 
-      // Recent runs remains a collapsible section, expanded by default.
-      const recentRunsSection = await screen.findByRole('button', { name: 'Recent runs' });
-      expect(recentRunsSection.getAttribute('aria-expanded')).toBe('true');
+      expect(await screen.findByRole('heading', { name: 'Recent runs' })).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Recent runs' })).toBeNull();
 
       // The trigger input content is visible.
       expect(await screen.findByRole('radiogroup', { name: 'Input type' })).not.toBeNull();
+    });
+
+    it('caps the top section at half of the established panel height and scrolls its contents', async () => {
+      stubCapabilities();
+      stubWorkflow(baseWorkflow);
+      stubRuns(emptyWorkflowRuns);
+
+      renderInformation();
+
+      expect(await screen.findByText('Demo Workflow')).not.toBeNull();
+      expect(screen.getByTestId('workflow-information-panel').className).toContain('h-full');
+      expect(screen.getByTestId('workflow-information-top-section').className).toContain('max-h-[50%]');
+      expect(screen.getByTestId('workflow-information-top-section').className).toContain('overflow-hidden');
+      expect(screen.getByTestId('workflow-information-top-scroll-area').className).toContain('min-h-0');
+      expect(screen.getByTestId('workflow-information-top-scroll-area').className).toContain('flex-1');
+      expect(
+        screen.getByTestId('workflow-information-top-scroll-area').querySelector('[style*="overflow-y: scroll"]'),
+      ).not.toBeNull();
     });
 
     it('keeps the trigger input content visible (the header does not collapse)', async () => {
@@ -329,16 +378,23 @@ describe('WorkflowInformation', () => {
       expect(await screen.findByText('Run input')).not.toBeNull();
     });
 
-    it('shows the run ID and "Input" label when viewing a specific run', async () => {
+    it('shows the run status, run ID, duration, and relative age when viewing a specific run', async () => {
       stubCapabilities();
       stubWorkflow(baseWorkflow);
       stubRuns(oneSuccessfulRun);
-      stubRunById('run-success-1');
+      stubRunById('run-success-1', undefined, {
+        ...runWithTimedSteps,
+        runId: 'run-success-1',
+        status: 'success',
+      });
 
       renderInformation('run-success-1');
 
       expect(await screen.findByText('Input')).not.toBeNull();
-      expect((await screen.findAllByText('run-success-1')).length).toBeGreaterThan(0);
+      const statusTitle = await screen.findByText('Success');
+      expect(statusTitle.nextElementSibling?.textContent).toBe('run-success-1');
+      expect(await screen.findByText('3s')).not.toBeNull();
+      expect(await screen.findByText(/ago$/)).not.toBeNull();
     });
 
     it('shows both finished-run dialog buttons when the run has a result', async () => {

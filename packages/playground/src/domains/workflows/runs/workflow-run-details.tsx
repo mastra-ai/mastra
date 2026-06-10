@@ -34,11 +34,16 @@ export const WorkflowRunDetail = ({
   if (isLoadingRunExecutionResult) {
     return (
       <div className="p-4 space-y-4">
-        {/* Header row: run icon + run id + status */}
-        <div className="flex items-center gap-2">
-          <Skeleton className="h-5 w-5 rounded" />
-          <Skeleton className="h-4 w-40" />
-          <Skeleton className="ml-auto h-5 w-5 rounded-full" />
+        <div className="flex items-start gap-3">
+          <Skeleton className="h-5 w-5 shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-3 w-40" />
+          </div>
+          <div className="shrink-0 space-y-2">
+            <Skeleton className="ml-auto h-3 w-12" />
+            <Skeleton className="ml-auto h-3 w-16" />
+          </div>
         </div>
 
         {/* "Run input" label + Form/JSON toggle */}

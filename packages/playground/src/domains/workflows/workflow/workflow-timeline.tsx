@@ -1,6 +1,7 @@
 import { CheckIcon, CrossIcon, Icon, Txt, useAutoscroll } from '@mastra/playground-ui';
 import { CirclePause, HourglassIcon, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import type { CSSProperties } from 'react';
 
 import { useCurrentRun } from '../context/use-current-run';
 import type { Step } from '../context/use-current-run';
@@ -56,8 +57,17 @@ export function WorkflowTimeline() {
   }
 
   return (
-    <div data-testid="workflow-timeline" className="shrink-0 px-2 pb-2">
-      <div className="-ml-2 flex max-h-64 w-full min-w-0 flex-col gap-3 overflow-hidden rounded-studio-panel border border-border1/50 bg-surface3 p-4">
+    <div
+      data-testid="workflow-timeline"
+      className="shrink-0 px-2 pb-2"
+      style={
+        {
+          marginLeft: 'var(--workflow-left-panel-width, 0px)',
+          width: 'calc(100% - var(--workflow-left-panel-width, 0px))',
+        } as CSSProperties
+      }
+    >
+      <div className="flex max-h-64 w-full min-w-0 flex-col gap-3 overflow-hidden rounded-studio-panel border border-border1/50 bg-surface3 p-4">
         <div className="flex shrink-0 items-center justify-between gap-3">
           <Txt as="p" variant="ui-md" className="text-neutral3">
             Timeline
