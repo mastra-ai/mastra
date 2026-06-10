@@ -176,6 +176,12 @@ const workspace = new Workspace({
             isOptional: true,
             defaultValue: '2000',
           },
+          {
+            name: 'hooks',
+            type: 'WorkspaceToolHooks',
+            description: 'Hooks that run before and after every enabled workspace tool call. See Tool hooks below.',
+            isOptional: true,
+          },
         ],
       },
     ],
@@ -239,6 +245,49 @@ const workspace = new Workspace({
 ```
 
 Tool names must be unique across all workspace tools. Setting a custom name that conflicts with another tool's default or custom name throws an error.
+
+### Tool hooks
+
+Set `tools.hooks` to run logic before and after every enabled workspace tool call. Hooks run after name remapping, so the context includes both the exposed `toolName` and the original `workspaceToolName`.
+
+```typescript {6-14}
+import { Workspace } from '@mastra/core/workspace'
+
+const workspace = new Workspace({
+  id: 'my-workspace',
+  tools: {
+    hooks: {
+      beforeToolCall: ({ toolName, workspaceToolName, input }) => {
+        console.log(`Running ${toolName} (${workspaceToolName})`, input)
+      },
+      afterToolCall: ({ toolName, output, error }) => {
+        console.log(`Finished ${toolName}`, { output, error })
+      },
+    },
+  },
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'beforeToolCall',
+    type: '(context: WorkspaceToolHookContext) => void | WorkspaceToolBeforeHookResult | Promise<void | WorkspaceToolBeforeHookResult>',
+    isOptional: true,
+    description:
+      'Runs before a workspace tool executes. Receives `{ toolName, workspaceToolName, input, context }`. Return `{ proceed: false, output }` to skip the tool call and use `output` as its result.',
+  },
+  {
+    name: 'afterToolCall',
+    type: '(context: WorkspaceToolAfterHookContext) => void | Promise<void>',
+    isOptional: true,
+    description:
+      'Runs after a workspace tool executes. Receives `{ toolName, workspaceToolName, input, context, output, error }`. `output` is undefined when the tool throws, and `error` is set instead.',
+  },
+]}
+/>
+
+If the owning agent also defines [tool hooks](/reference/agents/agent#tool-hooks), workspace hooks run inside the agent hook wrapper: agent `beforeToolCall` runs first, then workspace `beforeToolCall`, then the tool, then workspace `afterToolCall`, then agent `afterToolCall`.
 
 ## Properties
 
@@ -325,6 +374,12 @@ Destroy the workspace and clean up resources.
 ```typescript
 await workspace.destroy()
 ```
+
+`destroy()` closes workspace-owned resources in order: language servers, browsers, sandbox providers, and filesystem providers. It also clears cached sandbox references.
+
+Call `destroy()` when your application is done with a workspace. `mastra.shutdown()` calls it for registered workspaces during shutdown. To remove a workspace from the Mastra registry, use [`mastra.removeWorkspace()`](/reference/core/removeWorkspace).
+
+`LocalFilesystem.destroy()` does not delete files on disk. Resolver-backed filesystem and sandbox providers are owned by your application and must be cleaned up by your application.
 
 ### Search operations
 

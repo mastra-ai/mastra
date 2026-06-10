@@ -26,7 +26,8 @@ if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollTo) {
 }
 
 // jsdom does not implement Element.prototype.getAnimations, used by Radix UI
-// primitives (e.g. Switch) when reconciling presence/animation state
+// primitives (e.g. Switch) when reconciling presence/animation state, and by
+// @base-ui/react's ScrollAreaViewport inside a deferred timer.
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.getAnimations) {
   Element.prototype.getAnimations = () => [];
 }
@@ -47,7 +48,8 @@ if (typeof globalThis.IntersectionObserver === 'undefined') {
   globalThis.IntersectionObserver = IntersectionObserverStub as unknown as typeof IntersectionObserver;
 }
 
-// jsdom does not implement ResizeObserver, used by @xyflow/react when rendering the workflow graph
+// jsdom does not implement ResizeObserver, used by @xyflow/react when rendering the
+// workflow graph and by assistant-ui's thread primitives during render.
 if (typeof globalThis.ResizeObserver === 'undefined') {
   class ResizeObserverStub {
     observe() {}

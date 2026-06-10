@@ -23,6 +23,7 @@ export * from './ds/components/Collapsible';
 export * from './ds/components/Combobox';
 export * from './ds/components/Command';
 export * from './ds/components/ContextMenu';
+export * from './ds/components/Code';
 export * from './ds/components/CodeBlock';
 export * from './ds/components/CopyButton';
 export * from './ds/components/DashboardCard';
@@ -112,6 +113,7 @@ export * from './ds/icons/index';
 export * from './ds/tokens';
 
 // DS Primitives
+export * from './ds/primitives/control-size';
 export * from './ds/primitives/form-element';
 export * from './ds/primitives/transitions';
 
