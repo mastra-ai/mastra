@@ -178,6 +178,9 @@ async function executeClientToolWithObservability({
   };
 }
 
+type ClientToolCallResult = { toolCall: ToolInvocation; result: any };
+
+
 async function executeToolCallAndRespond<OUTPUT>({
   response,
   params,
@@ -282,6 +285,121 @@ async function executeToolCallAndRespond<OUTPUT>({
 
   // If no client tool was executed, return the original response
   return response;
+}
+
+async function executeClientToolCalls({
+  message,
+  toolCalls,
+  clientTools,
+  requestContext,
+  agentId,
+  responseMessages,
+  threadId,
+  resourceId,
+}: {
+  message: UIMessage | undefined;
+  toolCalls: ToolInvocation[];
+  clientTools: Record<string, Tool> | undefined;
+  requestContext: RequestContext | undefined;
+  agentId: string;
+  responseMessages: CoreMessage[];
+  threadId: string | undefined;
+  resourceId: string | undefined;
+}): Promise<ClientToolCallResult[] | null> {
+  const pendingToolCalls = [
+    ...(message?.parts ?? [])
+      .filter((part): part is ToolInvocationUIPart => part.type === 'tool-invocation')
+      .map(part => part.toolInvocation),
+    ...(message?.toolInvocations ?? []),
+  ].filter((inv): inv is ToolInvocation => inv != null && inv.state === 'call');
+
+  const uniquePendingToolCalls = Array.from(
+    new Map(pendingToolCalls.map(toolCall => [toolCall.toolCallId, toolCall])).values(),
+  );
+
+  toolCalls.length = 0;
+  toolCalls.push(...uniquePendingToolCalls);
+
+  const executableCalls = toolCalls.filter(tc => {
+    const ct = clientTools?.[tc.toolName] as Tool | undefined;
+    return ct?.execute != null;
+  });
+
+  if (executableCalls.length === 0) {
+    return null;
+  }
+
+  return Promise.all(
+    executableCalls.map(async toolCall => {
+      const clientTool = clientTools![toolCall.toolName] as Tool;
+      const result = await clientTool.execute!(toolCall.args, {
+        requestContext: requestContext as RequestContext,
+        tracingContext: { currentSpan: undefined },
+        agent: {
+          agentId,
+          messages: responseMessages,
+          toolCallId: toolCall.toolCallId,
+          suspend: async () => {},
+          threadId,
+          resourceId,
+        },
+      });
+
+      return { toolCall, result };
+    }),
+  );
+}
+
+function cloneMessageWithToolResults(messages: UIMessage[], results: ClientToolCallResult[]): UIMessage | undefined {
+  const lastMessageRaw = messages[messages.length - 1];
+  const lastMessage: UIMessage | undefined =
+    lastMessageRaw != null ? JSON.parse(JSON.stringify(lastMessageRaw)) : undefined;
+
+  if (lastMessage == null) {
+    return undefined;
+  }
+
+  applyToolResultsToMessage(lastMessage, results);
+
+  return lastMessage;
+}
+
+function applyToolResultsToMessage(lastMessage: UIMessage, results: ClientToolCallResult[]): void {
+  for (const { toolCall, result } of results) {
+    const toolInvocationPart = lastMessage.parts?.find(
+      part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
+    ) as ToolInvocationUIPart | undefined;
+
+    if (toolInvocationPart) {
+      toolInvocationPart.toolInvocation = {
+        ...toolInvocationPart.toolInvocation,
+        state: 'result',
+        result,
+      };
+    }
+
+    const inv = lastMessage.toolInvocations?.find(ti => ti.toolCallId === toolCall.toolCallId) as
+      | ToolInvocation
+      | undefined;
+
+    if (inv) {
+      inv.state = 'result';
+      // @ts-expect-error - result property exists when state is 'result'
+      inv.result = result;
+    }
+  }
+}
+
+function buildUpdatedMessages(
+  messages: UIMessage[],
+  lastMessage: UIMessage | undefined,
+  originalMessages: any,
+  threadId: string | undefined,
+): UIMessage[] {
+  const newMessages =
+    lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
+
+  return threadId ? newMessages : [...(Array.isArray(originalMessages) ? originalMessages : []), ...newMessages];
 }
 
 export class AgentVoice extends BaseResource {
@@ -2084,221 +2202,49 @@ export class Agent extends BaseResource {
         },
         onFinish: async ({ finishReason, message }) => {
           if (finishReason === 'tool-calls') {
-            const toolCall = [...(message?.parts ?? [])]
-              .reverse()
-              .find(part => part.type === 'tool-invocation')?.toolInvocation;
-            if (toolCall) {
-              const toolInvocationWithMetadata = message?.toolInvocations?.find(
-                invocation => invocation.toolCallId === toolCall.toolCallId,
-              );
-              toolCalls.push({
-                ...toolInvocationWithMetadata,
-                ...toolCall,
-                ...(!getClientToolObservabilityContext(toolCall) && toolInvocationWithMetadata
-                  ? { observability: getClientToolObservabilityContext(toolInvocationWithMetadata) }
-                  : {}),
-              });
-            }
+            const results = await executeClientToolCalls({
+              message,
+              toolCalls,
+              clientTools: processedParams.clientTools,
+              requestContext: processedParams.requestContext,
+              agentId: this.agentId,
+              responseMessages: (response as unknown as { messages: CoreMessage[] }).messages,
+              threadId,
+              resourceId,
+            });
 
-            let shouldExecuteClientTool = false;
-            // Handle tool calls if needed
-            for (const toolCall of toolCalls) {
-              const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
-              if (clientTool && clientTool.execute) {
-                shouldExecuteClientTool = true;
+            if (results != null) {
+              const lastMessage = cloneMessageWithToolResults(messages, results);
+              const updatedMessages = buildUpdatedMessages(messages, lastMessage, processedParams.messages, threadId);
 
-                // Synthesize a Mastra-shaped terminal chunk so React's toUIMessage
-                // reducer flips the matching `dynamic-tool` part from
-                // `input-available` to `output-available` / `output-error`.
-                // Without this, the React-side `dynamic-tool` part is stuck in
-                // `input-available` forever because the server stream never emits
-                // a terminal chunk for client-executed tools.
-                const runId: string = streamRunId ?? toolCall.toolCallId;
-                let result: unknown;
-                let observability: ClientToolObservabilityEnvelope | undefined;
-                let synthetic:
-                  | {
-                      type: 'tool-result';
-                      runId: string;
-                      from: 'AGENT';
-                      payload: {
-                        toolCallId: string;
-                        toolName: string;
-                        result: unknown;
-                        isError: boolean;
-                        providerExecuted: false;
-                      };
-                    }
-                  | {
-                      type: 'tool-error';
-                      runId: string;
-                      from: 'AGENT';
-                      payload: {
-                        toolCallId: string;
-                        toolName: string;
-                        error: unknown;
-                        args?: unknown;
-                        providerExecuted: false;
-                      };
-                    };
-
-                try {
-                  ({ result, observability } = await executeClientToolWithObservability({
-                    clientTool,
-                    args: toolCall?.args,
-                    toolName: toolCall.toolName,
-                    parentContext: getClientToolObservabilityContext(toolCall),
-                    executeContext: {
-                      requestContext: processedParams.requestContext as RequestContext,
-                      tracingContext: { currentSpan: undefined },
-                      agent: {
-                        agentId: this.agentId,
-                        messages: (response as unknown as { messages: CoreMessage[] }).messages,
-                        toolCallId: toolCall?.toolCallId,
-                        suspend: async () => {},
-                        threadId,
-                        resourceId,
-                      },
-                    },
-                  }));
-
-                  synthetic = {
-                    type: 'tool-result',
-                    runId,
-                    from: 'AGENT',
-                    payload: {
-                      toolCallId: toolCall.toolCallId,
-                      toolName: toolCall.toolName,
-                      result,
-                      isError: false,
-                      providerExecuted: false,
-                    },
-                  };
-                } catch (error) {
-                  synthetic = {
-                    type: 'tool-error',
-                    runId,
-                    from: 'AGENT',
-                    payload: {
-                      toolCallId: toolCall.toolCallId,
-                      toolName: toolCall.toolName,
-                      error,
-                      args: toolCall?.args,
-                      providerExecuted: false,
-                    },
-                  };
-                  // Mirror the executed-result message-patching path so the
-                  // internal `messages[]` carries the error too (matches the
-                  // existing legacy reducer's expectations for the recursive
-                  // request body).
-                  result = { error: error instanceof Error ? error.message : String(error) };
-                }
-
-                // Wait for the server-side stream pipe to finish before
-                // enqueueing the synthetic chunk so the React reducer observes
-                // the server `finish` chunk first, then our terminal tool chunk.
-                try {
-                  await pipePromise;
-                } catch {
-                  // pipePromise already has its own .catch; ignore here.
-                }
-
-                try {
-                  const errorForSerialization = synthetic.type === 'tool-error' ? synthetic.payload.error : undefined;
-                  const serializedError =
-                    errorForSerialization instanceof Error
-                      ? {
-                          name: errorForSerialization.name,
-                          message: errorForSerialization.message,
-                          stack: errorForSerialization.stack,
-                        }
-                      : errorForSerialization;
-                  const payloadForWire =
-                    synthetic.type === 'tool-error'
-                      ? { ...synthetic, payload: { ...synthetic.payload, error: serializedError } }
-                      : synthetic;
-                  const sseLine = `data: ${JSON.stringify(payloadForWire)}\n\n`;
-                  controller.enqueue(new TextEncoder().encode(sseLine));
-                } catch (enqueueErr) {
-                  console.error('Failed to enqueue synthetic tool-result chunk:', enqueueErr);
-                }
-
-                const lastMessageRaw = messages[messages.length - 1];
-                const lastMessage: UIMessage | undefined =
-                  lastMessageRaw != null ? JSON.parse(JSON.stringify(lastMessageRaw)) : undefined;
-
-                const toolInvocationPart = lastMessage?.parts?.find(
-                  part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
-                ) as ToolInvocationUIPart | undefined;
-
-                if (toolInvocationPart) {
-                  toolInvocationPart.toolInvocation = {
-                    ...toolInvocationPart.toolInvocation,
-                    state: 'result',
-                    result,
-                    ...(observability ? { __mastraObservability: observability } : {}),
-                  };
-                }
-
-                const toolInvocation = lastMessage?.toolInvocations?.find(
-                  toolInvocation => toolInvocation.toolCallId === toolCall.toolCallId,
-                ) as ToolInvocation | undefined;
-
-                if (toolInvocation) {
-                  toolInvocation.state = 'result';
-                  // @ts-expect-error - result property exists when state is 'result'
-                  toolInvocation.result = result;
-                  if (observability) {
-                    (
-                      toolInvocation as unknown as { __mastraObservability?: ClientToolObservabilityEnvelope }
-                    ).__mastraObservability = observability;
-                  }
-                }
-
-                // Build updated messages for the recursive call
-                // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
-                // When no threadId (stateless), include full conversation history for context
-                const newMessages =
-                  lastMessage != null ? [...messages.filter(m => m.id !== lastMessage.id), lastMessage] : [...messages];
-
-                const updatedMessages = threadId
-                  ? newMessages
-                  : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
-
-                // Recursively call stream with updated messages
-                // This will wait for the recursive stream to complete before continuing.
-                // Resume routes are one-shot (they consume server-side resumeData),
-                // so client-tool continuations must fall back to the corresponding
-                // non-resume stream endpoint. Other routes (e.g. stream-until-idle)
-                // are idempotent continuations and stay on the same endpoint.
-                const recursionRoute =
-                  route === 'resume-stream'
-                    ? 'stream'
-                    : route === 'resume-stream-until-idle'
-                      ? 'stream-until-idle'
-                      : route;
-                try {
-                  await this.processStreamResponse(
-                    {
-                      ...processedParams,
-                      messages: updatedMessages,
-                    },
-                    controller,
-                    recursionRoute,
-                  );
-                } catch (error) {
-                  console.error('Error processing recursive stream response:', error);
-                }
+              // Recurse exactly once with every tool result included.
+              // Resume routes are one-shot (they consume server-side resumeData),
+              // so client-tool continuations must fall back to the corresponding
+              // non-resume stream endpoint. Other routes (e.g. stream-until-idle)
+              // are idempotent continuations and stay on the same endpoint.
+              const recursionRoute =
+                route === 'resume-stream'
+                  ? 'stream'
+                  : route === 'resume-stream-until-idle'
+                    ? 'stream-until-idle'
+                    : route;
+              try {
+                await this.processStreamResponse(
+                  {
+                    ...processedParams,
+                    messages: updatedMessages,
+                  },
+                  controller,
+                  recursionRoute,
+                );
+              } catch (error) {
+                console.error('Error processing recursive stream response:', error);
               }
-            }
-
-            // Close the controller after all processing is complete
-            // Wait for current pipe to finish before closing
-            if (!shouldExecuteClientTool) {
+            } else {
+              // No executable client tools — wait for pipe and close
               await pipePromise;
               controller.close();
             }
-            // If client tool was executed, the recursive call will handle closing the stream
           } else {
             // No tool calls - wait for pipe to complete then close the stream
             await pipePromise;
@@ -3133,79 +3079,24 @@ export class Agent extends BaseResource {
         },
         onFinish: async ({ finishReason, message }) => {
           if (finishReason === 'tool-calls') {
-            const toolCall = [...(message?.parts ?? [])]
-              .reverse()
-              .find(part => part.type === 'tool-invocation')?.toolInvocation;
-            if (toolCall) {
-              const toolInvocationWithMetadata = message?.toolInvocations?.find(
-                invocation => invocation.toolCallId === toolCall.toolCallId,
-              );
-              toolCalls.push({
-                ...toolInvocationWithMetadata,
-                ...toolCall,
-                ...(!getClientToolObservabilityContext(toolCall) && toolInvocationWithMetadata
-                  ? { observability: getClientToolObservabilityContext(toolInvocationWithMetadata) }
-                  : {}),
-              });
-            }
+            const results = await executeClientToolCalls({
+              message,
+              toolCalls,
+              clientTools: processedParams.clientTools,
+              requestContext: processedParams.requestContext,
+              agentId: this.agentId,
+              responseMessages: (response as unknown as { messages: CoreMessage[] }).messages,
+              threadId,
+              resourceId,
+            });
 
-            // Handle tool calls if needed
-            for (const toolCall of toolCalls) {
-              const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
-              if (clientTool && clientTool.execute) {
-                const { result, observability } = await executeClientToolWithObservability({
-                  clientTool,
-                  args: toolCall?.args,
-                  toolName: toolCall.toolName,
-                  parentContext: getClientToolObservabilityContext(toolCall),
-                  executeContext: {
-                    requestContext: processedParams.requestContext as RequestContext,
-                    tracingContext: { currentSpan: undefined },
-                    agent: {
-                      agentId: this.agentId,
-                      messages: (response as unknown as { messages: CoreMessage[] }).messages,
-                      toolCallId: toolCall?.toolCallId,
-                      suspend: async () => {},
-                      threadId,
-                      resourceId,
-                    },
-                  },
-                });
+            if (results != null) {
+              const lastMessage = cloneMessageWithToolResults(messages, results);
 
-                const lastMessage: UIMessage = JSON.parse(JSON.stringify(messages[messages.length - 1]));
-
-                const toolInvocationPart = lastMessage?.parts?.find(
-                  part => part.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCall.toolCallId,
-                ) as ToolInvocationUIPart | undefined;
-
-                if (toolInvocationPart) {
-                  toolInvocationPart.toolInvocation = {
-                    ...toolInvocationPart.toolInvocation,
-                    state: 'result',
-                    result,
-                    ...(observability ? { __mastraObservability: observability } : {}),
-                  };
-                }
-
-                const toolInvocation = lastMessage?.toolInvocations?.find(
-                  toolInvocation => toolInvocation.toolCallId === toolCall.toolCallId,
-                ) as ToolInvocation | undefined;
-
-                if (toolInvocation) {
-                  toolInvocation.state = 'result';
-                  // @ts-expect-error - result property exists when state is 'result'
-                  toolInvocation.result = result;
-                  if (observability) {
-                    (
-                      toolInvocation as unknown as { __mastraObservability?: ClientToolObservabilityEnvelope }
-                    ).__mastraObservability = observability;
-                  }
-                }
-
-                // write the tool result part to the stream
-                const writer = writable.getWriter();
-
-                try {
+              // Write all tool result chunks to the stream
+              const writer = writable.getWriter();
+              try {
+                for (const { toolCall, result } of results) {
                   await writer.write(
                     new TextEncoder().encode(
                       'a:' +
@@ -3213,32 +3104,27 @@ export class Agent extends BaseResource {
                           toolCallId: toolCall.toolCallId,
                           result,
                         }) +
-                        '\n',
+                        '
+',
                     ),
                   );
-                } finally {
-                  writer.releaseLock();
                 }
-
-                // Build updated messages for the recursive call
-                // When threadId is present, server has memory - don't re-include original messages to avoid storage duplicates
-                // When no threadId (stateless), include full conversation history for context
-                const newMessages = [...messages.filter(m => m.id !== lastMessage.id), lastMessage];
-                const updatedMessages = threadId
-                  ? newMessages
-                  : [...(Array.isArray(processedParams.messages) ? processedParams.messages : []), ...newMessages];
-
-                // Recursively call stream with updated messages
-                this.processStreamResponseLegacy(
-                  {
-                    ...processedParams,
-                    messages: updatedMessages,
-                  },
-                  writable,
-                ).catch(error => {
-                  console.error('Error processing stream response:', error);
-                });
+              } finally {
+                writer.releaseLock();
               }
+
+              const updatedMessages = buildUpdatedMessages(messages, lastMessage, processedParams.messages, threadId);
+
+              // Recurse exactly once with the complete updated message
+              this.processStreamResponseLegacy(
+                {
+                  ...processedParams,
+                  messages: updatedMessages,
+                },
+                writable,
+              ).catch(error => {
+                console.error('Error processing stream response:', error);
+              });
             }
           } else {
             setTimeout(() => {
