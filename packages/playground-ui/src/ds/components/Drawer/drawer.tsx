@@ -22,7 +22,7 @@ const drawerBackdropVariants = cva('drawer-backdrop fixed inset-0 z-50 bg-overla
   },
 });
 
-const drawerViewportVariants = cva('fixed inset-0 z-50 flex', {
+const drawerViewportVariants = cva('fixed z-50 flex', {
   variants: {
     side: {
       top: 'items-start justify-center',
@@ -31,10 +31,32 @@ const drawerViewportVariants = cva('fixed inset-0 z-50 flex', {
       right: 'items-stretch justify-end',
     },
     variant: {
-      default: '',
-      floating: 'pointer-events-none p-3 sm:p-4',
+      default: 'inset-0',
+      floating: 'p-3 sm:p-4',
     },
   },
+  compoundVariants: [
+    {
+      side: 'right',
+      variant: 'floating',
+      className: 'inset-y-0 right-0 w-[calc(32rem+1.5rem)] max-w-full sm:w-[calc(32rem+2rem)]',
+    },
+    {
+      side: 'left',
+      variant: 'floating',
+      className: 'inset-y-0 left-0 w-[calc(32rem+1.5rem)] max-w-full sm:w-[calc(32rem+2rem)]',
+    },
+    {
+      side: 'bottom',
+      variant: 'floating',
+      className: 'inset-x-0 bottom-0 h-[calc(85dvh+1.5rem)] max-h-full sm:h-[calc(85dvh+2rem)]',
+    },
+    {
+      side: 'top',
+      variant: 'floating',
+      className: 'inset-x-0 top-0 h-[calc(85dvh+1.5rem)] max-h-full sm:h-[calc(85dvh+2rem)]',
+    },
+  ],
   defaultVariants: {
     side: 'bottom',
     variant: 'default',
@@ -217,8 +239,8 @@ type DrawerViewportProps = Omit<DrawerPrimitive.Viewport.Props, 'className'> & {
   className?: string;
 } & DrawerViewportVariantsProps;
 
-// Must NOT default to `pointer-events-none` — that would break the modal swipe gesture.
-// Non-modal callers opt out via className on viewport (none) and popup (auto).
+// Keep the viewport pointer-interactive: Base UI wires native drag-to-dismiss to it.
+// Floating drawers avoid blocking the page by constraining the viewport to the panel edge.
 const DrawerViewport = React.forwardRef<HTMLDivElement, DrawerViewportProps>(
   ({ className, side, variant, ...props }, ref) => {
     const context = useDrawerContext();
