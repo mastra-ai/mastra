@@ -11,10 +11,14 @@ import { ProcessorStepSchema } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow } from '@mastra/core/workflows';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Memory } from '../../../index';
+
+// These tests drive full agent loops with OM + workflow processors; they sit
+// close to vitest's 5s default on loaded CI runners, so give the file headroom.
+vi.setConfig({ testTimeout: 15_000 });
 
 // =============================================================================
 // Mock Models
