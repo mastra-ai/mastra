@@ -404,7 +404,7 @@ describe('MastraAuthClerk', () => {
   });
 
   describe('SSO - getLoginUrl', () => {
-    it('should generate correct Clerk OAuth authorize URL', () => {
+    it('should generate correct Clerk OAuth authorize URL with signed state token', () => {
       const auth = new MastraAuthClerk(mockSSOOptions) as any;
       const url = auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'test-state-id');
 
@@ -412,16 +412,39 @@ describe('MastraAuthClerk', () => {
       expect(url).toContain('client_id=test-oauth-client-id');
       expect(url).toContain('response_type=code');
       expect(url).toContain('scope=openid+profile+email');
-      expect(url).toContain('state=test-state-id');
       expect(url).toContain('redirect_uri=http%3A%2F%2Flocalhost%3A4111%2Fapi%2Fauth%2Fsso%2Fcallback');
+      // State is now a signed token (payload.signature format)
+      const parsedUrl = new URL(url);
+      const state = parsedUrl.searchParams.get('state');
+      expect(state).toBeTruthy();
+      expect(state!.split('.').length).toBe(2); // payload.signature format
     });
 
-    it('should extract state ID from state with encoded redirect', () => {
+    it('should produce signed state that round-trips through handleCallback', async () => {
       const auth = new MastraAuthClerk(mockSSOOptions) as any;
-      const url = auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'uuid-123|%2Fstudio');
+      const redirectUri = 'http://localhost:4111/api/auth/sso/callback';
+      const url = auth.getLoginUrl(redirectUri, 'test-uuid|%2Fstudio');
+      const signedState = new URL(url).searchParams.get('state')!;
 
-      // State should be passed as-is to the URL
-      expect(url).toContain('state=uuid-123%7C%252Fstudio');
+      // Mock token exchange
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          access_token: 'at',
+          id_token: 'it',
+          expires_in: 3600,
+          token_type: 'bearer',
+        }),
+      });
+      // Mock verifyJwks for ID token verification
+      (verifyJwks as any).mockResolvedValue({
+        sub: 'clerk|user',
+        email: 'test@example.com',
+      });
+
+      // handleCallback should not throw if state is valid
+      const result = await auth.handleCallback('code', signedState);
+      expect(result.user.id).toBe('clerk|user');
     });
   });
 
@@ -443,7 +466,7 @@ describe('MastraAuthClerk', () => {
       const auth = new MastraAuthClerk(mockSSOOptions) as any;
 
       await expect(auth.handleCallback('code123', 'invalid-state')).rejects.toThrow(
-        'Invalid or expired state parameter',
+        'Invalid state token format',
       );
     });
 
@@ -452,13 +475,14 @@ describe('MastraAuthClerk', () => {
       try {
         const auth = new MastraAuthClerk(mockSSOOptions) as any;
 
-        // Generate a login URL to store state
-        auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'expired-state');
+        // Generate login URL which returns signed state token
+        const loginUrl = auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'expired-state');
+        const signedState = new URL(loginUrl).searchParams.get('state')!;
 
         // Advance time past state expiry (10 minutes + 1ms)
         vi.advanceTimersByTime(10 * 60 * 1000 + 1);
 
-        await expect(auth.handleCallback('code123', 'expired-state')).rejects.toThrow('State parameter has expired');
+        await expect(auth.handleCallback('code123', signedState)).rejects.toThrow('State token has expired');
       } finally {
         vi.useRealTimers();
       }
@@ -467,8 +491,9 @@ describe('MastraAuthClerk', () => {
     it('should exchange code for tokens and return user with session cookie', async () => {
       const auth = new MastraAuthClerk(mockSSOOptions) as any;
 
-      // First generate login URL to store state
-      auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'valid-state');
+      // Generate login URL which returns signed state token
+      const loginUrl = auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'valid-state');
+      const signedState = new URL(loginUrl).searchParams.get('state')!;
 
       // Mock token exchange response
       mockFetch.mockResolvedValueOnce({
@@ -500,7 +525,7 @@ describe('MastraAuthClerk', () => {
         publicMetadata: { role: 'admin' },
       });
 
-      const result = await auth.handleCallback('auth-code-123', 'valid-state');
+      const result = await auth.handleCallback('auth-code-123', signedState);
 
       // Verify token exchange was called
       expect(mockFetch).toHaveBeenCalledWith(
@@ -537,7 +562,9 @@ describe('MastraAuthClerk', () => {
     it('should fall back to userinfo endpoint when no id_token', async () => {
       const auth = new MastraAuthClerk(mockSSOOptions) as any;
 
-      auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'state-no-idtoken');
+      // Generate login URL which returns signed state token
+      const loginUrl = auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'state-no-idtoken');
+      const signedState = new URL(loginUrl).searchParams.get('state')!;
 
       // Token exchange - no id_token
       mockFetch.mockResolvedValueOnce({
@@ -563,7 +590,7 @@ describe('MastraAuthClerk', () => {
       // getUser enrichment fails
       mockClerkClient.users.getUser.mockRejectedValue(new Error('not found'));
 
-      const result = await auth.handleCallback('code-456', 'state-no-idtoken');
+      const result = await auth.handleCallback('code-456', signedState);
 
       expect(result.user.id).toBe('user_456');
       expect(result.user.email).toBe('user@example.com');
@@ -581,14 +608,16 @@ describe('MastraAuthClerk', () => {
     it('should throw on failed token exchange', async () => {
       const auth = new MastraAuthClerk(mockSSOOptions) as any;
 
-      auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'state-fail');
+      // Generate login URL which returns signed state token
+      const loginUrl = auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'state-fail');
+      const signedState = new URL(loginUrl).searchParams.get('state')!;
 
       mockFetch.mockResolvedValueOnce({
         ok: false,
         text: async () => 'invalid_grant',
       });
 
-      await expect(auth.handleCallback('bad-code', 'state-fail')).rejects.toThrow('Token exchange failed');
+      await expect(auth.handleCallback('bad-code', signedState)).rejects.toThrow('Token exchange failed');
     });
   });
 
