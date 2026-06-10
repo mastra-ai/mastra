@@ -339,6 +339,10 @@ export class DurableAgent<
     return this.#wrappedAgent.getInstructions(options);
   }
 
+  override getDefaultOptions(options?: any) {
+    return this.#wrappedAgent.getDefaultOptions(options);
+  }
+
   override listTools(options?: any) {
     return this.#wrappedAgent.listTools(options);
   }
