@@ -22,6 +22,7 @@ export {
   isFeatureEnabled,
   isDevEnvironment,
   isEEEnabled,
+  warnIfDevEENeedsLicense,
   clearLicenseCache,
   type LicenseInfo,
 } from './license';
@@ -38,6 +39,7 @@ export {
   getMCPToolFGAResourceId,
   type CheckFGAOptions,
   type RequireFGAOptions,
+  type SystemActorSignal,
 } from './fga-check';
 
 // Default implementations
