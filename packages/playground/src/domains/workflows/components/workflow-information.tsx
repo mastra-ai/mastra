@@ -43,10 +43,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
     if (!runId && !initialRunId) {
       closeStreamsAndReset();
     }
-    // Only react to run identity changes. `closeStreamsAndReset` comes from context
-    // and is intentionally excluded to avoid refiring on every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runId, initialRunId]);
+  }, [runId, initialRunId, closeStreamsAndReset]);
 
   useEffect(() => {
     if (error) {

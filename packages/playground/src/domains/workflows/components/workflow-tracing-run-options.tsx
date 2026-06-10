@@ -1,12 +1,14 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import { Button, cn, useCodemirrorTheme, Txt } from '@mastra/playground-ui';
 import CodeMirror from '@uiw/react-codemirror';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTracingSettings } from '@/domains/observability/context/tracing-settings-context';
 
-const stringifyTracingOptions = (settings: ReturnType<typeof useTracingSettings>['settings']) => {
+type TracingOptions = NonNullable<ReturnType<typeof useTracingSettings>['settings']>['tracingOptions'];
+
+const stringifyTracingOptions = (tracingOptions: TracingOptions) => {
   try {
-    return JSON.stringify(settings?.tracingOptions, null, 2);
+    return JSON.stringify(tracingOptions ?? {}, null, 2);
   } catch {
     return '{}';
   }
@@ -33,16 +35,18 @@ export const WorkflowTracingRunOptions = ({
   const theme = useCodemirrorTheme();
   const { settings, setSettings } = useTracingSettings();
 
-  const [text, setText] = useState(() => stringifyTracingOptions(settings));
+  const tracingOptions = settings?.tracingOptions;
+  const serializedTracingOptions = useMemo(() => stringifyTracingOptions(tracingOptions), [tracingOptions]);
+  const [text, setText] = useState(() => serializedTracingOptions);
   const userEditedRef = useRef(false);
 
   // Seed the editor from externally-loaded settings (the provider hydrates from localStorage
   // asynchronously) until the user starts editing. Once edited, local text owns the value.
   useEffect(() => {
     if (!userEditedRef.current) {
-      setText(stringifyTracingOptions(settings));
+      setText(serializedTracingOptions);
     }
-  }, [settings]);
+  }, [serializedTracingOptions]);
 
   const handleChange = (value: string) => {
     userEditedRef.current = true;

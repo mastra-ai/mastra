@@ -8,7 +8,7 @@ import type { AnchorHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { WorkflowRunProvider } from '../../context/workflow-run-context';
+import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { emptyWorkflowRuns, oneSuccessfulRun } from '../../runs/__tests__/fixtures/workflow-runs';
 import { WorkflowInformation } from '../workflow-information';
 import { fullAccessAuthCapabilities } from './fixtures/auth';
@@ -428,8 +428,10 @@ describe('WorkflowInformation', () => {
 
       renderInformation('run-success-1');
 
-      const runLabel = await screen.findByText('run-success-1');
-      const link = runLabel.closest('a');
+      const runLabels = await screen.findAllByText('run-success-1');
+      const link = runLabels
+        .map(label => label.closest('a'))
+        .find(anchor => anchor?.getAttribute('href') === paths.workflowRunLink(WORKFLOW_ID, 'run-success-1'));
       expect(link?.className).toContain('bg-surface4');
     });
   });

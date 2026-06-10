@@ -15,7 +15,7 @@ import {
 } from '@mastra/playground-ui';
 import { ChevronRight, Loader2, Play } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { ZodSchema } from 'zod';
 
 import { WorkflowInputTypeToggle } from './workflow-input-type-toggle';
@@ -23,6 +23,20 @@ import type { WorkflowInputType } from './workflow-input-type-toggle';
 import { DynamicForm } from '@/lib/form';
 
 type InputType = WorkflowInputType;
+
+type WorkflowSubmitRowProps = Pick<
+  WorkflowInputDataProps,
+  | 'isSubmitLoading'
+  | 'submitButtonLabel'
+  | 'disableSubmit'
+  | 'submitActions'
+  | 'leftActions'
+  | 'submitButtonClassName'
+  | 'submitButtonIcon'
+  | 'submitButtonVariant'
+> & {
+  onSubmit: () => void;
+};
 
 export interface WorkflowInputDataProps {
   schema: ZodSchema;
@@ -78,15 +92,14 @@ export const WorkflowInputData = ({
   hideHeading,
 }: WorkflowInputDataProps) => {
   const [type, setType] = useState<InputType>(isProcessorWorkflow ? 'simple' : 'form');
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  if (!mounted) {
-    return null;
-  }
+  const processorInputKey = useMemo(
+    () =>
+      JSON.stringify({
+        message: getDefaultProcessorMessage(defaultValues),
+        phase: getDefaultProcessorPhase(defaultValues),
+      }),
+    [defaultValues],
+  );
 
   const defaultHeading = (
     <Txt as="span" variant="ui-md" className={cn('text-neutral5 font-semibold', headingClassName)}>
@@ -117,7 +130,8 @@ export const WorkflowInputData = ({
           })}
         >
           {type === 'simple' && isProcessorWorkflow ? (
-            <SimpleProcessorInput
+            <WorkflowProcessorInput
+              key={processorInputKey}
               schema={schema}
               defaultValues={defaultValues}
               isSubmitLoading={isSubmitLoading}
@@ -131,9 +145,9 @@ export const WorkflowInputData = ({
               leftActions={leftActions}
             >
               {children}
-            </SimpleProcessorInput>
+            </WorkflowProcessorInput>
           ) : type === 'form' ? (
-            <DynamicForm
+            <WorkflowFormInput
               schema={schema}
               defaultValues={defaultValues}
               isSubmitLoading={isSubmitLoading}
@@ -142,16 +156,17 @@ export const WorkflowInputData = ({
               submitButtonIcon={submitButtonIcon}
               submitButtonVariant={submitButtonVariant}
               submitButtonFullWidth={submitButtonFullWidth}
-              onSubmit={withoutSubmit ? undefined : onSubmit}
-              readOnly={isReadOnly}
+              onSubmit={onSubmit}
+              withoutSubmit={withoutSubmit}
+              isReadOnly={isReadOnly}
               disableSubmit={disableSubmit}
               submitActions={submitActions}
               leftActions={leftActions}
             >
               {children}
-            </DynamicForm>
+            </WorkflowFormInput>
           ) : (
-            <JSONInput
+            <WorkflowJsonInput
               schema={schema}
               defaultValues={defaultValues}
               isSubmitLoading={isSubmitLoading}
@@ -165,7 +180,7 @@ export const WorkflowInputData = ({
               leftActions={leftActions}
             >
               {children}
-            </JSONInput>
+            </WorkflowJsonInput>
           )}
         </div>
       </div>
@@ -193,7 +208,81 @@ export const WorkflowInputData = ({
   );
 };
 
-const JSONInput = ({
+const WorkflowSubmitRow = ({
+  isSubmitLoading,
+  submitButtonLabel,
+  disableSubmit,
+  submitActions,
+  leftActions,
+  submitButtonClassName,
+  submitButtonIcon,
+  submitButtonVariant,
+  onSubmit,
+}: WorkflowSubmitRowProps) => (
+  <div className="flex items-center justify-between gap-1">
+    {leftActions ?? <div />}
+    <div className="flex items-center gap-1">
+      {submitActions}
+      <Button
+        variant={submitButtonVariant ?? 'primary'}
+        onClick={onSubmit}
+        disabled={isSubmitLoading || disableSubmit}
+        className={submitButtonClassName}
+      >
+        {isSubmitLoading ? (
+          <Icon>
+            <Loader2 className="animate-spin" />
+          </Icon>
+        ) : (
+          (submitButtonIcon ?? (
+            <Icon>
+              <Play />
+            </Icon>
+          ))
+        )}
+        {submitButtonLabel}
+      </Button>
+    </div>
+  </div>
+);
+
+const WorkflowFormInput = ({
+  schema,
+  defaultValues,
+  isSubmitLoading,
+  submitButtonLabel,
+  onSubmit,
+  withoutSubmit,
+  isReadOnly,
+  disableSubmit,
+  children,
+  submitActions,
+  leftActions,
+  submitButtonClassName,
+  submitButtonIcon,
+  submitButtonVariant,
+  submitButtonFullWidth,
+}: WorkflowInputDataProps) => (
+  <DynamicForm
+    schema={schema}
+    defaultValues={defaultValues}
+    isSubmitLoading={isSubmitLoading}
+    submitButtonLabel={submitButtonLabel}
+    submitButtonClassName={submitButtonClassName}
+    submitButtonIcon={submitButtonIcon}
+    submitButtonVariant={submitButtonVariant}
+    submitButtonFullWidth={submitButtonFullWidth}
+    onSubmit={withoutSubmit ? undefined : onSubmit}
+    readOnly={isReadOnly}
+    disableSubmit={disableSubmit}
+    submitActions={submitActions}
+    leftActions={leftActions}
+  >
+    {children}
+  </DynamicForm>
+);
+
+const WorkflowJsonInput = ({
   schema,
   defaultValues,
   isSubmitLoading,
@@ -262,31 +351,17 @@ const JSONInput = ({
       {children}
 
       {withoutSubmit ? null : (
-        <div className="flex items-center justify-between gap-1">
-          {leftActions ?? <div />}
-          <div className="flex items-center gap-1">
-            {submitActions}
-            <Button
-              variant={submitButtonVariant ?? 'primary'}
-              onClick={handleSubmit}
-              disabled={isSubmitLoading || disableSubmit}
-              className={submitButtonClassName}
-            >
-              {isSubmitLoading ? (
-                <Icon>
-                  <Loader2 className="animate-spin" />
-                </Icon>
-              ) : (
-                (submitButtonIcon ?? (
-                  <Icon>
-                    <Play />
-                  </Icon>
-                ))
-              )}
-              {submitButtonLabel}
-            </Button>
-          </div>
-        </div>
+        <WorkflowSubmitRow
+          isSubmitLoading={isSubmitLoading}
+          submitButtonLabel={submitButtonLabel}
+          disableSubmit={disableSubmit}
+          submitActions={submitActions}
+          leftActions={leftActions}
+          submitButtonClassName={submitButtonClassName}
+          submitButtonIcon={submitButtonIcon}
+          submitButtonVariant={submitButtonVariant}
+          onSubmit={handleSubmit}
+        />
       )}
     </div>
   );
@@ -312,7 +387,7 @@ function getDefaultProcessorPhase(defaultValues: any) {
   return typeof defaultValues?.phase === 'string' ? defaultValues.phase : DEFAULT_PROCESSOR_PHASE;
 }
 
-const SimpleProcessorInput = ({
+const WorkflowProcessorInput = ({
   schema,
   defaultValues,
   isSubmitLoading,
@@ -331,11 +406,6 @@ const SimpleProcessorInput = ({
   const [message, setMessage] = useState(() => getDefaultProcessorMessage(defaultValues));
   const [phase, setPhase] = useState(() => getDefaultProcessorPhase(defaultValues));
   const [errors, setErrors] = useState<string[]>([]);
-
-  useEffect(() => {
-    setMessage(getDefaultProcessorMessage(defaultValues));
-    setPhase(getDefaultProcessorPhase(defaultValues));
-  }, [defaultValues]);
 
   const handleSubmit = () => {
     setErrors([]);
@@ -427,31 +497,17 @@ const SimpleProcessorInput = ({
       {children}
 
       {withoutSubmit ? null : (
-        <div className="flex items-center justify-between gap-1">
-          {leftActions ?? <div />}
-          <div className="flex items-center gap-1">
-            {submitActions}
-            <Button
-              variant={submitButtonVariant ?? 'primary'}
-              onClick={handleSubmit}
-              disabled={isSubmitLoading || disableSubmit}
-              className={submitButtonClassName}
-            >
-              {isSubmitLoading ? (
-                <Icon>
-                  <Loader2 className="animate-spin" />
-                </Icon>
-              ) : (
-                (submitButtonIcon ?? (
-                  <Icon>
-                    <Play />
-                  </Icon>
-                ))
-              )}
-              {submitButtonLabel}
-            </Button>
-          </div>
-        </div>
+        <WorkflowSubmitRow
+          isSubmitLoading={isSubmitLoading}
+          submitButtonLabel={submitButtonLabel}
+          disableSubmit={disableSubmit}
+          submitActions={submitActions}
+          leftActions={leftActions}
+          submitButtonClassName={submitButtonClassName}
+          submitButtonIcon={submitButtonIcon}
+          submitButtonVariant={submitButtonVariant}
+          onSubmit={handleSubmit}
+        />
       )}
     </div>
   );

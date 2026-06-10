@@ -7,7 +7,7 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { baseWorkflow } from '../../components/__tests__/fixtures/workflow';
-import { WorkflowRunProvider } from '../../context/workflow-run-context';
+import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { runWithOnlyInput, runWithTimedSteps } from '../../runs/__tests__/fixtures/workflow-runs';
 import { WorkflowTimeline } from '../workflow-timeline';
 import { TracingSettingsProvider } from '@/domains/observability/context/tracing-settings-context';
@@ -92,7 +92,7 @@ describe('WorkflowTimeline', () => {
     expect(Number(bars[1].getAttribute('data-offset'))).toBeGreaterThan(0);
   });
 
-  it('shows a duration label for completed steps', async () => {
+  it('shows a duration label in seconds for completed steps', async () => {
     stubRunById('run-timeline-1', runWithTimedSteps);
     stubWorkflow();
 
@@ -101,7 +101,8 @@ describe('WorkflowTimeline', () => {
     await screen.findByText('Step A');
 
     await waitFor(() => {
-      expect(screen.getAllByText(/ms$/).length).toBeGreaterThan(0);
+      expect(screen.getByText('1s')).not.toBeNull();
+      expect(screen.getAllByText(/s$/).length).toBeGreaterThan(0);
     });
   });
 });

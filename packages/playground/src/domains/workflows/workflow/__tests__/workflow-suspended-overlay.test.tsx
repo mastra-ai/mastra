@@ -11,7 +11,8 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { baseWorkflow } from '../../components/__tests__/fixtures/workflow';
-import { WorkflowRunContext, WorkflowRunProvider } from '../../context/workflow-run-context';
+import { WorkflowRunContext } from '../../context/workflow-run-context';
+import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { runWithSuspendedStep, runWithTimedSteps } from '../../runs/__tests__/fixtures/workflow-runs';
 import { convertWorkflowRunStateToStreamResult } from '../../utils';
 import { WorkflowSuspendedOverlay } from '../workflow-suspended-overlay';

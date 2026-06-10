@@ -6,7 +6,7 @@ import { TracingSettingsProvider } from '@/domains/observability/context/tracing
 import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 import { WorkflowInformation } from '@/domains/workflows/components/workflow-information';
 import { WorkflowLayout as WorkflowLayoutUI } from '@/domains/workflows/components/workflow-layout';
-import { WorkflowRunProvider } from '@/domains/workflows/context/workflow-run-context';
+import { WorkflowRunProvider } from '@/domains/workflows/context/workflow-run-provider';
 import { useWorkflowRun } from '@/hooks/use-workflow-runs';
 import { useWorkflow } from '@/hooks/use-workflows';
 

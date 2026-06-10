@@ -1,4 +1,4 @@
-import { CheckIcon, CrossIcon, Icon, toSigFigs, Txt, useAutoscroll } from '@mastra/playground-ui';
+import { CheckIcon, CrossIcon, Icon, Txt, useAutoscroll } from '@mastra/playground-ui';
 import { CirclePause, HourglassIcon, Loader2 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
@@ -64,32 +64,36 @@ export function WorkflowTimeline() {
           </Txt>
         </div>
         <div ref={scrollRef} className="flex min-h-0 flex-col gap-2 overflow-y-auto">
-          {rows.map((row, index) => (
-            <div
-              key={`timeline-item-${row.stepId}-${index}`}
-              data-testid="workflow-timeline-row"
-              className="grid grid-cols-[10rem_minmax(0,1fr)_5rem] items-center gap-3"
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                <StepStatusIcon status={row.status} />
-                <Txt as="span" variant="ui-sm" className="min-w-0 truncate text-neutral6">
-                  {titleCase(row.stepId)}
+          {rows.map((row, index) => {
+            const timeDiff = row.durationMs / 1000;
+
+            return (
+              <div
+                key={`timeline-item-${row.stepId}-${index}`}
+                data-testid="workflow-timeline-row"
+                className="grid grid-cols-[10rem_minmax(0,1fr)_5rem] items-center gap-3"
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <StepStatusIcon status={row.status} />
+                  <Txt as="span" variant="ui-sm" className="min-w-0 truncate text-neutral6">
+                    {titleCase(row.stepId)}
+                  </Txt>
+                </div>
+                <div className="relative h-2 min-w-0 rounded bg-surface4">
+                  <div
+                    data-testid="workflow-timeline-bar"
+                    data-offset={String(row.offsetPct)}
+                    data-width={String(row.widthPct)}
+                    className={`absolute top-0 h-full rounded ${BAR_TINT[row.status]}`}
+                    style={{ left: `${row.offsetPct}%`, width: `${row.widthPct}%` }}
+                  />
+                </div>
+                <Txt as="span" variant="ui-sm" className="text-right text-neutral3 tabular-nums">
+                  {Number(timeDiff.toPrecision(3))}s
                 </Txt>
               </div>
-              <div className="relative h-2 min-w-0 rounded bg-surface4">
-                <div
-                  data-testid="workflow-timeline-bar"
-                  data-offset={String(row.offsetPct)}
-                  data-width={String(row.widthPct)}
-                  className={`absolute top-0 h-full rounded ${BAR_TINT[row.status]}`}
-                  style={{ left: `${row.offsetPct}%`, width: `${row.widthPct}%` }}
-                />
-              </div>
-              <Txt as="span" variant="ui-sm" className="text-right text-neutral3 tabular-nums">
-                {toSigFigs(row.durationMs, 3)}ms
-              </Txt>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>

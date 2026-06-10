@@ -2,7 +2,7 @@ import type { GetWorkflowResponse } from '@mastra/client-js';
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
 import { ScrollArea, Skeleton, Txt, Icon, Badge, WorkflowIcon, toast, Switch, CopyButton } from '@mastra/playground-ui';
 import { Loader2 } from 'lucide-react';
-import { useState, useEffect, useContext } from 'react';
+import { useState, useEffect, useContext, useRef } from 'react';
 import { WorkflowRequestContextDialog } from '../components/workflow-request-context-dialog';
 import { WorkflowRunOptionsDialog } from '../components/workflow-run-options-dialog';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
@@ -76,6 +76,16 @@ function DebugModeSwitch() {
   );
 }
 
+function useSyncStreamResultToWorkflowRunContext(streamResult: WorkflowRunStreamResult | null) {
+  const { setResult } = useContext(WorkflowRunContext);
+
+  useEffect(() => {
+    if (streamResult) {
+      setResult(streamResult);
+    }
+  }, [setResult, streamResult]);
+}
+
 export function WorkflowTrigger({
   workflowId,
   paramsRunId,
@@ -94,6 +104,7 @@ export function WorkflowTrigger({
   const requestContext = useMergedRequestContext();
 
   const { result, setResult, payload, setPayload, setRunId: setContextRunId } = useContext(WorkflowRunContext);
+  useSyncStreamResultToWorkflowRunContext(streamResult);
   const { canExecute } = usePermissions();
 
   // Check if user can execute workflows
@@ -101,6 +112,7 @@ export function WorkflowTrigger({
 
   const [innerRunId, setInnerRunId] = useState<string>('');
   const [cancelResponse, setCancelResponse] = useState<{ message: string } | null>(null);
+  const observedParamRunRef = useRef<string | null>(null);
 
   const streamResultToUse = result ?? streamResult;
   const suspendedSteps = useSuspendedSteps(streamResultToUse, innerRunId);
@@ -136,21 +148,17 @@ export function WorkflowTrigger({
   };
 
   useEffect(() => {
-    if (paramsRunId && observeWorkflowStream) {
-      observeWorkflowStream({ workflowId, runId: paramsRunId });
-      setInnerRunId(paramsRunId);
-      setContextRunId(paramsRunId);
-    }
-    // Only react to the run id from params changing; the stream/setters are stable for this effect.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paramsRunId]);
+    if (!paramsRunId || !observeWorkflowStream) return;
 
-  useEffect(() => {
-    if (streamResult) {
-      setResult(streamResult);
+    const observedParamRunKey = `${workflowId}:${paramsRunId}`;
+    if (observedParamRunRef.current !== observedParamRunKey) {
+      observeWorkflowStream({ workflowId, runId: paramsRunId });
+      observedParamRunRef.current = observedParamRunKey;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [streamResult]);
+
+    setInnerRunId(paramsRunId);
+    setContextRunId(paramsRunId);
+  }, [paramsRunId, observeWorkflowStream, setContextRunId, workflowId]);
 
   if (isLoading) {
     return (
