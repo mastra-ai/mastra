@@ -631,6 +631,16 @@
         "default": "./dist/base.cjs"
       }
     },
+    "./telemetry": {
+      "import": {
+        "types": "./dist/telemetry/index.d.ts",
+        "default": "./dist/telemetry/index.js"
+      },
+      "require": {
+        "types": "./dist/telemetry/index.d.ts",
+        "default": "./dist/telemetry/index.cjs"
+      }
+    },
     "./telemetry/otel-vendor": {
       "import": {
         "types": "./dist/telemetry/otel-vendor.d.ts",
