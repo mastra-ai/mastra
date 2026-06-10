@@ -17149,3 +17149,123 @@ describe('Message ordering regressions', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 });
+
+describe('filterObservedMessages — tool-call/result pair preservation', () => {
+  it('keeps the tool-call message when its result is in an unobserved message', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-test-thread';
+    const resourceId = 'tool-pair-test-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    // Add observed message with tool call
+    messageList.add(
+      {
+        id: 'tool-call-msg',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    // Add unobserved message with tool result
+    messageList.add(
+      {
+        id: 'tool-result-msg',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['tool-call-msg'] } as any,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingIds = remaining.map((m: any) => m.id);
+
+    expect(remainingIds).toContain('tool-call-msg');
+  });
+
+  it('removes the tool-call message when no result is pending', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-no-result-thread';
+    const resourceId = 'tool-pair-no-result-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+
+    // Add observed message with tool call but no result
+    messageList.add(
+      {
+        id: 'tool-call-msg-alone',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-2',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['tool-call-msg-alone'] } as any,
+    });
+
+    const remaining = messageList.get.all.db();
+    const remainingIds = remaining.map((m: any) => m.id);
+
+    expect(remainingIds).not.toContain('tool-call-msg-alone');
+  });
+});

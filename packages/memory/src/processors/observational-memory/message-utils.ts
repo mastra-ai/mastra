@@ -140,6 +140,21 @@ export function filterObservedMessages(opts: {
   } else if (record) {
     const observedIds = new Set<string>(Array.isArray(record.observedMessageIds) ? record.observedMessageIds : []);
 
+    // Collect toolCallIds that have a pending result in a non-observed message
+    const pendingToolResultIds = new Set<string>();
+    for (const msg of allMessages) {
+      if (!msg?.id || observedIds.has(msg.id)) continue;
+      const parts = (msg.content as any)?.parts;
+      if (!Array.isArray(parts)) continue;
+      for (const part of parts) {
+        if ((part as any)?.type === 'tool-invocation' &&
+            (part as any)?.toolInvocation?.state === 'result') {
+          const id = (part as any)?.toolInvocation?.toolCallId;
+          if (id) pendingToolResultIds.add(id);
+        }
+      }
+    }
+
     const derivedCursor =
       opts.fallbackCursor ??
       getLastObservedMessageCursor(allMessages.filter(msg => !!msg?.id && observedIds.has(msg.id) && !!msg.createdAt));
@@ -150,6 +165,17 @@ export function filterObservedMessages(opts: {
       if (!msg?.id || msg.id === 'om-continuation' || preserveMessageIds.has(msg.id)) continue;
 
       if (observedIds.has(msg.id)) {
+        if (pendingToolResultIds.size > 0) {
+          const parts = (msg.content as any)?.parts;
+          if (Array.isArray(parts)) {
+            const hasOrphanedCall = parts.some((part: any) =>
+              part?.type === 'tool-invocation' &&
+              part?.toolInvocation?.state === 'call' &&
+              pendingToolResultIds.has(part?.toolInvocation?.toolCallId),
+            );
+            if (hasOrphanedCall) continue;
+          }
+        }
         messagesToRemove.push(msg.id);
         continue;
       }
