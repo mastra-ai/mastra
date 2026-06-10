@@ -55,7 +55,7 @@ Supply one of the following authentication options:
 
 #### Service account
 
-Service account auth is the recommended option for backend agents. There is no user consent flow and no token refresh handling. You only need **two values** from the service account JSON key file: `client_email` and `private_key`.
+Service account auth is the recommended option for backend agents. No user consent flow and no token refresh handling is required. You only need **two values** from the service account JSON key file: `client_email` and `private_key`.
 
 ##### Set up the service account
 
@@ -67,21 +67,21 @@ Service account auth is the recommended option for backend agents. There is no u
 
 ##### Share the Drive folder with the service account
 
-The service account is its own Google identity. It cannot see anything in Drive until you share with it explicitly.
+The service account is its own Google identity. It can't see anything in Drive until you share with it explicitly.
 
 1. Open the target folder in [Google Drive](https://drive.google.com/).
 1. Select **Share**.
 1. Paste the service account's `client_email` address.
 1. Set the role to **Editor** (for read and write) or **Viewer** (for read-only access). Select **Send**.
-1. Copy the folder ID from the URL. It is the segment after `/folders/` in `https://drive.google.com/drive/folders/<folderId>`.
+1. Copy the folder ID from the URL. it's the segment after `/folders/` in `https://drive.google.com/drive/folders/<folderId>`.
 
 :::warning
 
-Service accounts cannot create files in standard "My Drive" folders. A service account has no personal Drive storage quota, so any file it creates needs to be owned by a quota-bearing entity. If you only share a personal Drive folder, read operations work but writes fail with a quota error.
+Service accounts can't create files in standard "My Drive" folders. A service account has no personal Drive storage quota, so any file it creates needs to be owned by a quota-bearing entity. If you only share a personal Drive folder, read operations work but writes fail with a quota error.
 
 For write access, place the folder inside a **shared drive** (formerly Team Drive) and add the service account as a member of that shared drive. Shared drives provide the storage quota that service-account-created files need.
 
-Read-only workloads against a personal Drive folder do not have this restriction.
+Read-only workloads against a personal Drive folder don't have this restriction.
 
 :::
 
@@ -108,13 +108,13 @@ const filesystem = new GoogleDriveFilesystem({
 })
 ```
 
-You do **not** need to copy the entire JSON file or pass other fields like `project_id`, `client_id`, `private_key_id`, or `token_uri`. They are not used. Only `clientEmail` and `privateKey` are required. `privateKeyId`, `scopes`, and `subject` are optional. `scopes` defaults to `['https://www.googleapis.com/auth/drive']`, which is the scope required for the service account to see folders shared with it. The narrower `drive.file` scope only grants access to files the application created itself, so a folder shared with the service account would return `404 Not Found`.
+You **don't** need to copy the entire JSON file or pass other fields like `project_id`, `client_id`, `private_key_id`, or `token_uri`. They're not used. Only `clientEmail` and `privateKey` are required. `privateKeyId`, `scopes`, and `subject` are optional. `scopes` defaults to `['https://www.googleapis.com/auth/drive']`, which is the scope required for the service account to see folders shared with it. The narrower `drive.file` scope only grants access to files the application created itself, so a folder shared with the service account would return `404 Not Found`.
 
 `GoogleDriveFilesystem` automatically normalizes the `privateKey` string before signing. It strips surrounding quotes (including escaped quotes from JSON-wrapped values), converts literal `\n` sequences to real newlines, normalizes `\r\n` line endings, and removes a trailing comma. The key works regardless of how your `.env` loader handles the value.
 
 ##### Troubleshoot
 
-- **`404 File not found: <folderId>`**: The service account does not have access to the folder. Confirm the folder is shared with the exact `client_email` address and that the folder ID matches the URL.
+- **`404 File not found: <folderId>`**: The service account doesn't have access to the folder. Confirm the folder is shared with the exact `client_email` address and that the folder ID matches the URL.
 - **`storageQuotaExceeded` on write**: The folder is in a personal "My Drive". Move the folder to a shared drive and add the service account as a member.
 - **`error:1E08010C:DECODER routines::unsupported`**: The `privateKey` value is malformed. Confirm the value contains the full PEM block and that newlines are preserved (literal `\n` is fine).
 

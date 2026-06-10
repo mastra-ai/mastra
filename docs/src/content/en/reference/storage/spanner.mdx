@@ -179,7 +179,7 @@ Two tables also carry Spanner-specific `STORED` generated columns that the adapt
 
 Both are added via `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` during `init()` and skipped under `initMode: 'validate'` (where the schema is owned externally). When the column is absent, the adapter falls back to a `JSON_VALUE` filter at runtime.
 
-The adapter does not create or use named schemas; use a dedicated database for isolation.
+The adapter doesn't create or use named schemas; use a dedicated database for isolation.
 
 ### Initialization
 
@@ -201,7 +201,7 @@ const mastra = new Mastra({
 })
 ```
 
-If you use storage directly, call `init()` once before the first operation. Spanner does not allow concurrent schema changes, so `SpannerStore.init()` runs each domain's setup sequentially.
+If you use storage directly, call `init()` once before the first operation. Spanner doesn't allow concurrent schema changes, so `SpannerStore.init()` runs each domain's setup sequentially.
 
 ```typescript
 const storage = new SpannerStore({
@@ -217,19 +217,19 @@ const thread = await memory?.getThreadById({ threadId: '...' })
 ```
 
 :::warning
-If `init()` is not called and `disableInit` is true, the required tables will not exist and storage operations will fail.
+If `init()` isn't called and `disableInit` is true, the required tables won't exist and storage operations will fail.
 :::
 
 ### GoogleSQL specifics
 
 A few behaviors differ from other relational adapters:
 
-- Upserts use `INSERT OR UPDATE`. Spanner does not provide a `RETURNING` clause for upserts, so callers needing the post-write state must read it back.
-- There is no `TRUNCATE`; `dangerouslyClearAll()` issues `DELETE WHERE TRUE`.
+- Upserts use `INSERT OR UPDATE`. Spanner doesn't provide a `RETURNING` clause for upserts, so callers needing the post-write state must read it back.
+- No `TRUNCATE` exists; `dangerouslyClearAll()` issues `DELETE WHERE TRUE`.
 - Identifiers are quoted with backticks.
 - DDL is applied through `database.updateSchema(...)`, which is asynchronous (long-running operation).
-- `NULLS FIRST/LAST` is not supported. Ordering with NULL handling is emulated through an `IS NULL` ordering key.
-- JSON containment is not supported natively. `listTraces` `metadata` and `scope` filters compile to per-key `JSON_VALUE(...) = @v` equality checks, and `tags` filters compile to `EXISTS` over `JSON_QUERY_ARRAY(...)`. This differs from Postgres' `@>` containment operator (which can match nested structure in a single index scan) — most one-shot lookups still work but deeply nested structural matches are not expressible.
+- `NULLS FIRST/LAST` isn't supported. Ordering with NULL handling is emulated through an `IS NULL` ordering key.
+- JSON containment isn't supported natively. `listTraces` `metadata` and `scope` filters compile to per-key `JSON_VALUE(...) = @v` equality checks, and `tags` filters compile to `EXISTS` over `JSON_QUERY_ARRAY(...)`. This differs from Postgres' `@>` containment operator (which can match nested structure in a single index scan) — most one-shot lookups still work but deeply nested structural matches aren't expressible.
 
 ### Direct database access
 

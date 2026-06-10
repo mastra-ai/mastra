@@ -208,7 +208,7 @@ for await (const chunk of result.fullStream) {
 }
 ```
 
-`resumeGenerate()` and `resumeStream()` are not supported and throw an error when called.
+`resumeGenerate()` and `resumeStream()` aren't supported and throw an error when called.
 
 ### Model management
 
@@ -252,7 +252,7 @@ With `persistSession: false`, `@mastra/acp` stops the ACP process after each pro
 
 ## Workspace integration
 
-ACP file operations go through Mastra's `Workspace` abstraction. If you do not pass `workspace`, `@mastra/acp` creates a `Workspace` backed by `LocalFilesystem` and uses `cwd` or `process.cwd()` as the filesystem base path.
+ACP file operations go through Mastra's `Workspace` abstraction. If you don't pass `workspace`, `@mastra/acp` creates a `Workspace` backed by `LocalFilesystem` and uses `cwd` or `process.cwd()` as the filesystem base path.
 
 Pass a custom `Workspace` when the ACP agent should read and write through a specific filesystem implementation:
 
