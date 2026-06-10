@@ -15,6 +15,7 @@ Use `BrowserViewer` when your agent drives a browser through a CLI tool like `br
 
 ```typescript title="src/mastra/index.ts"
 import { Workspace, LocalSandbox } from '@mastra/core/workspace'
+import { Memory } from '@mastra/memory';
 import { BrowserViewer } from '@mastra/browser-viewer'
 import { Agent } from '@mastra/core/agent'
 
@@ -33,6 +34,7 @@ const browserAgent = new Agent({
   model: '__GATEWAY_OPENAI_MODEL__',
   workspace,
   instructions: 'You are a web automation assistant.',
+  memory: new Memory(),
 })
 ```
 

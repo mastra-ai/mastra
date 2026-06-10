@@ -45,6 +45,8 @@ Create a workspace with BrowserViewer and assign it to an agent:
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
 import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory';
+import { LibSQLStore } from '@mastra/libsql';
 import { Workspace, LocalSandbox } from '@mastra/core/workspace'
 import { BrowserViewer } from '@mastra/browser-viewer'
 
@@ -64,10 +66,15 @@ const browserAgent = new Agent({
   workspace,
   instructions: `You are a web automation assistant.
 Use browser-use commands to navigate and interact with websites.`,
+  memory: new Memory(),
 })
 
 export const mastra = new Mastra({
   agents: { browserAgent },
+  storage: new LibSQLStore({
+    id: "mastra-storage",
+    url: "file:./mastra.db",
+  })
 })
 ```
 
