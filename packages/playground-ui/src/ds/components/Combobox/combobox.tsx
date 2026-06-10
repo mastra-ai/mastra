@@ -64,6 +64,7 @@ export function Combobox({
   return (
     <div className={comboboxStyles.root}>
       <BaseCombobox.Root
+        autoHighlight
         items={options}
         value={selectedOption}
         onValueChange={handleSelect}
