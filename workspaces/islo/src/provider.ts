@@ -6,7 +6,9 @@
  * import { isloSandboxProvider } from '@mastra/islo';
  *
  * const editor = new MastraEditor({
- *   sandboxes: [isloSandboxProvider],
+ *   sandboxes: {
+ *     [isloSandboxProvider.id]: isloSandboxProvider,
+ *   },
  * });
  * ```
  */

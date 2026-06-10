@@ -33,6 +33,21 @@ const agent = new Agent({
 
 `apiKey` falls back to the `ISLO_API_KEY` environment variable. `controlUrl` falls back to `ISLO_CONTROL_URL`, then `https://api.islo.dev`. `computeUrl` falls back to `ISLO_COMPUTE_URL`, then `https://ca.compute.islo.dev`. Token exchange happens on the control API; sandbox lifecycle and exec calls happen on the compute API.
 
+## Studio provider
+
+Register the provider with `MastraEditor` to make Islo available for UI-driven workspace configuration:
+
+```typescript
+import { MastraEditor } from '@mastra/editor';
+import { isloSandboxProvider } from '@mastra/islo';
+
+const editor = new MastraEditor({
+  sandboxes: {
+    [isloSandboxProvider.id]: isloSandboxProvider,
+  },
+});
+```
+
 ## Lifecycle
 
 | WorkspaceSandbox method | islo SDK call |
