@@ -1,0 +1,29 @@
+{
+  "name": "agent-builder",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "latest",
+    "@mastra/core": "latest",
+    "@mastra/editor": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/observability": "latest",
+    "@mastra/slack": "latest",
+    "@mastra/stagehand": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "mastra": "latest",
+    "typescript": "latest"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "packageManager": "pnpm@11.3.0"
+}
