@@ -6,6 +6,7 @@ import fs from 'node:fs';
 
 import { createMastraCodeAnalytics } from './analytics.js';
 import { isStreamDestroyedError } from './error-classification.js';
+import { createMastraCode } from './index-v1.js';
 import { createBrowserFromSettings, loadSettings } from './onboarding/settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
@@ -14,7 +15,6 @@ import { setupDebugLogging } from './utils/debug-log.js';
 import { drainPipedStdin, reopenStdinFromTTY } from './utils/stdin-pipe.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { getCurrentVersion } from './utils/update-check.js';
-import { createMastraCode } from './index-v1.js';
 
 let harness: Awaited<ReturnType<typeof createMastraCode>>['harness'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];

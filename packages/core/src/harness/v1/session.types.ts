@@ -2,7 +2,6 @@ import type {
   Agent,
   AgentExecutionOptionsBase,
   AgentMessageInput,
-  AgentSignal,
   AgentSubscribeToThreadOptions,
   AgentThreadSubscription,
   QueueAgentMessageOptions,
@@ -10,7 +9,6 @@ import type {
   SendAgentMessageOptions,
   SendAgentMessageResult,
   SendAgentSignalOptions,
-  SendAgentSignalResult,
 } from '../../agent';
 import type { MessageListInput } from '../../agent/message-list';
 import type { MastraModelGatewayInterface } from '../../llm';
@@ -44,8 +42,13 @@ export type CloneSessionOptions = {
   messageLimit?: number;
 };
 
-export type HarnessAgentResolver = (agentId: string) => Agent | Promise<Agent>;
-export type HarnessModeResolver = (modeId: string) => HarnessMode | Promise<HarnessMode>;
+/**
+ * Minimal protocol for resolving an agent by id.
+ * Mastra instances satisfy this interface structurally.
+ */
+export interface AgentResolver {
+  getAgentById(id: string): Agent;
+}
 
 type SessionScopedTargetOptions<
   OUTPUT = unknown,
@@ -60,15 +63,10 @@ type SessionScopedTargetOptions<
 };
 
 type SessionScopedMessageOptions<OUTPUT = unknown> = SessionScopedTargetOptions<OUTPUT, SendAgentMessageOptions<OUTPUT>>;
-export type SessionScopedSignalOptions<OUTPUT = unknown> = SessionScopedTargetOptions<
-  OUTPUT,
-  SendAgentSignalOptions<OUTPUT>
->;
 
 export type SessionSubscribeToThreadOptions = Omit<AgentSubscribeToThreadOptions, 'resourceId' | 'threadId'>;
 export type SessionThreadSubscription<OUTPUT = unknown> = AgentThreadSubscription<OUTPUT>;
 export type SessionSendMessageResult = SendAgentMessageResult;
-export type SessionSendSignalResult = SendAgentSignalResult;
 export type SessionQueueMessageResult = QueueAgentMessageResult;
 export type SessionQueueMessageOptions<OUTPUT = unknown> = Omit<
   Extract<QueueAgentMessageOptions<OUTPUT>, { resourceId: string; threadId: string }>,
@@ -82,10 +80,6 @@ type SessionExecutionOptions<OUTPUT = unknown> = Omit<
   'requestContext' | 'toolsets' | 'model'
 >;
 
-export type SessionSignalOptions<OUTPUT = unknown> = SessionExecutionOptions<OUTPUT> &
-  SessionScopedSignalOptions<OUTPUT> & {
-    signal: AgentSignal;
-  };
 export type SessionMessageOptions<OUTPUT = unknown> = SessionExecutionOptions<OUTPUT> &
   SessionScopedMessageOptions<OUTPUT> & {
     messages: SessionMessageInput;
@@ -119,10 +113,10 @@ export interface SessionConfig<TState = {}> {
   runtimeCompatibilityGeneration?: string | null;
   /** Initial ordered pending records loaded from the durable record. */
   pending?: HarnessPendingItemRecord[];
-  /** Resolves the mode's backing agent without exposing the registry publicly. */
-  resolveAgent?: HarnessAgentResolver;
-  /** Resolves modes for session-owned transitions without exposing the registry publicly. */
-  resolveMode?: HarnessModeResolver;
+  /** Resolves agents by id for subagent spawn and tool approval. */
+  agentResolver?: AgentResolver;
+  /** All registered modes, keyed by id, for session-owned transitions. */
+  modes?: Map<string, HarnessMode>;
   /** Identifier of the Harness instance that owns this session. */
   ownerId: string;
   /** Initial record loaded under the lease. The Session takes ownership. */

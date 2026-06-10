@@ -62,7 +62,7 @@ function createSession(
     getThread: vi.fn(async () => thread),
     getMessages: vi.fn(async () => []),
     subscribeToThread: vi.fn(async () => ({ stream: toStream(chunks), unsubscribe: vi.fn(async () => {}) })),
-    sendSignal: vi.fn(async ({ signal }) => ({ accepted: true, runId: 'run-1', signal })),
+    sendMessage: vi.fn(async ({ messages }) => ({ accepted: true, runId: 'run-1', signal: messages })),
     queueMessage: vi.fn(async () => {
       activeRunId = 'run-queued';
       return { accepted: true, queued: true };
@@ -101,6 +101,7 @@ function createHarness(session = createSession()) {
     cloneSession: vi.fn(),
   };
   const mastra = { getAgentById: vi.fn(() => ({ id: 'agent' })) };
+  const defaultAgent = { id: 'agent' } as unknown as import('@mastra/core/agent').Agent;
   const harness = new HarnessCompat(
     {
       resourceId: 'resource-id',
@@ -108,6 +109,7 @@ function createHarness(session = createSession()) {
       memory: memory as never,
       modes: [buildMode, planMode],
       defaultModeId: 'build',
+      defaultAgent,
       initialState: {
         projectPath: '/repo',
         subagentModelIds: { worker: 'worker-model' },
@@ -278,8 +280,8 @@ describe('HarnessCompat standalone V1 adapter', () => {
     expect(signal).toMatchObject({ id: 'signal-1', type: 'user' });
     expect(signal.accepted.catch).toEqual(expect.any(Function));
     await expect(signal.accepted).resolves.toEqual({ accepted: true, runId: 'run-1' });
-    expect(session.sendSignal).toHaveBeenCalledWith({
-      signal: { id: 'signal-1', type: 'user-message', contents: 'hello' },
+    expect(session.sendMessage).toHaveBeenCalledWith({
+      messages: { id: 'signal-1', type: 'user-message', contents: 'hello' },
     });
     expect(session.queueMessage).not.toHaveBeenCalled();
   });
@@ -301,8 +303,8 @@ describe('HarnessCompat standalone V1 adapter', () => {
 
     await signal.accepted;
 
-    expect(session.sendSignal).toHaveBeenCalledWith({
-      signal: {
+    expect(session.sendMessage).toHaveBeenCalledWith({
+      messages: {
         id: 'signal-1',
         type: 'user-message',
         contents: [
@@ -342,8 +344,8 @@ describe('HarnessCompat standalone V1 adapter', () => {
 
     await signal.accepted;
     expect(session.subscribeToThread).toHaveBeenCalledTimes(1);
-    expect(session.sendSignal).toHaveBeenCalledWith({
-      signal: { id: 'signal-active', type: 'user-message', contents: 'while active' },
+    expect(session.sendMessage).toHaveBeenCalledWith({
+      messages: { id: 'signal-active', type: 'user-message', contents: 'while active' },
       ifActive: { attributes: { delivery: 'while-active' } },
       ifIdle: { attributes: { delivery: 'message' } },
     });
@@ -375,8 +377,8 @@ describe('HarnessCompat standalone V1 adapter', () => {
     await signal.accepted;
 
     expect(session.subscribeToThread).toHaveBeenCalledTimes(2);
-    expect(session.sendSignal).toHaveBeenCalledWith({
-      signal: { id: 'signal-idle', type: 'user-message', contents: 'idle despite display state' },
+    expect(session.sendMessage).toHaveBeenCalledWith({
+      messages: { id: 'signal-idle', type: 'user-message', contents: 'idle despite display state' },
     });
 
     pending.resolve();

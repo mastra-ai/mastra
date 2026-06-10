@@ -22,4 +22,5 @@ export type {
   ToolCategory,
   ToolCategoryResolver,
 } from './permissions.types';
+export type { AgentResolver } from './session.types';
 export type { HarnessRequestContext, HarnessRequestContextSource } from './request-context';

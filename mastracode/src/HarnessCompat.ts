@@ -93,12 +93,6 @@ type NormalizedSignal = {
   options: Pick<ThreadScopedSignalOptions, 'ifActive' | 'ifIdle' | 'runId'>;
 };
 
-type SignalCapableSession<TState> = Session<TState> & {
-  sendSignal<OUTPUT = unknown>(
-    options: { signal: AgentSignal } & Pick<ThreadScopedSignalOptions<OUTPUT>, 'ifActive' | 'ifIdle' | 'runId'>,
-  ): Promise<{ accepted: true; runId: string }>;
-};
-
 type StreamMessageState = {
   textContentById: Map<string, number>;
   thinkingContentById: Map<string, number>;
@@ -982,10 +976,10 @@ export class HarnessCompat<TState = {}> {
   sendSignal(signalInput: unknown): SendSignalResult {
     const { id, type, signal, options } = normalizeSignal(signalInput);
     const accepted = (async () => {
-      const session = (await this.#ensureSession()) as SignalCapableSession<TState>;
+      const session = await this.#ensureSession();
 
       if (this.isCurrentThreadStreamActive()) {
-        const result = await session.sendSignal({ signal, ...options });
+        const result = await session.sendMessage({ messages: signal as any, ...options });
         return { accepted: true as const, runId: result.runId };
       }
 
@@ -994,7 +988,7 @@ export class HarnessCompat<TState = {}> {
 
       let streamOwned = false;
       try {
-        const result = await session.sendSignal({ signal, ...options });
+        const result = await session.sendMessage({ messages: signal as any, ...options });
         streamOwned = true;
         await this.#consumeSignalSubscription(subscription, { rejectOnTerminalError: true });
         return { accepted: true as const, runId: result.runId };

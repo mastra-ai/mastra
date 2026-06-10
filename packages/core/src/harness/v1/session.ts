@@ -6,7 +6,6 @@ import type {
   AgentMessageInput,
   QueueAgentMessageOptions,
   SendAgentMessageOptions,
-  SendAgentSignalOptions,
   ToolsInput,
 } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
@@ -38,13 +37,12 @@ import type {
 import { buildHarnessRequestContext } from './request-context';
 import type { HarnessRequestContext, HarnessRequestContextSource } from './request-context';
 import type {
+  AgentResolver,
   CloneSessionOptions,
   SessionConfig,
   SessionMessageOptions,
   SessionQueueMessageResult,
   SessionSendMessageResult,
-  SessionSendSignalResult,
-  SessionSignalOptions,
   SessionSubscribeToThreadOptions,
   SessionThreadSubscription,
 } from './session.types';
@@ -80,8 +78,8 @@ export class Session<TState = {}> {
   readonly #workspace?: DynamicArgument<Workspace | undefined>;
   #resolvedWorkspace?: Workspace;
   #workspaceResolved = false;
-  readonly #resolveAgent?: (agentId: string) => Agent | Promise<Agent>;
-  readonly #resolveMode?: (modeId: string) => HarnessMode | Promise<HarnessMode>;
+  readonly #agentResolver?: AgentResolver;
+  readonly #modes?: Map<string, HarnessMode>;
   /**
    * Single-flight cache for workspace skill discovery (spec §4.6: concurrent
    * `listSkills`/`useSkill` calls must share the same in-flight promise so we
@@ -122,8 +120,8 @@ export class Session<TState = {}> {
     this.#events = config.events;
     this.#stateSchemaInput = config.stateSchema;
     this.#stateSchema = config.stateSchema ? toStandardSchema(config.stateSchema) : undefined;
-    this.#resolveAgent = config.resolveAgent;
-    this.#resolveMode = config.resolveMode;
+    this.#agentResolver = config.agentResolver;
+    this.#modes = config.modes;
     this.#state = {
       ...this.#getSchemaDefaults(),
       ...config.initialState,
@@ -272,10 +270,10 @@ export class Session<TState = {}> {
       throw new Error(`Harness subagent type "${opts.agentType}" was not found`);
     }
 
-    if (!this.#resolveAgent) {
+    if (!this.#agentResolver) {
       throw new Error('Harness subagent spawn requires an agent resolver');
     }
-    await this.#resolveAgent(definition.agentId);
+    this.#agentResolver.getAgentById(definition.agentId);
 
     const modelId = opts.modelId ?? definition.defaultModelId ?? this.#modelId;
 
@@ -415,8 +413,8 @@ export class Session<TState = {}> {
       initialState: this.getState() as Partial<TState>,
       workspace: this.#workspace,
       subagents: this.#subagents,
-      resolveAgent: this.#resolveAgent,
-      resolveMode: this.#resolveMode,
+      agentResolver: this.#agentResolver,
+      modes: this.#modes,
       gateways: this.#gateways,
       defaultPermissionPolicy: this.#defaultPermissionPolicy,
       permissionRules: this.#permissionRules,
@@ -532,14 +530,6 @@ export class Session<TState = {}> {
     return result;
   }
 
-  async sendSignal<OUTPUT = unknown>({ signal, ...options }: SessionSignalOptions<OUTPUT>): Promise<SessionSendSignalResult> {
-    const agent = await this.#resolveSessionAgent();
-    const target = await this.#buildMessageTarget(agent, options);
-    const result = agent.sendSignal<OUTPUT>(signal, target);
-    void this.#persistSession({});
-    return result;
-  }
-
   async queueMessage<OUTPUT = unknown>({ messages, ...options }: SessionMessageOptions<OUTPUT>): Promise<SessionQueueMessageResult> {
     const agent = await this.#resolveSessionAgent();
     const target = await this.#buildMessageTarget(agent, options);
@@ -619,8 +609,8 @@ export class Session<TState = {}> {
 
   async #buildMessageTarget<OUTPUT>(
     agent: Agent,
-    options: Omit<SessionMessageOptions<OUTPUT>, 'messages'> | Omit<SessionSignalOptions<OUTPUT>, 'signal'>,
-  ): Promise<SendAgentMessageOptions<OUTPUT> & QueueAgentMessageOptions<OUTPUT> & SendAgentSignalOptions<OUTPUT>> {
+    options: Omit<SessionMessageOptions<OUTPUT>, 'messages'>,
+  ): Promise<SendAgentMessageOptions<OUTPUT> & QueueAgentMessageOptions<OUTPUT>> {
     const { ifActive, ifIdle, runId, ...executionOptions } = options;
     const { tools, harnessToolNames } = await this.#buildToolsets(agent);
     const modeInstructions = this.#mode.instructions;
@@ -651,7 +641,7 @@ export class Session<TState = {}> {
       },
     };
 
-    return target as unknown as SendAgentMessageOptions<OUTPUT> & QueueAgentMessageOptions<OUTPUT> & SendAgentSignalOptions<OUTPUT>;
+    return target as unknown as SendAgentMessageOptions<OUTPUT> & QueueAgentMessageOptions<OUTPUT>;
   }
 
   #toAgentMessageInput(messages: SessionMessageOptions['messages']): AgentMessageInput {
@@ -987,10 +977,10 @@ export class Session<TState = {}> {
       const runId = typeof payload.runId === 'string' ? payload.runId : item.runId;
       const toolCallId = typeof payload.toolCallId === 'string' ? payload.toolCallId : undefined;
       const agent =
-        typeof payload.agentId === 'string' && this.#resolveAgent
-          ? await this.#resolveAgent(payload.agentId)
+        typeof payload.agentId === 'string' && this.#agentResolver
+          ? await this.#agentResolver.getAgentById(payload.agentId)
           : this.#agent;
-      if (typeof approved !== 'boolean' || !runId || !this.#resolveAgent) return undefined;
+      if (typeof approved !== 'boolean' || !runId) return undefined;
 
       const result = approved
         ? await agent.approveToolCallGenerate({ runId, toolCallId, requestContext: await this.#buildRequestContext() })
@@ -1000,10 +990,12 @@ export class Session<TState = {}> {
 
     if (item.kind === 'plan-approval' && response.approved === true) {
       const transitionModeId = typeof payload.transitionModeId === 'string' ? payload.transitionModeId : undefined;
-      if (transitionModeId && transitionModeId !== this.#mode.id && this.#resolveMode) {
-        const mode = await this.#resolveMode(transitionModeId);
-        this.setMode(mode);
-        return { transitionModeId, modeChanged: true };
+      if (transitionModeId && transitionModeId !== this.#mode.id && this.#modes) {
+        const mode = this.#modes.get(transitionModeId);
+        if (mode) {
+          this.setMode(mode);
+          return { transitionModeId, modeChanged: true };
+        }
       }
     }
 

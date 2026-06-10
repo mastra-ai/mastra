@@ -1,5 +1,5 @@
 import type { Agent } from '../../agent';
-import type { MastraModelGateway, MastraModelGatewayInterface } from '../../llm';
+import type { MastraModelGatewayInterface } from '../../llm';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
 import type { PublicSchema } from '../../schema';
@@ -16,7 +16,7 @@ import type {
   ToolCategory,
   ToolCategoryResolver,
 } from './permissions.types';
-import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
+import type { SubagentRegistryConfig } from './subagents.types';
 
 export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
   /**

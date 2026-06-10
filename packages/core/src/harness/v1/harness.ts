@@ -22,8 +22,8 @@ import type {
   ToolCategoryResolver,
 } from './permissions.types';
 import { Session } from './session';
-import type { CloneSessionOptions } from './session.types';
-import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
+import type { AgentResolver, CloneSessionOptions } from './session.types';
+import type { SubagentRegistryConfig } from './subagents.types';
 
 type SessionByIdOptions = {
   sessionId: string;
@@ -325,8 +325,8 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       initialState: this.#initialState,
       workspace: this.#workspace,
       subagents: this.#subagents,
-      resolveAgent: agentId => this.#resolveAgent(agentId),
-      resolveMode: modeId => this.#resolveMode(modeId),
+      agentResolver: this.#mastra as AgentResolver | undefined,
+      modes: this.#modesById,
       gateways: this.#gateways,
       defaultPermissionPolicy: this.#defaultPermissionPolicy,
       permissionRules: this.#permissionRules,
@@ -334,19 +334,6 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       onPermissionRequested: this.#onPermissionRequested,
       toolCategoryResolver: this.#toolCategoryResolver,
     });
-  }
-
-  #resolveAgent(agentId: string): Agent {
-    if (this.#mastra) return this.#mastra.getAgentById(agentId) as Agent;
-    throw new Error(`Harness mode references unknown agent "${agentId}"`);
-  }
-
-  #resolveMode(modeId: string): HarnessMode {
-    const mode = this.#modesById.get(modeId);
-    if (!mode) {
-      throw new Error(`Harness mode "${modeId}" was not found`);
-    }
-    return mode;
   }
 
   #sessionIdFor(resourceId: string, threadId: string): string {

@@ -15,7 +15,7 @@ import type {
 import { Harness as HarnessV1 } from '@mastra/core/harness/v1';
 import type { HarnessMode as HarnessModeV1, SubagentRegistryConfig } from '@mastra/core/harness/v1';
 import { GatewayRegistry, PROVIDER_REGISTRY } from '@mastra/core/llm';
-import type { LanguageModel, ProviderConfig } from '@mastra/core/llm';
+import type { ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import type { StorageThreadType } from '@mastra/core/memory';
 import {
@@ -30,12 +30,12 @@ import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
-import {
-  Observability,
-  MastraStorageExporter,
-  MastraPlatformExporter,
-  SensitiveDataFilter,
-} from '@mastra/observability';
+// import {
+//   Observability,
+//   MastraStorageExporter,
+//   MastraPlatformExporter,
+//   SensitiveDataFilter,
+// } from '@mastra/observability';
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
@@ -51,7 +51,7 @@ import { getDynamicWorkspace } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
-import { HarnessCompat, v1ModeToLegacy } from './HarnessCompat.js';
+import { HarnessCompat } from './HarnessCompat.js';
 import type { HarnessCompatConfig } from './HarnessCompat.js';
 import { HookManager } from './hooks/index.js';
 import { createMcpManager } from './mcp/index.js';
@@ -62,7 +62,6 @@ import {
   getCustomProviderId,
   loadSettings,
   MEMORY_GATEWAY_PROVIDER,
-  OBSERVABILITY_AUTH_PREFIX,
   resolveModelDefaults,
   resolveOmRoleModel,
   saveSettings,
@@ -77,7 +76,6 @@ import { stateSchema } from './schema.js';
 import type { MastraCodeState } from './schema.js';
 
 import { mastra } from './tui/theme.js';
-import { syncGateways } from './utils/gateway-sync.js';
 import {
   detectProject,
   getObservabilityDatabasePath,
@@ -87,7 +85,6 @@ import {
 import type { StorageConfig } from './utils/project.js';
 import { createSignalsPubSub } from './utils/signals-pubsub.js';
 import { createStorage, createVectorStore } from './utils/storage-factory.js';
-import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const PROVIDER_TO_OAUTH_ID: Record<string, string> = {
   anthropic: 'anthropic',
@@ -232,24 +229,24 @@ export function createAuthStorage() {
  * Resolve cloud observability credentials for the MastraPlatformExporter.
  * Priority: per-resource settings > environment variables > disabled.
  */
-function resolveCloudObservabilityConfig(
-  settings: ReturnType<typeof loadSettings>,
-  authStorage: AuthStorage,
-  resourceId: string,
-): { accessToken?: string; projectId?: string } {
-  const resourceConfig = settings.observability.resources[resourceId];
-  if (resourceConfig) {
-    const token = authStorage.getStoredApiKey(`${OBSERVABILITY_AUTH_PREFIX}${resourceId}`);
-    if (token) {
-      return { accessToken: token, projectId: resourceConfig.projectId };
-    }
-  }
-  // Fall back to environment variables for backwards compatibility
-  return {
-    accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
-    projectId: process.env.MASTRA_PROJECT_ID,
-  };
-}
+// function resolveCloudObservabilityConfig(
+//   settings: ReturnType<typeof loadSettings>,
+//   authStorage: AuthStorage,
+//   resourceId: string,
+// ): { accessToken?: string; projectId?: string } {
+//   const resourceConfig = settings.observability.resources[resourceId];
+//   if (resourceConfig) {
+//     const token = authStorage.getStoredApiKey(`${OBSERVABILITY_AUTH_PREFIX}${resourceId}`);
+//     if (token) {
+//       return { accessToken: token, projectId: resourceConfig.projectId };
+//     }
+//   }
+//   // Fall back to environment variables for backwards compatibility
+//   return {
+//     accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
+//     projectId: process.env.MASTRA_PROJECT_ID,
+//   };
+// }
 
 export async function createMastraCode(config?: MastraCodeConfig) {
   const cwd = config?.cwd ?? process.cwd();
@@ -370,56 +367,56 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   });
 
   // Observability (tracing, scoring, feedback)
-  const observability = new Observability({
-    configs: {
-      default: {
-        serviceName: 'mastracode',
-        // Only these requestContext keys are stored on spans — prevents leaking
-        // large objects (harness state, workspace, env vars) into trace data.
-        // Use dot-notation because these are nested inside the 'harness' key.
-        //
-        // Session identifiers:
-        //   threadId, resourceId, modeId, harnessId
-        // Environment & project:
-        //   state.projectName, state.gitBranch
-        // Model configuration:
-        //   state.currentModelId, state.subagentModelId
-        // Agent settings:
-        //   state.yolo, state.thinkingLevel, state.smartEditing
-        // Observational memory settings:
-        //   state.omScope, state.observerModelId, state.reflectorModelId,
-        //   state.observationThreshold, state.reflectionThreshold
-        requestContextKeys: [
-          // Session identifiers
-          'harness.threadId',
-          'harness.resourceId',
-          'harness.modeId',
-          'harness.harnessId',
-          // Environment & project
-          'harness.state.projectName',
-          'harness.state.gitBranch',
-          // Model configuration
-          'harness.state.currentModelId',
-          'harness.state.subagentModelId',
-          // Agent settings
-          'harness.state.yolo',
-          'harness.state.thinkingLevel',
-          'harness.state.smartEditing',
-          // Observational memory settings
-          'harness.state.omScope',
-          'harness.state.observerModelId',
-          'harness.state.reflectorModelId',
-          'harness.state.observationThreshold',
-          'harness.state.reflectionThreshold',
-        ],
-        exporters: [
-          new MastraStorageExporter({ strategy: 'event-sourced' }),
-          new MastraPlatformExporter(resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId)),
-        ],
-        spanOutputProcessors: [new SensitiveDataFilter()],
-      },
-    },
-  });
+  // const observability = new Observability({
+  //   configs: {
+  //     default: {
+  //       serviceName: 'mastracode',
+  //       // Only these requestContext keys are stored on spans — prevents leaking
+  //       // large objects (harness state, workspace, env vars) into trace data.
+  //       // Use dot-notation because these are nested inside the 'harness' key.
+  //       //
+  //       // Session identifiers:
+  //       //   threadId, resourceId, modeId, harnessId
+  //       // Environment & project:
+  //       //   state.projectName, state.gitBranch
+  //       // Model configuration:
+  //       //   state.currentModelId, state.subagentModelId
+  //       // Agent settings:
+  //       //   state.yolo, state.thinkingLevel, state.smartEditing
+  //       // Observational memory settings:
+  //       //   state.omScope, state.observerModelId, state.reflectorModelId,
+  //       //   state.observationThreshold, state.reflectionThreshold
+  //       requestContextKeys: [
+  //         // Session identifiers
+  //         'harness.threadId',
+  //         'harness.resourceId',
+  //         'harness.modeId',
+  //         'harness.harnessId',
+  //         // Environment & project
+  //         'harness.state.projectName',
+  //         'harness.state.gitBranch',
+  //         // Model configuration
+  //         'harness.state.currentModelId',
+  //         'harness.state.subagentModelId',
+  //         // Agent settings
+  //         'harness.state.yolo',
+  //         'harness.state.thinkingLevel',
+  //         'harness.state.smartEditing',
+  //         // Observational memory settings
+  //         'harness.state.omScope',
+  //         'harness.state.observerModelId',
+  //         'harness.state.reflectorModelId',
+  //         'harness.state.observationThreshold',
+  //         'harness.state.reflectionThreshold',
+  //       ],
+  //       exporters: [
+  //         new MastraStorageExporter({ strategy: 'event-sourced' }),
+  //         new MastraPlatformExporter(resolveCloudObservabilityConfig(globalSettings, authStorage, project.resourceId)),
+  //       ],
+  //       spanOutputProcessors: [new SensitiveDataFilter()],
+  //     },
+  //   },
+  // });
 
   // Vector store for recall search (separate DB file to avoid bloating main storage)
   const vectorStore = await createVectorStore(storageConfig, storageResult.backend);
@@ -537,14 +534,14 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     },
   ];
 
-  const defaultHeartbeatHandlers: HeartbeatHandler[] = [
-    {
-      id: 'gateway-sync',
-      intervalMs: 5 * 60 * 1000,
-      handler: () => syncGateways(),
-    },
-  ];
-  const heartbeatHandlers = config?.heartbeatHandlers ?? defaultHeartbeatHandlers;
+  // const defaultHeartbeatHandlers: HeartbeatHandler[] = [
+  //   {
+  //     id: 'gateway-sync',
+  //     intervalMs: 5 * 60 * 1000,
+  //     handler: () => syncGateways(),
+  //   },
+  // ];
+  // const heartbeatHandlers = config?.heartbeatHandlers ?? defaultHeartbeatHandlers;
 
   // Build lightweight provider access for resolving built-in packs at startup.
   // Anthropic/OpenAI use AuthStorage; other providers use env API keys.
@@ -611,7 +608,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   if (!defaultModeId) {
     throw new Error('MastraCode requires at least one mode');
   }
-  const modes: HarnessMode<MastraCodeState>[] = modesV1.map(mode => v1ModeToLegacy(mode, codeAgent));
 
   // Map subagent types to mode models: explore→fast, plan→plan, execute→build
   const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
