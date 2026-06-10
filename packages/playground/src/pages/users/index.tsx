@@ -58,6 +58,12 @@ function UserRow({ user }: { user: User }) {
             Traces
           </Button>
         </Link>
+        <Link to={`/metrics?filterUserId=${user.id}&period=30d`}>
+          <Button variant="outline" size="sm">
+            <ExternalLinkIcon className="h-3 w-3 mr-1" />
+            Metrics
+          </Button>
+        </Link>
       </div>
     </Link>
   );

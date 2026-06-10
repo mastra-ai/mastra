@@ -112,21 +112,20 @@ function UserDetail() {
         </SectionCard>
 
         {/* Activity section */}
-        <SectionCard title="Activity" description="View this customer's requests and activity in the traces view.">
-          <div className="py-2">
+        <SectionCard title="Activity" description="View this customer's requests and activity.">
+          <div className="py-2 flex gap-3">
             <Link to={`/observability?filterUserId=${userId}`}>
               <Button variant="outline">
                 <ExternalLinkIcon className="h-4 w-4 mr-2" />
                 View Traces
               </Button>
             </Link>
-          </div>
-        </SectionCard>
-
-        {/* Usage summary - placeholder for future */}
-        <SectionCard title="Usage Summary" description="Usage metrics coming soon.">
-          <div className="py-2">
-            <p className="text-text2 text-sm italic">No usage data available yet.</p>
+            <Link to={`/metrics?filterUserId=${userId}&period=30d`}>
+              <Button variant="outline">
+                <ExternalLinkIcon className="h-4 w-4 mr-2" />
+                View Metrics
+              </Button>
+            </Link>
           </div>
         </SectionCard>
       </PageLayout.MainArea>
