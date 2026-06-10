@@ -150,7 +150,10 @@ export const ToolkitConnectionControl = ({
     [toolkitsQuery.data?.data, toolkit],
   );
 
-  const connectionsField = useMemo(() => `toolProviders.${providerId}.connections.${toolkit}` as const, [providerId, toolkit]);
+  const connectionsField = useMemo(
+    () => `toolProviders.${providerId}.connections.${toolkit}` as const,
+    [providerId, toolkit],
+  );
   const pinnedRaw = useWatch({ name: connectionsField }) as ToolProviderConnectionFormValue[] | undefined;
   const pinned = useMemo(() => pinnedRaw ?? [], [pinnedRaw]);
 
