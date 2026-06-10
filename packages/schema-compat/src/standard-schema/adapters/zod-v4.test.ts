@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { standardSchemaToJSONSchema, toStandardSchema as toRoutedStandardSchema } from '../standard-schema';
 import { toStandardSchema } from './zod-v4';
 
 describe('zod-v4 standard-schema adapter', () => {
@@ -197,6 +198,56 @@ describe('zod-v4 standard-schema adapter', () => {
       const items = (jsonSchema.properties as any).tasks.items;
       expect(items.type).toBe('object');
       expect(items.required).toEqual(['content', 'status', 'activeForm']);
+    });
+
+    it('serializes built-in Mastra Code command tool schemas as JSON Schema objects', () => {
+      const toolSchemas = {
+        ask_user: z.object({
+          question: z.string().min(1),
+          options: z
+            .array(
+              z.object({
+                label: z.string(),
+                description: z.string().optional(),
+              }),
+            )
+            .optional(),
+        }),
+        task_write: z.object({
+          tasks: z.array(
+            z.object({
+              id: z.string().optional(),
+              content: z.string().min(1),
+              status: z.enum(['pending', 'in_progress', 'completed']),
+              activeForm: z.string().min(1),
+            }),
+          ),
+        }),
+        task_check: z.object({}),
+        submit_plan: z.object({
+          title: z.string().nullable().optional(),
+          plan: z.string().min(1),
+        }),
+      };
+
+      const serialized = Object.fromEntries(
+        Object.entries(toolSchemas).map(([name, schema]) => {
+          // Simulate the Zod 3.25 v4 compatibility export shape where schemas expose _zod
+          // but do not provide native ~standard.jsonSchema converters.
+          delete (schema as any)['~standard'].jsonSchema;
+          return [name, standardSchemaToJSONSchema(toRoutedStandardSchema(schema as any), { io: 'input' })];
+        }),
+      ) as Record<keyof typeof toolSchemas, any>;
+
+      for (const schema of Object.values(serialized)) {
+        expect(schema.type).toBe('object');
+        expect(schema.properties).toBeDefined();
+      }
+      expect(serialized.ask_user.properties.options.items.type).toBe('object');
+      expect(serialized.task_write.properties.tasks.items.required).toEqual(['content', 'status', 'activeForm']);
+      expect(serialized.task_check.properties).toEqual({});
+      expect(serialized.submit_plan.required).toEqual(['plan']);
+      expect(serialized.submit_plan.properties.title).toEqual({ anyOf: [{ type: 'string' }, { type: 'null' }] });
     });
 
     it('should pass adapter options to z.toJSONSchema', () => {
