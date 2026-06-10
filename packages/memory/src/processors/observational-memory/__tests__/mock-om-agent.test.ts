@@ -396,7 +396,9 @@ describe('Mock OM Agent Integration', () => {
     expect(record!.activeObservations).toContain('User asked for help');
   });
 
-  it('should complete when primary agent with OM calls a sub-agent with OM', async () => {
+  // Two nested agent loops with OM; sits just under the 5s default on loaded
+  // CI runners, so give it headroom.
+  it('should complete when primary agent with OM calls a sub-agent with OM', { timeout: 15_000 }, async () => {
     const subAgent = new Agent({
       id: 'sub-agent',
       name: 'Sub Agent',
