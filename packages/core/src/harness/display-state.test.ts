@@ -1572,6 +1572,29 @@ describe('Harness.subscribeDisplayState()', () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
+  it('lets a non-TUI subscriber render canonical UI state without raw events', () => {
+    const rendered: string[] = [];
+    harness.subscribeDisplayState(
+      state => {
+        const tasks = state.tasks.map(task => `${task.id}:${task.status}`).join(',') || 'none';
+        const tools = [...state.activeTools.values()].map(tool => `${tool.name}:${tool.status}`).join(',') || 'none';
+        rendered.push(`running=${state.isRunning};tasks=${tasks};tools=${tools}`);
+      },
+      { windowMs: 250, maxWaitMs: 500 },
+    );
+
+    emit(harness, { type: 'agent_start' });
+    emit(harness, {
+      type: 'task_updated',
+      tasks: [{ id: 'write-tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' }],
+    });
+    emit(harness, { type: 'tool_start', toolCallId: 'tool-1', toolName: 'write_file', args: { path: 'x.ts' } });
+    vi.advanceTimersByTime(250);
+
+    expect(rendered).toContain('running=true;tasks=none;tools=none');
+    expect(rendered.at(-1)).toBe('running=true;tasks=write-tests:pending;tools=write_file:running');
+  });
+
   it('flushes immediately for critical lifecycle events', () => {
     const listener = vi.fn();
     harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });

@@ -204,10 +204,13 @@ export function openaiCodexProvider(
   const middleware = createCodexMiddleware(reasoningEffort);
   const headers = options?.headers;
 
+  const baseURL = process.env.OPENAI_BASE_URL;
+
   // Test environment: use API key
   if (process.env.NODE_ENV === 'test' || process.env.VITEST) {
     const openai = createOpenAI({
       apiKey: 'test-api-key',
+      baseURL,
       headers,
     });
     return wrapLanguageModel({
@@ -218,6 +221,7 @@ export function openaiCodexProvider(
 
   const openai = createOpenAI({
     apiKey: 'oauth-dummy-key',
+    baseURL,
     headers,
     fetch: buildOpenAICodexOAuthFetch() as any,
   });
