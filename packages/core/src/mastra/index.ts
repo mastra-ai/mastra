@@ -654,9 +654,43 @@ export class Mastra<
                 const data = event.data as Record<string, unknown> | undefined;
                 const wfId = data?.workflowId as string | undefined;
                 const rId = data?.runId as string | undefined;
-                if (wfId && rId && self.__hasInternalWorkflow(wfId, rId)) {
+                // Walk parentWorkflow chain to root — nested internal workflows
+                // (e.g. `executionWorkflow` inside `agentic-loop`) carry an
+                // immediate workflowId that isn't itself in the internal registry,
+                // but their root parent (the registered agentic-loop) is. If any
+                // ancestor matches an internal registration, this instance owns
+                // the run and the event should stay local. Also tag publishes
+                // for workflow ids only known to this instance's public registry
+                // (e.g. background scheduler runs like the notification
+                // dispatcher) — they have no cross-instance consumer.
+                const isOwnedHere = (() => {
+                  if (wfId && rId && self.__hasInternalWorkflow(wfId, rId)) return true;
+                  let parent = data?.parentWorkflow as
+                    | { workflowId?: string; runId?: string; parentWorkflow?: unknown }
+                    | undefined;
+                  let depth = 0;
+                  while (parent && depth < 16) {
+                    const pwfId = parent.workflowId;
+                    const prId = parent.runId;
+                    if (pwfId && prId && self.__hasInternalWorkflow(pwfId, prId)) return true;
+                    parent = parent.parentWorkflow as typeof parent;
+                    depth++;
+                  }
+                  // Scheduler-spawned background workflows: runId carries the
+                  // workflow id prefix `sched_wf_<workflowId>_<timestamp>`. These
+                  // ticks fire on every instance independently — events are
+                  // only meaningful to the publishing process.
+                  if (rId && rId.startsWith('sched_wf_')) return true;
+                  return false;
+                })();
+                if (isOwnedHere) {
                   return target.publish(topic, event, { localOnly: true });
                 }
+              } else if (topic.startsWith('workflow.events.v2.')) {
+                // Per-run watch stream events. Only the publishing process
+                // consumes these (execution-engine subscribes per-run). No
+                // cross-instance fan-out needed.
+                return target.publish(topic, event, { localOnly: true });
               }
               return target.publish(topic, event);
             };
