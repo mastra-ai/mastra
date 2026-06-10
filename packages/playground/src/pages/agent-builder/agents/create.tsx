@@ -43,6 +43,7 @@ export default function AgentBuilderCreate() {
           }
           className="rounded-full"
           tooltip="Agents list"
+          data-testid="agent-builder-back-to-list"
         >
           <ArrowLeftIcon />
         </Button>

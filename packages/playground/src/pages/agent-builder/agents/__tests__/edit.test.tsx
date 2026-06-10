@@ -60,6 +60,7 @@ vi.mock('@/domains/agent-builder/components/agent-edit/conversation-panel', () =
 
 vi.mock('@/domains/agent-builder/contexts/stream-chat-context', () => ({
   useStreamRunning: () => false,
+  useStreamRunningDebounced: () => false,
   useStreamMessages: () => [],
   useStreamSend: () => () => {},
 }));
