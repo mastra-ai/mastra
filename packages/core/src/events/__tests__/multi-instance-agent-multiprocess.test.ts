@@ -55,7 +55,9 @@ function waitForMessage(child: ChildProcess, type: string, timeoutMs: number): P
     };
     const timer = setTimeout(() => {
       cleanup();
-      reject(new Error(`Timeout waiting for "${type}" from worker after ${timeoutMs}ms.\nstderr:\n${stderrChunks.join('')}`));
+      reject(
+        new Error(`Timeout waiting for "${type}" from worker after ${timeoutMs}ms.\nstderr:\n${stderrChunks.join('')}`),
+      );
     }, timeoutMs);
     child.on('message', handler);
   });
@@ -143,7 +145,9 @@ process.on('message', async (msg) => {
 
   afterEach(async () => {
     for (const child of children.splice(0)) {
-      try { child.kill('SIGKILL'); } catch {}
+      try {
+        child.kill('SIGKILL');
+      } catch {}
     }
     await rm(tempDir, { recursive: true, force: true });
   });
@@ -157,37 +161,33 @@ process.on('message', async (msg) => {
     return child;
   }
 
-  it(
-    'both processes complete agent.generate() without AGENT_GENERATE_MALFORMED_RESULT under shared broker',
-    async () => {
-      const socketPath = join(tempDir, 'pub.sock');
+  it('both processes complete agent.generate() without AGENT_GENERATE_MALFORMED_RESULT under shared broker', async () => {
+    const socketPath = join(tempDir, 'pub.sock');
 
-      // Spawn broker first, wait until it's listening.
-      const broker = spawnWorker(socketPath, 'w0', 'hello from w0', 'reply-from-w0');
-      await waitForMessage(broker, 'ready', 30_000);
+    // Spawn broker first, wait until it's listening.
+    const broker = spawnWorker(socketPath, 'w0', 'hello from w0', 'reply-from-w0');
+    await waitForMessage(broker, 'ready', 30_000);
 
-      // Spawn second instance as a client of the broker.
-      const client = spawnWorker(socketPath, 'w1', 'hello from w1', 'reply-from-w1');
-      await waitForMessage(client, 'ready', 30_000);
+    // Spawn second instance as a client of the broker.
+    const client = spawnWorker(socketPath, 'w1', 'hello from w1', 'reply-from-w1');
+    await waitForMessage(client, 'ready', 30_000);
 
-      // Fire both agent.generate() concurrently — this is the scenario that used
-      // to silently hang or throw AGENT_GENERATE_MALFORMED_RESULT on w1.
-      const brokerDone = waitForMessage(broker, 'turn-done', 60_000);
-      const clientDone = waitForMessage(client, 'turn-done', 60_000);
-      broker.send({ type: 'go' });
-      client.send({ type: 'go' });
+    // Fire both agent.generate() concurrently — this is the scenario that used
+    // to silently hang or throw AGENT_GENERATE_MALFORMED_RESULT on w1.
+    const brokerDone = waitForMessage(broker, 'turn-done', 60_000);
+    const clientDone = waitForMessage(client, 'turn-done', 60_000);
+    broker.send({ type: 'go' });
+    client.send({ type: 'go' });
 
-      const [brokerResult, clientResult] = await Promise.all([brokerDone, clientDone]);
+    const [brokerResult, clientResult] = await Promise.all([brokerDone, clientDone]);
 
-      expect(brokerResult.data.hasResult).toBe(true);
-      expect(clientResult.data.hasResult).toBe(true);
-      // The mocked model returns the exact expectedReply via createMockModel.
-      expect(brokerResult.data.text).toBe('reply-from-w0');
-      expect(clientResult.data.text).toBe('reply-from-w1');
+    expect(brokerResult.data.hasResult).toBe(true);
+    expect(clientResult.data.hasResult).toBe(true);
+    // The mocked model returns the exact expectedReply via createMockModel.
+    expect(brokerResult.data.text).toBe('reply-from-w0');
+    expect(clientResult.data.text).toBe('reply-from-w1');
 
-      broker.send({ type: 'shutdown' });
-      client.send({ type: 'shutdown' });
-    },
-    90_000,
-  );
+    broker.send({ type: 'shutdown' });
+    client.send({ type: 'shutdown' });
+  }, 90_000);
 });

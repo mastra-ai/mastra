@@ -204,11 +204,9 @@ describe('UnixSocketPubSub', () => {
     }
     const liveResult = new LiveResult();
 
-    await clientA.publish(
-      'topic-a',
-      makeEvent({ type: 'workflow.end', data: { result: liveResult } as any }),
-      { localOnly: true },
-    );
+    await clientA.publish('topic-a', makeEvent({ type: 'workflow.end', data: { result: liveResult } as any }), {
+      localOnly: true,
+    });
 
     await waitFor(() => {
       expect(clientACb).toHaveBeenCalledTimes(1);
