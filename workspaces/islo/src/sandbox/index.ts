@@ -1,24 +1,23 @@
 /**
  * islo Sandbox Provider
  *
- * Wraps `@islo-labs/sdk` with the Mastra `WorkspaceSandbox` contract. Auth
- * comes from `ISLO_API_KEY` (the SDK's `Islo` class handles API-key → JWT
- * exchange and refresh). Lifecycle:
+ * Wraps `@islo-labs/sdk` with the Mastra `WorkspaceSandbox` contract. Token
+ * exchange uses the control API, while sandbox operations use the compute API.
+ * Lifecycle:
  *
  *  - start    → `sandboxes.createSandbox` (or reconnect to an existing
  *               sandbox by name, idempotent)
- *  - stop     → `sandboxes.stopSandbox` (record retained, sandbox paused)
+ *  - stop     → `sandboxes.pauseSandbox` (record retained, sandbox paused)
  *  - destroy  → `sandboxes.deleteSandbox` (sandbox marked for deletion)
  *  - executeCommand → POST `/sandboxes/{name}/exec/stream`, parse SSE,
  *                     dispatch stdout/stderr deltas to callbacks.
  *
- * The `executeCommand` path bypasses the SDK's generated stream wrapper
- * (`execInSandboxStream`) because the wrapper buffers the SSE body through a
- * JSON unmarshaler — useless for live output. Auth still comes from the
- * SDK's `TokenProvider` so refresh stays consistent.
+ * The `executeCommand` path bypasses the SDK's generated stream wrapper so
+ * callers see live output. Auth still comes from the SDK's `TokenProvider` so
+ * refresh stays consistent.
  */
 
-import { Islo, TokenProvider } from '@islo-labs/sdk';
+import { IsloApiClient, TokenProvider } from '@islo-labs/sdk';
 import { MastraSandbox } from '@mastra/core/workspace';
 import type {
   CommandResult,
@@ -32,12 +31,14 @@ import { consumeIsloStream } from './sse';
 
 const ENV_API_KEY = 'ISLO_API_KEY';
 const ENV_BASE_URL = 'ISLO_BASE_URL';
+const ENV_COMPUTE_URL = 'ISLO_COMPUTE_URL';
 const DEFAULT_BASE_URL = 'https://api.islo.dev';
+const DEFAULT_COMPUTE_URL = 'https://ca.compute.islo.dev';
 
 /**
  * Configuration for an `IsloSandbox` instance.
  */
-export interface IsloSandboxOptions extends MastraSandboxOptions {
+export interface IsloSandboxOptions extends Omit<MastraSandboxOptions, 'processes'> {
   /** Mastra-side instance ID. Auto-generated if omitted. */
   id?: string;
   /**
@@ -59,10 +60,24 @@ export interface IsloSandboxOptions extends MastraSandboxOptions {
    */
   apiKey?: string;
   /**
-   * Base URL for the islo API. Falls back to `ISLO_BASE_URL` env var, then
-   * `https://api.islo.dev`.
+   * Control API URL used for token exchange. Falls back to `baseUrl`,
+   * `ISLO_BASE_URL`, then `https://api.islo.dev`.
+   */
+  controlUrl?: string;
+  /**
+   * Backwards-compatible alias for `controlUrl`.
+   *
+   * @deprecated Use `controlUrl` for the control API and `computeUrl` for
+   * sandbox operations.
    */
   baseUrl?: string;
+  /**
+   * Compute API URL used for sandbox lifecycle, files, and exec operations.
+   * Falls back to `ISLO_COMPUTE_URL`, then `https://ca.compute.islo.dev`.
+   */
+  computeUrl?: string;
+  /** Delete the sandbox record on destroy. Defaults to true. */
+  deleteOnDestroy?: boolean;
   /** Sandbox-create metadata. */
   metadata?: Record<string, unknown>;
   /** Default per-command timeout in milliseconds. */
@@ -77,9 +92,10 @@ export class IsloSandbox extends MastraSandbox {
   readonly provider = 'islo';
   status: ProviderStatus = 'pending';
 
-  private readonly client: Islo;
+  private readonly client: IsloApiClient;
   private readonly tokenProvider: TokenProvider;
-  private readonly baseUrl: string;
+  private readonly controlUrl: string;
+  private readonly computeUrl: string;
   private readonly sandboxName: string;
   private readonly image?: string;
   private readonly workdir?: string;
@@ -87,9 +103,9 @@ export class IsloSandbox extends MastraSandbox {
   private readonly env: Record<string, string>;
   private readonly metadata: Record<string, unknown>;
   private readonly defaultTimeoutMs: number;
+  private readonly deleteOnDestroy: boolean;
 
   private _createdAt: Date | null = null;
-  private _acquired = false;
 
   constructor(options: IsloSandboxOptions = {}) {
     super({ ...options, name: 'IsloSandbox' });
@@ -100,7 +116,11 @@ export class IsloSandbox extends MastraSandbox {
         `IsloSandbox: missing ${ENV_API_KEY}; set the env var or pass { apiKey } to the constructor`,
       );
     }
-    const baseUrl = (options.baseUrl ?? process.env[ENV_BASE_URL] ?? DEFAULT_BASE_URL).replace(/\/$/, '');
+    const controlUrl = (options.controlUrl ?? options.baseUrl ?? process.env[ENV_BASE_URL] ?? DEFAULT_BASE_URL).replace(
+      /\/$/,
+      '',
+    );
+    const computeUrl = (options.computeUrl ?? process.env[ENV_COMPUTE_URL] ?? DEFAULT_COMPUTE_URL).replace(/\/$/, '');
 
     this.id = options.id ?? generateIsloSandboxInstanceId();
     this.sandboxName = options.sandboxName ?? generateSandboxName();
@@ -110,18 +130,24 @@ export class IsloSandbox extends MastraSandbox {
     this.env = options.env ?? {};
     this.metadata = options.metadata ?? {};
     this.defaultTimeoutMs = options.timeout ?? DEFAULT_TIMEOUT_MS;
-    this.baseUrl = baseUrl;
+    this.deleteOnDestroy = options.deleteOnDestroy ?? true;
+    this.controlUrl = controlUrl;
+    this.computeUrl = computeUrl;
 
-    this.client = new Islo({ apiKey, baseUrl });
-    this.tokenProvider = new TokenProvider({ apiKey, baseUrl });
+    this.tokenProvider = new TokenProvider({ apiKey, baseUrl: controlUrl });
+    this.client = new IsloApiClient({
+      apiKey: () => this.tokenProvider.getToken(),
+      environment: computeUrl,
+      baseUrl: computeUrl,
+    });
   }
 
   /**
-   * Direct access to the underlying `@islo-labs/sdk` `Islo` client for
+   * Direct access to the underlying `@islo-labs/sdk` client for
    * features not surfaced through the `WorkspaceSandbox` contract (e.g.
    * snapshots, sessions, file transfer).
    */
-  get islo(): Islo {
+  get islo(): IsloApiClient {
     return this.client;
   }
 
@@ -134,8 +160,13 @@ export class IsloSandbox extends MastraSandbox {
     // Reconnect to an existing live sandbox with this name if present.
     const existing = await this.findExistingSandbox();
     if (existing) {
-      this._createdAt = existing.createdAt;
-      this._acquired = false;
+      if (existing.resume) {
+        this.logger.debug(`resuming existing islo sandbox ${this.sandboxName}`);
+        const resumed = await this.client.sandboxes.resumeSandbox({ sandbox_name: this.sandboxName });
+        this._createdAt = resumed.created_at ? new Date(resumed.created_at) : existing.createdAt;
+      } else {
+        this._createdAt = existing.createdAt;
+      }
       this.logger.debug(`reconnected to existing islo sandbox ${this.sandboxName}`);
       return;
     }
@@ -149,21 +180,19 @@ export class IsloSandbox extends MastraSandbox {
       env: nullifyValues(this.env),
     });
     this._createdAt = created.created_at ? new Date(created.created_at) : new Date();
-    this._acquired = true;
   }
 
   override async stop(): Promise<void> {
     try {
-      await this.client.sandboxes.stopSandbox({ sandbox_name: this.sandboxName });
+      await this.client.sandboxes.pauseSandbox({ sandbox_name: this.sandboxName });
     } catch (err) {
       // Stop is best-effort; log and continue. The destroy path will clean up.
-      this.logger.warn(`islo stop failed for ${this.sandboxName}`, { error: serializeError(err) });
+      this.logger.warn(`islo pause failed for ${this.sandboxName}`, { error: serializeError(err) });
     }
   }
 
   override async destroy(): Promise<void> {
-    if (!this._acquired) {
-      // We didn't create this sandbox; don't delete it on the user's behalf.
+    if (!this.deleteOnDestroy) {
       return;
     }
     try {
@@ -180,7 +209,12 @@ export class IsloSandbox extends MastraSandbox {
       provider: this.provider,
       status: this.status,
       createdAt: this._createdAt ?? new Date(),
-      metadata: { sandboxName: this.sandboxName, ...this.metadata },
+      metadata: {
+        sandboxName: this.sandboxName,
+        controlUrl: this.controlUrl,
+        computeUrl: this.computeUrl,
+        ...this.metadata,
+      },
     };
     return info;
   }
@@ -198,8 +232,9 @@ export class IsloSandbox extends MastraSandbox {
     const cwd = options.cwd ?? this.workdir;
     const envOverride = options.env ? mergeEnv(this.env, options.env) : this.env;
 
-    const url = `${this.baseUrl}/sandboxes/${encodeURIComponent(this.sandboxName)}/exec/stream`;
+    const url = `${this.computeUrl}/sandboxes/${encodeURIComponent(this.sandboxName)}/exec/stream`;
     const token = await this.tokenProvider.getToken();
+    const timeoutSecs = timeoutMs > 0 ? Math.ceil(timeoutMs / 1000) : undefined;
 
     // Wire up timeout + caller's abort signal.
     const controller = new AbortController();
@@ -227,9 +262,10 @@ export class IsloSandbox extends MastraSandbox {
           accept: 'text/event-stream',
         },
         body: JSON.stringify({
-          command: fullCommand,
+          args: fullCommand,
           workdir: cwd ?? null,
-          env: nullifyValues(envOverride),
+          env_vars: nullifyValues(envOverride),
+          timeout_secs: timeoutSecs,
         }),
         signal: controller.signal,
       });
@@ -308,14 +344,21 @@ export class IsloSandbox extends MastraSandbox {
    * Look up an existing islo sandbox by name. Returns null if it doesn't
    * exist, has been deleted, or the lookup raised a 404.
    */
-  private async findExistingSandbox(): Promise<{ createdAt: Date } | null> {
+  private async findExistingSandbox(): Promise<{ createdAt: Date; resume: boolean } | null> {
     try {
       const sandbox = await this.client.sandboxes.getSandbox({ sandbox_name: this.sandboxName });
-      if (!sandbox || isDeletedStatus(sandbox.status)) {
+      const status = sandbox?.status;
+      if (!sandbox || isDeletedStatus(status)) {
         return null;
+      }
+      if (isUnusableStatus(status)) {
+        throw new Error(
+          `islo sandbox ${this.sandboxName} is ${status}; delete it or choose a new sandboxName before starting`,
+        );
       }
       return {
         createdAt: sandbox.created_at ? new Date(sandbox.created_at) : new Date(),
+        resume: isPausedStatus(status),
       };
     } catch (err) {
       if (isNotFoundError(err)) {
@@ -328,7 +371,17 @@ export class IsloSandbox extends MastraSandbox {
 
 function isDeletedStatus(status: string | undefined): boolean {
   if (!status) return false;
-  return status === 'deleted' || status === 'failed';
+  return status === 'deleted';
+}
+
+function isUnusableStatus(status: string | undefined): boolean {
+  if (!status) return false;
+  return status === 'failed' || status === 'stopped' || status === 'terminated';
+}
+
+function isPausedStatus(status: string | undefined): boolean {
+  if (!status) return false;
+  return status === 'paused' || status === 'suspended';
 }
 
 function isNotFoundError(err: unknown): boolean {

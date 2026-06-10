@@ -5,21 +5,25 @@
  * sandboxes which are torn down in `afterAll`.
  */
 
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { IsloSandbox } from './index';
 
 const hasApiKey = !!process.env.ISLO_API_KEY;
 
 describe.skipIf(!hasApiKey)('IsloSandbox (live)', () => {
-  const sandbox = new IsloSandbox({
-    sandboxName: `mastra-it-${Date.now().toString(36)}`,
-    timeout: 60_000,
+  let sandbox: IsloSandbox;
+
+  beforeAll(() => {
+    sandbox = new IsloSandbox({
+      sandboxName: `mastra-it-${Date.now().toString(36)}`,
+      timeout: 60_000,
+    });
   });
 
   afterAll(async () => {
     try {
-      await sandbox._destroy();
+      await sandbox?._destroy();
     } catch {
       // best-effort cleanup
     }
