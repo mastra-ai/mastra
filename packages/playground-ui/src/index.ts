@@ -22,7 +22,7 @@ export * from './ds/components/Checkbox';
 export * from './ds/components/Collapsible';
 export * from './ds/components/Combobox';
 export * from './ds/components/Command';
-export * from './ds/components/ContextMenu';
+export * from './ds/components/Code';
 export * from './ds/components/CodeBlock';
 export * from './ds/components/CopyButton';
 export * from './ds/components/DashboardCard';
@@ -70,9 +70,6 @@ export * from './ds/components/MainSidebar';
 export * from './ds/components/PageHeader';
 export * from './ds/components/Section';
 export * from './ds/components/SectionCard';
-export * from './ds/components/SelectElement';
-export * from './ds/components/SettingsRow';
-export * from './ds/components/SideDialog';
 export * from './ds/components/Steps';
 export * from './ds/components/Tabs';
 export * from './ds/components/Text';
@@ -100,9 +97,7 @@ export * from './ds/components/DataPanel';
 export * from './ds/components/DateTimeRangePicker';
 export * from './ds/components/HorizontalBars';
 export * from './ds/components/MetricsDataTable';
-export * from './ds/components/MetricsKpiCard';
 export * from './ds/components/MetricsLineChart';
-export * from './ds/components/PrevNextNav';
 export * from './ds/components/ScrollableContainer';
 export * from './ds/components/StatusBadge';
 
@@ -113,6 +108,7 @@ export * from './ds/icons/index';
 export * from './ds/tokens';
 
 // DS Primitives
+export * from './ds/primitives/control-size';
 export * from './ds/primitives/form-element';
 export * from './ds/primitives/transitions';
 

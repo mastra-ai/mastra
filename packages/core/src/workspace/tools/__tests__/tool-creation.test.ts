@@ -236,6 +236,60 @@ describe('createWorkspaceTools', () => {
     });
   });
 
+  describe('tool hooks', () => {
+    it('should run hooks using the exposed tool name and original workspace tool name', async () => {
+      await fs.writeFile(path.join(tempDir, 'hello.txt'), 'hello');
+      const calls: Array<{ phase: 'before' | 'after'; toolName: string; workspaceToolName: string }> = [];
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          hooks: {
+            beforeToolCall: context => {
+              calls.push({
+                phase: 'before',
+                toolName: context.toolName,
+                workspaceToolName: context.workspaceToolName,
+              });
+            },
+            afterToolCall: context => {
+              calls.push({
+                phase: 'after',
+                toolName: context.toolName,
+                workspaceToolName: context.workspaceToolName,
+              });
+            },
+          },
+          mastra_workspace_read_file: { name: 'view' },
+        },
+      });
+      const tools = await createWorkspaceTools(workspace);
+
+      const result = await tools['view'].execute({ path: 'hello.txt' }, { workspace });
+
+      expect(result).toContain('hello');
+      expect(calls).toEqual([
+        { phase: 'before', toolName: 'view', workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE },
+        { phase: 'after', toolName: 'view', workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.READ_FILE },
+      ]);
+    });
+
+    it('should allow beforeToolCall to skip tool execution with an output', async () => {
+      const workspace = new Workspace({
+        filesystem: new LocalFilesystem({ basePath: tempDir }),
+        tools: {
+          hooks: {
+            beforeToolCall: () => ({ proceed: false, output: 'blocked' }),
+          },
+        },
+      });
+      const tools = await createWorkspaceTools(workspace);
+
+      const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: 'missing.txt' }, { workspace });
+
+      expect(result).toBe('blocked');
+    });
+  });
+
   describe('background process tools', () => {
     it('should register process tools when sandbox has processes (LocalSandbox)', async () => {
       const workspace = new Workspace({

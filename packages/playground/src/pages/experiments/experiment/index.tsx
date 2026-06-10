@@ -1,21 +1,35 @@
 import {
-  MainContentLayout,
+  Button,
+  EmptyState,
+  ErrorState,
+  PageLayout,
   PermissionDenied,
   SessionExpired,
-  Spinner,
   is401UnauthorizedError,
   is403ForbiddenError,
+  is404NotFoundError,
 } from '@mastra/playground-ui';
-import { useParams } from 'react-router';
+import { ArrowLeft, PlayCircle } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { Link, useParams } from 'react-router';
 import { useDatasetExperiment, useDatasetExperimentResults } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useExperiments } from '@/domains/datasets/hooks/use-experiments';
-import { ExperimentPageContent } from '@/domains/experiments/components/experiment-page-content';
-import { ExperimentPageHeader } from '@/domains/experiments/components/experiment-page-header';
+import { ExperimentPageTabs } from '@/domains/experiments/components/experiment-page-tabs';
+import { ExperimentTopArea } from '@/domains/experiments/components/experiment-top-area';
+
+function ExperimentPageShell({ children }: { children?: ReactNode }) {
+  return (
+    <PageLayout height="full">
+      <div />
+      <PageLayout.MainArea isCentered>{children}</PageLayout.MainArea>
+    </PageLayout>
+  );
+}
 
 function ExperimentPage() {
   const { experimentId } = useParams<{ experimentId: string }>();
 
-  // Fetch all experiments to resolve datasetId from experimentId
+  // Resolve datasetId from experimentId (the URL has only the experiment id).
   const { data: experimentsData, isLoading: experimentsListLoading } = useExperiments();
   const matchedExperiment = experimentsData?.experiments?.find(e => e.id === experimentId);
   const datasetId = matchedExperiment?.datasetId ?? '';
@@ -38,68 +52,82 @@ function ExperimentPage() {
     experimentStatus: experiment?.status,
   });
 
-  if (!experimentId) {
-    return null;
-  }
-
-  if (experimentsListLoading || experimentLoading || !datasetId) {
-    return (
-      <MainContentLayout>
-        <div className="flex items-center justify-center h-full">
-          <Spinner />
-        </div>
-      </MainContentLayout>
-    );
-  }
+  if (!experimentId) return null;
+  if (experimentsListLoading || experimentLoading) return null; // Avoid layout shift on initial load
 
   if (experimentError && is401UnauthorizedError(experimentError)) {
     return (
-      <MainContentLayout>
-        <div className="flex h-full items-center justify-center">
-          <SessionExpired />
-        </div>
-      </MainContentLayout>
+      <ExperimentPageShell>
+        <SessionExpired />
+      </ExperimentPageShell>
     );
   }
 
   if (experimentError && is403ForbiddenError(experimentError)) {
     return (
-      <MainContentLayout>
-        <div className="flex h-full items-center justify-center">
-          <PermissionDenied resource="datasets" />
-        </div>
-      </MainContentLayout>
+      <ExperimentPageShell>
+        <PermissionDenied resource="datasets" />
+      </ExperimentPageShell>
     );
   }
 
-  if (experimentError || !experiment) {
+  // Not found: either an explicit 404 from the dataset/experiment fetch, or the
+  // experimentId isn't present in the full experiments listing (so we can't
+  // resolve a datasetId for it).
+  if (
+    (experimentError && is404NotFoundError(experimentError)) ||
+    (!experimentsListLoading && !datasetId) ||
+    (!experimentLoading && !experimentError && !experiment)
+  ) {
     return (
-      <MainContentLayout>
-        <div className="text-red-500 p-4">
-          Error loading experiment: {experimentError instanceof Error ? experimentError.message : 'Unknown error'}
-        </div>
-      </MainContentLayout>
+      <ExperimentPageShell>
+        <EmptyState
+          iconSlot={<PlayCircle />}
+          titleSlot="Experiment not found"
+          descriptionSlot={`No experiment with id "${experimentId}".`}
+          actionSlot={
+            <Button as={Link} to="/experiments">
+              <ArrowLeft />
+              Back to Experiments
+            </Button>
+          }
+        />
+      </ExperimentPageShell>
+    );
+  }
+
+  if (experimentError) {
+    return (
+      <ExperimentPageShell>
+        <ErrorState
+          title="Failed to load experiment"
+          message={
+            experimentError instanceof Error
+              ? experimentError.message
+              : 'An unexpected error occurred. Please try again.'
+          }
+        />
+      </ExperimentPageShell>
     );
   }
 
   return (
-    <MainContentLayout>
-      <div className="h-full overflow-hidden px-[3vw] pb-4">
-        <div className="grid gap-1 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full">
-          <ExperimentPageHeader experimentId={experimentId!} experiment={experiment} />
-          <ExperimentPageContent
-            experimentId={experimentId!}
-            datasetId={datasetId}
-            experimentStatus={experiment?.status}
-            results={results ?? []}
-            isLoading={resultsLoading}
-            setEndOfListElement={setEndOfListElement}
-            isFetchingNextPage={isFetchingNextPage}
-            hasNextPage={hasNextPage}
-          />
-        </div>
-      </div>
-    </MainContentLayout>
+    <PageLayout height="full">
+      <ExperimentTopArea experiment={experiment!} />
+
+      <PageLayout.MainArea>
+        <ExperimentPageTabs
+          experimentId={experimentId}
+          datasetId={datasetId}
+          experimentStatus={experiment!.status}
+          results={results ?? []}
+          isLoading={resultsLoading}
+          setEndOfListElement={setEndOfListElement}
+          isFetchingNextPage={isFetchingNextPage}
+          hasNextPage={hasNextPage}
+        />
+      </PageLayout.MainArea>
+    </PageLayout>
   );
 }
 

@@ -554,6 +554,17 @@ describe('Workflow (Evented Engine Specific)', () => {
     }
   });
 
+  it('should create a processor step for state signal only processors', () => {
+    const processor: Processor = {
+      id: 'state-only-processor',
+      computeStateSignal: () => ({ cacheKey: 'state-only-cache', contents: 'state' }),
+    };
+
+    const step = createStep(processor);
+
+    expect(step.id).toBe('processor:state-only-processor');
+  });
+
   it('should preserve processorStates across nested processor workflows', async () => {
     const trackingProcessor: Processor = {
       id: 'tracking-processor',

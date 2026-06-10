@@ -1,4 +1,5 @@
 import {
+  TABLE_MESSAGES,
   TABLE_RESOURCES,
   TABLE_SCHEDULES,
   TABLE_THREADS,
@@ -16,7 +17,7 @@ type StorageHandlerForTest = typeof mastraStorage & {
 };
 type TestDoc = { _id: GenericId<string>; id?: string; record?: Record<string, unknown> };
 type TestQueryBuilder = {
-  eq: (field: string, value: unknown) => TestQueryBuilder;
+  eq: (field: string, value: string) => TestQueryBuilder;
   lte?: (field: string, value: number) => TestQueryBuilder;
   gte?: (field: string, value: number) => TestQueryBuilder;
   lt?: (field: string, value: number) => TestQueryBuilder;
@@ -60,6 +61,85 @@ describe('mastraStorage typed load', () => {
     expect(builder.eq).toHaveBeenNthCalledWith(2, 'run_id', 'run-1');
     expect(unique).toHaveBeenCalledTimes(1);
     expect(take).not.toHaveBeenCalled();
+  });
+
+  it('loads multiple typed records through by_record_id without scanning the table', async () => {
+    const docsById = new Map([
+      ['message-1', { _id: asConvexId('doc-message-1'), id: 'message-1' }],
+      ['message-2', { _id: asConvexId('doc-message-2'), id: 'message-2' }],
+    ]);
+    const requestedFilters: Array<{ field: string; value: string }> = [];
+    const take = vi.fn(async () => {
+      throw new Error('loadMany should not scan the table');
+    });
+    const withIndex = vi.fn((_indexName: string, queryBuilder: (q: TestQueryBuilder) => TestQueryBuilder) => {
+      let lookupId = '';
+      const builder: TestQueryBuilder = {
+        eq: vi.fn((field: string, value: string) => {
+          requestedFilters.push({ field, value });
+          lookupId = value;
+          return builder;
+        }),
+      };
+      queryBuilder(builder);
+      return {
+        unique: vi.fn(async () => docsById.get(lookupId) ?? null),
+        take,
+      };
+    });
+    const query = vi.fn(() => ({ withIndex, take }));
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    const result = await handleTypedOperation(ctx, 'mastra_messages', {
+      op: 'loadMany',
+      tableName: TABLE_MESSAGES,
+      ids: ['message-2', 'missing-message', 'message-1', 'message-2'],
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      result: [
+        { _id: asConvexId('doc-message-2'), id: 'message-2' },
+        { _id: asConvexId('doc-message-1'), id: 'message-1' },
+      ],
+    });
+    expect(query).toHaveBeenCalledTimes(3);
+    expect(withIndex).toHaveBeenCalledTimes(3);
+    expect(withIndex).toHaveBeenCalledWith('by_record_id', expect.any(Function));
+    expect(requestedFilters).toEqual([
+      { field: 'id', value: 'message-2' },
+      { field: 'id', value: 'missing-message' },
+      { field: 'id', value: 'message-1' },
+    ]);
+    expect(take).not.toHaveBeenCalled();
+  });
+
+  it('rejects loadMany requests that exceed the mutation-boundary id limit', async () => {
+    const query = vi.fn();
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    await expect(
+      handleTypedOperation(ctx, 'mastra_messages', {
+        op: 'loadMany',
+        tableName: TABLE_MESSAGES,
+        ids: Array.from({ length: 11 }, (_, index) => `message-${index}`),
+      }),
+    ).rejects.toThrow('loadMany supports at most 10 ids per request');
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it('rejects duplicate-heavy loadMany requests before deduping ids', async () => {
+    const query = vi.fn();
+    const ctx = { db: { query } } as unknown as TypedOperationCtx;
+
+    await expect(
+      handleTypedOperation(ctx, 'mastra_messages', {
+        op: 'loadMany',
+        tableName: TABLE_MESSAGES,
+        ids: Array.from({ length: 11 }, () => 'message-1'),
+      }),
+    ).rejects.toThrow('loadMany supports at most 10 ids per request');
+    expect(query).not.toHaveBeenCalled();
   });
 });
 
@@ -1859,6 +1939,36 @@ describe('mastraStorage bulk mutations', () => {
     expect(batchCtx.inserts).toEqual([]);
   });
 
+  it('background task loadMany preserves request order across typed and legacy fallback rows', async () => {
+    const batchCtx = createBatchInsertCtx(
+      new Map([
+        ['typed-task', { _id: asConvexId('typed-task-doc'), id: 'typed-task', status: 'running' }],
+        [
+          'mastra_background_tasks|legacy-task',
+          {
+            _id: asConvexId('legacy-task-doc'),
+            record: { id: 'legacy-task', status: 'pending' },
+          },
+        ],
+      ]),
+    );
+
+    const result = await handleTypedOperation(batchCtx.ctx, 'mastra_background_tasks', {
+      op: 'loadMany',
+      tableName: 'mastra_background_tasks',
+      ids: ['legacy-task', 'typed-task'],
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      result: [
+        { id: 'legacy-task', status: 'pending' },
+        { _id: asConvexId('typed-task-doc'), id: 'typed-task', status: 'running' },
+      ],
+    });
+    expect(batchCtx.lookupKeys).toEqual(['legacy-task', 'typed-task', 'mastra_background_tasks|legacy-task']);
+  });
+
   it('vector batchInsert keeps the last record for duplicate ids and scopes lookups by vector index', async () => {
     const batchCtx = createBatchInsertCtx(new Map([['embeddings|existing', { _id: asConvexId('vector-existing') }]]));
 
@@ -1908,6 +2018,30 @@ describe('mastraStorage bulk mutations', () => {
       },
     ]);
     expect(batchCtx.inserts).toEqual([]);
+  });
+
+  it('vector loadMany scopes indexed lookups by vector index without scanning the vector table', async () => {
+    const batchCtx = createBatchInsertCtx(
+      new Map([
+        ['embeddings|one', { _id: asConvexId('vector-one'), id: 'one', indexName: 'embeddings' }],
+        ['embeddings|two', { _id: asConvexId('vector-two'), id: 'two', indexName: 'embeddings' }],
+      ]),
+    );
+
+    const result = await (mastraStorage as StorageHandlerForTest)._handler(batchCtx.ctx, {
+      op: 'loadMany',
+      tableName: 'mastra_vector_embeddings',
+      ids: ['one', 'missing', 'two', 'one'],
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      result: [
+        { _id: asConvexId('vector-one'), id: 'one', indexName: 'embeddings' },
+        { _id: asConvexId('vector-two'), id: 'two', indexName: 'embeddings' },
+      ],
+    });
+    expect(batchCtx.lookupKeys).toEqual(['embeddings|one', 'embeddings|missing', 'embeddings|two']);
   });
 
   it('generic batchInsert keeps the last duplicate record for fallback tables', async () => {

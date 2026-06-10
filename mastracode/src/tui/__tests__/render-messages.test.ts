@@ -4,7 +4,11 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
+import { NotificationSummaryComponent } from '../components/notification-summary.js';
+import { NotificationComponent } from '../components/notification.js';
+import { ReactiveSignalComponent } from '../components/reactive-signal.js';
 import { SlashCommandComponent } from '../components/slash-command.js';
+import { StateSignalComponent } from '../components/state-signal.js';
 import { SubagentExecutionComponent } from '../components/subagent-execution.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { UserMessageComponent } from '../components/user-message.js';
@@ -56,6 +60,114 @@ function createReminderMessage(
 }
 
 describe('addUserMessage', () => {
+  it('renders state signals as inline state components', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'state-signal-1',
+      role: 'user',
+      content: [
+        {
+          type: 'state_signal',
+          stateId: 'browser',
+          mode: 'delta',
+          version: 2,
+          message: 'changed: active tab URL changed to https://example.com',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(true);
+    expect(state.messageComponentsById.get('state-signal-1')).toBeInstanceOf(StateSignalComponent);
+  });
+
+  it('renders generic reactive signals as inline signal components', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'reactive-signal-1',
+      role: 'user',
+      content: [
+        {
+          type: 'reactive_signal',
+          tagName: 'build-status',
+          message: 'Build is still running',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof ReactiveSignalComponent)).toBe(true);
+    expect(state.messageComponentsById.get('reactive-signal-1')).toBeInstanceOf(ReactiveSignalComponent);
+  });
+
+  it('does not render GitHub subscribe operation signals from history', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'github-subscribe-signal-1',
+      role: 'user',
+      content: [
+        {
+          type: 'reactive_signal',
+          tagName: 'github-subscribe-pr',
+          message: 'Subscribe to GitHub PR #17241',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof ReactiveSignalComponent)).toBe(false);
+    expect(state.messageComponentsById.has('github-subscribe-signal-1')).toBe(false);
+  });
+
+  it('renders notification summaries as inline notification components', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'notification-summary-1',
+      role: 'user',
+      content: [
+        {
+          type: 'notification_summary',
+          message: 'mastracode: 1',
+          pending: 1,
+          bySource: { mastracode: 1 },
+          byPriority: { low: 1 },
+          notificationIds: ['notification-1'],
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof NotificationSummaryComponent)).toBe(true);
+    expect(state.messageComponentsById.get('notification-summary-1')).toBeInstanceOf(NotificationSummaryComponent);
+  });
+
+  it('renders full notifications as inline notification components', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'notification-1',
+      role: 'user',
+      content: [
+        {
+          type: 'notification',
+          message: 'CI failed on main',
+          source: 'github',
+          kind: 'ci-status',
+          priority: 'high',
+          status: 'delivered',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof NotificationComponent)).toBe(true);
+    expect(state.messageComponentsById.get('notification-1')).toBeInstanceOf(NotificationComponent);
+  });
+
   it('dedupes echoed slash command messages against the optimistic slash component', () => {
     const state = createState();
     const slashComp = new SlashCommandComponent('deploy', 'custom output');

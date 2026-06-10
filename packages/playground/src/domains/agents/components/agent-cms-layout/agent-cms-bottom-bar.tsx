@@ -11,13 +11,14 @@ interface AgentCmsBottomBarProps {
 }
 
 export function AgentCmsBottomBar({ basePath, currentPath }: AgentCmsBottomBarProps) {
-  const { form, isCodeAgentOverride } = useAgentEditFormContext();
+  const { form, isCodeAgentOverride, editorConfig } = useAgentEditFormContext();
   const { navigate } = useLinkComponent();
   const { previous, next, isNextDisabled } = useAgentCmsNavigation(
     basePath,
     currentPath,
     form.control,
     isCodeAgentOverride,
+    editorConfig,
   );
 
   if (!previous && !next) {

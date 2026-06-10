@@ -5,7 +5,9 @@ import { Navigate, useNavigate, useParams } from 'react-router';
 import { AgentBuilderMobileMenu } from '@/domains/agent-builder/components/agent-edit/agent-builder-mobile-menu';
 import {
   AgentProfile,
-  AgentProfileInitialStep,
+  AgentProfileReadyStep,
+  AgentProfileIdentityStep,
+  AgentProfileLibraryStep,
   AgentProfileModelStep,
   AgentProfileToolsStep,
   AgentProfileInstructionsStep,
@@ -25,7 +27,7 @@ import { VisibilitySelect } from '@/domains/agent-builder/components/agent-edit/
 import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
 import { AgentPrimitivesProvider, useAgentPrimitives } from '@/domains/agent-builder/contexts/agent-primitives-context';
 import { EditPageProvider, useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
-import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
+import { useStreamRunning, useStreamRunningDebounced } from '@/domains/agent-builder/contexts/stream-chat-context';
 import { useWizard, WizardProvider } from '@/domains/agent-builder/contexts/wizard-context';
 import { useAvailableAgentTools } from '@/domains/agent-builder/hooks/use-available-agent-tools';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
@@ -55,7 +57,7 @@ const EditPageGate = () => {
   if (!canWrite || !isOwner) return <Navigate to={`/agent-builder/agents/${agentId}/view`} replace />;
 
   return (
-    <WizardProvider initialStep={initialUserMessage ? 'initial' : 'end'}>
+    <WizardProvider initialStep={initialUserMessage ? 'ready' : 'end'}>
       <EditPageForm />
     </WizardProvider>
   );
@@ -111,7 +113,9 @@ const EditPageBody = () => {
 const EditPageLayout = () => {
   const { step } = useWizard();
   const features = useBuilderAgentFeatures();
-  const isRunning = useStreamRunning();
+  // Debounced so a brief mid-conversation idle gap doesn't flicker the layout
+  // between centered and split. Same signal as the composer.
+  const isStreamRunning = useStreamRunningDebounced();
   const { control } = useFormContext<AgentBuilderEditFormValues>();
   const { dirtyFields } = useFormState({ control });
   const name = useWatch({ control, name: 'name' }) ?? '';
@@ -131,7 +135,19 @@ const EditPageLayout = () => {
     isFilled(dirtyFields.instructions, instructions) &&
     (!features.model || isFilled(dirtyFields.model?.name, modelName));
 
-  const shouldBeCentered = step === 'initial' && !hasMandatoryFields;
+  // The `ready` step is only ever reached on the initial starter flow (a fresh agent
+  // with a starter message); a direct /edit open starts the wizard at `end` instead.
+  // On that flow the agent begins empty and the builder agent auto-runs to compose it,
+  // writing the mandatory fields through the form. The "Your agent is ready" review
+  // panel must only appear once the builder has finished: every mandatory field is
+  // populated AND the stream is idle. While it is still running (or before any field
+  // is set) we keep the chat centered.
+  const isBuilderReady = hasMandatoryFields && !isStreamRunning;
+
+  // Keep the chat centered (no profile column) until the builder is ready; for the
+  // identity step we only require the mandatory fields so editing them back to empty
+  // re-centers the layout.
+  const shouldBeCentered = (step === 'ready' && !isBuilderReady) || (step === 'identity' && !hasMandatoryFields);
 
   const [variant, setVariant] = useState<'centered' | 'split'>(shouldBeCentered ? 'centered' : 'split');
 
@@ -144,7 +160,7 @@ const EditPageLayout = () => {
   }, [shouldBeCentered, variant]);
 
   const isCentered = variant === 'centered';
-  const showMobileInitialCtas = step === 'initial' && hasMandatoryFields && !isRunning;
+  const showMobileInitialCtas = step === 'identity' && hasMandatoryFields && !isStreamRunning;
 
   return (
     <AgentBuilderEditLayout
@@ -186,12 +202,16 @@ const MobileInitialCtas = () => {
 const EditTopBarSlot = () => {
   const { autosave, onModeToggle } = useEditPage();
   const isRunning = useStreamRunning();
+  const { step } = useWizard();
+  // During onboarding (any step before `end`) the agent is still being composed,
+  // so switching to view mode makes no sense — hide the toggle entirely.
+  const isOnboarding = step !== 'end';
 
   return (
     <EditTopBar
       isLoading={false}
       mode="build"
-      onModeToggle={onModeToggle}
+      onModeToggle={isOnboarding ? undefined : onModeToggle}
       modeToggleDisabled={isRunning}
       rightAside={
         <AutosaveIndicator status={autosave.status} lastError={autosave.lastError} onRetry={autosave.retry} />
@@ -241,16 +261,26 @@ const ProfileSlot = () => {
     </div>
   );
 
-  // When the wizard is on the 'initial' step, `EditPageLayout` guarantees that
+  // The `ready` entry screen is the review panel on the right-hand side; the
+  // chat stays on the left (split layout) just like the rest of onboarding.
+  if (step === 'ready') {
+    return <AgentProfileReadyStep />;
+  }
+
+  // When the wizard is on the 'identity' step, `EditPageLayout` guarantees that
   // every mandatory field is filled before the profile column is rendered, so
   // there is no preparing/skeleton state to handle here.
-  if (step === 'initial') {
+  if (step === 'identity') {
     return (
-      <AgentProfileInitialStep
+      <AgentProfileIdentityStep
         avatar={<AgentProfileAvatar disabled={isRunning} />}
         details={<AgentProfileDetails mode="highlighted" disabled={isRunning} />}
       />
     );
+  }
+
+  if (step === 'library') {
+    return <AgentProfileLibraryStep agentId={agentId} />;
   }
 
   if (step === 'model') {

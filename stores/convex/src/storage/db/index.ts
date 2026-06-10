@@ -16,6 +16,9 @@ import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { ConvexAdminClient } from '../client';
 import type { EqualityFilter, IndexHint } from '../types';
 
+// Must not exceed the server-side loadMany id cap in server/storage.ts.
+const LOAD_MANY_REQUEST_BATCH_SIZE = 10;
+
 /**
  * Configuration for standalone domain usage.
  * Accepts either:
@@ -201,6 +204,23 @@ export class ConvexDB extends MastraBase {
     });
 
     return result;
+  }
+
+  async loadMany<R>(tableName: TABLE_NAMES, ids: string[]): Promise<R[]> {
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) return [];
+
+    const rows: R[] = [];
+    for (let index = 0; index < uniqueIds.length; index += LOAD_MANY_REQUEST_BATCH_SIZE) {
+      rows.push(
+        ...(await this.client.callStorage<R[]>({
+          op: 'loadMany',
+          tableName,
+          ids: uniqueIds.slice(index, index + LOAD_MANY_REQUEST_BATCH_SIZE),
+        })),
+      );
+    }
+    return rows;
   }
 
   public async queryTable<R>(

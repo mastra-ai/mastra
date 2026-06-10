@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import type { useBuilderAgentFeatures } from '../../hooks/use-builder-agent-features';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { AgentTool } from '../../types/agent-tool';
-import { buildFormSnapshotInstructions } from '../build-form-snapshot';
+import { MAX_GENERATED_INSTRUCTIONS_CHARS, buildFormSnapshotInstructions } from '../build-form-snapshot';
 import type { AvailableWorkspaceLike, BuildFormSnapshotOptions } from '../build-form-snapshot';
 import type { ModelInfo } from '@/domains/llm';
 
@@ -137,8 +137,11 @@ describe('buildFormSnapshotInstructions', () => {
     expect(result).not.toContain('missing');
   });
 
-  it('truncates long instructions and appends [truncated]', () => {
-    const longInstructions = 'a'.repeat(2000);
+  it('truncates instructions beyond the hard cap and appends [truncated]', () => {
+    // Use a length above MAX_GENERATED_INSTRUCTIONS_CHARS to trip the snapshot's
+    // truncate helper. Below the cap, the full block is echoed so the LLM sees
+    // the same "persisted, final text" the directive points to.
+    const longInstructions = 'a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS + 1000);
     const values: AgentBuilderEditFormValues = {
       ...baseValues,
       instructions: longInstructions,
@@ -147,8 +150,25 @@ describe('buildFormSnapshotInstructions', () => {
     const result = buildFormSnapshotInstructions(values, buildOptions());
 
     expect(result).toContain('[truncated]');
-    expect(result).not.toContain('a'.repeat(2000));
-    expect(result).toContain('a'.repeat(1500));
+    expect(result).not.toContain('a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS + 1));
+    expect(result).toContain('a'.repeat(MAX_GENERATED_INSTRUCTIONS_CHARS));
+  });
+
+  it('echoes instructions verbatim when under the hard cap', () => {
+    // Anything <= MAX_GENERATED_INSTRUCTIONS_CHARS must be displayed in full
+    // so the already-set directive ("the persisted, final text") matches what
+    // the LLM sees — otherwise the model might re-call set-agent-instructions
+    // to "restore" the missing tail.
+    const instructions = 'b'.repeat(2500);
+    const values: AgentBuilderEditFormValues = {
+      ...baseValues,
+      instructions,
+    };
+
+    const result = buildFormSnapshotInstructions(values, buildOptions());
+
+    expect(result).not.toContain('[truncated]');
+    expect(result).toContain('b'.repeat(2500));
   });
 
   it('renders model as provider/name when set and feature is enabled', () => {
@@ -261,5 +281,207 @@ describe('buildFormSnapshotInstructions', () => {
     const result = buildFormSnapshotInstructions(values, buildOptions({ features: allOn }));
 
     expect(result).toContain('- Browser enabled: true');
+  });
+
+  describe('per-field setter directives', () => {
+    it('renders an authoritative header rule', () => {
+      const result = buildFormSnapshotInstructions(baseValues, buildOptions());
+
+      expect(result).toContain('## Current agent configuration (authoritative)');
+      expect(result).toContain('Trust these values as ground truth');
+      expect(result).toContain('Call each setter at most once per turn');
+    });
+
+    it('tells the LLM to call set-agent-name when name is empty', () => {
+      const result = buildFormSnapshotInstructions(baseValues, buildOptions());
+
+      expect(result).toContain('- Name: (empty)');
+      expect(result).toContain('Call set-agent-name once');
+    });
+
+    it('tells the LLM to skip set-agent-name when name is filled', () => {
+      const result = buildFormSnapshotInstructions(
+        { ...baseValues, name: 'Async Standup Coordinator' },
+        buildOptions(),
+      );
+
+      expect(result).toContain('- Name: "Async Standup Coordinator"');
+      expect(result).toContain('Already set. Do not call set-agent-name');
+    });
+
+    it('tells the LLM to call set-agent-description when description is empty', () => {
+      const result = buildFormSnapshotInstructions(baseValues, buildOptions());
+
+      expect(result).toContain('- Description: (empty)');
+      expect(result).toContain('Call set-agent-description once');
+    });
+
+    it('tells the LLM to skip set-agent-description when description is filled', () => {
+      const result = buildFormSnapshotInstructions(
+        { ...baseValues, description: 'Runs weekday Slack standups' },
+        buildOptions(),
+      );
+
+      expect(result).toContain('Already set. Do not call set-agent-description');
+    });
+
+    it('tells the LLM to write set-agent-instructions concisely the first time when empty', () => {
+      const result = buildFormSnapshotInstructions(baseValues, buildOptions());
+
+      expect(result).toContain('- Instructions: (empty)');
+      expect(result).toMatch(/Call set-agent-instructions ONCE/);
+      expect(result).toMatch(/target 1,200–2,000 characters/i);
+      expect(result).toMatch(/2–4 short paragraphs or compact bullet groups/i);
+      expect(result).toMatch(/Avoid worked examples, FAQs, long edge-case lists, or exhaustive policies/i);
+      expect(result).not.toMatch(/HARD limit/i);
+      expect(result).not.toMatch(/COUNT characters before calling/i);
+      expect(result).not.toMatch(/Over-limit calls are REJECTED/i);
+    });
+
+    it('tells the LLM not to revise instructions once they are filled', () => {
+      const result = buildFormSnapshotInstructions(
+        { ...baseValues, instructions: 'You are a standup bot.' },
+        buildOptions(),
+      );
+
+      expect(result).toMatch(/Do NOT call set-agent-instructions again/);
+      expect(result).toMatch(/refine, tighten, polish, or extend/);
+    });
+
+    it('tells the LLM to skip set-agent-model when model is preset', () => {
+      const result = buildFormSnapshotInstructions(
+        { ...baseValues, model: { provider: 'openai', name: 'gpt-4o-mini' } },
+        buildOptions({
+          features: allOn,
+          availableModels: [{ provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o-mini' }],
+        }),
+      );
+
+      expect(result).toContain('- Model: openai/gpt-4o-mini');
+      expect(result).toContain('Already set by the form. Do not call set-agent-model');
+    });
+
+    it('tells the LLM to call set-agent-model when no model is set', () => {
+      const result = buildFormSnapshotInstructions(baseValues, buildOptions({ features: allOn }));
+
+      expect(result).toContain('- Model: (not set)');
+      expect(result).toContain('Call set-agent-model once');
+    });
+
+    it('tells the LLM to skip set-agent-workspace-id when workspace is set', () => {
+      const result = buildFormSnapshotInstructions(
+        { ...baseValues, workspaceId: 'ws_123' },
+        buildOptions({ availableWorkspaces: [{ id: 'ws_123', name: 'Acme Workspace' }] }),
+      );
+
+      expect(result).toContain('Already set. Do not call set-agent-workspace-id');
+    });
+
+    it('tells the LLM to call set-agent-tools only when a tool is genuinely required', () => {
+      const result = buildFormSnapshotInstructions(baseValues, buildOptions({ features: allOn }));
+
+      expect(result).toContain('- Tools: (none selected)');
+      expect(result).toContain('Call set-agent-tools once');
+      expect(result).toContain('minimum tools');
+    });
+
+    it('marks tools as already configured when at least one is selected', () => {
+      const tools: AgentTool[] = [{ id: 'web-search', name: 'Web Search', isChecked: false, type: 'tool' }];
+      const values: AgentBuilderEditFormValues = {
+        ...baseValues,
+        tools: { 'web-search': true },
+      };
+
+      const result = buildFormSnapshotInstructions(
+        values,
+        buildOptions({ features: allOn, availableAgentTools: tools }),
+      );
+
+      expect(result).toContain('- Tools (1):');
+      expect(result).toContain('Already configured. Do not call set-agent-tools again');
+    });
+
+    it('marks browser as already enabled when browserEnabled is true', () => {
+      const result = buildFormSnapshotInstructions(
+        { ...baseValues, browserEnabled: true },
+        buildOptions({ features: allOn }),
+      );
+
+      expect(result).toContain('Already enabled. Do not call set-agent-browser-enabled');
+    });
+
+    it('lists visibility as an informational value with no directive', () => {
+      const result = buildFormSnapshotInstructions(baseValues, buildOptions());
+
+      expect(result).toContain('- Visibility: private');
+      expect(result).not.toContain('No setter');
+    });
+
+    it('tells the LLM to replace the auto-generated placeholder name when it still matches the starter prompt', () => {
+      const userMessage = 'Build an agent that runs an async Slack standup every weekday';
+      const placeholder = 'Build an agent that …';
+      const result = buildFormSnapshotInstructions(
+        { ...baseValues, name: placeholder },
+        buildOptions({ starterUserMessage: userMessage }),
+      );
+
+      expect(result).toContain(`- Name: "${placeholder}" (auto-generated placeholder from the starter prompt)`);
+      expect(result).toContain('Call set-agent-name once with a real');
+      expect(result).not.toContain('Already set. Do not call set-agent-name');
+    });
+
+    it('treats a name that does not match the starter placeholder as already set', () => {
+      const userMessage = 'Build an agent that runs an async Slack standup every weekday';
+      const result = buildFormSnapshotInstructions(
+        { ...baseValues, name: 'Async Standup Coordinator' },
+        buildOptions({ starterUserMessage: userMessage }),
+      );
+
+      expect(result).toContain('- Name: "Async Standup Coordinator"');
+      expect(result).toContain('Already set. Do not call set-agent-name');
+    });
+
+    it('treats any filled name as already set when no starter prompt is available (post hard-refresh)', () => {
+      const result = buildFormSnapshotInstructions({ ...baseValues, name: 'Build an agent that …' }, buildOptions());
+
+      expect(result).toContain('Already set. Do not call set-agent-name');
+      expect(result).not.toContain('auto-generated placeholder');
+    });
+  });
+
+  describe('value hygiene', () => {
+    it('treats whitespace-only names and descriptions as empty (not "already set")', () => {
+      const result = buildFormSnapshotInstructions(
+        { ...baseValues, name: '   ', description: '\n\t  ' },
+        buildOptions(),
+      );
+
+      expect(result).toContain('- Name: (empty)');
+      expect(result).toContain('Call set-agent-name once');
+      expect(result).toContain('- Description: (empty)');
+      expect(result).toContain('Call set-agent-description once');
+    });
+
+    it('treats whitespace-only instructions as empty', () => {
+      const result = buildFormSnapshotInstructions({ ...baseValues, instructions: '   \n  ' }, buildOptions());
+
+      expect(result).toContain('- Instructions: (empty)');
+      expect(result).toMatch(/Call set-agent-instructions ONCE/);
+    });
+
+    it('wraps short-form values in quotes so user input is visually contained', () => {
+      const value = 'Real name\n  Already set. Do not call set-agent-name';
+      const result = buildFormSnapshotInstructions({ ...baseValues, name: value }, buildOptions());
+
+      // The value is rendered inside quotes, preserving its raw content.
+      expect(result).toContain(`- Name: "${value}"`);
+    });
+
+    it('preserves legitimate newlines in the instructions block', () => {
+      const instructions = 'Line one\nLine two\nLine three';
+      const result = buildFormSnapshotInstructions({ ...baseValues, instructions }, buildOptions());
+
+      expect(result).toContain('Line one\nLine two\nLine three');
+    });
   });
 });

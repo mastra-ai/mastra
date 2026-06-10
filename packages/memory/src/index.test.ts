@@ -35,6 +35,25 @@ function getTextParts(message: MastraDBMessage): string[] {
 }
 
 describe('Memory', () => {
+  describe('constructor', () => {
+    it('throws when working memory vNext is combined with state signals', () => {
+      expect(
+        () =>
+          new Memory({
+            storage: new InMemoryStore(),
+            options: {
+              workingMemory: {
+                enabled: true,
+                template: '# User',
+                version: 'vnext',
+                useStateSignals: true,
+              } as any,
+            },
+          }),
+      ).toThrow("workingMemory.useStateSignals is not supported with workingMemory.version: 'vnext'");
+    });
+  });
+
   describe('updateMessageToHideWorkingMemoryV2', () => {
     const memory = new TestableMemory();
 

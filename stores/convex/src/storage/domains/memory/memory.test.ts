@@ -192,9 +192,37 @@ describe('MemoryConvex atomic memory writes', () => {
     });
   });
 
+  it('loads messages by id through indexed point lookups', async () => {
+    const storedMessage = {
+      id: 'message-1',
+      thread_id: 'thread-1',
+      resourceId: 'resource-1',
+      role: 'user',
+      type: 'v2',
+      content: JSON.stringify({ format: 2, parts: [{ type: 'text', text: 'hello' }], content: 'hello' }),
+      createdAt: '2026-05-29T00:00:00.000Z',
+    };
+    const { calls, memory } = createMemoryDomain(request => {
+      if (request.op === 'loadMany') return [storedMessage];
+      throw new Error(`Unexpected storage op ${request.op}`);
+    });
+
+    await expect(memory.listMessagesById({ messageIds: ['message-1'] })).resolves.toMatchObject({
+      messages: [expect.objectContaining({ id: 'message-1', threadId: 'thread-1' })],
+    });
+
+    expect(calls).toEqual([
+      {
+        op: 'loadMany',
+        tableName: TABLE_MESSAGES,
+        ids: ['message-1'],
+      },
+    ]);
+  });
+
   it('bumps updated-message threads with timestamp-only patches', async () => {
     const { calls, memory } = createMemoryDomain(request => {
-      if (request.op === 'queryTable') {
+      if (request.op === 'loadMany') {
         return [
           {
             id: 'message-1',
@@ -217,12 +245,18 @@ describe('MemoryConvex atomic memory writes', () => {
         {
           id: 'message-1',
           threadId: 'new-thread',
-          content: { content: 'new' },
+          content: { format: 2, parts: [{ type: 'text', text: 'new' }], content: 'new' },
         },
       ],
     });
 
     expect(calls.filter(call => call.op === 'load')).toEqual([]);
+    expect(calls.filter(call => call.op === 'queryTable')).toEqual([]);
+    expect(calls[0]).toMatchObject({
+      op: 'loadMany',
+      tableName: TABLE_MESSAGES,
+      ids: ['message-1'],
+    });
     expect(calls.filter(call => call.op === 'patch')).toEqual([
       {
         op: 'patch',

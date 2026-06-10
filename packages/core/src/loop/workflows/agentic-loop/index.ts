@@ -5,8 +5,8 @@ import { InternalSpans } from '../../../observability';
 import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
+import { createEventedWorkflow as createWorkflow } from '../../../workflows/create';
 import type { OutputWriter } from '../../../workflows/types';
-import { createWorkflow } from '../../../workflows/workflow';
 import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
 import { llmIterationOutputSchema } from '../schema';
@@ -257,12 +257,10 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       const shouldEmitStepFinish = typedInputData.stepResult?.reason !== 'tripwire' || hasSteps;
 
       if (shouldEmitStepFinish) {
-        // Only enqueue if controller is still open
-        safeEnqueue(controller, {
+        await outputWriter({
           type: 'step-finish',
           runId,
           from: ChunkFrom.AGENT,
-          // @ts-expect-error TODO: Look into the proper types for this
           payload: typedInputData,
         });
       }

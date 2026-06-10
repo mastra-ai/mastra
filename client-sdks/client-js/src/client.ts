@@ -146,6 +146,8 @@ import type {
   StoredSkillResponse,
   GetSystemPackagesResponse,
   BuilderSettingsResponse,
+  BuilderAvailableModelsResponse,
+  PermissionPatternsResponse,
   InfrastructureStatusResponse,
   ListBuilderRegistriesResponse,
   BuilderRegistrySearchResponse,
@@ -1568,6 +1570,25 @@ export class MastraClient extends BaseResource {
    */
   public getBuilderSettings(): Promise<BuilderSettingsResponse> {
     return this.request('/editor/builder/settings');
+  }
+
+  /**
+   * Retrieves the AI providers/models available under the active builder model
+   * policy. The server applies the EE allowlist, so the result can be rendered
+   * directly in the model picker.
+   * @returns Promise containing the policy-filtered providers/models
+   */
+  public getBuilderAvailableModels(): Promise<BuilderAvailableModelsResponse> {
+    return this.request('/editor/builder/models/available');
+  }
+
+  /**
+   * Retrieves the authoritative list of valid permission-pattern strings.
+   * Used by Studio to validate route→permission literals and gate the sidebar.
+   * @returns Promise containing the permission patterns
+   */
+  public getPermissionPatterns(): Promise<PermissionPatternsResponse> {
+    return this.request('/auth/permission-patterns');
   }
 
   /**

@@ -93,9 +93,9 @@ describe('AgentChannelsPage MSW integration', () => {
       http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json(emptyPlatforms)),
     );
 
-    const { container } = renderPage();
+    renderPage();
 
-    expect(container.querySelector('.animate-spin')).not.toBeNull();
+    expect(await screen.findByRole('status', { name: 'Loading' })).not.toBeNull();
 
     gate.resolve();
 

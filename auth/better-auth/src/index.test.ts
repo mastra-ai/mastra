@@ -27,24 +27,10 @@ describe('MastraAuthBetterAuth', () => {
     },
   };
 
-  const mockRequest = {
-    header: vi.fn(),
-    headers: new Headers(),
-  } as any;
-
-  /**
-   * Mock a standard Web Request (what c.req.raw returns in Hono).
-   * Does NOT have a .header() method — only .headers (Headers object).
-   */
-  const mockRawRequest = (headers: Record<string, string> = {}) =>
-    ({
-      headers: new Headers(headers),
-    }) as unknown as any;
+  const mockRawRequest = (headers: Record<string, string> = {}) => new Request('http://localhost/test', { headers });
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRequest.header.mockReset();
-    mockRequest.headers = new Headers();
   });
 
   describe('initialization', () => {

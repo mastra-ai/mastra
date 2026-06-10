@@ -649,6 +649,17 @@ function ReadOnlyConfigWithDiff({
 
   return (
     <>
+      <CollapsibleSection title="Variables" icon={<Braces />} badge={variablesBadge}>
+        {variablesDiff ? (
+          <VariablesDiffView
+            previousVars={variablesDiff.previousValue as Record<string, unknown> | undefined}
+            currentVars={variablesDiff.currentValue as Record<string, unknown> | undefined}
+          />
+        ) : (
+          <ReadOnlyVariables variables={variables as Record<string, unknown> | undefined} />
+        )}
+      </CollapsibleSection>
+
       <CollapsibleSection title="System Prompt" icon={<Cpu />} badge={instructionsBadge}>
         {instructionsDiff ? (
           <InstructionsDiffView
@@ -668,17 +679,6 @@ function ReadOnlyConfigWithDiff({
           />
         ) : (
           <ReadOnlyTools tools={tools as Record<string, unknown> | undefined} />
-        )}
-      </CollapsibleSection>
-
-      <CollapsibleSection title="Variables" icon={<Wrench />} badge={variablesBadge}>
-        {variablesDiff ? (
-          <VariablesDiffView
-            previousVars={variablesDiff.previousValue as Record<string, unknown> | undefined}
-            currentVars={variablesDiff.currentValue as Record<string, unknown> | undefined}
-          />
-        ) : (
-          <ReadOnlyVariables variables={variables as Record<string, unknown> | undefined} />
         )}
       </CollapsibleSection>
     </>

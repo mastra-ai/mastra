@@ -4,6 +4,7 @@ description: "Add resource-level authorization to your Mastra application with F
 packages:
   - "@mastra/auth-workos"
   - "@mastra/core"
+  - "@mastra/mcp"
 ---
 
 # Fine-Grained Authorization (FGA)
@@ -218,10 +219,12 @@ When an FGA provider is configured, Mastra automatically checks authorization at
 | Built-in workflow HTTP execution routes and `Workflow.execute()` | `workflows:execute` | `workflow` | `workflowId` |
 | Standalone tool execution | `tools:execute` | `tool` | `toolName` |
 | Agent tool execution | `tools:execute` | `tool` | `${agentId}:${toolName}` |
-| MCP tool execution | `tools:execute` | `tool` | `JSON.stringify([serverName, toolName])` |
+| MCP tool execution | `tools:execute` | `tool` by default, or the server-level `fga.resourceMapping` override | `JSON.stringify([serverName, toolName])` by default, or the server-level derived ID |
 | Thread and memory access | `memory:read`, `memory:write`, `memory:delete` | `thread` | `threadId` |
 | Stored resource routes | Stored resource permission for the route action | Stored resource type | Route record ID, or the stored-resource scope for collection routes |
 | HTTP resource routes | Configured per route | Configured per route | Configured per route |
+
+For OAuth-protected MCP servers, HTTP MCP transports pass authenticated data as `extra.authInfo`. If an `MCPServer` is registered on an FGA-enabled Mastra instance, configure `mapAuthInfoToUser` so Mastra can set `requestContext.get('user')` before checking `tools/list` and `tools/call`. Use the server-level `fga` option when MCP tool checks need different resource or permission mapping than internal agent and workflow tool checks. See [MCPServer authentication context](/reference/tools/mcp-server#map-auth-data-for-fga).
 
 Direct SDK calls to `createRun().start()`, `resume()`, or `restart()` are not independently checked by core FGA in this release. Make those calls from a protected route or guard them in application code. Pass a `requestContext` with an authenticated user when invoking protected entry points directly.
 

@@ -1,10 +1,10 @@
-import type { HonoRequest } from 'hono';
 import { MastraBase } from '../base';
+import type { AuthorizeUserFn, MastraAuthRequest } from './request-types';
 import type { MastraAuthConfig } from './types';
 
 export interface MastraAuthProviderOptions<TUser = unknown> {
   name?: string;
-  authorizeUser?: (user: TUser, request: HonoRequest) => Promise<boolean> | boolean;
+  authorizeUser?: AuthorizeUserFn<TUser>;
   mapUserToResourceId?(user: TUser): string | undefined | null;
   /**
    * Protected paths for the auth provider
@@ -39,7 +39,7 @@ export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase {
    * @param request - The request
    * @returns The payload
    */
-  abstract authenticateToken(token: string, request: HonoRequest): Promise<TUser | null>;
+  abstract authenticateToken(token: string, request: MastraAuthRequest): Promise<TUser | null>;
 
   /**
    * Authorize a user for a path and method
@@ -47,7 +47,7 @@ export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase {
    * @param request - The request
    * @returns The authorization result
    */
-  abstract authorizeUser(user: TUser, request: HonoRequest): Promise<boolean> | boolean;
+  abstract authorizeUser(user: TUser, request: MastraAuthRequest): Promise<boolean> | boolean;
 
   protected registerOptions(opts?: MastraAuthProviderOptions<TUser>) {
     if (opts?.authorizeUser) {

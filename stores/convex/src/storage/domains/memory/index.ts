@@ -349,8 +349,8 @@ export class MemoryConvex extends MemoryStorage {
     if (messageIds.length === 0) {
       return { messages: [] };
     }
-    const rows = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, undefined);
-    const filtered = rows.filter(row => messageIds.includes(row.id)).map(row => this.parseStoredMessage(row));
+    const rows = await this.#db.loadMany<StoredMessage>(TABLE_MESSAGES, messageIds);
+    const filtered = rows.map(row => this.parseStoredMessage(row));
     const list = new MessageList().add(filtered, 'memory');
     return { messages: list.get.all.db() };
   }
@@ -407,12 +407,16 @@ export class MemoryConvex extends MemoryStorage {
   }): Promise<MastraDBMessage[]> {
     if (messages.length === 0) return [];
 
-    const existing = await this.#db.queryTable<StoredMessage>(TABLE_MESSAGES, undefined);
+    const existingRows = await this.#db.loadMany<StoredMessage>(
+      TABLE_MESSAGES,
+      messages.map(message => message.id),
+    );
+    const existing = new Map(existingRows.map(row => [row.id, row]));
     const updated: MastraDBMessage[] = [];
     const affectedThreadIds = new Set<string>();
 
     for (const update of messages) {
-      const current = existing.find(row => row.id === update.id);
+      const current = existing.get(update.id);
       if (!current) continue;
 
       // Track old thread for timestamp update

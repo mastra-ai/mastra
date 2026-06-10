@@ -22,6 +22,7 @@ import type {
   ScorerTargetScope,
 } from './core';
 import type { FeedbackInput } from './feedback';
+import type { CostContext } from './metrics';
 import type { ScoreInput } from './scores';
 
 // ============================================================================
@@ -228,6 +229,8 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
   resultType?: 'tool_selection' | 'response_generation' | 'reasoning' | 'planning';
   /** Token usage statistics */
   usage?: UsageStats;
+  /** Estimated cost context, when provided directly by an SDK or provider */
+  costContext?: CostContext;
   /** Model parameters */
   parameters?: {
     maxOutputTokens?: number;

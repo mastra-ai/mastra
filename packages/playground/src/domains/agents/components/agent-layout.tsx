@@ -1,4 +1,4 @@
-import { getMainContentContentClassName, CollapsiblePanel, PanelSeparator } from '@mastra/playground-ui';
+import { CollapsiblePanel, PanelSeparator } from '@mastra/playground-ui';
 import { Panel, useDefaultLayout, Group } from 'react-resizable-panels';
 
 export interface AgentLayoutProps {
@@ -15,15 +15,9 @@ export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserOve
     storage: localStorage,
   });
 
-  const computedClassName = getMainContentContentClassName({
-    isCentered: false,
-    isDivided: true,
-    hasLeftServiceColumn: Boolean(leftSlot),
-  });
-
   return (
     <div className="relative h-full w-full overflow-hidden">
-      <Group className={computedClassName} defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
+      <Group className="h-full min-h-0 w-full min-w-0" defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
         {leftSlot && (
           <>
             <CollapsiblePanel
@@ -31,16 +25,17 @@ export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserOve
               id="left-slot"
               minSize={200}
               maxSize={'30%'}
-              defaultSize={200}
+              defaultSize={300}
               collapsedSize={60}
               collapsible={true}
+              className="min-w-0"
             >
               {leftSlot}
             </CollapsiblePanel>
             <PanelSeparator />
           </>
         )}
-        <Panel id="main-slot" className="grid overflow-y-auto relative">
+        <Panel id="main-slot" className="grid min-w-0 overflow-y-auto relative">
           {children}
         </Panel>
         {rightSlot && (
@@ -54,6 +49,7 @@ export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserOve
               defaultSize="30%"
               collapsedSize={60}
               collapsible={true}
+              className="min-w-0"
             >
               {rightSlot}
             </CollapsiblePanel>

@@ -3,7 +3,10 @@ packages:
 
 overrides:
   '@mastra/core': link:../../../../packages/core
+  '@mastra/editor': link:../../../../packages/editor
   '@mastra/memory': link:../../../../packages/memory
+  '@mastra/libsql': link:../../../../stores/libsql
+  '@mastra/mcp': link:../../../../packages/mcp
   mastra: link:../../../../packages/cli
   '@mastra/react': link:../../../playground-ui
   '@mastra/loggers': link:../../../../packages/loggers
@@ -13,5 +16,5 @@ overrides:
   '@internal/test-utils': link:../../../../packages/_test-utils
 
 allowBuilds:
-  esbuild: false
+  esbuild: true
   msw: false

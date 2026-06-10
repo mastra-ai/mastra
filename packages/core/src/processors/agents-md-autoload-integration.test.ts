@@ -227,10 +227,10 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
       writer,
     });
 
-    // A data-system-reminder chunk should have been emitted
+    // A data-signal chunk should have been emitted
     expect(chunks).toEqual([
       expect.objectContaining({
-        type: 'data-system-reminder',
+        type: 'data-signal',
         data: expect.objectContaining({
           type: 'reactive',
           tagName: 'system-reminder',
@@ -426,7 +426,7 @@ describe('AgentsMDInjector integration through ProcessorRunner', () => {
       expect.objectContaining({ attributes: { type: 'dynamic-agents-md', path: '/repo/packages/core/AGENTS.md' } }),
     );
     expect(rotateResponseMessageId).toHaveBeenCalledTimes(1);
-    expect(writer.custom).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-system-reminder' }));
+    expect(writer.custom).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-signal' }));
   });
 
   it('no injection when tool call path has no nearby AGENTS.md', async () => {

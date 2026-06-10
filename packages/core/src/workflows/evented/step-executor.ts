@@ -6,8 +6,8 @@ import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
-import type { TracingContext } from '../../observability';
-import { createObservabilityContext } from '../../observability';
+import type { TracingContext, TracingPolicy } from '../../observability';
+import { EntityType, SpanType, createObservabilityContext } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
@@ -77,6 +77,8 @@ export class StepExecutor extends MastraBase {
     format?: 'legacy' | 'vnext';
     /** Tracing context for span nesting */
     tracingContext?: TracingContext;
+    /** Workflow tracing policy, used to mark the step's span internal/external. */
+    tracingPolicy?: TracingPolicy;
   }): Promise<StepResult<any, any, any, any>> {
     const { step, stepResults, runId, requestContext, retryCount = 0, perStep } = params;
 
@@ -133,6 +135,22 @@ export class StepExecutor extends MastraBase {
     // the update and applies it AFTER the step completes
     let stateUpdate: Record<string, any> | undefined;
 
+    // The evented engine, unlike the default engine, has no per-step span.
+    // Emit the WORKFLOW_STEP span here so the step's child spans nest under it
+    // and traces match the default engine.
+    const workflowStepSpan = params.tracingContext?.currentSpan?.createChildSpan({
+      type: SpanType.WORKFLOW_STEP,
+      name: `workflow step: '${step.id}'`,
+      entityType: EntityType.WORKFLOW_STEP,
+      entityId: step.id,
+      input: inputData,
+      tracingPolicy: params.tracingPolicy,
+      requestContext,
+    });
+    const stepTracingContext: TracingContext = workflowStepSpan
+      ? { currentSpan: workflowStepSpan }
+      : (params.tracingContext ?? {});
+
     try {
       if (validationError) {
         throw validationError;
@@ -142,7 +160,7 @@ export class StepExecutor extends MastraBase {
       const outputWriter = this.createOutputWriter(runId);
 
       const stepOutput = await executeWithContext({
-        span: params.tracingContext?.currentSpan,
+        span: stepTracingContext.currentSpan,
         fn: () =>
           step.execute(
             createDeprecationProxy(
@@ -217,7 +235,7 @@ export class StepExecutor extends MastraBase {
                 [STREAM_FORMAT_SYMBOL]: params.format,
                 engine: {},
                 abortSignal: abortController?.signal,
-                ...createObservabilityContext(params.tracingContext),
+                ...createObservabilityContext(stepTracingContext),
               },
               {
                 paramName: 'runCount',
@@ -275,6 +293,12 @@ export class StepExecutor extends MastraBase {
         };
       }
 
+      if (finalResult.status === 'success') {
+        workflowStepSpan?.end({ output: stepOutput, attributes: { status: 'success' } });
+      } else {
+        workflowStepSpan?.end({ attributes: { status: finalResult.status } });
+      }
+
       return finalResult;
     } catch (error: any) {
       const endedAt = Date.now();
@@ -283,6 +307,8 @@ export class StepExecutor extends MastraBase {
         serializeStack: false,
         fallbackMessage: 'Unknown step execution error',
       });
+
+      workflowStepSpan?.error({ error: errorInstance });
 
       // Log the error for observability (matching default engine behavior)
       const stepId = params.step.id;

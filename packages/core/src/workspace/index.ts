@@ -40,6 +40,10 @@ export {
   type ToolConfigContext,
   type ToolConfigWithArgsContext,
   type DynamicToolConfigValue,
+  type WorkspaceToolHookContext,
+  type WorkspaceToolBeforeHookResult,
+  type WorkspaceToolAfterHookContext,
+  type WorkspaceToolHooks,
   type ResolvedToolConfig,
   // Individual standalone tools
   readFileTool,
@@ -101,6 +105,9 @@ export { detectIsolation, isIsolationAvailable, getRecommendedIsolation } from '
 
 // Constants
 export { WORKSPACE_TOOLS_PREFIX, WORKSPACE_TOOLS, type WorkspaceToolName } from './constants';
+
+// Search types
+export type { TokenizeOptions } from './search';
 
 // Shared types
 export type { InstructionsOption } from './types';

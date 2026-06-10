@@ -267,12 +267,20 @@ export async function processWorkflowForEach(
       isForeachIterationPending(currentResult, index),
     );
     if (pendingIterations.length > 0) {
-      // Collect resumeLabels from all suspended iterations
+      // Collect resumeLabels from all suspended iterations and capture the first
+      // suspended iteration's full suspendPayload so non-__workflow_meta keys
+      // (e.g. __streamState stashed by the agent loop) survive aggregation.
       const collectedResumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
+      let firstSuspendedIterationPayload: Record<string, unknown> | undefined;
       for (let i = 0; i < currentResult.output.length; i++) {
         const iterResult = currentResult.output[i];
-        if (isSuspendedStepResult(iterResult) && iterResult.suspendPayload?.__workflow_meta?.resumeLabels) {
-          Object.assign(collectedResumeLabels, iterResult.suspendPayload.__workflow_meta.resumeLabels);
+        if (isSuspendedStepResult(iterResult)) {
+          if (iterResult.suspendPayload?.__workflow_meta?.resumeLabels) {
+            Object.assign(collectedResumeLabels, iterResult.suspendPayload.__workflow_meta.resumeLabels);
+          }
+          if (firstSuspendedIterationPayload === undefined) {
+            firstSuspendedIterationPayload = iterResult.suspendPayload;
+          }
         }
       }
 
@@ -286,6 +294,11 @@ export async function processWorkflowForEach(
       if (Object.keys(collectedResumeLabels).length > 0) {
         suspendMeta.resumeLabels = collectedResumeLabels;
       }
+
+      const aggregatedSuspendPayload = {
+        ...firstSuspendedIterationPayload,
+        __workflow_meta: suspendMeta,
+      };
 
       // Re-suspend the workflow - there are still pending iterations
       // Use workflow.step.end with suspended status to update storage
@@ -304,13 +317,13 @@ export async function processWorkflowForEach(
               ...currentResult,
               status: 'suspended',
               suspendedAt: Date.now(),
-              suspendPayload: { __workflow_meta: suspendMeta },
+              suspendPayload: aggregatedSuspendPayload,
             },
           },
           prevResult: {
             status: 'suspended',
             output: currentResult.output,
-            suspendPayload: { __workflow_meta: suspendMeta },
+            suspendPayload: aggregatedSuspendPayload,
             payload: currentResult.payload,
             startedAt: currentResult.startedAt,
             suspendedAt: Date.now(),

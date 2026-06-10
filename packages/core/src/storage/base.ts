@@ -19,7 +19,9 @@ import type {
   BackgroundTasksStorage,
   SchedulesStorage,
   ChannelsStorage,
+  HarnessStorage,
   ToolProviderConnectionsStorage,
+  NotificationsStorage,
 } from './domains';
 
 /** Map of all storage domain interfaces available in a composite store. */
@@ -28,6 +30,7 @@ export type StorageDomains = {
   scores?: ScoresStorage;
   memory?: MemoryStorage;
   channels?: ChannelsStorage;
+  notifications?: NotificationsStorage;
   observability?: ObservabilityStorage;
   agents?: AgentsStorage;
   datasets?: DatasetsStorage;
@@ -42,6 +45,7 @@ export type StorageDomains = {
   blobs?: BlobStore;
   backgroundTasks?: BackgroundTasksStorage;
   schedules?: SchedulesStorage;
+  harness?: HarnessStorage;
   toolProviderConnections?: ToolProviderConnectionsStorage;
 };
 
@@ -235,7 +239,7 @@ export interface MastraCompositeStoreConfig {
  */
 export interface StorageMastraRef {
   getAgentById?: (id: string) => { source?: string; __getEditorConfig?: () => unknown } | undefined;
-  getEditor?: () => { getMode?: () => 'code' | 'db' | undefined } | undefined;
+  getEditor?: () => { getSource?: () => 'code' | 'db' | undefined } | undefined;
 }
 
 export class MastraCompositeStore extends MastraBase {
@@ -327,7 +331,9 @@ export class MastraCompositeStore extends MastraBase {
         backgroundTasks: resolve('backgroundTasks'),
         schedules: resolve('schedules'),
         channels: resolve('channels'),
+        harness: resolve('harness'),
         toolProviderConnections: resolve('toolProviderConnections'),
+        notifications: resolve('notifications'),
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -454,7 +460,9 @@ export class MastraCompositeStore extends MastraBase {
       maybeInit(this.stores.backgroundTasks);
       maybeInit(this.stores.schedules);
       maybeInit(this.stores.channels);
+      maybeInit(this.stores.harness);
       maybeInit(this.stores.toolProviderConnections);
+      maybeInit(this.stores.notifications);
     }
 
     await Promise.all(initTasks);

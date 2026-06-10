@@ -79,6 +79,45 @@ const NetworkRadio = ({ hasMemory, hasSubAgents, disabled }: NetworkRadioProps) 
   );
 };
 
+interface StreamSubscriptionRadioProps {
+  supported: boolean;
+  disabled: boolean;
+}
+
+const StreamSubscriptionRadio = ({ supported, disabled }: StreamSubscriptionRadioProps) => {
+  const itemDisabled = disabled || !supported;
+
+  const radio = (
+    <div className="flex items-center gap-2">
+      <RadioGroupItem
+        value="streamSubscription"
+        id="streamSubscription"
+        className="text-neutral6"
+        disabled={itemDisabled}
+      />
+      <Label
+        className={cn('text-neutral6 text-ui-md', !supported && 'text-neutral3! cursor-not-allowed')}
+        htmlFor="streamSubscription"
+      >
+        Stream subscription (default)
+      </Label>
+    </div>
+  );
+
+  if (supported) {
+    return radio;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{radio}</TooltipTrigger>
+      <TooltipContent>
+        <p>Stream subscription is not supported for this agent.</p>
+      </TooltipContent>
+    </Tooltip>
+  );
+};
+
 export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) => {
   const { data: agent, isLoading } = useAgent(agentId);
   const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId);
@@ -104,6 +143,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
   const hasSubAgents = Boolean(agent && Object.keys(agent.agents || {}).length > 0);
   const modelVersion = agent?.modelVersion;
   const isSupportedModel = modelVersion === 'v2' || modelVersion === 'v3';
+  const supportsThreadSubscription = agent?.supportsMemory !== false;
 
   let radioValue: string | undefined;
 
@@ -111,8 +151,12 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
     if (isSupportedModel) {
       if (settings?.modelSettings?.chatWithNetwork) {
         radioValue = 'network';
+      } else if (settings?.modelSettings?.chatWithGenerate) {
+        radioValue = 'generate';
+      } else if (settings?.modelSettings?.chatWithLegacyStream || !supportsThreadSubscription) {
+        radioValue = 'stream';
       } else {
-        radioValue = settings?.modelSettings?.chatWithGenerate ? 'generate' : 'stream';
+        radioValue = 'streamSubscription';
       }
     } else {
       radioValue = settings?.modelSettings?.chatWithGenerateLegacy ? 'generateLegacy' : 'streamLegacy';
@@ -167,6 +211,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                         ...settings?.modelSettings,
                         chatWithGenerateLegacy: value === 'generateLegacy',
                         chatWithGenerate: value === 'generate',
+                        chatWithLegacyStream: value === 'stream',
                         chatWithNetwork: value === 'network',
                       },
                     })
@@ -211,6 +256,9 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                         Stream (Legacy)
                       </Label>
                     </div>
+                  )}
+                  {isSupportedModel && (
+                    <StreamSubscriptionRadio supported={supportsThreadSubscription} disabled={!canEditSettings} />
                   )}
                   {isSupportedModel && (
                     <div className="flex items-center gap-2">

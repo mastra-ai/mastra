@@ -4,9 +4,10 @@ import { z } from 'zod/v4';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { DefaultStepResult } from '../stream/aisdk/v5/output-helpers';
+import { createWorkflow } from './create';
 import { serializeWorkflowSnapshotValue } from './snapshot-serialization';
 import { validateStepResumeData } from './utils';
-import { createStep, createWorkflow } from './workflow';
+import { createStep } from './workflow';
 
 describe('workflow snapshot size', () => {
   const falsyResumePayloadCases = [
