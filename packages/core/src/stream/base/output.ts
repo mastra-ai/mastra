@@ -1763,11 +1763,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   serializeState() {
     return {
       status: this.#status,
-      bufferedSteps: this.#bufferedSteps,
+      bufferedSteps: serializeBufferedSteps(this.#bufferedSteps),
       bufferedReasoningDetails: this.#bufferedReasoningDetails,
       bufferedByStep: this.#bufferedByStep,
       bufferedText: this.#bufferedText,
-      bufferedTextChunks: this.#bufferedTextChunks,
       bufferedSources: this.#bufferedSources,
       bufferedReasoning: this.#bufferedReasoning,
       bufferedFiles: this.#bufferedFiles,
@@ -1787,11 +1786,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
   deserializeState(state: any) {
     this.#status = state.status;
-    this.#bufferedSteps = state.bufferedSteps;
+    this.#bufferedSteps = deserializeBufferedSteps(state.bufferedSteps ?? []);
     this.#bufferedReasoningDetails = state.bufferedReasoningDetails;
     this.#bufferedByStep = state.bufferedByStep;
     this.#bufferedText = state.bufferedText;
-    this.#bufferedTextChunks = state.bufferedTextChunks;
+    this.#bufferedTextChunks = state.bufferedTextChunks ?? {};
     this.#bufferedSources = state.bufferedSources;
     this.#bufferedReasoning = state.bufferedReasoning;
     this.#bufferedFiles = state.bufferedFiles;
@@ -1807,4 +1806,50 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#tripwire = state.tripwire;
     this.messageList = this.messageList.deserialize(state.messageList);
   }
+}
+
+type BufferedStepMessages = NonNullable<LLMStepResult<any>['response']['messages']>;
+
+/**
+ * Each buffered step's `response.messages` holds the cumulative response history at the
+ * time the step finished, which makes serialized stream state grow quadratically with
+ * step count. Persist only the messages each step added (`messagesDeltaFrom` marks the
+ * boundary) and rebuild the cumulative view on deserialize. Steps whose history is not
+ * an extension of the previous step (e.g. after a processor retry removed messages) are
+ * stored in full. Cumulative `request`, `dbMessages` and `uiMessages` are not persisted:
+ * the live loop recomputes them from the message list when the run finishes.
+ */
+export function serializeBufferedSteps<OUTPUT>(steps: LLMStepResult<OUTPUT>[]): LLMStepResult<OUTPUT>[] {
+  let prev: BufferedStepMessages = [];
+  return steps.map(step => {
+    const messages = step.response?.messages ?? [];
+    const boundary = prev.length;
+    const extendsPrev =
+      messages.length >= boundary &&
+      (boundary === 0 || JSON.stringify(messages[boundary - 1]) === JSON.stringify(prev[boundary - 1]));
+    const slimmed: LLMStepResult<OUTPUT> = {
+      ...step,
+      request: {},
+      response: {
+        ...step.response,
+        dbMessages: undefined,
+        uiMessages: undefined,
+        messages: extendsPrev ? messages.slice(boundary) : messages,
+        ...(extendsPrev ? { messagesDeltaFrom: boundary } : {}),
+      },
+    };
+    prev = messages;
+    return slimmed;
+  });
+}
+
+export function deserializeBufferedSteps<OUTPUT>(steps: LLMStepResult<OUTPUT>[]): LLMStepResult<OUTPUT>[] {
+  let running: BufferedStepMessages = [];
+  return steps.map(step => {
+    const { messagesDeltaFrom, ...response } = step.response ?? {};
+    const stored = (response.messages ?? []) as BufferedStepMessages;
+    const messages = messagesDeltaFrom === undefined ? stored : [...running, ...stored];
+    running = messages;
+    return { ...step, response: { ...response, messages } };
+  });
 }

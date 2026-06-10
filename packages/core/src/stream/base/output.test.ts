@@ -4,7 +4,7 @@ import { MessageList } from '../../agent/message-list';
 import type { Processor, ProcessorStreamWriter } from '../../processors';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
-import { MastraModelOutput } from './output';
+import { MastraModelOutput, serializeBufferedSteps, deserializeBufferedSteps } from './output';
 
 /**
  * Creates a ReadableStream that emits the given chunks in order.
@@ -842,5 +842,124 @@ describe('MastraModelOutput', () => {
       expect(result.toolCalls).toHaveLength(1);
       expect(result.toolCalls[0]?.payload.observability).toEqual(observability);
     });
+  });
+});
+
+describe('buffered step serialization', () => {
+  function makeStep(messages: Array<Record<string, unknown>>, overrides: Record<string, unknown> = {}) {
+    return {
+      stepType: 'initial',
+      toolCalls: [],
+      toolResults: [],
+      dynamicToolCalls: [],
+      dynamicToolResults: [],
+      staticToolCalls: [],
+      staticToolResults: [],
+      files: [],
+      sources: [],
+      text: 'hello',
+      reasoning: [],
+      content: [],
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+      warnings: [],
+      request: { body: 'full prompt with entire conversation' },
+      response: {
+        id: 'resp-1',
+        modelId: 'test-model',
+        messages,
+        dbMessages: [{ id: 'db-1' }],
+        uiMessages: [{ id: 'ui-1' }],
+      },
+      reasoningText: undefined,
+      providerMetadata: undefined,
+      ...overrides,
+    } as any;
+  }
+
+  const m = (text: string) => ({ role: 'assistant', content: [{ type: 'text', text }] });
+
+  it('persists only the messages each step added', () => {
+    const m1 = m('one');
+    const m2 = m('two');
+    const m3 = m('three');
+    const steps = [makeStep([m1]), makeStep([m1, m2]), makeStep([m1, m2, m3])];
+
+    const serialized = serializeBufferedSteps(steps);
+
+    expect(serialized[0]!.response.messages).toEqual([m1]);
+    expect(serialized[1]!.response.messages).toEqual([m2]);
+    expect(serialized[2]!.response.messages).toEqual([m3]);
+    expect(serialized[2]!.response.messagesDeltaFrom).toBe(2);
+  });
+
+  it('drops cumulative request, dbMessages and uiMessages from persisted steps', () => {
+    const serialized = serializeBufferedSteps([makeStep([m('one')])]);
+
+    expect(serialized[0]!.request).toEqual({});
+    expect(serialized[0]!.response.dbMessages).toBeUndefined();
+    expect(serialized[0]!.response.uiMessages).toBeUndefined();
+  });
+
+  it('restores the cumulative message history on deserialize', () => {
+    const m1 = m('one');
+    const m2 = m('two');
+    const steps = [makeStep([m1]), makeStep([m1, m2])];
+
+    const restored = deserializeBufferedSteps(serializeBufferedSteps(steps));
+
+    expect(restored[0]!.response.messages).toEqual([m1]);
+    expect(restored[1]!.response.messages).toEqual([m1, m2]);
+    expect(restored[1]!.response.messagesDeltaFrom).toBeUndefined();
+  });
+
+  it('stores the full history when a step does not extend the previous one', () => {
+    const m1 = m('one');
+    const replaced = m('replaced after retry');
+    const steps = [makeStep([m1]), makeStep([replaced])];
+
+    const serialized = serializeBufferedSteps(steps);
+    expect(serialized[1]!.response.messages).toEqual([replaced]);
+    expect(serialized[1]!.response.messagesDeltaFrom).toBeUndefined();
+
+    const restored = deserializeBufferedSteps(serialized);
+    expect(restored[1]!.response.messages).toEqual([replaced]);
+  });
+
+  it('passes legacy snapshots through unchanged', () => {
+    const m1 = m('one');
+    const m2 = m('two');
+    const legacy = [makeStep([m1]), makeStep([m1, m2])];
+
+    const restored = deserializeBufferedSteps(legacy);
+
+    expect(restored[0]!.response.messages).toEqual([m1]);
+    expect(restored[1]!.response.messages).toEqual([m1, m2]);
+    expect(restored[1]!.response.dbMessages).toEqual([{ id: 'db-1' }]);
+  });
+
+  it('is stable across repeated serialize/deserialize round trips', () => {
+    const m1 = m('one');
+    const m2 = m('two');
+    const steps = [makeStep([m1]), makeStep([m1, m2])];
+
+    const first = serializeBufferedSteps(steps);
+    const second = serializeBufferedSteps(deserializeBufferedSteps(structuredClone(first)));
+
+    expect(second).toEqual(first);
+  });
+
+  it('keeps serialized size linear in step count', () => {
+    const payload = 'x'.repeat(10_000);
+    const cumulative: Array<Record<string, unknown>> = [];
+    const steps = [];
+    for (let i = 0; i < 8; i++) {
+      cumulative.push(m(`${payload}-${i}`));
+      steps.push(makeStep([...cumulative]));
+    }
+
+    const fatSize = JSON.stringify(steps).length;
+    const slimSize = JSON.stringify(serializeBufferedSteps(steps)).length;
+
+    expect(slimSize).toBeLessThan(fatSize / 3);
   });
 });
