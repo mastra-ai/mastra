@@ -25,9 +25,9 @@ import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
-import { RETHROWN_TOOL_ERROR_NAMES } from './rethrown-error-names';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
+import { RETHROWN_TOOL_ERROR_NAMES } from './rethrown-error-names';
 
 type AddToolMetadataOptions = {
   toolCallId: string;

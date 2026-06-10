@@ -50,7 +50,7 @@ const usePlatformsHandler = (platforms: PlatformsFixture[]) => {
 };
 
 const Probe = () => {
-  const { step, next, steps, isLast } = useWizard();
+  const { step, next, prev, steps, isLast } = useWizard();
   return (
     <div>
       <div data-testid="step">{step}</div>
@@ -58,6 +58,9 @@ const Probe = () => {
       <div data-testid="is-last">{isLast ? 'yes' : 'no'}</div>
       <button type="button" data-testid="next" onClick={next}>
         next
+      </button>
+      <button type="button" data-testid="prev" onClick={prev}>
+        prev
       </button>
     </div>
   );
@@ -104,15 +107,21 @@ describe('WizardProvider', () => {
     expect(getByTestId('step').textContent).toBe('end');
   });
 
-  it('walks initial -> instructions -> end when all features are off and initialStep=initial', async () => {
-    const { getByTestId } = renderWizard({ initialStep: 'initial' });
+  it('walks ready -> identity -> instructions -> library -> end when all features are off and initialStep=ready', async () => {
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
     await flushPlatforms();
 
-    expect(getByTestId('steps').textContent).toBe('initial>instructions>end');
-    expect(getByTestId('step').textContent).toBe('initial');
+    expect(getByTestId('steps').textContent).toBe('ready>identity>instructions>library>end');
+    expect(getByTestId('step').textContent).toBe('ready');
+
+    fireEvent.click(getByTestId('next'));
+    expect(getByTestId('step').textContent).toBe('identity');
 
     fireEvent.click(getByTestId('next'));
     expect(getByTestId('step').textContent).toBe('instructions');
+
+    fireEvent.click(getByTestId('next'));
+    expect(getByTestId('step').textContent).toBe('library');
 
     fireEvent.click(getByTestId('next'));
     expect(getByTestId('step').textContent).toBe('end');
@@ -120,6 +129,37 @@ describe('WizardProvider', () => {
     // No-op at end.
     fireEvent.click(getByTestId('next'));
     expect(getByTestId('step').textContent).toBe('end');
+  });
+
+  it('walks backward with prev() and is a no-op on the first step', async () => {
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
+    await flushPlatforms();
+
+    expect(getByTestId('step').textContent).toBe('ready');
+
+    // No-op on first step.
+    fireEvent.click(getByTestId('prev'));
+    expect(getByTestId('step').textContent).toBe('ready');
+
+    fireEvent.click(getByTestId('next')); // ready -> identity
+    fireEvent.click(getByTestId('next')); // identity -> instructions
+    expect(getByTestId('step').textContent).toBe('instructions');
+
+    fireEvent.click(getByTestId('prev')); // instructions -> identity
+    expect(getByTestId('step').textContent).toBe('identity');
+
+    fireEvent.click(getByTestId('prev')); // identity -> ready
+    expect(getByTestId('step').textContent).toBe('ready');
+  });
+
+  it('round-trips next() then prev()', async () => {
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
+    await flushPlatforms();
+
+    fireEvent.click(getByTestId('next'));
+    expect(getByTestId('step').textContent).toBe('identity');
+    fireEvent.click(getByTestId('prev'));
+    expect(getByTestId('step').textContent).toBe('ready');
   });
 
   it('builds the full tree when all features are on and a configured platform exists', async () => {
@@ -133,19 +173,23 @@ describe('WizardProvider', () => {
     skillsMock = [{ id: 'skill-a' } as StoredSkillResponse];
     usePlatformsHandler([{ id: 'slack', name: 'Slack', isConfigured: true }]);
 
-    const { getByTestId } = renderWizard({ initialStep: 'initial' });
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
 
     await waitFor(() => {
-      expect(getByTestId('steps').textContent).toBe('initial>model>tools>instructions>skills>browser>integrations>end');
+      expect(getByTestId('steps').textContent).toBe(
+        'ready>identity>model>tools>instructions>skills>browser>library>integrations>end',
+      );
     });
 
     const expectedOrder: WizardStep[] = [
-      'initial',
+      'ready',
+      'identity',
       'model',
       'tools',
       'instructions',
       'skills',
       'browser',
+      'library',
       'integrations',
       'end',
     ];
@@ -162,12 +206,13 @@ describe('WizardProvider', () => {
   it('skips a feature step when the matching flag is off (tools off, model on)', async () => {
     featuresMock = { ...DEFAULT_FEATURES, model: true, tools: false };
 
-    const { getByTestId } = renderWizard({ initialStep: 'initial' });
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
     await flushPlatforms();
 
-    expect(getByTestId('steps').textContent).toBe('initial>model>instructions>end');
+    expect(getByTestId('steps').textContent).toBe('ready>identity>model>instructions>library>end');
 
-    fireEvent.click(getByTestId('next')); // initial -> model
+    fireEvent.click(getByTestId('next')); // ready -> identity
+    fireEvent.click(getByTestId('next')); // identity -> model
     expect(getByTestId('step').textContent).toBe('model');
     fireEvent.click(getByTestId('next')); // model -> instructions
     expect(getByTestId('step').textContent).toBe('instructions');
@@ -176,39 +221,39 @@ describe('WizardProvider', () => {
   it('skips a feature step when the matching flag is off (tools on, model off)', async () => {
     featuresMock = { ...DEFAULT_FEATURES, model: false, tools: true };
 
-    const { getByTestId } = renderWizard({ initialStep: 'initial' });
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
     await flushPlatforms();
 
-    expect(getByTestId('steps').textContent).toBe('initial>tools>instructions>end');
+    expect(getByTestId('steps').textContent).toBe('ready>identity>tools>instructions>library>end');
   });
 
   it('excludes skills when features.skills is on but no skills are available', async () => {
     featuresMock = { ...DEFAULT_FEATURES, skills: true };
     skillsMock = [];
 
-    const { getByTestId } = renderWizard({ initialStep: 'initial' });
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
     await flushPlatforms();
 
-    expect(getByTestId('steps').textContent).toBe('initial>instructions>end');
+    expect(getByTestId('steps').textContent).toBe('ready>identity>instructions>library>end');
   });
 
   it('includes skills when features.skills is on and skills are available', async () => {
     featuresMock = { ...DEFAULT_FEATURES, skills: true };
     skillsMock = [{ id: 'skill-a' } as StoredSkillResponse];
 
-    const { getByTestId } = renderWizard({ initialStep: 'initial' });
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
     await flushPlatforms();
 
-    expect(getByTestId('steps').textContent).toBe('initial>instructions>skills>end');
+    expect(getByTestId('steps').textContent).toBe('ready>identity>instructions>skills>library>end');
   });
 
   it('excludes integrations when no platform is configured', async () => {
     usePlatformsHandler([{ id: 'slack', name: 'Slack', isConfigured: false }]);
 
-    const { getByTestId } = renderWizard({ initialStep: 'initial' });
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
     await waitFor(() => {
       // Platforms query has resolved; nothing should have added `integrations`.
-      expect(getByTestId('steps').textContent).toBe('initial>instructions>end');
+      expect(getByTestId('steps').textContent).toBe('ready>identity>instructions>library>end');
     });
   });
 
@@ -218,9 +263,9 @@ describe('WizardProvider', () => {
       { id: 'discord', name: 'Discord', isConfigured: true },
     ]);
 
-    const { getByTestId } = renderWizard({ initialStep: 'initial' });
+    const { getByTestId } = renderWizard({ initialStep: 'ready' });
     await waitFor(() => {
-      expect(getByTestId('steps').textContent).toBe('initial>instructions>integrations>end');
+      expect(getByTestId('steps').textContent).toBe('ready>identity>instructions>library>integrations>end');
     });
   });
 
@@ -255,16 +300,24 @@ describe('WizardProvider', () => {
       expect(getByTestId('is-last').textContent).toBe('no');
     });
 
-    it('is true on the last user-facing step when starting from initial', async () => {
-      const { getByTestId } = renderWizard({ initialStep: 'initial' });
+    it('is true on the last user-facing step when starting from ready', async () => {
+      const { getByTestId } = renderWizard({ initialStep: 'ready' });
       await flushPlatforms();
 
-      // Tree: initial > instructions > end. instructions is the last user step.
-      expect(getByTestId('step').textContent).toBe('initial');
+      // Tree: ready > identity > instructions > library > end. library is the last user step.
+      expect(getByTestId('step').textContent).toBe('ready');
+      expect(getByTestId('is-last').textContent).toBe('no');
+
+      fireEvent.click(getByTestId('next'));
+      expect(getByTestId('step').textContent).toBe('identity');
       expect(getByTestId('is-last').textContent).toBe('no');
 
       fireEvent.click(getByTestId('next'));
       expect(getByTestId('step').textContent).toBe('instructions');
+      expect(getByTestId('is-last').textContent).toBe('no');
+
+      fireEvent.click(getByTestId('next'));
+      expect(getByTestId('step').textContent).toBe('library');
       expect(getByTestId('is-last').textContent).toBe('yes');
 
       fireEvent.click(getByTestId('next'));
@@ -275,15 +328,17 @@ describe('WizardProvider', () => {
     it('is false on intermediate steps and true only on the final user-facing one', async () => {
       featuresMock = { ...DEFAULT_FEATURES, model: true, tools: true };
 
-      const { getByTestId } = renderWizard({ initialStep: 'initial' });
+      const { getByTestId } = renderWizard({ initialStep: 'ready' });
       await flushPlatforms();
 
-      // Tree: initial > model > tools > instructions > end.
+      // Tree: ready > identity > model > tools > instructions > library > end.
       const order: { step: WizardStep; isLast: 'yes' | 'no' }[] = [
-        { step: 'initial', isLast: 'no' },
+        { step: 'ready', isLast: 'no' },
+        { step: 'identity', isLast: 'no' },
         { step: 'model', isLast: 'no' },
         { step: 'tools', isLast: 'no' },
-        { step: 'instructions', isLast: 'yes' },
+        { step: 'instructions', isLast: 'no' },
+        { step: 'library', isLast: 'yes' },
         { step: 'end', isLast: 'no' },
       ];
 
