@@ -588,7 +588,7 @@ export function ScorerMiniEditor({
                             <Icon size="sm">
                               <AlertCircle />
                             </Icon>
-                            <Txt variant="ui-xs">Error: {String(resultError)}</Txt>
+                            <Txt variant="ui-xs">Error: {resultError.message}</Txt>
                           </div>
                         ) : (
                           <>
