@@ -1,6 +1,7 @@
 'use client';
 
-import { Button, CodeEditor, Label, SideDialog, Txt, toast } from '@mastra/playground-ui';
+import { Button, CodeEditor, Label, Txt, toast } from '@mastra/playground-ui';
+import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { ChevronLeftIcon, ChevronRightIcon, DatabaseIcon, Loader2Icon, TrashIcon } from 'lucide-react';
 import { useState, useCallback, useEffect } from 'react';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
