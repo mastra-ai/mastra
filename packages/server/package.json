@@ -112,6 +112,7 @@
   "license": "Apache-2.0",
   "peerDependencies": {
     "@mastra/core": ">=1.34.0-0 <2.0.0-0",
+    "hono": "^4.0.0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
@@ -151,7 +152,5 @@
   "engines": {
     "node": ">=22.13.0"
   },
-  "dependencies": {
-    "hono": "^4.12.8"
-  }
+  "dependencies": {}
 }
