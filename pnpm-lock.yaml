@@ -1879,8 +1879,8 @@ importers:
   mastracode:
     dependencies:
       '@ai-sdk/anthropic':
-        specifier: ^3.0.76
-        version: 3.0.76(zod@4.4.3)
+        specifier: ^3.0.82
+        version: 3.0.82(zod@4.4.3)
       '@ai-sdk/openai':
         specifier: ^3.0.63
         version: 3.0.63(zod@4.4.3)
@@ -3190,8 +3190,8 @@ importers:
         specifier: ^1.2.12
         version: 1.2.12(zod@4.4.3)
       '@ai-sdk/anthropic-v5':
-        specifier: npm:@ai-sdk/anthropic@2.0.79
-        version: '@ai-sdk/anthropic@2.0.79(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@27.4.0(@noble/hashes@2.0.1)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@4.4.3)'
+        specifier: npm:@ai-sdk/anthropic@2.0.81
+        version: '@ai-sdk/anthropic@2.0.81(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@27.4.0(@noble/hashes@2.0.1)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@4.4.3)'
       '@ai-sdk/google':
         specifier: ^1.2.22
         version: 1.2.22(zod@4.4.3)
@@ -3600,11 +3600,11 @@ importers:
         specifier: npm:@ai-sdk/alibaba@1.0.25
         version: '@ai-sdk/alibaba@1.0.25(zod@4.4.3)'
       '@ai-sdk/anthropic-v5':
-        specifier: npm:@ai-sdk/anthropic@2.0.79
-        version: '@ai-sdk/anthropic@2.0.79(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@27.4.0(@noble/hashes@2.0.1)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@4.4.3)'
+        specifier: npm:@ai-sdk/anthropic@2.0.81
+        version: '@ai-sdk/anthropic@2.0.81(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@27.4.0(@noble/hashes@2.0.1)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@4.4.3)'
       '@ai-sdk/anthropic-v6':
-        specifier: npm:@ai-sdk/anthropic@3.0.76
-        version: '@ai-sdk/anthropic@3.0.76(zod@4.4.3)'
+        specifier: npm:@ai-sdk/anthropic@3.0.82
+        version: '@ai-sdk/anthropic@3.0.82(zod@4.4.3)'
       '@ai-sdk/azure':
         specifier: ^2.0.108
         version: 2.0.108(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@27.4.0(@noble/hashes@2.0.1)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@4.4.3)
@@ -5045,8 +5045,8 @@ importers:
         version: 3.25.1(zod@4.4.3)
     devDependencies:
       '@ai-sdk/anthropic':
-        specifier: ^3.0.76
-        version: 3.0.76(zod@4.4.3)
+        specifier: ^3.0.82
+        version: 3.0.82(zod@4.4.3)
       '@ai-sdk/google':
         specifier: ^3.0.70
         version: 3.0.71(zod@4.4.3)
@@ -8585,8 +8585,14 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/anthropic@3.0.76':
-    resolution: {integrity: sha512-kOuvT9e6PygFvgYpkr4v9gjvmcMPfJp79jaXjeRl9Gpoj2OXdtc3ero7o1ic+tiSBw5IMubxXFO68BCA/axGJA==}
+  '@ai-sdk/anthropic@2.0.81':
+    resolution: {integrity: sha512-0iqx9hZc9xqdhxOdZkYJAKuCs9o+5a86gStYl0M7IBZzmx6jTDrynXiOigDjH3SQrmLclLCspTjW5E6YFrlyHQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      zod: ^3.25.76 || ^4.1.8
+
+  '@ai-sdk/anthropic@3.0.82':
+    resolution: {integrity: sha512-WKKou2wbhGGYV8PSALAPyV2YY4nfCqCPkyBzYtJtDA9yCcIFwsbtkTNgg7bqtLCVzeEsY7wwxRoCWy+EMfrw/A==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -29101,8 +29107,29 @@ snapshots:
       - jsdom
       - typescript
       - vite
+    optional: true
 
-  '@ai-sdk/anthropic@3.0.76(zod@4.4.3)':
+  '@ai-sdk/anthropic@2.0.81(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@27.4.0(@noble/hashes@2.0.1)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@4.4.3)':
+    dependencies:
+      '@ai-sdk/provider': 2.0.3
+      '@ai-sdk/provider-utils': 3.0.25(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.5)(@vitest/ui@4.1.5)(jsdom@27.4.0(@noble/hashes@2.0.1)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.1(@types/node@22.19.15)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@4.4.3)
+      zod: 4.4.3
+    transitivePeerDependencies:
+      - '@edge-runtime/vm'
+      - '@opentelemetry/api'
+      - '@types/node'
+      - '@vitest/browser-playwright'
+      - '@vitest/browser-preview'
+      - '@vitest/browser-webdriverio'
+      - '@vitest/coverage-istanbul'
+      - '@vitest/coverage-v8'
+      - '@vitest/ui'
+      - happy-dom
+      - jsdom
+      - typescript
+      - vite
+
+  '@ai-sdk/anthropic@3.0.82(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 3.0.10
       '@ai-sdk/provider-utils': 4.0.27(zod@4.4.3)
