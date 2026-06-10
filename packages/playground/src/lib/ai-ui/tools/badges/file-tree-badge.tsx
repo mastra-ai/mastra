@@ -2,9 +2,9 @@ import { Badge, Button, CodeEditor, Icon, cn } from '@mastra/playground-ui';
 import { ChevronUpIcon, CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
+import type { DataMessagePart } from '../tool-card';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
-import type { DataMessagePart } from '../tool-card';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 import { useLinkComponent } from '@/lib/framework';
 

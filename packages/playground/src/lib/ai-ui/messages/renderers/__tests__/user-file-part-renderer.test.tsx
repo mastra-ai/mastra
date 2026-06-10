@@ -5,13 +5,15 @@ import { describe, expect, it } from 'vitest';
 
 import { UserFilePartRenderer } from '../user-file-part-renderer';
 
+const v5FilePart = (part: { type: 'file'; mediaType: string; url: string }): FilePart => part as never;
+
 describe('UserFilePartRenderer', () => {
   it('renders an image preview for image mime types', () => {
     const part = {
       type: 'file',
       mimeType: 'image/png',
       data: 'https://example.com/cat.png',
-    } as unknown as FilePart;
+    } satisfies FilePart;
 
     const { container } = render(<UserFilePartRenderer part={part} />);
 
@@ -23,7 +25,7 @@ describe('UserFilePartRenderer', () => {
       type: 'file',
       mimeType: 'application/pdf',
       data: 'https://example.com/doc.pdf',
-    } as unknown as FilePart;
+    } satisfies FilePart;
 
     const { container } = render(<UserFilePartRenderer part={part} />);
 
@@ -39,7 +41,7 @@ describe('UserFilePartRenderer', () => {
       type: 'file',
       mimeType: 'text/plain',
       data: 'just text',
-    } as unknown as FilePart;
+    } satisfies FilePart;
 
     const { container } = render(<UserFilePartRenderer part={part} />);
 
@@ -48,11 +50,11 @@ describe('UserFilePartRenderer', () => {
   });
 
   it('renders an image preview for the V5 streaming shape (mediaType/url)', () => {
-    const part = {
+    const part = v5FilePart({
       type: 'file',
       mediaType: 'image/png',
       url: 'data:image/png;base64,aGVsbG8=',
-    } as unknown as FilePart;
+    });
 
     const { container } = render(<UserFilePartRenderer part={part} />);
 
@@ -60,11 +62,11 @@ describe('UserFilePartRenderer', () => {
   });
 
   it('renders a PDF document preview for the V5 streaming shape (mediaType/url)', () => {
-    const part = {
+    const part = v5FilePart({
       type: 'file',
       mediaType: 'application/pdf',
       url: 'https://example.com/doc.pdf',
-    } as unknown as FilePart;
+    });
 
     const { container } = render(<UserFilePartRenderer part={part} />);
 
@@ -75,11 +77,11 @@ describe('UserFilePartRenderer', () => {
   });
 
   it('falls back to a text document preview for the V5 streaming shape (mediaType/url)', () => {
-    const part = {
+    const part = v5FilePart({
       type: 'file',
       mediaType: 'text/plain',
       url: 'just text',
-    } as unknown as FilePart;
+    });
 
     const { container } = render(<UserFilePartRenderer part={part} />);
 

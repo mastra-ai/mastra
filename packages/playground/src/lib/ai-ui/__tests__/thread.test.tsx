@@ -4,22 +4,32 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter } from 'react-router';
 import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { server } from '@/test/msw-server';
-import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
-import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
+import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
+import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
+import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
+type CapturedBody = Record<string, unknown>;
+
 interface Captured {
   url: string;
-  body: any;
+  body: CapturedBody;
 }
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const captureBody = async (request: Request): Promise<CapturedBody> => {
+  const body: unknown = await request.json();
+  return isRecord(body) ? body : {};
+};
 
 const finishStream = () =>
   new ReadableStream<Uint8Array>({
@@ -165,7 +175,7 @@ describe('Thread', () => {
     server.use(
       ...baseHandlers(),
       http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
-        captured.push({ url: request.url, body: await request.json() });
+        captured.push({ url: request.url, body: await captureBody(request) });
         return sseResponse();
       }),
     );
@@ -195,7 +205,7 @@ describe('Thread', () => {
     server.use(
       ...baseHandlers(),
       http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
-        captured.push({ url: request.url, body: await request.json() });
+        captured.push({ url: request.url, body: await captureBody(request) });
         return sseResponse();
       }),
     );

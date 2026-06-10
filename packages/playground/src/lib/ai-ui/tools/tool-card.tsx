@@ -7,7 +7,6 @@ import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
-import { useChatSend } from '@/lib/ai-ui/chat/chat-context';
 import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
 import {
   isBrowserTool,
@@ -19,6 +18,7 @@ import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result'
 import { useMcpAppTools } from '@/domains/mcps/hooks';
 import { WorkflowRunProvider } from '@/domains/workflows';
 import { WORKSPACE_TOOLS } from '@/domains/workspace/constants';
+import { useChatSend } from '@/lib/ai-ui/chat/chat-context';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 /**

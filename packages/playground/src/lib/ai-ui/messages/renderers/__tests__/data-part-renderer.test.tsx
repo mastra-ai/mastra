@@ -10,7 +10,7 @@ describe('DataPartRenderer', () => {
     const part = {
       type: 'data-signal',
       data: { type: 'state', contents: 'signal body', metadata: { state: { id: 'cart' } } },
-    } as unknown as DataPart;
+    } satisfies DataPart;
 
     render(<DataPartRenderer part={part} />);
 
@@ -18,7 +18,7 @@ describe('DataPartRenderer', () => {
   });
 
   it('renders nothing for a non-signal data part', () => {
-    const part = { type: 'data-other', data: { foo: 'bar' } } as unknown as DataPart;
+    const part = { type: 'data-other', data: { foo: 'bar' } } satisfies DataPart;
 
     const { container } = render(<DataPartRenderer part={part} />);
 
@@ -26,7 +26,7 @@ describe('DataPartRenderer', () => {
   });
 
   it('renders nothing when the signal data is not a recognized signal shape', () => {
-    const part = { type: 'data-signal', data: { type: 'unknown' } } as unknown as DataPart;
+    const part = { type: 'data-signal', data: { type: 'unknown' } } satisfies DataPart;
 
     const { container } = render(<DataPartRenderer part={part} />);
 

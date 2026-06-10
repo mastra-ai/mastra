@@ -1,10 +1,10 @@
+import { Notice } from '@mastra/playground-ui';
 import type {
   ErrorRendererProps,
   MessageStatusRenderers,
   TripwireRendererProps,
   WarningRendererProps,
 } from '@mastra/react';
-import { Notice } from '@mastra/playground-ui';
 
 import { TripwireNotice } from '../tripwire-notice';
 

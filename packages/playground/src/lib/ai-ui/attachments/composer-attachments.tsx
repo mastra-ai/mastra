@@ -3,17 +3,6 @@ import { fileToBase64, getFileContentType } from '@mastra/playground-ui';
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
-/**
- * Local composer-attachment state, replacing the assistant-ui
- * `ComposerPrimitive.Attachments` / `AttachmentPrimitive` / `useAttachment` /
- * `useComposerRuntime` attachment surface.
- *
- * `Composer` mounts the provider; the previews row, the add-file dialog, and the
- * send button all read this single state. On send the attachments are converted
- * to `CoreUserMessage[]` (image / file / text) exactly like the old
- * `convertToAIAttachments` in `MastraRuntimeProvider`.
- */
-
 export type ComposerAttachmentKind = 'image' | 'pdf' | 'text';
 
 export interface ComposerAttachment {
@@ -68,11 +57,6 @@ const toAttachment = (file: File): ComposerAttachment => {
   };
 };
 
-/**
- * Convert a single composer attachment into a `CoreUserMessage`, mirroring the
- * old assistant-ui runtime conversion (image → image part, pdf → file part,
- * text → plain string content). URL attachments forward the URL as the data.
- */
 const attachmentToCoreUserMessage = async (att: ComposerAttachment): Promise<CoreUserMessage> => {
   if (att.kind === 'image') {
     return {
@@ -120,9 +104,7 @@ export const ComposerAttachmentsProvider = ({ children }: { children: ReactNode 
 
   const addUrl = useCallback(async (url: string) => {
     const contentType = (await getFileContentType(url)) ?? 'application/octet-stream';
-    // assistant-ui only accepted real files, so the old code passed the URL as
-    // the filename of an empty File. We keep that shape so conversion can detect
-    // URL attachments via the `https://` name prefix.
+    // URL attachments are represented by an empty File named with the URL.
     const file = new File([], url, { type: contentType });
     setAttachments(prev => [...prev, toAttachment(file)]);
   }, []);

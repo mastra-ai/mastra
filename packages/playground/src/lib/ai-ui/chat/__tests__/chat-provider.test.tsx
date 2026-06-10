@@ -3,22 +3,32 @@ import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter } from 'react-router';
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { server } from '@/test/msw-server';
-import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
-import { ChatProvider } from '../chat-provider';
 import { useChatRunning, useChatSend } from '../chat-context';
+import { ChatProvider } from '../chat-provider';
+import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
+import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
+type CapturedBody = Record<string, unknown>;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
 interface Captured {
   url: string;
-  body: any;
+  body: CapturedBody;
 }
+
+const captureBody = async (request: Request): Promise<CapturedBody> => {
+  const body: unknown = await request.json();
+  return isRecord(body) ? body : {};
+};
 
 /** Streams a single `finish` SSE event then closes, so useChat completes cleanly. */
 const finishStream = () =>
@@ -100,7 +110,7 @@ describe('ChatProvider', () => {
     server.use(
       ...baseHandlers(captured),
       http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
-        captured.push({ url: request.url, body: await request.json() });
+        captured.push({ url: request.url, body: await captureBody(request) });
         return sseResponse();
       }),
     );
@@ -126,7 +136,8 @@ describe('ChatProvider', () => {
 
     expect(captured).toHaveLength(1);
     expect(captured[0].body.maxSteps).toBe(7);
-    expect(captured[0].body.modelSettings.temperature).toBe(0.4);
+    const modelSettings = captured[0].body.modelSettings;
+    expect(isRecord(modelSettings) ? modelSettings.temperature : undefined).toBe(0.4);
     const serialized = JSON.stringify(captured[0].body.messages ?? []);
     expect(serialized).toContain('Hello agent');
   });
@@ -136,7 +147,7 @@ describe('ChatProvider', () => {
     server.use(
       ...baseHandlers(captured),
       http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
-        captured.push({ url: request.url, body: await request.json() });
+        captured.push({ url: request.url, body: await captureBody(request) });
         return sseResponse();
       }),
     );
@@ -162,9 +173,9 @@ describe('ChatProvider', () => {
     });
 
     expect(captured).toHaveLength(1);
-    const ctx = captured[0].body.requestContext ?? {};
-    expect(ctx.agentVersionId).toBe('v-42');
-    expect(ctx.tenant).toBe('acme');
+    const ctx = captured[0].body.requestContext;
+    expect(isRecord(ctx) ? ctx.agentVersionId : undefined).toBe('v-42');
+    expect(isRecord(ctx) ? ctx.tenant : undefined).toBe('acme');
   });
 
   it('routes to the generate endpoint when chatWithGenerate is set', async () => {
@@ -172,7 +183,7 @@ describe('ChatProvider', () => {
     server.use(
       ...baseHandlers(captured),
       http.post(`${BASE_URL}/api/agents/agent-1/generate`, async ({ request }) => {
-        captured.push({ url: request.url, body: await request.json() });
+        captured.push({ url: request.url, body: await captureBody(request) });
         return HttpResponse.json({ text: 'ok', response: { messages: [] } });
       }),
     );
@@ -232,12 +243,12 @@ describe('ChatProvider', () => {
     server.use(
       ...baseHandlers(captured),
       http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
-        captured.push({ url: request.url, body: await request.json() });
+        captured.push({ url: request.url, body: await captureBody(request) });
         return sseResponse();
       }),
       // Signal-mode route fallback so an unhandled request never fails the test.
       http.post(`${BASE_URL}/api/agents/agent-1/stream/signal`, async ({ request }) => {
-        captured.push({ url: request.url, body: await request.json() });
+        captured.push({ url: request.url, body: await captureBody(request) });
         return sseResponse();
       }),
     );

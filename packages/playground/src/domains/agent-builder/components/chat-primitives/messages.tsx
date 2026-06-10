@@ -37,17 +37,17 @@ import {
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';
+import type { MessageMetadata } from '../../../../lib/ai-ui/messages/message-metadata';
+import { MessageText } from '../../../../lib/ai-ui/messages/renderers/message-text';
+import {
+  WarningStatusRenderer,
+  TripwireStatusRenderer,
+} from '../../../../lib/ai-ui/messages/renderers/status-renderers';
 import { useAgentPrimitives } from '../../contexts/agent-primitives-context';
 import { useStreamApproval, useStreamRetry } from '../../contexts/stream-chat-context';
 import { useAvailableAgentTools } from '../../hooks/use-available-agent-tools';
 import { parseStreamErrorText } from './parse-stream-error';
 import type { ParsedStreamError } from './parse-stream-error';
-import { MessageText } from '../../../../lib/ai-ui/messages/renderers/message-text';
-import type { MessageMetadata } from '../../../../lib/ai-ui/messages/message-metadata';
-import {
-  WarningStatusRenderer,
-  TripwireStatusRenderer,
-} from '../../../../lib/ai-ui/messages/renderers/status-renderers';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import {
   SET_AGENT_BROWSER_ENABLED_TOOL_NAME,

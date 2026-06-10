@@ -8,8 +8,8 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MessageRow } from '../message-row';
 import { DatasetSaveProvider } from '../../context/dataset-save-context';
+import { MessageRow } from '../message-row';
 import { ToolCallProvider } from '@/services/tool-call-provider';
 import { server } from '@/test/msw-server';
 

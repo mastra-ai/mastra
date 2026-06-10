@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { render } from '@testing-library/react';
 import type { MastraDBMessage } from '@mastra/react';
+import { render } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { messageStatusRenderers } from '../status-renderers';
 
@@ -9,7 +9,7 @@ const message = {
   role: 'assistant',
   createdAt: new Date(),
   content: { format: 2, parts: [] },
-} as unknown as MastraDBMessage;
+} satisfies MastraDBMessage;
 
 describe('messageStatusRenderers', () => {
   it('renders the error notice', () => {
@@ -28,7 +28,7 @@ describe('messageStatusRenderers', () => {
 
   it('forwards tripwire metadata to the tripwire notice', () => {
     const Tripwire = messageStatusRenderers.Tripwire!;
-    const { getByText } = render(<>{Tripwire({ text: 'blocked', tripwire: { processorId: 'guard' }, message })}</>);
+    const { getByText } = render(<>{Tripwire({ text: 'blocked', tripwire: { processorId: 'guard', reason: 'blocked' }, message })}</>);
     expect(getByText('blocked')).not.toBeNull();
   });
 });

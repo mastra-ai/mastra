@@ -28,7 +28,7 @@ describe('DynamicToolPartRenderer', () => {
       state: 'output-available',
       input: { q: 'x' },
       output: { ok: true },
-    } as unknown as DynamicToolPart;
+    } satisfies DynamicToolPart;
 
     const metadata: MessageMetadata = { mode: 'stream' };
     const dataParts = [{ type: 'data-foo', data: {}, toolCallId: 'dyn-1' }];
@@ -52,7 +52,7 @@ describe('DynamicToolPartRenderer', () => {
       type: 'tool-weather',
       toolCallId: 'dyn-2',
       state: 'output-available',
-    } as unknown as DynamicToolPart;
+    } satisfies DynamicToolPart;
 
     render(<DynamicToolPartRenderer part={part} />);
 
@@ -62,7 +62,7 @@ describe('DynamicToolPartRenderer', () => {
   it('falls back to an empty toolCallId when none is provided', () => {
     toolCardProps.mockClear();
 
-    const part = { type: 'tool-noid', toolName: 'noid' } as unknown as DynamicToolPart;
+    const part = { type: 'tool-noid', toolName: 'noid' } satisfies DynamicToolPart;
 
     render(<DynamicToolPartRenderer part={part} />);
 

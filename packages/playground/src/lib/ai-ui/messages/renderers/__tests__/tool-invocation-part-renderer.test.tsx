@@ -33,7 +33,7 @@ describe('ToolInvocationPartRenderer', () => {
         args: { query: 'hello' },
         result: { hits: 3 },
       },
-    } as unknown as ToolInvocationPart;
+    } satisfies ToolInvocationPart;
 
     const metadata: MessageMetadata = { mode: 'stream' };
     const dataParts = [{ type: 'data-foo', data: { a: 1 }, toolCallId: 'call-1' }];
@@ -56,8 +56,8 @@ describe('ToolInvocationPartRenderer', () => {
 
     const part = {
       type: 'tool-invocation',
-      toolInvocation: { toolName: 'noop', toolCallId: 'call-2', state: 'call' },
-    } as unknown as ToolInvocationPart;
+      toolInvocation: { toolName: 'noop', toolCallId: 'call-2', state: 'call', args: undefined },
+    } satisfies ToolInvocationPart;
 
     render(<ToolInvocationPartRenderer part={part} />);
 
