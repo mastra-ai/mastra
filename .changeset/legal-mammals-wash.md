@@ -1,5 +1,5 @@
 ---
-'@mastra/playground-ui': major
+'@mastra/playground-ui': patch
 ---
 
 Removed three rarely-used components from the root barrel export. `SettingsRow`, `PrevNextNav`, and `MetricsKpiCard` must now be imported from their per-component entrypoints (added in v33.1):
