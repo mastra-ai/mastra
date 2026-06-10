@@ -74,7 +74,11 @@ function quoteClickhouseString(value: string): string {
  * contain nested parentheses — true for every engine currently emitted by
  * Mastra (see TABLE_ENGINES in db/utils.ts) and for every v-next DDL. If a
  * future engine uses nested parens (e.g. `ReplacingMergeTree(ver, CAST(...))`),
- * this parser must be extended.
+ * this parser must be extended. As a defensive measure we balance-check the
+ * captured args and bail out (returning null) on a mismatch so the rewriter
+ * leaves the original engine clause untouched — invalid DDL surfaces at
+ * ClickHouse parse time with the real engine instead of a silently-corrupted
+ * rewrite.
  */
 function getEngineNameAndArgs(engine: string): { name: string; args: string } | null {
   const trimmed = engine.trim();
@@ -82,7 +86,21 @@ function getEngineNameAndArgs(engine: string): { name: string; args: string } | 
   if (!match) return null;
   const name = match[1];
   if (!name) return null;
-  return { name, args: match[2]?.trim() ?? '' };
+  const args = match[2]?.trim() ?? '';
+  if (args && !hasBalancedParens(args)) return null;
+  return { name, args };
+}
+
+function hasBalancedParens(s: string): boolean {
+  let depth = 0;
+  for (const c of s) {
+    if (c === '(') depth++;
+    else if (c === ')') {
+      depth--;
+      if (depth < 0) return false;
+    }
+  }
+  return depth === 0;
 }
 
 export function buildReplicatedTableEngine(engine: string, replication?: ClickhouseReplicationConfig): string {

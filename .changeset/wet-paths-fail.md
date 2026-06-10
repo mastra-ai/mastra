@@ -17,3 +17,9 @@ new ClickhouseStoreVNext({
   },
 })
 ```
+
+Notes:
+
+- If existing Mastra tables use local `MergeTree` or `ReplacingMergeTree` engines, initialization fails. Migrate existing local tables to `Replicated*` engines before enabling `replication`.
+- vNext observability signal-table migrations (`migrateSpans()`) are blocked while `replication` is configured. Migrate legacy signal tables before turning on replication.
+- The default `zookeeperPath` is `/clickhouse/tables/{shard}/{database}/{table}`. Override it if your cluster uses a different convention.

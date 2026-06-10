@@ -92,9 +92,31 @@ describe('ClickHouse replication helpers', () => {
     );
   });
 
-  it('is idempotent when ON CLUSTER is already present', () => {
-    const sql = "CREATE TABLE mastra_threads ON CLUSTER 'cluster-a' (id String)";
-    expect(addOnClusterToDDL(sql, { cluster: 'cluster-a' })).toBe(sql);
+  it('rewrites engines with balanced nested parentheses correctly', () => {
+    // The parser captures everything between the outer `(` and the trailing `)`,
+    // so a nested function call in the version expression rides along intact.
+    // This is the current behavior; the balanced-paren guard in
+    // getEngineNameAndArgs would only kick in if a future caller fed us a
+    // truly malformed engine string with an unbalanced trailing paren.
+    expect(buildReplicatedTableEngine('ReplacingMergeTree(toUInt64(updatedAt))', { cluster: 'c' })).toBe(
+      "ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/{database}/{table}', '{replica}', toUInt64(updatedAt))",
+    );
+  });
+
+  it.each([
+    ['CREATE TABLE', "CREATE TABLE mastra_t ON CLUSTER 'c' (id String)"],
+    ['CREATE MATERIALIZED VIEW', "CREATE MATERIALIZED VIEW mastra_mv ON CLUSTER 'c' TO mastra_t AS SELECT 1"],
+    ['ALTER TABLE', "ALTER TABLE mastra_t ON CLUSTER 'c' ADD COLUMN IF NOT EXISTS x String"],
+    ['DROP TABLE', "DROP TABLE IF EXISTS mastra_t ON CLUSTER 'c'"],
+    ['DROP VIEW', "DROP VIEW IF EXISTS mastra_mv ON CLUSTER 'c'"],
+    ['TRUNCATE TABLE', "TRUNCATE TABLE mastra_t ON CLUSTER 'c'"],
+    ['OPTIMIZE TABLE', "OPTIMIZE TABLE mastra_t ON CLUSTER 'c' FINAL"],
+    ['SYSTEM REFRESH VIEW', "SYSTEM REFRESH VIEW mastra_mv ON CLUSTER 'c'"],
+    ['SYSTEM WAIT VIEW', "SYSTEM WAIT VIEW mastra_mv ON CLUSTER 'c'"],
+    ['SYSTEM STOP MERGES', "SYSTEM STOP MERGES mastra_t ON CLUSTER 'c'"],
+    ['SYSTEM START MERGES', "SYSTEM START MERGES mastra_t ON CLUSTER 'c'"],
+  ])('addOnClusterToDDL is idempotent for %s', (_label, sql) => {
+    expect(addOnClusterToDDL(sql, { cluster: 'c' })).toBe(sql);
   });
 
   it('rewrites table DDL engines and cluster together', () => {
