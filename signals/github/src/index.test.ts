@@ -435,9 +435,14 @@ describe('GithubSignals', () => {
     await tools.github_subscribe_pr!.execute({ owner: 'mastra-ai', repo: 'mastra', number: 17439 }, toolContext);
     await tools.github_unsubscribe_pr!.execute({ owner: 'mastra-ai', repo: 'mastra', number: 17439 }, toolContext);
 
-    expect(threadStore.getThreadById).toHaveBeenCalledWith({ threadId: explicitThread.id, resourceId: explicitThread.resourceId });
+    expect(threadStore.getThreadById).toHaveBeenCalledWith({
+      threadId: explicitThread.id,
+      resourceId: explicitThread.resourceId,
+    });
     expect(threadStore.saveThread).toHaveBeenCalledWith(
-      expect.objectContaining({ thread: expect.objectContaining({ id: explicitThread.id, resourceId: explicitThread.resourceId }) }),
+      expect.objectContaining({
+        thread: expect.objectContaining({ id: explicitThread.id, resourceId: explicitThread.resourceId }),
+      }),
     );
     expect((explicitThread.metadata?.mastra as any)[GITHUB_SIGNALS_METADATA_KEY].subscriptions).toEqual([]);
     expect((capturedThread.metadata?.mastra as any)?.[GITHUB_SIGNALS_METADATA_KEY]?.subscriptions).toBeUndefined();
