@@ -111,7 +111,7 @@ SQL
 SSE
 STS
 STT
-Supabase
+(?i)Supabase
 Svelte
 SvelteKit
 Swagger
