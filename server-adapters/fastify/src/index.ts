@@ -628,6 +628,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         taskStore: request.taskStore,
         abortSignal: request.abortSignal,
         routePrefix: prefix,
+        request: toWebRequest(request),
       };
 
       // Check route permission requirement (EE feature)

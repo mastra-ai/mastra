@@ -538,19 +538,18 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           taskStore: res.locals.taskStore,
           abortSignal: res.locals.abortSignal,
           routePrefix: prefix,
+          request: toWebRequest(req),
         };
 
         // Check route permission requirement (EE feature)
         // Uses convention-based permission derivation: permissions are auto-derived
         // from route path/method unless explicitly set or route is public
-        const requestContext = res.locals.requestContext;
-        // Check if any auth is configured (studio or server) for RBAC
-        const hasAuth = this.mastra.getStudio()?.auth || this.mastra.getServer()?.auth;
-        if (hasAuth) {
+        const authConfig = this.mastra.getServer()?.auth;
+        if (authConfig) {
           const hasPermission = await loadHasPermission();
           if (hasPermission) {
-            const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
+            const userPermissions = res.locals.requestContext.get('mastra__userPermissions') as string[] | undefined;
+            const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
 
             if (permissionError) {
               return res.status(permissionError.status).json({
@@ -562,7 +561,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         }
 
         // Check FGA authorization (EE feature)
-        const fgaError = await checkRouteFGA(this.mastra, route, requestContext, {
+        const fgaError = await checkRouteFGA(this.mastra, route, res.locals.requestContext, {
           ...params.urlParams,
           ...params.queryParams,
           ...(typeof params.body === 'object' ? params.body : {}),
@@ -652,19 +651,12 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             }
           }
 
-          const requestContext = res.locals.requestContext;
-          // Check if any auth is configured (studio or server) for RBAC
-          const hasAuth = this.mastra.getStudio()?.auth || this.mastra.getServer()?.auth;
-          if (hasAuth) {
+          const authConfig = this.mastra.getServer()?.auth;
+          if (authConfig) {
             const hasPermission = await loadHasPermission();
             if (hasPermission) {
-              const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-              const permissionError = this.checkRoutePermission(
-                serverRoute,
-                userPermissions,
-                hasPermission,
-                requestContext,
-              );
+              const userPermissions = res.locals.requestContext.get('mastra__userPermissions') as string[] | undefined;
+              const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
               if (permissionError) {
                 return res.status(permissionError.status).json({
                   error: permissionError.error,
