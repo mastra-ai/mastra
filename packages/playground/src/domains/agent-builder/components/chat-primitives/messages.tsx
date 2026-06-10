@@ -8,6 +8,7 @@ import {
   CollapsibleTrigger,
   Icon,
   MarkdownRenderer,
+  Shimmer,
   Skeleton,
   Txt,
 } from '@mastra/playground-ui';
@@ -42,7 +43,6 @@ import { useStreamApproval, useStreamRetry } from '../../contexts/stream-chat-co
 import { useAvailableAgentTools } from '../../hooks/use-available-agent-tools';
 import { parseStreamErrorText } from './parse-stream-error';
 import type { ParsedStreamError } from './parse-stream-error';
-import { Shimmer } from './shimmer';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import {
   SET_AGENT_BROWSER_ENABLED_TOOL_NAME,
@@ -328,20 +328,6 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
         )
       )}
     </Card>
-  );
-};
-
-export const PendingIndicator = () => {
-  return (
-    <Txt
-      variant="ui-md"
-      className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%] flex items-center gap-2"
-      as="div"
-      data-testid="agent-builder-chat-pending"
-    >
-      <Loader2 className="animate-spin size-4 text-neutral3" />
-      <Shimmer>Thinking…</Shimmer>
-    </Txt>
   );
 };
 
