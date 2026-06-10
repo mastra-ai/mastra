@@ -37,5 +37,9 @@ export const omSettingsScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Observational Memory Settings/i, terminal);
     await runtime.waitForScreenText(/Caveman observations\s+On/i, terminal);
     runtime.printScreen('after om reopen', terminal);
+
+    terminal.keyCtrlC();
+    await runtime.sleep(300);
+    runtime.printScreen('after Ctrl-C', terminal);
   },
 };
