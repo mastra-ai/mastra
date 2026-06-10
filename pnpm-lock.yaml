@@ -1851,7 +1851,7 @@ importers:
   integrations/tavily:
     dependencies:
       '@tavily/core':
-        specifier: ^0.7.3
+        specifier: ^0.7.5
         version: 0.7.5
     devDependencies:
       '@internal/lint':
