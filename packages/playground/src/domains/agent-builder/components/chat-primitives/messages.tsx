@@ -8,10 +8,10 @@ import {
   CollapsibleTrigger,
   Icon,
   MarkdownRenderer,
-  Shimmer,
   Skeleton,
   Txt,
 } from '@mastra/playground-ui';
+import { Shimmer } from '@mastra/playground-ui/components/Shimmer';
 import { MessageFactory } from '@mastra/react';
 import type {
   MastraDBMessageMetadata,
