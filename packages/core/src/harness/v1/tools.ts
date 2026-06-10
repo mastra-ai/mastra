@@ -179,7 +179,10 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
     task_write: createTool({
       id: 'task_write',
       description: 'Replace the task list for the current harness session.',
-      inputSchema: z.object({ tasks: z.array(taskSchema).min(1) }),
+      // No `.min(1)`: an empty array is the documented way to clear the task
+      // list (legacy product contract; the TUI renders a "Tasks cleared"
+      // transition for it).
+      inputSchema: z.object({ tasks: z.array(taskSchema) }),
       execute: async ({ tasks }, context) => {
         try {
           assertOwningSession(session, context);
