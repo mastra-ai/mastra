@@ -7,10 +7,12 @@ import { Observability, DefaultExporter, SensitiveDataFilter } from '@mastra/obs
 import { SlackProvider } from '@mastra/slack';
 import { StagehandBrowser } from '@mastra/stagehand';
 
+import { initWorkOS } from './auth';
 import { getEnv, hasEnv, requireEnterpriseLicense } from './env';
 import { workspace } from './workspace';
 
 requireEnterpriseLicense();
+const workos = await initWorkOS();
 
 const storage = new LibSQLStore({
   id: 'mastra-storage',
@@ -101,6 +103,13 @@ export const mastra = new Mastra({
   },
   bundler: {
     sourcemap: true,
+  },
+  server: {
+    auth: workos.mastraAuth,
+    rbac: workos.rbacProvider,
+    build: {
+      swaggerUI: true,
+    },
   },
   ...(hasSlack
     ? {

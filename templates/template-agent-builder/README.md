@@ -5,6 +5,7 @@ A minimal [Mastra](https://mastra.ai) Agent Builder template with safe defaults.
 ## Features
 
 - Agent Builder enabled by default
+- WorkOS AuthKit authentication and WorkOS-backed RBAC permissions
 - Local filesystem workspace at `.mastra/workspace`
 - No starter agents, tools, or workflows
 - Observational memory enabled for builder-created agents
@@ -15,6 +16,7 @@ A minimal [Mastra](https://mastra.ai) Agent Builder template with safe defaults.
 - Node.js 22.13 or newer
 - An OpenAI API key
 - A valid `MASTRA_EE_LICENSE` for Agent Builder
+- WorkOS AuthKit credentials for authentication/RBAC
 
 ## Quickstart
 
@@ -27,6 +29,8 @@ A minimal [Mastra](https://mastra.ai) Agent Builder template with safe defaults.
    Copy `.env.example` to `.env`, then set:
    - `MASTRA_EE_LICENSE` — required; the template fails fast if it is missing or shorter than 32 characters.
    - `OPENAI_API_KEY` — required for builder-created agents that use the default OpenAI model.
+   - `WORKOS_API_KEY`, `WORKOS_CLIENT_ID`, and `WORKOS_COOKIE_PASSWORD` — required for AuthKit login and RBAC. The cookie password must be at least 32 characters.
+   - `WORKOS_REDIRECT_URI` — defaults to `http://localhost:4111/api/auth/callback`.
 
 3. **Start Mastra**
    ```bash
@@ -50,7 +54,8 @@ Git credentials are not needed for the default template. The workspace uses the 
 
 Edit the files under `src/mastra` to add your own resources and adjust the setup:
 
-- `index.ts` configures Mastra, Agent Builder, and optional providers.
+- `index.ts` configures Mastra, Agent Builder, auth/RBAC, and optional providers.
+- `auth.ts` configures WorkOS AuthKit and role-to-permission mappings.
 - `workspace.ts` configures the local filesystem workspace.
 - `env.ts` contains the environment variable helpers and license guard.
 
