@@ -22,7 +22,7 @@ export const LLMModels = ({
   value,
   onValueChange,
   llmId,
-  variant = 'default',
+  variant,
   size = 'default',
   className,
   open,

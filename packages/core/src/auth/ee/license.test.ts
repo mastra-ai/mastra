@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   isDevEnvironment,
   isEEEnabled,
@@ -6,6 +6,7 @@ import {
   isLicenseValid,
   validateLicense,
   clearLicenseCache,
+  warnIfDevEENeedsLicense,
 } from './license';
 
 describe('license', () => {
@@ -27,6 +28,7 @@ describe('license', () => {
     else delete process.env['MASTRA_DEV'];
     if (originalLicense !== undefined) process.env['MASTRA_EE_LICENSE'] = originalLicense;
     else delete process.env['MASTRA_EE_LICENSE'];
+    vi.restoreAllMocks();
   });
 
   describe('validateLicense', () => {
@@ -150,6 +152,55 @@ describe('license', () => {
       delete process.env['MASTRA_DEV'];
       process.env['NODE_ENV'] = 'production';
       expect(isEEEnabled()).toBe(false);
+    });
+  });
+
+  describe('warnIfDevEENeedsLicense', () => {
+    it('should warn in dev without a valid license', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      delete process.env['MASTRA_EE_LICENSE'];
+      delete process.env['MASTRA_DEV'];
+      process.env['NODE_ENV'] = 'development';
+
+      warnIfDevEENeedsLicense();
+
+      expect(warn).toHaveBeenCalledWith(
+        '[mastra/auth-ee] Mastra Enterprise features are enabled for local development, but no valid MASTRA_EE_LICENSE is configured. These features will be disabled in production without a valid license. Contact us to get a production license: https://mastra.ai/contact',
+      );
+    });
+
+    it('should warn only once across repeated calls', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      delete process.env['MASTRA_EE_LICENSE'];
+      delete process.env['MASTRA_DEV'];
+      process.env['NODE_ENV'] = 'development';
+
+      warnIfDevEENeedsLicense();
+      warnIfDevEENeedsLicense();
+
+      expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not warn in production without a license', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      delete process.env['MASTRA_EE_LICENSE'];
+      delete process.env['MASTRA_DEV'];
+      process.env['NODE_ENV'] = 'production';
+
+      warnIfDevEENeedsLicense();
+
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('should not warn in dev with a valid license', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      process.env['MASTRA_EE_LICENSE'] = 'a'.repeat(32);
+      delete process.env['MASTRA_DEV'];
+      process.env['NODE_ENV'] = 'development';
+
+      warnIfDevEENeedsLicense();
+
+      expect(warn).not.toHaveBeenCalled();
     });
   });
 });

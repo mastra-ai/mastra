@@ -16,6 +16,7 @@ const {
   hasAnyPermission,
   hasPermission,
   useStoredAgentMutations,
+  useStoredAgentDependents,
   useCreateSkill,
   useUpdateSkill,
   useDefaultVisibility,
@@ -33,6 +34,7 @@ const {
   hasAnyPermission: vi.fn(),
   hasPermission: vi.fn(),
   useStoredAgentMutations: vi.fn(),
+  useStoredAgentDependents: vi.fn(),
   useCreateSkill: vi.fn(),
   useUpdateSkill: vi.fn(),
   useDefaultVisibility: vi.fn(() => 'private'),
@@ -93,7 +95,7 @@ vi.mock('@/domains/auth/hooks/use-permissions', () => ({
 }));
 
 vi.mock('@/domains/auth/hooks/use-default-visibility', () => ({ useDefaultVisibility }));
-vi.mock('@/domains/agents/hooks/use-stored-agents', () => ({ useStoredAgentMutations }));
+vi.mock('@/domains/agents/hooks/use-stored-agents', () => ({ useStoredAgentMutations, useStoredAgentDependents }));
 vi.mock('@/domains/agents/hooks/use-create-skill', () => ({ useCreateSkill }));
 vi.mock('@/domains/agents/hooks/use-update-skill', () => ({ useUpdateSkill }));
 vi.mock('@/domains/llm', () => ({
@@ -206,6 +208,7 @@ beforeEach(() => {
   useStoredAgentMutations.mockReturnValue({
     updateStoredAgent: { mutateAsync: vi.fn().mockResolvedValue({ id: 'agent-id' }), isPending: false },
   });
+  useStoredAgentDependents.mockReturnValue({ isLoading: false });
   useCreateSkill.mockReturnValue({ mutateAsync: vi.fn().mockResolvedValue({ id: 'skill-new' }), isPending: false });
   useUpdateSkill.mockReturnValue({ mutateAsync: vi.fn().mockResolvedValue({ id: 'skill-id' }), isPending: false });
   llmProvidersState.data = undefined;

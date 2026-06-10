@@ -80,7 +80,7 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "dependencies": {
-    "@arcadeai/arcadejs": "^2.3.0",
+    "@arcadeai/arcadejs": "^2.4.1",
     "@composio/core": "^0.6.5",
     "@composio/mastra": "^0.6.5",
     "@mastra/memory": "workspace:*",
