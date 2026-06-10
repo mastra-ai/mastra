@@ -192,6 +192,14 @@ const replayed = await dataset.startExperiment({
 })
 ```
 
+:::warning
+
+With `'passthrough'`, unmatched calls run against the real world, including writes. Avoid it for agents with side-effecting tools unless every write is recorded.
+
+:::
+
+An item with no recording at all fails with `TOOL_REPLAY_NO_RECORDING` regardless of `onMiss`: replay never runs an item silently live. This also applies when the source trace was purged or not yet flushed. When using `fromExperimentId` with inline data, give items explicit `id`s; auto-generated ids change between runs and never match the prior experiment's results.
+
 ### Divergence report
 
 Every replayed item result carries a `toolReplay` report describing how the run differed from the recording:
@@ -208,6 +216,8 @@ console.log(report.argMismatches) // replayed calls whose args differed from the
 For stored results, the report is merged into the item's `output` after scoring, so it is available from [`listExperimentResults()`](/reference/datasets/listExperimentResults). Scorers never see it: the output they evaluate stays free of replay metadata, so replay runs score the same way as baseline runs.
 
 Treat divergence as a trust signal for scores. An entry in `argMismatches` means the agent received a re-paired recorded observation: matching is per-tool and ordered, so the replayed output came from a call whose original arguments differed. A `passthrough` miss means a live observation entered the run. In either case, inspect the report before trusting the item's scores.
+
+The report also carries two recording-quality signals: `redactedPayloadCount` counts recorded payloads containing the sensitive-data redaction marker (the agent received `[REDACTED]` values), and `staleRecording` is `true` when the recording came from an older version of the dataset item than the one being replayed.
 
 `toolReplay` is also available through the experiment trigger API: pass it in the body of `POST /api/datasets/:datasetId/experiments` alongside `targetType` and `targetId`.
 

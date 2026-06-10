@@ -298,7 +298,10 @@ describe('tool replay integration', () => {
     expect(report?.misses).toEqual([{ toolName: 'lookup', action: 'passthrough', input: { key: 'second' } }]);
   });
 
-  it('reports every call as a miss when the item has no recording', async () => {
+  it('fails the item when no recording resolves — never runs silently live', async () => {
+    // Even with onMiss: 'passthrough', a missing recording must not silently
+    // execute the whole run live while reporting success. If live execution
+    // is wanted, run without toolReplay.
     const summary = await runExperiment(mastra, {
       data: [{ id: 'item-without-recording', input: 'Look up first and second' }],
       targetType: 'agent',
@@ -306,14 +309,70 @@ describe('tool replay integration', () => {
       toolReplay: { onMiss: 'passthrough' },
     });
 
-    expect(summary.succeededCount).toBe(1);
-    expect(liveExecute).toHaveBeenCalledTimes(2);
-    expect(summary.results[0]?.toolReplay).toMatchObject({
-      sourceTraceId: null,
-      totalRecorded: 0,
-      replayedCount: 0,
+    expect(summary.failedCount).toBe(1);
+    expect(liveExecute).not.toHaveBeenCalled();
+    const result = summary.results[0]!;
+    expect(result.error?.code).toBe('TOOL_REPLAY_NO_RECORDING');
+    expect(result.error?.message).toContain('explicit ids');
+  });
+
+  it('fails the item when the source trace was purged or never flushed', async () => {
+    const summary = await runExperiment(mastra, {
+      data: [{ id: 'item-1', input: 'Look up first and second', replayTraceId: 'purged-trace' }],
+      targetType: 'agent',
+      targetId: 'replay-test-agent',
+      toolReplay: {},
     });
-    expect(summary.results[0]?.toolReplay?.misses).toHaveLength(2);
+
+    expect(summary.failedCount).toBe(1);
+    expect(liveExecute).not.toHaveBeenCalled();
+    const result = summary.results[0]!;
+    expect(result.error?.code).toBe('TOOL_REPLAY_NO_RECORDING');
+    expect(result.error?.message).toContain('purged-trace');
+  });
+
+  it('stamps replay experiments with a toolReplay metadata marker', async () => {
+    await seedRecordedTrace('rec-trace-marker', [
+      { input: { key: 'first' }, output: { value: 'recorded:first' } },
+      { input: { key: 'second' }, output: { value: 'recorded:second' } },
+    ]);
+
+    const summary = await runExperiment(mastra, {
+      data: [{ id: 'item-1', input: 'Look up first and second', replayTraceId: 'rec-trace-marker' }],
+      targetType: 'agent',
+      targetId: 'replay-test-agent',
+      metadata: { team: 'evals' },
+      toolReplay: { onMiss: 'passthrough' },
+    });
+
+    const experiment = await experimentsStorage.getExperimentById({ id: summary.experimentId });
+    // Stored runs must be distinguishable from live runs — and user metadata survives
+    expect(experiment?.metadata).toMatchObject({
+      team: 'evals',
+      toolReplay: { onMiss: 'passthrough' },
+    });
+  });
+
+  it('persists the divergence report for failed items too', async () => {
+    // One recorded call, agent makes two → deterministic TOOL_REPLAY_MISS.
+    await seedRecordedTrace('rec-trace-failed-report', [{ input: { key: 'first' }, output: { value: 'one' } }]);
+
+    const summary = await runExperiment(mastra, {
+      data: [{ id: 'item-1', input: 'Look up first and second', replayTraceId: 'rec-trace-failed-report' }],
+      targetType: 'agent',
+      targetId: 'replay-test-agent',
+      toolReplay: {},
+    });
+
+    expect(summary.failedCount).toBe(1);
+    const persisted = await experimentsStorage.listExperimentResults({
+      experimentId: summary.experimentId,
+      pagination: { page: 0, perPage: false },
+    });
+    const storedOutput = persisted.results[0]?.output as { toolReplay?: ToolReplayReport };
+    // Failures are when the report matters most — it must survive persistence
+    expect(storedOutput.toolReplay?.replayedCount).toBe(1);
+    expect(storedOutput.toolReplay?.misses).toHaveLength(1);
   });
 
   it('fails only the affected item when its trace cannot be loaded', async () => {
@@ -397,6 +456,49 @@ describe('tool replay integration', () => {
     const serialized = JSON.stringify(output.toolResults);
     expect(serialized).toContain('recorded:second');
     expect(serialized).not.toContain('recorded:first');
+  });
+
+  it('flags stale recordings when the item was edited after the recording', async () => {
+    await seedRecordedTrace('rec-trace-stale', [
+      { input: { key: 'first' }, output: { value: 'recorded:first' } },
+      { input: { key: 'second' }, output: { value: 'recorded:second' } },
+    ]);
+
+    const dataset = await datasetsStorage.createDataset({ name: 'Stale Dataset' });
+    const item = await datasetsStorage.addItem({ datasetId: dataset.id, input: 'Look up first and second' });
+
+    // Prior experiment recorded against a DIFFERENT version of this item
+    await experimentsStorage.createExperiment({
+      id: 'stale-prior',
+      datasetId: dataset.id,
+      datasetVersion: 999,
+      targetType: 'agent',
+      targetId: 'replay-test-agent',
+      totalItems: 1,
+    });
+    await experimentsStorage.addExperimentResult({
+      experimentId: 'stale-prior',
+      itemId: item.id,
+      itemDatasetVersion: 999,
+      input: 'old input',
+      output: {},
+      groundTruth: null,
+      error: null,
+      startedAt: new Date(),
+      completedAt: new Date(),
+      retryCount: 0,
+      traceId: 'rec-trace-stale',
+    });
+
+    const summary = await runExperiment(mastra, {
+      datasetId: dataset.id,
+      targetType: 'agent',
+      targetId: 'replay-test-agent',
+      toolReplay: { fromExperimentId: 'stale-prior' },
+    });
+
+    expect(summary.succeededCount).toBe(1);
+    expect(summary.results[0]?.toolReplay?.staleRecording).toBe(true);
   });
 
   it('rejects toolReplay for non-agent targets at setup', async () => {

@@ -69,6 +69,8 @@ export interface ToolReplayExecutionOptions {
   sourceTraceId: string | null;
   /** Behavior when a tool call has no remaining recorded event. */
   onMiss: ToolReplayOnMiss;
+  /** True when the recording came from a different version of this dataset item. */
+  staleRecording?: boolean;
 }
 
 /**
@@ -269,6 +271,13 @@ async function executeAgent(
       : replayAbort.signal
     : signal;
 
+  // Attach resolution-level diagnostics (computed in runExperiment) to the
+  // per-attempt report.
+  const composeReport = (): ToolReplayReport => ({
+    ...finalizeReplayReport(replayState!),
+    ...(toolReplay?.staleRecording ? { staleRecording: true } : {}),
+  });
+
   // Keep the failure contract: failed executions have output: null (scorers
   // run against output even on errors). The divergence report stays available
   // on ExecutionResult.toolReplay / ItemResult.toolReplay.
@@ -276,7 +285,7 @@ async function executeAgent(
     output: null,
     error: { message: fatalMissError!.message, code: 'TOOL_REPLAY_MISS' },
     traceId: null,
-    toolReplay: finalizeReplayReport(replayState!),
+    toolReplay: composeReport(),
   });
 
   let rawResult: unknown;
@@ -313,7 +322,7 @@ async function executeAgent(
 
   const traceId = result.traceId ?? null;
   const scoringData = result.scoringData;
-  const replayReport = replayState ? finalizeReplayReport(replayState) : undefined;
+  const replayReport = replayState ? composeReport() : undefined;
 
   // Only persist fields relevant to experiment evaluation — drop provider metadata,
   // duplicate messages, steps trace, and other debugging internals.
