@@ -4,7 +4,7 @@ import { MessageList } from '../../agent/message-list';
 import type { Processor, ProcessorStreamWriter } from '../../processors';
 import { ChunkFrom } from '../types';
 import type { ChunkType } from '../types';
-import { MastraModelOutput, serializeBufferedSteps, deserializeBufferedSteps } from './output';
+import { MastraModelOutput, serializeBufferedSteps, deserializeBufferedSteps, collectToolResultRefs } from './output';
 
 /**
  * Creates a ReadableStream that emits the given chunks in order.
@@ -961,5 +961,114 @@ describe('buffered step serialization', () => {
     const slimSize = JSON.stringify(serializeBufferedSteps(steps)).length;
 
     expect(slimSize).toBeLessThan(fatSize / 3);
+  });
+});
+
+describe('tool result deduplication in serialized state', () => {
+  const bigResult = { data: 'x'.repeat(50_000), nodes: [{ id: 1 }, { id: 2 }] };
+
+  function makeDbMessage(toolCallId: string, result: unknown) {
+    return {
+      id: 'msg-tool',
+      role: 'assistant',
+      createdAt: new Date().toISOString(),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: { state: 'result', toolCallId, toolName: 'figma_export', args: {}, result },
+          },
+        ],
+      },
+    };
+  }
+
+  function makeToolResultChunk(toolCallId: string, result: unknown) {
+    return {
+      type: 'tool-result',
+      runId: 'run-1',
+      from: 'AGENT',
+      payload: { toolCallId, toolName: 'figma_export', result },
+    } as any;
+  }
+
+  it('replaces matching chunk payloads with refs and rehydrates them', () => {
+    const refs = collectToolResultRefs([makeDbMessage('call-1', bigResult)]);
+    const chunks = [makeToolResultChunk('call-1', structuredClone(bigResult))];
+
+    const step = {
+      toolResults: chunks,
+      dynamicToolResults: [],
+      staticToolResults: [],
+      content: [],
+      response: { messages: [] },
+    } as any;
+
+    const [slimStep] = serializeBufferedSteps([step], refs);
+    expect(slimStep!.toolResults[0]!.payload.result).toEqual({ __toolResultRef: 'call-1' });
+
+    const [restored] = deserializeBufferedSteps(structuredClone([slimStep!]) as any, refs);
+    expect(restored!.toolResults[0]!.payload.result).toEqual(bigResult);
+  });
+
+  it('keeps payloads that do not match the message list copy', () => {
+    const refs = collectToolResultRefs([makeDbMessage('call-1', bigResult)]);
+    const transformed = { summary: 'shrunk by toModelOutput' };
+    const step = {
+      toolResults: [makeToolResultChunk('call-1', transformed)],
+      dynamicToolResults: [],
+      staticToolResults: [],
+      content: [],
+      response: { messages: [] },
+    } as any;
+
+    const [slimStep] = serializeBufferedSteps([step], refs);
+    expect(slimStep!.toolResults[0]!.payload.result).toEqual(transformed);
+  });
+
+  it('dedupes tool-result content parts with wrapped output values', () => {
+    const refs = collectToolResultRefs([makeDbMessage('call-1', bigResult)]);
+    const step = {
+      toolResults: [],
+      dynamicToolResults: [],
+      staticToolResults: [],
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId: 'call-1',
+          toolName: 'figma_export',
+          output: { type: 'json', value: structuredClone(bigResult) },
+        },
+      ],
+      response: { messages: [] },
+    } as any;
+
+    const [slimStep] = serializeBufferedSteps([step], refs);
+    expect((slimStep!.content[0] as any).output.value).toEqual({ __toolResultRef: 'call-1' });
+
+    const [restored] = deserializeBufferedSteps(structuredClone([slimStep!]) as any, refs);
+    expect((restored!.content[0] as any).output.value).toEqual(bigResult);
+  });
+
+  it('shrinks serialized size when large results appear in multiple places', () => {
+    const refs = collectToolResultRefs([makeDbMessage('call-1', bigResult)]);
+    const step = {
+      toolResults: [makeToolResultChunk('call-1', structuredClone(bigResult))],
+      dynamicToolResults: [makeToolResultChunk('call-1', structuredClone(bigResult))],
+      staticToolResults: [],
+      content: [
+        {
+          type: 'tool-result',
+          toolCallId: 'call-1',
+          output: { type: 'json', value: structuredClone(bigResult) },
+        },
+      ],
+      response: { messages: [] },
+    } as any;
+
+    const fat = JSON.stringify([step]).length;
+    const slim = JSON.stringify(serializeBufferedSteps([step], refs)).length;
+    expect(slim).toBeLessThan(fat / 10);
   });
 });
