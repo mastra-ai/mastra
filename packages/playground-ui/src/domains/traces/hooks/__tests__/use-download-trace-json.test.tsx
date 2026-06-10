@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { SpanType } from '@mastra/core/observability';
 import type { TraceRecord } from '@mastra/core/storage';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -32,6 +33,7 @@ const server = setupServer();
 // Minimal full-trace payload. The download serializes whatever `getTrace` returns, so the
 // downloaded bytes must equal this fixture — including the heavy input/output fields that the
 // lightweight panel spans omit.
+const timestamp = new Date('2026-06-10T00:00:00.000Z');
 const traceFixture = {
   traceId: TRACE_ID,
   spans: [
@@ -40,14 +42,18 @@ const traceFixture = {
       traceId: TRACE_ID,
       parentSpanId: null,
       name: 'agent run',
-      spanType: 'agent_run',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      startedAt: timestamp,
       input: { prompt: 'hello' },
       output: { text: 'hi there' },
       metadata: { foo: 'bar' },
       attributes: { usage: { totalTokens: 42 } },
+      createdAt: timestamp,
+      updatedAt: timestamp,
     },
   ],
-} as unknown as TraceRecord;
+} satisfies TraceRecord;
 
 function makeWrapper() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
