@@ -552,6 +552,49 @@ describe('tool replay integration', () => {
     ).rejects.toThrowError(/itself a tool replay run/);
   });
 
+  it('accepts a live source experiment whose user metadata happens to contain a toolReplay key', async () => {
+    // Experiment metadata is user-writable. Only the exact marker shape this
+    // feature stamps (an object with onMiss) disqualifies a source — an
+    // unrelated user key must not reject a valid live recording.
+    await seedRecordedTrace('rec-trace-collision', [
+      { input: { key: 'first' }, output: { value: 'recorded:first' } },
+      { input: { key: 'second' }, output: { value: 'recorded:second' } },
+    ]);
+    await experimentsStorage.createExperiment({
+      id: 'live-with-junk-metadata',
+      datasetId: null,
+      datasetVersion: null,
+      targetType: 'agent',
+      targetId: 'replay-test-agent',
+      totalItems: 1,
+      metadata: { toolReplay: 'user-owned junk' },
+    });
+    await experimentsStorage.addExperimentResult({
+      experimentId: 'live-with-junk-metadata',
+      itemId: 'item-1',
+      itemDatasetVersion: null,
+      input: 'Look up first and second',
+      output: { text: 'Done with lookups.' },
+      groundTruth: null,
+      error: null,
+      startedAt: new Date(),
+      completedAt: new Date(),
+      retryCount: 0,
+      traceId: 'rec-trace-collision',
+    });
+
+    const summary = await runExperiment(mastra, {
+      data: [{ id: 'item-1', input: 'Look up first and second' }],
+      targetType: 'agent',
+      targetId: 'replay-test-agent',
+      toolReplay: { fromExperimentId: 'live-with-junk-metadata' },
+    });
+
+    expect(summary.succeededCount).toBe(1);
+    expect(liveExecute).not.toHaveBeenCalled();
+    expect(summary.results[0]?.toolReplay?.replayedCount).toBe(2);
+  });
+
   it('keeps the divergence report when the run fails after replaying began (non-miss failure)', async () => {
     await seedRecordedTrace('rec-trace-late-fail', [
       { input: { key: 'first' }, output: { value: 'recorded:first' } },

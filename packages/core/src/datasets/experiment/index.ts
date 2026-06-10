@@ -242,8 +242,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         // a replay experiment's traces contain no tool spans — chaining one as
         // a recording source would make every item miss (onMiss 'error') or
         // run fully live (onMiss 'passthrough'). Recordings must come from
-        // live runs.
-        if ((sourceExperiment.metadata as Record<string, unknown> | null | undefined)?.toolReplay) {
+        // live runs. Experiment metadata is user-writable, so match the exact
+        // marker shape this feature stamps (an object carrying onMiss) rather
+        // than bare truthiness — an unrelated user `toolReplay` key must not
+        // disqualify a live recording source.
+        const sourceMarker = (sourceExperiment.metadata as Record<string, unknown> | null | undefined)?.toolReplay;
+        if (typeof sourceMarker === 'object' && sourceMarker !== null && 'onMiss' in sourceMarker) {
           throw new MastraError({
             id: 'EXPERIMENT_TOOL_REPLAY_SOURCE_IS_REPLAY',
             text: `Experiment '${toolReplay.fromExperimentId}' is itself a tool replay run; its traces contain no tool spans. Use the original live experiment as fromExperimentId.`,
