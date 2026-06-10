@@ -1,8 +1,8 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { PendingIndicator } from '@mastra/playground-ui';
 import type { MessageFactoryPart } from '@mastra/react';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { PendingIndicator } from '@mastra/playground-ui';
 import { MessageRow, MessagesSkeleton } from './messages';
 import { useAutoScroll } from '@/domains/agent-builder/hooks/use-auto-scroll';
 

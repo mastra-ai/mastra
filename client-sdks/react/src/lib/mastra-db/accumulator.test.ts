@@ -945,6 +945,15 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
     expect(user.content.parts[0]).toEqual({ type: 'text', text: 'hello back' });
   });
 
+  it('drops an empty trailing assistant before appending the echoed user message', () => {
+    const out = reduce([startChunk('asst-1'), dataUserMessageChunk('sig-1', 'hello back')]);
+
+    expect(out).toHaveLength(1);
+    expect(out[0].role).toBe('user');
+    expect(out[0].id).toBe('sig-1');
+    expect(out[0].content.parts[0]).toEqual({ type: 'text', text: 'hello back' });
+  });
+
   it('dedupes by signalId', () => {
     const out = reduce([
       startChunk('asst-1'),
@@ -976,6 +985,24 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
     // key stays stable across the id swap (no unmount/remount). It is stripped
     // only later, on reload, by `resolveInitialMessages`.
     expect(userMessages[0].content.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe('corr-1');
+  });
+
+  it('drops the empty assistant shell when reconciling a pending user echo', () => {
+    const pending = pendingUserMessage('client-1', 'weather in paris', 'corr-1');
+    const out = reduce(
+      [startChunk('asst-1'), dataUserMessageChunk('server-1', 'weather in paris', 'user', 'corr-1')],
+      streamMeta(),
+      [pending],
+    );
+
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({
+      id: 'server-1',
+      role: 'user',
+      content: {
+        parts: [{ type: 'text', text: 'weather in paris' }],
+      },
+    });
   });
 
   it('keeps the correlation key but adopts the server id and clears pending on reconciliation', () => {
@@ -1173,6 +1200,11 @@ describe('finishStreamingAssistantMessage', () => {
       },
     ];
     expect(finishStreamingAssistantMessage(userOnly)).toBe(userOnly);
+  });
+
+  it('drops an empty trailing assistant message', () => {
+    const out = reduce([startChunk('asst-1')]);
+    expect(finishStreamingAssistantMessage(out)).toEqual([]);
   });
 });
 

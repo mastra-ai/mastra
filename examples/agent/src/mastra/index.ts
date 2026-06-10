@@ -181,6 +181,7 @@ export const mastra = new Mastra({
     auth: mastraAuth,
     rbac: rbacProvider,
     fga: fgaProvider,
+    port: 4112,
   },
   backgroundTasks: {
     enabled: true,

@@ -1113,26 +1113,24 @@ export const useChat = ({
     // optimistic message so streaming renders one bubble, matching how
     // memory/reload resolves the persisted multi-part user message.
     const dbUserMessage = fromCoreUserMessagesToMastraDBMessage(coreUserMessages);
-    const signalId =
+    const clientSetId =
       mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current && !threadSignalsDisabled
-        ? dbUserMessage.id
+        ? `client-set-${uuid()}`
         : undefined;
-    // Client-generated correlation id for the signal path: stamped on the
-    // optimistic pending bubble and on the outgoing message metadata so the
-    // server echo can reconcile them by id (the server mints its own signal id,
-    // which we cannot pre-seed).
-    const clientMessageId = signalId ? uuid() : undefined;
+    const signalId = clientSetId;
+    const clientMessageId = clientSetId;
+
     if (signalId) {
-      // Signal path: append the user turn optimistically as `pending` so it
-      // renders inline immediately. The server echo (matched by clientMessageId
-      // in the accumulator) clears the status to a normal bubble.
+      // Signal path: append the user turn optimistically as `pending` with a
+      // visibly client-owned id. The server echo can replace the final message
+      // id while the matching client id reconciles the pending bubble.
       const metadata: MastraDBMessageMetadata = {
         ...dbUserMessage.content.metadata,
         mode: 'stream',
         status: 'pending',
         [CLIENT_MESSAGE_ID_KEY]: clientMessageId,
       };
-      const pendingMessage = { ...dbUserMessage, content: { ...dbUserMessage.content, metadata } };
+      const pendingMessage = { ...dbUserMessage, id: clientSetId, content: { ...dbUserMessage.content, metadata } };
       setMessages(s => [...s, pendingMessage]);
     } else {
       setMessages(s => [...s, dbUserMessage]);

@@ -1105,9 +1105,12 @@ describe('useChat optimistic pending user message', () => {
     expect(metadata?.status).toBe('pending');
     expect(metadata?.mode).toBe('stream');
 
-    // The optimistic bubble carries a client correlation id...
+    const optimisticMessageId = userMessages[0]?.id;
+    expect(optimisticMessageId).toMatch(/^client-set-/);
+
+    // The optimistic bubble carries the same client-set id as its correlation id...
     const clientMessageId = metadata?.[CLIENT_MESSAGE_ID_KEY];
-    expect(typeof clientMessageId).toBe('string');
+    expect(clientMessageId).toBe(optimisticMessageId);
 
     // ...and the same id is sent to the server in the outgoing message metadata
     // so the echo can reconcile the pending bubble.
@@ -1115,8 +1118,7 @@ describe('useChat optimistic pending user message', () => {
     const sendArgs = sendMessageMock.mock.calls[0]?.[0] as
       | { message?: { metadata?: Record<string, unknown> } }
       | undefined;
-    expect(sendArgs?.message?.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe(clientMessageId);
-    expect(typeof sendArgs?.message?.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe('string');
+    expect(sendArgs?.message?.metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe(optimisticMessageId);
   });
 
   it('merges a multi-message send (text + attachment) into a single pending bubble', async () => {
@@ -1156,7 +1158,8 @@ describe('useChat optimistic pending user message', () => {
 
     const metadata = userMessages[0]?.content.metadata as MastraDBMessageMetadata | undefined;
     expect(metadata?.status).toBe('pending');
-    expect(typeof metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe('string');
+    expect(userMessages[0]?.id).toMatch(/^client-set-/);
+    expect(metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe(userMessages[0]?.id);
   });
 
   it('keys two sequential sends as independent pending messages', async () => {
@@ -1182,8 +1185,10 @@ describe('useChat optimistic pending user message', () => {
     expect(userMessages).toHaveLength(2);
     expect(new Set(userMessages.map(m => m.id)).size).toBe(2);
     for (const message of userMessages) {
+      expect(message.id).toMatch(/^client-set-/);
       const metadata = message.content.metadata as MastraDBMessageMetadata | undefined;
       expect(metadata?.status).toBe('pending');
+      expect(metadata?.[CLIENT_MESSAGE_ID_KEY]).toBe(message.id);
     }
   });
 
