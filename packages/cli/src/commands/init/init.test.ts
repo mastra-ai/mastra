@@ -9,6 +9,7 @@ beforeEach(() => {
 vi.mock('./utils', () => ({
   checkInitialization: vi.fn(),
   writeIndexFile: vi.fn(),
+  writeAgentBuilderIndexFile: vi.fn(),
   createComponentsDir: vi.fn(),
   writeAPIKey: vi.fn(),
   getAPIKey: vi.fn(() => 'OPENAI_API_KEY'),
@@ -54,17 +55,27 @@ vi.mock('node:util', () => ({
 const utils = await import('./utils');
 const { init } = await import('./init');
 
+const { checkDependenciesMock, installPackagesMock } = vi.hoisted(() => ({
+  checkDependenciesMock: vi.fn((_deps: string[]) => Promise.resolve('ok')),
+  installPackagesMock: vi.fn((_packages: string[]) => Promise.resolve()),
+}));
+
 vi.mock('../../services/service.deps', () => {
   class MockDepsService {
     packageManager = 'pnpm';
 
-    checkDependencies = vi.fn(() => Promise.resolve('ok'));
-    installPackages = vi.fn(() => Promise.resolve());
+    checkDependencies = checkDependenciesMock;
+    installPackages = installPackagesMock;
   }
 
   return {
     DepsService: MockDepsService,
   };
+});
+
+beforeEach(() => {
+  checkDependenciesMock.mockResolvedValue('ok');
+  installPackagesMock.mockResolvedValue(undefined);
 });
 
 describe('CLI', () => {
@@ -263,5 +274,72 @@ describe('CLI', () => {
     expect(mockWriteAPIKey).not.toHaveBeenCalled();
 
     expect(fs.existsSync('/mock/mastra')).toBe(true);
+  });
+});
+
+describe('agent builder mode', () => {
+  const mockMastraDir = () =>
+    vi.spyOn(utils, 'createMastraDir').mockImplementation(async directory => {
+      const dirPath = `${directory}/mastra`;
+      fs.mkdirSync(dirPath, { recursive: true });
+      return { ok: true, dirPath };
+    });
+
+  test('writes the Agent Builder index file instead of the default template', async () => {
+    mockMastraDir();
+
+    await init({
+      directory: '/mock',
+      components: ['agents', 'tools'],
+      addExample: false,
+      llmProvider: 'openai',
+      llmApiKey: 'sk-...',
+      agentBuilder: true,
+    });
+
+    expect(utils.writeAgentBuilderIndexFile).toHaveBeenCalledWith({ dirPath: '/mock/mastra' });
+    expect(utils.writeAPIKey).toHaveBeenCalledWith({ provider: 'openai', apiKey: 'sk-...' });
+
+    // Agent Builder mode skips the default template, component dirs, and examples
+    expect(utils.writeIndexFile).not.toHaveBeenCalled();
+    expect(utils.createComponentsDir).not.toHaveBeenCalled();
+    expect(utils.writeCodeSample).not.toHaveBeenCalled();
+  });
+
+  test('installs only the missing Agent Builder dependencies with the version tag', async () => {
+    mockMastraDir();
+    checkDependenciesMock.mockImplementation(async (deps: string[]) =>
+      deps[0] === '@mastra/editor' || deps[0] === '@mastra/duckdb' ? `Please install ${deps[0]}` : 'ok',
+    );
+
+    await init({
+      directory: '/mock',
+      components: ['agents', 'tools'],
+      addExample: false,
+      llmProvider: 'openai',
+      llmApiKey: 'sk-...',
+      versionTag: 'latest',
+      agentBuilder: true,
+    });
+
+    expect(installPackagesMock).toHaveBeenCalledTimes(1);
+    expect(installPackagesMock).toHaveBeenCalledWith(['@mastra/editor@latest', '@mastra/duckdb@latest']);
+  });
+
+  test('skips installation when all Agent Builder dependencies are present', async () => {
+    mockMastraDir();
+
+    await init({
+      directory: '/mock',
+      components: ['agents', 'tools'],
+      addExample: false,
+      llmProvider: 'openai',
+      llmApiKey: 'sk-...',
+      agentBuilder: true,
+    });
+
+    expect(checkDependenciesMock).toHaveBeenCalledWith(['@mastra/editor']);
+    expect(checkDependenciesMock).toHaveBeenCalledWith(['@mastra/duckdb']);
+    expect(installPackagesMock).not.toHaveBeenCalled();
   });
 });

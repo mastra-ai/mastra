@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { MastraCompositeStore } from '@mastra/core/storage';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { DuckDBStore } from './index';
@@ -37,5 +38,26 @@ describe('DuckDBStore.close()', () => {
 
     await store.close();
     await expect(store.close()).resolves.toBeUndefined();
+  });
+
+  it('releases the lock when used as a domain override in MastraCompositeStore', async () => {
+    // The create-mastra / create-agentbuilder scaffolds compose DuckDB in as
+    // the observability domain:
+    //   domains: { observability: await new DuckDBStore().getStore('observability') }
+    // Mastra.shutdown() only calls close() on the outer composite, so the
+    // composite must cascade to the DuckDB-backed domain to free the lock.
+    const duckdb = new DuckDBStore({ id: 'close-composed', path: dbPath });
+    const composite = new MastraCompositeStore({
+      id: 'close-composite',
+      domains: { observability: await duckdb.getStore('observability') },
+    });
+    await composite.init();
+    await composite.close();
+
+    // If the cascade missed the DuckDB domain, this would throw
+    // "Conflicting lock is held".
+    const reopened = new DuckDBStore({ id: 'close-reopened', path: dbPath });
+    await reopened.init();
+    await reopened.close();
   });
 });

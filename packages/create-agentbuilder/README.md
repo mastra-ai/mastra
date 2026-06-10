@@ -42,6 +42,10 @@ Open [http://localhost:4111/agent-builder](http://localhost:4111/agent-builder) 
 - Node.js ≥ 22.13.0
 - An `OPENAI_API_KEY` environment variable (the Builder agent runs on OpenAI)
 
+## Licensing
+
+The Agent Builder is a Mastra Enterprise (EE) feature, licensed under the [Mastra Enterprise License](https://github.com/mastra-ai/mastra/blob/main/ee/LICENSE). It works without a license key in local development (`mastra dev`). Deploying it to production requires a valid license key set via the `MASTRA_EE_LICENSE` environment variable.
+
 ## Options
 
 | Flag                        | Description                              |
