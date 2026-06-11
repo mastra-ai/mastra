@@ -61,6 +61,36 @@ describe('FatalError propagation', () => {
     expect(rejection).not.toBeInstanceOf(FatalError);
   });
 
+  it('output processor abort.fatal(err) re-throws the original error instance', async () => {
+    const fatalProcessor: any = {
+      id: 'fatal-output',
+      name: 'Fatal Output',
+      processOutputResult: async ({ abort, messages }: any) => {
+        abort.fatal(new QuotaExceededError('over quota', 90));
+        return messages;
+      },
+    };
+
+    const agent = new Agent({
+      id: 'fatal-output-agent',
+      name: 'Fatal Output Agent',
+      instructions: 'noop',
+      model: makeMockModel(),
+      outputProcessors: [fatalProcessor],
+    });
+
+    const rejection = await agent.generate('hello').then(
+      () => {
+        throw new Error('expected agent.generate to reject with QuotaExceededError');
+      },
+      err => err,
+    );
+    expect(rejection).toBeInstanceOf(QuotaExceededError);
+    expect(rejection).not.toBeInstanceOf(FatalError);
+    expect((rejection as QuotaExceededError).code).toBe('QUOTA_EXCEEDED');
+    expect((rejection as QuotaExceededError).retryAfterSeconds).toBe(90);
+  });
+
   it('FatalError thrown directly from a workflow step is captured on result.fatal', async () => {
     const failingStep = createStep({
       id: 'failing',
