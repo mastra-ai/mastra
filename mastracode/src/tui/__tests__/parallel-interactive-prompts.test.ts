@@ -64,7 +64,6 @@ function createMockContext(state: TUIState): EventHandlerContext {
     fireMessage: vi.fn(),
     queueFollowUpMessage: vi.fn(),
     renderExistingMessages: vi.fn(),
-    renderCompletedTasksInline: vi.fn(),
     renderClearedTasksInline: vi.fn(),
     refreshModelAuthStatus: vi.fn(),
   };
