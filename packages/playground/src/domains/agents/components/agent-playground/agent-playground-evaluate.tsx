@@ -712,7 +712,12 @@ export function AgentPlaygroundEvaluate({
     return (
       <>
         {/* Create Dataset Dialog */}
-        <CreateDatasetDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} targetIds={[agentId]} />
+        <CreateDatasetDialog
+          open={showCreateDialog}
+          onOpenChange={setShowCreateDialog}
+          targetType="agent"
+          targetIds={[agentId]}
+        />
 
         {/* Generate Config Dialog */}
         {generateDatasetId && (
@@ -754,6 +759,8 @@ export function AgentPlaygroundEvaluate({
                       try {
                         await updateDataset.mutateAsync({
                           datasetId: ds.id,
+                          // Classify legacy/untyped datasets without overwriting existing target types.
+                          targetType: ds.targetType ?? 'agent',
                           targetIds: [...parseIdList(ds.targetIds), agentId],
                         });
                         toast.success(`Dataset "${ds.name}" attached`);

@@ -7,7 +7,17 @@ import { DuckDBStore } from '@mastra/duckdb';
 import { Observability, MastraStorageExporter, SensitiveDataFilter } from '@mastra/observability';
 import { SlackProvider } from '@mastra/slack';
 
-import { mastraAuth, rbacProvider, fgaProvider } from './auth';
+import {
+  mastraAuth,
+  rbacProvider,
+  fgaProvider,
+  studioAuth,
+  studioRbac,
+  studioFga,
+  serverAuth,
+  serverRbac,
+  serverFga,
+} from './auth';
 
 import {
   agentThatHarassesYou,
@@ -178,10 +188,18 @@ export const mastra = new Mastra({
     }),
   },
   server: {
-    auth: mastraAuth,
-    rbac: rbacProvider,
-    fga: fgaProvider,
+    // Use dual auth providers if available, otherwise fall back to single auth
+    auth: serverAuth ?? mastraAuth,
+    rbac: serverRbac ?? rbacProvider,
+    fga: serverFga ?? fgaProvider,
   },
+  studio: studioAuth
+    ? {
+        auth: studioAuth,
+        rbac: studioRbac,
+        fga: studioFga,
+      }
+    : undefined,
   backgroundTasks: {
     enabled: true,
     globalConcurrency: 10,
