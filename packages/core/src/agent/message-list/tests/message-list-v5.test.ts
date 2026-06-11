@@ -1841,6 +1841,62 @@ describe('MessageList V5 Support', () => {
       expect(toolPart.toolInvocation.result).toEqual({ status: 200, body: 'lots of data here' });
     });
 
+    it('should apply modelOutput from providerOptions on ingested AIV5 tool-result parts (client tool continuation)', async () => {
+      const list = new MessageList({ threadId, resourceId });
+
+      list.add('Take a screenshot', 'input');
+
+      // Mirrors the continuation message a client tool sends back over HTTP:
+      // raw result in output, toModelOutput result in providerOptions.mastra.modelOutput
+      const continuationMessage: AIV5ModelMessage = {
+        role: 'assistant',
+        content: [
+          {
+            type: 'tool-call',
+            toolCallId: 'call-client-1',
+            toolName: 'screenshotTool',
+            input: { url: 'https://example.com' },
+          },
+          {
+            type: 'tool-result',
+            toolCallId: 'call-client-1',
+            toolName: 'screenshotTool',
+            output: { type: 'json', value: { ok: true, _b64: 'base64imagedata' } },
+            providerOptions: {
+              mastra: {
+                modelOutput: {
+                  type: 'content',
+                  value: [{ type: 'image-data', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+                },
+              },
+            },
+          },
+        ],
+      };
+
+      list.add(continuationMessage, 'input');
+
+      // llmPrompt should surface the transformed multimodal output, not the raw json
+      const prompt = await list.get.all.aiV5.llmPrompt();
+      const toolRole = prompt.find(m => m.role === 'tool');
+      expect(toolRole).toBeDefined();
+      const toolResultPart = (toolRole as any).content.find((p: any) => p.type === 'tool-result');
+      expect(toolResultPart.output).toEqual({
+        type: 'content',
+        value: [{ type: 'image-data', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+      });
+
+      // Raw result should still be preserved in the stored messages
+      const dbMessages = list.get.all.db();
+      const toolDbMsg = dbMessages.find(m => m.content.parts?.some((p: any) => p.type === 'tool-invocation'));
+      const toolPart = toolDbMsg?.content.parts?.find((p: any) => p.type === 'tool-invocation') as any;
+      expect(toolPart.toolInvocation.result).toEqual({ ok: true, _b64: 'base64imagedata' });
+      expect(toolPart.providerMetadata?.mastra?.modelOutput).toEqual({
+        type: 'content',
+        value: [{ type: 'image-data', data: 'base64imagedata', mediaType: 'image/jpeg' }],
+      });
+    });
+
     it('should convert MCP content-array tool results to multimodal model output without providerMetadata duplication', async () => {
       const list = new MessageList({ threadId, resourceId });
 
