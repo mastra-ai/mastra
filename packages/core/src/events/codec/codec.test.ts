@@ -151,6 +151,24 @@ describe('codec', () => {
       expect(out.source).toBe('foo');
       expect(out.flags).toBe('gi');
     });
+
+    it('treats a RegExp envelope with hostile flags as user data', () => {
+      // Crafted payload as if a peer tried to inject non-spec flags. The
+      // decoder must not construct a RegExp from it.
+      const hostile = { __m_codec__: 'RegExp', v: { source: 'foo', flags: 'gizz' } };
+      const out = decode(hostile);
+      expect(out).not.toBeInstanceOf(RegExp);
+      expect(out).toEqual(hostile);
+    });
+
+    it('returns the raw envelope when source is unparseable', () => {
+      // Spec-valid flags but the source itself is invalid. The decoder must
+      // catch the constructor error and fall back to the user-data path.
+      const broken = { __m_codec__: 'RegExp', v: { source: '[', flags: 'g' } };
+      const out = decode(broken);
+      expect(out).not.toBeInstanceOf(RegExp);
+      expect(out).toEqual(broken);
+    });
   });
 
   describe('URL', () => {

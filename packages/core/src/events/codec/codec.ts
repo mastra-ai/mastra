@@ -129,8 +129,16 @@ export function decode(value: unknown): unknown {
         return new Date(env.v);
       case 'BigInt':
         return BigInt(env.v);
-      case 'RegExp':
-        return new RegExp(env.v.source, env.v.flags);
+      case 'RegExp': {
+        // `isEnvelope` already constrained `flags` to the spec-defined set. A
+        // malformed `source` is the remaining failure mode — fall back to the
+        // raw envelope so a hostile peer cannot crash frame decoding.
+        try {
+          return new RegExp(env.v.source, env.v.flags);
+        } catch {
+          return value;
+        }
+      }
       case 'URL':
         return new URL(env.v);
       case 'Map':
