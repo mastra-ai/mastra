@@ -473,12 +473,9 @@ export class ProcessorRunner {
     retryCount: number;
   }): Promise<void> {
     for (const processor of workflow.__stateSignalProcessors ?? []) {
-      const abort = attachFatal(
-        <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
-          throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-        },
-        processor.id,
-      );
+      const abort = attachFatal(<TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      }, processor.id);
 
       await this.runComputeStateSignal({
         processor,
@@ -630,12 +627,9 @@ export class ProcessorRunner {
 
       // Handle regular processor
       const processor = processorOrWorkflow;
-      const abort = attachFatal(
-        <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
-          throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-        },
-        processor.id,
-      );
+      const abort = attachFatal(<TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      }, processor.id);
 
       // Use the processOutputResult method if available
       const processMethod = processor.processOutputResult?.bind(processor);
@@ -1149,12 +1143,9 @@ export class ProcessorRunner {
 
       // Handle regular processor
       const processor = processorOrWorkflow;
-      const abort = attachFatal(
-        <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
-          throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-        },
-        processor.id,
-      );
+      const abort = attachFatal(<TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      }, processor.id);
 
       // Use the processInput method if available
       const processMethod = processor.processInput?.bind(processor);
@@ -1442,12 +1433,9 @@ export class ProcessorRunner {
         continue;
       }
 
-      const abort = attachFatal(
-        <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
-          throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-        },
-        processor.id,
-      );
+      const abort = attachFatal(<TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      }, processor.id);
 
       // Pass only the untagged system messages — tagged buckets belong to
       // their owning processors and are merged back in at final model assembly.
@@ -1672,12 +1660,9 @@ export class ProcessorRunner {
       const processMethod = processor.processLLMRequest?.bind(processor);
       if (!processMethod) continue;
 
-      const abort = attachFatal(
-        <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
-          throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-        },
-        processor.id,
-      );
+      const abort = attachFatal(<TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      }, processor.id);
 
       try {
         const processorState = this.getProcessorState(processor.id);
@@ -1759,12 +1744,9 @@ export class ProcessorRunner {
       const processMethod = processor.processLLMResponse?.bind(processor);
       if (!processMethod) continue;
 
-      const abort = attachFatal(
-        <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
-          throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-        },
-        processor.id,
-      );
+      const abort = attachFatal(<TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      }, processor.id);
 
       try {
         const processorState = this.getProcessorState(processor.id);
@@ -1901,12 +1883,9 @@ export class ProcessorRunner {
         continue;
       }
 
-      const abort = attachFatal(
-        <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
-          throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-        },
-        processor.id,
-      );
+      const abort = attachFatal(<TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      }, processor.id);
 
       const currentSystemMessages = messageList.getSystemMessages();
       const defaultUsage: LanguageModelUsage = {
@@ -2082,12 +2061,9 @@ export class ProcessorRunner {
         continue;
       }
 
-      const abort = attachFatal(
-        <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
-          throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-        },
-        processor.id,
-      );
+      const abort = attachFatal(<TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      }, processor.id);
 
       const processableMessages: MastraDBMessage[] = messageList.get.all.db();
       const systemMessagesBefore = messageList.getAllSystemMessages();

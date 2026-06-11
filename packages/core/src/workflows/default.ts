@@ -586,7 +586,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       // Check if the failure was due to a FatalError (raw thrown FatalError or
       // a `fatal` marker attached by executeStepWithRetry)
       const errAsFatal = isFatalError(error) ? error : undefined;
-      const fatalData = lastOutput?.fatal ?? (errAsFatal ? { cause: errAsFatal.cause, processorId: errAsFatal.processorId } : undefined);
+      const fatalData =
+        lastOutput?.fatal ??
+        (errAsFatal ? { cause: errAsFatal.cause, processorId: errAsFatal.processorId } : undefined);
       if (fatalData) {
         // Keep status as 'failed' but attach the original user error instance so
         // the processor runner can re-throw it unwrapped.

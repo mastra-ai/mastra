@@ -818,12 +818,9 @@ function createStepFromProcessor<TProcessorId extends string>(
 
       // Create a minimal abort function that throws TripWire, plus a `.fatal()`
       // escape hatch that propagates the original user error unwrapped.
-      const abort = attachFatal(
-        (reason?: string, options?: { retry?: boolean; metadata?: unknown }): never => {
-          throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-        },
-        processor.id,
-      );
+      const abort = attachFatal((reason?: string, options?: { retry?: boolean; metadata?: unknown }): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      }, processor.id);
       const initialMessageId = messageId;
       let currentMessageId = messageId;
       const rotateCurrentResponseMessageId = rotateResponseMessageId
