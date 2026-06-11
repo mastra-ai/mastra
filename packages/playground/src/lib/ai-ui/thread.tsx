@@ -1,6 +1,6 @@
 import type { MessagePrimitive } from '@assistant-ui/react';
 import { ComposerPrimitive, ThreadPrimitive, useComposer, useComposerRuntime } from '@assistant-ui/react';
-import { Avatar, Button, ButtonsGroup, cn, useAutoscroll } from '@mastra/playground-ui';
+import { Avatar, Button, ButtonsGroup, cn, ScrollArea, useAutoscroll } from '@mastra/playground-ui';
 import { useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, EyeIcon, Mic, PlusIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -184,29 +184,35 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher }: Compos
         >
           <ComposerSendingGradient pulseKey={sendPulseKey} />
           <div className="relative z-10">
-            <ComposerPrimitive.Input
-              asChild
-              className="w-full"
-              submitMode={isStreaming && !canSendWhileStreaming ? 'none' : undefined}
-            >
-              <textarea
-                ref={textareaRef}
-                autoFocus={false}
-                className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50 px-3 pt-3 pb-2"
-                placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
-                name=""
-                id=""
-                onChange={e => setThreadInput?.(e.target.value)}
-                onKeyDownCapture={e => {
-                  if (isStreaming && canSendWhileStreaming && e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    composerRuntime.send();
+            {/* The textarea grows with its content (field-sizing); the ScrollArea caps the
+                height and fades the clipped edges once the content overflows. */}
+            <ScrollArea maxHeight="212px">
+              <ComposerPrimitive.Input
+                asChild
+                className="w-full"
+                submitMode={isStreaming && !canSendWhileStreaming ? 'none' : undefined}
+              >
+                <textarea
+                  ref={textareaRef}
+                  autoFocus={false}
+                  className="field-sizing-content min-h-17 text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50 px-3 pt-3 pb-2"
+                  placeholder={
+                    canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"
                   }
-                }}
-                disabled={!canExecuteAgent}
-              />
-            </ComposerPrimitive.Input>
+                  name=""
+                  id=""
+                  onChange={e => setThreadInput?.(e.target.value)}
+                  onKeyDownCapture={e => {
+                    if (isStreaming && canSendWhileStreaming && e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      composerRuntime.send();
+                    }
+                  }}
+                  disabled={!canExecuteAgent}
+                />
+              </ComposerPrimitive.Input>
+            </ScrollArea>
             {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning agentId={agentId} />}
             <ComposerActionRow
               canExecute={canExecuteAgent}
