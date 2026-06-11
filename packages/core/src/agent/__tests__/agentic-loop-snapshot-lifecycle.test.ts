@@ -27,7 +27,7 @@ function createFindUserTool() {
     inputSchema: z.object({ name: z.string() }),
     requireApproval: true,
     execute: async input => {
-      return mockFindUser(input) as Promise<Record<string, any>>;
+      return mockFindUser(input);
     },
   });
 }
