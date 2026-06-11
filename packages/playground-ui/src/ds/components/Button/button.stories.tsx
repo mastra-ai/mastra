@@ -26,7 +26,7 @@ const meta: Meta<typeof Button> = {
     },
     size: {
       control: { type: 'select' },
-      options: ['xs', 'sm', 'md', 'default', 'lg', 'icon-xs', 'icon-sm', 'icon-md', 'icon-lg'],
+      options: ['xs', 'sm', 'md', 'lg', 'icon-xs', 'icon-sm', 'icon-md', 'icon-lg'],
     },
     disabled: {
       control: { type: 'boolean' },
@@ -40,6 +40,7 @@ type Story = StoryObj<typeof Button>;
 export const Default: Story = {
   args: {
     children: 'Button',
+    size: 'md',
   },
 };
 
@@ -61,7 +62,6 @@ export const Sizes: Story = {
       <Button size="xs">Extra Small</Button>
       <Button size="sm">Small</Button>
       <Button size="md">Medium</Button>
-      <Button size="default">Default</Button>
       <Button size="lg">Large</Button>
     </div>
   ),
@@ -100,7 +100,7 @@ export const WithTooltip: Story = {
 export const IconAutoDetect: Story = {
   render: () => (
     <div className="flex items-center gap-4">
-      {(['xs', 'sm', 'md', 'default', 'lg'] as const).map(size => (
+      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
         <Button key={size} size={size}>
           <Settings />
         </Button>
@@ -173,13 +173,10 @@ export const VariantSizeMatrix: Story = {
           <Button variant={variant} size="md">
             md
           </Button>
-          <Button variant={variant} size="default">
-            default
-          </Button>
           <Button variant={variant} size="lg">
             lg
           </Button>
-          <Button variant={variant} size="default">
+          <Button variant={variant} size="lg">
             <Trash />
             with icon
           </Button>
