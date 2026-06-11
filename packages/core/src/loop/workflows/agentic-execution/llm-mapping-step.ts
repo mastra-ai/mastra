@@ -13,6 +13,12 @@ import {
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { createStep } from '../../../workflows/workflow';
+import {
+  DELEGATION_BAILED_KEY,
+  STEP_TOOLS_KEY,
+  TOOL_PAYLOAD_TRANSFORM_KEY,
+} from '../../run-scope-keys';
+import { readScoped, writeScoped, type RunScopeContext } from '../../run-scope-access';
 import type { OuterLLMRun } from '../../types';
 import { deserializeToolError } from '../errors';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
@@ -21,6 +27,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
   { models, _internal, ...rest }: OuterLLMRun<Tools, OUTPUT>,
   llmExecutionStep: any,
 ) {
+  const scopeCtx: RunScopeContext = { mastra: rest.mastra, runId: rest.runId, _internal };
   /**
    * Output processor handling for tool-result and tool-error chunks.
    *
@@ -177,7 +184,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         providerMetadata?: Record<string, unknown>;
       }) {
         const tool = ((
-          _internal?.stepTools as Record<string, { toModelOutput?: (output: unknown) => unknown }> | undefined
+          readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as
+            | Record<string, { toModelOutput?: (output: unknown) => unknown }>
+            | undefined
         )?.[toolCall.toolName] ?? rest.tools?.[toolCall.toolName]) as
           | { toModelOutput?: (output: unknown) => unknown }
           | undefined;
@@ -228,7 +237,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         },
         phase: 'output-available' | 'error',
       ): Promise<ChunkType<OUTPUT>> {
-        const stepTools = _internal?.stepTools as ToolSet | undefined;
+        const stepTools = readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as ToolSet | undefined;
         const tool =
           stepTools?.[toolCall.toolName] ||
           findProviderToolByName(stepTools, toolCall.toolName) ||
@@ -237,7 +246,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           findProviderToolByName(rest.tools, toolCall.toolName) ||
           Object.values(rest.tools || {}).find((t: any) => `id` in t && t.id === toolCall.toolName);
         const source = {
-          policy: _internal?.toolPayloadTransform,
+          policy: readScoped(scopeCtx, TOOL_PAYLOAD_TRANSFORM_KEY, 'toolPayloadTransform'),
           toolTransform: (tool as { transform?: unknown } | undefined)?.transform as any,
         };
         const inputTransform = await transformToolPayloadForTargets(
@@ -492,8 +501,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         // Check if any delegation hook called ctx.bail() — signal the loop to stop.
         // The bail flag is communicated via requestContext because Zod output validation
         // strips unknown fields (like _bailed) from the tool result object.
-        if (rest.requestContext?.get('__mastra_delegationBailed') && _internal) {
-          _internal._delegationBailed = true;
+        if (rest.requestContext?.get('__mastra_delegationBailed')) {
+          writeScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed', true);
           rest.requestContext.set('__mastra_delegationBailed', false);
         }
 

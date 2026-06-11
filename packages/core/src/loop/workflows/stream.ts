@@ -10,6 +10,7 @@ import { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue } from '../../stream/base';
 import type { ChunkType } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
+import { hydrateRunScopeFromInternal } from '../hydrate-run-scope';
 import type { LoopRun } from '../types';
 import { createAgenticLoopWorkflow } from './agentic-loop';
 
@@ -208,6 +209,12 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         // agentId closures) don't clobber each other in the global id-keyed registry.
         // __registerInternalWorkflow also calls __registerMastra under the hood.
         rest.mastra.__registerInternalWorkflow(agenticLoopWorkflow, runId);
+        // Hydrate the RunScope from the bootstrap `_internal` bag. Done right
+        // after registration so the scope is the single source of truth for
+        // non-serializable state by the time any step runs. The scope's
+        // refcount is owned by the internal-workflow registration above —
+        // no separate release needed here.
+        hydrateRunScopeFromInternal(rest.mastra, runId, _internal);
       }
 
       // Keep the run-scoped registration alive only when the run suspends — a
