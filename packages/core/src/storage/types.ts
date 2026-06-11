@@ -2579,8 +2579,12 @@ export interface ExperimentResult {
   traceId: string | null;
   status: ExperimentResultStatus | null;
   tags: string[] | null;
-  /** Tool replay divergence report — present only on items executed with tool replay. */
-  toolReplay: ToolReplayReport | null;
+  /**
+   * Tool replay/mock report — present on items executed with tool replay or
+   * tool mocks. Optional so out-of-tree adapters predating the column keep
+   * compiling; in-tree adapters always populate it (null when absent).
+   */
+  toolReplay?: ToolReplayReport | null;
   createdAt: Date;
 }
 

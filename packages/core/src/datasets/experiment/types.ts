@@ -87,6 +87,12 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
 
   /** Pin to specific dataset version (default: latest). Only applies when datasetId is used. */
   version?: number;
+  /**
+   * Run only these item IDs (after version resolution). Lets a caller re-run
+   * a single diverging item — e.g. with tool replay — without paying for the
+   * whole dataset. Unknown IDs are ignored; matching nothing is an error.
+   */
+  itemIds?: string[];
   /** Maximum concurrent executions (default: 5) */
   maxConcurrency?: number;
   /** AbortSignal for cancellation */

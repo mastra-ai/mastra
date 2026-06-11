@@ -362,6 +362,10 @@ async function executeAgent(
   const scoringData = result.scoringData;
   const replayReport = replayState ? composeReport() : undefined;
 
+  // Post-run assertion failures. Error-code precedence for one attempt is:
+  // TOOL_REPLAY_MISS (run aborted mid-flight, handled above) >
+  // TOOL_MOCK_EXPECTATION_FAILED > TOOL_REPLAY_UNCONSUMED — the report always
+  // carries the full picture regardless of which code wins.
   // Unsatisfied mock expectations fail the item — an assertion that doesn't
   // fail isn't an assertion. Deterministic (the run is over), so the runner's
   // retry loop skips this code, like replay misses.
@@ -374,6 +378,24 @@ async function executeAgent(
           .map(expectation => `${expectation.toolName} (${expectation.reason})`)
           .join('; ')}`,
         code: 'TOOL_MOCK_EXPECTATION_FAILED',
+      },
+      traceId,
+      toolReplay: replayReport,
+    };
+  }
+
+  // Strict matching treats the recording as a contract: every recorded call
+  // must be consumed. Unconsumed events under 'fifo' are signal (often the
+  // intended fix); under 'strict' they are a broken contract and fail the
+  // item — deterministic, so never retried.
+  if (toolReplay?.matching === 'strict' && replayReport && replayReport.unconsumed.length > 0) {
+    return {
+      output: null,
+      error: {
+        message: `Strict replay left recorded calls unconsumed: ${replayReport.unconsumed
+          .map(entry => `${entry.toolName} (${entry.count})`)
+          .join('; ')}`,
+        code: 'TOOL_REPLAY_UNCONSUMED',
       },
       traceId,
       toolReplay: replayReport,

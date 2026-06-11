@@ -31,7 +31,7 @@ const replayed = await dataset.startExperiment({
 
 Agent targets only in this release; tools inside sub-agents are not intercepted.
 
-**Matching policy.** `toolReplay.matching` selects how recorded events match the agent's calls: `'fifo'` (default) serves per-tool events in recorded order and reports argument drift in `argMismatches`; `'strict'` serves an event only on an exact args match — anything else is a miss, for contract-style tests where deviation must fail.
+**Matching policy.** `toolReplay.matching` selects how recorded events match the agent's calls: `'fifo'` (default) serves per-tool events in recorded order and reports argument drift in `argMismatches`; `'strict'` serves an event only on an exact args match — anything else is a miss, for contract-style tests where deviation must fail. Strict mode also treats the recording as a contract in the other direction: recorded calls left unconsumed fail the item with `TOOL_REPLAY_UNCONSUMED` (not retried), so an agent that stops calling an expected tool cannot pass silently.
 
 **Tool mocks.** `toolMocks` overrides individual tools without needing a recording, with or without `toolReplay`:
 
@@ -48,4 +48,6 @@ await dataset.startExperiment({
 })
 ```
 
-An unsatisfied `expect` fails the item with `TOOL_MOCK_EXPECTATION_FAILED`. Mock usage and expectation outcomes appear in the divergence report (`mocks`, `expectations`), and the report itself now persists in a dedicated `toolReplay` column on experiment results instead of riding inside the stored output.
+An unsatisfied `expect` fails the item with `TOOL_MOCK_EXPECTATION_FAILED`. Mock usage and expectation outcomes appear in the divergence report (`mocks`, `expectations`), and the report itself now persists in a dedicated `toolReplay` column on experiment results instead of riding inside the stored output. The report also includes `calls` — the run's tool-call flow in order, each entry telling whether the call was replayed, mocked, missed, or ran live.
+
+Runs whose mocks suppress live execution (`output`/`error`/function mocks) are stamped with `metadata.toolReplay.mockedTools` and refused as replay sources; expect-only runs execute tools live and stay eligible. Mock keys that normalize to the same tool name are rejected at setup (`TOOL_MOCK_NAME_COLLISION`) instead of silently dropping one mock and its assertions.

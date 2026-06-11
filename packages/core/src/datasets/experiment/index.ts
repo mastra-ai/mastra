@@ -4,7 +4,7 @@ import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
 import { executeTarget } from './executor';
 import type { Target, ExecutionResult, ToolReplayExecutionOptions } from './executor';
-import { extractToolReplayEvents } from './replay';
+import { extractToolReplayEvents, validateToolMockNames } from './replay';
 import { resolveScorers, resolveStepScorers, runScorersForItem, runStepScorersForItem } from './scorer';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
@@ -90,6 +90,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     signal,
     itemTimeout,
     maxRetries = 0,
+    itemIds,
     experimentId: providedExperimentId,
     name,
     description,
@@ -192,6 +193,19 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     } else {
       throw new Error('No data source: provide datasetId or data');
     }
+
+    if (itemIds && itemIds.length > 0) {
+      const wanted = new Set(itemIds);
+      items = items.filter(item => wanted.has(item.id));
+      if (items.length === 0) {
+        throw new MastraError({
+          id: 'EXPERIMENT_NO_ITEMS',
+          text: `No items match itemIds [${itemIds.join(', ')}]${datasetId ? ` in dataset ${datasetId} at version ${datasetVersion}` : ''}`,
+          domain: 'STORAGE',
+          category: 'USER',
+        });
+      }
+    }
   } catch (err) {
     await markFailedOnSetupError(err);
     throw err; // unreachable, but satisfies TS control flow
@@ -206,7 +220,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   let resolveToolReplay: ((item: ExperimentItem) => Promise<ToolReplayExecutionOptions>) | undefined;
 
   try {
-    if ((toolReplay || toolMocks) && (config.task || targetType !== 'agent')) {
+    if ((toolReplay || toolMocks) && (config.task || (targetType !== undefined && targetType !== 'agent'))) {
       const feature = toolReplay ? 'toolReplay' : 'toolMocks';
       throw new MastraError({
         id: 'EXPERIMENT_TOOL_REPLAY_UNSUPPORTED_TARGET',
@@ -216,8 +230,11 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       });
     }
 
-    if (toolReplay) {
+    if (toolMocks) {
+      validateToolMockNames(toolMocks);
+    }
 
+    if (toolReplay) {
       const observabilityStore = await storage?.getStore('observability');
       if (!observabilityStore) {
         throw new MastraError({
@@ -459,23 +476,26 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   // Mark replay/mock experiments in their metadata so stored runs are
   // distinguishable from live runs (dashboards and score comparisons must
   // never silently mix the two, and such runs are refused as replay sources —
-  // their traces lack tool spans for replayed/mocked calls).
-  const experimentMetadata =
-    toolReplay || toolMocks
+  // their traces lack tool spans for replayed/mocked calls). Expect-only mock
+  // entries observe live executions (tool spans stay complete), so they don't
+  // stamp the run and it remains an eligible replay source.
+  const suppressingMockNames = Object.entries(toolMocks ?? {})
+    .filter(([, mockConfig]) => typeof mockConfig === 'function' || Boolean(mockConfig.error) || 'output' in mockConfig)
+    .map(([toolName]) => toolName);
+  const replayMarker =
+    toolReplay || suppressingMockNames.length > 0
       ? {
-          ...metadata,
-          toolReplay: {
-            ...(toolReplay
-              ? {
-                  fromExperimentId: toolReplay.fromExperimentId,
-                  onMiss: toolReplay.onMiss ?? 'error',
-                  matching: toolReplay.matching ?? 'fifo',
-                }
-              : {}),
-            ...(toolMocks ? { mockedTools: Object.keys(toolMocks) } : {}),
-          },
+          ...(toolReplay
+            ? {
+                fromExperimentId: toolReplay.fromExperimentId,
+                onMiss: toolReplay.onMiss ?? 'error',
+                matching: toolReplay.matching ?? 'fifo',
+              }
+            : {}),
+          ...(suppressingMockNames.length > 0 ? { mockedTools: suppressingMockNames } : {}),
         }
-      : metadata;
+      : undefined;
+  const experimentMetadata = replayMarker ? { ...metadata, toolReplay: replayMarker } : metadata;
 
   // 5. Create experiment record (if storage available and not pre-created)
   if (experimentsStore) {
@@ -505,7 +525,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       status: 'running',
       totalItems: items.length,
       startedAt,
-      ...(toolReplay ? { metadata: experimentMetadata } : {}),
+      ...(replayMarker ? { metadata: experimentMetadata } : {}),
     });
   }
 
@@ -550,7 +570,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           if (
             execResult.error.code === 'TOOL_REPLAY_MISS' ||
             execResult.error.code === 'TOOL_REPLAY_NO_RECORDING' ||
-            execResult.error.code === 'TOOL_MOCK_EXPECTATION_FAILED'
+            execResult.error.code === 'TOOL_MOCK_EXPECTATION_FAILED' ||
+            execResult.error.code === 'TOOL_REPLAY_UNCONSUMED'
           )
             break;
           // Don't retry abort errors
