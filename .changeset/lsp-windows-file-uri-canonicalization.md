@@ -2,15 +2,8 @@
 "@mastra/core": patch
 ---
 
-fix(workspace): normalize file URI keys in LSP diagnostics map to fix Windows mismatch
+Fixed LSP diagnostics always returning empty arrays on Windows when using `lsp: true` in Workspace.
 
-On Windows, LSP servers (e.g. lua-language-server) emit VS Code-style URIs
-like file:///c%3A/... while Node's pathToFileURL produces file:///C:/...
-The Map key mismatch caused waitForDiagnostics to always return [] on Windows.
-
-Fix: key the diagnostics map by normalized OS path via diagnosticsKey() which
-strips leading slashes, lowercases the drive letter, and handles percent-encoded
-colons — making store and lookup keys match regardless of which URI form the
-server emits.
+Previously, `waitForDiagnostics` returned `[]` after the full timeout on Windows even when the language server published non-empty diagnostics. This affected any LSP server emitting VS Code-style URIs (e.g. lua-language-server). Now diagnostics are correctly returned regardless of how the language server encodes the file URI.
 
 Fixes #17813
