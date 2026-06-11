@@ -61,7 +61,6 @@ export interface WorkflowInputDataProps {
   submitButtonFullWidth?: boolean;
   hideInputTypeLabel?: boolean;
   inputTypeLabel?: string;
-  inputTypeBordered?: boolean;
   hideHeading?: boolean;
 }
 
@@ -88,7 +87,6 @@ export const WorkflowInputData = ({
   submitButtonFullWidth,
   hideInputTypeLabel,
   inputTypeLabel = 'Run input',
-  inputTypeBordered,
   hideHeading,
 }: WorkflowInputDataProps) => {
   const [type, setType] = useState<InputType>(isProcessorWorkflow ? 'simple' : 'form');
@@ -106,23 +104,29 @@ export const WorkflowInputData = ({
       {heading ?? (withoutSubmit ? 'Run input' : 'Trigger a run')}
     </Txt>
   );
+  const inputTypeToggle = (
+    <WorkflowInputTypeToggle
+      value={type}
+      onChange={setType}
+      disabled={isSubmitLoading}
+      includeSimple={isProcessorWorkflow}
+      compact={!collapsible && !hideHeading}
+    />
+  );
 
   const body = (
     <>
       {!hideInputTypeLabel && (
-        <Txt as="p" variant="ui-sm" className="text-neutral3 pb-3">
-          {inputTypeLabel}
-        </Txt>
-      )}
-      <div className={cn({ 'pl-3 border-l border-dashed border-border1': inputTypeBordered })}>
-        <div className="pb-4">
-          <WorkflowInputTypeToggle
-            value={type}
-            onChange={setType}
-            disabled={isSubmitLoading}
-            includeSimple={isProcessorWorkflow}
-          />
+        <div className="flex justify-between gap-3 py-3 px-5">
+          <Txt as="p" variant="ui-sm" className="text-neutral3">
+            {inputTypeLabel}
+          </Txt>
+          {!collapsible && !hideHeading && <div className="shrink-0">{inputTypeToggle}</div>}
         </div>
+      )}
+
+      <div className="px-5">
+        {(collapsible || hideHeading || hideInputTypeLabel) && <div className="pb-4">{inputTypeToggle}</div>}
 
         <div
           className={cn('pb-4', {
@@ -189,10 +193,10 @@ export const WorkflowInputData = ({
 
   if (!collapsible) {
     return (
-      <div>
-        {!hideHeading && <div className="pb-3">{headingSlot ?? defaultHeading}</div>}
-        {body}
-      </div>
+      <>
+        {!hideHeading && <div className="border-b border-border1/50 pb-3">{headingSlot ?? defaultHeading}</div>}
+        <div>{body}</div>
+      </>
     );
   }
 

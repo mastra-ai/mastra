@@ -5,12 +5,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { AnchorHTMLAttributes } from 'react';
-import { forwardRef, useContext, useEffect } from 'react';
+import { forwardRef, useContext, useEffect, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
-import { emptyWorkflowRuns, oneSuccessfulRun, runWithTimedSteps } from '../../runs/__tests__/fixtures/workflow-runs';
+import {
+  emptyWorkflowRuns,
+  oneSuccessfulRun,
+  runWithSuspendedStep,
+  runWithTimedSteps,
+} from '../../runs/__tests__/fixtures/workflow-runs';
 import { WorkflowInformation } from '../workflow-information';
 import { fullAccessAuthCapabilities } from './fixtures/auth';
 import { baseWorkflow, workflowWithRequestContext } from './fixtures/workflow';
@@ -140,6 +145,45 @@ function renderInformation(initialRunId?: string, currentRunId?: string) {
   );
 }
 
+function RouteBackToWorkflowHarness({ initialRunId }: { initialRunId: string }) {
+  const [routeRunId, setRouteRunId] = useState<string | undefined>(initialRunId);
+  const [queryClient] = useState(
+    () => new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } }),
+  );
+
+  const RouteLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLAnchorElement> & { to?: string }>(
+    ({ children, to, href, onClick, ...props }, ref) => (
+      <a
+        ref={ref}
+        href={to ?? href}
+        onClick={event => {
+          onClick?.(event);
+          setRouteRunId(undefined);
+        }}
+        {...props}
+      >
+        {children}
+      </a>
+    ),
+  );
+
+  return (
+    <MastraReactProvider baseUrl={BASE_URL}>
+      <QueryClientProvider client={queryClient}>
+        <LinkComponentProvider Link={RouteLink} navigate={() => {}} paths={paths}>
+          <TracingSettingsProvider entityId={WORKFLOW_ID} entityType="workflow">
+            <SchemaRequestContextProvider>
+              <WorkflowRunProvider workflowId={WORKFLOW_ID} initialRunId={routeRunId}>
+                <WorkflowInformation workflowId={WORKFLOW_ID} initialRunId={routeRunId} />
+              </WorkflowRunProvider>
+            </SchemaRequestContextProvider>
+          </TracingSettingsProvider>
+        </LinkComponentProvider>
+      </QueryClientProvider>
+    </MastraReactProvider>
+  );
+}
+
 afterEach(cleanup);
 
 describe('WorkflowInformation', () => {
@@ -187,6 +231,22 @@ describe('WorkflowInformation', () => {
 
       const button = await screen.findByText('New workflow run');
       expect(button.closest('a')?.getAttribute('href')).toBe(paths.workflowLink(WORKFLOW_ID));
+    });
+
+    it('clears the current run header after clicking "New workflow run"', async () => {
+      stubCapabilities();
+      stubWorkflow(baseWorkflow);
+      stubRuns(emptyWorkflowRuns);
+      stubRunById('run-success-1');
+
+      render(<RouteBackToWorkflowHarness initialRunId="run-success-1" />);
+
+      expect(await screen.findByText('run-success-1')).not.toBeNull();
+
+      fireEvent.click(await screen.findByText('New workflow run'));
+
+      await waitFor(() => expect(screen.queryByText('run-success-1')).toBeNull());
+      expect(await screen.findByText('Demo Workflow')).not.toBeNull();
     });
   });
 
@@ -374,8 +434,13 @@ describe('WorkflowInformation', () => {
 
       renderInformation();
 
-      expect(await screen.findByText('Demo Workflow')).not.toBeNull();
-      expect(await screen.findByText('Run input')).not.toBeNull();
+      const workflowTitle = await screen.findByText('Demo Workflow');
+      const runInputLabel = await screen.findByText('Run input');
+      const toggle = await screen.findByRole('radiogroup', { name: 'Input type' });
+
+      expect(workflowTitle.parentElement?.contains(toggle)).toBe(false);
+      expect(runInputLabel.parentElement?.contains(toggle)).toBe(true);
+      expect(toggle.className).toContain('h-7');
     });
 
     it('shows the run status, run ID, duration, and relative age when viewing a specific run', async () => {
@@ -394,14 +459,13 @@ describe('WorkflowInformation', () => {
       expect(inputButton.className).toContain('w-full');
       expect(inputButton.className).toContain('justify-start');
       expect(inputButton.querySelector('svg')).not.toBeNull();
-      expect(within(screen.getByTestId('workflow-information-top-section')).queryByRole('radiogroup', { name: 'Input type' })).toBeNull();
 
       fireEvent.click(inputButton);
 
       const inputDialog = await screen.findByRole('dialog', { name: 'Workflow input' });
       expect(inputDialog).not.toBeNull();
       expect(within(inputDialog).getByRole('radiogroup', { name: 'Input type' })).not.toBeNull();
-      expect(within(inputDialog).getByText('Input')).not.toBeNull();
+      expect(within(inputDialog).queryByText('Input')).toBeNull();
       const statusTitle = await screen.findByText('Success');
       expect(statusTitle.nextElementSibling?.textContent).toBe('run-success-1');
       expect(await screen.findByText('3s')).not.toBeNull();
@@ -431,6 +495,23 @@ describe('WorkflowInformation', () => {
         expect(button.className).toContain('justify-start');
         expect(button.querySelector('svg')).not.toBeNull();
       }
+    });
+
+    it('keeps spacing between suspended run input and the cancel action', async () => {
+      stubCapabilities();
+      stubWorkflow(baseWorkflow);
+      stubRuns(emptyWorkflowRuns);
+      stubRunById('run-suspended-1', undefined, runWithSuspendedStep);
+
+      renderInformation('run-suspended-1');
+
+      expect(await screen.findByRole('button', { name: 'Run input' })).not.toBeNull();
+      const cancelButton = await screen.findByRole('button', { name: /cancel workflow run/i });
+      expect((cancelButton as HTMLButtonElement).disabled).toBe(true);
+
+      const cancelAction = screen.getByTestId('workflow-cancel-action');
+      expect(cancelAction.className).toContain('pt-3');
+      expect(cancelAction.className).not.toContain('-mt-2');
     });
 
     it('shows only the entire-execution button when the run has no result', async () => {
@@ -481,10 +562,9 @@ describe('WorkflowInformation', () => {
 
       renderInformation();
 
-      const runLabel = await screen.findByText('run-success-1');
+      const link = await screen.findByRole('link', { name: /run-success-1/ });
       expect(screen.getByLabelText('success')).not.toBeNull();
-      const link = runLabel.closest('a');
-      expect(link?.getAttribute('href')).toBe(paths.workflowRunLink(WORKFLOW_ID, 'run-success-1'));
+      expect(link.getAttribute('href')).toBe(paths.workflowRunLink(WORKFLOW_ID, 'run-success-1'));
     });
 
     it('shows an empty state and no run rows when there are no runs', async () => {
@@ -515,8 +595,8 @@ describe('WorkflowInformation', () => {
     });
   });
 
-  describe('Toggle debug switch', () => {
-    it('renders the "Toggle debug" switch on the left of the trigger action row', async () => {
+  describe('Debug switch', () => {
+    it('renders the "Debug" switch on the left of the trigger action row', async () => {
       stubCapabilities();
       stubWorkflow(baseWorkflow);
       stubRuns(emptyWorkflowRuns);
@@ -524,7 +604,7 @@ describe('WorkflowInformation', () => {
       renderInformation();
 
       const run = await screen.findByRole('button', { name: 'Run' });
-      const toggle = screen.getByRole('switch', { name: 'Toggle debug' });
+      const toggle = screen.getByRole('switch', { name: 'Debug' });
       expect(toggle).not.toBeNull();
 
       // The toggle is on the left of the same action row, not inside the
@@ -536,7 +616,7 @@ describe('WorkflowInformation', () => {
       expect(actionRow?.contains(run)).toBe(true);
     });
 
-    it('does not render the "Toggle debug" switch when viewing a specific run', async () => {
+    it('does not render the "Debug" switch when viewing a specific run', async () => {
       stubCapabilities();
       stubWorkflow(baseWorkflow);
       stubRuns(oneSuccessfulRun);
@@ -545,7 +625,7 @@ describe('WorkflowInformation', () => {
       renderInformation('run-success-1');
 
       expect(await screen.findByRole('button', { name: 'Run input' })).not.toBeNull();
-      expect(screen.queryByRole('switch', { name: 'Toggle debug' })).toBeNull();
+      expect(screen.queryByRole('switch', { name: 'Debug' })).toBeNull();
     });
 
     it('toggles checked state when clicked', async () => {
@@ -555,13 +635,13 @@ describe('WorkflowInformation', () => {
 
       renderInformation();
 
-      const toggle = await screen.findByRole('switch', { name: 'Toggle debug' });
+      const toggle = await screen.findByRole('switch', { name: 'Debug' });
       expect(toggle.getAttribute('aria-checked')).toBe('false');
 
       fireEvent.click(toggle);
 
       await waitFor(() => {
-        expect(screen.getByRole('switch', { name: 'Toggle debug' }).getAttribute('aria-checked')).toBe('true');
+        expect(screen.getByRole('switch', { name: 'Debug' }).getAttribute('aria-checked')).toBe('true');
       });
     });
   });

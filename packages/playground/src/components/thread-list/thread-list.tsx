@@ -87,9 +87,9 @@ export const ThreadListItem = ({
         to={to}
         variant="ghost"
         className={cn(
-          'w-full min-w-0 justify-start rounded-xl text-left',
+          'w-full min-w-0 justify-start rounded-lg text-left',
           onDelete && 'pr-9',
-          isActive && 'bg-surface4 text-neutral6',
+          isActive && 'bg-surface4 text-neutral6 border-primary',
           className,
         )}
       >

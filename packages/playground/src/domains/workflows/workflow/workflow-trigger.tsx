@@ -68,9 +68,9 @@ function DebugModeSwitch() {
   const { debugMode, setDebugMode } = useContext(WorkflowRunContext);
   return (
     <label className="flex shrink-0 items-center gap-2 cursor-pointer">
-      <Switch checked={debugMode} onCheckedChange={setDebugMode} aria-label="Toggle debug" />
+      <Switch checked={debugMode} onCheckedChange={setDebugMode} aria-label="Debug" />
       <Txt variant="ui-xs" className="text-neutral3 whitespace-nowrap">
-        Toggle debug
+        Debug
       </Txt>
     </label>
   );
@@ -158,6 +158,7 @@ export function WorkflowTrigger({
     payload,
     setPayload,
     setRunId: setContextRunId,
+    runId: contextRunId,
     runSnapshot,
   } = useContext(WorkflowRunContext);
   useSyncStreamResultToWorkflowRunContext(streamResult);
@@ -216,6 +217,12 @@ export function WorkflowTrigger({
     setContextRunId(paramsRunId);
   }, [paramsRunId, observeWorkflowStream, setContextRunId, workflowId]);
 
+  useEffect(() => {
+    if (!paramsRunId && !contextRunId && !streamResultToUse) {
+      setInnerRunId('');
+    }
+  }, [contextRunId, paramsRunId, streamResultToUse]);
+
   if (isLoading) {
     return (
       <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs">
@@ -237,7 +244,7 @@ export function WorkflowTrigger({
   const runStatus = streamResultToUse?.status ?? paramsRunStatus;
 
   const triggerHeadingSlot = (
-    <div className="flex w-full items-center gap-2">
+    <div className="flex w-full items-center gap-2 px-5">
       <Icon className="shrink-0 text-neutral4">
         <WorkflowIcon />
       </Icon>
@@ -255,7 +262,7 @@ export function WorkflowTrigger({
   const runTimestamp = runSnapshot?.timestamp;
 
   const runHeadingSlot = (
-    <div className="flex w-full items-start gap-3">
+    <div className="flex w-full items-start gap-3 px-5">
       {runStatus && (
         <span className="shrink-0 pt-1">
           <WorkflowRunStatusIcon status={runStatus} />
@@ -282,7 +289,7 @@ export function WorkflowTrigger({
 
   return (
     <div className="h-full pt-3 overflow-y-auto">
-      <div className={`${isViewingRun ? '' : 'space-y-4'} border-b border-border1/50`}>
+      <div className={`border-b border-border1/50`}>
         {isSuspendedSteps && isStreamingWorkflow && (
           <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mt-5 border-b border-border1">
             <Icon>
@@ -293,34 +300,30 @@ export function WorkflowTrigger({
         )}
 
         {canExecuteWorkflow && (
-          <div className="px-5">
-            <WorkflowTriggerForm
-              zodSchema={zodSchemaToUse}
-              defaultValues={payload}
-              isStreaming={isStreamingWorkflow || isSuspendedSteps}
-              onExecute={data => {
-                setPayload(data);
-                void handleExecuteWorkflow(data);
-              }}
-              isViewingRun={!!paramsRunId || hasFinished}
-              inputTypeLabel={!!paramsRunId || hasFinished ? 'Input' : undefined}
-              inputTypeBordered={!!paramsRunId || hasFinished}
-              isReadOnly={!!paramsRunId || hasFinished || isSuspendedSteps}
-              disableSubmit={isSuspendedSteps}
-              isProcessorWorkflow={workflow?.isProcessorWorkflow}
-              collapsible={false}
-              headingSlot={isViewingRun ? runHeadingSlot : triggerHeadingSlot}
-              leftActions={!paramsRunId ? <DebugModeSwitch /> : undefined}
-              submitActions={
-                <>
-                  {workflow?.requestContextSchema && (
-                    <WorkflowRequestContextDialog requestContextSchema={workflow.requestContextSchema} />
-                  )}
-                  <WorkflowRunOptionsDialog />
-                </>
-              }
-            />
-          </div>
+          <WorkflowTriggerForm
+            zodSchema={zodSchemaToUse}
+            defaultValues={payload}
+            isStreaming={isStreamingWorkflow || isSuspendedSteps}
+            onExecute={data => {
+              setPayload(data);
+              void handleExecuteWorkflow(data);
+            }}
+            isViewingRun={!!paramsRunId || hasFinished}
+            isReadOnly={!!paramsRunId || hasFinished || isSuspendedSteps}
+            disableSubmit={isSuspendedSteps}
+            isProcessorWorkflow={workflow?.isProcessorWorkflow}
+            collapsible={false}
+            headingSlot={isViewingRun ? runHeadingSlot : triggerHeadingSlot}
+            leftActions={!paramsRunId ? <DebugModeSwitch /> : undefined}
+            submitActions={
+              <>
+                {workflow?.requestContextSchema && (
+                  <WorkflowRequestContextDialog requestContextSchema={workflow.requestContextSchema} />
+                )}
+                <WorkflowRunOptionsDialog />
+              </>
+            }
+          />
         )}
 
         {!canExecuteWorkflow && (
@@ -339,7 +342,6 @@ export function WorkflowTrigger({
                 data={result}
                 triggerLabel="Entire workflow execution (JSON)"
                 title="Entire workflow execution (JSON)"
-                description="JSON view of the full workflow execution"
               />
               {'result' in result && result.result !== undefined && (
                 <WorkflowJsonDialog
@@ -349,7 +351,6 @@ export function WorkflowTrigger({
                   data={{ result: result.result }}
                   triggerLabel="Run output"
                   title="Run output (JSON)"
-                  description="JSON view of the final workflow result"
                 />
               )}
             </div>
@@ -357,7 +358,7 @@ export function WorkflowTrigger({
         )}
 
         {(result?.status === 'running' || isSuspendedSteps) && (
-          <div className="px-5 pb-4 -mt-2">
+          <div data-testid="workflow-cancel-action" className="px-5 pb-4 pt-3">
             <WorkflowCancelButton
               status={isSuspendedSteps ? 'suspended' : result?.status}
               cancelMessage={cancelResponse?.message ?? null}

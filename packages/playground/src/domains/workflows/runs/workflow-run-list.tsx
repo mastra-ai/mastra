@@ -12,24 +12,27 @@ export interface WorkflowRecentRunsProps {
   runId?: string;
 }
 
-function formatRunTitle(snapshot: unknown, fallback: string): string {
+function formatRunInput(snapshot: unknown): string | null {
   if (!snapshot || typeof snapshot !== 'object') {
-    return fallback;
+    return null;
   }
 
   const input = (snapshot as { context?: { input?: unknown } }).context?.input;
   if (input === undefined || input === null) {
-    return fallback;
+    return null;
   }
 
   if (typeof input === 'string') {
     return input;
   }
 
+  const inputValue =
+    typeof input === 'object' && input !== null && 'output' in input ? (input as { output: unknown }).output : input;
+
   try {
-    return JSON.stringify(input);
+    return JSON.stringify(inputValue);
   } catch {
-    return fallback;
+    return null;
   }
 }
 
@@ -73,39 +76,45 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
               <ThreadListEmpty>Your run history will appear here once you run the workflow</ThreadListEmpty>
             ) : (
               <ThreadListItems>
-                {actualRuns.map(run => (
-                  <ThreadListItem
-                    key={run.runId}
-                    as={Link}
-                    to={paths.workflowRunLink(workflowId, run.runId)}
-                    isActive={run.runId === runId}
-                    onDelete={canDeleteRun ? () => setDeleteRunId(run.runId) : undefined}
-                    deleteLabel="delete run"
-                    className="h-auto min-h-0 items-stretch py-1"
-                  >
-                    <span className="flex w-full min-w-0 items-center gap-2.5 px-1 text-left">
-                      {run?.snapshot && typeof run.snapshot === 'object' && (
-                        <WorkflowRunStatusIcon status={run.snapshot.status} />
-                      )}
-                      <span className="flex min-w-0 flex-1 flex-col items-start gap-0">
-                        <span className="block w-full min-w-0 truncate text-xs">
-                          {formatRunTitle(run.snapshot, run.runId)}
-                        </span>
-                        <span className="text-neutral3 flex w-full min-w-0 items-center gap-1 text-xs">
-                          <span className="shrink-0">#{run.runId.slice(0, 6)}</span>
-                          {run?.snapshot && typeof run.snapshot === 'object' && run.snapshot.timestamp && (
-                            <>
-                              <span className="shrink-0">·</span>
-                              <span className="truncate">
+                {actualRuns.map(run => {
+                  const isActiveRun = run.runId === runId;
+                  const runInput = isActiveRun ? formatRunInput(run.snapshot) : null;
+
+                  return (
+                    <ThreadListItem
+                      key={run.runId}
+                      as={Link}
+                      to={paths.workflowRunLink(workflowId, run.runId)}
+                      isActive={isActiveRun}
+                      onDelete={canDeleteRun ? () => setDeleteRunId(run.runId) : undefined}
+                      deleteLabel="delete run"
+                      className="h-auto min-h-0 items-stretch py-1"
+                    >
+                      <span className="flex w-full min-w-0 items-center gap-2.5 px-1 text-left">
+                        {run?.snapshot && typeof run.snapshot === 'object' && (
+                          <span className="shrink-0">
+                            <WorkflowRunStatusIcon status={run.snapshot.status} />
+                          </span>
+                        )}
+                        <span className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+                          <span className="flex w-full min-w-0 items-center gap-2 text-xs">
+                            <span className="min-w-0 flex-1 truncate font-medium text-neutral5" title={run.runId}>
+                              {run.runId}
+                            </span>
+                            {run?.snapshot && typeof run.snapshot === 'object' && run.snapshot.timestamp && (
+                              <span className="shrink-0 text-neutral3">
                                 {formatDate(run.snapshot.timestamp, 'MMM d, yyyy h:mm a')}
                               </span>
-                            </>
+                            )}
+                          </span>
+                          {runInput && (
+                            <span className="block w-full min-w-0 truncate text-xs text-neutral3">{runInput}</span>
                           )}
                         </span>
                       </span>
-                    </span>
-                  </ThreadListItem>
-                ))}
+                    </ThreadListItem>
+                  );
+                })}
 
                 {isFetchingNextPage && (
                   <li className="flex justify-center items-center py-2">

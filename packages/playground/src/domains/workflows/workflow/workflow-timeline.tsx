@@ -75,15 +75,14 @@ export function WorkflowTimeline() {
   return (
     <div
       data-testid="workflow-timeline"
-      className="shrink-0 px-2 pb-2"
+      className="pointer-events-none absolute right-0 bottom-0 z-20 px-2 pb-2"
       style={
         {
-          marginLeft: 'var(--workflow-left-panel-width, 0px)',
-          width: 'calc(100% - var(--workflow-left-panel-width, 0px))',
+          left: 'var(--workflow-left-panel-width, 0px)',
         } as CSSProperties
       }
     >
-      <div className="flex max-h-64 w-full min-w-0 flex-col gap-3 overflow-hidden rounded-studio-panel border border-border1/50 bg-surface3 p-4">
+      <div className="pointer-events-auto flex max-h-64 w-full min-w-0 flex-col gap-3 overflow-hidden rounded-studio-panel border border-border1/50 bg-surface3 p-4 shadow-lg">
         <div className="flex shrink-0 items-center justify-between gap-3">
           <Txt as="p" variant="ui-md" className="text-neutral3">
             Timeline

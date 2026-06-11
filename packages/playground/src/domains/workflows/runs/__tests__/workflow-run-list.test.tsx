@@ -2,14 +2,14 @@
 import type { ListWorkflowRunsResponse } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { AnchorHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { WorkflowRecentRuns } from '../workflow-run-list';
-import { emptyWorkflowRuns, oneSuccessfulRun } from './fixtures/workflow-runs';
+import { emptyWorkflowRuns, oneSuccessfulRun, runsWithInput } from './fixtures/workflow-runs';
 import { readOnlyAuthCapabilities } from '@/domains/agents/components/__tests__/fixtures/auth';
 import { LinkComponentProvider } from '@/lib/framework';
 import type { LinkComponentProviderProps } from '@/lib/framework';
@@ -17,7 +17,6 @@ import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const WORKFLOW_ID = 'demo-workflow';
-
 const StubLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLAnchorElement> & { to?: string }>(
   ({ children, to, href, ...props }, ref) => (
     <a ref={ref} href={to ?? href} {...props}>
@@ -99,7 +98,7 @@ describe('WorkflowRecentRuns', () => {
 
     renderRunList('run-success-1');
 
-    expect(await screen.findByText('run-success-1')).not.toBeNull();
+    expect(await screen.findByRole('link', { name: /run-success-1/ })).not.toBeNull();
     expect(screen.queryByText('New workflow run')).toBeNull();
   });
 
@@ -109,20 +108,48 @@ describe('WorkflowRecentRuns', () => {
 
     renderRunList();
 
-    expect(await screen.findByText('run-success-1')).not.toBeNull();
+    expect(await screen.findByRole('link', { name: /run-success-1/ })).not.toBeNull();
     // Status icon trigger exposes the raw status for accessibility...
     expect(screen.getByLabelText('success')).not.toBeNull();
     // ...and the textual badge is gone.
     expect(screen.queryByText('SUCCESS')).toBeNull();
   });
 
-  it('shows the run id prefix (first 6 chars) before the date', async () => {
+  it('shows the run id and date in the same muted metadata row', async () => {
     stubCapabilities();
     stubRuns(oneSuccessfulRun);
 
     renderRunList();
 
-    expect(await screen.findByText('#run-su')).not.toBeNull();
+    const link = await screen.findByRole('link', { name: /run-success-1/ });
+    const runId = within(link).getByTitle('run-success-1');
+    expect(runId.className).toContain('truncate');
+    expect(within(link).getByText('May 29, 2026 4:19 PM').className).toContain('text-neutral3');
+    expect(runId.parentElement?.className).toContain('flex');
+    expect(runId.parentElement?.className).toContain('items-center');
+    expect(runId.parentElement?.className).toContain('gap-2');
+  });
+
+  it('shows the input preview only for the active run', async () => {
+    stubCapabilities();
+    stubRuns(runsWithInput);
+
+    renderRunList('run-with-input');
+
+    const link = await screen.findByRole('link', { name: /run-with-input/ });
+    expect(within(link).getByTitle('run-with-input')).not.toBeNull();
+    expect(within(link).getByText('{"city":"Paris"}')).not.toBeNull();
+  });
+
+  it('does not show an input preview for inactive runs', async () => {
+    stubCapabilities();
+    stubRuns(runsWithInput);
+
+    renderRunList();
+
+    const link = await screen.findByRole('link', { name: /run-with-input/ });
+    expect(within(link).getByTitle('run-with-input')).not.toBeNull();
+    expect(within(link).queryByText('{"city":"Paris"}')).toBeNull();
   });
 
   it('renders the "Recent runs" section title', async () => {
@@ -151,9 +178,7 @@ describe('WorkflowRecentRuns', () => {
 
     renderRunList();
 
-    const runLabel = await screen.findByText('run-success-1');
-    const link = runLabel.closest('a');
-    expect(link).not.toBeNull();
-    expect(link?.getAttribute('href')).toBe(paths.workflowRunLink(WORKFLOW_ID, 'run-success-1'));
+    const link = await screen.findByRole('link', { name: /run-success-1/ });
+    expect(link.getAttribute('href')).toBe(paths.workflowRunLink(WORKFLOW_ID, 'run-success-1'));
   });
 });

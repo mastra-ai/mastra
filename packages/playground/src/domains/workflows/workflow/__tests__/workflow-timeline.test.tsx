@@ -208,7 +208,7 @@ describe('WorkflowTimeline', () => {
     });
   });
 
-  it('positions and sizes itself from the workflow left panel width variable', async () => {
+  it('positions itself over the graph from the workflow left panel width variable', async () => {
     stubRunById('run-timeline-1', runWithTimedSteps);
     stubWorkflow();
 
@@ -217,8 +217,9 @@ describe('WorkflowTimeline', () => {
     await screen.findByText('Step A');
 
     const timeline = screen.getByTestId('workflow-timeline');
-    expect(timeline.style.marginLeft).toBe('var(--workflow-left-panel-width, 0px)');
-    expect(timeline.style.width).toBe('calc(100% - var(--workflow-left-panel-width, 0px))');
+    expect(timeline.className).toContain('absolute');
+    expect(timeline.className).toContain('bottom-0');
+    expect(timeline.style.left).toBe('var(--workflow-left-panel-width, 0px)');
   });
 
   it('positions and sizes each bar from step timing', async () => {

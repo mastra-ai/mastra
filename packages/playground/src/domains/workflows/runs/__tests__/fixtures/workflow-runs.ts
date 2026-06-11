@@ -40,6 +40,28 @@ export const oneSuccessfulRun: ListWorkflowRunsResponse = {
   total: 1,
 };
 
+const inputStep = {
+  status: 'success',
+  output: { city: 'Paris' },
+  payload: {},
+  startedAt: new Date(2026, 4, 29, 16, 19, 44).getTime(),
+  endedAt: new Date(2026, 4, 29, 16, 19, 44).getTime(),
+} as const;
+const runWithInput = workflowRun('run-with-input', 'success');
+
+export const runsWithInput: ListWorkflowRunsResponse = {
+  runs: [
+    {
+      ...runWithInput,
+      snapshot: {
+        ...runWithInput.snapshot,
+        context: { input: inputStep },
+      },
+    },
+  ],
+  total: 1,
+};
+
 const RUN_BASE = new Date(2026, 4, 29, 16, 19, 44);
 
 /**

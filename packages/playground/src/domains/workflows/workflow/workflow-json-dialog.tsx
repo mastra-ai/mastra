@@ -4,7 +4,6 @@ import {
   Dialog,
   DialogBody,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from '@mastra/playground-ui';
@@ -16,7 +15,6 @@ export interface WorkflowJsonDialogProps {
   data: Record<string, unknown>;
   triggerLabel: string;
   title: string;
-  description: string;
   triggerIcon?: ReactNode;
   variant?: ComponentProps<typeof Button>['variant'];
   size?: ComponentProps<typeof Button>['size'];
@@ -27,7 +25,6 @@ export const WorkflowJsonDialog = ({
   data,
   triggerLabel,
   title,
-  description,
   triggerIcon = <Braces className="shrink-0 text-neutral3" />,
   variant = 'default',
   size = 'default',
@@ -46,10 +43,9 @@ export const WorkflowJsonDialog = ({
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>{title}</DialogTitle>
-            <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
           <DialogBody className="max-h-[90vh]">
-            <CodeEditor data={data} className="p-4" />
+            <CodeEditor data={data} className="p-0" />
           </DialogBody>
         </DialogContent>
       </Dialog>

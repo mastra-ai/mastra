@@ -1,13 +1,4 @@
-import {
-  Button,
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  Icon,
-} from '@mastra/playground-ui';
+import { Button, Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle, Icon } from '@mastra/playground-ui';
 import { FormInput, Loader2, Play } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -29,8 +20,6 @@ export interface WorkflowTriggerFormProps {
   heading?: string;
   headingSlot?: ReactNode;
   collapsible?: boolean;
-  inputTypeLabel?: string;
-  inputTypeBordered?: boolean;
 }
 
 export function WorkflowTriggerForm({
@@ -47,8 +36,6 @@ export function WorkflowTriggerForm({
   heading,
   headingSlot,
   collapsible,
-  inputTypeLabel,
-  inputTypeBordered,
 }: WorkflowTriggerFormProps) {
   const [isInputDialogOpen, setIsInputDialogOpen] = useState(false);
 
@@ -56,7 +43,7 @@ export function WorkflowTriggerForm({
     return (
       <div>
         {headingSlot && <div className="pb-3">{headingSlot}</div>}
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 px-5">
           <Button
             type="button"
             variant="ghost"
@@ -72,7 +59,6 @@ export function WorkflowTriggerForm({
           <DialogContent className="max-w-3xl">
             <DialogHeader>
               <DialogTitle>Workflow input</DialogTitle>
-              <DialogDescription>Input data used for this workflow run.</DialogDescription>
             </DialogHeader>
             <DialogBody className="max-h-[90vh]">
               <WorkflowInputData
@@ -87,8 +73,7 @@ export function WorkflowTriggerForm({
                 isProcessorWorkflow={isProcessorWorkflow}
                 collapsible={false}
                 hideHeading
-                inputTypeLabel={inputTypeLabel}
-                inputTypeBordered={inputTypeBordered}
+                hideInputTypeLabel
               />
             </DialogBody>
           </DialogContent>
@@ -120,8 +105,6 @@ export function WorkflowTriggerForm({
         heading={heading}
         headingSlot={headingSlot}
         collapsible={collapsible}
-        inputTypeLabel={inputTypeLabel}
-        inputTypeBordered={inputTypeBordered}
       />
     );
   }
