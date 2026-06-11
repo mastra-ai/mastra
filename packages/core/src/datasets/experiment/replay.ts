@@ -100,6 +100,30 @@ export interface ToolMockExpectationResult {
   reason?: string;
 }
 
+/**
+ * One tool call the run actually made, in hook-arrival order — the run's
+ * call flow. Lets consumers reconstruct "what happened, step by step" and
+ * diff it against the recording (replayed entries carry the consumed
+ * recorded event's `sequence`).
+ */
+export interface ToolReplayCall {
+  /** 0-based arrival order across all tools. Parallel calls in one step keep hook-arrival order. */
+  order: number;
+  toolName: string;
+  outcome:
+    | 'replayed' // recorded output served
+    | 'replayed-error' // recorded error re-thrown
+    | 'mocked' // mock output / function result served
+    | 'mock-error' // mock error injected
+    | 'miss-error' // no event left, item stopped
+    | 'miss-passthrough' // no event left, live tool executed
+    | 'live'; // mock-only run, unmocked tool executed live
+  /** Recorded event consumed (replayed outcomes only). */
+  sequence?: number;
+  /** FIFO mode only: args differed from the consumed recorded event. */
+  argsDiffered?: boolean;
+}
+
 export interface ToolReplayMiss {
   toolName: string;
   /** What happened: 'passthrough' = live execution proceeded, 'error' = the run was aborted. */
@@ -145,6 +169,11 @@ export interface ToolReplayReport {
    * with the item's new input.
    */
   staleRecording?: boolean;
+  /**
+   * The run's actual call flow, in order — what each call was answered by.
+   * Lets consumers diff the run against the recording step by step.
+   */
+  calls?: ToolReplayCall[];
   /** Mock usage accounting — present when toolMocks were configured. */
   mocks?: ToolMockUsage[];
   /**
@@ -173,6 +202,8 @@ export interface ToolReplayState {
   replayActive: boolean;
   /** Mocks keyed by formatted tool name, with per-call accounting. */
   mocks: Map<string, { toolName: string; config: ToolMockConfig; calls: { input: unknown }[] }>;
+  /** The run's call flow, appended at each hook arrival. */
+  calls: ToolReplayCall[];
 }
 
 const TOOL_SPAN_TYPES: ReadonlySet<SpanType> = new Set([SpanType.TOOL_CALL, SpanType.MCP_TOOL_CALL]);
@@ -365,6 +396,7 @@ export function createReplayState(
     matching: options?.matching ?? 'fifo',
     replayActive: options?.replayActive ?? true,
     mocks,
+    calls: [],
   };
 }
 
@@ -414,6 +446,7 @@ export function buildReplayHooks(
       if (mock) {
         mock.calls.push({ input });
         if (typeof mock.config === 'function') {
+          state.calls.push({ order: state.calls.length, toolName, outcome: 'mocked' });
           const output = await mock.config({ input, callIndex: mock.calls.length - 1 });
           return { proceed: false, output };
         }
@@ -424,9 +457,11 @@ export function buildReplayHooks(
           if (mock.config.error.name && !RETHROWN_TOOL_ERROR_NAMES.has(mock.config.error.name)) {
             error.name = mock.config.error.name;
           }
+          state.calls.push({ order: state.calls.length, toolName, outcome: 'mock-error' });
           throw error;
         }
         if ('output' in mock.config) {
+          state.calls.push({ order: state.calls.length, toolName, outcome: 'mocked' });
           return { proceed: false, output: mock.config.output };
         }
         // expect-only: fall through.
@@ -434,7 +469,10 @@ export function buildReplayHooks(
 
       // Mock-only runs: unmocked tools execute live — the experiment never
       // configured a replay source, so there is nothing to miss against.
-      if (!state.replayActive) return;
+      if (!state.replayActive) {
+        state.calls.push({ order: state.calls.length, toolName, outcome: 'live' });
+        return;
+      }
 
       const queue = state.queues.get(key);
       let event: ToolReplayEvent | undefined;
@@ -450,6 +488,11 @@ export function buildReplayHooks(
 
       if (!event) {
         state.misses.push({ toolName, action: options.onMiss, input });
+        state.calls.push({
+          order: state.calls.length,
+          toolName,
+          outcome: options.onMiss === 'passthrough' ? 'miss-passthrough' : 'miss-error',
+        });
         if (options.onMiss === 'passthrough') {
           return; // proceed with live execution
         }
@@ -465,12 +508,19 @@ export function buildReplayHooks(
       }
 
       state.replayedCount++;
-      if (
+      const argsDiffered =
         state.matching !== 'strict' &&
-        !deepEqual(normalizeArgsForComparison(input), normalizeArgsForComparison(event.input))
-      ) {
+        !deepEqual(normalizeArgsForComparison(input), normalizeArgsForComparison(event.input));
+      if (argsDiffered) {
         state.argMismatches.push({ toolName, sequence: event.sequence, spanId: event.spanId });
       }
+      state.calls.push({
+        order: state.calls.length,
+        toolName,
+        outcome: event.error ? 'replayed-error' : 'replayed',
+        sequence: event.sequence,
+        ...(argsDiffered ? { argsDiffered: true } : {}),
+      });
 
       if (event.error) {
         const error = new Error(event.error.message);
@@ -542,6 +592,7 @@ export function finalizeReplayReport(state: ToolReplayState): ToolReplayReport {
     unconsumed,
     argMismatches: [...state.argMismatches],
     ...(state.redactedPayloadCount > 0 ? { redactedPayloadCount: state.redactedPayloadCount } : {}),
+    ...(state.calls.length > 0 ? { calls: [...state.calls] } : {}),
     ...(mocks.length > 0 ? { mocks } : {}),
     ...(expectations.length > 0 ? { expectations } : {}),
   };

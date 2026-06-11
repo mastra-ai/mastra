@@ -500,3 +500,39 @@ describe('tool mocks', () => {
     ]);
   });
 });
+
+describe('call flow (report.calls)', () => {
+  it('records every call with its outcome, consumed sequence, and arg drift', async () => {
+    const events = extractToolReplayEvents([
+      toolSpan('s1', 'lookup', 1000, { input: { key: 'first' }, output: { value: 'one' } }),
+      toolSpan('s2', 'flaky', 2000, { input: {}, error: { name: 'TimeoutError', message: 'timed out' } }),
+    ]);
+    const state = createReplayState(events, TRACE_ID, {
+      mocks: { stubbed: { output: { ok: true } } },
+    });
+    const hooks = buildReplayHooks(state, { onMiss: 'passthrough' });
+
+    await callHook(hooks, 'stubbed', {}); // mocked
+    await callHook(hooks, 'lookup', { key: 'REPHRASED' }); // replayed, args differed
+    await expect(callHook(hooks, 'flaky', {})).rejects.toThrow(); // replayed error
+    await callHook(hooks, 'unknown', {}); // miss → passthrough
+
+    expect(finalizeReplayReport(state).calls).toEqual([
+      { order: 0, toolName: 'stubbed', outcome: 'mocked' },
+      { order: 1, toolName: 'lookup', outcome: 'replayed', sequence: 0, argsDiffered: true },
+      { order: 2, toolName: 'flaky', outcome: 'replayed-error', sequence: 1 },
+      { order: 3, toolName: 'unknown', outcome: 'miss-passthrough' },
+    ]);
+  });
+
+  it('records live outcomes on mock-only runs and omits calls when none happened', async () => {
+    const state = createReplayState([], null, { replayActive: false, mocks: { m: { output: 1 } } });
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+    await callHook(hooks, 'liveTool', {});
+
+    expect(finalizeReplayReport(state).calls).toEqual([{ order: 0, toolName: 'liveTool', outcome: 'live' }]);
+
+    const idle = createReplayState([], TRACE_ID);
+    expect(finalizeReplayReport(idle).calls).toBeUndefined();
+  });
+});
