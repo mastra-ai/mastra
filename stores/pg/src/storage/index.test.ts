@@ -461,3 +461,116 @@ describe('WorkflowsPG snapshot sanitization', () => {
     }
   });
 });
+
+/**
+ * Real-Postgres regression for https://github.com/mastra-ai/mastra/issues/17679
+ *
+ * The simulation tests in packages/core prove the architectural shape
+ * of the bug — that MastraCompositeStore.init() broadcasts DDL across
+ * the pool via Promise.all. These tests prove the same bug exhibits on
+ * an actual `pg.Pool` against an actual Postgres instance under
+ * Supabase-shaped constraints (tight pool budget, tight statement
+ * timeout), and that the fix resolves it end-to-end.
+ *
+ * Each test uses a unique `schemaName` so it runs in isolation against
+ * the shared `pg-test-db` container and never interferes with the
+ * baseline `createTestSuite(...)` runs above.
+ */
+describe('PostgresStore.init() — parallel DDL fan-out (issue #17679)', () => {
+  /** Best-effort isolation: each test runs against its own schema. */
+  async function dropSchema(schemaName: string) {
+    try {
+      const cleanup = new Pool({ connectionString });
+      await cleanup.query(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+      await cleanup.end();
+    } catch {}
+  }
+
+  /**
+   * Wraps `pool.query()` to count concurrent in-flight queries and
+   * returns `{ peakInFlight, totalQueries }`. `pool.query()` is the
+   * entry point every domain's DDL goes through via PoolAdapter.none,
+   * so this is a direct, mechanism-level witness to the fan-out.
+   */
+  function instrumentPool(pool: Pool) {
+    const state = { inFlight: 0, peakInFlight: 0, totalQueries: 0 };
+    const originalQuery = pool.query.bind(pool);
+    (pool as any).query = async (...args: any[]) => {
+      state.inFlight++;
+      state.totalQueries++;
+      state.peakInFlight = Math.max(state.peakInFlight, state.inFlight);
+      try {
+        return await (originalQuery as any)(...args);
+      } finally {
+        state.inFlight--;
+      }
+    };
+    return state;
+  }
+
+  it('init() must serialize DDL — peak concurrent pool.query() calls stays at 1', async () => {
+    // This is the strongest, most reliable witness to the bug. Unlike
+    // the symptoms (statement_timeout, connectionTimeoutMillis) which
+    // only surface under Supabase-grade latency amplification and
+    // can't be reproduced reliably against a local Postgres, the
+    // fan-out itself is directly observable on the pg.Pool the moment
+    // init() runs.
+    //
+    // BEFORE THE FIX: every domain's chained `pool.query(...)` calls
+    //   each take their own backend, all concurrently via
+    //   `Promise.all`. peakInFlight on this codebase is ~340 (well
+    //   over the pool's `max: 20`).
+    // AFTER THE FIX: serialized init touches one backend at a time so
+    //   peakInFlight === 1.
+    //
+    // The Supabase production symptom (`canceling statement due to
+    // statement timeout`) follows directly from this: any peakInFlight
+    // > 1 means DDL is racing on the same relation, and on a real
+    // Supabase pooler that race amplifies into the reported timeout.
+    const schemaName = `it17679_fanout_${Date.now()}`;
+    const pool = new Pool({ connectionString, max: 20 });
+    const probe = instrumentPool(pool);
+
+    const store = new PostgresStore({ id: `pg-17679-fanout-${Date.now()}`, pool, schemaName });
+
+    try {
+      await store.init();
+      // Sanity: init actually ran some DDL (so we know we measured the
+      // right thing and didn't pass via a no-op).
+      expect(probe.totalQueries).toBeGreaterThan(20);
+      // The actual assertion: no concurrent DDL.
+      expect(probe.peakInFlight).toBe(1);
+    } finally {
+      await dropSchema(schemaName);
+      await store.close();
+      await pool.end();
+    }
+  });
+
+  it('init() must not over-acquire pool slots even when the pool is small (max=2)', async () => {
+    // Complementary check: the bug isn't just about peak concurrency
+    // in a generous pool — it manifests as "every domain is asking for
+    // a connection right now" under any pool size. Here we shrink the
+    // pool to 2 and assert peakInFlight is still 1.
+    //
+    // BEFORE THE FIX: peakInFlight saturates at 2 (the pool max) and
+    //   the other ~340 calls just queue. The init "succeeds" but the
+    //   pool is a bottleneck and any per-connection latency (real
+    //   Supabase pooler) amplifies that queue into seconds.
+    // AFTER THE FIX: peakInFlight === 1, pool size is irrelevant.
+    const schemaName = `it17679_small_pool_${Date.now()}`;
+    const pool = new Pool({ connectionString, max: 2 });
+    const probe = instrumentPool(pool);
+
+    const store = new PostgresStore({ id: `pg-17679-small-pool-${Date.now()}`, pool, schemaName });
+
+    try {
+      await store.init();
+      expect(probe.peakInFlight).toBe(1);
+    } finally {
+      await dropSchema(schemaName);
+      await store.close();
+      await pool.end();
+    }
+  });
+});
