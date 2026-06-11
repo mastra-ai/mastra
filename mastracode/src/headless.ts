@@ -219,6 +219,14 @@ function autoResolve<TState extends Record<string, unknown>>(
           json: { ...event, autoApproved: true },
         };
       }
+      if (event.toolName === 'submit_plan') {
+        void harness.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: { action: 'approved' } });
+        return {
+          resolved: true,
+          label: `[auto-approved plan] ${String(payload.title ?? '')}`,
+          json: { ...event, autoApproved: true },
+        };
+      }
       void harness.respondToToolSuspension({
         toolCallId: event.toolCallId,
         resumeData: 'Proceed with your best judgment. Do not ask further questions.',
@@ -228,10 +236,6 @@ function autoResolve<TState extends Record<string, unknown>>(
         label: `[auto-answered] ${truncate(String(payload.question ?? ''), 100)}`,
         json: { ...event, autoAnswered: true },
       };
-    }
-    case 'plan_approval_required': {
-      void harness.respondToPlanApproval({ planId: event.planId, response: { action: 'approved' } });
-      return { resolved: true, label: `[auto-approved plan] ${event.title}`, json: { ...event, autoApproved: true } };
     }
     default:
       return { resolved: false };
