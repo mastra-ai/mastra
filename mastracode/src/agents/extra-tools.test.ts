@@ -162,6 +162,53 @@ describe('createDynamicTools – extraTools', () => {
       limit: undefined,
     });
   });
+
+  it('should deliver unread notification details through the inbox tool for the current thread', async () => {
+    const notificationStore = {
+      getNotification: vi.fn(async () => ({
+        id: 'n1',
+        threadId: 'thread-1',
+        source: 'github',
+        kind: 'pull-request-ci-failure',
+        summary: 'CI failed on PR #123',
+        status: 'pending',
+        resourceId: 'resource-1',
+        agentId: 'agent-1',
+      })),
+      updateNotification: vi.fn(async input => ({ ...input })),
+    };
+    const storage = {
+      getStore: vi.fn(async (name: string) => (name === 'notifications' ? notificationStore : undefined)),
+    };
+    const sendSignal = vi.fn(signal => ({
+      signal: { ...signal, id: 'signal-delivered-1' },
+      persisted: Promise.resolve(),
+    }));
+    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, storage as any);
+    const tools = getDynamicTools({ requestContext: makeRequestContext() });
+
+    await expect(
+      tools[MC_TOOLS.NOTIFICATION_INBOX]?.execute?.(
+        { action: 'read', id: 'n1' },
+        {
+          agent: { agentId: 'agent-1', threadId: 'thread-1', resourceId: 'resource-1' },
+          mastra: { getAgentById: vi.fn(async () => ({ sendSignal })) },
+        },
+      ),
+    ).resolves.toMatchObject({ delivered: 1, message: '1 notification will now be delivered.' });
+
+    expect(notificationStore.getNotification).toHaveBeenCalledWith({ threadId: 'thread-1', id: 'n1' });
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'notification', contents: 'CI failed on PR #123' }),
+      { resourceId: 'resource-1', threadId: 'thread-1' },
+    );
+    expect(notificationStore.updateNotification).toHaveBeenCalledWith({
+      threadId: 'thread-1',
+      id: 'n1',
+      status: 'seen',
+      deliveredSignalId: 'signal-delivered-1',
+    });
+  });
 });
 
 describe('getToolCategory – extra tools', () => {
