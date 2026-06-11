@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 
 import type { MastraUnion } from '../../action';
 import type { RequestContext } from '../../request-context';
+import type { TaskRecord } from '../../storage/domains/tasks/base';
 import { createTool } from '../tool';
 
 // =============================================================================
@@ -303,9 +304,16 @@ function formatAvailableTaskIds(tasks: TaskItemSnapshot[]): string {
 // within-turn list from `RequestContext` (set on each write) so the snapshot
 // reflects the latest mutation in the same step it is computed.
 
+// Typed in terms of the storage domain's `TaskRecord` (the storage contract).
+// The `tasks` domain deliberately defines its own `TaskRecord` so the storage
+// layer does not depend on this tools package; the tools operate on
+// `TaskItemSnapshot`. The two must stay structurally identical — typing the
+// store methods with `TaskRecord` here means any drift between the shapes breaks
+// the build at the read/write call sites below, rather than silently passing
+// the duck-typed `isTaskStore` guard.
 type ResolvedTaskStore = {
-  getTasks(threadId: string): Promise<TaskItemSnapshot[]>;
-  setTasks(threadId: string, tasks: TaskItemSnapshot[]): Promise<void>;
+  getTasks(threadId: string): Promise<TaskRecord[]>;
+  setTasks(threadId: string, tasks: TaskRecord[]): Promise<void>;
 };
 
 interface TaskToolAgentContext {
