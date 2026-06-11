@@ -1,6 +1,6 @@
 import { Txt, cn } from '@mastra/playground-ui';
 import { Check } from 'lucide-react';
-import { type CSSProperties, type ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useAgentColor } from '../../contexts/agent-color-context';
 
 export interface AgentSelectableCardProps {

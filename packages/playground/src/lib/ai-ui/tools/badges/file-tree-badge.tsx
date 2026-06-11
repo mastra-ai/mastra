@@ -1,8 +1,8 @@
-import { useAuiState } from '@assistant-ui/react';
 import { Badge, Button, CodeEditor, Icon, cn } from '@mastra/playground-ui';
 import { ChevronUpIcon, CopyIcon, CheckIcon, FolderTree, HardDrive } from 'lucide-react';
 import { useState, useEffect, useMemo } from 'react';
 import { useCopyToClipboard } from '../../hooks/use-copy-to-clipboard';
+import type { DataMessagePart } from '../tool-card';
 import type { ToolApprovalButtonsProps } from './tool-approval-buttons';
 import { ToolApprovalButtons } from './tool-approval-buttons';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
@@ -43,6 +43,7 @@ export interface FileTreeBadgeProps extends Omit<ToolApprovalButtonsProps, 'tool
   result: any;
   metadata?: MessageMetadata;
   toolCalled?: boolean;
+  dataParts?: ReadonlyArray<DataMessagePart>;
 }
 
 export const FileTreeBadge = ({
@@ -53,6 +54,7 @@ export const FileTreeBadge = ({
   toolApprovalMetadata,
   isNetwork,
   toolCalled: toolCalledProp,
+  dataParts,
 }: FileTreeBadgeProps) => {
   // Expand by default when approval is required (so buttons are visible)
   const [isCollapsed, setIsCollapsed] = useState(!toolApprovalMetadata);
@@ -109,13 +111,11 @@ export const FileTreeBadge = ({
   const toolCalled = toolCalledProp ?? hasResult;
 
   // Extract filesystem metadata from message data parts (via writer.custom), scoped to this tool call
-  const message = useAuiState(s => s.message);
   const workspaceMetadata = useMemo(() => {
-    const content = message.content as ReadonlyArray<{ type: string; name?: string; data?: any }>;
-    return content.find(
+    return (dataParts ?? []).find(
       part => part.type === 'data' && part.name === 'workspace-metadata' && part.data?.toolCallId === toolCallId,
     );
-  }, [message.content, toolCallId]);
+  }, [dataParts, toolCallId]);
 
   const wsMeta = workspaceMetadata?.data as WorkspaceMetadata | undefined;
 

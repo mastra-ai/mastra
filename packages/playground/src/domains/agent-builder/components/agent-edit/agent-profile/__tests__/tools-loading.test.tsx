@@ -8,10 +8,10 @@ import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { server } from '@/test/msw-server';
 import { AgentColorProvider } from '../../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import { Tools } from '../tools';
+import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
