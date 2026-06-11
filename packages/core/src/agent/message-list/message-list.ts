@@ -1138,7 +1138,7 @@ export class MessageList {
           const existingState = part.toolInvocation?.state;
           const isAlreadySettled =
             existingState === 'result' ||
-            existingState === 'output-available' ||
+            (existingState as string) === 'output-available' ||
             existingState === 'output-denied' ||
             existingState === 'output-error';
           if (!isAlreadySettled) {
