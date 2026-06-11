@@ -39,8 +39,6 @@ describe('defaultDisplayState', () => {
     expect(ds.toolInputBuffers).toBeInstanceOf(Map);
     expect(ds.toolInputBuffers.size).toBe(0);
     expect(ds.pendingApproval).toBeNull();
-    expect(ds.pendingQuestion).toBeNull();
-    expect(ds.pendingPlanApproval).toBeNull();
     expect(ds.activeSubagents).toBeInstanceOf(Map);
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.omProgress.status).toBe('idle');
@@ -76,8 +74,6 @@ describe('Harness.getDisplayState()', () => {
     expect(ds.tokenUsage).toEqual(createEmptyTokenUsage());
     expect(ds.activeTools.size).toBe(0);
     expect(ds.pendingApproval).toBeNull();
-    expect(ds.pendingQuestion).toBeNull();
-    expect(ds.pendingPlanApproval).toBeNull();
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.modifiedFiles.size).toBe(0);
     expect(ds.tasks).toEqual([]);
@@ -137,22 +133,6 @@ describe('agent lifecycle', () => {
 
     emit(harness, { type: 'agent_end', reason: 'complete' });
     expect(harness.getDisplayState().isRunning).toBe(false);
-  });
-
-  it('clears pendingQuestion on agent_end', () => {
-    emit(harness, { type: 'ask_question', questionId: 'q1', question: 'What?', options: [] });
-    expect(harness.getDisplayState().pendingQuestion).not.toBeNull();
-
-    emit(harness, { type: 'agent_end', reason: 'complete' });
-    expect(harness.getDisplayState().pendingQuestion).toBeNull();
-  });
-
-  it('clears pendingPlanApproval on agent_end', () => {
-    emit(harness, { type: 'plan_approval_required', planId: 'p1', title: 'Plan', plan: '# Plan' });
-    expect(harness.getDisplayState().pendingPlanApproval).not.toBeNull();
-
-    emit(harness, { type: 'agent_end', reason: 'complete' });
-    expect(harness.getDisplayState().pendingPlanApproval).toBeNull();
   });
 
   it('marks running tools as error on agent_end', () => {
@@ -530,7 +510,7 @@ describe('tool lifecycle', () => {
   });
 
   describe('tool_suspended', () => {
-    it('sets pendingSuspension', () => {
+    it('sets a pendingSuspensions entry', () => {
       emit(harness, {
         type: 'tool_suspended',
         toolCallId: 't1',
@@ -539,15 +519,15 @@ describe('tool lifecycle', () => {
         suspendPayload: { reason: 'Needs confirmation' },
         resumeSchema: undefined,
       });
-      const suspension = harness.getDisplayState().pendingSuspension;
-      expect(suspension).not.toBeNull();
+      const suspension = harness.getDisplayState().pendingSuspensions.get('t1');
+      expect(suspension).toBeDefined();
       expect(suspension!.toolCallId).toBe('t1');
       expect(suspension!.toolName).toBe('confirmAction');
       expect(suspension!.args).toEqual({ action: 'deploy' });
       expect(suspension!.suspendPayload).toEqual({ reason: 'Needs confirmation' });
     });
 
-    it('clears pendingSuspension on agent_start', () => {
+    it('preserves pendingSuspensions on agent_start so resuming one keeps the rest', () => {
       emit(harness, {
         type: 'tool_suspended',
         toolCallId: 't1',
@@ -556,13 +536,15 @@ describe('tool lifecycle', () => {
         suspendPayload: {},
         resumeSchema: undefined,
       });
-      expect(harness.getDisplayState().pendingSuspension).not.toBeNull();
+      expect(harness.getDisplayState().pendingSuspensions.size).toBe(1);
 
+      // Resuming a parked tool restarts the run (a fresh agent_start); the other
+      // parallel prompts must survive.
       emit(harness, { type: 'agent_start' });
-      expect(harness.getDisplayState().pendingSuspension).toBeNull();
+      expect(harness.getDisplayState().pendingSuspensions.has('t1')).toBe(true);
     });
 
-    it('preserves pendingSuspension on agent_end with reason suspended', () => {
+    it('preserves pendingSuspensions on agent_end with reason suspended', () => {
       emit(harness, {
         type: 'tool_suspended',
         toolCallId: 't1',
@@ -571,13 +553,13 @@ describe('tool lifecycle', () => {
         suspendPayload: {},
         resumeSchema: undefined,
       });
-      expect(harness.getDisplayState().pendingSuspension).not.toBeNull();
+      expect(harness.getDisplayState().pendingSuspensions.size).toBe(1);
 
       emit(harness, { type: 'agent_end', reason: 'suspended' });
-      expect(harness.getDisplayState().pendingSuspension).not.toBeNull();
+      expect(harness.getDisplayState().pendingSuspensions.size).toBe(1);
     });
 
-    it('clears pendingSuspension on agent_end with non-suspended reason', () => {
+    it('clears pendingSuspensions on agent_end with non-suspended reason', () => {
       emit(harness, {
         type: 'tool_suspended',
         toolCallId: 't1',
@@ -586,10 +568,35 @@ describe('tool lifecycle', () => {
         suspendPayload: {},
         resumeSchema: undefined,
       });
-      expect(harness.getDisplayState().pendingSuspension).not.toBeNull();
+      expect(harness.getDisplayState().pendingSuspensions.size).toBe(1);
 
       emit(harness, { type: 'agent_end', reason: 'complete' });
-      expect(harness.getDisplayState().pendingSuspension).toBeNull();
+      expect(harness.getDisplayState().pendingSuspensions.size).toBe(0);
+    });
+
+    it('keeps other parked suspensions when one resumes while another is pending', () => {
+      emit(harness, {
+        type: 'tool_suspended',
+        toolCallId: 't1',
+        toolName: 'ask_user',
+        args: {},
+        suspendPayload: { question: 'first?' },
+        resumeSchema: undefined,
+      });
+      emit(harness, {
+        type: 'tool_suspended',
+        toolCallId: 't2',
+        toolName: 'ask_user',
+        args: {},
+        suspendPayload: { question: 'second?' },
+        resumeSchema: undefined,
+      });
+      expect(harness.getDisplayState().pendingSuspensions.size).toBe(2);
+
+      // Simulate resuming only t1 (display-state side of handleToolResume).
+      harness.getDisplayState().pendingSuspensions.delete('t1');
+      expect(harness.getDisplayState().pendingSuspensions.has('t1')).toBe(false);
+      expect(harness.getDisplayState().pendingSuspensions.get('t2')?.suspendPayload).toEqual({ question: 'second?' });
     });
   });
 });
@@ -680,42 +687,34 @@ describe('interactive prompts', () => {
     harness = createHarness();
   });
 
-  it('sets pendingQuestion on ask_question', () => {
+  it('sets a pendingSuspensions entry on tool_suspended', () => {
     emit(harness, {
-      type: 'ask_question',
-      questionId: 'q1',
-      question: 'Which option?',
-      options: [{ label: 'A' }, { label: 'B' }],
-      selectionMode: 'multi_select',
+      type: 'tool_suspended',
+      toolCallId: 'call-1',
+      toolName: 'ask_user',
+      args: {},
+      suspendPayload: { question: 'Which option?' },
     });
-    const q = harness.getDisplayState().pendingQuestion;
-    expect(q).not.toBeNull();
-    expect(q!.questionId).toBe('q1');
-    expect(q!.question).toBe('Which option?');
-    expect(q!.options).toHaveLength(2);
-    expect(q!.selectionMode).toBe('multi_select');
+    const s = harness.getDisplayState().pendingSuspensions.get('call-1');
+    expect(s).toBeDefined();
+    expect(s!.toolCallId).toBe('call-1');
+    expect(s!.toolName).toBe('ask_user');
   });
 
-  it('sets pendingPlanApproval on plan_approval_required', () => {
+  it('sets a pendingSuspensions entry on tool_suspended for submit_plan', () => {
     emit(harness, {
-      type: 'plan_approval_required',
-      planId: 'p1',
-      title: 'Refactor Plan',
-      plan: '# Steps\n1. Do X',
+      type: 'tool_suspended',
+      toolCallId: 'call-plan',
+      toolName: 'submit_plan',
+      args: { title: 'Refactor Plan', plan: '# Steps\n1. Do X' },
+      suspendPayload: { title: 'Refactor Plan', plan: '# Steps\n1. Do X' },
+      resumeSchema: undefined,
     });
-    const p = harness.getDisplayState().pendingPlanApproval;
-    expect(p).not.toBeNull();
-    expect(p!.planId).toBe('p1');
-    expect(p!.title).toBe('Refactor Plan');
-    expect(p!.plan).toBe('# Steps\n1. Do X');
-  });
-
-  it('clears pendingPlanApproval on plan_approved', () => {
-    emit(harness, { type: 'plan_approval_required', planId: 'p1', title: 'Plan', plan: '...' });
-    expect(harness.getDisplayState().pendingPlanApproval).not.toBeNull();
-
-    emit(harness, { type: 'plan_approved' });
-    expect(harness.getDisplayState().pendingPlanApproval).toBeNull();
+    const s = harness.getDisplayState().pendingSuspensions.get('call-plan');
+    expect(s).toBeDefined();
+    expect(s!.toolCallId).toBe('call-plan');
+    expect(s!.toolName).toBe('submit_plan');
+    expect(s!.suspendPayload).toEqual({ title: 'Refactor Plan', plan: '# Steps\n1. Do X' });
   });
 });
 
@@ -1356,8 +1355,14 @@ describe('resetThreadDisplayState', () => {
     // Populate various state
     emit(harness, { type: 'tool_start', toolCallId: 't1', toolName: 'read_file', args: {} });
     emit(harness, { type: 'tool_input_start', toolCallId: 't2', toolName: 'write_file' });
-    emit(harness, { type: 'ask_question', questionId: 'q1', question: 'Q?', options: [] });
-    emit(harness, { type: 'plan_approval_required', planId: 'p1', title: 'P', plan: '#' });
+    emit(harness, {
+      type: 'tool_suspended',
+      toolCallId: 'p1',
+      toolName: 'submit_plan',
+      args: { title: 'P', plan: '#' },
+      suspendPayload: { title: 'P', plan: '#' },
+      resumeSchema: undefined,
+    });
     emit(harness, { type: 'subagent_start', toolCallId: 's1', agentType: 'explore', task: 't', modelId: 'm' });
     emit(harness, {
       type: 'task_updated',
@@ -1373,8 +1378,7 @@ describe('resetThreadDisplayState', () => {
     expect(ds.activeTools.size).toBe(0);
     expect(ds.toolInputBuffers.size).toBe(0);
     expect(ds.pendingApproval).toBeNull();
-    expect(ds.pendingQuestion).toBeNull();
-    expect(ds.pendingPlanApproval).toBeNull();
+    expect(ds.pendingSuspensions.size).toBe(0);
     expect(ds.activeSubagents.size).toBe(0);
     expect(ds.currentMessage).toBeNull();
     expect(ds.modifiedFiles.size).toBe(0);
@@ -1608,7 +1612,7 @@ describe('Harness.subscribeDisplayState()', () => {
     expect(listener.mock.calls[1]?.[0].isRunning).toBe(false);
   });
 
-  it('flushes immediately for approvals, suspensions, questions, plans, errors, and state changes', () => {
+  it('flushes immediately for approvals, suspensions, plans, errors, and state changes', () => {
     const listener = vi.fn();
     harness.subscribeDisplayState(listener, { windowMs: 250, maxWaitMs: 500 });
 
@@ -1629,38 +1633,31 @@ describe('Harness.subscribeDisplayState()', () => {
       suspendPayload: {},
     });
     expect(listener).toHaveBeenCalledTimes(2);
-    expect(listener.mock.calls[1]?.[0].pendingSuspension?.toolCallId).toBe('t2');
+    expect(listener.mock.calls[1]?.[0].pendingSuspensions.get('t2')?.toolCallId).toBe('t2');
 
     emit(harness, {
-      type: 'ask_question',
-      questionId: 'q1',
-      question: 'Proceed?',
+      type: 'tool_suspended',
+      toolCallId: 'p1',
+      toolName: 'submit_plan',
+      args: { title: 'Plan', plan: '# Plan' },
+      suspendPayload: { title: 'Plan', plan: '# Plan' },
     });
     expect(listener).toHaveBeenCalledTimes(3);
-    expect(listener.mock.calls[2]?.[0].pendingQuestion?.questionId).toBe('q1');
-
-    emit(harness, {
-      type: 'plan_approval_required',
-      planId: 'p1',
-      title: 'Plan',
-      plan: '# Plan',
-    });
-    expect(listener).toHaveBeenCalledTimes(4);
-    expect(listener.mock.calls[3]?.[0].pendingPlanApproval?.planId).toBe('p1');
+    expect(listener.mock.calls[2]?.[0].pendingSuspensions.get('p1')?.toolCallId).toBe('p1');
 
     emit(harness, {
       type: 'error',
       error: new Error('boom'),
     });
-    expect(listener).toHaveBeenCalledTimes(5);
+    expect(listener).toHaveBeenCalledTimes(4);
 
     emit(harness, {
       type: 'state_changed',
       state: { observationThreshold: 12_000 },
       changedKeys: ['observationThreshold'],
     });
-    expect(listener).toHaveBeenCalledTimes(6);
-    expect(listener.mock.calls[5]?.[0].omProgress.threshold).toBe(12_000);
+    expect(listener).toHaveBeenCalledTimes(5);
+    expect(listener.mock.calls[4]?.[0].omProgress.threshold).toBe(12_000);
   });
 
   it('critical events emit one latest post-critical snapshot when state is pending', () => {
