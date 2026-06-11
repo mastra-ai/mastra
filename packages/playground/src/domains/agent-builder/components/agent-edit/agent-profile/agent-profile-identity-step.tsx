@@ -6,12 +6,12 @@ import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-c
 import { useWizard } from '@/domains/agent-builder/contexts/wizard-context';
 import { startViewTransition } from '@/lib/routing';
 
-export interface AgentProfileInitialStepProps {
+export interface AgentProfileIdentityStepProps {
   avatar: ReactNode;
   details: ReactNode;
 }
 
-export const AgentProfileInitialStep = ({ avatar, details }: AgentProfileInitialStepProps) => {
+export const AgentProfileIdentityStep = ({ avatar, details }: AgentProfileIdentityStepProps) => {
   const { next } = useWizard();
   const isStreaming = useStreamRunning();
 

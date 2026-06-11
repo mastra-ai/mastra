@@ -30,7 +30,7 @@
   "dependencies": {
     "@aws-sdk/types": "^3.973.9",
     "@aws/aurora-dsql-node-postgres-connector": "^0.1.9",
-    "pg": "^8.14.0"
+    "pg": "^8.21.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

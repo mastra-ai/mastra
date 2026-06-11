@@ -51,12 +51,39 @@ async function initAuth(): Promise<AuthResult> {
       const { initStudio } = await import('./studio');
       return initStudio();
     }
+    case 'dual-workos': {
+      const { initDualWorkOS } = await import('./dual-workos');
+      return initDualWorkOS();
+    }
     default:
       return {};
   }
 }
 
-const { mastraAuth, rbacProvider, fgaProvider, auth } = await initAuth();
+const {
+  mastraAuth,
+  rbacProvider,
+  fgaProvider,
+  auth,
+  // Dual auth providers
+  studioAuth,
+  studioRbac,
+  studioFga,
+  serverAuth,
+  serverRbac,
+  serverFga,
+} = await initAuth();
 
-export { mastraAuth, rbacProvider, fgaProvider, auth };
+export {
+  mastraAuth,
+  rbacProvider,
+  fgaProvider,
+  auth,
+  studioAuth,
+  studioRbac,
+  studioFga,
+  serverAuth,
+  serverRbac,
+  serverFga,
+};
 export type { AuthResult, AuthProviderType } from './types';

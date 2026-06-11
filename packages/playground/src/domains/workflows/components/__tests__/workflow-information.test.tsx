@@ -440,7 +440,7 @@ describe('WorkflowInformation', () => {
 
       expect(workflowTitle.parentElement?.contains(toggle)).toBe(false);
       expect(runInputLabel.parentElement?.contains(toggle)).toBe(true);
-      expect(toggle.className).toContain('h-7');
+      expect(toggle.className).toContain('h-5');
     });
 
     it('shows the run status, run ID, duration, and relative age when viewing a specific run', async () => {
