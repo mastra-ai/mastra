@@ -54,7 +54,7 @@ export function isEnvelope(value: object): value is Envelope {
       // Bound flags to the spec-defined RegExp flags. Anything else means the
       // payload is either corrupted or hostile — treat as user data and let
       // the decoder skip envelope reconstruction.
-      return /^[dgimsuy]*$/.test(v.flags) && new Set(v.flags).size === v.flags.length;
+      return /^[dgimsuvy]*$/.test(v.flags) && new Set(v.flags).size === v.flags.length;
     }
     case 'Map':
     case 'Set':

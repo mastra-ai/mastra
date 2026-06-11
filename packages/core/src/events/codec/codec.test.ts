@@ -180,13 +180,15 @@ describe('codec', () => {
       expect(out).toEqual(hostile);
     });
 
-    it('returns the raw envelope when source is unparseable', () => {
-      // Spec-valid flags but the source itself is invalid. The decoder must
-      // catch the constructor error and fall back to the user-data path.
+    it('falls back to an empty regex when source is unparseable', () => {
+      // Spec-valid flags but the source itself is invalid. `decodeRegExpEnvelope`
+      // catches the constructor error and returns a benign empty regex so frame
+      // decoding stays resilient.
       const broken = { __m_codec__: 'RegExp', v: { source: '[', flags: 'g' } };
       const out = decode(broken);
-      expect(out).not.toBeInstanceOf(RegExp);
-      expect(out).toEqual(broken);
+      expect(out).toBeInstanceOf(RegExp);
+      expect((out as RegExp).source).toBe('(?:)');
+      expect((out as RegExp).flags).toBe('');
     });
 
     it('treats an oversized source as user data instead of constructing a RegExp', () => {

@@ -110,6 +110,30 @@ function walk(v: unknown, seen: WeakSet<object>): unknown {
 }
 
 /**
+ * Reconstruct a `RegExp` from a decoded envelope payload. Re-validates the
+ * payload locally (independent of `isEnvelope`) so the constructor input is
+ * narrowed at this single call site: bounded `source` length, spec-defined
+ * flag whitelist, no duplicate flags. A malformed or hostile envelope yields
+ * an empty regex (`/(?:)/`) rather than throwing, keeping frame decoding
+ * resilient.
+ */
+function decodeRegExpEnvelope(v: unknown): RegExp {
+  if (!v || typeof v !== 'object') return /(?:)/;
+  const candidate = v as { source?: unknown; flags?: unknown };
+  if (typeof candidate.source !== 'string') return /(?:)/;
+  if (typeof candidate.flags !== 'string') return /(?:)/;
+  if (candidate.source.length > 1024) return /(?:)/;
+  const flags = candidate.flags;
+  if (!/^[dgimsuvy]*$/.test(flags)) return /(?:)/;
+  if (new Set(flags).size !== flags.length) return /(?:)/;
+  try {
+    return new RegExp(candidate.source, flags);
+  } catch {
+    return /(?:)/;
+  }
+}
+
+/**
  * Decode a value previously produced by `encode`. Reconstructs envelope-tagged
  * types and recursively decodes nested values. Plain objects that happen to
  * carry a `CODEC_TAG` key but do not match an envelope shape are preserved.
@@ -129,23 +153,8 @@ export function decode(value: unknown): unknown {
         return new Date(env.v);
       case 'BigInt':
         return BigInt(env.v);
-      case 'RegExp': {
-        // `isEnvelope` already constrained `flags` to the spec-defined set
-        // (`d g i m s u y`, no duplicates) and `source` to a bounded length
-        // (`MAX_REGEXP_SOURCE_LENGTH`). We only reach this branch for our own
-        // envelopes — `source` came from a peer that previously called
-        // `encode()` on a real `RegExp`. Reconstruct with the raw source so
-        // metacharacter semantics survive the round-trip (`/foo.*/gi` must
-        // come back as `/foo.*/gi`, not `/foo\.\*/gi`). The try/catch keeps a
-        // malformed/hostile `source` from crashing frame decoding — we fall
-        // back to the raw envelope.
-        try {
-          // lgtm[js/regex-injection] -- input bounded by isEnvelope (flag whitelist + length cap) and wrapped in try/catch
-          return new RegExp(env.v.source, env.v.flags);
-        } catch {
-          return value;
-        }
-      }
+      case 'RegExp':
+        return decodeRegExpEnvelope(env.v);
       case 'URL':
         return new URL(env.v);
       case 'Map':
