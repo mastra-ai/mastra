@@ -70,14 +70,14 @@ const workspace = new Workspace({
 
 ## Configuration
 
-| Option           | Type                                               | Default    | Description                                      |
-| ---------------- | -------------------------------------------------- | ---------- | ------------------------------------------------ |
+| Option           | Type                                                           | Default    | Description                                      |
+| ---------------- | -------------------------------------------------------------- | ---------- | ------------------------------------------------ |
 | `cli`            | `'agent-browser' \| 'browser-use' \| 'browse' \| 'browse-cli'` | Required   | Which CLI the agent uses                         |
-| `cdpUrl`         | `string`                                           | -          | Connect to existing browser instead of launching |
-| `headless`       | `boolean`                                          | `true`     | Run browser in headless mode                     |
-| `cdpPort`        | `number`                                           | `0` (auto) | Port for Chrome remote debugging                 |
-| `viewport`       | `{ width, height }`                                | `1280x720` | Browser viewport size                            |
-| `executablePath` | `string`                                           | -          | Path to Chrome executable                        |
+| `cdpUrl`         | `string`                                                       | -          | Connect to existing browser instead of launching |
+| `headless`       | `boolean`                                                      | `true`     | Run browser in headless mode                     |
+| `cdpPort`        | `number`                                                       | `0` (auto) | Port for Chrome remote debugging                 |
+| `viewport`       | `{ width, height }`                                            | `1280x720` | Browser viewport size                            |
+| `executablePath` | `string`                                                       | -          | Path to Chrome executable                        |
 
 ## How It Works
 
