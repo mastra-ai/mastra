@@ -19,6 +19,7 @@ import type {
 import type { SubagentRegistryConfig } from './subagents.types';
 
 export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
+  id: string;
   /**
    * Operator-managed compatibility token for the configured runtime surface:
    * agents and prompts/tools, mode-to-agent bindings, model aliases, MCP
@@ -65,10 +66,9 @@ export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
   };
 
   /**
-   * Subagent type registry. When `types` is non-empty and {@link resolveModel}
-   * is also configured, the harness exposes a built-in `subagent` tool to the
-   * session agent. The tool's `agentType` enum is drawn from the keys of this
-   * map. Validated at construction.
+   * Subagent type registry. When `types` is non-empty, the harness exposes a
+   * built-in `subagent` tool to the session agent. The tool's `agentType` enum
+   * is drawn from the keys of this map. Validated at construction.
    */
   subagents?: SubagentRegistryConfig;
 

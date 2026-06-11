@@ -32,6 +32,19 @@
       "response": {
         "content": "Plan goal handoff e2e goal run started."
       }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "sequenceIndex": 2
+      },
+      "response": {
+        "content": {
+          "decision": "done",
+          "reason": "All plan steps completed: plan rendered, goal selected, goal handoff started."
+        }
+      }
     }
   ]
 }

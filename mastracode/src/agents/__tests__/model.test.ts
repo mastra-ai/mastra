@@ -7,6 +7,7 @@ const mockAuthStorageInstance = vi.hoisted(() => ({
   reload: vi.fn(),
   get: vi.fn(),
   getStoredApiKey: vi.fn().mockReturnValue(undefined),
+  getApiKey: vi.fn().mockResolvedValue(undefined),
   isLoggedIn: vi.fn().mockReturnValue(false),
 }));
 
@@ -16,6 +17,7 @@ vi.mock('../../auth/storage.js', () => {
       reload = mockAuthStorageInstance.reload;
       get = mockAuthStorageInstance.get;
       getStoredApiKey = mockAuthStorageInstance.getStoredApiKey;
+      getApiKey = mockAuthStorageInstance.getApiKey;
       isLoggedIn = mockAuthStorageInstance.isLoggedIn;
     },
   };
@@ -187,6 +189,7 @@ describe('resolveModel', () => {
     mockAuthStorageInstance.get.mockReturnValue(undefined);
     mockAuthStorageInstance.isLoggedIn.mockReturnValue(false);
     mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
+    mockAuthStorageInstance.getApiKey.mockResolvedValue(undefined);
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_BASE_URL;

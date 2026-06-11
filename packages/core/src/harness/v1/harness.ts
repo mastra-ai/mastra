@@ -45,6 +45,7 @@ function isHarnessStorage(storage: HarnessStorage | MastraCompositeStore): stora
 }
 
 export class Harness<MODES extends HarnessMode[], TState = {}> {
+  readonly #id: string;
   readonly #ownerId: string;
   readonly #defaultMode: string;
   readonly #modesById = new Map<string, MODES[number]>();
@@ -71,6 +72,7 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
       throw new Error('The harness needs modes to operate.');
     }
 
+    this.#id = config.id;
     this.#ownerId = config.ownerId ?? randomUUID();
     this.#defaultMode = config.defaultModeId ?? config.modes[0]!.id;
     this.#mastra = config.mastra;
@@ -149,6 +151,10 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
     }
   }
 
+  get id(): string {
+    return this.#id;
+  }
+
   get ownerId(): string {
     return this.#ownerId;
   }
@@ -160,6 +166,8 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
   emit(event: Parameters<EventEmitter['emit']>[0]): ReturnType<EventEmitter['emit']> {
     return this.#events.emit(event);
   }
+
+  async init(): Promise<void> {}
 
   async shutdown(): Promise<void> {}
 

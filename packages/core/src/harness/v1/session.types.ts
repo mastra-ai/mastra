@@ -94,7 +94,6 @@ export interface SessionConfig<TState = {}> {
   agent: Agent;
   /** Subagent registry the session can spawn through the built-in tool. */
   subagents?: SubagentRegistryConfig;
-  /**  */
   gateways: Array<MastraModelGatewayInterface>;
   /** Default permission policy applied when no category rule matches. */
   defaultPermissionPolicy?: PermissionPolicy;

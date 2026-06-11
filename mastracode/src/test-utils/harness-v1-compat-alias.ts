@@ -1,6 +1,7 @@
 import type { Agent } from '@mastra/core/agent';
 import { Harness as HarnessV1 } from '@mastra/core/harness/v1';
 import type { HarnessMode as HarnessModeV1, SubagentRegistryConfig } from '@mastra/core/harness/v1';
+import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { Memory } from '@mastra/memory';
 import { HarnessCompat } from '../HarnessCompat.js';
@@ -49,6 +50,14 @@ type LegacySubagent = {
   forked?: boolean;
 };
 
+type LegacyAvailableModel = {
+  id: string;
+  provider: string;
+  modelName: string;
+  hasApiKey: boolean;
+  apiKeyEnvVar?: string;
+};
+
 type LegacyHarnessConfig<TState = {}> = {
   id?: string;
   resourceId?: string;
@@ -65,10 +74,11 @@ type LegacyHarnessConfig<TState = {}> = {
   defaultPermissionPolicy?: unknown;
   sessionGrants?: unknown;
   onPermissionRequested?: unknown;
-  modelAuthChecker?: unknown;
+  gateways?: MastraModelGatewayInterface[];
+  modelAuthChecker?: (providerId: string) => boolean | Promise<boolean>;
   modelUseCountProvider?: unknown;
   modelUseCountTracker?: unknown;
-  customModelCatalogProvider?: unknown;
+  customModelCatalogProvider?: () => LegacyAvailableModel[] | Promise<LegacyAvailableModel[]>;
 };
 
 const TEST_OWNER_ID = 'mastracode-vitest-harness-v1-compat';
@@ -110,6 +120,47 @@ function toSubagentRegistry(subagents: LegacySubagent[] | undefined): SubagentRe
   } as SubagentRegistryConfig;
 }
 
+function createLegacyModelGateway<TState>(config: LegacyHarnessConfig<TState>): MastraModelGatewayInterface | undefined {
+  if (!config.customModelCatalogProvider && !config.modelAuthChecker) return undefined;
+
+  const fetchModels = async (): Promise<LegacyAvailableModel[]> => config.customModelCatalogProvider?.() ?? [];
+
+  return {
+    id: 'legacy-test-models',
+    name: 'Legacy test models',
+    async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+      const providers: Record<string, ProviderConfig> = {};
+      for (const model of await fetchModels()) {
+        const providerConfig = (providers[model.provider] ??= {
+          name: model.provider,
+          apiKeyEnvVar: model.apiKeyEnvVar ?? `${model.provider.toUpperCase().replace(/-/g, '_')}_API_KEY`,
+          models: [],
+          gateway: 'legacy-test-models',
+        });
+        if (!providerConfig.models.includes(model.modelName)) providerConfig.models.push(model.modelName);
+      }
+      return providers;
+    },
+    buildUrl() {
+      return undefined;
+    },
+    async getApiKey() {
+      return '';
+    },
+    async resolveAuth({ providerId, modelId }) {
+      const models = await fetchModels();
+      if (models.some(model => model.provider === providerId && model.id === modelId && model.hasApiKey)) {
+        return { apiKey: 'test-api-key', source: 'gateway' };
+      }
+      if (await config.modelAuthChecker?.(providerId)) return { apiKey: 'test-api-key', source: 'gateway' };
+      return undefined;
+    },
+    resolveLanguageModel() {
+      throw new Error('Legacy test model gateway does not resolve language models');
+    },
+  };
+}
+
 export class Harness<TState = {}> extends HarnessCompat<TState> {
   constructor(config: LegacyHarnessConfig<TState>) {
     recordHarnessConfig(config);
@@ -117,6 +168,8 @@ export class Harness<TState = {}> extends HarnessCompat<TState> {
     const defaultAgent = resolveDefaultAgent(config);
     const modes = config.modes.map(toV1Mode);
     const memory = config.memory ?? new Memory({ storage: config.storage as never });
+    const legacyModelGateway = createLegacyModelGateway(config);
+    const gateways = [...(config.gateways ?? []), ...(legacyModelGateway ? [legacyModelGateway] : [])];
     const defaultModeId =
       modes.find(mode => mode.metadata?.default === true)?.id ?? modes.find(mode => mode.id === 'plan')?.id ?? modes[0]?.id;
 
@@ -125,13 +178,14 @@ export class Harness<TState = {}> extends HarnessCompat<TState> {
     }
 
     const harnessV1 = new HarnessV1({
+      id: config.id ?? 'legacy-test-harness-v1-compat',
       ownerId: TEST_OWNER_ID,
       agent: defaultAgent,
       memory: memory as never,
       modes,
       defaultModeId,
       storage: config.storage as never,
-      gateways: [],
+      gateways,
       stateSchema: config.stateSchema as never,
       initialState: config.initialState,
       workspace: (typeof config.workspace === 'function' ? config.workspace : undefined) as never,
@@ -155,10 +209,9 @@ export class Harness<TState = {}> extends HarnessCompat<TState> {
         defaultAgent,
         workspace: config.workspace,
         browser: config.browser,
-        modelAuthChecker: config.modelAuthChecker as never,
+        gateways,
         modelUseCountProvider: config.modelUseCountProvider as never,
         modelUseCountTracker: config.modelUseCountTracker as never,
-        customModelCatalogProvider: config.customModelCatalogProvider as never,
       },
       harnessV1,
     );

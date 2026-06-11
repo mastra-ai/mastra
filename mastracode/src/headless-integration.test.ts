@@ -10,7 +10,7 @@ import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import z from 'zod';
 
 import { HarnessCompat } from './HarnessCompat.js';
@@ -95,8 +95,19 @@ function createToolCallStream(toolName: string, args: string) {
 }
 
 const tempStorePaths: string[] = [];
+const originalOpenAIApiKey = process.env.OPENAI_API_KEY;
+
+beforeEach(() => {
+  delete process.env.OPENAI_API_KEY;
+});
 
 afterEach(() => {
+  if (originalOpenAIApiKey === undefined) {
+    delete process.env.OPENAI_API_KEY;
+  } else {
+    process.env.OPENAI_API_KEY = originalOpenAIApiKey;
+  }
+
   for (const storePath of tempStorePaths.splice(0)) {
     rmSync(storePath, { force: true, recursive: true });
   }

@@ -272,7 +272,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.contentBox.addChild(
       new Text(theme.fg('dim', 'Enter to submit feedback  Esc to reject without feedback'), 0, 0),
     );
-    this.ui.requestRender(true);
+    this.ui.requestRender?.(true);
   }
 
   private showResult(status: string, isApproved: boolean, feedback?: string): void {
@@ -284,6 +284,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
     this.contentBox.addChild(new Text(`${icon} ${theme.fg('dim', status)}`, 0, 0));
     this.contentBox.addChild(new Spacer(1));
     this.renderFeedback(feedback);
+    this.ui.requestRender?.(true);
   }
 
   handleInput(data: string): void {

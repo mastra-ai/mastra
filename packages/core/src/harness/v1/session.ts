@@ -49,7 +49,7 @@ import type {
 } from './session.types';
 import { HarnessSkillNotFoundError } from './skills.types';
 import type { HarnessSkill, SkillSource } from './skills.types';
-import type { SubagentRegistryConfig } from './subagents.types';
+import type { SubagentDefinition, SubagentRegistryConfig } from './subagents.types';
 import { buildHarnessBuiltInTools, buildSessionToolsets } from './tools';
 
 export class Session<TState = {}> {
@@ -263,6 +263,75 @@ export class Session<TState = {}> {
         details: { maxDepth: number; attemptedDepth: number };
       }
   > {
+    const created = await this.#createSubagentSession(opts);
+    if (created.isError) return created;
+    return created.result;
+  }
+
+  async executeSubagent(opts: { agentType: string; prompt: string; modelId?: string; forked?: boolean }): Promise<
+    | {
+        isError: false;
+        subagentSessionId: string;
+        threadId: string;
+        resourceId: string;
+        agentType: string;
+        depth: number;
+        content: string;
+      }
+    | {
+        isError: true;
+        code: string;
+        message: string;
+        details?: Record<string, unknown>;
+        content?: string;
+      }
+  > {
+    const created = await this.#createSubagentSession(opts);
+    if (created.isError) return created;
+
+    const { session, definition, result } = created;
+    const agent = await session.#resolveSessionAgent();
+    if (typeof agent.stream !== 'function') {
+      return { ...result, content: '' };
+    }
+
+    const requestContext = await session.#buildRequestContext();
+    const instructions =
+      definition.instructions && typeof definition.instructions !== 'function' ? definition.instructions : undefined;
+    const response = await agent.stream(opts.prompt, {
+      requestContext,
+      memory: { thread: result.threadId, resource: result.resourceId },
+      ...(instructions ? { instructions } : {}),
+      ...(definition.maxSteps !== undefined ? { maxSteps: definition.maxSteps } : {}),
+      ...(definition.stopWhen !== undefined ? { stopWhen: definition.stopWhen } : {}),
+      requireToolApproval: false,
+    });
+    const fullOutput = await response.getFullOutput();
+    const content = fullOutput.text ?? '';
+    return { ...result, content };
+  }
+
+  async #createSubagentSession(opts: { agentType: string; prompt: string; modelId?: string; forked?: boolean }): Promise<
+    | {
+        isError: false;
+        result: {
+          isError: false;
+          subagentSessionId: string;
+          threadId: string;
+          resourceId: string;
+          agentType: string;
+          depth: number;
+        };
+        session: Session<TState>;
+        definition: SubagentDefinition;
+      }
+    | {
+        isError: true;
+        code: 'harness.subagent_depth_exceeded';
+        message: string;
+        details: { maxDepth: number; attemptedDepth: number };
+      }
+  > {
     const maxDepth = this.#subagents?.maxDepth ?? 1;
     const attemptedDepth = this.#subagentDepth + 1;
     if (attemptedDepth > maxDepth) {
@@ -282,7 +351,7 @@ export class Session<TState = {}> {
     if (!this.#agentResolver) {
       throw new Error('Harness subagent spawn requires an agent resolver');
     }
-    this.#agentResolver.getAgentById(definition.agentId);
+    const agent = this.#agentResolver.getAgentById(definition.agentId);
 
     const modelId = opts.modelId ?? definition.defaultModelId ?? this.#modelId;
 
@@ -319,13 +388,46 @@ export class Session<TState = {}> {
       payload: { agentType: opts.agentType, parentSessionId: this.#id, depth: attemptedDepth },
     });
 
-    return {
-      isError: false,
-      subagentSessionId: record.id,
+    const session = new Session<TState>({
+      id: record.id,
+      ownerId: this.#ownerId,
       threadId: record.threadId,
       resourceId: record.resourceId,
-      agentType: opts.agentType,
-      depth: attemptedDepth,
+      mode: this.#mode,
+      model: modelId,
+      createdAt: record.createdAt,
+      lastActivityAt: record.lastActivityAt,
+      agent,
+      memory: this.#memory,
+      storage: this.#storage,
+      events: this.#events.scoped({ sessionId: record.id }),
+      stateSchema: this.#stateSchemaInput,
+      initialState: this.getState() as Partial<TState>,
+      workspace: this.#workspace,
+      subagents: this.#subagents,
+      agentResolver: this.#agentResolver,
+      modes: this.#modes,
+      gateways: this.#gateways,
+      defaultPermissionPolicy: this.#defaultPermissionPolicy,
+      permissionRules: this.#permissionRules,
+      sessionGrants: this.#sessionGrants,
+      onPermissionRequested: this.#onPermissionRequested,
+      toolCategoryResolver: this.#toolCategoryResolver,
+      record,
+    });
+
+    return {
+      isError: false,
+      result: {
+        isError: false,
+        subagentSessionId: record.id,
+        threadId: record.threadId,
+        resourceId: record.resourceId,
+        agentType: opts.agentType,
+        depth: attemptedDepth,
+      },
+      session,
+      definition,
     };
   }
 
@@ -531,7 +633,10 @@ export class Session<TState = {}> {
     });
   }
 
-  async sendMessage<OUTPUT = unknown>({ messages, ...options }: SessionMessageOptions<OUTPUT>): Promise<SessionSendMessageResult> {
+  async sendMessage<OUTPUT = unknown>({
+    messages,
+    ...options
+  }: SessionMessageOptions<OUTPUT>): Promise<SessionSendMessageResult> {
     const agent = await this.#resolveSessionAgent();
     const target = await this.#buildMessageTarget(agent, options);
     const result = agent.sendMessage<OUTPUT>(this.#toAgentMessageInput(messages), target);
@@ -539,7 +644,10 @@ export class Session<TState = {}> {
     return result;
   }
 
-  async queueMessage<OUTPUT = unknown>({ messages, ...options }: SessionMessageOptions<OUTPUT>): Promise<SessionQueueMessageResult> {
+  async queueMessage<OUTPUT = unknown>({
+    messages,
+    ...options
+  }: SessionMessageOptions<OUTPUT>): Promise<SessionQueueMessageResult> {
     const agent = await this.#resolveSessionAgent();
     const target = await this.#buildMessageTarget(agent, options);
     const result = agent.queueMessage<OUTPUT>(this.#toAgentMessageInput(messages), target);
@@ -625,6 +733,7 @@ export class Session<TState = {}> {
     const modeInstructions = this.#mode.instructions;
     const userStreamOptions = ifIdle?.streamOptions ?? {};
     const requestedActiveTools = userStreamOptions.activeTools ?? executionOptions.activeTools;
+    const memory = userStreamOptions.memory ?? { thread: this.#threadId, resource: this.#resourceId };
 
     const target = {
       runId,
@@ -641,11 +750,10 @@ export class Session<TState = {}> {
           ...executionOptions,
           // ifIdle.streamOptions overrides everything
           ...userStreamOptions,
+          memory,
           requestContext: await this.#buildRequestContext(),
           toolsets: { harness: tools },
-          activeTools: requestedActiveTools
-            ? [...new Set([...requestedActiveTools, ...harnessToolNames])]
-            : undefined,
+          activeTools: requestedActiveTools ? [...new Set([...requestedActiveTools, ...harnessToolNames])] : undefined,
         },
       },
     };
@@ -663,7 +771,10 @@ export class Session<TState = {}> {
         return messages as AgentMessageInput;
       }
 
-      const text = messages.map(message => this.#extractMessageText(message)).filter(Boolean).join('\n');
+      const text = messages
+        .map(message => this.#extractMessageText(message))
+        .filter(Boolean)
+        .join('\n');
       if (text) {
         return text;
       }
@@ -720,7 +831,10 @@ export class Session<TState = {}> {
     }
 
     if (Array.isArray(content)) {
-      const text = content.map(part => this.#extractMessageText(part)).filter(Boolean).join('\n');
+      const text = content
+        .map(part => this.#extractMessageText(part))
+        .filter(Boolean)
+        .join('\n');
       return text || undefined;
     }
 

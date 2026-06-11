@@ -6,6 +6,7 @@ import fs from 'node:fs';
 
 import { createMastraCodeAnalytics } from './analytics.js';
 import { isStreamDestroyedError } from './error-classification.js';
+import { hasHeadlessFlag, headlessMain } from './headless.js';
 import { createMastraCode } from './index-v1.js';
 import { createBrowserFromSettings, loadSettings } from './onboarding/settings.js';
 import { detectTerminalTheme } from './tui/detect-theme.js';
@@ -23,12 +24,31 @@ let authStorage: Awaited<ReturnType<typeof createMastraCode>>['authStorage'];
 let signalsPubSub: Awaited<ReturnType<typeof createMastraCode>>['signalsPubSub'];
 let analytics: ReturnType<typeof createMastraCodeAnalytics> | undefined;
 
-function hasHeadlessFlag(argv: string[]): boolean {
-  return argv.some(arg => arg === '--prompt' || arg === '-p');
+function isTruthyEnv(name: string): boolean {
+  return ['1', 'true', 'yes', 'on'].includes(process.env[name]?.trim().toLowerCase() ?? '');
 }
 
-function printLocalV1Usage(): void {
-  process.stdout.write('Mastra Code Harness V1 local TUI\nUsage: pnpm --dir mastracode exec tsx src/main-v1.ts\n');
+type MastraCodeFactoryOptions = Parameters<typeof createMastraCode>[0];
+
+function resolveInitialStateFromEnv() {
+  const currentModelId = process.env.MASTRACODE_MODEL_ID?.trim();
+  const initialState: Record<string, unknown> = {};
+  if (currentModelId) initialState.currentModelId = currentModelId;
+  if (isTruthyEnv('MASTRACODE_YOLO')) initialState.yolo = true;
+  return Object.keys(initialState).length > 0 ? initialState : undefined;
+}
+
+function createMastraCodeWithEnv(config?: MastraCodeFactoryOptions) {
+  const envInitialState = resolveInitialStateFromEnv();
+  const initialState = envInitialState || config?.initialState ? { ...envInitialState, ...config?.initialState } : undefined;
+  return createMastraCode({
+    ...config,
+    unixSocketPubSub: config?.unixSocketPubSub ?? !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
+    disableMcp: config?.disableMcp ?? isTruthyEnv('MASTRACODE_DISABLE_MCP'),
+    disableHooks: config?.disableHooks ?? isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),
+    ...(isTruthyEnv('MASTRACODE_DISABLE_MEMORY') && config?.memory === undefined ? { memory: false as never } : {}),
+    ...(initialState ? { initialState: initialState as never } : {}),
+  });
 }
 
 // Global safety nets — catch any uncaught errors from storage init, etc.
@@ -51,7 +71,7 @@ async function tuiMain(pipedInput?: string | null) {
     return browserPromise;
   };
 
-  const result = await createMastraCode({ unixSocketPubSub: true });
+  const result = await createMastraCodeWithEnv();
   harness = result.harness;
   mcpManager = result.mcpManager;
   hookManager = result.hookManager;
@@ -194,12 +214,8 @@ function handleFatalError(error: unknown): never {
 }
 
 async function main() {
-  if (process.argv.includes('--help') || process.argv.includes('-h')) {
-    printLocalV1Usage();
-    return;
-  }
-  if (hasHeadlessFlag(process.argv)) {
-    throw new Error('Headless mode is not wired for the local Harness V1 TUI entrypoint. Use src/main.ts for headless mode.');
+  if (hasHeadlessFlag(process.argv) || process.argv.includes('--help') || process.argv.includes('-h')) {
+    return headlessMain(undefined, createMastraCodeWithEnv);
   }
 
   // When stdin is piped (e.g. `cat foo | mastracode`), drain the pipe fully
@@ -214,7 +230,8 @@ async function main() {
     // stdin is consumed/closed and the TUI needs a live TTY for keyboard input.
     const reopenedStdin = reopenStdinFromTTY();
     if (!reopenedStdin) {
-      throw new Error('No TTY available for the local Harness V1 TUI entrypoint. Use src/main.ts for headless fallback.');
+      process.stderr.write('No TTY available — falling back to headless mode.\n');
+      return headlessMain(pipedInput, createMastraCodeWithEnv);
     }
   }
 

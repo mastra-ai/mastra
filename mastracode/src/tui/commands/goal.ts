@@ -29,6 +29,7 @@ import type { SlashCommandContext } from './types.js';
 
 export interface StartGoalOptions {
   trigger?: 'send' | 'none';
+  suppressInitialAgentEnd?: boolean;
 }
 
 export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
@@ -456,7 +457,7 @@ async function startGoal(
   }
 
   try {
-    await state.harness.sendSignal(createGoalReminderSignal(goal)).accepted;
+    await state.harness.sendSignal(createGoalReminderSignal(goal, options)).accepted;
   } catch (err) {
     goalManager.pause();
     await goalManager.saveToThread(state);
@@ -464,7 +465,7 @@ async function startGoal(
   }
 }
 
-function createGoalReminderSignal(goal: GoalState) {
+function createGoalReminderSignal(goal: GoalState, options: StartGoalOptions = {}) {
   return {
     type: 'system-reminder' as const,
     contents: goal.objective,
@@ -473,6 +474,7 @@ function createGoalReminderSignal(goal: GoalState) {
       goalId: goal.id,
       maxTurns: goal.maxTurns,
       judgeModelId: goal.judgeModelId,
+      ...(options.suppressInitialAgentEnd === false ? { suppressInitialAgentEnd: false } : {}),
     },
   };
 }

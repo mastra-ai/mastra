@@ -104,6 +104,7 @@ async function flushEventLogWrites(): Promise<void> {
 
 // ─── Create HarnessV1 ───────────────────────────────────────────────────────
 const harness = new HarnessV1({
+  id: 'mastracode-tui-v1',
   ownerId,
   agent: codeAgent,
   memory,

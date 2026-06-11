@@ -71,10 +71,13 @@ function createSession(
       { id: 'grant-category', category: 'read' },
       { id: 'grant-tool', toolName: 'write_file' },
     ]),
+    addSessionGrant: vi.fn(),
+    approveToolCall: vi.fn(async () => {}),
   };
 }
 
-function createHarness(session = createSession()) {
+function createHarness(session = createSession(), configOverrides: Record<string, unknown> = {}) {
+  const harnessEventListeners: Array<(event: unknown) => void> = [];
   const memory = {
     createThread: vi.fn(async ({ threadId, resourceId, title, metadata }) => ({
       id: threadId,
@@ -93,7 +96,10 @@ function createHarness(session = createSession()) {
   const harnessV1 = {
     init: vi.fn(async () => {}),
     shutdown: vi.fn(async () => {}),
-    subscribe: vi.fn(() => () => {}),
+    subscribe: vi.fn((listener: (event: unknown) => void) => {
+      harnessEventListeners.push(listener);
+      return () => {};
+    }),
     listModes: vi.fn(() => [buildMode, planMode]),
     getMode: vi.fn((modeId: string) => (modeId === 'plan' ? planMode : buildMode)),
     session: vi.fn(async () => session),
@@ -118,6 +124,7 @@ function createHarness(session = createSession()) {
         observationThreshold: 123,
         reflectionThreshold: 456,
       },
+      ...configOverrides,
     },
     harnessV1 as never,
   );
@@ -268,6 +275,57 @@ describe('HarnessCompat standalone V1 adapter', () => {
       tools: { write_file: 'deny' },
     });
     expect(harness.getSessionGrants()).toEqual({ categories: ['read'], tools: ['write_file'] });
+  });
+
+  it('bridges V1 permission requests to legacy tool approval events', async () => {
+    const { harness, harnessV1 } = createHarness();
+    const events: Array<Record<string, unknown>> = [];
+    harness.subscribe(event => {
+      events.push(event as unknown as Record<string, unknown>);
+    });
+
+    const onHarnessEvent = harnessV1.subscribe.mock.calls[0]?.[0] as (event: unknown) => void;
+    onHarnessEvent({
+      type: 'permission.requested',
+      payload: {
+        pendingItemId: 'pending-1',
+        toolName: 'execute_command',
+        category: 'execute',
+      },
+    });
+
+    expect(events).toContainEqual(
+      expect.objectContaining({
+        type: 'tool_approval_required',
+        toolCallId: 'pending-1',
+        toolName: 'execute_command',
+        category: 'execute',
+      }),
+    );
+    expect(harness.getDisplayState().pendingApproval).toMatchObject({
+      toolCallId: 'pending-1',
+      toolName: 'execute_command',
+    });
+  });
+
+  it('grants the pending tool category when approval allows the category', async () => {
+    const session = createSession();
+    const { harness, harnessV1 } = createHarness(session);
+    await harness.switchThread({ threadId: 'thread-id' });
+    const onHarnessEvent = harnessV1.subscribe.mock.calls[0]?.[0] as (event: unknown) => void;
+    onHarnessEvent({
+      type: 'permission.requested',
+      payload: {
+        pendingItemId: 'pending-1',
+        toolName: 'execute_command',
+        category: 'execute',
+      },
+    });
+
+    await harness.respondToToolApproval({ decision: 'always_allow_category' });
+
+    expect(session.addSessionGrant).toHaveBeenCalledWith({ category: 'execute' });
+    expect(session.approveToolCall).toHaveBeenCalledWith('pending-1', 'allow');
   });
 
   it('returns a legacy signal handle with accepted delivery promise', async () => {
@@ -448,6 +506,101 @@ describe('HarnessCompat standalone V1 adapter', () => {
     });
     expect(lifecycleEvents[7]).toMatchObject({ type: 'agent_end', reason: 'complete' });
     expect(harness.getDisplayState()).toMatchObject({ isRunning: false, currentMessage: null });
+  });
+
+  it('bridges subagent tool calls into legacy subagent render events', async () => {
+    const session = createSession('session-model', 'thread-id', [
+      {
+        type: 'tool-call',
+        payload: {
+          toolCallId: 'subagent-tool-1',
+          toolName: 'subagent',
+          args: {
+            agentType: 'worker',
+            task: 'Find the SUBAGENT_E2E_MARKER symbol.',
+            modelId: 'worker-model',
+            forked: false,
+          },
+        },
+      },
+      {
+        type: 'tool-result',
+        payload: {
+          toolCallId: 'subagent-tool-1',
+          toolName: 'subagent',
+          result: { isError: false, content: 'Subagent completed.' },
+          isError: false,
+        },
+      },
+      { type: 'finish' },
+    ]);
+    const { harness } = createHarness(session);
+    const events: Array<Record<string, unknown>> = [];
+    harness.subscribe(event => {
+      events.push(event as unknown as Record<string, unknown>);
+    });
+    await harness.switchThread({ threadId: 'thread-id' });
+    events.length = 0;
+
+    await harness.sendSignal({ id: 'signal-subagent', content: 'delegate' }).accepted;
+
+    const lifecycleEvents = events.filter(event => event.type !== 'display_state_changed');
+    expect(lifecycleEvents.map(event => event.type)).toEqual([
+      'agent_start',
+      'tool_start',
+      'subagent_start',
+      'message_update',
+      'tool_end',
+      'subagent_end',
+      'message_update',
+      'message_end',
+      'agent_end',
+    ]);
+    expect(lifecycleEvents[2]).toMatchObject({
+      type: 'subagent_start',
+      toolCallId: 'subagent-tool-1',
+      agentType: 'worker',
+      task: 'Find the SUBAGENT_E2E_MARKER symbol.',
+      modelId: 'worker-model',
+      forked: false,
+    });
+    expect(lifecycleEvents[5]).toMatchObject({
+      type: 'subagent_end',
+      toolCallId: 'subagent-tool-1',
+      agentType: 'worker',
+      result: 'Subagent completed.',
+      isError: false,
+    });
+  });
+
+  it('renders goal-start reminders but suppresses their initial compat agent_end', async () => {
+    const session = createSession('session-model', 'thread-id', [{ type: 'finish' }]);
+    const { harness } = createHarness(session, { memoryDisabled: true });
+    const events: Array<Record<string, unknown>> = [];
+    harness.subscribe(event => {
+      events.push(event as unknown as Record<string, unknown>);
+    });
+    await harness.switchThread({ threadId: 'thread-id' });
+    events.length = 0;
+
+    await harness.sendSignal({
+      id: 'goal-signal',
+      type: 'system-reminder',
+      contents: 'Finish the goal.',
+      attributes: { type: 'goal' },
+    }).accepted;
+
+    const lifecycleEvents = events.filter(event => event.type !== 'display_state_changed');
+    expect(lifecycleEvents).toContainEqual(expect.objectContaining({ type: 'agent_start' }));
+    expect(lifecycleEvents).toContainEqual(
+      expect.objectContaining({
+        type: 'message_start',
+        message: expect.objectContaining({
+          content: [expect.objectContaining({ type: 'system_reminder', reminderType: 'goal' })],
+        }),
+      }),
+    );
+    expect(lifecycleEvents).not.toContainEqual(expect.objectContaining({ type: 'agent_end' }));
   });
 
   it('streams real V1 data-part chunks through the compat event bridge', async () => {

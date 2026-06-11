@@ -112,6 +112,7 @@ async function main(): Promise<void> {
     });
 
     const harness = new HarnessV1({
+      id: 'harness-v1-file-roundtrip-example',
       ownerId: 'harness-v1-file-roundtrip-example',
       agent,
       memory: new Memory({ options: { workingMemory: { enabled: true } } }),

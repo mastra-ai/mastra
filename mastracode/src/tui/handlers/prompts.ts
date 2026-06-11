@@ -314,6 +314,7 @@ export async function handlePlanApproval(
         const goal = state.goalManager.getGoal();
         if (goal?.id) {
           state.planStartedGoalId = goal.id;
+          ctx.showInfo?.(`Goal (judge: ${goal.judgeModelId})\n${objective}`);
         }
 
         resolve();

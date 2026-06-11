@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import type { Agent, AgentSignal, SendAgentSignalOptions } from '@mastra/core/agent';
 import type {
   AvailableModel,
-  CustomModelCatalogProvider,
   HarnessDisplayState,
   HarnessEvent,
   HarnessEventListener,
@@ -10,16 +9,24 @@ import type {
   HarnessMessageContent,
   HarnessMode as HarnessModeLegacy,
   HarnessThread,
-  ModelAuthChecker,
   ModelAuthStatus,
   ModelUseCountProvider,
   ModelUseCountTracker,
 } from '@mastra/core/harness';
-import type { Session, HarnessMode, Harness, PermissionPolicy, PermissionRules, ToolCategory } from '@mastra/core/harness/v1';
+import type {
+  Session,
+  HarnessMode,
+  Harness,
+  PermissionPolicy,
+  PermissionRules,
+  ToolCategory,
+} from '@mastra/core/harness/v1';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
+import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
+import { getToolCategory } from './permissions.js';
 
 export type HarnessCompatMode = HarnessMode;
 
@@ -52,15 +59,14 @@ type SessionStateFields = {
  * stream loop processes chunks, so the sync converter call sites can rely on
  * the cached references.
  */
-type SignalConverters = Pick<
-  typeof import('@mastra/core/harness'),
-  | 'toNotificationContent'
-  | 'toNotificationSummaryContent'
-  | 'toReactiveSignalContent'
-  | 'toStateSignalContent'
-  | 'toSystemReminderContent'
-  | 'toUserSignalMessage'
->;
+type SignalConverters = {
+  toNotificationContent: (payload: Record<string, unknown>) => HarnessMessageContent | undefined;
+  toNotificationSummaryContent: (payload: Record<string, unknown>) => HarnessMessageContent | undefined;
+  toReactiveSignalContent: (payload: Record<string, unknown>) => HarnessMessageContent | undefined;
+  toStateSignalContent: (payload: Record<string, unknown>) => HarnessMessageContent | undefined;
+  toSystemReminderContent: (payload: Record<string, unknown>) => HarnessMessageContent | undefined;
+  toUserSignalMessage: (payload: Record<string, unknown>) => HarnessMessage | undefined;
+};
 
 let signalConvertersCache: SignalConverters | undefined;
 let signalConvertersPromise: Promise<SignalConverters> | undefined;
@@ -68,13 +74,14 @@ let signalConvertersPromise: Promise<SignalConverters> | undefined;
 async function loadSignalConverters(): Promise<SignalConverters> {
   if (signalConvertersCache) return signalConvertersCache;
   signalConvertersPromise ??= import('@mastra/core/harness').then(mod => {
+    const converters = mod as unknown as SignalConverters;
     signalConvertersCache = {
-      toNotificationContent: mod.toNotificationContent,
-      toNotificationSummaryContent: mod.toNotificationSummaryContent,
-      toReactiveSignalContent: mod.toReactiveSignalContent,
-      toStateSignalContent: mod.toStateSignalContent,
-      toSystemReminderContent: mod.toSystemReminderContent,
-      toUserSignalMessage: mod.toUserSignalMessage,
+      toNotificationContent: converters.toNotificationContent,
+      toNotificationSummaryContent: converters.toNotificationSummaryContent,
+      toReactiveSignalContent: converters.toReactiveSignalContent,
+      toStateSignalContent: converters.toStateSignalContent,
+      toSystemReminderContent: converters.toSystemReminderContent,
+      toUserSignalMessage: converters.toUserSignalMessage,
     };
     return signalConvertersCache;
   });
@@ -97,16 +104,16 @@ export type HarnessCompatConfig<TState = {}> = {
   resourceId: string;
   mastra: Mastra;
   memory: MastraMemory | MemoryResolver;
+  memoryDisabled?: boolean;
   modes: HarnessCompatMode[];
   defaultModeId: string;
   initialState?: Partial<TState>;
   defaultAgent?: Agent;
   workspace?: unknown | WorkspaceResolver;
   browser?: unknown;
-  modelAuthChecker?: ModelAuthChecker;
+  gateways?: MastraModelGatewayInterface[];
   modelUseCountProvider?: ModelUseCountProvider;
   modelUseCountTracker?: ModelUseCountTracker;
-  customModelCatalogProvider?: CustomModelCatalogProvider;
 };
 
 type StreamSubscription = {
@@ -392,14 +399,10 @@ function normalizeSignal(signalInput: unknown): NormalizedSignal {
     return { id, type: getSignalType(signal), signal, options: {} };
   }
 
-  const {
-    ifActive,
-    ifIdle,
-    runId,
-    content,
-    ...signalFields
-  } = signalInput as Record<string, unknown> & Pick<ThreadScopedSignalOptions, 'ifActive' | 'ifIdle' | 'runId'>;
-  const type = typeof signalFields.type === 'string' && signalFields.type.length > 0 ? signalFields.type : 'user-message';
+  const { ifActive, ifIdle, runId, content, ...signalFields } = signalInput as Record<string, unknown> &
+    Pick<ThreadScopedSignalOptions, 'ifActive' | 'ifIdle' | 'runId'>;
+  const type =
+    typeof signalFields.type === 'string' && signalFields.type.length > 0 ? signalFields.type : 'user-message';
   const contents = 'contents' in signalFields ? signalFields.contents : content;
   const signal = {
     ...signalFields,
@@ -429,7 +432,8 @@ function extractStreamError(chunk: unknown): Error {
   if (!chunk || typeof chunk !== 'object') return new Error('Stream failed');
 
   const record = chunk as Record<string, unknown>;
-  const payload = record.payload && typeof record.payload === 'object' ? (record.payload as Record<string, unknown>) : undefined;
+  const payload =
+    record.payload && typeof record.payload === 'object' ? (record.payload as Record<string, unknown>) : undefined;
 
   return (
     errorFromValue(record.error) ??
@@ -446,6 +450,61 @@ function providerFromModelId(modelId: string): string {
 
 function modelNameFromModelId(modelId: string): string {
   return modelId.includes('/') ? modelId.slice(modelId.indexOf('/') + 1) : modelId;
+}
+
+function firstApiKeyEnvVar(providerConfig: Pick<ProviderConfig, 'apiKeyEnvVar'> | undefined): string | undefined {
+  const envVars = providerConfig?.apiKeyEnvVar;
+  return Array.isArray(envVars) ? envVars[0] : envVars;
+}
+
+function apiKeyEnvVars(providerConfig: Pick<ProviderConfig, 'apiKeyEnvVar'> | undefined): string[] {
+  const envVars = providerConfig?.apiKeyEnvVar;
+  if (!envVars) return [];
+  return Array.isArray(envVars) ? envVars : [envVars];
+}
+
+function fallbackApiKeyEnvVar(providerId: string): string {
+  return `${providerId.toUpperCase().replace(/-/g, '_')}_API_KEY`;
+}
+
+function gatewayId(gateway: MastraModelGatewayInterface): string {
+  return gateway.getId?.() ?? gateway.id;
+}
+
+function hasResolvedGatewayAuth(
+  auth: Awaited<ReturnType<NonNullable<MastraModelGatewayInterface['resolveAuth']>>>,
+): boolean {
+  if (!auth) return false;
+  if (auth.apiKey || auth.bearerToken) return true;
+  return Boolean(auth.headers && Object.keys(auth.headers).length > 0);
+}
+
+function shouldSuppressGoalStartAgentEnd(signal: unknown): boolean {
+  if (!signal || typeof signal !== 'object') return false;
+  const record = signal as Record<string, unknown>;
+  if (record.type !== 'system-reminder') return false;
+  const attributes = record.attributes;
+  if (!attributes || typeof attributes !== 'object' || (attributes as Record<string, unknown>).type !== 'goal') return false;
+  const metadata = record.metadata;
+  if (metadata && typeof metadata === 'object' && (metadata as Record<string, unknown>).suppressInitialAgentEnd === false) {
+    return false;
+  }
+  return true;
+}
+
+function stringifySubagentResult(result: unknown): string {
+  if (typeof result === 'string') return result;
+  if (!result || typeof result !== 'object') return '';
+  const record = result as Record<string, unknown>;
+  const content = record.content;
+  if (typeof content === 'string') return content;
+  if (typeof record.result === 'string') return record.result;
+  if (typeof record.message === 'string') return record.message;
+  try {
+    return JSON.stringify(result);
+  } catch {
+    return String(result);
+  }
 }
 
 export class HarnessCompat<TState = {}> {
@@ -471,11 +530,18 @@ export class HarnessCompat<TState = {}> {
   #activeRunWaiters: Array<(value: { terminalType: string | undefined; error?: unknown }) => void> = [];
   #pendingQuestions = new Map<string, (answer: any) => void>();
   #pendingPlanApprovals = new Map<string, (result: { action: 'approved' | 'rejected'; feedback?: string }) => void>();
+  #subagentToolCalls = new Map<
+    string,
+    { agentType: string; task: string; modelId: string; forked?: boolean; startedAt: number }
+  >();
+  #suppressNextGoalStartAgentEnd = false;
+  #streamHasStarted = false;
+  #streamStartWaiters: Array<() => void> = [];
   #resolvedWorkspace?: unknown;
   #workspaceResolved = false;
 
   constructor(config: HarnessCompatConfig<TState>, harnessV1: Harness<HarnessCompatMode[], TState>) {
-    this.id = config.id ?? 'mastra-code-v1-local';
+    this.id = config.id ?? 'harness-compat';
     this.#config = config;
     this.#harnessV1 = harnessV1;
     this.#resourceId = config.resourceId;
@@ -508,6 +574,41 @@ export class HarnessCompat<TState = {}> {
         this.#displayState.previousTasks = [...this.#displayState.tasks];
         this.#displayState.tasks = (Array.isArray(nextTasks) ? nextTasks : []) as HarnessDisplayState['tasks'];
       }
+      // Bridge V1 session `permission.requested` events to the legacy
+      // `tool_approval_required` event that the TUI (and headless harness)
+      // consume. This also stores toolName on pendingApproval so the
+      // compat respondToToolApproval can create a SessionGrant when the user
+      // chooses `always_allow_category`. V1 permission events don't carry
+      // tool args, so the bridged event has `args: undefined`.
+      if (event.type === 'permission.requested') {
+        const payload = (event as { payload?: Record<string, unknown> }).payload ?? {};
+        const toolCallId = String(payload.pendingItemId ?? '');
+        const toolName = String(payload.toolName ?? '');
+        const category = (payload.category as ToolCategory | null | undefined) ?? null;
+        if (toolCallId && toolName) {
+          this.#displayState.pendingApproval = {
+            toolCallId,
+            toolName,
+            args: undefined,
+          } as NonNullable<HarnessDisplayState['pendingApproval']>;
+          this.#emit({
+            type: 'tool_approval_required',
+            toolCallId,
+            toolName,
+            args: undefined,
+            category,
+          } as unknown as HarnessEvent);
+          this.#emitDisplayState();
+        }
+        return;
+      }
+      if (event.type === 'subagent_start' && !('toolCallId' in event)) {
+        // V1 emits a session-lifecycle subagent_start with subagentSessionId,
+        // while the legacy TUI expects render events keyed by the parent tool
+        // call. The stream chunk bridge below emits the legacy start/end pair
+        // from the actual subagent tool call/result.
+        return;
+      }
       this.#emit(event as unknown as HarnessEvent);
     });
   }
@@ -525,13 +626,27 @@ export class HarnessCompat<TState = {}> {
     return () => this.#listeners.delete(listener);
   }
 
-  #emit(event: HarnessEvent): void {
+  #emit(event: HarnessEvent): Promise<void>[] {
     if (event.type === 'display_state_changed') {
       this.#displayState = event.displayState;
     }
+
+    const pending: Promise<void>[] = [];
     for (const listener of this.#listeners) {
-      void listener(event);
+      try {
+        const result = listener(event) as unknown;
+        if (result && typeof result === 'object' && 'then' in result) {
+          pending.push(
+            Promise.resolve(result as PromiseLike<void>).catch(err =>
+              console.error('Error in harness event listener:', err),
+            ),
+          );
+        }
+      } catch (err) {
+        console.error('Error in harness event listener:', err);
+      }
     }
+    return pending;
   }
 
   /**
@@ -639,7 +754,8 @@ export class HarnessCompat<TState = {}> {
     if (threadId) this.#emit({ type: 'thread_changed', threadId, previousThreadId });
   }
 
-  async getResolvedMemory(): Promise<MastraMemory> {
+  async getResolvedMemory(): Promise<MastraMemory | null> {
+    if (this.#config.memoryDisabled) return null;
     return this.#resolveMemory();
   }
 
@@ -704,7 +820,12 @@ export class HarnessCompat<TState = {}> {
 
     const modeId = this.#state.modeId ?? this.getCurrentModeId();
     const modelId = this.getCurrentModelId();
-    this.#session = await this.#harnessV1.session({ threadId: thread.id, resourceId: thread.resourceId, modeId, modelId });
+    this.#session = await this.#harnessV1.session({
+      threadId: thread.id,
+      resourceId: thread.resourceId,
+      modeId,
+      modelId,
+    });
     this.#currentThreadId = thread.id;
 
     const harnessThread = this.#toHarnessThread(thread, this.#session);
@@ -744,7 +865,11 @@ export class HarnessCompat<TState = {}> {
 
     const byKey = new Map<string, HarnessThread>();
     for (const thread of memoryResult.threads ?? []) {
-      if (!options?.includeForkedSubagents && (thread.metadata as Record<string, unknown> | undefined)?.forkedSubagent === true) {
+      if (!options?.allResources && thread.resourceId !== this.#resourceId) continue;
+      if (
+        !options?.includeForkedSubagents &&
+        (thread.metadata as Record<string, unknown> | undefined)?.forkedSubagent === true
+      ) {
         continue;
       }
       byKey.set(`${thread.resourceId}:${thread.id}`, this.#toHarnessThread(thread));
@@ -938,29 +1063,101 @@ export class HarnessCompat<TState = {}> {
 
   async listAvailableModels(): Promise<AvailableModel[]> {
     const useCounts = this.#config.modelUseCountProvider?.() ?? {};
-    const ids = new Set<string>();
-    for (const mode of this.#harnessV1.listModes()) ids.add(mode.defaultModelId);
-    if (this.getFullModelId()) ids.add(this.getFullModelId());
+    const providerConfigs = await this.#getProviderConfigs();
+    const modelsById = new Map<string, AvailableModel>();
 
-    const models: AvailableModel[] = [...ids].map(id => {
-      const provider = providerFromModelId(id);
-      return {
-        id,
+    const upsertModel = async (modelId: string, providerConfig?: ProviderConfig): Promise<void> => {
+      if (!modelId) return;
+      const provider = providerFromModelId(modelId);
+      const modelName = modelNameFromModelId(modelId);
+      if (!provider || !modelName) return;
+      modelsById.set(modelId, {
+        id: modelId,
         provider,
-        modelName: modelNameFromModelId(id),
-        hasApiKey:
-          this.#config.modelAuthChecker?.(provider) ??
-          Boolean(process.env[`${provider.toUpperCase().replace(/-/g, '_')}_API_KEY`]),
-        useCount: useCounts[id] ?? 0,
-      };
-    });
+        modelName,
+        hasApiKey: await this.#hasModelAuth(provider, modelId, providerConfig ?? providerConfigs[provider]),
+        apiKeyEnvVar: firstApiKeyEnvVar(providerConfig ?? providerConfigs[provider]),
+        useCount: useCounts[modelId] ?? 0,
+      });
+    };
 
-    const custom = (await this.#config.customModelCatalogProvider?.()) ?? [];
-    for (const model of custom) {
-      models.push({ ...model, useCount: useCounts[model.id] ?? 0 });
+    for (const [provider, providerConfig] of Object.entries(providerConfigs)) {
+      for (const modelName of providerConfig.models ?? []) {
+        await upsertModel(`${provider}/${modelName}`, providerConfig);
+      }
     }
 
-    return models.sort((a, b) => b.useCount - a.useCount || a.id.localeCompare(b.id));
+    for (const mode of this.#harnessV1.listModes()) {
+      await upsertModel(mode.defaultModelId);
+    }
+    if (this.getFullModelId()) {
+      await upsertModel(this.getFullModelId());
+    }
+
+    return [...modelsById.values()].sort((a, b) => b.useCount - a.useCount || a.id.localeCompare(b.id));
+  }
+
+  async #getProviderConfigs(): Promise<Record<string, ProviderConfig>> {
+    const providers: Record<string, ProviderConfig> = { ...(PROVIDER_REGISTRY as Record<string, ProviderConfig>) };
+    const gateways = await this.#getGateways();
+
+    for (const gateway of gateways) {
+      try {
+        const gatewayProviders = await gateway.fetchProviders();
+        for (const [providerId, providerConfig] of Object.entries(gatewayProviders)) {
+          providers[providerId] = {
+            ...providerConfig,
+            gateway: providerConfig.gateway ?? gatewayId(gateway),
+          };
+        }
+      } catch {
+        // Model catalog is best-effort; a failing gateway should not break the picker.
+      }
+    }
+
+    return providers;
+  }
+
+  async #getGateways(): Promise<MastraModelGatewayInterface[]> {
+    const gatewaysById = new Map<string, MastraModelGatewayInterface>();
+    const addGateway = (gateway: MastraModelGatewayInterface | undefined) => {
+      if (!gateway) return;
+      gatewaysById.set(gatewayId(gateway), gateway);
+    };
+
+    for (const gateway of this.#config.gateways ?? []) addGateway(gateway);
+
+    try {
+      const listedGateways = this.#config.mastra.listGateways?.();
+      for (const gateway of Object.values(listedGateways ?? {}) as MastraModelGatewayInterface[]) addGateway(gateway);
+    } catch {
+      // Ignore gateway discovery failures; configured gateways above are enough for compat paths.
+    }
+
+    return [...gatewaysById.values()];
+  }
+
+  async #hasModelAuth(providerId: string, modelId: string, providerConfig?: ProviderConfig): Promise<boolean> {
+    const envVars = apiKeyEnvVars(providerConfig);
+    if (envVars.some(envVar => Boolean(process.env[envVar]))) return true;
+    if (envVars.length === 0 && process.env[fallbackApiKeyEnvVar(providerId)]) return true;
+
+    for (const gateway of await this.#getGateways()) {
+      if (!gateway.resolveAuth) continue;
+      try {
+        const auth = await gateway.resolveAuth({
+          gatewayId: providerConfig?.gateway ?? gatewayId(gateway),
+          providerId,
+          modelId,
+          routerId: modelId,
+        });
+        if (hasResolvedGatewayAuth(auth)) return true;
+      } catch {
+        // Auth probing is best-effort; continue to other gateways/fallbacks.
+      }
+    }
+
+    return false;
   }
 
   getDisplayState(): HarnessDisplayState {
@@ -997,9 +1194,7 @@ export class HarnessCompat<TState = {}> {
 
   async listMessages({ limit }: { limit?: number } = {}): Promise<HarnessMessage[]> {
     const messages = (await this.#session?.getMessages()) ?? [];
-    const converted = messages
-      .map(toHarnessMessage)
-      .filter((message): message is HarnessMessage => message !== undefined);
+    const converted = messages.map(toHarnessMessage).filter((message): message is HarnessMessage => message !== undefined);
     return typeof limit === 'number' && limit > 0 ? converted.slice(-limit) : converted;
   }
 
@@ -1041,7 +1236,9 @@ export class HarnessCompat<TState = {}> {
     } as HarnessMessage;
   }
 
-  async getFirstUserMessagesForThreads({ threadIds }: { threadIds?: string[] } = {}): Promise<Map<string, HarnessMessage>> {
+  async getFirstUserMessagesForThreads({ threadIds }: { threadIds?: string[] } = {}): Promise<
+    Map<string, HarnessMessage>
+  > {
     const ids = threadIds ?? (this.#currentThreadId ? [this.#currentThreadId] : []);
     const firstMessages = new Map<string, HarnessMessage>();
     for (const threadId of ids) {
@@ -1143,11 +1340,21 @@ export class HarnessCompat<TState = {}> {
     const accepted = (async () => {
       const session = await this.#ensureSession();
 
-      this.#emitReactiveSignalMessage(signal);
+      const suppressGoalStartAgentEnd = this.#config.memoryDisabled && shouldSuppressGoalStartAgentEnd(signal);
+      await this.#emitReactiveSignalMessage(signal);
+      if (suppressGoalStartAgentEnd) {
+        this.#suppressNextGoalStartAgentEnd = true;
+      }
 
       if (this.isCurrentThreadStreamActive()) {
-        const result = await session.sendMessage({ messages: signal as any, ...options });
-        return { accepted: true as const, runId: result.runId };
+        await this.#waitForCurrentStreamStart();
+        try {
+          const result = await session.sendMessage({ messages: signal as any, ...options });
+          return { accepted: true as const, runId: result.runId };
+        } catch (error) {
+          this.#suppressNextGoalStartAgentEnd = false;
+          throw error;
+        }
       }
 
       await this.#ensurePersistentSubscription(session);
@@ -1163,6 +1370,7 @@ export class HarnessCompat<TState = {}> {
         return { accepted: true as const, runId: result.runId };
       } catch (error) {
         if (!started) {
+          this.#suppressNextGoalStartAgentEnd = false;
           this.#resolveRunWaiters({ terminalType: 'error', error });
           this.#emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
           this.#emit({ type: 'agent_end', reason: 'error' });
@@ -1222,17 +1430,9 @@ export class HarnessCompat<TState = {}> {
    */
   async #runPersistentLoop(subscription: StreamSubscription): Promise<void> {
     while (this.#persistentSubscription === subscription) {
-      let assistantMessage: HarnessMessage = {
-        id: randomUUID(),
-        role: 'assistant',
-        content: [],
-        createdAt: new Date(),
-      };
+      let assistantMessage: HarnessMessage = this.#createAssistantMessage();
       let started = false;
-      const streamState: StreamMessageState = {
-        textContentById: new Map(),
-        thinkingContentById: new Map(),
-      };
+      const streamState: StreamMessageState = this.#createStreamMessageState();
 
       // Ensure signal-content converters are loaded before processing chunks so
       // the sync data-signal handlers can render notification/state/reminder parts.
@@ -1243,6 +1443,7 @@ export class HarnessCompat<TState = {}> {
         for await (const chunk of subscription.stream) {
           if (this.#persistentSubscription !== subscription) return;
           runHadChunks = true;
+          this.#markCurrentStreamStarted();
           if (this.#handleStreamChunk(chunk, assistantMessage, started, streamState)) {
             started = true;
           }
@@ -1253,43 +1454,53 @@ export class HarnessCompat<TState = {}> {
               runError = extractStreamError(chunk);
               this.#emit({ type: 'error', error: runError });
             }
+            const suppressAgentEnd = terminalType === 'finish' && this.#suppressNextGoalStartAgentEnd;
+            this.#suppressNextGoalStartAgentEnd = false;
             if (started) this.#emit({ type: 'message_end', message: assistantMessage });
-            this.#emit({
-              type: 'agent_end',
-              reason:
-                terminalType === 'error'
-                  ? 'error'
-                  : terminalType === 'abort'
-                    ? 'aborted'
-                    : terminalType === 'tool-call-suspended'
-                      ? 'suspended'
-                      : 'complete',
-            });
+            if (!suppressAgentEnd) {
+              this.#emit({
+                type: 'agent_end',
+                reason:
+                  terminalType === 'error'
+                    ? 'error'
+                    : terminalType === 'abort'
+                      ? 'aborted'
+                      : terminalType === 'tool-call-suspended'
+                        ? 'suspended'
+                        : 'complete',
+              });
+            }
             this.#displayState = { ...this.#displayState, isRunning: false, currentMessage: null };
             this.#emitDisplayState();
             this.#resolveRunWaiters({ terminalType, error: runError });
 
             // Reset accumulators for the next run on this persistent stream.
-            assistantMessage = { id: randomUUID(), role: 'assistant', content: [], createdAt: new Date() };
+            assistantMessage = this.#createAssistantMessage();
             started = false;
+            this.#streamHasStarted = false;
             streamState.textContentById.clear();
             streamState.thinkingContentById.clear();
           }
         }
         // Stream ended without a terminal chunk (subscription closed).
         if (runHadChunks && started) {
+          const suppressAgentEnd = this.#suppressNextGoalStartAgentEnd;
+          this.#suppressNextGoalStartAgentEnd = false;
           this.#emit({ type: 'message_end', message: assistantMessage });
-          this.#emit({ type: 'agent_end', reason: 'complete' });
+          if (!suppressAgentEnd) this.#emit({ type: 'agent_end', reason: 'complete' });
           this.#displayState = { ...this.#displayState, isRunning: false, currentMessage: null };
           this.#emitDisplayState();
         }
+        this.#markCurrentStreamStarted();
         this.#resolveRunWaiters({ terminalType: undefined });
         return;
       } catch (error) {
         if (this.#persistentSubscription !== subscription) return;
+        this.#suppressNextGoalStartAgentEnd = false;
         this.#emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
         this.#emit({ type: 'agent_end', reason: 'error' });
         this.#displayState = { ...this.#displayState, isRunning: false, currentMessage: null };
+        this.#markCurrentStreamStarted();
         this.#emitDisplayState();
         this.#resolveRunWaiters({ terminalType: 'error', error });
         return;
@@ -1302,6 +1513,7 @@ export class HarnessCompat<TState = {}> {
   }
 
   #startStreamRun(): void {
+    this.#streamHasStarted = false;
     this.#displayState = { ...this.#displayState, isRunning: true };
     this.#emit({ type: 'agent_start' });
     this.#emitDisplayState();
@@ -1313,7 +1525,7 @@ export class HarnessCompat<TState = {}> {
    * sendMessage path doesn't synthesize that part, so we emit the renderable
    * message here to keep TUI parity (used by plan-approval and goal handoffs).
    */
-  #emitReactiveSignalMessage(signal: unknown): void {
+  async #emitReactiveSignalMessage(signal: unknown): Promise<void> {
     if (!signal || typeof signal !== 'object') return;
     const record = signal as Record<string, unknown>;
     if (record.type !== 'system-reminder') return;
@@ -1325,15 +1537,24 @@ export class HarnessCompat<TState = {}> {
         : typeof (record.attributes as Record<string, unknown> | undefined)?.type === 'string'
           ? ((record.attributes as Record<string, unknown>).type as string)
           : 'system-reminder';
-    this.#emit({
-      type: 'message_update',
+    const metadata = record.metadata as Record<string, unknown> | undefined;
+    await Promise.all(this.#emit({
+      type: 'message_start',
       message: {
         id: typeof record.id === 'string' ? record.id : randomUUID(),
-        role: 'assistant',
+        role: 'user',
         createdAt: new Date(),
-        content: [{ type: 'system_reminder', reminderType, message } as any],
+        content: [
+          {
+            type: 'system_reminder',
+            reminderType,
+            message,
+            precedesMessageId: typeof metadata?.precedesMessageId === 'string' ? metadata.precedesMessageId : '__append__',
+            judgeModelId: typeof metadata?.judgeModelId === 'string' ? metadata.judgeModelId : undefined,
+          } as any,
+        ],
       } as HarnessMessage,
-    });
+    }));
   }
 
   /**
@@ -1344,13 +1565,45 @@ export class HarnessCompat<TState = {}> {
     const converters = signalConvertersCache;
     if (!converters) return undefined;
     if (data.type === 'state') return converters.toStateSignalContent(data);
-    if (data.type === 'reactive' && data.tagName === 'system-reminder')
-      return converters.toSystemReminderContent(data);
+    if (data.type === 'reactive' && data.tagName === 'system-reminder') return converters.toSystemReminderContent(data);
     if (data.type === 'notification' && data.tagName === 'notification-summary')
       return converters.toNotificationSummaryContent(data);
     if (data.type === 'notification' && data.tagName === 'notification') return converters.toNotificationContent(data);
     if (data.type === 'reactive') return converters.toReactiveSignalContent(data);
     return undefined;
+  }
+
+  #markCurrentStreamStarted(): void {
+    if (this.#streamHasStarted) return;
+    this.#streamHasStarted = true;
+    while (this.#streamStartWaiters.length) this.#streamStartWaiters.shift()?.();
+  }
+
+  async #waitForCurrentStreamStart(): Promise<void> {
+    if (this.#streamHasStarted || !this.isCurrentThreadStreamActive()) return;
+    await new Promise<void>(resolve => {
+      const timeout = setTimeout(resolve, 2_000);
+      this.#streamStartWaiters.push(() => {
+        clearTimeout(timeout);
+        resolve();
+      });
+    });
+  }
+
+  #createAssistantMessage(): HarnessMessage {
+    return {
+      id: randomUUID(),
+      role: 'assistant',
+      content: [],
+      createdAt: new Date(),
+    };
+  }
+
+  #createStreamMessageState(): StreamMessageState {
+    return {
+      textContentById: new Map(),
+      thinkingContentById: new Map(),
+    };
   }
 
   #handleStreamChunk(
@@ -1374,7 +1627,8 @@ export class HarnessCompat<TState = {}> {
     const type = record.type;
     const chunkId = getStringField(payload, 'id', 'textId') ?? getStringField(record, 'id', 'textId');
     const toolCallId = getStringField(payload, 'toolCallId', 'id') ?? getStringField(record, 'toolCallId', 'id');
-    const toolName = getStringField(payload, 'toolName', 'name') ?? getStringField(record, 'toolName', 'name') ?? 'tool';
+    const toolName =
+      getStringField(payload, 'toolName', 'name') ?? getStringField(record, 'toolName', 'name') ?? 'tool';
 
     if (type === 'text-start') {
       const text = getStringField(payload, 'text') ?? getStringField(record, 'text') ?? '';
@@ -1485,6 +1739,22 @@ export class HarnessCompat<TState = {}> {
       }
       this.#displayState = { ...this.#displayState, currentMessage: assistantMessage };
       this.#emit({ type: 'tool_start', toolCallId, toolName, args });
+      if (toolName === 'subagent' && args && typeof args === 'object') {
+        const subagentArgs = args as Record<string, unknown>;
+        const agentType = typeof subagentArgs.agentType === 'string' ? subagentArgs.agentType : 'subagent';
+        const task =
+          typeof subagentArgs.prompt === 'string'
+            ? subagentArgs.prompt
+            : typeof subagentArgs.task === 'string'
+              ? subagentArgs.task
+              : '';
+        const modelId =
+          (typeof subagentArgs.modelId === 'string' ? subagentArgs.modelId : this.getSubagentModelId({ agentType })) ??
+          this.getCurrentModelId();
+        const forked = typeof subagentArgs.forked === 'boolean' ? subagentArgs.forked : undefined;
+        this.#subagentToolCalls.set(toolCallId, { agentType, task, modelId, forked, startedAt: Date.now() });
+        this.#emit({ type: 'subagent_start', toolCallId, agentType, task, modelId, forked });
+      }
       this.#emit({ type: 'message_update', message: assistantMessage });
       this.#emitDisplayState();
       return true;
@@ -1502,6 +1772,18 @@ export class HarnessCompat<TState = {}> {
       }
       this.#displayState = { ...this.#displayState, currentMessage: assistantMessage };
       this.#emit({ type: 'tool_end', toolCallId, result, isError });
+      const subagentCall = this.#subagentToolCalls.get(toolCallId);
+      if (subagentCall) {
+        this.#subagentToolCalls.delete(toolCallId);
+        this.#emit({
+          type: 'subagent_end',
+          toolCallId,
+          agentType: subagentCall.agentType,
+          result: stringifySubagentResult(result),
+          isError,
+          durationMs: Math.max(0, Date.now() - subagentCall.startedAt),
+        });
+      }
       this.#emit({ type: 'message_update', message: assistantMessage });
       this.#emitDisplayState();
       return true;
@@ -1510,6 +1792,18 @@ export class HarnessCompat<TState = {}> {
     if (type === 'tool-error' && toolCallId) {
       const result = payload?.error ?? record.error;
       this.#emit({ type: 'tool_end', toolCallId, result, isError: true });
+      const subagentCall = this.#subagentToolCalls.get(toolCallId);
+      if (subagentCall) {
+        this.#subagentToolCalls.delete(toolCallId);
+        this.#emit({
+          type: 'subagent_end',
+          toolCallId,
+          agentType: subagentCall.agentType,
+          result: stringifySubagentResult(result),
+          isError: true,
+          durationMs: Math.max(0, Date.now() - subagentCall.startedAt),
+        });
+      }
       this.#emitDisplayState();
       return started;
     }
@@ -1529,7 +1823,7 @@ export class HarnessCompat<TState = {}> {
 
     if (type === 'data-signal') {
       const data =
-        record.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : payload ?? {};
+        record.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : (payload ?? {});
       const part = this.#signalDataToContent(data);
       if (part) {
         assistantMessage.content.push(part);
@@ -1543,7 +1837,7 @@ export class HarnessCompat<TState = {}> {
 
     if (type === 'data-user-message') {
       const data =
-        record.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : payload ?? {};
+        record.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : (payload ?? {});
       const message = signalConvertersCache?.toUserSignalMessage(data);
       if (message?.content?.length) {
         // Mirror v0: a user-message chunk is a standalone message (e.g. the run's
@@ -1563,7 +1857,7 @@ export class HarnessCompat<TState = {}> {
 
     if (type === 'data-system-reminder') {
       const data =
-        record.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : payload ?? {};
+        record.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : (payload ?? {});
       const reminder = signalConvertersCache?.toSystemReminderContent(data);
       if (reminder) {
         assistantMessage.content.push(reminder);
@@ -1665,9 +1959,25 @@ export class HarnessCompat<TState = {}> {
       await this.#session.respondToToolApproval(toolCallId, decision);
       return;
     }
+    if (decision === 'always_allow_category') {
+      const pending = this.#displayState.pendingApproval;
+      const toolName = pending?.toolName;
+      if (toolName) {
+        const category = getToolCategory(toolName);
+        if (category) {
+          try {
+            this.#session.addSessionGrant({ category });
+          } catch {
+            // Swallow grant creation errors so approval still proceeds.
+          }
+        }
+      }
+      await this.#session.approveToolCall(toolCallId, 'allow');
+      return;
+    }
     await this.#session.approveToolCall(
       toolCallId,
-      decision === 'approve' || decision === 'always_allow_category' ? 'allow' : 'deny',
+      decision === 'approve' ? 'allow' : 'deny',
     );
   }
 
@@ -1732,7 +2042,6 @@ export class HarnessCompat<TState = {}> {
 
   /**
    * Check if the current model's provider has authentication configured.
-   * Uses the provider registry's `apiKeyEnvVar` and the optional `modelAuthChecker` hook.
    */
   async getCurrentModelAuthStatus(): Promise<ModelAuthStatus> {
     const modelId = this.getCurrentModelId();
@@ -1742,27 +2051,20 @@ export class HarnessCompat<TState = {}> {
       const availableModels = await this.listAvailableModels();
       const currentModel = availableModels.find(model => model.id === modelId);
       if (currentModel) {
-        if (currentModel.hasApiKey) {
-          return { hasAuth: true };
-        }
+        if (currentModel.hasApiKey) return { hasAuth: true };
         return { hasAuth: false, apiKeyEnvVar: currentModel.apiKeyEnvVar };
       }
     } catch {
       // Ignore catalog lookup errors and fall through to provider-based checks.
     }
 
-    const provider = modelId.split('/')[0];
+    const provider = providerFromModelId(modelId);
     if (!provider) return { hasAuth: true };
 
     try {
-      const registry = PROVIDER_REGISTRY as Record<string, { apiKeyEnvVar?: string | string[] }>;
-      const providerConfig = registry[provider];
-      const envVars = providerConfig?.apiKeyEnvVar;
-      const apiKeyEnvVar = Array.isArray(envVars) ? envVars[0] : envVars;
-      if (apiKeyEnvVar && process.env[apiKeyEnvVar]) {
-        return { hasAuth: true };
-      }
-      return { hasAuth: false, apiKeyEnvVar: apiKeyEnvVar || undefined };
+      const providerConfig = (await this.#getProviderConfigs())[provider];
+      const hasAuth = await this.#hasModelAuth(provider, modelId, providerConfig);
+      return { hasAuth, apiKeyEnvVar: hasAuth ? undefined : firstApiKeyEnvVar(providerConfig) };
     } catch {
       return { hasAuth: true };
     }

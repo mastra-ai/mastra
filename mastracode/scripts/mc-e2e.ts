@@ -341,7 +341,10 @@ const tmpRootDir = join(mastracodeDir, '.tmp-mc-e2e');
 const tmpDir = join(tmpRootDir, `${Date.now()}-${process.pid}`);
 const tuiTestBin = join(mastracodeDir, 'node_modules', '.bin', 'tui-test');
 const tsxBin = join(mastracodeDir, 'node_modules', '.bin', 'tsx');
-const harnessBackend = process.env.MC_E2E_HARNESS === 'v1-compat' ? 'v1-compat' : 'v0';
+const harnessBackend =
+  process.env.MASTRACODE_TEST_HARNESS_BACKEND === 'v1-compat' || process.env.MC_E2E_HARNESS === 'v1-compat'
+    ? 'v1-compat'
+    : 'v0';
 const mainFile = join(mastracodeDir, harnessBackend === 'v1-compat' ? 'src/main-v1.ts' : 'src/main.ts');
 const testFile = join(scriptDir, 'mc-e2e', 'tui.test.ts');
 
