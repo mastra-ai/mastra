@@ -57,7 +57,7 @@ class AsyncCallbackPubSub extends PubSub {
   #index = 0;
   #pending = new Set<Promise<void>>();
 
-  async publish(topic: string, event: any): Promise<void> {
+  async publish(topic: string, event: any, _options?: { localOnly?: boolean }): Promise<void> {
     const subscribers = [...(this.#subscribers.get(topic) ?? [])];
     const envelope = {
       ...event,
@@ -2882,8 +2882,10 @@ describe('Agent signals', () => {
       model: createTextStreamModel('observer response'),
     });
     new Mastra({ agents: { runner, observer }, logger: false, pubsub });
-    expect(runner.getPubSub()).toBe(pubsub);
-    expect(observer.getPubSub()).toBe(pubsub);
+    // Mastra wraps the raw pubsub in a Proxy (for localOnly tagging), so
+    // reference equality against the raw instance won't hold. Verify both
+    // agents share the *same* (proxy-wrapped) pubsub instead.
+    expect(runner.getPubSub()).toBe(observer.getPubSub());
 
     const subscription = await observer.subscribeToThread({
       threadId: 'shared-thread',

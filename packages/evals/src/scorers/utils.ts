@@ -81,7 +81,7 @@ const isRecord = (value: unknown): value is Record<string, any> => {
 };
 
 const getTextFromValue = (value: unknown): string | undefined => {
-  if (typeof value === 'string') return value;
+  if (typeof value === 'string') return value === '' ? undefined : value;
   if (Array.isArray(value)) {
     const textParts = value
       .filter(part => isRecord(part) && part.type === 'text' && typeof part.text === 'string')
@@ -90,10 +90,13 @@ const getTextFromValue = (value: unknown): string | undefined => {
   }
   if (!isRecord(value)) return undefined;
 
+  const fromParts = Array.isArray(value.parts) ? getTextFromValue(value.parts) : undefined;
+
   return (
     getTextFromValue(value.content) ??
-    (typeof value.text === 'string' ? value.text : undefined) ??
-    (typeof value.body === 'string' ? value.body : undefined)
+    (typeof value.text === 'string' && value.text !== '' ? value.text : undefined) ??
+    (typeof value.body === 'string' && value.body !== '' ? value.body : undefined) ??
+    fromParts
   );
 };
 

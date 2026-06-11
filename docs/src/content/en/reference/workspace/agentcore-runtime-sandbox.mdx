@@ -19,7 +19,7 @@ For interface details, see [WorkspaceSandbox interface](/reference/workspace/san
 
 :::warning
 
-`AgentCoreRuntimeSandbox` only supports one-shot command execution. It does not support background process management, stdin, or filesystem mounts. AgentCore Code Interpreter is a separate AWS service and is not part of this provider.
+`AgentCoreRuntimeSandbox` only supports one-shot command execution. It doesn't support background process management, stdin, or filesystem mounts. AgentCore Code Interpreter is a separate AWS service and isn't part of this provider.
 
 :::
 
@@ -216,7 +216,7 @@ Returns: `Promise<CommandResult>`.
 
 #### `start()`
 
-Runs the sandbox lifecycle start hook. This provider does not create an AgentCore Runtime session during `start()`.
+Runs the sandbox lifecycle start hook. This provider doesn't create an AgentCore Runtime session during `start()`.
 
 ```typescript
 await sandbox.start()
@@ -234,7 +234,7 @@ await sandbox.stop()
 
 Explicitly stops the AgentCore Runtime session used by this sandbox.
 
-Use this when the sandbox owns the runtime session and you want to clean it up directly. `destroy()` does not call this method unless `stopSessionOnLifecycle` is `true`, because AgentCore Runtime sessions can be shared with agent invocations outside the Workspace sandbox lifecycle.
+Use this when the sandbox owns the runtime session and you want to clean it up directly. `destroy()` doesn't call this method unless `stopSessionOnLifecycle` is `true`, because AgentCore Runtime sessions can be shared with agent invocations outside the Workspace sandbox lifecycle.
 
 ```typescript
 await sandbox.stopRuntimeSession()
@@ -265,10 +265,10 @@ Returns: `Promise<SandboxInfo>`.
 `AgentCoreRuntimeSandbox` follows AgentCore Runtime command execution semantics:
 
 - **One-shot commands**: Each command runs to completion or timeout.
-- **No persistent shell**: Shell state does not carry over between commands. Encode state in each command, for example `cd /workspace && npm test`.
-- **Background processes are not supported**: The provider does not expose a `processes` manager.
-- **Interactive stdin is unavailable**: Runtime command execution does not provide an interactive stdin stream through this provider.
-- **Workspace filesystem mounts are unsupported**: Workspace filesystem mounting is not supported by this provider.
+- **No persistent shell**: Shell state doesn't carry over between commands. Encode state in each command, for example `cd /workspace && npm test`.
+- **Background processes aren't supported**: The provider doesn't expose a `processes` manager.
+- **Interactive stdin is unavailable**: Runtime command execution doesn't provide an interactive stdin stream through this provider.
+- **Workspace filesystem mounts are unsupported**: Workspace filesystem mounting isn't supported by this provider.
 - **Container-dependent tools**: Commands can only use tools installed in the AgentCore Runtime container image.
 
 ## Related

@@ -1,0 +1,41 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "sequenceIndex": 0,
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Delegate an explore subagent to find the e2e marker."
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_subagent_delegation_e2e",
+            "name": "subagent",
+            "arguments": {
+              "agentType": "explore",
+              "task": "Find the SUBAGENT_E2E_MARKER symbol in the fixture project and report the file path.",
+              "modelId": "openai/gpt-5.4-mini"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {},
+      "response": {
+        "content": "Explore subagent e2e result: SUBAGENT_E2E_MARKER is defined in src/subagent-marker.ts."
+      },
+      "streamingProfile": {
+        "ttft": 200,
+        "tps": 30
+      }
+    },
+    {
+      "match": {},
+      "response": {
+        "content": "Parent received the explore subagent result from src/subagent-marker.ts."
+      }
+    }
+  ]
+}

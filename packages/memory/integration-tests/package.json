@@ -8,7 +8,7 @@
     "dev": "mastra dev"
   },
   "dependencies": {
-    "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@^2.0.77",
+    "@ai-sdk/anthropic-v5": "npm:@ai-sdk/anthropic@^2.0.81",
     "@ai-sdk/anthropic-v6": "npm:@ai-sdk/anthropic@latest",
     "@ai-sdk/google": "^1.2.22",
     "@ai-sdk/google-v5": "npm:@ai-sdk/google@^2.0.70",

@@ -23,6 +23,8 @@ export interface RouteHandlerParams {
   requestContext: RequestContext;
   /** Abort signal for request cancellation */
   abortSignal: AbortSignal;
+  /** The web-standard Request object for accessing headers, cookies, etc. */
+  request?: Request;
 }
 
 export interface RouteHandlerResult {
@@ -206,6 +208,7 @@ export class RouteHandlerService {
       taskStore: this.options.taskStore,
       abortSignal: params.abortSignal,
       routePrefix: this.options.prefix,
+      request: params.request,
     };
 
     const body = typeof validatedBody === 'object' && validatedBody !== null ? validatedBody : {};

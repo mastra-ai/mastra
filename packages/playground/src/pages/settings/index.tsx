@@ -6,10 +6,10 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  SettingsRow,
   useTheme,
 } from '@mastra/playground-ui';
 import type { Theme } from '@mastra/playground-ui';
+import { SettingsRow } from '@mastra/playground-ui/components/SettingsRow';
 import { StudioConfigForm } from '@/domains/configuration/components/studio-config-form';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 
