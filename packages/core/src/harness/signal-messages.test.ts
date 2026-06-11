@@ -53,6 +53,73 @@ function createHarness(
 }
 
 describe('Harness signal messages', () => {
+  it('converts sendMessage files into fenced text and preserved binary file parts', () => {
+    const harness = createHarness(new InMemoryStore());
+    const createMessageInput = (
+      harness as unknown as {
+        createMessageInput(input: {
+          content: string;
+          files?: Array<{ data: string; mediaType: string; filename?: string }>;
+        }): unknown;
+      }
+    ).createMessageInput.bind(harness);
+
+    const input = createMessageInput({
+      content: 'Review these attachments.',
+      files: [
+        {
+          data: 'data:text/plain;base64,Y29uc29sZS5sb2coImhpIik7',
+          mediaType: 'text/plain',
+          filename: 'snippet.ts',
+        },
+        {
+          data: 'data:application/octet-stream;base64,AAEC',
+          mediaType: 'application/octet-stream',
+          filename: 'archive.bin',
+        },
+      ],
+    });
+
+    expect(input).toEqual([
+      { type: 'text', text: 'Review these attachments.' },
+      { type: 'text', text: '[File: snippet.ts]\n```\nconsole.log("hi");\n```' },
+      {
+        type: 'file',
+        data: 'data:application/octet-stream;base64,AAEC',
+        mediaType: 'application/octet-stream',
+        filename: 'archive.bin',
+      },
+    ]);
+  });
+
+  it('uses a longer fence than any backtick run in text attachments', () => {
+    const harness = createHarness(new InMemoryStore());
+    const createMessageInput = (
+      harness as unknown as {
+        createMessageInput(input: {
+          content: string;
+          files?: Array<{ data: string; mediaType: string; filename?: string }>;
+        }): unknown;
+      }
+    ).createMessageInput.bind(harness);
+
+    const input = createMessageInput({
+      content: 'Review this markdown.',
+      files: [
+        {
+          data: 'const fence = ```nested```;',
+          mediaType: 'text/markdown',
+          filename: 'notes.md',
+        },
+      ],
+    });
+
+    expect(input).toEqual([
+      { type: 'text', text: 'Review this markdown.' },
+      { type: 'text', text: '[File: notes.md]\n````\nconst fence = ```nested```;\n````' },
+    ]);
+  });
+
   it('renders persisted user-message signal attributes', async () => {
     const storage = new InMemoryStore();
     const harness = createHarness(storage);
