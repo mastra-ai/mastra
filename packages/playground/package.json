@@ -71,7 +71,7 @@
     "@xyflow/react": "^12.10.1",
     "date-fns": "catalog:",
     "lucide-react": "^0.522.0",
-    "nanoid": "^5.1.7",
+    "nanoid": "^5.1.11",
     "papaparse": "^5.5.3",
     "posthog-js": "^1.369.3",
     "prism-react-renderer": "^2.4.1",
