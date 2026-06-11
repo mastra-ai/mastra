@@ -103,13 +103,16 @@ function cloneDisplayState(state: HarnessDisplayState): HarnessDisplayState {
     pendingApproval: state.pendingApproval
       ? { ...state.pendingApproval, args: cloneUnknown(state.pendingApproval.args) }
       : null,
-    pendingSuspension: state.pendingSuspension
-      ? {
-          ...state.pendingSuspension,
-          args: cloneUnknown(state.pendingSuspension.args),
-          suspendPayload: cloneUnknown(state.pendingSuspension.suspendPayload),
-        }
-      : null,
+    pendingSuspensions: new Map(
+      Array.from(state.pendingSuspensions, ([id, suspension]) => [
+        id,
+        {
+          ...suspension,
+          args: cloneUnknown(suspension.args),
+          suspendPayload: cloneUnknown(suspension.suspendPayload),
+        },
+      ]),
+    ),
     pendingPlanApproval: state.pendingPlanApproval ? { ...state.pendingPlanApproval } : null,
     activeSubagents: new Map(
       Array.from(state.activeSubagents, ([id, subagent]) => [

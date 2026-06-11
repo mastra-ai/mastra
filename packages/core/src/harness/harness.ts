@@ -3133,6 +3133,7 @@ export class Harness<TState = {}> {
     // ensures the harness no longer considers itself awaiting resumes after an
     // abort, and that a later respondToToolSuspension is a safe no-op.
     this.pendingSuspensions.clear();
+    this.displayState.pendingSuspensions.clear();
     try {
       this.agentThreadSubscription?.abort();
     } catch {}
@@ -3250,7 +3251,7 @@ export class Harness<TState = {}> {
     this.displayState.activeTools = new Map();
     this.displayState.toolInputBuffers = new Map();
     this.displayState.pendingApproval = null;
-    this.displayState.pendingSuspension = null;
+    this.displayState.pendingSuspensions = new Map();
     this.displayState.pendingPlanApproval = null;
     this.displayState.activeSubagents = new Map();
     this.displayState.currentMessage = null;
@@ -3474,8 +3475,11 @@ export class Harness<TState = {}> {
     }
 
     // Remove before resuming so a re-suspend during the resumed run can re-register
-    // the same toolCallId without being clobbered by this cleanup.
+    // the same toolCallId without being clobbered by this cleanup. Drop the matching
+    // display-state entry too so the UI stops rendering only the resolved prompt
+    // while any other parked suspensions stay visible.
     this.pendingSuspensions.delete(toolCallId);
+    this.displayState.pendingSuspensions.delete(toolCallId);
 
     const requestContext = await this.buildRequestContext(requestContextInput);
     const isYolo = (this.state as Record<string, unknown>).yolo === true;
@@ -3588,17 +3592,20 @@ export class Harness<TState = {}> {
         ds.toolInputBuffers = new Map();
         ds.currentMessage = null;
         ds.pendingApproval = null;
-        ds.pendingSuspension = null;
+        // Parked tool suspensions are intentionally NOT cleared here: resuming
+        // one parked tool restarts the run (a fresh agent_start) and the other
+        // parallel prompts must stay rendered until they are resolved.
         break;
 
       case 'agent_end':
         ds.isRunning = false;
         ds.pendingApproval = null;
-        // A suspended run keeps its pending tool suspension alive so the UI can
-        // still render the prompt (e.g. `ask_user`, which pauses via the native
-        // tool-suspension primitive).
+        // A suspended run keeps its pending tool suspensions alive so the UI can
+        // still render the prompts (e.g. `ask_user`, which pauses via the native
+        // tool-suspension primitive). When the run ends for any other reason the
+        // parked suspensions are abandoned, so clear them all.
         if (event.reason !== 'suspended') {
-          ds.pendingSuspension = null;
+          ds.pendingSuspensions.clear();
         }
         ds.pendingPlanApproval = null;
         // Mark any still-running tools as errored (handles abort mid-run)
@@ -3723,13 +3730,13 @@ export class Harness<TState = {}> {
         break;
 
       case 'tool_suspended':
-        ds.pendingSuspension = {
+        ds.pendingSuspensions.set(event.toolCallId, {
           toolCallId: event.toolCallId,
           toolName: event.toolName,
           args: event.args,
           suspendPayload: event.suspendPayload,
           resumeSchema: event.resumeSchema,
-        };
+        });
         break;
 
       // ── Interactive prompts ────────────────────────────────────────────

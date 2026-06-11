@@ -11,6 +11,7 @@ Made the `ask_user` built-in tool agent-agnostic and removed the Harness questio
 - Removed `harness.respondToQuestion(...)`. Use `harness.respondToToolSuspension(...)` instead.
 - Removed the `ask_question` event. Listen for `tool_suspended` and read the question from `event.suspendPayload`.
 - Removed `registerQuestion` from `HarnessRequestContext`, the `HarnessDisplayState.pendingQuestion` field, and the `HarnessQuestionAnswer`, `HarnessQuestionOption`, and `HarnessQuestionSelectionMode` types.
+- `HarnessDisplayState.pendingSuspension` (a single object or `null`) is now `HarnessDisplayState.pendingSuspensions`, a `Map` keyed by `toolCallId`. This lets the display state hold several parked prompts at once, so resuming one parallel `ask_user` no longer hides the others. Read a specific prompt with `displayState.pendingSuspensions.get(toolCallId)`.
 
 `respondToToolSuspension` accepts an optional `toolCallId` so concurrently suspended tools (for example, parallel `ask_user` calls) can each be answered independently.
 
