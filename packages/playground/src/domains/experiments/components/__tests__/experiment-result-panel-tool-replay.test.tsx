@@ -1,13 +1,17 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  callFlowResult,
   emptyRecordingReport,
+  errorOutcomesCallFlowReport,
   expectationFailedResult,
   failedReplayResult,
   liveResultWithJunkToolReplay,
+  mockOnlyCallFlowReport,
   replayResult,
 } from '../../__tests__/fixtures/tool-replay';
+import type { ReplayTapeSpan } from '../../utils/tool-replay';
 import { ExperimentResultPanel } from '../experiment-result-panel';
 
 describe('ExperimentResultPanel tool replay', () => {
@@ -129,5 +133,121 @@ describe('ExperimentResultPanel tool replay', () => {
     expect(screen.getByText('Output')).toBeDefined();
     expect(screen.queryByText('Output — original run')).toBeNull();
     expect(screen.queryByText('Output — this replay')).toBeNull();
+  });
+});
+
+describe('ExperimentResultPanel run flow', () => {
+  afterEach(cleanup);
+
+  it('renders the verdict sentence and one ordered row per call', () => {
+    render(<ExperimentResultPanel result={callFlowResult} onClose={vi.fn()} isReplayExperiment />);
+
+    expect(screen.getByText('4 tool calls — 2 replayed (1 with different args) · 1 mocked · 1 ran live')).toBeDefined();
+
+    const runFlow = screen.getByTestId('replay-run-flow');
+    expect(within(runFlow).getByText('Run flow')).toBeDefined();
+    expect(within(runFlow).getByText('#')).toBeDefined();
+    expect(within(runFlow).getByText('Tool')).toBeDefined();
+    expect(within(runFlow).getByText('Outcome')).toBeDefined();
+    expect(within(runFlow).getByText('Notes')).toBeDefined();
+
+    const rows = runFlow.querySelectorAll('.data-list-row');
+    expect(rows).toHaveLength(4);
+    // Rows keep hook-arrival order and number calls as order + 1.
+    expect(rows[0].textContent).toContain('1');
+    expect(rows[0].textContent).toContain('get-weather');
+    expect(rows[0].textContent).toContain('✓');
+    expect(rows[0].textContent).toContain('replayed');
+    expect(rows[0].textContent).toContain('tape #1');
+    expect(rows[1].textContent).toContain('tape #2 · args differed');
+    expect(rows[2].textContent).toContain('send-email');
+    expect(rows[2].textContent).toContain('Ⓜ');
+    expect(rows[2].textContent).toContain('mocked');
+    expect(rows[3].textContent).toContain('get-photos');
+    expect(rows[3].textContent).toContain('⚡');
+    expect(rows[3].textContent).toContain('ran live (passthrough)');
+  });
+
+  it('marks the drifted call with the amber args-differed note', () => {
+    render(<ExperimentResultPanel result={callFlowResult} onClose={vi.fn()} isReplayExperiment />);
+
+    // Exact note text — the divergence detail list has its own "args differed from the recording" line.
+    const driftNote = screen.getByText('· args differed');
+    expect(driftNote.className).toContain('text-amber-400');
+    // Only the drifted call carries the note.
+    expect(screen.getAllByText('· args differed')).toHaveLength(1);
+  });
+
+  it('labels error-path outcomes with their notes', () => {
+    render(
+      <ExperimentResultPanel
+        result={{ ...replayResult, toolReplay: errorOutcomesCallFlowReport }}
+        onClose={vi.fn()}
+        isReplayExperiment
+      />,
+    );
+
+    expect(screen.getByText('3 tool calls — 1 replayed · 1 mocked · 1 missed')).toBeDefined();
+    expect(screen.getByText('tape #1 · recorded error re-thrown')).toBeDefined();
+    expect(screen.getByText('error injected')).toBeDefined();
+    expect(screen.getByText('no recorded call left')).toBeDefined();
+    expect(screen.getByText('✗')).toBeDefined();
+    expect(screen.getByText('miss')).toBeDefined();
+  });
+
+  it('shows mocked and live outcomes for mock-only runs', () => {
+    const mockOnlyResult = { ...expectationFailedResult, toolReplay: mockOnlyCallFlowReport, error: null };
+    render(<ExperimentResultPanel result={mockOnlyResult} onClose={vi.fn()} isReplayExperiment />);
+
+    expect(screen.getByText('2 tool calls — 1 mocked · 1 ran live')).toBeDefined();
+    expect(screen.getByText('live')).toBeDefined();
+    expect(screen.getByText('ran live (not mocked)')).toBeDefined();
+  });
+
+  it('renders the run flow (run perspective) before the recording tape (recording perspective)', () => {
+    // The recording behind callFlowReport: get-weather ×2 + create-ticket ×1.
+    const sourceTraceSpans: ReplayTapeSpan[] = [
+      {
+        spanId: 's0',
+        spanType: 'tool_call',
+        entityName: 'get-weather',
+        startedAt: '2026-06-01T10:00:00.000Z',
+        endedAt: '2026-06-01T10:00:01.000Z',
+      },
+      {
+        spanId: 's1',
+        spanType: 'tool_call',
+        entityName: 'get-weather',
+        startedAt: '2026-06-01T10:00:01.000Z',
+        endedAt: '2026-06-01T10:00:02.000Z',
+      },
+      {
+        spanId: 's2',
+        spanType: 'tool_call',
+        entityName: 'create-ticket',
+        startedAt: '2026-06-01T10:00:02.000Z',
+        endedAt: '2026-06-01T10:00:03.000Z',
+      },
+    ];
+    render(
+      <ExperimentResultPanel
+        result={callFlowResult}
+        onClose={vi.fn()}
+        isReplayExperiment
+        sourceTraceSpans={sourceTraceSpans}
+      />,
+    );
+
+    const runFlow = screen.getByTestId('replay-run-flow');
+    const tapeTitle = screen.getByText('Recording (tape) · FIFO per tool');
+    expect(runFlow.compareDocumentPosition(tapeTitle) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  });
+
+  it('renders no verdict and no run flow when the report predates the calls field', () => {
+    render(<ExperimentResultPanel result={replayResult} onClose={vi.fn()} isReplayExperiment />);
+
+    expect(screen.queryByTestId('replay-run-flow')).toBeNull();
+    expect(screen.queryByText('Run flow')).toBeNull();
+    expect(screen.queryByText(/\d+ tool call/)).toBeNull();
   });
 });

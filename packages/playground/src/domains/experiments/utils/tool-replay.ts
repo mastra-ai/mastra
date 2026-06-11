@@ -6,17 +6,90 @@ export type ToolReplayMatching = 'fifo' | 'strict';
 /** Kind of mock answer configured for a tool (mirrors the core mock config). */
 export type ToolReplayMockKind = 'output' | 'error' | 'function' | 'observe';
 
+/** One actual tool call of the run, in hook-arrival order (mirrors the core call-flow entry). */
+export interface ToolReplayCall {
+  /** 0-based arrival order across all tools. Parallel calls in one step keep hook-arrival order. */
+  order: number;
+  toolName: string;
+  outcome:
+    | 'replayed' // recorded output served
+    | 'replayed-error' // recorded error re-thrown
+    | 'mocked' // mock output / function result served
+    | 'mock-error' // mock error injected
+    | 'miss-error' // no event left, item stopped
+    | 'miss-passthrough' // no event left, live tool executed
+    | 'live'; // mock-only run, unmocked tool executed live
+  /** Recorded event consumed (replayed outcomes only). */
+  sequence?: number;
+  /** FIFO mode only: args differed from the consumed recorded event. */
+  argsDiffered?: boolean;
+}
+
 /**
- * Local extension of the client report type: `mocks` and `expectations`
- * landed in core but @mastra/client-js has not picked them up yet (client
- * types catch up in the stacked PR). Both optional, so plain reports remain
- * assignable.
+ * Local extension of the client report type: `calls`, `mocks` and
+ * `expectations` landed in core but @mastra/client-js has not picked them up
+ * yet (client types catch up in the stacked PR). All optional, so plain
+ * reports remain assignable.
  */
 export interface ToolReplayReportExtended extends ToolReplayReport {
+  /** The run's actual tool-call flow, in hook-arrival order. */
+  calls?: ToolReplayCall[];
   /** Tools answered by configured mocks instead of recordings or live calls. */
   mocks?: { toolName: string; calls: number; kind: ToolReplayMockKind }[];
   /** Per-tool call assertions evaluated after the run. */
   expectations?: { toolName: string; satisfied: boolean; calledTimes: number; reason?: string }[];
+}
+
+/** One-line verdict model over the run's call flow — every call lands in exactly one bucket. */
+export interface ToolReplayCallsSummary {
+  total: number;
+  /** Calls answered from the recording (`replayed` and `replayed-error`). */
+  replayed: number;
+  /** Replayed calls that asked with different args than the consumed event (FIFO drift). */
+  replayedWithDrift: number;
+  /** Calls answered by configured mocks (`mocked` and `mock-error`). */
+  mocked: number;
+  /** Calls with no recorded event left that stopped the item (`miss-error`). */
+  missed: number;
+  /** Calls that executed the live tool (`miss-passthrough` and `live`). */
+  live: number;
+}
+
+/**
+ * Derives the one-line verdict counts from the run's call flow. Returns null
+ * when the report carries no `calls` — older rows predate the field.
+ */
+export function summarizeReplayCalls(report: ToolReplayReportExtended): ToolReplayCallsSummary | null {
+  if (!Array.isArray(report.calls)) return null;
+  const summary: ToolReplayCallsSummary = {
+    total: report.calls.length,
+    replayed: 0,
+    replayedWithDrift: 0,
+    mocked: 0,
+    missed: 0,
+    live: 0,
+  };
+  for (const call of report.calls) {
+    switch (call.outcome) {
+      case 'replayed':
+      case 'replayed-error':
+        summary.replayed += 1;
+        if (call.argsDiffered) summary.replayedWithDrift += 1;
+        break;
+      case 'mocked':
+      case 'mock-error':
+        summary.mocked += 1;
+        break;
+      case 'miss-error':
+        summary.missed += 1;
+        break;
+      case 'miss-passthrough':
+      case 'live':
+        summary.live += 1;
+        break;
+    }
+  }
+  return summary;
 }
 
 export interface ToolReplayMarker {

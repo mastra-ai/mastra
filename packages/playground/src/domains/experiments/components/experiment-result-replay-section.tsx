@@ -2,6 +2,7 @@ import {
   Button,
   Chip,
   DataKeysAndValues,
+  DataList,
   DataPanel,
   Tooltip,
   TooltipContent,
@@ -11,8 +12,14 @@ import {
 } from '@mastra/playground-ui';
 import { HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import type { ReplayTapeSpan, ToolReplayMockKind, ToolReplayReportExtended } from '../utils/tool-replay';
-import { buildReplayTape, classifyReplayDivergence } from '../utils/tool-replay';
+import type {
+  ReplayTapeSpan,
+  ToolReplayCall,
+  ToolReplayCallsSummary,
+  ToolReplayMockKind,
+  ToolReplayReportExtended,
+} from '../utils/tool-replay';
+import { buildReplayTape, classifyReplayDivergence, summarizeReplayCalls } from '../utils/tool-replay';
 
 export type ExperimentResultReplaySectionProps = {
   report: ToolReplayReportExtended;
@@ -27,6 +34,52 @@ const MOCK_KIND_LABELS: Record<ToolReplayMockKind, string> = {
   function: 'function',
   observe: 'observed',
 };
+
+type ReplayCallOutcomeView = {
+  glyph: string;
+  glyphClassName: string;
+  label: string;
+  /** Fixed explanation shown in the Notes column. */
+  note?: string;
+};
+
+/** How each run-flow outcome renders: glyph + label in Outcome, fixed note in Notes. */
+const CALL_OUTCOME_VIEWS: Record<ToolReplayCall['outcome'], ReplayCallOutcomeView> = {
+  replayed: { glyph: '✓', glyphClassName: 'text-green-400', label: 'replayed' },
+  'replayed-error': {
+    glyph: '✓',
+    glyphClassName: 'text-green-400',
+    label: 'replayed',
+    note: 'recorded error re-thrown',
+  },
+  mocked: { glyph: 'Ⓜ', glyphClassName: 'text-purple-400', label: 'mocked' },
+  'mock-error': { glyph: 'Ⓜ', glyphClassName: 'text-purple-400', label: 'mocked', note: 'error injected' },
+  'miss-error': { glyph: '✗', glyphClassName: 'text-red-400', label: 'miss', note: 'no recorded call left' },
+  'miss-passthrough': {
+    glyph: '⚡',
+    glyphClassName: 'text-amber-400',
+    label: 'miss',
+    note: 'ran live (passthrough)',
+  },
+  live: { glyph: '⚡', glyphClassName: 'text-blue-400', label: 'live', note: 'ran live (not mocked)' },
+};
+
+/** Future-proof fallback — reports come from storage, so an unknown outcome must not crash the panel. */
+const UNKNOWN_CALL_OUTCOME_VIEW: ReplayCallOutcomeView = { glyph: '•', glyphClassName: 'text-neutral3', label: '' };
+
+/** "4 tool calls — 2 replayed (1 with different args) · 1 mocked · 1 ran live" (zero-count segments are skipped). */
+function formatReplayCallsVerdict(summary: ToolReplayCallsSummary): string {
+  const segments: string[] = [];
+  if (summary.replayed > 0) {
+    const drift = summary.replayedWithDrift > 0 ? ` (${summary.replayedWithDrift} with different args)` : '';
+    segments.push(`${summary.replayed} replayed${drift}`);
+  }
+  if (summary.mocked > 0) segments.push(`${summary.mocked} mocked`);
+  if (summary.missed > 0) segments.push(`${summary.missed} missed`);
+  if (summary.live > 0) segments.push(`${summary.live} ran live`);
+  const head = `${summary.total} tool call${summary.total === 1 ? '' : 's'}`;
+  return segments.length > 0 ? `${head} — ${segments.join(' · ')}` : head;
+}
 
 /**
  * Per-item divergence report: how far this run drifted from the recording.
@@ -45,12 +98,17 @@ export function ExperimentResultReplaySection({
     () => (sourceTraceSpans && !isEmptyRecording ? buildReplayTape(sourceTraceSpans, report) : null),
     [sourceTraceSpans, report, isEmptyRecording],
   );
+  // Older rows predate the call-flow field — they render no verdict and no run-flow table.
+  const callsSummary = useMemo(() => summarizeReplayCalls(report), [report]);
+  const calls = callsSummary && callsSummary.total > 0 ? report.calls! : null;
 
   return (
     <div className="grid gap-2">
       <DataPanel.SectionHeading icon={<HistoryIcon />} className="mb-2">
         Tool Replay
       </DataPanel.SectionHeading>
+
+      {callsSummary && <p className="text-ui-sm text-neutral3">{formatReplayCallsVerdict(callsSummary)}</p>}
 
       <div className="flex flex-wrap items-center gap-1.5">
         {isEmptyRecording ? (
@@ -120,10 +178,53 @@ export function ExperimentResultReplaySection({
           </p>
         ))}
 
+      {calls && (
+        <div data-testid="replay-run-flow" className="grid gap-1.5">
+          {/* The RUN's perspective: every call the new run made, in arrival order. */}
+          <span className="text-ui-xs uppercase tracking-widest text-neutral2">Run flow</span>
+          <DataList columns="max-content minmax(0, 1fr) max-content minmax(0, 1.5fr)">
+            <DataList.Top>
+              <DataList.TopCell>#</DataList.TopCell>
+              <DataList.TopCell>Tool</DataList.TopCell>
+              <DataList.TopCell>Outcome</DataList.TopCell>
+              <DataList.TopCell>Notes</DataList.TopCell>
+            </DataList.Top>
+            {calls.map(call => {
+              const view = CALL_OUTCOME_VIEWS[call.outcome] ?? UNKNOWN_CALL_OUTCOME_VIEW;
+              const tapeRef = typeof call.sequence === 'number' ? `tape #${call.sequence + 1}` : null;
+              const note = [tapeRef, view.note].filter(Boolean).join(' · ');
+              return (
+                <DataList.RowStatic key={call.order}>
+                  <DataList.MonoCell>{call.order + 1}</DataList.MonoCell>
+                  <DataList.MonoCell className="text-neutral5">{call.toolName}</DataList.MonoCell>
+                  <DataList.Cell height="compact" className="text-ui-sm text-neutral4">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span aria-hidden="true" className={cn('font-mono', view.glyphClassName)}>
+                        {view.glyph}
+                      </span>
+                      <span className="truncate">{view.label || call.outcome}</span>
+                    </span>
+                  </DataList.Cell>
+                  <DataList.Cell height="compact" className="text-ui-sm text-neutral3">
+                    {note || call.argsDiffered ? (
+                      <span className="min-w-0 truncate">
+                        {note}
+                        {call.argsDiffered && <span className="text-amber-400">{note ? ' · ' : ''}args differed</span>}
+                      </span>
+                    ) : null}
+                  </DataList.Cell>
+                </DataList.RowStatic>
+              );
+            })}
+          </DataList>
+        </div>
+      )}
+
       {tape && tape.length > 0 && (
         <div className="grid gap-1.5 rounded-lg border border-border1 bg-surface3/50 p-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-ui-xs uppercase tracking-widest text-neutral2">Recording tape (FIFO per tool)</span>
+            {/* The RECORDING's perspective: what was on the tape and what became of it. */}
+            <span className="text-ui-xs uppercase tracking-widest text-neutral2">Recording (tape) · FIFO per tool</span>
             <span className="text-ui-xs text-neutral2">
               ✓ replayed · ≈ args differed · ○ never requested · + new call
             </span>

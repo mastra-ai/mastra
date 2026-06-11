@@ -108,6 +108,63 @@ export const emptyRecordingReport: ToolReplayReport = {
   argMismatches: [],
 };
 
+/**
+ * Replay+mock run (onMiss: passthrough) carrying the run's call flow:
+ * recorded get-weather ×2 + create-ticket ×1; the run replayed both
+ * get-weather events (the second with drifted args), got send-email from a
+ * mock, never asked for create-ticket, and ran get-photos live on a miss.
+ * Verdict: "4 tool calls — 2 replayed (1 with different args) · 1 mocked · 1 ran live".
+ */
+export const callFlowReport: ToolReplayReportExtended = {
+  sourceTraceId: 'trace-src-1',
+  totalRecorded: 3,
+  replayedCount: 2,
+  misses: [{ toolName: 'get-photos', action: 'passthrough', input: { ticketId: 'T-1' } }],
+  unconsumed: [{ toolName: 'create-ticket', count: 1 }],
+  argMismatches: [{ toolName: 'get-weather', sequence: 1, spanId: 'span-1' }],
+  mocks: [{ toolName: 'send-email', calls: 1, kind: 'output' }],
+  calls: [
+    { order: 0, toolName: 'get-weather', outcome: 'replayed', sequence: 0 },
+    { order: 1, toolName: 'get-weather', outcome: 'replayed', sequence: 1, argsDiffered: true },
+    { order: 2, toolName: 'send-email', outcome: 'mocked' },
+    { order: 3, toolName: 'get-photos', outcome: 'miss-passthrough' },
+  ],
+};
+
+/**
+ * Replay+mock run (onMiss: error) aborted at the miss: a recorded error was
+ * re-thrown, a mock injected an error, then a miss stopped the item.
+ */
+export const errorOutcomesCallFlowReport: ToolReplayReportExtended = {
+  sourceTraceId: 'trace-src-4',
+  totalRecorded: 2,
+  replayedCount: 1,
+  misses: [{ toolName: 'get-weather', action: 'error', input: { city: 'Lyon' } }],
+  unconsumed: [{ toolName: 'fetch-invoice', count: 1 }],
+  argMismatches: [],
+  mocks: [{ toolName: 'charge-card', calls: 1, kind: 'error' }],
+  calls: [
+    { order: 0, toolName: 'fetch-invoice', outcome: 'replayed-error', sequence: 0 },
+    { order: 1, toolName: 'charge-card', outcome: 'mock-error' },
+    { order: 2, toolName: 'get-weather', outcome: 'miss-error' },
+  ],
+};
+
+/** Mock-only run flow: one mocked answer plus an unmocked tool that ran live. */
+export const mockOnlyCallFlowReport: ToolReplayReportExtended = {
+  sourceTraceId: null,
+  totalRecorded: 0,
+  replayedCount: 0,
+  misses: [],
+  unconsumed: [],
+  argMismatches: [],
+  mocks: [{ toolName: 'weatherInfo', calls: 1, kind: 'output' }],
+  calls: [
+    { order: 0, toolName: 'weatherInfo', outcome: 'mocked' },
+    { order: 1, toolName: 'searchDocs', outcome: 'live' },
+  ],
+};
+
 /** Mock-run report: no recording, mocked answers, one satisfied and one failed expectation. */
 export const expectationFailedReport: ToolReplayReportExtended = {
   sourceTraceId: null,
@@ -149,6 +206,18 @@ export const replayResult: DatasetExperimentResultWithReplayColumn = {
   toolReplay: divergentReport,
   error: null,
   traceId: 'trace-replay-run-1',
+};
+
+/** Successful replayed item whose report carries the run's call flow. */
+export const callFlowResult: DatasetExperimentResultWithReplayColumn = {
+  ...resultBase,
+  id: 'result-replay-3',
+  itemId: 'item-5',
+  input: { question: 'Compare the weather and email me.' },
+  output: { text: 'Sent! Paris is warmer.' },
+  toolReplay: callFlowReport,
+  error: null,
+  traceId: 'trace-replay-run-3',
 };
 
 /** Failed replay item — older row shape: TOOL_REPLAY_MISS error + report merged into the output. */

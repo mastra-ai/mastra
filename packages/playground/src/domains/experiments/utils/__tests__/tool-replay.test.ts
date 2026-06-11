@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import {
+  callFlowReport,
   cleanReport,
   divergentReport,
+  errorOutcomesCallFlowReport,
   expectationFailedReport,
   expectationFailedResult,
   failedReplayResult,
   junkMarkerExperiment,
   liveExperiment,
   liveResultWithJunkToolReplay,
+  mockOnlyCallFlowReport,
   mockOnlyExperiment,
   noOnMissMarkerExperiment,
   replayExperiment,
@@ -22,6 +25,7 @@ import {
   getToolReplayReport,
   isReplayExperiment,
   stripToolReplayFromOutput,
+  summarizeReplayCalls,
 } from '../tool-replay';
 
 describe('getReplayMarker / isReplayExperiment', () => {
@@ -198,6 +202,53 @@ describe('buildReplayTape', () => {
       argMismatches: [],
     });
     expect(tape[0].events.map(e => e.spanId)).toEqual(['a', 'b']);
+  });
+});
+
+describe('summarizeReplayCalls', () => {
+  it('buckets every call of the flow into exactly one verdict count', () => {
+    expect(summarizeReplayCalls(callFlowReport)).toEqual({
+      total: 4,
+      replayed: 2,
+      replayedWithDrift: 1,
+      mocked: 1,
+      missed: 0,
+      live: 1,
+    });
+    // replayed-error counts as replayed, mock-error as mocked, miss-error as missed.
+    expect(summarizeReplayCalls(errorOutcomesCallFlowReport)).toEqual({
+      total: 3,
+      replayed: 1,
+      replayedWithDrift: 0,
+      mocked: 1,
+      missed: 1,
+      live: 0,
+    });
+    // Mock-only runs: unmocked tools that executed live count as live.
+    expect(summarizeReplayCalls(mockOnlyCallFlowReport)).toEqual({
+      total: 2,
+      replayed: 0,
+      replayedWithDrift: 0,
+      mocked: 1,
+      missed: 0,
+      live: 1,
+    });
+  });
+
+  it('returns null for reports that predate the calls field', () => {
+    expect(summarizeReplayCalls(divergentReport)).toBeNull();
+    expect(summarizeReplayCalls(cleanReport)).toBeNull();
+  });
+
+  it('returns zero counts for a run that never called a tool', () => {
+    expect(summarizeReplayCalls({ ...cleanReport, calls: [] })).toEqual({
+      total: 0,
+      replayed: 0,
+      replayedWithDrift: 0,
+      mocked: 0,
+      missed: 0,
+      live: 0,
+    });
   });
 });
 
