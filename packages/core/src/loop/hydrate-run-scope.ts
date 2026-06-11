@@ -37,6 +37,14 @@ export function hydrateRunScopeFromInternal(mastra: Mastra, runId: string, inter
   const scope = mastra.__getRunScope(runId);
   if (!scope) return;
 
+  // Intentionally NOT hydrated here: `stepTools`, `stepActiveTools`,
+  // `stepWorkspace`, `_delegationBailed`. Those are *runtime-written outputs*
+  // of step execution, not bootstrap inputs — hydrating them would seed the
+  // scope with stale/empty values that get overwritten on the first step.
+  // The one case where a caller pre-populates `_internal.stepTools` as a
+  // bootstrap input (durable resume via `resolveInternalState`, e.g. the
+  // `ToolSearchProcessor` pattern) still works because `readScoped` falls
+  // back to `_internal[field]` when the scope slot is `undefined`.
   if (internal.now) scope.set(NOW_KEY, internal.now);
   if (internal.generateId) scope.set(GENERATE_ID_KEY, internal.generateId);
   if (internal.currentDate) scope.set(CURRENT_DATE_KEY, internal.currentDate);

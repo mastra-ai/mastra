@@ -1,7 +1,7 @@
 import type { SerializedError } from '../../error/utils';
 import { rehydrateError, serializeError } from './error';
 import { getClassCodec } from './registry';
-import { CODEC_TAG, isEnvelope } from './tags';
+import { CODEC_TAG, MAX_REGEXP_SOURCE_LENGTH, isEnvelope } from './tags';
 import type { Envelope } from './tags';
 
 /**
@@ -127,7 +127,7 @@ function decodeRegExpEnvelope(v: unknown): RegExp {
   const candidate = v as { source?: unknown; flags?: unknown };
   if (typeof candidate.source !== 'string') return /(?:)/;
   if (typeof candidate.flags !== 'string') return /(?:)/;
-  if (candidate.source.length > 1024) return /(?:)/;
+  if (candidate.source.length > MAX_REGEXP_SOURCE_LENGTH) return /(?:)/;
   const flags = candidate.flags;
   if (!/^[dgimsuvy]*$/.test(flags)) return /(?:)/;
   if (new Set(flags).size !== flags.length) return /(?:)/;
