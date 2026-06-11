@@ -185,6 +185,33 @@ describe('Datasets Handlers', () => {
       expect(startSpy).not.toHaveBeenCalled();
     });
 
+    it('passes itemIds through to startExperimentAsync', async () => {
+      const startSpy = vi.spyOn(Dataset.prototype, 'startExperimentAsync').mockResolvedValue({
+        experimentId: 'exp-items',
+        status: 'pending',
+        totalItems: 2,
+      });
+      const dataset = await mastra.datasets.create({ name: 'Subset Dataset' });
+
+      const result = await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        targetType: 'agent',
+        targetId: 'my-agent',
+        itemIds: ['item-1', 'item-2'],
+      });
+
+      expect(result.status).toBe('pending');
+      expect(startSpy).toHaveBeenCalledTimes(1);
+      expect(startSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          targetType: 'agent',
+          targetId: 'my-agent',
+          itemIds: ['item-1', 'item-2'],
+        }),
+      );
+    });
+
     it('omits toolReplay from the config when not provided', async () => {
       const startSpy = vi.spyOn(Dataset.prototype, 'startExperimentAsync').mockResolvedValue({
         experimentId: 'exp-2',
@@ -229,15 +256,13 @@ describe('Datasets Handlers', () => {
       });
 
       it('accepts the matching policy and rejects invalid values', () => {
-        expect(
-          triggerExperimentBodySchema.parse({ ...base, toolReplay: { matching: 'strict' } }).toolReplay,
-        ).toEqual({ matching: 'strict' });
+        expect(triggerExperimentBodySchema.parse({ ...base, toolReplay: { matching: 'strict' } }).toolReplay).toEqual({
+          matching: 'strict',
+        });
         expect(triggerExperimentBodySchema.parse({ ...base, toolReplay: { matching: 'fifo' } }).toolReplay).toEqual({
           matching: 'fifo',
         });
-        expect(() =>
-          triggerExperimentBodySchema.parse({ ...base, toolReplay: { matching: 'exact' } }),
-        ).toThrowError();
+        expect(() => triggerExperimentBodySchema.parse({ ...base, toolReplay: { matching: 'exact' } })).toThrowError();
       });
 
       it('rejects toolReplay for non-agent targets at the boundary', () => {
@@ -298,6 +323,22 @@ describe('Datasets Handlers', () => {
         }
       });
 
+      it('accepts itemIds for any target type and rejects an empty array', () => {
+        expect(triggerExperimentBodySchema.parse({ ...base, itemIds: ['item-1', 'item-2'] }).itemIds).toEqual([
+          'item-1',
+          'item-2',
+        ]);
+        // itemIds is target-agnostic — no agent-only refinement applies.
+        expect(
+          triggerExperimentBodySchema.parse({
+            targetType: 'workflow',
+            targetId: 'my-workflow',
+            itemIds: ['item-1'],
+          }).itemIds,
+        ).toEqual(['item-1']);
+        expect(triggerExperimentBodySchema.safeParse({ ...base, itemIds: [] }).success).toBe(false);
+      });
+
       it('still converts to JSON schema for OpenAPI despite the refinements', () => {
         // superRefine wraps the schema in ZodEffects — the OpenAPI pipeline
         // (toStandardSchema → JSON schema) must keep working.
@@ -306,6 +347,7 @@ describe('Datasets Handlers', () => {
         };
         expect(jsonSchema.properties?.toolReplay).toBeDefined();
         expect(jsonSchema.properties?.toolMocks).toBeDefined();
+        expect(jsonSchema.properties?.itemIds).toBeDefined();
       });
     });
   });

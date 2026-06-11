@@ -281,6 +281,13 @@ export const triggerExperimentBodySchema = z
     targetId: z.string().describe('ID of the target'),
     scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
     version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
+    itemIds: z
+      .array(z.string())
+      .min(1)
+      .optional()
+      .describe(
+        'Run only these dataset item IDs (after version resolution). Matching no items fails the experiment at setup.',
+      ),
     agentVersion: z.string().optional().describe('Agent version ID to use for experiment'),
     maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
     requestContext: z
