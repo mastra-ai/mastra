@@ -1,5 +1,7 @@
 ---
 '@mastra/auth-clerk': minor
+'@mastra/core': patch
+'@mastra/server': patch
 ---
 
 Added full Studio authentication support for Clerk users.
@@ -26,3 +28,5 @@ const auth = new MastraAuthClerk({
   session: { cookiePassword: process.env.CLERK_COOKIE_PASSWORD },
 });
 ```
+
+**Note:** This release includes updates to `@mastra/core` (ISSOProvider interface now supports async getLoginUrl) and `@mastra/server` (handles async login URLs). All three packages should be updated together.
