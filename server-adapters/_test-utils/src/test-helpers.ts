@@ -1,6 +1,6 @@
 import { Agent, createMessageSignal, createSignal } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
-import { Mock, vi } from 'vitest';
+import { expect, Mock, vi } from 'vitest';
 import { Workflow } from '@mastra/core/workflows';
 import { normalizeRoutePath } from './route-test-utils';
 import { createScorer } from '@mastra/core/evals';
@@ -1475,6 +1475,49 @@ export function createStreamWithSensitiveData(format: 'v1' | 'v2' = 'v2'): Reada
       controller.close();
     },
   });
+}
+
+/**
+ * Creates a ReadableStream for testing per-chunk serialization error handling
+ * (https://github.com/mastra-ai/mastra/issues/17821).
+ *
+ * Emits three chunks:
+ * 1. a chunk whose payload contains a BigInt (not JSON-serializable natively — must be coerced to a string)
+ * 2. a chunk that cannot be serialized at all (throwing toJSON — must be skipped without killing the stream)
+ * 3. a final chunk that must still be delivered after the unserializable one
+ *
+ * Use {@link expectSerializedStreamChunks} to assert on the consumed result.
+ */
+export function createStreamWithUnserializableChunk(): ReadableStream {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: 'workflow-step-result', payload: { output: { count: 42n } } });
+      controller.enqueue({
+        type: 'poison',
+        toJSON() {
+          throw new Error('cannot serialize');
+        },
+      });
+      controller.enqueue({ type: 'workflow-finish', payload: { workflowStatus: 'success' } });
+      controller.close();
+    },
+  });
+}
+
+/**
+ * Asserts the chunks consumed from {@link createStreamWithUnserializableChunk}:
+ * BigInt coerced to a string, the poison chunk skipped, and the final chunk delivered.
+ */
+export function expectSerializedStreamChunks(chunks: any[]): void {
+  const stepResult = chunks.find(c => c.type === 'workflow-step-result');
+  expect(stepResult).toBeDefined();
+  expect(stepResult.payload.output).toEqual({ count: '42' });
+
+  expect(chunks.find(c => c.type === 'poison')).toBeUndefined();
+
+  const finish = chunks.find(c => c.type === 'workflow-finish');
+  expect(finish, 'chunks after an unserializable chunk must still be delivered').toBeDefined();
+  expect(finish.payload.workflowStatus).toBe('success');
 }
 
 /**
