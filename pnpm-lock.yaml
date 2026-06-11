@@ -4603,7 +4603,7 @@ importers:
         specifier: ^0.522.0
         version: 0.522.0(react@19.2.6)
       nanoid:
-        specifier: ^5.1.7
+        specifier: ^5.1.11
         version: 5.1.11
       papaparse:
         specifier: ^5.5.3
