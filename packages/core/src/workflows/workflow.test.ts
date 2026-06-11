@@ -784,7 +784,7 @@ describe('Workflow (Default Engine Specifics)', () => {
       expect(fgaProvider.require).not.toHaveBeenCalled();
     });
 
-    it('bypasses membership resolution for a tenant-scoped system actor', async () => {
+    it('bypasses membership resolution for a tenant-scoped trusted actor', async () => {
       const fgaProvider = {
         require: vi.fn().mockResolvedValue(undefined),
         check: vi.fn(),
@@ -809,7 +809,7 @@ describe('Workflow (Default Engine Specifics)', () => {
         [PUBSUB_SYMBOL]: new EventEmitterPubSub(),
         mastra,
         requestContext,
-        systemActor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
+        actor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
         abort: vi.fn(),
         abortSignal: new AbortController().signal,
         engine: 'default',

@@ -1,7 +1,7 @@
 import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import { MastraFGAPermissions } from '../auth/ee';
-import type { MastraFGAPermissionInput, SystemActorSignal } from '../auth/ee';
+import type { MastraFGAPermissionInput, ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model';
@@ -596,7 +596,7 @@ https://mastra.ai/en/docs/memory/overview`,
     resourceId?: string;
     requestContext?: RequestContext;
     permission?: MastraFGAPermissionInput;
-    systemActor?: SystemActorSignal;
+    actor?: ActorSignal;
   }): Promise<void> {
     const {
       mastra,
@@ -605,7 +605,7 @@ https://mastra.ai/en/docs/memory/overview`,
       resourceId,
       requestContext,
       permission = MastraFGAPermissions.MEMORY_READ,
-      systemActor,
+      actor,
     } = options;
     const fgaProvider = mastra?.getServer()?.fga;
     if (!fgaProvider) return;
@@ -617,7 +617,7 @@ https://mastra.ai/en/docs/memory/overview`,
       resource: { type: 'thread', id: threadId },
       permission,
       requestContext,
-      systemActor,
+      actor,
       context:
         resourceId || requestContext
           ? {

@@ -147,7 +147,7 @@ describe('CoreToolBuilder FGA', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it('bypasses membership resolution for a tenant-scoped system actor', async () => {
+  it('bypasses membership resolution for a tenant-scoped trusted actor', async () => {
     const execute = vi.fn().mockResolvedValue({ result: 'ok' });
     const testTool = createTool({
       id: 'search',
@@ -178,14 +178,14 @@ describe('CoreToolBuilder FGA', () => {
       },
     });
 
-    const systemActor = { actorKind: 'system', sourceWorkflow: 'nightly-workflow' } as const;
+    const actor = { actorKind: 'system', sourceWorkflow: 'nightly-workflow' } as const;
     const builtTool = builder.build();
     await builtTool.execute!(
       { query: 'docs' },
       {
         toolCallId: 'call-1',
         messages: [],
-        systemActor,
+        actor,
       },
     );
 
@@ -193,7 +193,7 @@ describe('CoreToolBuilder FGA', () => {
     expect(execute).toHaveBeenCalledWith(
       { query: 'docs' },
       expect.objectContaining({
-        systemActor,
+        actor,
       }),
     );
   });

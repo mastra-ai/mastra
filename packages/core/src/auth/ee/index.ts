@@ -39,7 +39,7 @@ export {
   getMCPToolFGAResourceId,
   type CheckFGAOptions,
   type RequireFGAOptions,
-  type SystemActorSignal,
+  type ActorSignal,
 } from './fga-check';
 
 // Default implementations

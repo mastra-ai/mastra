@@ -12,7 +12,7 @@ import type { ElicitRequest, ElicitResult } from '@modelcontextprotocol/sdk/type
 
 import type { MastraPrimitives, MastraUnion } from '../action';
 export type { MastraPrimitives, MastraUnion };
-import type { SystemActorSignal } from '../auth/ee';
+import type { ActorSignal } from '../auth/ee';
 import type { ToolBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
@@ -287,7 +287,7 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
      */
     requestContext?: RequestContext;
     /** Trusted server-side signal for this tool FGA check. */
-    systemActor?: SystemActorSignal;
+    actor?: ActorSignal;
     /**
      * Flushes the parent stream's pending messages to persistent storage.
      *
@@ -525,7 +525,7 @@ export interface ToolExecutionContext<
   requestContext?: RequestContext<TRequestContext>;
   abortSignal?: AbortSignal;
   /** Trusted server-side signal forwarded for nested FGA checks. */
-  systemActor?: SystemActorSignal;
+  actor?: ActorSignal;
 
   /**
    * Workspace available for tool execution. When provided, tools can access:

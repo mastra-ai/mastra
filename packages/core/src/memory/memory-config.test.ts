@@ -7,7 +7,7 @@ import { InMemoryStore } from '../storage';
 import { MockMemory } from './mock';
 
 describe('MastraMemory FGA', () => {
-  it('bypasses thread membership resolution for a tenant-scoped system actor', async () => {
+  it('bypasses thread membership resolution for a tenant-scoped trusted actor', async () => {
     const fgaProvider = {
       require: vi.fn().mockResolvedValue(undefined),
     };
@@ -22,7 +22,7 @@ describe('MastraMemory FGA', () => {
       resourceId: 'tenant-1',
       requestContext,
       permission: MastraFGAPermissions.MEMORY_READ,
-      systemActor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
+      actor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
     });
 
     expect(fgaProvider.require).not.toHaveBeenCalled();

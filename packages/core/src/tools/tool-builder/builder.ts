@@ -588,7 +588,7 @@ export class CoreToolBuilder extends MastraBase {
             memory: options.memory,
             runId: options.runId,
             requestContext: mergeRequestContexts(options.requestContext, execOptions.requestContext),
-            systemActor: execOptions.systemActor,
+            actor: execOptions.actor,
             // Workspace for file operations and command execution
             // Execution-time workspace (from prepareStep/processInputStep) takes precedence over build-time workspace
             workspace: execOptions.workspace ?? options.workspace,
@@ -779,7 +779,7 @@ export class CoreToolBuilder extends MastraBase {
           resource: { type: 'tool', id: toolResourceId },
           permission: MastraFGAPermissions.TOOLS_EXECUTE,
           requestContext: toolRequestContext,
-          systemActor: execOptions?.systemActor,
+          actor: execOptions?.actor,
           context: {
             resourceId: options.resourceId,
           },
