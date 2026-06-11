@@ -372,7 +372,17 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async endWorkflow(args: ProcessorArgs, status: 'success' | 'failed' | 'canceled' | 'paused' = 'success') {
-    const { workflowId, runId, prevResult, perStep, workflow, stepResults, activeStepsPath, executionPath } = args;
+    const {
+      workflowId,
+      runId,
+      prevResult,
+      perStep,
+      workflow,
+      stepResults,
+      activeStepsPath,
+      executionPath,
+      parentWorkflow,
+    } = args;
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
 
     // Check shouldPersistSnapshot option - default to true if not specified
@@ -394,6 +404,14 @@ export class WorkflowEventProcessor extends EventProcessor {
           activeStepsPath: activeStepsPath,
         },
       });
+    } else if (parentWorkflow && finalStatus !== 'paused') {
+      // The nested run reached a terminal state its workflow opted not to
+      // persist (e.g. the internal `executionWorkflow` inside `agentic-loop`).
+      // A row may still exist from an earlier persisted phase — 'pending' at
+      // nested-run start or 'suspended' before a resume — and without the
+      // terminal update it would leak as a stale, resumable-looking record.
+      // Terminal runs can't be resumed, so drop the row entirely.
+      await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
     }
 
     if (perStep) {
@@ -653,6 +671,11 @@ export class WorkflowEventProcessor extends EventProcessor {
           activeStepsPath: activeStepsPath,
         },
       });
+    } else if (parentWorkflow) {
+      // Mirrors endWorkflow: a nested run whose workflow opted out of
+      // persisting the terminal 'failed' status would otherwise leak its
+      // earlier-phase ('pending'/'suspended') snapshot row forever.
+      await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
     }
 
     // handle nested workflow
