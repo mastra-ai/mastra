@@ -1,5 +1,5 @@
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { Pool } from 'pg';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { PostgresStore } from './index';
 
 const TOXIPROXY_API = 'http://localhost:8475';
