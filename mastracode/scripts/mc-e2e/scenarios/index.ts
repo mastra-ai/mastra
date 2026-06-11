@@ -30,6 +30,7 @@ import { promptContextInstructionsScenario } from './prompt-context-instructions
 import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { quietSettingsScenario } from './quiet-settings.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
+import { requestAccessModalScenario } from './request-access-modal.js';
 import { startupScenario } from './startup.js';
 import { stateCommandsScenario } from './state-commands.js';
 import { stateSignalReloadScenario } from './state-signal-reload.js';
@@ -91,6 +92,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'prompt-context-instructions': promptContextInstructionsScenario,
   'quiet-settings': quietSettingsScenario,
   'report-issue-command': reportIssueCommandScenario,
+  'request-access-modal': requestAccessModalScenario,
   'state-commands': stateCommandsScenario,
   'state-signal-reload': stateSignalReloadScenario,
   'state-signal-rendering': stateSignalRenderingScenario,

@@ -82,6 +82,7 @@
 - `mastracode/src/tui/components/__tests__/ask-question-inline-multi-select.test.ts` — multi-select behavior and guard that `Custom response...` is omitted in multi-select mode.
 - `mastracode/src/tui/components/__tests__/masked-input.test.ts` — sensitive input masking is render-only: cleartext never appears in rendered lines, the underlying value is restored after render, and submit forwards the unmasked value.
 - `mastracode/scripts/mc-e2e/scenarios/api-key-prompt.ts` — partial real PTY coverage for sensitive prompt behavior: opens `/api-keys`, selects an unset provider, types a fake key, asserts cleartext is absent and mask characters are visible, then verifies the provider becomes stored.
+- `mastracode/scripts/mc-e2e/scenarios/request-access-modal.ts` — real PTY coverage for AIMock-driven `request_access`: model calls the real tool, the TUI renders the sandbox access prompt with reason/options, Enter approves the default Yes option, the tool returns an access-granted result, and a follow-up `view` reads a deterministic file outside the project root from the newly approved path.
 - `mastracode/src/tui/__tests__/overlay.test.ts` — shared modal overlay min-height, max-height cap, and top-padding behavior.
 - `mastracode/src/tools/__tests__/request-sandbox-access.test.ts` — approve/deny outcomes, tilde expansion, same-turn `setAllowedPaths()`, missing filesystem fallback, and no-`setAllowedPaths` fallback.
 

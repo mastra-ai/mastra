@@ -4578,3 +4578,14 @@ Break validations proved the scenario fails if the `Use as /goal` option label c
   - Disabling `lastObservedCiState` cursor persistence allowed the notification but timed out on `/github debug` waiting for `ci=success`.
 - Clean focused verification: `pnpm --filter @mastra/github-signals build`; `pnpm --filter ./mastracode run e2e:test github-signals-incremental`; `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
 - Tracker update: `Git: GitHub signal subscriptions` remains `needs-follow-up` but now covers command subscribe/baseline notification/debug projection and manual-sync incremental recovered-CI notification classification/cursor persistence. Remaining gaps are interval polling delivery, notification inbox read transitions, branch auto-subscribe lifecycle, unsubscribe/reload, and reload/history parity.
+
+## 2026-06-11 — Request access prompt remediation
+
+- Selected `TUI: Interactive prompts and access requests` as the next high-risk unfinished row by tracker priority.
+- Added `request-access-modal` TUI e2e scenario and AIMock fixture. The scenario creates a deterministic external `/tmp/mastracode-request-access-e2e/allowed.txt` file, has the model call the real `request_access` tool for that outside-project directory, verifies the real TUI sandbox approval prompt/reason/options, approves the default `Yes` option with Enter, verifies the access-granted tool result, then has the model call `view` on the external file and verifies its content renders in the TUI.
+- Break validations proved the scenario catches regressions:
+  - Renaming the visible prompt copy from `Grant sandbox access` caused the scenario to time out waiting for the canonical prompt.
+  - Corrupting approval parsing so selected `Yes` no longer approved access caused the scenario to time out waiting for the granted result/external read.
+  - Emitting the wrong sandbox access event type prevented the TUI prompt from rendering and timed out waiting for the prompt.
+- Clean verification: `pnpm run build:mastracode`; `pnpm --filter ./mastracode run e2e:test request-access-modal`; `pnpm --filter ./mastracode run e2e:test -- --jobs 2` (55/55); `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
+- Tracker update: `TUI: Interactive prompts and access requests` remains `needs-follow-up` but now covers sensitive masked input and request_access approval/same-turn external-read behavior through real PTY e2e. Remaining gaps are ask_user multiline/custom/multi-select queueing and queued prompt interleaving.

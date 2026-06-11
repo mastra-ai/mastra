@@ -33,6 +33,7 @@ export type ScenarioName =
   | 'om-settings'
   | 'quiet-settings'
   | 'report-issue-command'
+  | 'request-access-modal'
   | 'state-commands'
   | 'state-signal-reload'
   | 'state-signal-rendering'
