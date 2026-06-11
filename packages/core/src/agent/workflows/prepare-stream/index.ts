@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 import type { BackgroundTaskManager } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import type { SystemMessage } from '../../../llm';
+import { createRunScope } from '../../../mastra/run-scope';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal, StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
@@ -18,7 +19,6 @@ import type { AgentMethodType } from '../../types';
 import { createMapResultsStep } from './map-results-step';
 import { createPrepareMemoryStep } from './prepare-memory-step';
 import { createPrepareToolsStep } from './prepare-tools-step';
-import type { PrepareStreamRunScope } from './run-scope';
 import type { AgentCapabilities } from './schema';
 import { createStreamStep } from './stream-step';
 
@@ -90,7 +90,10 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
   // Per-run scope shared between steps. Class instances (MessageList, Tools),
   // Maps, and closures live here instead of step outputs — see ./run-scope.ts.
-  const runScope: PrepareStreamRunScope<OUTPUT> = {};
+  // The agent.ts caller wires the same scope into `Mastra.__createRunScope` for
+  // the evented path; the closure reference here keeps the direct path working
+  // without touching the registry.
+  const runScope = createRunScope();
 
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,

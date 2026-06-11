@@ -4,6 +4,7 @@ import type { FileHandle } from 'node:fs/promises';
 import net from 'node:net';
 import { dirname } from 'node:path';
 
+import { decode, encode } from './codec';
 import { PubSub } from './pubsub';
 import type { PubSubDeliveryMode } from './pubsub';
 import type { Event, EventCallback, SubscribeOptions } from './types';
@@ -36,7 +37,10 @@ type SubscribeWaiter = {
 const DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES = 64 * 1024 * 1024;
 
 function serializeFrame(frame: ClientFrame | ServerFrame): string {
-  return `${JSON.stringify(frame)}\n`;
+  // Encode through the codec so non-JSON-safe values (Date, Error, Map, Set,
+  // RegExp, URL, BigInt, undefined, registered classes) survive the wire
+  // round-trip via tagged envelopes.
+  return `${JSON.stringify(encode(frame))}\n`;
 }
 
 function writeSerializedFrame(socket: net.Socket, serializedFrame: string): Promise<void> {
@@ -115,7 +119,7 @@ function readFrames(socket: net.Socket, onFrame: (frame: any) => void) {
       buffer = buffer.slice(newlineIndex + 1);
       if (!line.trim()) continue;
       try {
-        onFrame(JSON.parse(line));
+        onFrame(decode(JSON.parse(line)));
       } catch {
         // Ignore malformed frames. The transport is local IPC and callers can retry.
       }
@@ -557,11 +561,9 @@ export class UnixSocketPubSub extends PubSub {
       return;
     }
     if (frame.type !== 'event') return;
-    const event = {
-      ...frame.event,
-      createdAt: new Date(frame.event.createdAt),
-    };
-    this.#deliverLocal(frame.topic, event);
+    // `createdAt` is already a Date — the codec rehydrates it during JSON.parse
+    // in `readFrames`. No ad-hoc conversion needed.
+    this.#deliverLocal(frame.topic, frame.event);
   }
 
   async #publishFromBroker(

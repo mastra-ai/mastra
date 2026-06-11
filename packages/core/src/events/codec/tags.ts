@@ -1,0 +1,52 @@
+import type { SerializedError } from '../../error/utils';
+
+/**
+ * Discriminator key for codec-tagged envelopes. Long, namespaced, and unlikely
+ * to collide with user data. Plain objects that happen to carry this key but
+ * do not match an envelope shape are preserved as-is by the decoder.
+ */
+export const CODEC_TAG = '__m_codec__';
+
+export type EnvelopeTag = 'Date' | 'Error' | 'Map' | 'Set' | 'RegExp' | 'URL' | 'BigInt' | 'Undefined' | 'Class';
+
+export type Envelope =
+  | { [CODEC_TAG]: 'Date'; v: string }
+  | { [CODEC_TAG]: 'Error'; v: SerializedError }
+  | { [CODEC_TAG]: 'Map'; v: Array<[unknown, unknown]> }
+  | { [CODEC_TAG]: 'Set'; v: Array<unknown> }
+  | { [CODEC_TAG]: 'RegExp'; v: { source: string; flags: string } }
+  | { [CODEC_TAG]: 'URL'; v: string }
+  | { [CODEC_TAG]: 'BigInt'; v: string }
+  | { [CODEC_TAG]: 'Undefined' }
+  | { [CODEC_TAG]: 'Class'; n: string; v: unknown };
+
+/**
+ * Returns true when `value` looks like a codec envelope. The check is
+ * conservative — an object with the tag key but an unknown tag value, or a
+ * shape that does not match any envelope variant, is treated as user data.
+ */
+export function isEnvelope(value: object): value is Envelope {
+  const tag = (value as Record<string, unknown>)[CODEC_TAG];
+  if (typeof tag !== 'string') return false;
+  switch (tag as EnvelopeTag) {
+    case 'Undefined':
+      return true;
+    case 'Date':
+    case 'BigInt':
+    case 'URL':
+      return typeof (value as { v?: unknown }).v === 'string';
+    case 'RegExp': {
+      const v = (value as { v?: unknown }).v as { source?: unknown; flags?: unknown } | undefined;
+      return !!v && typeof v.source === 'string' && typeof v.flags === 'string';
+    }
+    case 'Map':
+    case 'Set':
+      return Array.isArray((value as { v?: unknown }).v);
+    case 'Error':
+      return typeof (value as { v?: unknown }).v === 'object' && (value as { v?: unknown }).v !== null;
+    case 'Class':
+      return typeof (value as { n?: unknown }).n === 'string';
+    default:
+      return false;
+  }
+}

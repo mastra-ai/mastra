@@ -65,6 +65,7 @@ import { computeNextFireAt } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, WorkflowSchedulerConfig, WorkflowScheduler } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
+import { createRunScope, type RunScope } from './run-scope';
 import type { VersionOverrides, VersionSelector } from './types';
 
 /**
@@ -611,6 +612,15 @@ export class Mastra<
   // TTL sweep can evict entries from abandoned suspended runs that were never
   // resumed. Unscoped (singleton) entries are not tracked — they live forever.
   #runScopedWorkflowTimestamps: Map<string, number> = new Map();
+  // Per-run bag of non-serializable runtime state (SaveQueueManager,
+  // BackgroundTaskManager, MessageList, abort controllers, dynamic tool sets…)
+  // shared across step factories within a single run. Never persisted, never
+  // published. Lifecycle is refcounted against `__registerInternalWorkflow`
+  // calls for the same runId so multiple workflows sharing a run (e.g. an
+  // agentic-loop wrapping an agentic-execution) keep the scope alive until the
+  // last unregisters. See `./run-scope.ts`.
+  #runScopes: Map<string, RunScope> = new Map();
+  #runScopeRefcounts: Map<string, number> = new Map();
   // Run-scoped internal workflows older than this TTL (ms) are evicted during
   // the lazy sweep that runs on each new registration.
   static readonly INTERNAL_WORKFLOW_TTL_MS = 30 * 60 * 1000; // 30 minutes
@@ -2405,8 +2415,18 @@ export class Mastra<
     });
     if (runId) {
       const key = `${workflow.id}:${runId}`;
+      const isNewRegistration = !this.#internalMastraWorkflows[key];
       this.#internalMastraWorkflows[key] = workflow;
       this.#runScopedWorkflowTimestamps.set(key, Date.now());
+      // Pair the registration with a runScope. Multiple workflows can share a
+      // runId (parent + nested); we refcount so the scope outlives the first
+      // unregister and dies with the last.
+      if (isNewRegistration) {
+        this.#runScopeRefcounts.set(runId, (this.#runScopeRefcounts.get(runId) ?? 0) + 1);
+        if (!this.#runScopes.has(runId)) {
+          this.#runScopes.set(runId, createRunScope());
+        }
+      }
       this.#sweepStaleRunScopedWorkflows();
     } else {
       this.#internalMastraWorkflows[workflow.id] = workflow;
@@ -2416,11 +2436,66 @@ export class Mastra<
   /**
    * Remove a runId-scoped registration. The unscoped `${id}` entry is left intact
    * so single-instance callers (background tasks, score-traces) continue to resolve.
+   *
+   * Decrements the refcount for the runScope tied to this runId; when the
+   * count hits zero the scope is dropped along with every reference it held.
    */
   __unregisterInternalWorkflow(id: string, runId: string) {
     const key = `${id}:${runId}`;
+    const wasRegistered = !!this.#internalMastraWorkflows[key];
     delete this.#internalMastraWorkflows[key];
     this.#runScopedWorkflowTimestamps.delete(key);
+    if (wasRegistered) {
+      this.#releaseRunScope(runId);
+    }
+  }
+
+  /**
+   * Get the existing runScope for a runId without creating one.
+   * Returns undefined when no internal workflow has been registered against
+   * the runId — callers should treat this as the run not yet being bootstrapped.
+   */
+  __getRunScope(runId: string): RunScope | undefined {
+    return this.#runScopes.get(runId);
+  }
+
+  /**
+   * Idempotently allocate a runScope for a runId. Used by call sites (like
+   * `loop()`) that need to populate the scope *before* the internal workflow
+   * registration lands. The scope is held until the matching internal-workflow
+   * registration is released or the TTL sweep evicts it.
+   *
+   * Bumps the refcount so the scope cannot be freed before the caller is done
+   * with it; callers MUST pair this with `__releaseRunScope(runId)`.
+   */
+  __createRunScope(runId: string): RunScope {
+    let scope = this.#runScopes.get(runId);
+    if (!scope) {
+      scope = createRunScope();
+      this.#runScopes.set(runId, scope);
+    }
+    this.#runScopeRefcounts.set(runId, (this.#runScopeRefcounts.get(runId) ?? 0) + 1);
+    return scope;
+  }
+
+  /**
+   * Decrement the runScope refcount; drops the scope when the count reaches
+   * zero. Public so callers that called `__createRunScope` directly (e.g.,
+   * `loop()` hydration) can release their hold without unregistering a
+   * workflow.
+   */
+  __releaseRunScope(runId: string): void {
+    this.#releaseRunScope(runId);
+  }
+
+  #releaseRunScope(runId: string): void {
+    const next = (this.#runScopeRefcounts.get(runId) ?? 0) - 1;
+    if (next <= 0) {
+      this.#runScopeRefcounts.delete(runId);
+      this.#runScopes.delete(runId);
+    } else {
+      this.#runScopeRefcounts.set(runId, next);
+    }
   }
 
   __hasInternalWorkflow(id: string, runId?: string): boolean {
@@ -2521,6 +2596,11 @@ export class Mastra<
       if (now - registeredAt > Mastra.INTERNAL_WORKFLOW_TTL_MS) {
         delete this.#internalMastraWorkflows[key];
         this.#runScopedWorkflowTimestamps.delete(key);
+        // key shape is `${workflowId}:${runId}` — release the matching scope.
+        const colon = key.lastIndexOf(':');
+        if (colon !== -1) {
+          this.#releaseRunScope(key.slice(colon + 1));
+        }
       }
     }
   }
