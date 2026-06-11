@@ -584,14 +584,21 @@ export interface HarnessDisplayState {
   } | null;
 
   // ── Tool suspension ─────────────────────────────────────────────────
-  /** A tool awaiting resume data after calling suspend() (null when none) */
-  pendingSuspension: {
-    toolCallId: string;
-    toolName: string;
-    args: unknown;
-    suspendPayload: unknown;
-    resumeSchema?: string;
-  } | null;
+  /**
+   * Tools awaiting resume data after calling suspend(), keyed by toolCallId.
+   * Multiple tools can be parked at once (e.g. parallel `ask_user` prompts), so
+   * resuming one leaves the others intact for the UI to keep rendering.
+   */
+  pendingSuspensions: Map<
+    string,
+    {
+      toolCallId: string;
+      toolName: string;
+      args: unknown;
+      suspendPayload: unknown;
+      resumeSchema?: string;
+    }
+  >;
 
   // ── Subagent tracking ────────────────────────────────────────────────
   /** Active subagent executions keyed by parent toolCallId */
@@ -631,7 +638,7 @@ export function defaultDisplayState(): HarnessDisplayState {
     activeTools: new Map(),
     toolInputBuffers: new Map(),
     pendingApproval: null,
-    pendingSuspension: null,
+    pendingSuspensions: new Map(),
     activeSubagents: new Map(),
     omProgress: defaultOMProgressState(),
     bufferingMessages: false,
