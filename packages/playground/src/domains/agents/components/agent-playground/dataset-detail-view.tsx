@@ -21,7 +21,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Play, Sparkles, Clock, ChevronRight, ChevronDown, Pencil, Save, X, Trash2 } from 'lucide-react';
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { formatVersionLabel } from './format-version-label';
+import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
+import type { ToolMockRow } from '@/domains/datasets/components/experiment-trigger/tool-mocks-editor';
+import {
+  areToolMockRowsValid,
+  buildToolMocksPayload,
+  ToolMocksEditor,
+} from '@/domains/datasets/components/experiment-trigger/tool-mocks-editor';
 import {
   buildToolReplayPayload,
   ToolReplaySelector,
@@ -108,6 +115,8 @@ export function DatasetDetailView({
   const [replayFromExperimentId, setReplayFromExperimentId] = useState('');
   const [replayOnMiss, setReplayOnMiss] = useState<ToolReplayOnMiss>('error');
   const [replayMatching, setReplayMatching] = useState<ToolReplayMatching>('fifo');
+  const [mocksEnabled, setMocksEnabled] = useState(false);
+  const [mockRows, setMockRows] = useState<ToolMockRow[]>([]);
 
   // Scorers for dataset attachment
   const { data: allScorers } = useScorers();
@@ -161,12 +170,18 @@ export function DatasetDetailView({
   const agentVersionsQuery = useAgentVersions({ agentId: isAgentTarget ? agentId : '' });
   const agentVersions = agentVersionsQuery.data?.versions ?? [];
 
+  // Already in the cache from the agent playground chat (same query key) — suggestion source only.
+  const { data: agentDetails } = useAgent(isAgentTarget ? agentId : undefined);
+  const toolSuggestions = useMemo(() => Object.keys(agentDetails?.tools ?? {}), [agentDetails]);
+
   useEffect(() => {
     setSelectedDatasetVersion('');
     setReplayEnabled(false);
     setReplayFromExperimentId('');
     setReplayOnMiss('error');
     setReplayMatching('fifo');
+    setMocksEnabled(false);
+    setMockRows([]);
   }, [datasetId]);
 
   useEffect(() => {
@@ -200,6 +215,7 @@ export function DatasetDetailView({
             })()
           : [];
       const expTargetId = expTargetType !== 'agent' && parsedTargetIds[0] ? parsedTargetIds[0] : agentId;
+      const toolMocks = expTargetType === 'agent' && mocksEnabled ? buildToolMocksPayload(mockRows) : undefined;
       await triggerExperiment.mutateAsync({
         datasetId,
         targetType: expTargetType,
@@ -217,6 +233,7 @@ export function DatasetDetailView({
               }),
             }
           : {}),
+        ...(toolMocks ? { toolMocks } : {}),
       });
       void queryClient.invalidateQueries({ queryKey: ['agent-experiments', agentId] });
       void refetchExperiments();
@@ -246,6 +263,8 @@ export function DatasetDetailView({
     replayFromExperimentId,
     replayOnMiss,
     replayMatching,
+    mocksEnabled,
+    mockRows,
   ]);
 
   return (
@@ -283,7 +302,12 @@ export function DatasetDetailView({
               variant="primary"
               size="sm"
               onClick={handleRunExperiment}
-              disabled={items.length === 0 || isRunning || (isAgentTarget && replayEnabled && !replayFromExperimentId)}
+              disabled={
+                items.length === 0 ||
+                isRunning ||
+                (isAgentTarget && replayEnabled && !replayFromExperimentId) ||
+                (isAgentTarget && mocksEnabled && !areToolMockRowsValid(mockRows))
+              }
             >
               {isRunning ? (
                 <>
@@ -364,6 +388,16 @@ export function DatasetDetailView({
             matching={replayMatching}
             onMatchingChange={setReplayMatching}
             selectedTargetId={agentId}
+            disabled={isRunning}
+          />
+        )}
+        {isAgentTarget && (
+          <ToolMocksEditor
+            enabled={mocksEnabled}
+            onEnabledChange={setMocksEnabled}
+            rows={mockRows}
+            onRowsChange={setMockRows}
+            toolSuggestions={toolSuggestions}
             disabled={isRunning}
           />
         )}

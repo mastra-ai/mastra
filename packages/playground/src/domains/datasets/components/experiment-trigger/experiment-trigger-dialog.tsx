@@ -20,7 +20,10 @@ import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { ScorerSelector } from './scorer-selector';
 import type { TargetType } from './target-selector';
 import { TargetSelector } from './target-selector';
+import type { ToolMockRow } from './tool-mocks-editor';
+import { areToolMockRowsValid, buildToolMocksPayload, ToolMocksEditor } from './tool-mocks-editor';
 import { buildToolReplayPayload, ToolReplaySelector } from './tool-replay-selector';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
 import type { ToolReplayMatching } from '@/domains/experiments/utils/tool-replay';
 import { DynamicForm } from '@/lib/form';
 import { resolveSerializedZodOutput } from '@/lib/form/utils';
@@ -84,15 +87,31 @@ export function ExperimentTriggerDialog({
   const [replayFromExperimentId, setReplayFromExperimentId] = useState('');
   const [replayOnMiss, setReplayOnMiss] = useState<ToolReplayOnMiss>('error');
   const [replayMatching, setReplayMatching] = useState<ToolReplayMatching>('fifo');
+  const [mocksEnabled, setMocksEnabled] = useState(false);
+  const [mockRows, setMockRows] = useState<ToolMockRow[]>([]);
 
   const { triggerExperiment } = useDatasetMutations();
+  // Suggestion source only. Gated on `open` so the always-mounted (closed)
+  // dialog never fetches; once open the TargetSelector fires the same query
+  // key anyway, so this adds zero requests.
+  const { data: agents } = useAgents({ enabled: open });
 
   const hasSchema = Boolean(requestContextSchema && Object.keys(requestContextSchema).length > 0);
 
-  // Tool replay is agent-only (the API rejects other targets up-front).
+  // Tool replay and tool mocks are agent-only (the API rejects other targets up-front).
   const replayActive = targetType === 'agent' && replayEnabled;
-  const canRun = targetType && targetId && (!replayActive || Boolean(replayFromExperimentId));
+  const mocksActive = targetType === 'agent' && mocksEnabled;
+  const canRun =
+    targetType &&
+    targetId &&
+    (!replayActive || Boolean(replayFromExperimentId)) &&
+    (!mocksActive || areToolMockRowsValid(mockRows));
   const isRunning = triggerExperiment.isPending;
+
+  const toolSuggestions = useMemo(
+    () => (targetType === 'agent' && targetId ? Object.keys(agents?.[targetId]?.tools ?? {}) : []),
+    [agents, targetType, targetId],
+  );
 
   const resetState = () => {
     setTargetType('');
@@ -104,6 +123,8 @@ export function ExperimentTriggerDialog({
     setReplayFromExperimentId('');
     setReplayOnMiss('error');
     setReplayMatching('fifo');
+    setMocksEnabled(false);
+    setMockRows([]);
   };
 
   const resolveRequestContext = (): Record<string, unknown> | undefined => {
@@ -138,6 +159,8 @@ export function ExperimentTriggerDialog({
       return;
     }
 
+    const toolMocks = mocksActive ? buildToolMocksPayload(mockRows) : undefined;
+
     try {
       const result = await triggerExperiment.mutateAsync({
         datasetId,
@@ -155,6 +178,7 @@ export function ExperimentTriggerDialog({
               }),
             }
           : {}),
+        ...(toolMocks ? { toolMocks } : {}),
       });
 
       toast.success('Experiment triggered successfully');
@@ -221,6 +245,18 @@ export function ExperimentTriggerDialog({
               selectedTargetId={targetId || undefined}
               disabled={isRunning}
               container={contentRef}
+            />
+          )}
+
+          {/* Tool mocks are agent-only too, and work with or without replay (mock-only runs) */}
+          {targetType === 'agent' && (
+            <ToolMocksEditor
+              enabled={mocksEnabled}
+              onEnabledChange={setMocksEnabled}
+              rows={mockRows}
+              onRowsChange={setMockRows}
+              toolSuggestions={toolSuggestions}
+              disabled={isRunning}
             />
           )}
 
