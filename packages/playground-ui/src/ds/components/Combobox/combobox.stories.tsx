@@ -134,7 +134,7 @@ export const WithDescriptions: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="flex flex-col gap-3">
-      {(['xs', 'sm', 'md', 'default', 'lg'] as const).map(size => (
+      {(['xs', 'sm', 'md', 'lg'] as const).map(size => (
         <Fragment key={size}>
           <Combobox size={size} options={frameworkOptions} placeholder={size} className="w-[200px]" />
         </Fragment>

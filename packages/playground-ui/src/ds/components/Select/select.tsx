@@ -3,8 +3,8 @@ import { Check, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 
 import { buttonVariants } from '../Button/Button';
+import type { TextButtonSize } from '../Button/Button';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
-import type { ControlSize } from '@/ds/primitives/control-size';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -110,7 +110,7 @@ type SelectTriggerLegacyVariant = 'primary';
 
 export type SelectTriggerProps = Omit<SelectPrimitive.Trigger.Props, 'className'> & {
   className?: string;
-  size?: ControlSize;
+  size?: TextButtonSize;
   variant?: SelectTriggerVariant | SelectTriggerLegacyVariant;
 };
 
@@ -121,7 +121,7 @@ function normalizeSelectTriggerVariant(
 }
 
 const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
-  ({ className, children, size = 'default', variant = 'default', ...props }, ref) => {
+  ({ className, children, size = 'md', variant = 'default', ...props }, ref) => {
     const visualVariant = normalizeSelectTriggerVariant(variant);
 
     return (
