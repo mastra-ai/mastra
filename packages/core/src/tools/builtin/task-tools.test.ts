@@ -1,9 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { RequestContext } from '../../request-context';
-import { InMemoryTasksStorage } from '../../storage/domains/tasks/inmemory';
+import { InMemoryThreadStateStorage } from '../../storage/domains/thread-state/inmemory';
 
-import { assignTaskIds, taskCheckTool, taskCompleteTool, taskUpdateTool, taskWriteTool } from './task-tools';
+import {
+  assignTaskIds,
+  TASK_STATE_TYPE,
+  taskCheckTool,
+  taskCompleteTool,
+  taskUpdateTool,
+  taskWriteTool,
+} from './task-tools';
 import type { TaskItem, TaskItemSnapshot } from './task-tools';
 
 type TaskInput = { id?: string; content: string; status: TaskItem['status']; activeForm: string };
@@ -14,9 +21,9 @@ const THREAD_ID = 'thread-1';
  * Build a tool execution context for the agnostic task tools.
  *
  * The tools are memory-gated on `agent.threadId`/`agent.resourceId` and read/
- * write the task list through the thread-scoped TaskStore, resolved via
- * `context.mastra.getStorage().getStore('tasks')`. By default the context is
- * memory-backed; pass `{ memory: false }` to exercise the no-op path.
+ * write the task list through the thread-scoped thread-state store, resolved via
+ * `context.mastra.getStorage().getStore('threadState')`. By default the context
+ * is memory-backed; pass `{ memory: false }` to exercise the no-op path.
  */
 function createToolContext(
   initialTasks: TaskInput[] = [],
@@ -24,9 +31,9 @@ function createToolContext(
 ) {
   const memory = options.memory ?? true;
   const requestContext = new RequestContext();
-  const store = new InMemoryTasksStorage();
+  const store = new InMemoryThreadStateStorage();
   if (initialTasks.length > 0) {
-    void store.setTasks(THREAD_ID, assignTaskIds(initialTasks));
+    void store.setState({ threadId: THREAD_ID, type: TASK_STATE_TYPE, value: assignTaskIds(initialTasks) });
   }
   if (options.onEvent) {
     requestContext.set('harness', { emitEvent: options.onEvent });
@@ -34,7 +41,7 @@ function createToolContext(
 
   const mastra = {
     getStorage: () => ({
-      getStore: (name: string) => (name === 'tasks' ? store : undefined),
+      getStore: (name: string) => (name === 'threadState' ? store : undefined),
     }),
   };
 
@@ -42,7 +49,8 @@ function createToolContext(
     requestContext,
     agent: memory ? { threadId: THREAD_ID, resourceId: 'resource-1' } : {},
     mastra,
-    getTasks: () => store.getTasks(THREAD_ID),
+    getTasks: () =>
+      store.getState<TaskItemSnapshot[]>({ threadId: THREAD_ID, type: TASK_STATE_TYPE }).then(t => t ?? []),
   };
 }
 

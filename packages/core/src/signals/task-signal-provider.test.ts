@@ -35,7 +35,7 @@ describe('TaskSignalProvider', () => {
     expect(provider.getInputProcessors()[0]).toBe(provider.getInputProcessors()[0]);
   });
 
-  it('the bundled tools and processor read/write the same TaskStore', async () => {
+  it('the bundled tools and processor read/write the same thread-state store', async () => {
     const provider = new TaskSignalProvider();
     const storage = new InMemoryStore();
     const mastra = { getStorage: () => storage } as any;

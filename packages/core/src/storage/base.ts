@@ -22,9 +22,9 @@ import type {
   HarnessStorage,
   ToolProviderConnectionsStorage,
   NotificationsStorage,
-  TasksStorage,
+  ThreadStateStorage,
 } from './domains';
-import { InMemoryTasksStorage } from './domains/tasks/inmemory';
+import { InMemoryThreadStateStorage } from './domains/thread-state/inmemory';
 
 /** Map of all storage domain interfaces available in a composite store. */
 export type StorageDomains = {
@@ -49,7 +49,7 @@ export type StorageDomains = {
   schedules?: SchedulesStorage;
   harness?: HarnessStorage;
   toolProviderConnections?: ToolProviderConnectionsStorage;
-  tasks?: TasksStorage;
+  threadState?: ThreadStateStorage;
 };
 
 /**
@@ -337,9 +337,11 @@ export class MastraCompositeStore extends MastraBase {
         harness: resolve('harness'),
         toolProviderConnections: resolve('toolProviderConnections'),
         notifications: resolve('notifications'),
-        // The tasks domain always has an in-memory store wired by default so the
-        // built-in task tools work out of the box without a configured backend.
-        tasks: resolve('tasks') ?? new InMemoryTasksStorage(),
+        // The thread-state domain always has an in-memory store wired by default
+        // so the built-in task tools work out of the box without a configured
+        // backend. Configure a durable backend for state that must survive a
+        // process restart.
+        threadState: resolve('threadState') ?? new InMemoryThreadStateStorage(),
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -469,7 +471,7 @@ export class MastraCompositeStore extends MastraBase {
       maybeInit(this.stores.harness);
       maybeInit(this.stores.toolProviderConnections);
       maybeInit(this.stores.notifications);
-      maybeInit(this.stores.tasks);
+      maybeInit(this.stores.threadState);
     }
 
     await Promise.all(initTasks);

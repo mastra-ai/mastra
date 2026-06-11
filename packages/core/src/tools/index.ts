@@ -23,6 +23,7 @@ export {
   getTasksFromRequestContext,
   TASKS_REQUEST_CONTEXT_KEY,
   TASKS_STATE_ID,
+  TASK_STATE_TYPE,
 } from './builtin/task-tools';
 export type {
   TaskItem,

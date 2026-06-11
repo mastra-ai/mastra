@@ -6,7 +6,7 @@ import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 
 import { TaskStateProcessor } from './task-state-processor';
-import { TASKS_REQUEST_CONTEXT_KEY } from './task-tools';
+import { TASKS_REQUEST_CONTEXT_KEY, TASK_STATE_TYPE } from './task-tools';
 import type { TaskItemSnapshot } from './task-tools';
 
 const THREAD_ID = 'thread-1';
@@ -27,14 +27,14 @@ function snapshotSignal(tasks: TaskItemSnapshot[]) {
 
 /**
  * Build a TaskStateProcessor wired to a real in-memory composite store via the
- * Mastra context, mirroring how the processor resolves `getStore('tasks')` in
- * production (optionally seeding the thread's task list).
+ * Mastra context, mirroring how the processor resolves `getStore('threadState')`
+ * in production (optionally seeding the thread's task list).
  */
 async function createProcessor(storeTasks?: TaskItemSnapshot[]) {
   const storage = new InMemoryStore();
   const mastra = new Mastra({ storage, logger: false });
-  const tasksStore = await storage.getStore('tasks');
-  if (storeTasks) await tasksStore!.setTasks(THREAD_ID, storeTasks);
+  const threadStateStore = await storage.getStore('threadState');
+  if (storeTasks) await threadStateStore!.setState({ threadId: THREAD_ID, type: TASK_STATE_TYPE, value: storeTasks });
   const processor = new TaskStateProcessor();
   processor.__registerMastra(mastra as any);
   return { processor, storage };

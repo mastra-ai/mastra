@@ -1,19 +1,19 @@
 import type { Mastra } from '../../mastra';
 import type { ComputeStateSignalArgs, ComputeStateSignalResult } from '../../processors/index';
-import type { TaskRecord } from '../../storage/domains/tasks/base';
-import { getTasksFromRequestContext, TASKS_STATE_ID } from './task-tools';
+import type { TaskRecord } from '../../storage/domains/thread-state/base';
+import { getTasksFromRequestContext, TASKS_STATE_ID, TASK_STATE_TYPE } from './task-tools';
 import type { TaskItemSnapshot } from './task-tools';
 
 // Typed in terms of the storage domain's `TaskRecord` (see the matching note in
 // task-tools.ts): the processor reads the durable list and projects it as
 // `TaskItemSnapshot`, so this assignment enforces that the two shapes stay
 // structurally identical.
-type ResolvedTaskStore = {
-  getTasks(threadId: string): Promise<TaskRecord[]>;
+type ResolvedThreadStateStore = {
+  getState<T = unknown>(args: { threadId: string; type: string }): Promise<T | undefined>;
 };
 
-function isTaskStore(value: unknown): value is ResolvedTaskStore {
-  return !!value && typeof (value as ResolvedTaskStore).getTasks === 'function';
+function isThreadStateStore(value: unknown): value is ResolvedThreadStateStore {
+  return !!value && typeof (value as ResolvedThreadStateStore).getState === 'function';
 }
 
 // =============================================================================
@@ -182,9 +182,9 @@ export class TaskStateProcessor {
     this.mastra = mastra;
   }
 
-  private async resolveTaskStore(): Promise<ResolvedTaskStore | undefined> {
-    const store = await this.mastra?.getStorage?.()?.getStore('tasks');
-    return isTaskStore(store) ? store : undefined;
+  private async resolveTaskStore(): Promise<ResolvedThreadStateStore | undefined> {
+    const store = await this.mastra?.getStorage?.()?.getStore('threadState');
+    return isThreadStateStore(store) ? store : undefined;
   }
 
   async computeStateSignal(args: ComputeStateSignalArgs): Promise<ComputeStateSignalResult> {
@@ -197,10 +197,15 @@ export class TaskStateProcessor {
     // the shared RequestContext this step (reflects the latest mutation), else
     // the durable TaskStore for the thread, else the prior state.
     const carried = getTasksFromRequestContext(args.requestContext);
-    let currentTasks = carried;
-    if (currentTasks === undefined) {
+    let currentTasks: TaskItemSnapshot[];
+    if (carried !== undefined) {
+      currentTasks = carried;
+    } else {
       const store = await this.resolveTaskStore();
-      currentTasks = store ? await store.getTasks(args.threadId) : priorTasks;
+      const stored = store
+        ? await store.getState<TaskRecord[]>({ threadId: args.threadId, type: TASK_STATE_TYPE })
+        : undefined;
+      currentTasks = Array.isArray(stored) ? stored : priorTasks;
     }
 
     // Nothing to track yet.

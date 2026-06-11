@@ -293,7 +293,7 @@ describe('task tool display bridge', () => {
     // display-only bridge the agnostic task tools call when present.
     const requestContext: RequestContext = await (harness as any).buildRequestContext();
 
-    // Storage with the always-wired tasks domain so the tool can persist.
+    // Storage with the always-wired threadState domain so the tool can persist.
     const storage = new InMemoryStore();
 
     const result = await (taskWriteTool as any).execute(

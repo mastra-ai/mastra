@@ -2,7 +2,7 @@ import { z } from 'zod/v4';
 
 import type { MastraUnion } from '../../action';
 import type { RequestContext } from '../../request-context';
-import type { TaskRecord } from '../../storage/domains/tasks/base';
+import type { TaskRecord } from '../../storage/domains/thread-state/base';
 import { createTool } from '../tool';
 
 // =============================================================================
@@ -16,10 +16,11 @@ import { createTool } from '../tool';
 // is cache-aware (the snapshot supersedes by cacheKey instead of accumulating)
 // and OM-aware (re-emitted when observational-memory truncation drops it).
 //
-// The task list is durably held in the thread-scoped `tasks` storage domain
-// (the TaskStore), which is the source of truth. The task tools read/write it
+// The task list is held in the thread-scoped `threadState` storage domain under
+// the `'task'` type, which is the source of truth. The task tools read/write it
 // synchronously within a run, and the task state processor projects it onto the
-// state-signal lane so the model sees it.
+// state-signal lane so the model sees it. With a durable `threadState` backend
+// (e.g. `@mastra/libsql`), the list survives a process restart.
 //
 // State signals + the task store require a memory-backed thread. When the run is
 // not memory backed (no threadId/resourceId), the tools no-op and tell the model
@@ -34,6 +35,9 @@ export const TASKS_REQUEST_CONTEXT_KEY = 'mastra:tasks';
 
 /** State-signal lane id used for the task list. */
 export const TASKS_STATE_ID = 'tasks';
+
+/** `threadState` storage `type` namespace under which the task list is stored. */
+export const TASK_STATE_TYPE = 'task';
 
 const NO_MEMORY_MESSAGE =
   'Task tools require agent memory (a memory-backed thread). No task was recorded. Configure the agent with Memory to use the task list.';
@@ -305,15 +309,15 @@ function formatAvailableTaskIds(tasks: TaskItemSnapshot[]): string {
 // reflects the latest mutation in the same step it is computed.
 
 // Typed in terms of the storage domain's `TaskRecord` (the storage contract).
-// The `tasks` domain deliberately defines its own `TaskRecord` so the storage
-// layer does not depend on this tools package; the tools operate on
+// The `threadState` domain deliberately defines its own `TaskRecord` so the
+// storage layer does not depend on this tools package; the tools operate on
 // `TaskItemSnapshot`. The two must stay structurally identical — typing the
 // store methods with `TaskRecord` here means any drift between the shapes breaks
 // the build at the read/write call sites below, rather than silently passing
-// the duck-typed `isTaskStore` guard.
-type ResolvedTaskStore = {
-  getTasks(threadId: string): Promise<TaskRecord[]>;
-  setTasks(threadId: string, tasks: TaskRecord[]): Promise<void>;
+// the duck-typed `isThreadStateStore` guard.
+type ResolvedThreadStateStore = {
+  getState<T = unknown>(args: { threadId: string; type: string }): Promise<T | undefined>;
+  setState(args: { threadId: string; type: string; value: TaskRecord[] }): Promise<void>;
 };
 
 interface TaskToolAgentContext {
@@ -324,7 +328,7 @@ interface TaskToolAgentContext {
 interface TaskToolContext {
   agent?: TaskToolAgentContext;
   requestContext?: RequestContext;
-  // The agent's Mastra instance, used to resolve the thread-scoped task store.
+  // The agent's Mastra instance, used to resolve the thread-scoped state store.
   mastra?: MastraUnion;
 }
 
@@ -333,18 +337,18 @@ function isMemoryBacked(agent: TaskToolAgentContext | undefined): boolean {
   return Boolean(agent?.threadId && agent?.resourceId);
 }
 
-function isTaskStore(value: unknown): value is ResolvedTaskStore {
+function isThreadStateStore(value: unknown): value is ResolvedThreadStateStore {
   return (
     !!value &&
-    typeof (value as ResolvedTaskStore).getTasks === 'function' &&
-    typeof (value as ResolvedTaskStore).setTasks === 'function'
+    typeof (value as ResolvedThreadStateStore).getState === 'function' &&
+    typeof (value as ResolvedThreadStateStore).setState === 'function'
   );
 }
 
-/** Resolve the thread-scoped task store from the agent's Mastra storage, if available. */
-async function resolveTaskStore(context: TaskToolContext): Promise<ResolvedTaskStore | undefined> {
-  const store = await context.mastra?.getStorage?.()?.getStore('tasks');
-  return isTaskStore(store) ? store : undefined;
+/** Resolve the thread-scoped state store from the agent's Mastra storage, if available. */
+async function resolveTaskStore(context: TaskToolContext): Promise<ResolvedThreadStateStore | undefined> {
+  const store = await context.mastra?.getStorage?.()?.getStore('threadState');
+  return isThreadStateStore(store) ? store : undefined;
 }
 
 /**
@@ -382,7 +386,8 @@ async function readTaskStore(context: TaskToolContext): Promise<TaskItemSnapshot
   const store = await resolveTaskStore(context);
   const threadId = context.agent?.threadId;
   if (!store || !threadId) return [];
-  return store.getTasks(threadId);
+  const tasks = await store.getState<TaskRecord[]>({ threadId, type: TASK_STATE_TYPE });
+  return Array.isArray(tasks) ? tasks : [];
 }
 
 /**
@@ -398,10 +403,10 @@ async function applyTaskMutation(
   const threadId = context.agent?.threadId;
   if (!store || !threadId) return noMemoryResult();
 
-  const currentTasks = await store.getTasks(threadId);
+  const currentTasks = await readTaskStore(context);
   const result = mutation(currentTasks);
   if (!result.isError) {
-    await store.setTasks(threadId, result.tasks);
+    await store.setState({ threadId, type: TASK_STATE_TYPE, value: result.tasks });
     // Surface the new list to the task state processor for this step's snapshot.
     context.requestContext?.set(TASKS_REQUEST_CONTEXT_KEY, result.tasks);
     emitTaskDisplayUpdate(context.requestContext, result.tasks);

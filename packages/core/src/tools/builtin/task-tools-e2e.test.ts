@@ -118,7 +118,7 @@ describe('task tools e2e (multi-step within one run)', () => {
     });
 
     // Register the agent with a Mastra that has storage so the task tools and
-    // processor can resolve the thread-scoped `tasks` store.
+    // processor can resolve the thread-scoped `threadState` store.
     new Mastra({ agents: { 'task-agent': agent }, storage: new InMemoryStore(), logger: false });
 
     const stream = await agent.stream('Create Alpha and Beta, then mark Alpha in progress.', {
