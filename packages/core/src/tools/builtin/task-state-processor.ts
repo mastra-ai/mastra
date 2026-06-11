@@ -21,14 +21,22 @@ function isTaskStore(value: unknown): value is ResolvedTaskStore {
 // =============================================================================
 //
 // Carries the agent's task list on the agent state-signal lane (`stateId:
-// 'tasks'`). This keeps the task list:
+// 'tasks'`) using a **delta-first** projection (modelled on working memory):
 //
-//  - **cache-aware**: the snapshot supersedes by cacheKey rather than being
-//    appended to the cached system-prompt prefix, so task updates do not
-//    invalidate the prompt cache prefix.
-//  - **OM-aware**: when observational-memory truncation drops the snapshot from
-//    the window (`contextWindow.hasSnapshot === false`), the snapshot is
-//    re-emitted so the agent never loses track of its tasks.
+//  - The first emission (and every compaction) is a full **snapshot**
+//    (`<current-task-list>`). Subsequent mutations emit a small **delta**
+//    (`<task-list-update>`) carrying only that turn's add/remove/update ops, so
+//    a large list is not re-sent in full on every change.
+//  - The base snapshot + each delta stay in the window as separate signal
+//    messages; the model reads the base list and folds the deltas onto it. To
+//    bound window growth we re-snapshot once `DELTA_SNAPSHOT_CAP` deltas have
+//    accumulated (compaction).
+//  - **cache-aware**: signals supersede by cacheKey rather than being appended
+//    to the cached system-prompt prefix, so task updates do not invalidate it.
+//  - **OM-aware**: when observational memory drops the base snapshot from the
+//    window (`contextWindow.hasSnapshot === false`), a fresh snapshot is emitted
+//    (deltas are meaningless without their base), so the agent never loses its
+//    tasks.
 //
 // The task list itself lives in the thread-scoped `tasks` storage domain (the
 // TaskStore); this processor projects it onto the model context. State signals
@@ -50,6 +58,20 @@ function renderTaskList(tasks: TaskItemSnapshot[]): string {
   return `\n${lines.join('\n')}\n`;
 }
 
+// Re-snapshot once this many deltas have accumulated since the last snapshot.
+// Pure-delta mode keeps each emission tiny, but the base snapshot + every delta
+// stay in the window as separate signal messages until the next snapshot, so we
+// periodically compact back to a fresh snapshot to bound window growth. Also
+// re-snapshot whenever observational memory drops the base from the window
+// (deltas are meaningless without their base).
+const DELTA_SNAPSHOT_CAP = 10;
+
+// A single task-list change carried on a `delta`-mode signal.
+type TaskDeltaOp =
+  | { op: 'add'; task: TaskItemSnapshot }
+  | { op: 'remove'; id: string }
+  | { op: 'update'; task: TaskItemSnapshot };
+
 function getTasksFromSnapshot(snapshot: ComputeStateSignalArgs['lastSnapshot']): TaskItemSnapshot[] {
   const value = snapshot?.metadata?.value as { tasks?: unknown } | undefined;
   const tasks = value?.tasks;
@@ -57,13 +79,78 @@ function getTasksFromSnapshot(snapshot: ComputeStateSignalArgs['lastSnapshot']):
   return [];
 }
 
-function stableTasksCacheKey(tasks: TaskItemSnapshot[]): string {
-  const fingerprint = tasks.map(t => `${t.id}:${t.status}:${t.content}:${t.activeForm}`).join('|');
-  return `tasks:${fingerprint}`;
+function getOpsFromDelta(signal: { metadata?: Record<string, unknown> } | undefined): TaskDeltaOp[] {
+  const delta = signal?.metadata?.delta as { ops?: unknown } | undefined;
+  const ops = delta?.ops;
+  return Array.isArray(ops) ? (ops as TaskDeltaOp[]) : [];
 }
 
-function tasksEqual(a: TaskItemSnapshot[], b: TaskItemSnapshot[]): boolean {
-  return stableTasksCacheKey(a) === stableTasksCacheKey(b);
+// Apply a delta's ops onto a working list to reconstruct the state the model
+// currently believes. Adds/updates that reference an existing id replace it in
+// place; new adds append; removes drop by id.
+function applyOps(tasks: TaskItemSnapshot[], ops: TaskDeltaOp[]): TaskItemSnapshot[] {
+  const next = tasks.slice();
+  for (const op of ops) {
+    if (op.op === 'remove') {
+      const idx = next.findIndex(t => t.id === op.id);
+      if (idx >= 0) next.splice(idx, 1);
+      continue;
+    }
+    const task = op.task;
+    const idx = next.findIndex(t => t.id === task.id);
+    if (idx >= 0) next[idx] = task;
+    else next.push(task);
+  }
+  return next;
+}
+
+// The state the model currently sees: the last snapshot with every
+// delta-since-snapshot applied in order.
+function effectivePriorTasks(args: ComputeStateSignalArgs): TaskItemSnapshot[] {
+  let tasks = getTasksFromSnapshot(args.lastSnapshot);
+  for (const delta of args.deltasSinceSnapshot ?? []) {
+    tasks = applyOps(tasks, getOpsFromDelta(delta));
+  }
+  return tasks;
+}
+
+function taskFingerprint(t: TaskItemSnapshot): string {
+  return `${t.id}:${t.status}:${t.content}:${t.activeForm}`;
+}
+
+function stableTasksCacheKey(tasks: TaskItemSnapshot[]): string {
+  return `tasks:${tasks.map(taskFingerprint).join('|')}`;
+}
+
+// Diff the prior list against the current one into add/remove/update ops. An
+// `update` is emitted when a task with the same id has any field changed.
+function diffTasks(prior: TaskItemSnapshot[], current: TaskItemSnapshot[]): TaskDeltaOp[] {
+  const ops: TaskDeltaOp[] = [];
+  const priorById = new Map(prior.map(t => [t.id, t]));
+  const currentIds = new Set(current.map(t => t.id));
+
+  for (const task of current) {
+    const before = priorById.get(task.id);
+    if (!before) ops.push({ op: 'add', task });
+    else if (taskFingerprint(before) !== taskFingerprint(task)) ops.push({ op: 'update', task });
+  }
+  for (const task of prior) {
+    if (!currentIds.has(task.id)) ops.push({ op: 'remove', id: task.id });
+  }
+  return ops;
+}
+
+// Render the ops a `delta` signal carries into the lines the model reads. The
+// framework wraps this in the signal's `tagName` (`task-list-update`).
+function renderDelta(ops: TaskDeltaOp[]): string {
+  const lines = ops.map(op => {
+    if (op.op === 'remove') return `  − removed {id: ${op.id}}`;
+    const { task } = op;
+    const icon = task.status === 'completed' ? '✓' : task.status === 'in_progress' ? '▸' : '○';
+    const verb = op.op === 'add' ? '+' : icon;
+    return `  ${verb} {id: ${task.id}} [${task.status}] ${task.content}`;
+  });
+  return `\n${lines.join('\n')}\n`;
 }
 
 /**
@@ -101,46 +188,69 @@ export class TaskStateProcessor {
   }
 
   async computeStateSignal(args: ComputeStateSignalArgs): Promise<ComputeStateSignalResult> {
-    const previousTasks = getTasksFromSnapshot(args.lastSnapshot);
+    // The state the model currently sees: the last snapshot with every
+    // delta-since-snapshot applied. We diff against this (not just the base
+    // snapshot) so an unchanged turn after several deltas emits nothing.
+    const priorTasks = effectivePriorTasks(args);
 
     // Current task list for this turn: the working list a task tool surfaced on
     // the shared RequestContext this step (reflects the latest mutation), else
-    // the durable TaskStore for the thread, else the last snapshot.
+    // the durable TaskStore for the thread, else the prior state.
     const carried = getTasksFromRequestContext(args.requestContext);
     let currentTasks = carried;
     if (currentTasks === undefined) {
       const store = await this.resolveTaskStore();
-      currentTasks = store ? await store.getTasks(args.threadId) : previousTasks;
+      currentTasks = store ? await store.getTasks(args.threadId) : priorTasks;
     }
 
     // Nothing to track yet.
-    if (currentTasks.length === 0 && previousTasks.length === 0) return;
+    if (currentTasks.length === 0 && priorTasks.length === 0) return;
 
-    const snapshotMissing = Boolean(args.lastSnapshot) && !args.contextWindow.hasSnapshot;
-    const changed = !tasksEqual(previousTasks, currentTasks);
+    const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;
+    const deltaCount = args.deltasSinceSnapshot?.length ?? 0;
+    const ops = diffTasks(priorTasks, currentTasks);
 
-    // No change and the window still has the snapshot: emit nothing so the
-    // cached prefix and the active window stay stable.
-    if (!changed && !snapshotMissing && args.contextWindow.hasSnapshot) return;
+    // No change and the base snapshot is still in the window: emit nothing so
+    // the cached prefix and the active window stay stable.
+    if (ops.length === 0 && hasBase) return;
 
+    // Emit a fresh snapshot (compaction) when there is no usable base in the
+    // window (first emission, or OM dropped it — deltas are meaningless without
+    // their base), or when enough deltas have accumulated. Otherwise emit a
+    // small delta carrying only this turn's ops.
+    const mustSnapshot = !hasBase || deltaCount >= DELTA_SNAPSHOT_CAP;
+
+    if (mustSnapshot) {
+      return {
+        id: TASKS_STATE_ID,
+        cacheKey: stableTasksCacheKey(currentTasks),
+        mode: 'snapshot',
+        // `current-task-list` is the signal's own tag. The framework wraps and
+        // escapes `contents` inside it, so `renderTaskList` returns only the
+        // inner lines — no inline tag here, or the model would see
+        // double-wrapped, XML-escaped markup.
+        tagName: 'current-task-list',
+        contents: renderTaskList(currentTasks),
+        value: { tasks: currentTasks },
+        attributes: { count: currentTasks.length },
+        metadata: { value: { tasks: currentTasks } },
+      };
+    }
+
+    // Delta: the model reads the base `<current-task-list>` plus each
+    // `<task-list-update>` and folds them together. `value` carries the full
+    // resulting list for programmatic consumers / recovery; `delta.ops` carries
+    // the structured change so the next turn can reconstruct the effective state.
     return {
       id: TASKS_STATE_ID,
       cacheKey: stableTasksCacheKey(currentTasks),
-      mode: 'snapshot',
-      // `current-task-list` is the signal's own tag (mirroring the wrapper that
-      // used to be injected into the system prompt). The framework wraps and
-      // escapes `contents` inside this tag, so `renderTaskList` returns only the
-      // inner lines — no inline tag here, or the model would see double-wrapped,
-      // XML-escaped markup.
-      tagName: 'current-task-list',
-      contents: renderTaskList(currentTasks),
+      mode: 'delta',
+      tagName: 'task-list-update',
+      contents: renderDelta(ops),
       value: { tasks: currentTasks },
-      attributes: {
-        count: currentTasks.length,
-      },
-      metadata: {
-        value: { tasks: currentTasks },
-      },
+      delta: { ops },
+      attributes: { changes: ops.length },
+      metadata: { value: { tasks: currentTasks }, delta: { ops } },
     };
   }
 }

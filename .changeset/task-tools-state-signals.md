@@ -8,10 +8,11 @@ The task tools no longer depend on the Harness request context. The task list is
 
 A new storage domain `tasks` is registered on `MastraStorage` (accessible via `storage.getStore("tasks")`). The composite store always wires an `InMemoryTasksStorage` by default, so task tracking works out of the box without configuring a backend. The tools read/write it synchronously within a run via `context.mastra.getStorage().getStore("tasks")`, scoped by the run's `threadId`.
 
-The state-signal projection is cache-aware and observational-memory-aware:
+The state-signal projection is delta-first (modelled on working memory), cache-aware, and observational-memory-aware:
 
-- The task list is carried as a superseding state-signal snapshot instead of being injected into the cached system prompt, so task updates no longer invalidate the prompt-cache prefix.
-- When observational-memory truncation drops the snapshot from the context window, `TaskStateProcessor` re-emits it (reading the durable `tasks` store) so the agent never loses track of its tasks.
+- The first projection of a populated list (and every compaction) is a full `<current-task-list>` **snapshot**; each later mutation emits a small `<task-list-update>` **delta** carrying only that turn's add/remove/update ops, so a large task list is not re-sent in full on every change.
+- The task list is carried on the state-signal lane instead of being injected into the cached system prompt, so task updates no longer invalidate the prompt-cache prefix.
+- The base snapshot and its deltas accumulate in the window; the processor re-snapshots once enough deltas accumulate (compaction) to bound window growth, and whenever observational-memory truncation drops the base snapshot from the window (deltas are meaningless without their base), reading the durable `tasks` store so the agent never loses track of its tasks.
 
 The task tools and the processor require a memory-backed thread. On a run that is not memory backed (no `threadId`/`resourceId`), the task tools no-op and return a result explaining that task tracking requires agent memory.
 

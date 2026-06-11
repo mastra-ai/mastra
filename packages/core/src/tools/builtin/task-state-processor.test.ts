@@ -16,10 +16,13 @@ const TASKS: TaskItemSnapshot[] = [
   { id: 'b', content: 'Task B', status: 'pending', activeForm: 'Doing B' },
 ];
 
+// A persisted delta-mode signal carrying structured ops in `metadata.delta`.
+function deltaSignal(ops: unknown[]) {
+  return { metadata: { state: { mode: 'delta' }, delta: { ops } } } as any;
+}
+
 function snapshotSignal(tasks: TaskItemSnapshot[]) {
-  return {
-    metadata: { value: { tasks } },
-  } as any;
+  return { metadata: { value: { tasks } } } as any;
 }
 
 /**
@@ -40,6 +43,7 @@ async function createProcessor(storeTasks?: TaskItemSnapshot[]) {
 function createArgs(options: {
   currentTasks?: TaskItemSnapshot[];
   lastSnapshotTasks?: TaskItemSnapshot[];
+  deltasSinceSnapshot?: any[];
   hasSnapshot?: boolean;
 }) {
   const requestContext = new RequestContext();
@@ -54,12 +58,12 @@ function createArgs(options: {
     contextWindow: { hasSnapshot: options.hasSnapshot ?? true },
     lastSnapshot: options.lastSnapshotTasks ? snapshotSignal(options.lastSnapshotTasks) : undefined,
     activeStateSignals: [],
-    deltasSinceSnapshot: [],
+    deltasSinceSnapshot: options.deltasSinceSnapshot ?? [],
   } as any;
 }
 
 describe('TaskStateProcessor', () => {
-  it('emits a snapshot when the task list changes', async () => {
+  it('emits a full snapshot on the first change (no base in window)', async () => {
     const { processor } = await createProcessor();
     const result = await processor.computeStateSignal(createArgs({ currentTasks: TASKS }));
 
@@ -81,15 +85,120 @@ describe('TaskStateProcessor', () => {
     expect(markup).not.toContain('&lt;current-task-list&gt;');
   });
 
-  it('renders an empty task list as a self-closing tag', async () => {
-    // A change from a populated list to an empty one still emits; the framework
-    // renders empty `contents` as a self-closing `<current-task-list count="0" />`.
+  it('emits a delta carrying only the changed ops once a base snapshot exists', async () => {
+    const { processor } = await createProcessor();
+    const changed: TaskItemSnapshot[] = [
+      { id: 'a', content: 'Task A', status: 'completed', activeForm: 'Doing A' },
+      { id: 'b', content: 'Task B', status: 'pending', activeForm: 'Doing B' },
+      { id: 'c', content: 'Task C', status: 'pending', activeForm: 'Doing C' },
+    ];
+
+    const result = await processor.computeStateSignal(
+      createArgs({ currentTasks: changed, lastSnapshotTasks: TASKS, hasSnapshot: true }),
+    );
+
+    expect(result).toBeTruthy();
+    expect((result as any).mode).toBe('delta');
+    expect((result as any).tagName).toBe('task-list-update');
+    // Only the changed task (a → completed) and the added task (c) are in the ops.
+    expect((result as any).delta.ops).toEqual([
+      { op: 'update', task: changed[0] },
+      { op: 'add', task: changed[2] },
+    ]);
+    expect((result as any).attributes).toEqual({ changes: 2 });
+    // `value` still carries the full resulting list for recovery / UIs.
+    expect((result as any).value.tasks).toEqual(changed);
+
+    const markup = signalToXmlMarkup(result as any);
+    expect(markup).toContain('<task-list-update changes="2">');
+    expect(markup).toContain('{id: a} [completed]');
+    expect(markup).toContain('+ {id: c}');
+  });
+
+  it('emits a remove op when a task is dropped', async () => {
+    const { processor } = await createProcessor();
+    const result = await processor.computeStateSignal(
+      createArgs({ currentTasks: [TASKS[0]], lastSnapshotTasks: TASKS, hasSnapshot: true }),
+    );
+
+    expect((result as any).mode).toBe('delta');
+    expect((result as any).delta.ops).toEqual([{ op: 'remove', id: 'b' }]);
+  });
+
+  it('diffs against the base plus prior deltas (no re-emit when net-unchanged)', async () => {
+    // Base = TASKS; a prior delta already moved `a` → completed. The current
+    // list equals base+delta applied, so there is no new change to emit.
+    const afterDelta: TaskItemSnapshot[] = [
+      { id: 'a', content: 'Task A', status: 'completed', activeForm: 'Doing A' },
+      TASKS[1],
+    ];
+    const { processor } = await createProcessor();
+    const result = await processor.computeStateSignal(
+      createArgs({
+        currentTasks: afterDelta,
+        lastSnapshotTasks: TASKS,
+        deltasSinceSnapshot: [deltaSignal([{ op: 'update', task: afterDelta[0] }])],
+        hasSnapshot: true,
+      }),
+    );
+
+    expect(result).toBeUndefined();
+  });
+
+  it('emits a delta relative to the base plus prior deltas', async () => {
+    const afterDelta: TaskItemSnapshot[] = [
+      { id: 'a', content: 'Task A', status: 'completed', activeForm: 'Doing A' },
+      TASKS[1],
+    ];
+    // Now b also completes; the only new op is b → completed.
+    const next: TaskItemSnapshot[] = [afterDelta[0], { ...TASKS[1], status: 'completed' }];
+    const { processor } = await createProcessor();
+    const result = await processor.computeStateSignal(
+      createArgs({
+        currentTasks: next,
+        lastSnapshotTasks: TASKS,
+        deltasSinceSnapshot: [deltaSignal([{ op: 'update', task: afterDelta[0] }])],
+        hasSnapshot: true,
+      }),
+    );
+
+    expect((result as any).mode).toBe('delta');
+    expect((result as any).delta.ops).toEqual([{ op: 'update', task: next[1] }]);
+  });
+
+  it('compacts to a snapshot once the delta cap is reached', async () => {
+    const changed: TaskItemSnapshot[] = [{ ...TASKS[0], status: 'completed' }, TASKS[1]];
+    const tenDeltas = Array.from({ length: 10 }, () => deltaSignal([]));
+    const { processor } = await createProcessor();
+    const result = await processor.computeStateSignal(
+      createArgs({
+        currentTasks: changed,
+        lastSnapshotTasks: TASKS,
+        deltasSinceSnapshot: tenDeltas,
+        hasSnapshot: true,
+      }),
+    );
+
+    expect((result as any).mode).toBe('snapshot');
+    expect((result as any).tagName).toBe('current-task-list');
+    expect((result as any).value.tasks).toEqual(changed);
+  });
+
+  it('renders an empty task list as a self-closing snapshot tag', async () => {
+    // Clearing the list (base populated → empty) compacts to a snapshot; the
+    // framework renders empty `contents` as `<current-task-list count="0" />`.
     const { processor } = await createProcessor();
     const result = await processor.computeStateSignal(createArgs({ currentTasks: [], lastSnapshotTasks: TASKS }));
 
     expect(result).toBeTruthy();
-    expect((result as any).contents).toBe('');
-    expect(signalToXmlMarkup(result as any)).toBe('<current-task-list count="0" />');
+    expect((result as any).mode).toBe('delta');
+    // Removing every task is still a delta (under cap, base present): a remove
+    // op per task, full `value` empty.
+    expect((result as any).delta.ops).toEqual([
+      { op: 'remove', id: 'a' },
+      { op: 'remove', id: 'b' },
+    ]);
+    expect((result as any).value.tasks).toEqual([]);
   });
 
   it('reads the current list from the store when no task tool ran this turn', async () => {
@@ -110,18 +219,15 @@ describe('TaskStateProcessor', () => {
     expect(result).toBeUndefined();
   });
 
-  it('re-emits the snapshot when OM truncation drops it from the window', async () => {
-    // The durable store still holds the tasks; OM only dropped the signal
-    // message from the window (hasSnapshot === false), so the processor must
-    // re-emit so the agent never loses its task list.
+  it('re-emits a full snapshot when OM truncation drops the base from the window', async () => {
+    // The durable store still holds the tasks; OM only dropped the base signal
+    // from the window (hasSnapshot === false). Deltas are meaningless without
+    // their base, so the processor must emit a fresh snapshot.
     const { processor } = await createProcessor(TASKS);
-    const result = await processor.computeStateSignal(
-      // No working list this turn (no task tool ran), prior snapshot exists but
-      // the window no longer contains it.
-      createArgs({ lastSnapshotTasks: TASKS, hasSnapshot: false }),
-    );
+    const result = await processor.computeStateSignal(createArgs({ lastSnapshotTasks: TASKS, hasSnapshot: false }));
 
     expect(result).toBeTruthy();
+    expect((result as any).mode).toBe('snapshot');
     expect((result as any).value.tasks).toEqual(TASKS);
   });
 
