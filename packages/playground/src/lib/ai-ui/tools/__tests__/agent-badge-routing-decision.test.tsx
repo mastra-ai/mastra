@@ -28,8 +28,8 @@ vi.mock('../badges/background-task-metadata-dialog', () => ({
   BackgroundTaskMetadataDialogTrigger: () => null,
 }));
 
-vi.mock('../tool-fallback', () => ({
-  ToolFallback: () => null,
+vi.mock('../tool-card', () => ({
+  ToolCard: () => null,
 }));
 
 vi.mock('react-markdown', () => ({
