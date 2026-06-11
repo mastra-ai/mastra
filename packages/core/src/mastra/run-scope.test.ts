@@ -215,5 +215,22 @@ describe('Mastra runScope lifecycle', () => {
       expect(m.__getRunScope('stale-run')).toBeUndefined();
       expect(m.__getRunScope('fresh-run')).toBeDefined();
     });
+
+    it('releases the correct scope when the runId contains a colon', () => {
+      const m = makeMastra();
+      // runIds are caller-controlled; nothing prevents a custom id from
+      // containing the workflowId:runId delimiter we use internally.
+      const colonRunId = 'tenant:abc:run-42';
+      m.__registerInternalWorkflow(makeWorkflow('agentic-loop'), colonRunId);
+      expect(m.__getRunScope(colonRunId)).toBeDefined();
+
+      vi.setSystemTime(Date.now() + Mastra.INTERNAL_WORKFLOW_TTL_MS + 1000);
+      m.__registerInternalWorkflow(makeWorkflow('agentic-loop'), 'fresh-run');
+
+      // The stale entry must have released the *full* runId, not a substring
+      // sliced from `lastIndexOf(':')`.
+      expect(m.__getRunScope(colonRunId)).toBeUndefined();
+      expect(m.__getRunScope('fresh-run')).toBeDefined();
+    });
   });
 });

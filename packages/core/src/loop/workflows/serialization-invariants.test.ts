@@ -60,15 +60,28 @@ describe('agentic-execution / agentic-loop serialization invariants', () => {
           }
           return;
         }
-        // Unwrap common wrappers
+        // Unwrap common wrappers — visit every child container so composite
+        // nodes (unions, intersections, tuples, records) are fully traversed.
         const def = (s as any)._def ?? (s as any).def;
         if (!def) return;
-        const inner =
-          def.innerType ?? def.schema ?? def.type ?? def.element ?? def.valueType ?? def.left ?? def.options;
-        if (Array.isArray(inner)) {
-          for (const i of inner) visit(i as z.ZodTypeAny);
-        } else if (inner) {
-          visit(inner as z.ZodTypeAny);
+        const children: unknown[] = [
+          def.innerType,
+          def.schema,
+          def.type,
+          def.element,
+          def.valueType,
+          def.keyType,
+          def.left,
+          def.right,
+          def.options,
+          def.items,
+        ];
+        for (const child of children) {
+          if (Array.isArray(child)) {
+            for (const i of child) visit(i as z.ZodTypeAny);
+          } else if (child) {
+            visit(child as z.ZodTypeAny);
+          }
         }
       };
       visit(schema);

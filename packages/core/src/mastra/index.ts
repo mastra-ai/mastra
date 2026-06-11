@@ -645,7 +645,7 @@ export class Mastra<
   // Tracks registration timestamps for run-scoped internal workflows so a lazy
   // TTL sweep can evict entries from abandoned suspended runs that were never
   // resumed. Unscoped (singleton) entries are not tracked — they live forever.
-  #runScopedWorkflowTimestamps: Map<string, number> = new Map();
+  #runScopedWorkflowTimestamps: Map<string, { registeredAt: number; runId: string }> = new Map();
   // Per-run bag of non-serializable runtime state (SaveQueueManager,
   // BackgroundTaskManager, MessageList, abort controllers, dynamic tool sets…)
   // shared across step factories within a single run. Never persisted, never
@@ -2489,7 +2489,7 @@ export class Mastra<
       const key = `${workflow.id}:${runId}`;
       const isNewRegistration = !this.#internalMastraWorkflows[key];
       this.#internalMastraWorkflows[key] = workflow;
-      this.#runScopedWorkflowTimestamps.set(key, Date.now());
+      this.#runScopedWorkflowTimestamps.set(key, { registeredAt: Date.now(), runId });
       // Pair the registration with a runScope. Multiple workflows can share a
       // runId (parent + nested); we refcount so the scope outlives the first
       // unregister and dies with the last.
@@ -2664,15 +2664,14 @@ export class Mastra<
    */
   #sweepStaleRunScopedWorkflows() {
     const now = Date.now();
-    for (const [key, registeredAt] of this.#runScopedWorkflowTimestamps) {
-      if (now - registeredAt > Mastra.INTERNAL_WORKFLOW_TTL_MS) {
+    for (const [key, entry] of this.#runScopedWorkflowTimestamps) {
+      if (now - entry.registeredAt > Mastra.INTERNAL_WORKFLOW_TTL_MS) {
         delete this.#internalMastraWorkflows[key];
         this.#runScopedWorkflowTimestamps.delete(key);
-        // key shape is `${workflowId}:${runId}` — release the matching scope.
-        const colon = key.lastIndexOf(':');
-        if (colon !== -1) {
-          this.#releaseRunScope(key.slice(colon + 1));
-        }
+        // Release the matching scope using the runId we stored at registration
+        // time — never parse it back out of the composite key, since callers
+        // can pass runIds that contain ':'.
+        this.#releaseRunScope(entry.runId);
       }
     }
   }
