@@ -41,6 +41,7 @@ export type ScenarioName =
   | 'state-commands'
   | 'state-signal-reload'
   | 'state-signal-rendering'
+  | 'setup-completion-persistence'
   | 'setup-nested-model-selector'
   | 'storage-settings'
   | 'stream-error-retry'

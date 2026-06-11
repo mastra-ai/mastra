@@ -53,7 +53,8 @@
 - Proposed scenarios:
   - Completed: `setup-nested-model-selector` opens `/setup`, selects the custom model pack, enters a pack name, opens the nested model selector, cancels it with Escape, and asserts the parent setup overlay resumes without leaving the selector stuck.
   - Completed: `om-global-settings-persistence` creates an active thread, toggles `/om` caveman and attachment settings through the real overlay, then proves global settings and active-thread metadata projections update.
-  - `onboarding-full-wizard`: clean config, step through auth/model/OM/YOLO choices, assert persisted settings.
+  - Completed: `setup-completion-persistence` seeds Memory Gateway provider access, steps `/setup` through OpenAI mode/OM pack selection and Disable YOLO, then proves completed/skipped state, pack IDs, YOLO, and built-in default persistence in `settings.json`.
+  - `onboarding-full-wizard`: remaining breadth for login refresh and custom pack completion.
   - `update-startup-prompt`: use existing update env seams to assert passive startup prompt, then `Yes` path with a stub install command if a safe seam is added.
   - Completed: `quiet-tool-history-parity` enables Quiet mode in settings, drives AIMock-backed live `view` + `task_write`, asserts compact tool/task rendering, then reloads a seeded tool-history thread and asserts loaded quiet compact rendering.
   - `settings-reload-persistence`: combine storage/custom-provider changes, relaunch scenario, assert settings persist without relying on runtime state.

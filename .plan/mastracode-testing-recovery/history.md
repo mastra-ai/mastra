@@ -4644,3 +4644,14 @@ Break validations:
 - Changed the visible Observe attachments value projection from `On` to `Enabled`; the scenario timed out waiting for `Observe attachments On`.
 
 Focused verification: `pnpm --filter ./mastracode run e2e:test om-global-settings-persistence`.
+
+### Setup completion persistence
+
+Added `setup-completion-persistence` TUI e2e coverage for the Settings: Onboarding and global settings row. The scenario seeds deterministic Memory Gateway provider access, runs `/setup`, skips auth, selects the OpenAI mode pack, selects OpenAI Mini for observational memory, disables YOLO, then uses shell passthrough to assert `settings.json` has completed onboarding, no skipped marker, `openai` mode/OM pack IDs, `yolo=false`, and no custom mode defaults for the built-in pack.
+
+Break validations:
+- Nulled `settings.onboarding.completedAt` in `applyOnboardingResult`; the scenario failed waiting for `SETUP_COMPLETED=true`.
+- Corrupted persisted `settings.onboarding.modePackId`; the scenario failed waiting for `SETUP_MODE=openai:openai`.
+- Forced `settings.preferences.yolo=true`; the scenario failed waiting for `SETUP_YOLO=false`.
+
+Verification: `pnpm run build:mastracode`; `pnpm --filter ./mastracode run e2e:test setup-completion-persistence`; `pnpm --filter ./mastracode run e2e:test --jobs 2` (61/61); `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
