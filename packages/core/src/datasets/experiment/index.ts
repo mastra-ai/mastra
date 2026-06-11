@@ -90,6 +90,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     signal,
     itemTimeout,
     maxRetries = 0,
+    itemIds,
     experimentId: providedExperimentId,
     name,
     description,
@@ -191,6 +192,19 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       }));
     } else {
       throw new Error('No data source: provide datasetId or data');
+    }
+
+    if (itemIds && itemIds.length > 0) {
+      const wanted = new Set(itemIds);
+      items = items.filter(item => wanted.has(item.id));
+      if (items.length === 0) {
+        throw new MastraError({
+          id: 'EXPERIMENT_NO_ITEMS',
+          text: `No items match itemIds [${itemIds.join(', ')}]${datasetId ? ` in dataset ${datasetId} at version ${datasetVersion}` : ''}`,
+          domain: 'STORAGE',
+          category: 'USER',
+        });
+      }
     }
   } catch (err) {
     await markFailedOnSetupError(err);

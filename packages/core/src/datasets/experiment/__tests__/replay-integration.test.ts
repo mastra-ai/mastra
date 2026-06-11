@@ -859,4 +859,34 @@ describe('tool replay integration', () => {
       ).rejects.toThrowError(/toolMocks is only supported for agent targets/);
     });
   });
+
+  describe('itemIds filter', () => {
+    it('runs only the selected items — single-item replay re-runs', async () => {
+    await observabilityStorage.batchCreateSpans({ records: [] }).catch(() => {});
+    const summary = await runExperiment(mastra, {
+      data: [
+        { id: 'item-1', input: 'Look up first and second' },
+        { id: 'item-2', input: 'Look up first and second' },
+        { id: 'item-3', input: 'Look up first and second' },
+      ],
+      targetType: 'agent',
+      targetId: 'replay-test-agent',
+      itemIds: ['item-2'],
+    });
+
+    expect(summary.totalItems).toBe(1);
+    expect(summary.results.map(r => r.itemId)).toEqual(['item-2']);
+    });
+
+    it('fails at setup when no item matches', async () => {
+    await expect(
+      runExperiment(mastra, {
+        data: [{ id: 'item-1', input: 'hello' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        itemIds: ['nope'],
+      }),
+    ).rejects.toThrowError(/No items match itemIds/);
+    });
+});
 });

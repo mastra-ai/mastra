@@ -132,6 +132,13 @@ console.log(`Status: ${summary2.status}`)
     description: 'Maximum retries per item on failure. Defaults to `0` (no retries). Abort errors are never retried.',
   },
   {
+    name: 'itemIds',
+    type: 'string[]',
+    isOptional: true,
+    description:
+      'Run only these item IDs (after version resolution) — e.g. re-run a single diverging item with tool replay without paying for the whole dataset. Matching nothing is a setup error.',
+  },
+  {
     name: 'toolReplay',
     type: 'object',
     isOptional: true,
