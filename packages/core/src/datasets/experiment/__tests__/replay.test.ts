@@ -134,6 +134,53 @@ describe('extractToolReplayEvents', () => {
     expect(events.map(e => e.spanId)).toEqual(['done']);
   });
 
+  it('skips synthetic spans flagged toolReplay.synthetic — a replay run trace can never serve as a recording', () => {
+    // The agent's hook wrapper records these for short-circuited (replayed or
+    // mocked) calls; they represent served recordings, not executions.
+    const events = extractToolReplayEvents([
+      toolSpan('synth-1', 'lookup', 1000, {
+        output: { value: 'served-from-recording' },
+        metadata: { toolReplay: { synthetic: true, outcome: 'replayed', sequence: 0 } },
+      }),
+      toolSpan('synth-2', 'lookup', 2000, {
+        output: { value: 'served-from-mock' },
+        metadata: { toolReplay: { synthetic: true, outcome: 'mocked' } },
+      }),
+    ]);
+
+    expect(events).toEqual([]);
+  });
+
+  it('keeps real spans in a mixed trace — only synthetic-flagged ones are dropped', () => {
+    const events = extractToolReplayEvents([
+      toolSpan('real-1', 'lookup', 1000, { output: { value: 'live:first' } }),
+      toolSpan('synth', 'lookup', 2000, {
+        output: { value: 'served' },
+        metadata: { toolReplay: { synthetic: true, outcome: 'replayed', sequence: 0 } },
+      }),
+      toolSpan('real-2', 'send', 3000, { output: { sent: true } }),
+    ]);
+
+    expect(events.map(e => [e.spanId, e.toolName, e.sequence])).toEqual([
+      ['real-1', 'lookup', 0],
+      ['real-2', 'send', 1],
+    ]);
+  });
+
+  it('extracts spans whose metadata only resembles the synthetic marker — exact shape required', () => {
+    // metadata is user-writable: anything that isn't the exact marker shape
+    // (object metadata.toolReplay with synthetic === true) stays extractable.
+    const events = extractToolReplayEvents([
+      toolSpan('m1', 'lookup', 1000, { output: 1, metadata: { toolReplay: 'user junk' } }),
+      toolSpan('m2', 'lookup', 2000, { output: 2, metadata: { toolReplay: { synthetic: 'true' } } }),
+      toolSpan('m3', 'lookup', 3000, { output: 3, metadata: { synthetic: true } }),
+      toolSpan('m4', 'lookup', 4000, { output: 4, metadata: { toolReplay: { synthetic: false } } }),
+      toolSpan('m5', 'lookup', 5000, { output: 5, metadata: null }),
+    ]);
+
+    expect(events.map(e => e.spanId)).toEqual(['m1', 'm2', 'm3', 'm4', 'm5']);
+  });
+
   it('counts recorded payloads carrying the sensitive-data redaction marker', () => {
     const events = extractToolReplayEvents([
       toolSpan('r1', 'auth', 1000, { input: { apiKey: '[REDACTED]' }, output: { ok: true } }),
@@ -186,8 +233,16 @@ describe('buildReplayHooks', () => {
     const state = createReplayState(recordedEvents(), TRACE_ID);
     const hooks = buildReplayHooks(state, { onMiss: 'error' });
 
-    expect(await callHook(hooks, 'lookup', { key: 'first' })).toEqual({ proceed: false, output: { value: 'one' } });
-    expect(await callHook(hooks, 'lookup', { key: 'second' })).toEqual({ proceed: false, output: { value: 'two' } });
+    expect(await callHook(hooks, 'lookup', { key: 'first' })).toEqual({
+      proceed: false,
+      output: { value: 'one' },
+      spanMetadata: { outcome: 'replayed', sequence: 0 },
+    });
+    expect(await callHook(hooks, 'lookup', { key: 'second' })).toEqual({
+      proceed: false,
+      output: { value: 'two' },
+      spanMetadata: { outcome: 'replayed', sequence: 1 },
+    });
 
     const report = finalizeReplayReport(state);
     expect(report.replayedCount).toBe(2);
@@ -200,8 +255,16 @@ describe('buildReplayHooks', () => {
     const hooks = buildReplayHooks(state, { onMiss: 'error' });
 
     // Agent calls 'send' before 'lookup' — opposite of the recorded order
-    expect(await callHook(hooks, 'send', { to: 'a' })).toEqual({ proceed: false, output: { sent: true } });
-    expect(await callHook(hooks, 'lookup', { key: 'first' })).toEqual({ proceed: false, output: { value: 'one' } });
+    expect(await callHook(hooks, 'send', { to: 'a' })).toEqual({
+      proceed: false,
+      output: { sent: true },
+      spanMetadata: { outcome: 'replayed', sequence: 2 },
+    });
+    expect(await callHook(hooks, 'lookup', { key: 'first' })).toEqual({
+      proceed: false,
+      output: { value: 'one' },
+      spanMetadata: { outcome: 'replayed', sequence: 0 },
+    });
 
     expect(finalizeReplayReport(state).misses).toEqual([]);
   });
@@ -210,7 +273,11 @@ describe('buildReplayHooks', () => {
     const state = createReplayState(recordedEvents(), TRACE_ID);
     const hooks = buildReplayHooks(state, { onMiss: 'error' });
 
-    expect(await callHook(hooks, 'lookup', { key: 'DIFFERENT' })).toEqual({ proceed: false, output: { value: 'one' } });
+    expect(await callHook(hooks, 'lookup', { key: 'DIFFERENT' })).toEqual({
+      proceed: false,
+      output: { value: 'one' },
+      spanMetadata: { outcome: 'replayed', sequence: 0 },
+    });
 
     const report = finalizeReplayReport(state);
     expect(report.replayedCount).toBe(1);
@@ -226,7 +293,7 @@ describe('buildReplayHooks', () => {
     // differ on their presence. Same semantic question → no mismatch.
     expect(
       await callHook(hooks, 'lookup', { key: 'first', _background: null, suspendedToolRunId: null, resumeData: null }),
-    ).toEqual({ proceed: false, output: { value: 'one' } });
+    ).toEqual({ proceed: false, output: { value: 'one' }, spanMetadata: { outcome: 'replayed', sequence: 0 } });
 
     expect(finalizeReplayReport(state).argMismatches).toEqual([]);
   });
@@ -239,6 +306,7 @@ describe('buildReplayHooks', () => {
     expect(await callHook(hooks, 'lookup', { key: 'first', _background: true })).toEqual({
       proceed: false,
       output: { value: 'one' },
+      spanMetadata: { outcome: 'replayed', sequence: 0 },
     });
 
     expect(finalizeReplayReport(state).argMismatches).toEqual([{ toolName: 'lookup', sequence: 0, spanId: 's1' }]);
@@ -308,6 +376,7 @@ describe('buildReplayHooks', () => {
       expect(await callHook(hooks, agentFormatted, {}), `tool name '${name}' → '${agentFormatted}'`).toEqual({
         proceed: false,
         output: { ok: true },
+        spanMetadata: { outcome: 'replayed', sequence: 0 },
       });
     }
   });
@@ -323,8 +392,16 @@ describe('buildReplayHooks', () => {
     const state = createReplayState(events, TRACE_ID);
     const hooks = buildReplayHooks(state, { onMiss: 'error' });
 
-    expect(await callHook(hooks, 'my_namespaced_tool', { a: 1 })).toEqual({ proceed: false, output: { ok: 1 } });
-    expect(await callHook(hooks, '_1starts-with-digit', { a: 2 })).toEqual({ proceed: false, output: { ok: 2 } });
+    expect(await callHook(hooks, 'my_namespaced_tool', { a: 1 })).toEqual({
+      proceed: false,
+      output: { ok: 1 },
+      spanMetadata: { outcome: 'replayed', sequence: 0 },
+    });
+    expect(await callHook(hooks, '_1starts-with-digit', { a: 2 })).toEqual({
+      proceed: false,
+      output: { ok: 2 },
+      spanMetadata: { outcome: 'replayed', sequence: 1 },
+    });
     expect(finalizeReplayReport(state).misses).toEqual([]);
   });
 
@@ -351,8 +428,16 @@ describe('strict matching', () => {
     const hooks = buildReplayHooks(state, { onMiss: 'error' });
 
     // Calls arrive in the opposite of recorded order — strict matches by args.
-    expect(await callHook(hooks, 'lookup', { key: 'second' })).toEqual({ proceed: false, output: { value: 'two' } });
-    expect(await callHook(hooks, 'lookup', { key: 'first' })).toEqual({ proceed: false, output: { value: 'one' } });
+    expect(await callHook(hooks, 'lookup', { key: 'second' })).toEqual({
+      proceed: false,
+      output: { value: 'two' },
+      spanMetadata: { outcome: 'replayed', sequence: 1 },
+    });
+    expect(await callHook(hooks, 'lookup', { key: 'first' })).toEqual({
+      proceed: false,
+      output: { value: 'one' },
+      spanMetadata: { outcome: 'replayed', sequence: 0 },
+    });
 
     const report = finalizeReplayReport(state);
     expect(report.replayedCount).toBe(2);
@@ -380,6 +465,7 @@ describe('strict matching', () => {
     expect(await callHook(hooks, 'lookup', { key: 'first', _background: null })).toEqual({
       proceed: false,
       output: { value: 'one' },
+      spanMetadata: { outcome: 'replayed', sequence: 0 },
     });
   });
 
@@ -394,10 +480,12 @@ describe('strict matching', () => {
     expect(await callHook(hooks, 'lookup', { key: 'same' })).toEqual({
       proceed: false,
       output: { value: 'first-recorded' },
+      spanMetadata: { outcome: 'replayed', sequence: 0 },
     });
     expect(await callHook(hooks, 'lookup', { key: 'same' })).toEqual({
       proceed: false,
       output: { value: 'second-recorded' },
+      spanMetadata: { outcome: 'replayed', sequence: 1 },
     });
   });
 });
@@ -412,7 +500,11 @@ describe('tool mocks', () => {
     });
     const hooks = buildReplayHooks(state, { onMiss: 'error' });
 
-    expect(await callHook(hooks, 'lookup', { key: 'first' })).toEqual({ proceed: false, output: { value: 'stubbed' } });
+    expect(await callHook(hooks, 'lookup', { key: 'first' })).toEqual({
+      proceed: false,
+      output: { value: 'stubbed' },
+      spanMetadata: { outcome: 'mocked' },
+    });
 
     const report = finalizeReplayReport(state);
     // The recorded event was never consumed — the mock answered instead.
@@ -442,10 +534,12 @@ describe('tool mocks', () => {
     expect(await callHook(hooks, 'search', { q: 'a' })).toEqual({
       proceed: false,
       output: { echoed: { q: 'a' }, callIndex: 0 },
+      spanMetadata: { outcome: 'mocked' },
     });
     expect(await callHook(hooks, 'search', { q: 'b' })).toEqual({
       proceed: false,
       output: { echoed: { q: 'b' }, callIndex: 1 },
+      spanMetadata: { outcome: 'mocked' },
     });
     expect(finalizeReplayReport(state).mocks).toEqual([{ toolName: 'search', calls: 2, kind: 'function' }]);
   });
@@ -457,7 +551,11 @@ describe('tool mocks', () => {
     const hooks = buildReplayHooks(state, { onMiss: 'error' });
 
     // Falls through: the recorded answer is served, and the call is counted.
-    expect(await callHook(hooks, 'lookup', { key: 'first' })).toEqual({ proceed: false, output: { value: 'one' } });
+    expect(await callHook(hooks, 'lookup', { key: 'first' })).toEqual({
+      proceed: false,
+      output: { value: 'one' },
+      spanMetadata: { outcome: 'replayed', sequence: 0 },
+    });
 
     const report = finalizeReplayReport(state);
     expect(report.mocks).toEqual([{ toolName: 'lookup', calls: 1, kind: 'observe' }]);
@@ -624,7 +722,11 @@ describe('adversarial review regressions', () => {
     );
     const hooks = buildReplayHooks(state, { onMiss: 'error' });
 
-    await expect(callHook(hooks, 'lookup', { key: 'a' })).resolves.toEqual({ proceed: false, output: 'mocked' });
+    await expect(callHook(hooks, 'lookup', { key: 'a' })).resolves.toEqual({
+      proceed: false,
+      output: 'mocked',
+      spanMetadata: { outcome: 'mocked' },
+    });
     const report = finalizeReplayReport(state);
     expect(report.replayedCount).toBe(0);
     expect(report.unconsumed).toEqual([{ toolName: 'lookup', count: 1 }]);

@@ -13,6 +13,11 @@ import { deepEqual } from '../../utils';
  * queues, and a `beforeToolCall` hook short-circuits each matching call with
  * the recorded output (or re-throws the recorded error). The agent's own
  * behavior stays free to diverge — divergence is reported, not prevented.
+ *
+ * Short-circuited calls appear in the replay run's own trace as synthetic
+ * TOOL_CALL spans flagged `metadata.toolReplay.synthetic: true` (recorded by
+ * the agent's hook wrapper); extraction skips them so a replay run's trace
+ * can never serve as a recording.
  */
 
 /** One recorded tool invocation derived from a trace tool span. */
@@ -250,6 +255,23 @@ function isToolSpan(span: SpanRecord): boolean {
 }
 
 /**
+ * True for synthetic tool spans the agent records when a `beforeToolCall`
+ * hook short-circuits the call (see `Agent.recordShortCircuitedToolSpan`).
+ * They carry `metadata.toolReplay.synthetic: true` and represent a served
+ * recording or mock, not an execution — extracting them would let a replay
+ * run's own trace masquerade as a recording. Shape-checked defensively:
+ * metadata is user-writable, so anything that isn't the exact marker shape
+ * stays extractable.
+ */
+function isSyntheticToolSpan(span: SpanRecord): boolean {
+  const metadata = span.metadata;
+  if (metadata == null || typeof metadata !== 'object') return false;
+  const toolReplay = (metadata as Record<string, unknown>).toolReplay;
+  if (toolReplay == null || typeof toolReplay !== 'object') return false;
+  return (toolReplay as Record<string, unknown>).synthetic === true;
+}
+
+/**
  * True when the span has another tool span anywhere in its ancestor chain.
  * Such spans belong to nested executions (sub-agents via agent-as-tool,
  * workflow-as-tool internals) that the top-level replay hooks never intercept —
@@ -318,6 +340,10 @@ export function extractToolReplayEvents(spans: SpanRecord[]): ToolReplayEvent[] 
       // those would feed the agent fabricated empty observations — skip them; the
       // resulting miss (or unconsumed gap) is visible in the report instead.
       span.endedAt != null &&
+      // Synthetic spans record served recordings/mocks, not executions — a
+      // replay run's trace must never serve as a recording, even when pointed
+      // at directly via replayTraceId.
+      !isSyntheticToolSpan(span) &&
       !hasToolSpanAncestor(span, spansById),
   );
 
@@ -491,7 +517,7 @@ export function buildReplayHooks(
           state.calls.push(call);
           try {
             const output = await mock.config({ input, callIndex: mock.calls.length - 1 });
-            return { proceed: false, output };
+            return { proceed: false, output, spanMetadata: { outcome: 'mocked' } };
           } catch (error) {
             call.outcome = 'mock-error';
             throw error;
@@ -509,7 +535,7 @@ export function buildReplayHooks(
         }
         if ('output' in mock.config) {
           state.calls.push({ order: state.calls.length, toolName, outcome: 'mocked' });
-          return { proceed: false, output: mock.config.output };
+          return { proceed: false, output: mock.config.output, spanMetadata: { outcome: 'mocked' } };
         }
         // expect-only: fall through.
       }
@@ -579,7 +605,11 @@ export function buildReplayHooks(
         throw error;
       }
 
-      return { proceed: false, output: event.output };
+      return {
+        proceed: false,
+        output: event.output,
+        spanMetadata: { outcome: 'replayed', sequence: event.sequence },
+      };
     },
   };
 }

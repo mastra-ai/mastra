@@ -160,7 +160,7 @@ console.log(`Status: ${summary2.status}`)
             type: 'string',
             isOptional: true,
             description:
-              'Prior experiment whose per-item results supply the source trace for each item ID. Must reference a live (non-replay) experiment: replay runs record no tool spans, so pointing at one is rejected at setup.',
+              'Prior experiment whose per-item results supply the source trace for each item ID. Must reference a live (non-replay) experiment: replay runs record only synthetic tool spans (flagged `toolReplay.synthetic` and ignored by replay extraction), so pointing at one is rejected at setup.',
           },
           {
             name: 'onMiss',

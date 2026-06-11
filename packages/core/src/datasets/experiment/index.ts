@@ -265,19 +265,25 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             category: 'USER',
           });
         }
-        // Replay runs short-circuit tools before any tool span is created, so
-        // a replay experiment's traces contain no tool spans — chaining one as
-        // a recording source would make every item miss (onMiss 'error') or
-        // run fully live (onMiss 'passthrough'). Recordings must come from
-        // live runs. Experiment metadata is user-writable, so match the exact
-        // marker shape this feature stamps (an object carrying onMiss) rather
-        // than bare truthiness — an unrelated user `toolReplay` key must not
-        // disqualify a live recording source.
+        // Replay runs short-circuit tools before the live tool span is
+        // created, so a replay experiment's traces contain only synthetic
+        // tool spans (flagged toolReplay.synthetic, skipped by extraction) —
+        // chaining one as a recording source would make every item miss
+        // (onMiss 'error') or run fully live (onMiss 'passthrough').
+        // Recordings must come from live runs. Experiment metadata is
+        // user-writable, so match the exact marker shape this feature stamps
+        // (an object carrying onMiss) rather than bare truthiness — an
+        // unrelated user `toolReplay` key must not disqualify a live
+        // recording source.
         const sourceMarker = (sourceExperiment.metadata as Record<string, unknown> | null | undefined)?.toolReplay;
-        if (typeof sourceMarker === 'object' && sourceMarker !== null && ('onMiss' in sourceMarker || 'mockedTools' in sourceMarker)) {
+        if (
+          typeof sourceMarker === 'object' &&
+          sourceMarker !== null &&
+          ('onMiss' in sourceMarker || 'mockedTools' in sourceMarker)
+        ) {
           throw new MastraError({
             id: 'EXPERIMENT_TOOL_REPLAY_SOURCE_IS_REPLAY',
-            text: `Experiment '${toolReplay.fromExperimentId}' is itself a tool replay run; its traces contain no tool spans. Use the original live experiment as fromExperimentId.`,
+            text: `Experiment '${toolReplay.fromExperimentId}' is itself a tool replay run; its traces contain no replayable tool spans (only synthetic served-from-recording spans). Use the original live experiment as fromExperimentId.`,
             domain: 'STORAGE',
             category: 'USER',
           });
