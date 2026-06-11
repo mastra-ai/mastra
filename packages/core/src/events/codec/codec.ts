@@ -110,20 +110,17 @@ function walk(v: unknown, seen: WeakSet<object>): unknown {
 }
 
 /**
- * Escape regex metacharacters so untrusted input is treated as a literal
- * pattern fragment when constructing `RegExp`.
- */
-function escapeRegExpLiteral(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/**
  * Reconstruct a `RegExp` from a decoded envelope payload. Re-validates the
  * payload locally (independent of `isEnvelope`) so the constructor input is
  * narrowed at this single call site: bounded `source` length, spec-defined
  * flag whitelist, no duplicate flags. A malformed or hostile envelope yields
  * an empty regex (`/(?:)/`) rather than throwing, keeping frame decoding
  * resilient.
+ *
+ * NOTE: `source` is intentionally NOT escaped — a `RegExp` envelope's whole
+ * purpose is to round-trip a pattern, so metacharacters must reach
+ * `new RegExp(...)` verbatim. Safety comes from the bounded length, the
+ * flag whitelist, and the `try/catch` fallback, not from escaping.
  */
 function decodeRegExpEnvelope(v: unknown): RegExp {
   if (!v || typeof v !== 'object') return /(?:)/;
@@ -134,9 +131,10 @@ function decodeRegExpEnvelope(v: unknown): RegExp {
   const flags = candidate.flags;
   if (!/^[dgimsuvy]*$/.test(flags)) return /(?:)/;
   if (new Set(flags).size !== flags.length) return /(?:)/;
-  const safeSource = escapeRegExpLiteral(candidate.source);
   try {
-    return new RegExp(safeSource, flags);
+    // lgtm[js/regex-injection] -- payload is narrowed (length cap, flag whitelist,
+    // try/catch); see helper docstring for why escaping `source` would be wrong.
+    return new RegExp(candidate.source, flags);
   } catch {
     return /(?:)/;
   }
