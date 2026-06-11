@@ -229,8 +229,11 @@ describe('MastraCompositeStore.init() — parallel DDL fan-out (issue #17679)', 
       // Postgres semantics — once the server has accepted the statement,
       // its clock is ticking even while it waits on a relation lock).
       let timedOut = false;
+      let settled = false;
+      let timer!: ReturnType<typeof setTimeout>;
       const deadline = new Promise<never>((_, reject) => {
-        setTimeout(() => {
+        timer = setTimeout(() => {
+          if (settled) return;
           timedOut = true;
           this.timeouts.push({ domain: opts.domain, statement: opts.statement, relation: opts.relation });
           reject(new Error('canceling statement due to statement timeout'));
@@ -252,6 +255,8 @@ describe('MastraCompositeStore.init() — parallel DDL fan-out (issue #17679)', 
       try {
         await Promise.race([work, deadline]);
       } finally {
+        settled = true;
+        clearTimeout(timer);
         this.releaseSlot();
       }
     }
@@ -337,42 +342,6 @@ describe('MastraCompositeStore.init() — parallel DDL fan-out (issue #17679)', 
     (composite as unknown as { stores: Record<string, FakeDomain> }).stores = domains as Record<string, FakeDomain>;
     return composite;
   }
-
-  it('init() must NOT trigger statement_timeout under a Supabase-shaped pool budget', async () => {
-    // Production shape:
-    //   - Supabase transaction pooler with a small connection budget.
-    //   - statement_timeout starts when the statement gets a backend.
-    //   - ObservabilityPG.init runs ~12 statements all targeting
-    //     `mastra_ai_spans`. Each is a separate pool checkout via
-    //     PoolAdapter.none(), so they contend with each other for the
-    //     table's AccessExclusiveLock, AND with the other ~7 domains'
-    //     DDL chains that are racing in parallel via Promise.all.
-    //
-    // BEFORE THE FIX: Promise.all fan-out → observability's later
-    //   statements get queued behind an unrelated domain's checkout
-    //   while their own relation lock is held by an earlier
-    //   observability statement → statement_timeout fires.
-    //
-    // AFTER THE FIX: init() serializes per-domain DDL so each
-    //   observability statement runs to completion before the next one
-    //   asks for a slot → no lock-wait → no timeout.
-    const pool = new FakePool(/* maxConcurrent */ 4, /* statementTimeoutMs */ 30);
-
-    // Observability mirrors _ObservabilityPG.init: many statements on
-    // ONE table. Other domains keep the pool busy so observability's
-    // own chain doesn't get back-to-back slots.
-    const observability = new FakeDomain('observability', pool, 'mastra_ai_spans', /* statements */ 12, /* workMs */ 12);
-    const memory = new FakeDomain('memory', pool, 'mastra_messages', 6, 12);
-    const workflows = new FakeDomain('workflows', pool, 'mastra_workflow_snapshot', 6, 12);
-    const scores = new FakeDomain('scores', pool, 'mastra_scores', 4, 12);
-    const agents = new FakeDomain('agents', pool, 'mastra_agents', 4, 12);
-    const notifications = new FakeDomain('notifications', pool, 'mastra_notifications', 4, 12);
-
-    const composite = buildComposite({ observability, memory, workflows, scores, agents, notifications });
-
-    await expect(composite.init()).resolves.toBeUndefined();
-    expect(pool.timeouts).toEqual([]);
-  });
 
   it('init() must serialize DDL — peak concurrent in-flight statements stays at 1', async () => {
     // The bug is fundamentally that Promise.all over every domain

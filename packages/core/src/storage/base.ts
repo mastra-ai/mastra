@@ -434,10 +434,18 @@ export class MastraCompositeStore extends MastraBase {
     // 3. Init any remaining domains (typically those provided via the
     //    explicit `domains` override pointing at a different store, or those
     //    set directly by a subclass).
-    const initTasks: Promise<void>[] = [];
+    //
+    // We collect deferred thunks rather than already-started promises so the
+    // `for ... await` loop below actually serializes init. On SQL-backed
+    // composites (PostgresStore, LibSQLStore, etc.) every domain's chained
+    // DDL goes through the same connection pool, and running them in
+    // parallel fans out into many concurrent backends racing for relation
+    // locks. Against pgBouncer/Supabase poolers that race amplifies into
+    // `canceling statement due to statement timeout`. See issue #17679.
+    const initTasks: Array<() => Promise<void>> = [];
     const maybeInit = (domain: { init(): Promise<void> } | undefined) => {
       if (!domain || alreadyInitialized.has(domain)) return;
-      initTasks.push(domain.init());
+      initTasks.push(() => domain.init());
       alreadyInitialized.add(domain);
     };
 
@@ -465,7 +473,9 @@ export class MastraCompositeStore extends MastraBase {
       maybeInit(this.stores.notifications);
     }
 
-    await Promise.all(initTasks);
+    for (const task of initTasks) {
+      await task();
+    }
     return true;
   }
   /**
