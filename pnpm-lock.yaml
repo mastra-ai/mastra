@@ -8038,8 +8038,8 @@ importers:
   workspaces/blaxel:
     dependencies:
       '@blaxel/core':
-        specifier: ^0.2.86
-        version: 0.2.86(@cfworker/json-schema@4.1.1)(@hey-api/openapi-ts@0.93.0(magicast@0.5.2)(typescript@6.0.3))(bufferutil@4.1.0)
+        specifier: ^0.2.87
+        version: 0.2.87(@cfworker/json-schema@4.1.1)(@hey-api/openapi-ts@0.93.0(magicast@0.5.2)(typescript@6.0.3))(bufferutil@4.1.0)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -10199,8 +10199,8 @@ packages:
   '@better-fetch/fetch@1.1.21':
     resolution: {integrity: sha512-/ImESw0sskqlVR94jB+5+Pxjf+xBwDZF/N5+y2/q4EqD7IARUTSpPfIo8uf39SYpCxyOCtbyYpUrZ3F/k0zT4A==}
 
-  '@blaxel/core@0.2.86':
-    resolution: {integrity: sha512-BVICgA0RUBoVmIAyAlMoesEcp6wZ6Wb2czw2xEQc56dfxw1UksbbvN5fDAyG+PY2fmDbbz886ep/I3Ta1T5JBA==}
+  '@blaxel/core@0.2.87':
+    resolution: {integrity: sha512-dzRDYJh33VImATL+7MmQEr6kIO6GxMMe3eq/uDFuHf4JAo5bG3EYd56crt/w9cZVlsyTxgzF77ef7OCVu8HzyA==}
     engines: {node: '>=18'}
 
   '@borewit/text-codec@0.2.2':
@@ -31273,7 +31273,7 @@ snapshots:
 
   '@better-fetch/fetch@1.1.21': {}
 
-  '@blaxel/core@0.2.86(@cfworker/json-schema@4.1.1)(@hey-api/openapi-ts@0.93.0(magicast@0.5.2)(typescript@6.0.3))(bufferutil@4.1.0)':
+  '@blaxel/core@0.2.87(@cfworker/json-schema@4.1.1)(@hey-api/openapi-ts@0.93.0(magicast@0.5.2)(typescript@6.0.3))(bufferutil@4.1.0)':
     dependencies:
       '@hey-api/client-fetch': 0.10.2(@hey-api/openapi-ts@0.93.0(magicast@0.5.2)(typescript@6.0.3))
       '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@3.25.76)
