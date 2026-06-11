@@ -358,49 +358,53 @@ describe.each([
   // Default engine only: the evented processor shares the same storage call,
   // and rejecting it there would break the event-processor flow unrelated to
   // what this test asserts (the stream-side cleanup being best-effort).
-  it.skipIf(evented)('still finishes the stream when snapshot cleanup fails', async () => {
-    const agent = new Agent({
-      id: 'cleanup-fail-agent',
-      name: 'Cleanup Fail Agent',
-      instructions: 'You answer.',
-      model: new MockLanguageModelV2({
-        doStream: async () => ({
-          rawCall: { rawPrompt: null, rawSettings: {} },
-          warnings: [],
-          stream: convertArrayToReadableStream([
-            { type: 'stream-start', warnings: [] },
-            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-            { type: 'text-start', id: 'text-1' },
-            { type: 'text-delta', id: 'text-1', delta: 'hello' },
-            { type: 'text-end', id: 'text-1' },
-            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
-          ]),
+  it.skipIf(evented)(
+    'still finishes the stream when snapshot cleanup fails',
+    async () => {
+      const agent = new Agent({
+        id: 'cleanup-fail-agent',
+        name: 'Cleanup Fail Agent',
+        instructions: 'You answer.',
+        model: new MockLanguageModelV2({
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'hello' },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+          }),
         }),
-      }),
-    });
+      });
 
-    const mastra = new Mastra({
-      agents: { agent },
-      logger: false,
-      storage: new InMemoryStore(),
-    });
-    const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))!;
-    const deleteSpy = vi
-      .spyOn(workflowsStore, 'deleteWorkflowRunById')
-      .mockRejectedValue(new Error('storage offline'));
+      const mastra = new Mastra({
+        agents: { agent },
+        logger: false,
+        storage: new InMemoryStore(),
+      });
+      const workflowsStore = (await mastra.getStorage()!.getStore('workflows'))!;
+      const deleteSpy = vi
+        .spyOn(workflowsStore, 'deleteWorkflowRunById')
+        .mockRejectedValue(new Error('storage offline'));
 
-    try {
-      const stream = await agent.stream('hi');
-      let sawFinish = false;
-      for await (const chunk of stream.fullStream) {
-        if (chunk.type === 'finish') sawFinish = true;
+      try {
+        const stream = await agent.stream('hi');
+        let sawFinish = false;
+        for await (const chunk of stream.fullStream) {
+          if (chunk.type === 'finish') sawFinish = true;
+        }
+        // Cleanup is best-effort: a storage failure must not turn a successful
+        // run into a stream error or swallow the finish chunk.
+        expect(sawFinish).toBe(true);
+        expect(deleteSpy).toHaveBeenCalled();
+      } finally {
+        deleteSpy.mockRestore();
       }
-      // Cleanup is best-effort: a storage failure must not turn a successful
-      // run into a stream error or swallow the finish chunk.
-      expect(sawFinish).toBe(true);
-      expect(deleteSpy).toHaveBeenCalled();
-    } finally {
-      deleteSpy.mockRestore();
-    }
-  }, 30000);
+    },
+    30000,
+  );
 });
