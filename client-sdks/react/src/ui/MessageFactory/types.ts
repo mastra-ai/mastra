@@ -1,7 +1,7 @@
 import type { MastraDBMessage, AIV5Type } from '@mastra/core/agent/message-list';
 import type { IsTaskCompletePayload } from '@mastra/core/stream';
 import type { ReactNode } from 'react';
-import type { AccumulatorPart, TripwireMetadata } from '../../lib/mastra-db';
+import type { AccumulatorPart, MastraReasoningPart, MastraTextPart, TripwireMetadata } from '../../lib/mastra-db';
 
 /**
  * Extract the concrete part shape for a given discriminant from the runtime
@@ -11,10 +11,15 @@ import type { AccumulatorPart, TripwireMetadata } from '../../lib/mastra-db';
  */
 export type PartByType<T extends string> = Extract<AccumulatorPart, { type: T }>;
 
+type TextRuntimeExtensions = Partial<Pick<MastraTextPart, 'textId' | 'state' | 'providerMetadata' | 'createdAt'>>;
+type ReasoningRuntimeExtensions = Partial<
+  Pick<MastraReasoningPart, 'reasoningId' | 'state' | 'redacted' | 'providerMetadata' | 'createdAt'>
+>;
+
 /** Narrowed part shape passed to the `Text` renderer. */
-export type TextPart = PartByType<'text'>;
+export type TextPart = Omit<PartByType<'text'>, keyof TextRuntimeExtensions> & TextRuntimeExtensions;
 /** Narrowed part shape passed to the `Reasoning` renderer. */
-export type ReasoningPart = PartByType<'reasoning'>;
+export type ReasoningPart = Omit<PartByType<'reasoning'>, keyof ReasoningRuntimeExtensions> & ReasoningRuntimeExtensions;
 /** Narrowed part shape passed to the `File` renderer. */
 export type FilePart = PartByType<'file'>;
 /** Narrowed part shape passed to the `StepStart` renderer. */
@@ -70,11 +75,11 @@ export type MessageFactoryPart = AccumulatorPart | DynamicToolPart;
  * type-checked and only the renderer matching a part's `type` is ever invoked.
  */
 export type MessageRenderers = {
-  Text?: (part: PartByType<'text'>) => ReactNode;
-  Reasoning?: (part: PartByType<'reasoning'>) => ReactNode;
-  File?: (part: PartByType<'file'>) => ReactNode;
-  StepStart?: (part: PartByType<'step-start'>) => ReactNode;
-  ToolInvocation?: (part: PartByType<'tool-invocation'>) => ReactNode;
+  Text?: (part: TextPart) => ReactNode;
+  Reasoning?: (part: ReasoningPart) => ReactNode;
+  File?: (part: FilePart) => ReactNode;
+  StepStart?: (part: StepStartPart) => ReactNode;
+  ToolInvocation?: (part: ToolInvocationPart) => ReactNode;
   /**
    * Receives the flat `source-url` citation shape ({@link AIV5Type.SourceUrlUIPart}).
    * Both the runtime `type: 'source-url'` part and the legacy persisted
@@ -82,7 +87,7 @@ export type MessageRenderers = {
    * are dispatched here, so the renderer always gets `sourceId`/`url`/`title`.
    */
   SourceUrl?: (part: SourceUrlPart) => ReactNode;
-  SourceDocument?: (part: PartByType<'source-document'>) => ReactNode;
+  SourceDocument?: (part: SourceDocumentPart) => ReactNode;
   Data?: (part: DataPart) => ReactNode;
   /** Covers runtime-only `dynamic-tool` and AI SDK v5 `tool-${string}` parts. */
   DynamicTool?: (part: DynamicToolPart) => ReactNode;
