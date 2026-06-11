@@ -214,6 +214,8 @@ const strict = await dataset.startExperiment({
 })
 ```
 
+The matching policy applies to the whole run. To be lenient about one tool whose arguments drift benignly (a generated SQL string, a free-text search query) while staying strict everywhere else, mock that tool — mocks take precedence over the replay queues per tool, so `toolMocks: { runSql: { output: recordedRows } }` answers every `runSql` call regardless of arguments while the remaining tools stay under the strict contract. The other direction needs no escape hatch: under `'fifo'` nothing fails on drift, and `argMismatches` tells you where it happened.
+
 ### Tool mocks
 
 `toolMocks` overrides individual tools without needing a recording — usable with or without `toolReplay`. Mocks take precedence over replay queues per tool; tools that are neither mocked nor covered by replay execute live.
@@ -255,6 +257,18 @@ The report is the top-level `toolReplay` field on every result — both on the s
 Treat divergence as a trust signal for scores. An entry in `argMismatches` means the agent received a re-paired recorded observation: matching is per-tool and ordered, so the replayed output came from a call whose original arguments differed. A `passthrough` miss means a live observation entered the run. In either case, inspect the report before trusting the item's scores.
 
 The report also carries two recording-quality signals: `redactedPayloadCount` counts recorded payloads containing the sensitive-data redaction marker (the agent received `[REDACTED]` values), and `staleRecording` is `true` when the recording came from an older version of the dataset item than the one being replayed.
+
+### What replay freezes — and what it doesn't
+
+Replay freezes the external world *as the recorded run observed it through tools* — nothing more. Knowing what stays live keeps comparisons honest:
+
+- **The model runs live.** A replay run is a real LLM run making its own decisions against frozen observations — that is the point. Identical scores are not guaranteed even with an unchanged agent; sampling alone can vary the output.
+- **The agent definition resolves at run time.** Instructions, model, and tools are whatever the agent is *now*. Pin `agentVersion` in the experiment config to run a recorded version, or leave it unpinned when the change is exactly what you are measuring. Experiments store the version they ran either way.
+- **No conversation state is involved.** Each experiment item executes as a standalone run without a memory thread, so conversation history and memory cannot drift between recording and replay.
+- **Item inputs can drift.** `staleRecording` flags an item edited after its recording was made; pin the dataset version (`version`) for stable inputs.
+- **`requestContext` passes through as configured.** If the agent reads it, keep it identical between the recording run and the replay run.
+
+For a contract-style comparison, the checklist is: pinned `agentVersion`, pinned dataset `version`, identical `requestContext`, and `matching: 'strict'`.
 
 ### Limitations
 
