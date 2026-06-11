@@ -9,7 +9,9 @@ function expectJson(result: ReturnType<typeof serializeStreamChunk>): string {
 describe('serializeStreamChunk', () => {
   it('serializes plain JSON values', () => {
     const result = serializeStreamChunk({ type: 'workflow-finish', payload: { workflowStatus: 'success' } });
-    expect(expectJson(result)).toBe(JSON.stringify({ type: 'workflow-finish', payload: { workflowStatus: 'success' } }));
+    expect(expectJson(result)).toBe(
+      JSON.stringify({ type: 'workflow-finish', payload: { workflowStatus: 'success' } }),
+    );
   });
 
   it('serializes BigInt values as strings', () => {
