@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { Avatar, Button, ButtonsGroup, cn, PendingIndicator, useAutoscroll } from '@mastra/playground-ui';
+import { Avatar, Button, ButtonsGroup, cn, PendingIndicator, ScrollArea, useAutoscroll } from '@mastra/playground-ui';
 import type { MessageFactoryPart } from '@mastra/react';
 import { CLIENT_MESSAGE_ID_KEY, useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, EyeIcon, Mic, PlusIcon } from 'lucide-react';
@@ -214,30 +214,34 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher }: Compos
         >
           <ComposerSendingGradient pulseKey={sendPulseKey} />
           <div className="relative z-10">
-            <textarea
-              ref={textareaRef}
-              value={text}
-              autoFocus={false}
-              className="w-full text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50 px-3 pt-3 pb-2"
-              placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
-              onChange={e => {
-                setText(e.target.value);
-                setThreadInput?.(e.target.value);
-              }}
-              onKeyDown={e => {
-                // Ignore Enter while an IME composition is active (e.g. committing a
-                // CJK/pinyin candidate). `isComposing` is the browser-owned flag; the
-                // `keyCode === 229` fallback covers browsers that fire keydown without it.
-                if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  if (sendBlocked) return;
-                  e.preventDefault();
-                  e.stopPropagation();
-                  void submit();
-                }
-              }}
-              disabled={!canExecuteAgent}
-            />
+            {/* The textarea grows with its content (field-sizing); the ScrollArea caps the
+                height and fades the clipped edges once the content overflows. */}
+            <ScrollArea maxHeight="212px">
+              <textarea
+                ref={textareaRef}
+                value={text}
+                autoFocus={false}
+                className="field-sizing-content min-h-17 w-full text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50 px-3 pt-3 pb-2"
+                placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
+                onChange={e => {
+                  setText(e.target.value);
+                  setThreadInput?.(e.target.value);
+                }}
+                onKeyDown={e => {
+                  // Ignore Enter while an IME composition is active (e.g. committing a
+                  // CJK/pinyin candidate). `isComposing` is the browser-owned flag; the
+                  // `keyCode === 229` fallback covers browsers that fire keydown without it.
+                  if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    if (sendBlocked) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void submit();
+                  }
+                }}
+                disabled={!canExecuteAgent}
+              />
+            </ScrollArea>
             {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning agentId={agentId} />}
             <ComposerActionRow
               canExecute={canExecuteAgent}
