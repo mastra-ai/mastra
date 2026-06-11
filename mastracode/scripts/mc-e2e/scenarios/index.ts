@@ -1,5 +1,6 @@
 import { activeSignalFollowupScenario } from './active-signal-followup.js';
 import { apiKeyPromptScenario } from './api-key-prompt.js';
+import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { automatedChatScenario } from './automated-chat.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
 import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
@@ -62,6 +63,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'branch-context-long-name': branchContextLongNameScenario,
   'active-signal-followup': activeSignalFollowupScenario,
   'api-key-prompt': apiKeyPromptScenario,
+  'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'automated-chat': automatedChatScenario,
   'clipboard-image-paste': clipboardImagePasteScenario,
   'commit-attribution-prompt': commitAttributionPromptScenario,

@@ -83,15 +83,15 @@
 - `mastracode/src/tui/components/__tests__/masked-input.test.ts` — sensitive input masking is render-only: cleartext never appears in rendered lines, the underlying value is restored after render, and submit forwards the unmasked value.
 - `mastracode/scripts/mc-e2e/scenarios/api-key-prompt.ts` — partial real PTY coverage for sensitive prompt behavior: opens `/api-keys`, selects an unset provider, types a fake key, asserts cleartext is absent and mask characters are visible, then verifies the provider becomes stored.
 - `mastracode/scripts/mc-e2e/scenarios/request-access-modal.ts` — real PTY coverage for AIMock-driven `request_access`: model calls the real tool, the TUI renders the sandbox access prompt with reason/options, Enter approves the default Yes option, the tool returns an access-granted result, and a follow-up `view` reads a deterministic file outside the project root from the newly approved path.
+- `mastracode/scripts/mc-e2e/scenarios/ask-user-advanced-prompts.ts` — real PTY coverage for AIMock-driven `ask_user` prompt shapes: multiline free-text input with backslash+Enter newline insertion, single-select `Custom response...` switching to free text, and fixed-option `multi_select` prompts toggled with Space and confirmed with Enter.
 - `mastracode/src/tui/__tests__/overlay.test.ts` — shared modal overlay min-height, max-height cap, and top-padding behavior.
 - `mastracode/src/tools/__tests__/request-sandbox-access.test.ts` — approve/deny outcomes, tilde expansion, same-turn `setAllowedPaths()`, missing filesystem fallback, and no-`setAllowedPaths` fallback.
 
 ## Missing tests
 
 - Full TUI/keyboard integration test proving real editor focus routes to the next queued prompt after the first answer.
-- End-to-end TUI/PTY test proving a real `ask_user` prompt accepts Shift+Enter multiline text and submits raw multiline content to Harness.
 - Direct regression test for long answered free-text values overflowing the inline bordered box.
-- Direct regression test that selecting `Custom response...` in inline and dialog single-select prompts switches to free-text input, preserves focus, and submits the typed answer rather than the sentinel value.
+- Direct dialog regression test that selecting `Custom response...` in dialog single-select prompts switches to free-text input, preserves focus, and submits the typed answer rather than the sentinel value.
 - Direct `askModalQuestion()` regression proving submit/cancel hide the overlay and resolve the expected value; `/api-keys` masked dialog e2e exists but does not cover shared ask-modal submit/cancel values.
 - Regression test for queued prompts interleaved with tool approvals or plan approval.
 - Headless parallel prompt behavior, if non-TUI auto-resolution needs similar queueing guarantees.

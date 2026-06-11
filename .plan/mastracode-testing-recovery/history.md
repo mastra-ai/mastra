@@ -4589,3 +4589,14 @@ Break validations proved the scenario fails if the `Use as /goal` option label c
   - Emitting the wrong sandbox access event type prevented the TUI prompt from rendering and timed out waiting for the prompt.
 - Clean verification: `pnpm run build:mastracode`; `pnpm --filter ./mastracode run e2e:test request-access-modal`; `pnpm --filter ./mastracode run e2e:test -- --jobs 2` (55/55); `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
 - Tracker update: `TUI: Interactive prompts and access requests` remains `needs-follow-up` but now covers sensitive masked input and request_access approval/same-turn external-read behavior through real PTY e2e. Remaining gaps are ask_user multiline/custom/multi-select queueing and queued prompt interleaving.
+
+## 2026-06-11 — ask_user advanced prompt remediation
+
+- Continued the `TUI: Interactive prompts and access requests` row after `request-access-modal` by targeting the remaining `ask_user` prompt-shape gap.
+- Added `ask-user-advanced-prompts` TUI e2e scenario and AIMock fixture. The scenario has the model call the real `ask_user` tool three times, then drives the real PTY TUI to enter a multiline free-text answer with backslash+Enter, select `Custom response...` from a single-select prompt and type a custom answer, and toggle multiple fixed options in a `multi_select` prompt with Space before confirming with Enter.
+- Break validations proved the scenario catches regressions:
+  - Disabling `handleAskQuestion()` multiline opt-in dropped the Shift+Enter/backslash+Enter hint and failed the scenario.
+  - Renaming the visible `Custom response...` picker row caused the scenario to time out waiting for the canonical custom-response affordance.
+  - Dropping `selectionMode` propagation prevented the multi-select prompt from reaching the expected checkbox/hint state and failed the scenario.
+- Clean verification: `pnpm --filter ./mastracode run e2e:test ask-user-advanced-prompts`; `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`; `pnpm run build:mastracode`; `pnpm --filter ./mastracode run e2e:test -- --jobs 2` (56/56).
+- Tracker update: `TUI: Interactive prompts and access requests` remains `needs-follow-up` but now covers masked sensitive input, request_access approval/same-turn external-read behavior, and ask_user multiline/custom/multi-select prompts through checked-in real PTY e2e coverage. Remaining gap is queued prompt interleaving through the real TUI.
