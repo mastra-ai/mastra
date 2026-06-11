@@ -110,6 +110,14 @@ function walk(v: unknown, seen: WeakSet<object>): unknown {
 }
 
 /**
+ * Escape regex metacharacters so untrusted input is treated as a literal
+ * pattern fragment when constructing `RegExp`.
+ */
+function escapeRegExpLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
  * Reconstruct a `RegExp` from a decoded envelope payload. Re-validates the
  * payload locally (independent of `isEnvelope`) so the constructor input is
  * narrowed at this single call site: bounded `source` length, spec-defined
@@ -126,8 +134,9 @@ function decodeRegExpEnvelope(v: unknown): RegExp {
   const flags = candidate.flags;
   if (!/^[dgimsuvy]*$/.test(flags)) return /(?:)/;
   if (new Set(flags).size !== flags.length) return /(?:)/;
+  const safeSource = escapeRegExpLiteral(candidate.source);
   try {
-    return new RegExp(candidate.source, flags);
+    return new RegExp(safeSource, flags);
   } catch {
     return /(?:)/;
   }
