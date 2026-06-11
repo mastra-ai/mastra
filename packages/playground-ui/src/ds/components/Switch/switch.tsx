@@ -35,7 +35,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
         ref={ref}
         data-slot="switch"
         className={cn(
-          'peer group/switch inline-flex h-5 w-9 shrink-0 cursor-pointer items-center overflow-hidden rounded-full border-0 bg-neutral6/[0.14] p-0.5 outline-hidden',
+          'peer group/switch inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-0 bg-neutral6/[0.14] p-0.5 outline-hidden',
           'transition-colors duration-normal ease-out-custom motion-reduce:transition-none',
           'hover:bg-neutral6/[0.18]',
           'active:bg-neutral6/[0.22]',
