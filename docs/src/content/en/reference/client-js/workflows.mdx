@@ -264,7 +264,7 @@ await mastraClient.pauseSchedule('daily-report')
 
 ### `resumeSchedule()`
 
-Resume a paused schedule. The next fire time is recomputed from now, so a long-paused schedule does not fire a backlog. Returns the updated schedule. Idempotent.
+Resume a paused schedule. The next fire time is recomputed from now, so a long-paused schedule doesn't fire a backlog. Returns the updated schedule. Idempotent.
 
 ```typescript
 await mastraClient.resumeSchedule('daily-report')

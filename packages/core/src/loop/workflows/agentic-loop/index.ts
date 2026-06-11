@@ -5,7 +5,7 @@ import { InternalSpans } from '../../../observability';
 import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
-import { createEventedWorkflow as createWorkflow } from '../../../workflows/create';
+import { createWorkflow as createDirectWorkflow, createEventedWorkflow } from '../../../workflows/create';
 import type { OutputWriter } from '../../../workflows/types';
 import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
@@ -52,6 +52,8 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
     runId,
     ...rest,
   });
+
+  const createWorkflow = process.env.MASTRA_EVENTED_EXECUTION === 'true' ? createEventedWorkflow : createDirectWorkflow;
 
   return createWorkflow({
     id: 'agentic-loop',
