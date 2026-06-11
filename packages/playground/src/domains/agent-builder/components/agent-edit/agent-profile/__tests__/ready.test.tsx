@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, waitFor } from '@testing-library/react';
-import { useLocation } from 'react-router';
-import { Route } from 'react-router';
+import { useLocation, Route  } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { useWizard } from '../../../../contexts/wizard-context';

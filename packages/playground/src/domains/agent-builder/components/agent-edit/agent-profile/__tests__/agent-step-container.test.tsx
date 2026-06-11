@@ -3,7 +3,8 @@ import { cleanup, fireEvent } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { StreamRunningContext } from '../../../../contexts/stream-chat-context';
-import { useWizard, type WizardStep } from '../../../../contexts/wizard-context';
+import { useWizard  } from '../../../../contexts/wizard-context';
+import type {WizardStep} from '../../../../contexts/wizard-context';
 import { AgentStepContainer } from '../agent-step-container';
 import { flush, registerStepHandlers, renderStep } from './test-utils';
 
