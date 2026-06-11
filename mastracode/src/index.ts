@@ -27,8 +27,8 @@ import {
 } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
+import { TaskSignalProvider } from '@mastra/core/signals';
 import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
-import { TaskStateProcessor } from '@mastra/core/tools';
 import { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
@@ -462,7 +462,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         sampling: { type: 'ratio', rate: 0.3 },
       },
     },
-    signals: githubSignals ? [githubSignals] : [],
+    // TaskSignalProvider bundles the task tools + TaskStateProcessor: it merges
+    // the tools into the toolset and registers the task state-signal processor,
+    // so the task list persists across turns and survives OM truncation.
+    signals: [new TaskSignalProvider(), ...(githubSignals ? [githubSignals] : [])],
     inputProcessors: [
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
@@ -475,7 +478,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         },
       }),
       new ProviderHistoryCompat(),
-      new TaskStateProcessor(),
     ],
     errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
   });

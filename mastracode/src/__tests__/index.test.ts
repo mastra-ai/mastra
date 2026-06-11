@@ -433,19 +433,19 @@ describe('createMastraCode', () => {
     expect(harnessConfig?.workspace).not.toEqual({ id: 'custom-workspace' });
   });
 
-  it('registers the TaskStateProcessor on the code agent so task tools persist via state signals', async () => {
-    const { TaskStateProcessor } = await import('@mastra/core/tools');
+  it('registers the TaskSignalProvider on the code agent so task tools persist via state signals', async () => {
+    const { TaskSignalProvider } = await import('@mastra/core/signals');
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
 
     expect(agentConstructorMock).toHaveBeenCalled();
     const codeAgentConfig = agentConstructorMock.mock.calls
-      .map(call => call?.[0] as { id?: string; inputProcessors?: unknown[] } | undefined)
+      .map(call => call?.[0] as { id?: string; signals?: unknown[] } | undefined)
       .find(config => config?.id === 'code-agent');
 
     expect(codeAgentConfig).toBeDefined();
-    expect(codeAgentConfig?.inputProcessors?.some(processor => processor instanceof TaskStateProcessor)).toBe(true);
+    expect(codeAgentConfig?.signals?.some(provider => provider instanceof TaskSignalProvider)).toBe(true);
   });
 
   it('uses the configured default mode when constructing Harness', async () => {

@@ -15,6 +15,17 @@ The state-signal projection is cache-aware and observational-memory-aware:
 
 The task tools and the processor require a memory-backed thread. On a run that is not memory backed (no `threadId`/`resourceId`), the task tools no-op and return a result explaining that task tracking requires agent memory.
 
-New exports from `@mastra/core/storage`: `TasksStorage`, `InMemoryTasksStorage`, and the `TaskRecord` type. New exports from `@mastra/core/tools`: `taskWriteTool`, `taskUpdateTool`, `taskCompleteTool`, `taskCheckTool`, `TaskStateProcessor`, and the task helpers/types (`assignTaskIds`, `summarizeTaskCheck`, `TaskItem`, `TaskItemSnapshot`, `TaskCheckSummary`, `TaskCheckResult`, etc.). The Harness continues to re-export the task tools, so existing imports and toolset identity are unchanged.
+For the simplest setup, register `TaskSignalProvider` via the agent's `signals` array — it bundles the task tools and the `TaskStateProcessor` so they cannot get out of sync:
 
-Internal behavior change: the Harness no longer stores the task list in session state. Task mutations still emit the `task_updated` display event, so the Harness display snapshot and any pinned task UI are unaffected. To adopt the new behavior on a plain agent (with `Memory` and a Mastra `storage`), add `new TaskStateProcessor()` to the agent's `inputProcessors` alongside the task tools.
+```ts
+import { Agent } from '@mastra/core/agent';
+import { TaskSignalProvider } from '@mastra/core/signals';
+
+const agent = new Agent({ name, instructions, model, memory, signals: [new TaskSignalProvider()] });
+```
+
+The Agent merges the tools into its toolset and registers the processor automatically.
+
+New exports from `@mastra/core/storage`: `TasksStorage`, `InMemoryTasksStorage`, and the `TaskRecord` type. New exports from `@mastra/core/tools`: `taskWriteTool`, `taskUpdateTool`, `taskCompleteTool`, `taskCheckTool`, `TaskStateProcessor`, and the task helpers/types (`assignTaskIds`, `summarizeTaskCheck`, `TaskItem`, `TaskItemSnapshot`, `TaskCheckSummary`, `TaskCheckResult`, etc.). New export from `@mastra/core/signals`: `TaskSignalProvider`, alongside the other signal providers. The Harness continues to re-export the task tools, so existing imports and toolset identity are unchanged.
+
+Internal behavior change: the Harness no longer stores the task list in session state. Task mutations still emit the `task_updated` display event, so the Harness display snapshot and any pinned task UI are unaffected. To adopt the new behavior on a plain agent (with `Memory` and a Mastra `storage`), register `new TaskSignalProvider()` in `signals` — or, for manual control, add `new TaskStateProcessor()` to `inputProcessors` alongside the task tools.
