@@ -207,7 +207,8 @@ describe('HarnessPG', () => {
   });
 
   it('exposes harness through PostgresStore and includes harness DDL in schema export', async () => {
-    const composite = new PostgresStore({ id: 'pg-harness-composite', pool: createTestPool() });
+    const compositePool = createTestPool();
+    const composite = new PostgresStore({ id: 'pg-harness-composite', pool: compositePool });
     try {
       await composite.init();
 
@@ -233,6 +234,7 @@ describe('HarnessPG', () => {
       });
     } finally {
       await composite.close();
+      await compositePool.end();
     }
 
     expect(exportSchemas()).toContain(TABLE_HARNESS_SESSIONS);
