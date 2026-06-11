@@ -304,7 +304,10 @@ async function handleGoalSourceCommand(
   const goalSkill = state.goalSkillCommands.find(skill => skill.name === sourceName);
   if (goalSkill) {
     try {
-      const workspace = ctx.getResolvedWorkspace();
+      let workspace = ctx.getResolvedWorkspace();
+      if (!workspace && ctx.harness?.hasWorkspace?.()) {
+        workspace = await ctx.harness.resolveWorkspace();
+      }
       const skill = await workspace?.skills?.get(goalSkill.path || goalSkill.name);
       if (!skill || skill.metadata?.goal !== true) {
         showError(state, `Unknown goal command: ${sourceName}`);
