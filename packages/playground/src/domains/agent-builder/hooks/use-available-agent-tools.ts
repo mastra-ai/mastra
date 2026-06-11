@@ -1,13 +1,13 @@
 import { useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
 
-import { useBuilderPickerVisibility } from './use-builder-settings';
 import { useAllConnections } from '../../tool-providers/hooks/use-all-connections';
 import { useAllProviderTools } from '../../tool-providers/hooks/use-all-provider-tools';
 import type { AgentBuilderEditFormValues } from '../schemas';
 import { buildAvailableToolRecords } from '../services/build-available-tool-records';
 import { buildAgentTools } from '../types/agent-tool';
 import type { AgentTool } from '../types/agent-tool';
+import { useBuilderPickerVisibility } from './use-builder-settings';
 
 interface UseAvailableAgentToolsArgs {
   toolsData: Record<string, unknown>;

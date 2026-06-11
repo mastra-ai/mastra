@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, fireEvent, render } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -27,16 +27,16 @@ interface BuilderToolInput {
   output?: unknown;
 }
 
-const builderToolPart = ({ toolName, toolCallId, input, output }: BuilderToolInput): ToolPart =>
+const builderToolPart = (toolInput: BuilderToolInput): ToolPart =>
   ({
     type: 'tool-invocation',
     toolInvocation: {
       state: 'result',
       step: 0,
-      toolCallId,
-      toolName,
-      args: input,
-      result: output ?? { success: true },
+      toolCallId: toolInput.toolCallId,
+      toolName: toolInput.toolName,
+      args: toolInput.input,
+      result: 'output' in toolInput ? toolInput.output : { success: true },
     },
   }) as unknown as ToolPart;
 
@@ -168,8 +168,69 @@ describe('MessageRow dynamic-tool rendering', () => {
     expect(container.textContent).not.toContain('Internal signal');
   });
 
-  it('renders the generic shimmer for non-builder dynamic tools', () => {
-    const { container } = renderRow([
+  it('renders user text through the shared MarkdownRenderer in a right-aligned bubble', () => {
+    const { container } = renderMessage({
+      id: 'user-md-1',
+      role: 'user',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'hello **world**' }],
+      },
+    } as unknown as MastraDBMessage);
+
+    expect(container.querySelector('.justify-end')).not.toBeNull();
+    expect(container.querySelector('strong')?.textContent).toBe('world');
+  });
+
+  it('renders assistant text through the shared MarkdownRenderer', () => {
+    const { container } = renderMessage(buildMessage([{ type: 'text', text: 'reply **bold**' } as ToolPart]));
+
+    expect(container.querySelector('strong')?.textContent).toBe('bold');
+  });
+
+  it('routes assistant text through the shared MessageText error-prefix handling', () => {
+    const { container } = renderMessage(buildMessage([{ type: 'text', text: 'Error: it broke' } as ToolPart]));
+
+    // The shared MessageText turns an `Error:`-prefixed body into a destructive notice.
+    expect(container.textContent).toContain('it broke');
+    expect(container.querySelector('[class*="destructive"]')).not.toBeNull();
+  });
+
+  it('renders a tripwire-status message through the shared TripwireNotice', () => {
+    const { container } = renderMessage({
+      id: 'assistant-tripwire-1',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'blocked for safety' }],
+        metadata: { mode: 'stream', status: 'tripwire' },
+      },
+    } as unknown as MastraDBMessage);
+
+    expect(container.textContent).toContain('Content Blocked');
+    expect(container.textContent).toContain('blocked for safety');
+  });
+
+  it('renders a warning-status message through the shared warning notice', () => {
+    const { container } = renderMessage({
+      id: 'assistant-warning-1',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'heads up about this' }],
+        metadata: { mode: 'stream', status: 'warning' },
+      },
+    } as unknown as MastraDBMessage);
+
+    expect(container.textContent).toContain('Warning');
+    expect(container.textContent).toContain('heads up about this');
+  });
+
+  it('renders the generic fallback for non-builder dynamic tools', () => {
+    const { container, getByRole } = renderRow([
       builderToolPart({
         toolCallId: 'call-5',
         toolName: 'some-other-tool',
@@ -182,6 +243,29 @@ describe('MessageRow dynamic-tool rendering', () => {
     expect(container.textContent).toContain('Executing');
     expect(container.textContent).toContain('some-other-tool');
     expect(container.textContent).not.toContain('Web Search');
+
+    fireEvent.click(getByRole('button'));
+
+    expect(container.textContent).toContain('Input');
+    expect(container.textContent).toContain('"web-search"');
+    expect(container.textContent).toContain('Output');
+    expect(container.textContent).toContain('"success": true');
+  });
+
+  it('omits the generic fallback output panel when there is no output', () => {
+    const { container, getByRole } = renderRow([
+      builderToolPart({
+        toolCallId: 'call-5',
+        toolName: 'some-other-tool',
+        input: { a: 1 },
+        output: undefined,
+      }),
+    ]);
+
+    fireEvent.click(getByRole('button'));
+
+    expect(container.textContent).toContain('Input');
+    expect(container.textContent).not.toContain('Output');
   });
 
   it('renders signal data parts in agent-builder chat messages', () => {
