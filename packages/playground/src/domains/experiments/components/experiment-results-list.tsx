@@ -153,6 +153,9 @@ function ReplayDivergenceCell({ result }: { result: DatasetExperimentResult }) {
   if (!report) return null;
   const divergence = classifyReplayDivergence(report);
   if (divergence === 'clean') return null;
+  if (divergence === 'failed-expectations') {
+    return <Chip color="red">expectation</Chip>;
+  }
   if (divergence === 'misses') {
     return <Chip color="orange">{`${report.misses.length} miss${report.misses.length > 1 ? 'es' : ''}`}</Chip>;
   }

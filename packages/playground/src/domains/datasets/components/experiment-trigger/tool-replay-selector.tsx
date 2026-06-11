@@ -1,9 +1,10 @@
-import type { DatasetExperiment, ToolReplayOnMiss } from '@mastra/client-js';
+import type { DatasetExperiment, ToolReplayOnMiss, TriggerDatasetExperimentParams } from '@mastra/client-js';
 import { Button, Combobox, Icon, Label, Notice, Switch } from '@mastra/playground-ui';
 import { format } from 'date-fns';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useDatasetExperiments } from '../../hooks/use-dataset-experiments';
+import type { ToolReplayMatching } from '@/domains/experiments/utils/tool-replay';
 import { isReplayExperiment } from '@/domains/experiments/utils/tool-replay';
 
 export interface ToolReplaySelectorProps {
@@ -14,6 +15,8 @@ export interface ToolReplaySelectorProps {
   onFromExperimentIdChange: (experimentId: string) => void;
   onMiss: ToolReplayOnMiss;
   onMissChange: (onMiss: ToolReplayOnMiss) => void;
+  matching: ToolReplayMatching;
+  onMatchingChange: (matching: ToolReplayMatching) => void;
   /** Sorts source experiments targeting this agent first. */
   selectedTargetId?: string;
   disabled?: boolean;
@@ -26,6 +29,28 @@ export interface ToolReplaySelectorProps {
  * run) instead of mapping items through a prior experiment's results.
  */
 export const ITEM_RECORDINGS_SOURCE = '__item-recordings__';
+
+/**
+ * Builds the `toolReplay` trigger payload shared by every run entry point.
+ * `matching: 'strict'` is included only when selected — fifo is the server
+ * default, so payloads stay minimal — and rides through a wider local shape
+ * because the field is not on the client param type yet (client types catch
+ * up in the stacked PR).
+ */
+export function buildToolReplayPayload(options: {
+  fromExperimentId: string;
+  onMiss: ToolReplayOnMiss;
+  matching: ToolReplayMatching;
+}): TriggerDatasetExperimentParams['toolReplay'] {
+  const payload: { fromExperimentId?: string; onMiss: ToolReplayOnMiss; matching?: ToolReplayMatching } = {
+    // The item-recordings source omits fromExperimentId: each item resolves
+    // its own metadata.replayTraceId in the runner.
+    ...(options.fromExperimentId !== ITEM_RECORDINGS_SOURCE ? { fromExperimentId: options.fromExperimentId } : {}),
+    onMiss: options.onMiss,
+    ...(options.matching === 'strict' ? { matching: options.matching } : {}),
+  };
+  return payload;
+}
 
 /**
  * Replay sources must be completed live agent runs: a replay experiment's
@@ -46,17 +71,20 @@ export function ToolReplaySelector({
   onFromExperimentIdChange,
   onMiss,
   onMissChange,
+  matching,
+  onMatchingChange,
   selectedTargetId,
   disabled,
   container,
 }: ToolReplaySelectorProps) {
   const { data, isLoading } = useDatasetExperiments(datasetId, { page: 0, perPage: 100 });
 
-  // Passthrough is the dangerous state: if it arrives already enabled, the
-  // Advanced disclosure starts open — and stays open while active — so the
-  // live-execution switch and its warning are never hidden.
-  const [advancedOpen, setAdvancedOpen] = useState(onMiss === 'passthrough');
-  const showAdvanced = advancedOpen || onMiss === 'passthrough';
+  // Passthrough is the dangerous state and strict matching changes what counts
+  // as a miss: if either arrives already enabled, the Advanced disclosure
+  // starts open — and stays open while active — so those switches and their
+  // notes are never hidden.
+  const [advancedOpen, setAdvancedOpen] = useState(onMiss === 'passthrough' || matching === 'strict');
+  const showAdvanced = advancedOpen || onMiss === 'passthrough' || matching === 'strict';
 
   const sourceOptions = useMemo(() => {
     const eligible = getEligibleReplaySources(data?.experiments ?? []);
@@ -138,6 +166,25 @@ export function ToolReplaySelector({
 
             {showAdvanced && (
               <div className="grid gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="tool-replay-strict-matching" className="font-normal">
+                    Strict args matching (exact tool arguments only)
+                  </Label>
+                  <Switch
+                    id="tool-replay-strict-matching"
+                    checked={matching === 'strict'}
+                    onCheckedChange={checked => onMatchingChange(checked ? 'strict' : 'fifo')}
+                    disabled={disabled}
+                    aria-label="Strict args matching (exact tool arguments only)"
+                  />
+                </div>
+
+                {matching === 'strict' && (
+                  <p className="text-ui-sm text-neutral3">
+                    Recorded answers are served only for exact argument matches — anything else is a miss.
+                  </p>
+                )}
+
                 <div className="flex items-center justify-between gap-2">
                   <Label htmlFor="tool-replay-on-miss-passthrough" className="font-normal">
                     Allow live execution for unrecorded calls (passthrough)

@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import type { PropsWithChildren } from 'react';
 import { describe, expect, it } from 'vitest';
 import {
+  expectationFailedResult,
   failedReplayResult,
   listResultsResponse,
   liveResultWithJunkToolReplay,
@@ -33,7 +34,7 @@ describe('useReplayAggregates', () => {
       id: `result-${i}`,
       itemId: `item-${i}`,
     }));
-    const pageOne = [failedReplayResult, liveResultWithJunkToolReplay];
+    const pageOne = [failedReplayResult, liveResultWithJunkToolReplay, expectationFailedResult];
     const total = pageZero.length + pageOne.length;
 
     server.use(
@@ -57,14 +58,18 @@ describe('useReplayAggregates', () => {
     await waitFor(() => expect(result.current.data).toBeDefined());
 
     expect(result.current.data).toEqual({
-      total: 102,
+      total: 103,
       // replayResult carries the divergent report (misses present) → never fully grounded.
       fullyGrounded: 0,
       withMisses: 101,
       withUnconsumed: 101,
       withArgMismatches: 101,
+      // expectationFailedResult: top-level report with one unsatisfied expectation.
+      withFailedExpectations: 1,
+      // TOOL_MOCK_EXPECTATION_FAILED is not a TOOL_REPLAY_* code — only the miss counts here.
       failedReplay: 1,
-      emptyRecordings: 0,
+      // expectationFailedResult mocked everything: nothing was ever on the tape.
+      emptyRecordings: 1,
       staleRecordings: 101,
       redactedPayloads: 101,
       // liveResultWithJunkToolReplay contributes to total only — junk key is not a report.

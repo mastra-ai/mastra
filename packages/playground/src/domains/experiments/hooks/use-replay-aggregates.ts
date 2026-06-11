@@ -10,6 +10,8 @@ export interface ReplayAggregates {
   withMisses: number;
   withUnconsumed: number;
   withArgMismatches: number;
+  /** Items whose report carries at least one unsatisfied tool-call expectation. */
+  withFailedExpectations: number;
   /** Items failed with a TOOL_REPLAY_* error code. */
   failedReplay: number;
   /** Recordings that contained zero tool calls — nothing was replayed for these items. */
@@ -46,6 +48,7 @@ export const useReplayAggregates = ({
         withMisses: 0,
         withUnconsumed: 0,
         withArgMismatches: 0,
+        withFailedExpectations: 0,
         failedReplay: 0,
         emptyRecordings: 0,
         staleRecordings: 0,
@@ -68,6 +71,7 @@ export const useReplayAggregates = ({
           if (report.misses.length > 0) aggregates.withMisses++;
           if (report.unconsumed.length > 0) aggregates.withUnconsumed++;
           if (report.argMismatches.length > 0) aggregates.withArgMismatches++;
+          if (report.expectations?.some(expectation => !expectation.satisfied)) aggregates.withFailedExpectations++;
           if (report.staleRecording) aggregates.staleRecordings++;
           if ((report.redactedPayloadCount ?? 0) > 0) aggregates.redactedPayloads++;
           if (report.totalRecorded === 0) {

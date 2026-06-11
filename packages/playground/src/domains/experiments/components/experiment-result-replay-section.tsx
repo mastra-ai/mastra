@@ -1,4 +1,3 @@
-import type { ToolReplayReport } from '@mastra/client-js';
 import {
   Button,
   Chip,
@@ -12,14 +11,21 @@ import {
 } from '@mastra/playground-ui';
 import { HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import type { ReplayTapeSpan } from '../utils/tool-replay';
+import type { ReplayTapeSpan, ToolReplayMockKind, ToolReplayReportExtended } from '../utils/tool-replay';
 import { buildReplayTape, classifyReplayDivergence } from '../utils/tool-replay';
 
 export type ExperimentResultReplaySectionProps = {
-  report: ToolReplayReport;
+  report: ToolReplayReportExtended;
   onShowSourceTrace?: (traceId: string, spanId?: string) => void;
   /** Source-trace spans (light) — enables the per-tool tape view when provided. */
   sourceTraceSpans?: ReplayTapeSpan[];
+};
+
+const MOCK_KIND_LABELS: Record<ToolReplayMockKind, string> = {
+  output: 'stub',
+  error: 'error',
+  function: 'function',
+  observe: 'observed',
 };
 
 /**
@@ -65,12 +71,54 @@ export function ExperimentResultReplaySection({
         )}
       </div>
 
-      {isEmptyRecording && (
-        <p className="text-ui-sm text-neutral3">
-          The source run never called any tools — there was nothing to replay, so the model ran with no frozen
-          observations. To exercise replay, record a baseline where the agent actually uses its tools.
-        </p>
+      {report.mocks && report.mocks.length > 0 && (
+        <div className="grid gap-1.5">
+          <span className="text-ui-xs uppercase tracking-widest text-neutral2">Mocked tools</span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {report.mocks.map((mock, i) => (
+              <Tooltip key={`${mock.toolName}-${i}`}>
+                <TooltipTrigger asChild>
+                  <span className="inline-flex">
+                    <Chip color="purple">{`${mock.toolName} · ${mock.calls} call${mock.calls === 1 ? '' : 's'}`}</Chip>
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent>Mock kind: {MOCK_KIND_LABELS[mock.kind] ?? mock.kind}</TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
+        </div>
       )}
+
+      {report.expectations && report.expectations.length > 0 && (
+        <div className="grid gap-1.5">
+          <span className="text-ui-xs uppercase tracking-widest text-neutral2">Expectations</span>
+          <ul className="grid gap-1">
+            {report.expectations.map((expectation, i) => (
+              <li
+                key={`${expectation.toolName}-${i}`}
+                className="flex flex-wrap items-center gap-2 text-ui-sm text-neutral4"
+              >
+                <Chip color={expectation.satisfied ? 'green' : 'red'}>
+                  {`${expectation.satisfied ? '✓' : '✗'} ${expectation.toolName}`}
+                </Chip>
+                {!expectation.satisfied && expectation.reason && <span>{expectation.reason}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {isEmptyRecording &&
+        (report.mocks && report.mocks.length > 0 ? (
+          <p className="text-ui-sm text-neutral3">
+            Tools were mocked — no recording involved. Mock answers are listed above.
+          </p>
+        ) : (
+          <p className="text-ui-sm text-neutral3">
+            The source run never called any tools — there was nothing to replay, so the model ran with no frozen
+            observations. To exercise replay, record a baseline where the agent actually uses its tools.
+          </p>
+        ))}
 
       {tape && tape.length > 0 && (
         <div className="grid gap-1.5 rounded-lg border border-border1 bg-surface3/50 p-3">

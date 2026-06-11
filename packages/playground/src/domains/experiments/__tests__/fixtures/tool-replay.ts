@@ -1,4 +1,14 @@
 import type { DatasetExperiment, DatasetExperimentResult, ToolReplayReport } from '@mastra/client-js';
+import type { ToolReplayReportExtended } from '../../utils/tool-replay';
+
+/**
+ * Result row with the dedicated top-level `toolReplay` report column. The
+ * column is not on the client result type yet — client types catch up in the
+ * stacked PR — so fixtures extend the client type locally.
+ */
+export type DatasetExperimentResultWithReplayColumn = DatasetExperimentResult & {
+  toolReplay?: ToolReplayReportExtended;
+};
 
 const experimentBase = {
   datasetId: 'dataset-1',
@@ -39,11 +49,19 @@ export const junkMarkerExperiment: DatasetExperiment = {
   metadata: { toolReplay: 'user junk' },
 };
 
-/** Object without `onMiss` — not the stamped shape, must NOT read as replay. */
+/** Object without `onMiss` or `mockedTools` — not a stamped shape, must NOT read as replay. */
 export const noOnMissMarkerExperiment: DatasetExperiment = {
   ...experimentBase,
   id: 'exp-no-onmiss',
   metadata: { toolReplay: { fromExperimentId: 'exp-live-1' } },
+};
+
+/** Mock-only run: `mockedTools` without `onMiss` — mocks always answer, so there is no miss policy. */
+export const mockOnlyExperiment: DatasetExperiment = {
+  ...experimentBase,
+  id: 'exp-mock-only',
+  name: 'mock-only',
+  metadata: { toolReplay: { mockedTools: ['weatherInfo'] } },
 };
 
 export const runningAgentExperiment: DatasetExperiment = {
@@ -90,6 +108,24 @@ export const emptyRecordingReport: ToolReplayReport = {
   argMismatches: [],
 };
 
+/** Mock-run report: no recording, mocked answers, one satisfied and one failed expectation. */
+export const expectationFailedReport: ToolReplayReportExtended = {
+  sourceTraceId: null,
+  totalRecorded: 0,
+  replayedCount: 0,
+  misses: [],
+  unconsumed: [],
+  argMismatches: [],
+  mocks: [
+    { toolName: 'weatherInfo', calls: 2, kind: 'output' },
+    { toolName: 'sendEmail', calls: 0, kind: 'observe' },
+  ],
+  expectations: [
+    { toolName: 'weatherInfo', satisfied: true, calledTimes: 2 },
+    { toolName: 'sendEmail', satisfied: false, calledTimes: 0, reason: 'expected at least 1 call, got 0' },
+  ],
+};
+
 const resultBase = {
   experimentId: 'exp-replay-1',
   itemDatasetVersion: 1,
@@ -103,18 +139,19 @@ const resultBase = {
   createdAt: '2026-06-01T10:00:05.000Z',
 };
 
-/** Successful replayed item whose output carries the divergence report. */
-export const replayResult: DatasetExperimentResult = {
+/** Successful replayed item — new row shape: the report sits in the dedicated top-level column. */
+export const replayResult: DatasetExperimentResultWithReplayColumn = {
   ...resultBase,
   id: 'result-replay-1',
   itemId: 'item-1',
   input: { question: 'Where is my refund?' },
-  output: { text: 'Please send a photo first.', toolReplay: divergentReport },
+  output: { text: 'Please send a photo first.' },
+  toolReplay: divergentReport,
   error: null,
   traceId: 'trace-replay-run-1',
 };
 
-/** Failed replay item: TOOL_REPLAY_MISS error + report-only output. */
+/** Failed replay item — older row shape: TOOL_REPLAY_MISS error + report merged into the output. */
 export const failedReplayResult: DatasetExperimentResult = {
   ...resultBase,
   id: 'result-replay-2',
@@ -126,6 +163,21 @@ export const failedReplayResult: DatasetExperimentResult = {
     code: 'TOOL_REPLAY_MISS',
   },
   traceId: 'trace-replay-run-2',
+};
+
+/** Mock-run item whose expectation failed: top-level report + TOOL_MOCK_EXPECTATION_FAILED error. */
+export const expectationFailedResult: DatasetExperimentResultWithReplayColumn = {
+  ...resultBase,
+  id: 'result-mock-1',
+  itemId: 'item-4',
+  input: { question: 'Email me the weather' },
+  output: { text: 'I could not send the email.' },
+  toolReplay: expectationFailedReport,
+  error: {
+    message: "Tool mock expectation failed for 'sendEmail': expected at least 1 call, got 0",
+    code: 'TOOL_MOCK_EXPECTATION_FAILED',
+  },
+  traceId: 'trace-mock-run-1',
 };
 
 /** Live-run result whose agent output happens to own a `toolReplay` key. */

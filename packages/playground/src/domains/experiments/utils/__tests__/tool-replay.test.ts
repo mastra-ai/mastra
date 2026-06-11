@@ -2,10 +2,13 @@ import { describe, expect, it } from 'vitest';
 import {
   cleanReport,
   divergentReport,
+  expectationFailedReport,
+  expectationFailedResult,
   failedReplayResult,
   junkMarkerExperiment,
   liveExperiment,
   liveResultWithJunkToolReplay,
+  mockOnlyExperiment,
   noOnMissMarkerExperiment,
   replayExperiment,
   replayResult,
@@ -36,19 +39,59 @@ describe('getReplayMarker / isReplayExperiment', () => {
     expect(getReplayMarker(junkMarkerExperiment)).toBeNull();
   });
 
-  it('ignores an object marker without onMiss (not the stamped shape)', () => {
+  it('ignores an object marker without onMiss or mockedTools (not a stamped shape)', () => {
     expect(getReplayMarker(noOnMissMarkerExperiment)).toBeNull();
   });
 
   it('normalizes unknown onMiss values to error for display', () => {
     expect(getReplayMarker({ metadata: { toolReplay: { onMiss: 'weird' } } })).toEqual({ onMiss: 'error' });
   });
+
+  it('reads a mock-only marker (mockedTools without onMiss)', () => {
+    expect(getReplayMarker(mockOnlyExperiment)).toEqual({ mockedTools: ['weatherInfo'] });
+    expect(isReplayExperiment(mockOnlyExperiment)).toBe(true);
+  });
+
+  it('never invents an onMiss for mock-only markers', () => {
+    expect(getReplayMarker(mockOnlyExperiment)?.onMiss).toBeUndefined();
+  });
+
+  it('reads matching and keeps unknown matching values out', () => {
+    expect(
+      getReplayMarker({
+        metadata: { toolReplay: { fromExperimentId: 'exp-live-1', onMiss: 'error', matching: 'strict' } },
+      }),
+    ).toEqual({ fromExperimentId: 'exp-live-1', onMiss: 'error', matching: 'strict' });
+    expect(getReplayMarker({ metadata: { toolReplay: { onMiss: 'error', matching: 'weird' } } })).toEqual({
+      onMiss: 'error',
+    });
+  });
+
+  it('reads a combined replay+mocks marker and drops non-string tool names', () => {
+    expect(
+      getReplayMarker({
+        metadata: { toolReplay: { onMiss: 'error', mockedTools: ['weatherInfo', 42, 'sendEmail'] } },
+      }),
+    ).toEqual({ onMiss: 'error', mockedTools: ['weatherInfo', 'sendEmail'] });
+  });
 });
 
 describe('getToolReplayReport', () => {
-  it('extracts a shape-valid report from output.toolReplay', () => {
+  it('reads the dedicated top-level toolReplay column first', () => {
     expect(getToolReplayReport(replayResult)).toEqual(divergentReport);
+    expect(getToolReplayReport(expectationFailedResult)).toEqual(expectationFailedReport);
+    // Top-level wins when both locations carry a valid report.
+    expect(getToolReplayReport({ toolReplay: cleanReport, output: { toolReplay: divergentReport } })).toEqual(
+      cleanReport,
+    );
+  });
+
+  it('falls back to output.toolReplay for older rows', () => {
     expect(getToolReplayReport(failedReplayResult)).toEqual(divergentReport);
+    // A shape-invalid top-level value never shadows a valid output report.
+    expect(
+      getToolReplayReport({ toolReplay: { totalRecorded: 'three' }, output: { toolReplay: cleanReport } }),
+    ).toEqual(cleanReport);
   });
 
   it('rejects user-owned toolReplay values that are not reports', () => {
@@ -65,7 +108,9 @@ describe('getToolReplayReport', () => {
 
 describe('stripToolReplayFromOutput', () => {
   it('removes the toolReplay key and keeps the rest', () => {
-    expect(stripToolReplayFromOutput(replayResult.output)).toEqual({ text: 'Please send a photo first.' });
+    expect(stripToolReplayFromOutput({ text: 'Please send a photo first.', toolReplay: divergentReport })).toEqual({
+      text: 'Please send a photo first.',
+    });
   });
 
   it('returns null for a report-only output (failed item)', () => {
@@ -80,10 +125,13 @@ describe('stripToolReplayFromOutput', () => {
 });
 
 describe('getToolReplayErrorLabel', () => {
-  it('labels the three replay error codes', () => {
+  it('labels the replay and mock error codes', () => {
     expect(getToolReplayErrorLabel('TOOL_REPLAY_MISS')).toMatch(/no remaining recorded event/);
     expect(getToolReplayErrorLabel('TOOL_REPLAY_NO_RECORDING')).toMatch(/No recording/);
     expect(getToolReplayErrorLabel('TOOL_REPLAY_LOAD_FAILED')).toMatch(/could not be loaded/);
+    expect(getToolReplayErrorLabel('TOOL_MOCK_EXPECTATION_FAILED')).toMatch(
+      /mock expectation was not satisfied — the agent did not call the tool as asserted/,
+    );
   });
 
   it('returns null for other codes', () => {
@@ -159,5 +207,20 @@ describe('classifyReplayDivergence', () => {
     expect(classifyReplayDivergence({ ...divergentReport, misses: [] })).toBe('arg-mismatches');
     expect(classifyReplayDivergence({ ...divergentReport, misses: [], argMismatches: [] })).toBe('unconsumed-only');
     expect(classifyReplayDivergence(cleanReport)).toBe('clean');
+  });
+
+  it('ranks a failed expectation above every other divergence signal', () => {
+    expect(classifyReplayDivergence(expectationFailedReport)).toBe('failed-expectations');
+    // Even with misses present, the broken assertion wins.
+    expect(classifyReplayDivergence({ ...divergentReport, expectations: expectationFailedReport.expectations })).toBe(
+      'failed-expectations',
+    );
+    // All-satisfied expectations never count as divergence.
+    expect(
+      classifyReplayDivergence({
+        ...cleanReport,
+        expectations: [{ toolName: 'weatherInfo', satisfied: true, calledTimes: 2 }],
+      }),
+    ).toBe('clean');
   });
 });

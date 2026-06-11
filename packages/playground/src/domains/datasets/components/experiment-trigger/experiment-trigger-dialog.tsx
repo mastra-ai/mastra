@@ -20,7 +20,8 @@ import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { ScorerSelector } from './scorer-selector';
 import type { TargetType } from './target-selector';
 import { TargetSelector } from './target-selector';
-import { ITEM_RECORDINGS_SOURCE, ToolReplaySelector } from './tool-replay-selector';
+import { buildToolReplayPayload, ToolReplaySelector } from './tool-replay-selector';
+import type { ToolReplayMatching } from '@/domains/experiments/utils/tool-replay';
 import { DynamicForm } from '@/lib/form';
 import { resolveSerializedZodOutput } from '@/lib/form/utils';
 
@@ -82,6 +83,7 @@ export function ExperimentTriggerDialog({
   const [replayEnabled, setReplayEnabled] = useState(false);
   const [replayFromExperimentId, setReplayFromExperimentId] = useState('');
   const [replayOnMiss, setReplayOnMiss] = useState<ToolReplayOnMiss>('error');
+  const [replayMatching, setReplayMatching] = useState<ToolReplayMatching>('fifo');
 
   const { triggerExperiment } = useDatasetMutations();
 
@@ -101,6 +103,7 @@ export function ExperimentTriggerDialog({
     setReplayEnabled(false);
     setReplayFromExperimentId('');
     setReplayOnMiss('error');
+    setReplayMatching('fifo');
   };
 
   const resolveRequestContext = (): Record<string, unknown> | undefined => {
@@ -145,14 +148,11 @@ export function ExperimentTriggerDialog({
         requestContext,
         ...(replayActive && replayFromExperimentId
           ? {
-              toolReplay: {
-                // The item-recordings source omits fromExperimentId: each item
-                // resolves its own metadata.replayTraceId in the runner.
-                ...(replayFromExperimentId !== ITEM_RECORDINGS_SOURCE
-                  ? { fromExperimentId: replayFromExperimentId }
-                  : {}),
+              toolReplay: buildToolReplayPayload({
+                fromExperimentId: replayFromExperimentId,
                 onMiss: replayOnMiss,
-              },
+                matching: replayMatching,
+              }),
             }
           : {}),
       });
@@ -216,6 +216,8 @@ export function ExperimentTriggerDialog({
               onFromExperimentIdChange={setReplayFromExperimentId}
               onMiss={replayOnMiss}
               onMissChange={setReplayOnMiss}
+              matching={replayMatching}
+              onMatchingChange={setReplayMatching}
               selectedTargetId={targetId || undefined}
               disabled={isRunning}
               container={contentRef}

@@ -23,7 +23,7 @@ import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { formatVersionLabel } from './format-version-label';
 import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
 import {
-  ITEM_RECORDINGS_SOURCE,
+  buildToolReplayPayload,
   ToolReplaySelector,
 } from '@/domains/datasets/components/experiment-trigger/tool-replay-selector';
 import { useDatasetExperiments } from '@/domains/datasets/hooks/use-dataset-experiments';
@@ -31,6 +31,7 @@ import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasetVersions } from '@/domains/datasets/hooks/use-dataset-versions';
 import { ToolReplayChip } from '@/domains/experiments/components/tool-replay-chip';
+import type { ToolReplayMatching } from '@/domains/experiments/utils/tool-replay';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
@@ -106,6 +107,7 @@ export function DatasetDetailView({
   const [replayEnabled, setReplayEnabled] = useState(false);
   const [replayFromExperimentId, setReplayFromExperimentId] = useState('');
   const [replayOnMiss, setReplayOnMiss] = useState<ToolReplayOnMiss>('error');
+  const [replayMatching, setReplayMatching] = useState<ToolReplayMatching>('fifo');
 
   // Scorers for dataset attachment
   const { data: allScorers } = useScorers();
@@ -164,6 +166,7 @@ export function DatasetDetailView({
     setReplayEnabled(false);
     setReplayFromExperimentId('');
     setReplayOnMiss('error');
+    setReplayMatching('fifo');
   }, [datasetId]);
 
   useEffect(() => {
@@ -207,12 +210,11 @@ export function DatasetDetailView({
         ...(selectedAgentVersion ? { agentVersion: selectedAgentVersion } : {}),
         ...(expTargetType === 'agent' && replayEnabled && replayFromExperimentId
           ? {
-              toolReplay: {
-                ...(replayFromExperimentId !== ITEM_RECORDINGS_SOURCE
-                  ? { fromExperimentId: replayFromExperimentId }
-                  : {}),
+              toolReplay: buildToolReplayPayload({
+                fromExperimentId: replayFromExperimentId,
                 onMiss: replayOnMiss,
-              },
+                matching: replayMatching,
+              }),
             }
           : {}),
       });
@@ -243,6 +245,7 @@ export function DatasetDetailView({
     replayEnabled,
     replayFromExperimentId,
     replayOnMiss,
+    replayMatching,
   ]);
 
   return (
@@ -358,6 +361,8 @@ export function DatasetDetailView({
             onFromExperimentIdChange={setReplayFromExperimentId}
             onMiss={replayOnMiss}
             onMissChange={setReplayOnMiss}
+            matching={replayMatching}
+            onMatchingChange={setReplayMatching}
             selectedTargetId={agentId}
             disabled={isRunning}
           />

@@ -3,6 +3,7 @@ import { Button, Chip, Spinner, Txt } from '@mastra/playground-ui';
 import { GitCompareArrows, HistoryIcon } from 'lucide-react';
 import type { ReplayAggregates } from '../hooks/use-replay-aggregates';
 import type { ToolReplayMarker } from '../utils/tool-replay';
+import { formatMockedToolNames } from '../utils/tool-replay';
 import { useLinkComponent } from '@/lib/framework';
 
 export type ExperimentReplaySummaryProps = {
@@ -62,9 +63,21 @@ export function ExperimentReplaySummary({
               source: {marker.fromExperimentId.slice(0, 8)}
             </Txt>
           ))}
-        <Txt variant="ui-sm" className="text-neutral3">
-          · on miss: {marker.onMiss}
-        </Txt>
+        {marker.onMiss && (
+          <Txt variant="ui-sm" className="text-neutral3">
+            · on miss: {marker.onMiss}
+          </Txt>
+        )}
+        {marker.matching && (
+          <Txt variant="ui-sm" className="text-neutral3">
+            · matching: {marker.matching}
+          </Txt>
+        )}
+        {marker.mockedTools && marker.mockedTools.length > 0 && (
+          <Txt variant="ui-sm" className="text-neutral3">
+            · mocked: {formatMockedToolNames(marker.mockedTools)}
+          </Txt>
+        )}
         {compareHref && (
           <Button as={LinkComponent} href={compareHref} size="sm" className="ml-auto">
             <GitCompareArrows />
@@ -92,6 +105,9 @@ export function ExperimentReplaySummary({
               aggregates.fullyGrounded === gradedTotal ? 'green' : aggregates.fullyGrounded > 0 ? 'yellow' : 'red';
             return <Chip color={color}>{`${aggregates.fullyGrounded}/${gradedTotal} fully grounded`}</Chip>;
           })()}
+          {aggregates.withFailedExpectations > 0 && (
+            <Chip color="red">{`${aggregates.withFailedExpectations} failed expectations`}</Chip>
+          )}
           {aggregates.withMisses > 0 && <Chip color="orange">{`${aggregates.withMisses} with misses`}</Chip>}
           {aggregates.withUnconsumed > 0 && <Chip color="blue">{`${aggregates.withUnconsumed} with unconsumed`}</Chip>}
           {aggregates.withArgMismatches > 0 && (

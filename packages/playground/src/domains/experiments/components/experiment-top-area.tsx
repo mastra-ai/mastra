@@ -101,10 +101,15 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
                 <DataKeysAndValues.Key>Tool replay</DataKeysAndValues.Key>
                 {replaySourceHref && replayMarker.fromExperimentId ? (
                   <DataKeysAndValues.ValueLink href={replaySourceHref} as={LinkComponent}>
-                    {`from ${replayMarker.fromExperimentId.slice(0, 8)} · on miss: ${replayMarker.onMiss}`}
+                    {`from ${replayMarker.fromExperimentId.slice(0, 8)}${
+                      replayMarker.onMiss ? ` · on miss: ${replayMarker.onMiss}` : ''
+                    }`}
                   </DataKeysAndValues.ValueLink>
                 ) : (
-                  <DataKeysAndValues.Value>{`enabled · on miss: ${replayMarker.onMiss}`}</DataKeysAndValues.Value>
+                  <DataKeysAndValues.Value>
+                    {/* onMiss is absent only on mock-only markers (mocks always answer). */}
+                    {replayMarker.onMiss ? `enabled · on miss: ${replayMarker.onMiss}` : 'mocked tools only'}
+                  </DataKeysAndValues.Value>
                 )}
               </>
             )}

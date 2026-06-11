@@ -1,50 +1,99 @@
 import type { DatasetExperiment, DatasetExperimentResult, ToolReplayOnMiss, ToolReplayReport } from '@mastra/client-js';
 
+/** How recorded answers are matched to calls: FIFO per tool, or exact-args only. */
+export type ToolReplayMatching = 'fifo' | 'strict';
+
+/** Kind of mock answer configured for a tool (mirrors the core mock config). */
+export type ToolReplayMockKind = 'output' | 'error' | 'function' | 'observe';
+
+/**
+ * Local extension of the client report type: `mocks` and `expectations`
+ * landed in core but @mastra/client-js has not picked them up yet (client
+ * types catch up in the stacked PR). Both optional, so plain reports remain
+ * assignable.
+ */
+export interface ToolReplayReportExtended extends ToolReplayReport {
+  /** Tools answered by configured mocks instead of recordings or live calls. */
+  mocks?: { toolName: string; calls: number; kind: ToolReplayMockKind }[];
+  /** Per-tool call assertions evaluated after the run. */
+  expectations?: { toolName: string; satisfied: boolean; calledTimes: number; reason?: string }[];
+}
+
 export interface ToolReplayMarker {
   fromExperimentId?: string;
-  onMiss: ToolReplayOnMiss;
+  /** Absent on mock-only runs — mocks always answer, so there is no miss policy. */
+  onMiss?: ToolReplayOnMiss;
+  matching?: ToolReplayMatching;
+  /** Tools answered by mocks (stamped for mock and replay+mock runs). */
+  mockedTools?: string[];
 }
 
 /**
- * Reads the replay marker an experiment run with `toolReplay` is stamped with
- * (`metadata.toolReplay = { fromExperimentId, onMiss }`). Metadata is
- * user-writable, so this matches the exact shape the backend stamps — an
- * object carrying `onMiss` — mirroring the core source-experiment guard;
- * arbitrary user `toolReplay` keys never read as replay runs.
+ * Reads the marker an experiment run with `toolReplay` is stamped with:
+ * `{ fromExperimentId?, onMiss, matching? }` for replay runs and/or
+ * `{ mockedTools }` for mocked tools (mock-only runs omit `onMiss`).
+ * Metadata is user-writable, so this matches the exact shapes the backend
+ * stamps — an object carrying `onMiss` or a `mockedTools` array — mirroring
+ * the core source-experiment guard; arbitrary user `toolReplay` keys never
+ * read as replay runs.
  */
 export function getReplayMarker(experiment: Pick<DatasetExperiment, 'metadata'>): ToolReplayMarker | null {
   const marker = experiment.metadata?.toolReplay;
-  if (typeof marker !== 'object' || marker === null || !('onMiss' in marker)) return null;
-  const { fromExperimentId, onMiss } = marker as Record<string, unknown>;
+  if (typeof marker !== 'object' || marker === null) return null;
+  const { fromExperimentId, onMiss, matching, mockedTools } = marker as Record<string, unknown>;
+  const hasOnMiss = 'onMiss' in marker;
+  const mockedToolNames = Array.isArray(mockedTools)
+    ? mockedTools.filter((tool): tool is string => typeof tool === 'string')
+    : null;
+  if (!hasOnMiss && !mockedToolNames) return null;
   return {
     ...(typeof fromExperimentId === 'string' ? { fromExperimentId } : {}),
-    onMiss: onMiss === 'passthrough' ? 'passthrough' : 'error',
+    // Unknown onMiss values normalize to the safe default for display — but
+    // only when the key exists (mock-only markers legitimately omit it).
+    ...(hasOnMiss ? { onMiss: onMiss === 'passthrough' ? ('passthrough' as const) : ('error' as const) } : {}),
+    ...(matching === 'fifo' || matching === 'strict' ? { matching } : {}),
+    ...(mockedToolNames ? { mockedTools: mockedToolNames } : {}),
   };
+}
+
+/** "a, b, c +2" — joined mocked-tool names capped for compact UI surfaces. */
+export function formatMockedToolNames(names: string[], max = 3): string {
+  const shown = names.slice(0, max).join(', ');
+  return names.length > max ? `${shown} +${names.length - max}` : shown;
 }
 
 export function isReplayExperiment(experiment: Pick<DatasetExperiment, 'metadata'>): boolean {
   return getReplayMarker(experiment) !== null;
 }
 
-/**
- * Extracts the divergence report a replay run merges into the stored result
- * output (`output.toolReplay`). Shape-checked so a user-owned `toolReplay`
- * key in an arbitrary agent output is never mistaken for a report.
- */
-export function getToolReplayReport(result: Pick<DatasetExperimentResult, 'output'>): ToolReplayReport | null {
-  const output = result.output;
-  if (typeof output !== 'object' || output === null || Array.isArray(output)) return null;
-  const report = (output as Record<string, unknown>).toolReplay;
-  if (typeof report !== 'object' || report === null || Array.isArray(report)) return null;
-  const candidate = report as Partial<ToolReplayReport>;
+/** Shape check shared by both report locations — a user-owned `toolReplay` value is never mistaken for a report. */
+function parseReportShape(candidate: unknown): ToolReplayReportExtended | null {
+  if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) return null;
+  const report = candidate as Partial<ToolReplayReport>;
   if (
-    typeof candidate.totalRecorded !== 'number' ||
-    typeof candidate.replayedCount !== 'number' ||
-    !Array.isArray(candidate.misses)
+    typeof report.totalRecorded !== 'number' ||
+    typeof report.replayedCount !== 'number' ||
+    !Array.isArray(report.misses)
   ) {
     return null;
   }
-  return report as ToolReplayReport;
+  return candidate as ToolReplayReportExtended;
+}
+
+/**
+ * Extracts the divergence report of a replay/mock run. New rows carry it in
+ * the dedicated top-level `toolReplay` column (not yet on the client result
+ * type — client types catch up in the stacked PR); older rows merged it into
+ * the output. Top-level wins when both are present.
+ */
+export function getToolReplayReport(
+  result: Pick<DatasetExperimentResult, 'output'> & { toolReplay?: unknown },
+): ToolReplayReportExtended | null {
+  const topLevel = parseReportShape(result.toolReplay);
+  if (topLevel) return topLevel;
+  const output = result.output;
+  if (typeof output !== 'object' || output === null || Array.isArray(output)) return null;
+  return parseReportShape((output as Record<string, unknown>).toolReplay);
 }
 
 /**
@@ -63,6 +112,8 @@ const TOOL_REPLAY_ERROR_LABELS: Record<string, string> = {
   TOOL_REPLAY_MISS: 'A tool call had no remaining recorded event — the item stopped instead of running live.',
   TOOL_REPLAY_NO_RECORDING: 'No recording was found for this item — it never ran (live execution is never silent).',
   TOOL_REPLAY_LOAD_FAILED: 'The recording could not be loaded from storage for this item.',
+  TOOL_MOCK_EXPECTATION_FAILED:
+    'A tool mock expectation was not satisfied — the agent did not call the tool as asserted.',
 };
 
 export function getToolReplayErrorLabel(code: string | undefined): string | null {
@@ -70,10 +121,13 @@ export function getToolReplayErrorLabel(code: string | undefined): string | null
   return TOOL_REPLAY_ERROR_LABELS[code] ?? null;
 }
 
-export type ReplayDivergence = 'clean' | 'misses' | 'arg-mismatches' | 'unconsumed-only';
+export type ReplayDivergence = 'clean' | 'failed-expectations' | 'misses' | 'arg-mismatches' | 'unconsumed-only';
 
 /** Worst-signal-first classification used by row chips and summaries. */
-export function classifyReplayDivergence(report: ToolReplayReport): ReplayDivergence {
+export function classifyReplayDivergence(report: ToolReplayReportExtended): ReplayDivergence {
+  // A failed expectation is an explicit assertion broken — it outranks every
+  // passive divergence signal.
+  if (report.expectations?.some(expectation => !expectation.satisfied)) return 'failed-expectations';
   if (report.misses.length > 0) return 'misses';
   if (report.argMismatches.length > 0) return 'arg-mismatches';
   if (report.unconsumed.length > 0) return 'unconsumed-only';

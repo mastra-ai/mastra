@@ -3,6 +3,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   emptyRecordingReport,
+  expectationFailedResult,
   failedReplayResult,
   liveResultWithJunkToolReplay,
   replayResult,
@@ -56,12 +57,40 @@ describe('ExperimentResultPanel tool replay', () => {
   it('explains an empty recording instead of a vacuous green chip', () => {
     const emptyRecordingResult = {
       ...replayResult,
-      output: { text: 'answered without tools', toolReplay: emptyRecordingReport },
+      toolReplay: emptyRecordingReport,
+      output: { text: 'answered without tools' },
     };
     render(<ExperimentResultPanel result={emptyRecordingResult} onClose={vi.fn()} isReplayExperiment />);
 
     expect(screen.getByText('no recorded tool calls')).toBeDefined();
     expect(screen.getByText(/The source run never called any tools/)).toBeDefined();
+    expect(screen.queryByText('replayed 0/0')).toBeNull();
+  });
+
+  it('renders the mocked-tools group and the expectations list with reasons', () => {
+    render(<ExperimentResultPanel result={expectationFailedResult} onClose={vi.fn()} isReplayExperiment />);
+
+    expect(screen.getByText('Mocked tools')).toBeDefined();
+    expect(screen.getByText('weatherInfo · 2 calls')).toBeDefined();
+    expect(screen.getByText('sendEmail · 0 calls')).toBeDefined();
+
+    expect(screen.getByText('Expectations')).toBeDefined();
+    expect(screen.getByText('✓ weatherInfo')).toBeDefined();
+    expect(screen.getByText('✗ sendEmail')).toBeDefined();
+    expect(screen.getByText('expected at least 1 call, got 0')).toBeDefined();
+
+    // Failed mock expectations surface the dedicated error code with a friendly label.
+    expect(screen.getByText(/Error · TOOL_MOCK_EXPECTATION_FAILED/)).toBeDefined();
+    expect(screen.getByText(/mock expectation was not satisfied/)).toBeDefined();
+  });
+
+  it('swaps the empty-recording explainer for the mock-only message when tools were mocked', () => {
+    render(<ExperimentResultPanel result={expectationFailedResult} onClose={vi.fn()} isReplayExperiment />);
+
+    expect(screen.getByText('Tools were mocked — no recording involved. Mock answers are listed above.')).toBeDefined();
+    expect(screen.queryByText(/The source run never called any tools/)).toBeNull();
+    // Empty tape still reads as such — never as a vacuous "replayed 0/0".
+    expect(screen.getByText('no recorded tool calls')).toBeDefined();
     expect(screen.queryByText('replayed 0/0')).toBeNull();
   });
 
