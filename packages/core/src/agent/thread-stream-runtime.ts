@@ -31,12 +31,16 @@ const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 const AGENT_THREAD_STREAM_TOPIC_PREFIX = 'agent.thread-stream';
 /**
  * TTL for the cross-process thread lease acquired in the idle-wake path.
- * Leases are released explicitly on run-completed / run-aborted / stream
- * error, so the TTL is only a safety net for crashes — it just needs to be
- * long enough to outlive a typical agent run while still freeing up the
- * thread reasonably quickly if the owning process dies without releasing.
+ * Kept short so a crashed owner process frees the thread quickly. A
+ * background heartbeat renews the lease while the run is still running.
  */
-const AGENT_THREAD_LEASE_TTL_MS = 60_000;
+const AGENT_THREAD_LEASE_TTL_MS = 15_000;
+/**
+ * Interval at which the owner process renews its lease. TTL/3 leaves
+ * room for two missed renewals (network blip, GC pause) before the
+ * lease expires.
+ */
+const AGENT_THREAD_LEASE_RENEW_INTERVAL_MS = 5_000;
 
 export let defaultAgentThreadPubSub: PubSub = new EventEmitterPubSub();
 
@@ -96,6 +100,13 @@ type AgentThreadRuntimeState = {
   watchedThreadRunIds: Set<string>;
   preparedRunsById: Map<string, PreparedThreadRun>;
   abortedRunIds: Set<string>;
+  /**
+   * Active lease-renewal timers keyed by runId. Set when the owner
+   * process wins the cross-process lease, cleared on release. Stored
+   * here (not on a Map<key,timer>) so a run's heartbeat survives even
+   * if `activeThreadRunIds` is rotated by a follow-up signal.
+   */
+  leaseRenewalTimers: Map<string, ReturnType<typeof setInterval>>;
 };
 
 export type AgentThreadState = 'active' | 'idle';
@@ -124,6 +135,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     watchedThreadRunIds: new Set(),
     preparedRunsById: new Map(),
     abortedRunIds: new Set(),
+    leaseRenewalTimers: new Map(),
   };
 }
 
@@ -145,11 +157,47 @@ export class AgentThreadStreamRuntime {
    * this owner. Safe to call when no lease was ever acquired — the
    * pubsub's `releaseLease` is a no-op for non-owners (Lua-guarded
    * GET+DEL on Redis), and the default in-memory implementation is
-   * identical.
+   * identical. Also stops the renewal heartbeat if one is running for
+   * this run.
    */
   #releaseThreadLease(pubsub: PubSub | undefined, key: string, runId: string): void {
     const resolved = this.#getPubSub(pubsub);
+    this.#stopLeaseRenewal(resolved, runId);
     void resolved.releaseLease(key, runId).catch(() => {});
+  }
+
+  /**
+   * Start a background heartbeat that renews the cross-process lease at
+   * TTL/3 intervals while the run is still going. If the lease is lost
+   * (e.g. expired due to clock skew or pubsub outage) the heartbeat
+   * stops itself — there's nothing useful we can do from the runner
+   * side beyond log; the original owner will keep running until the run
+   * itself errors or completes.
+   */
+  #startLeaseRenewal(pubsub: PubSub, key: string, runId: string): void {
+    const state = this.#getState(pubsub);
+    if (state.leaseRenewalTimers.has(runId)) return;
+    const timer = setInterval(() => {
+      void pubsub
+        .renewLease(key, runId, AGENT_THREAD_LEASE_TTL_MS)
+        .then(renewed => {
+          if (!renewed) this.#stopLeaseRenewal(pubsub, runId);
+        })
+        .catch(() => {});
+    }, AGENT_THREAD_LEASE_RENEW_INTERVAL_MS);
+    // Don't keep the process alive solely to renew a lease.
+    if (typeof timer === 'object' && timer && typeof (timer as any).unref === 'function') {
+      (timer as any).unref();
+    }
+    state.leaseRenewalTimers.set(runId, timer);
+  }
+
+  #stopLeaseRenewal(pubsub: PubSub, runId: string): void {
+    const state = this.#getState(pubsub);
+    const timer = state.leaseRenewalTimers.get(runId);
+    if (!timer) return;
+    clearInterval(timer);
+    state.leaseRenewalTimers.delete(runId);
   }
 
   #getState(pubsub?: PubSub): AgentThreadRuntimeState {
@@ -1451,7 +1499,9 @@ export class AgentThreadStreamRuntime {
         return undefined;
       }
 
-      // We own the lease. Start the stream.
+      // We own the lease. Start the heartbeat so it survives runs that
+      // outlive the TTL, then kick off the stream.
+      this.#startLeaseRenewal(resolvedPubSub, reservedKey, reservedRunId);
       try {
         const stream = await agent.stream(signal, {
           ...(target.ifIdle?.streamOptions as any),
