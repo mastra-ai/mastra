@@ -744,7 +744,13 @@ export class Agent extends BaseResource {
               });
               result = execution.result;
               observability = execution.observability;
-              modelOutput = await getClientToolModelOutput(clientTool, result);
+              try {
+                modelOutput = await getClientToolModelOutput(clientTool, result);
+              } catch {
+                // A failing toModelOutput shouldn't discard a successful tool
+                // execution; continue with the raw result only.
+                modelOutput = undefined;
+              }
             } catch (error) {
               result = { error: String(error) };
               modelOutput = undefined;
@@ -2258,10 +2264,17 @@ export class Agent extends BaseResource {
                   if (modelOutput != null) {
                     // Carry the client-side toModelOutput result so the server
                     // uses it when building the model prompt; part-level
-                    // providerMetadata survives UI message ingestion.
-                    (toolInvocationPart as { providerMetadata?: Record<string, unknown> }).providerMetadata = {
-                      ...(toolInvocationPart as { providerMetadata?: Record<string, unknown> }).providerMetadata,
-                      mastra: { modelOutput },
+                    // providerMetadata survives UI message ingestion. Merge
+                    // into any existing mastra metadata instead of replacing it.
+                    const partWithMetadata = toolInvocationPart as { providerMetadata?: Record<string, unknown> };
+                    const existingMastra =
+                      partWithMetadata.providerMetadata?.mastra != null &&
+                      typeof partWithMetadata.providerMetadata.mastra === 'object'
+                        ? (partWithMetadata.providerMetadata.mastra as Record<string, unknown>)
+                        : {};
+                    partWithMetadata.providerMetadata = {
+                      ...partWithMetadata.providerMetadata,
+                      mastra: { ...existingMastra, modelOutput },
                     };
                   }
                 }
