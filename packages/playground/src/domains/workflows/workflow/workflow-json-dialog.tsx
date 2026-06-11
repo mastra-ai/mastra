@@ -27,7 +27,7 @@ export const WorkflowJsonDialog = ({
   title,
   triggerIcon = <Braces className="shrink-0 text-neutral3" />,
   variant = 'default',
-  size = 'default',
+  size = 'md',
   className,
 }: WorkflowJsonDialogProps) => {
   const [open, setOpen] = useState(false);
