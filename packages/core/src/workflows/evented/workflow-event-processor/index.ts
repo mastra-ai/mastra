@@ -410,8 +410,13 @@ export class WorkflowEventProcessor extends EventProcessor {
       // A row may still exist from an earlier persisted phase — 'pending' at
       // nested-run start or 'suspended' before a resume — and without the
       // terminal update it would leak as a stale, resumable-looking record.
-      // Terminal runs can't be resumed, so drop the row entirely.
-      await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
+      // Terminal runs can't be resumed, so drop the row entirely. Best-effort:
+      // a storage failure here must not abort run completion.
+      try {
+        await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
+      } catch (e) {
+        this.mastra.getLogger()?.warn('Failed to clean up nested workflow snapshot', { workflowId, runId, error: e });
+      }
     }
 
     if (perStep) {
@@ -675,7 +680,12 @@ export class WorkflowEventProcessor extends EventProcessor {
       // Mirrors endWorkflow: a nested run whose workflow opted out of
       // persisting the terminal 'failed' status would otherwise leak its
       // earlier-phase ('pending'/'suspended') snapshot row forever.
-      await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
+      // Best-effort: a storage failure here must not abort run completion.
+      try {
+        await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
+      } catch (e) {
+        this.mastra.getLogger()?.warn('Failed to clean up nested workflow snapshot', { workflowId, runId, error: e });
+      }
     }
 
     // handle nested workflow
