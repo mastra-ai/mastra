@@ -9,7 +9,7 @@ import type { FGACheckContext, IFGAProvider } from './interfaces/fga';
 import type { MastraFGAPermissionInput } from './interfaces/permissions.generated';
 import { getSafeLicenseSummary } from './license';
 
-export type SystemActorSignal =
+export type ActorSignal =
   | true
   | {
       actorKind: 'system';
@@ -23,7 +23,7 @@ export interface CheckFGAOptions {
   permission: MastraFGAPermissionInput | MastraFGAPermissionInput[];
   context?: FGACheckContext;
   requestContext?: FGACheckContext['requestContext'];
-  systemActor?: SystemActorSignal;
+  actor?: ActorSignal;
 }
 
 export interface RequireFGAOptions extends CheckFGAOptions {
@@ -53,16 +53,16 @@ function mergeFGAContext({
   return Object.keys(mergedContext).length > 0 ? mergedContext : undefined;
 }
 
-function isSystemActorSignal(systemActor: unknown): systemActor is SystemActorSignal {
-  if (systemActor === true) {
+function isActorSignal(actor: unknown): actor is ActorSignal {
+  if (actor === true) {
     return true;
   }
 
-  if (typeof systemActor !== 'object' || systemActor === null) {
+  if (typeof actor !== 'object' || actor === null) {
     return false;
   }
 
-  const candidate = systemActor as { actorKind?: unknown; sourceWorkflow?: unknown };
+  const candidate = actor as { actorKind?: unknown; sourceWorkflow?: unknown };
   return (
     candidate.actorKind === 'system' &&
     (candidate.sourceWorkflow === undefined || typeof candidate.sourceWorkflow === 'string')
@@ -106,7 +106,7 @@ export async function checkFGA(options: CheckFGAOptions): Promise<void> {
  * user fails closed.
  */
 export async function requireFGA(options: RequireFGAOptions): Promise<void> {
-  const { fgaProvider, user, resource, permission, context, requestContext, metadata, systemActor } = options;
+  const { fgaProvider, user, resource, permission, context, requestContext, metadata, actor } = options;
 
   if (!fgaProvider) {
     return;
@@ -115,14 +115,14 @@ export async function requireFGA(options: RequireFGAOptions): Promise<void> {
   const fgaContext = mergeFGAContext({ context, requestContext, metadata });
   const license = getSafeLicenseSummary();
 
-  if (isSystemActorSignal(systemActor)) {
+  if (isActorSignal(actor)) {
     const tenantOrganizationId = fgaContext?.requestContext?.get('organizationId');
     if (typeof tenantOrganizationId !== 'string' || tenantOrganizationId.length === 0) {
-      throw new FGADeniedError(user, resource, permission, 'system actor requires organizationId / tenant scope');
+      throw new FGADeniedError(user, resource, permission, 'trusted actor requires organizationId / tenant scope');
     }
 
     const sourceWorkflow =
-      (systemActor === true ? undefined : systemActor.sourceWorkflow) ??
+      (actor === true ? undefined : actor.sourceWorkflow) ??
       (typeof fgaContext?.metadata?.['sourceWorkflow'] === 'string'
         ? fgaContext.metadata['sourceWorkflow']
         : undefined);

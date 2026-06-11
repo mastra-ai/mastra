@@ -13,7 +13,7 @@ function createCtx() {
     },
     options: { inlineQuestions: true },
     harness: {
-      respondToQuestion: vi.fn(),
+      respondToToolSuspension: vi.fn(),
       getDisplayState: vi.fn(() => ({ isRunning: false })),
     },
     pendingInlineQuestions: [],
@@ -50,7 +50,7 @@ describe('handleAskQuestion goal mode', () => {
 
     expect(answerQuestion).not.toHaveBeenCalled();
     expect(state.activeInlineQuestion).toBeDefined();
-    expect(state.harness.respondToQuestion).not.toHaveBeenCalled();
+    expect(state.harness.respondToToolSuspension).not.toHaveBeenCalled();
     expect(ctx.addChildBeforeFollowUps).not.toHaveBeenCalled();
     expect(state.activeGoalJudge).toBeUndefined();
 
@@ -74,9 +74,9 @@ describe('handleAskQuestion goal mode', () => {
 
     await promise;
 
-    expect(state.harness.respondToQuestion).toHaveBeenCalledWith({
-      questionId: 'q1',
-      answer: ['React', 'Svelte'],
+    expect(state.harness.respondToToolSuspension).toHaveBeenCalledWith({
+      toolCallId: 'q1',
+      resumeData: ['React', 'Svelte'],
     });
   });
 });
@@ -91,7 +91,7 @@ function createPlanApprovalCtx() {
     harness: {
       setState: vi.fn().mockResolvedValue(undefined),
       getResourceId: vi.fn(() => 'resource-1'),
-      respondToPlanApproval: vi.fn().mockResolvedValue(undefined),
+      respondToToolSuspension: vi.fn().mockResolvedValue(undefined),
       sendSignal,
     },
     goalManager: {
@@ -133,9 +133,9 @@ describe('handlePlanApproval goal mode', () => {
     await (component as any).onGoal();
     await promise;
 
-    expect(state.harness.respondToPlanApproval).toHaveBeenCalledWith({
-      planId: 'plan-1',
-      response: { action: 'approved' },
+    expect(state.harness.respondToToolSuspension).toHaveBeenCalledWith({
+      toolCallId: 'plan-1',
+      resumeData: { action: 'approved' },
     });
     expect(state.ui.setFocus).toHaveBeenLastCalledWith(state.editor);
     // `startGoal` is invoked with the title+plan as the objective and the
@@ -191,9 +191,9 @@ describe('handlePlanApproval regular approval', () => {
     await (component as any).onApprove();
     await promise;
 
-    expect(state.harness.respondToPlanApproval).toHaveBeenCalledWith({
-      planId: 'plan-1',
-      response: { action: 'approved' },
+    expect(state.harness.respondToToolSuspension).toHaveBeenCalledWith({
+      toolCallId: 'plan-1',
+      resumeData: { action: 'approved' },
     });
     expect(state.ui.setFocus).toHaveBeenLastCalledWith(state.editor);
     // The trigger goes through the structured signal pathway. We do not

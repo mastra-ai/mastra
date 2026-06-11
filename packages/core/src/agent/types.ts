@@ -4,6 +4,7 @@ import type { ProviderDefinedTool } from '@internal/external-types';
 import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypev4 } from 'zod/v4';
+import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser';
 import type { AgentChannels } from '../channels/agent-channels';
@@ -733,6 +734,8 @@ export type AgentGenerateOptions<
   toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string };
   /** RequestContext for dependency injection */
   requestContext?: RequestContext;
+  /** Trusted server-side signal for this agent FGA check. */
+  actor?: ActorSignal;
   /**
    * Per-invocation version overrides for sub-agents (and future primitives).
    * Merged on top of Mastra instance-level versions and propagated via requestContext.
@@ -834,6 +837,8 @@ export type AgentStreamOptions<
   experimental_output?: EXPERIMENTAL_OUTPUT;
   /** RequestContext for dependency injection */
   requestContext?: RequestContext;
+  /** Trusted server-side signal for this agent FGA check. */
+  actor?: ActorSignal;
   /**
    * Per-invocation version overrides for sub-agents (and future primitives).
    * Merged on top of Mastra instance-level versions and propagated via requestContext.

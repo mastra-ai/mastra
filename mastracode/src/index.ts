@@ -27,6 +27,7 @@ import {
 } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
+import { TaskSignalProvider } from '@mastra/core/signals';
 import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
 
@@ -105,11 +106,11 @@ function legacyModeToV1(mode: HarnessMode<MastraCodeState>, fallbackAgent: Agent
   const agent = typeof mode.agent === 'function' ? mode.agent({} as MastraCodeState) : mode.agent;
   return {
     id: mode.id,
-    agentId: (agent ?? fallbackAgent).id,
     defaultModelId: mode.defaultModelId ?? 'openai/gpt-5.5',
     description: mode.name,
     ...(mode.id === 'plan' ? { transitionsTo: 'build' } : {}),
     metadata: {
+      agentId: (agent ?? fallbackAgent).id,
       color: mode.color,
       default: mode.default,
       name: mode.name,
@@ -429,8 +430,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
             resourceId,
             modeId: harness.getCurrentModeId(),
             workspace: harness.getWorkspace(),
-            registerQuestion: params => harness.registerQuestion(params),
-            registerPlanApproval: params => harness.registerPlanApproval(params),
             getSubagentModelId: params => harness.getSubagentModelId(params),
           };
           requestContext.set('harness', harnessContext);
@@ -463,7 +462,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         sampling: { type: 'ratio', rate: 0.3 },
       },
     },
-    signals: githubSignals ? [githubSignals] : [],
+    // TaskSignalProvider bundles the task tools + TaskStateProcessor: it merges
+    // the tools into the toolset and registers the task state-signal processor,
+    // so the task list persists across turns and survives OM truncation.
+    signals: [new TaskSignalProvider(), ...(githubSignals ? [githubSignals] : [])],
     inputProcessors: [
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
@@ -485,30 +487,30 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const defaultModesV1: HarnessModeV1[] = [
     {
       id: 'build',
-      agentId: CODE_AGENT_ID,
       description: 'Build',
       defaultModelId: 'anthropic/claude-opus-4-7',
       metadata: {
+        agentId: CODE_AGENT_ID,
         color: mastra.green,
         default: true,
       },
     },
     {
       id: 'plan',
-      agentId: CODE_AGENT_ID,
       description: 'Plan',
       transitionsTo: 'build',
       defaultModelId: 'openai/gpt-5.5',
       metadata: {
+        agentId: CODE_AGENT_ID,
         color: mastra.purple,
       },
     },
     {
       id: 'fast',
-      agentId: CODE_AGENT_ID,
       description: 'Fast',
       defaultModelId: 'cerebras/zai-glm-4.7',
       metadata: {
+        agentId: CODE_AGENT_ID,
         color: mastra.orange,
       },
     },

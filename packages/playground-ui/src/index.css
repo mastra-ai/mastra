@@ -1,8 +1,6 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-@import '@assistant-ui/react-ui/styles/index.css';
-
 /* Tokens (:root/html.light + @theme) live in ../theme.css so they also ship raw
    as @mastra/playground-ui/theme.css. Edit tokens there, not here. */
 @import '../theme.css';
@@ -49,6 +47,18 @@
 
 @utility bg-sidebar-nav-active {
   background-color: var(--sidebar-nav-active);
+}
+
+@layer utilities {
+  .shiki-token {
+    color: var(--shiki-light, var(--neutral6));
+    background-color: var(--shiki-light-bg, transparent);
+  }
+
+  .dark .shiki-token {
+    color: var(--shiki-dark, var(--neutral6));
+    background-color: var(--shiki-dark-bg, transparent);
+  }
 }
 
 @layer base {

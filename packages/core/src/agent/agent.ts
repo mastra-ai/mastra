@@ -7,6 +7,7 @@ import type { JSONSchema7 } from 'json-schema';
 import { z } from 'zod/v4';
 import type { MastraPrimitives, MastraUnion } from '../action';
 import { MastraFGAPermissions } from '../auth/ee';
+import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig, ToolBackgroundConfig } from '../background-tasks';
 import { MastraBase } from '../base';
 import type { MastraBrowser } from '../browser/browser';
@@ -190,6 +191,10 @@ type AgentSnapshotMemoryInfo = {
   threadId?: string;
   resourceId?: string;
 };
+
+function getInvocationActor(context: unknown): ActorSignal | undefined {
+  return (context as { actor?: ActorSignal } | undefined)?.actor;
+}
 
 type ProcessorWorkflowChildrenContainer = {
   steps?: Record<string, unknown> | unknown[];
@@ -4130,6 +4135,7 @@ export class Agent<
           // manually wrap agent tools with tracing, so that we can pass the
           // current tool span onto the agent to maintain continuity of the trace
           execute: async (inputData: z.infer<typeof agentInputSchema>, context) => {
+            const invocationActor = getInvocationActor(context);
             const startTime = Date.now();
             const toolCallId = context?.agent?.toolCallId || randomUUID();
 
@@ -4444,6 +4450,7 @@ export class Agent<
                   ? await resolvedAgent.resumeGenerate(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
+                      actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
@@ -4461,6 +4468,7 @@ export class Agent<
                     })
                   : await resolvedAgent.generate(messagesForSubAgent, {
                       requestContext,
+                      actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
@@ -4556,6 +4564,7 @@ export class Agent<
                 }
                 const generateResult = await resolvedAgent.generateLegacy(messagesForSubAgent, {
                   requestContext,
+                  actor: invocationActor,
                   ...resolveObservabilityContext(context ?? {}),
                   context: filteredContextMessages as unknown as CoreMessage[],
                 });
@@ -4571,6 +4580,7 @@ export class Agent<
                   ? await resolvedAgent.resumeStream(resumeData, {
                       runId: suspendedToolRunId,
                       requestContext,
+                      actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
@@ -4590,6 +4600,7 @@ export class Agent<
                     })
                   : await resolvedAgent.stream(messagesForSubAgent, {
                       requestContext,
+                      actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(effectiveInstructions && { instructions: effectiveInstructions }),
                       ...(effectiveMaxSteps && { maxSteps: effectiveMaxSteps }),
@@ -4722,6 +4733,7 @@ export class Agent<
                 }
                 const streamResult = await resolvedAgent.streamLegacy(effectivePrompt, {
                   requestContext,
+                  actor: invocationActor,
                   ...resolveObservabilityContext(context ?? {}),
                 });
 
@@ -5051,6 +5063,7 @@ export class Agent<
           // manually wrap workflow tools with tracing, so that we can pass the
           // current tool span onto the workflow to maintain continuity of the trace
           execute: async (inputData, context) => {
+            const invocationActor = getInvocationActor(context);
             const savedMastraMemory = requestContext.get('MastraMemory');
             try {
               const { initialState, inputData: workflowInputData, suspendedToolRunId } = inputData as any;
@@ -5080,12 +5093,14 @@ export class Agent<
                   result = await run.resume({
                     resumeData,
                     requestContext,
+                    actor: invocationActor,
                     ...resolveObservabilityContext(context ?? {}),
                   });
                 } else {
                   result = await run.start({
                     inputData: workflowInputData,
                     requestContext,
+                    actor: invocationActor,
                     ...resolveObservabilityContext(context ?? {}),
                     ...(initialState && { initialState }),
                   });
@@ -5094,6 +5109,7 @@ export class Agent<
                 const streamResult = run.streamLegacy({
                   inputData: workflowInputData,
                   requestContext,
+                  actor: invocationActor,
                   ...resolveObservabilityContext(context ?? {}),
                 });
 
@@ -5111,11 +5127,13 @@ export class Agent<
                   ? run.resumeStream({
                       resumeData,
                       requestContext,
+                      actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                     })
                   : run.stream({
                       inputData: workflowInputData,
                       requestContext,
+                      actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
                       ...(initialState && { initialState }),
                     });
@@ -5881,11 +5899,13 @@ export class Agent<
     memory,
     runId,
     snapshotMemoryInfo,
+    actor,
   }: {
     requestContext?: RequestContext;
     memory?: AgentExecutionOptionsBase<any>['memory'];
     runId?: string;
     snapshotMemoryInfo?: AgentSnapshotMemoryInfo;
+    actor?: ActorSignal;
   }): Promise<void> {
     const fgaProvider = this.#mastra?.getServer()?.fga;
     if (!fgaProvider) {
@@ -5901,6 +5921,7 @@ export class Agent<
       resource: { type: 'agent', id: getAgentFGAResourceId(this.id) },
       permission: MastraFGAPermissions.AGENTS_EXECUTE,
       requestContext,
+      actor,
       context: {
         resourceId: executionResourceId,
       },
@@ -6288,41 +6309,57 @@ export class Agent<
     // Idempotent: the LLM was already given this.#mastra (or undefined) in
     // getLLM; re-register so the ephemeral case takes effect.
     llm.__registerMastra(effectiveMastra);
-    // Ensure the evented engine's workers are running on the effective Mastra.
-    // Users who just do `new Mastra({ agents })` without calling startWorkers
-    // would otherwise hang here — events would publish but no worker would
-    // consume them. startWorkers is idempotent.
-    await effectiveMastra?.startWorkers();
-    // Register as internal so the evented engine's event processor can resolve
-    // `execution-workflow` by id via __hasInternalWorkflow/getInternalWorkflow.
-    // We pick the runId up front and register run-scoped (not unscoped), so
-    // concurrent or nested agent invocations never resolve each other's
-    // closure-bound instance. __registerInternalWorkflow also calls
-    // __registerMastra under the hood, which wires the pubsub `createRun` needs.
+
+    const useEventedExecution = process.env.MASTRA_EVENTED_EXECUTION === 'true';
     const executionRunId = randomUUID();
-    effectiveMastra?.__registerInternalWorkflow(executionWorkflow, executionRunId);
+
+    if (useEventedExecution) {
+      // Evented engine path: needs pubsub workers and internal workflow registration.
+      // Ensure the evented engine's workers are running on the effective Mastra.
+      // Users who just do `new Mastra({ agents })` without calling startWorkers
+      // would otherwise hang here — events would publish but no worker would
+      // consume them. startWorkers is idempotent.
+      await effectiveMastra?.startWorkers();
+      // Register as internal so the evented engine's event processor can resolve
+      // `execution-workflow` by id via __hasInternalWorkflow/getInternalWorkflow.
+      // We pick the runId up front and register run-scoped (not unscoped), so
+      // concurrent or nested agent invocations never resolve each other's
+      // closure-bound instance. __registerInternalWorkflow also calls
+      // __registerMastra under the hood, which wires the pubsub `createRun` needs.
+      effectiveMastra?.__registerInternalWorkflow(executionWorkflow, executionRunId);
+    } else {
+      // Direct execution path (default): register Mastra for storage/observability
+      // but skip pubsub workers and internal workflow registration (not needed
+      // without events). Avoids requestContext serialisation loss.
+      executionWorkflow.__registerMastra(effectiveMastra);
+    }
 
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
     try {
       const run = await executionWorkflow.createRun({ runId: executionRunId });
-      const result = await run.start({ ...observabilityContext });
+      const result = await run.start({ requestContext, actor: options.actor, ...observabilityContext });
       return result;
     } finally {
-      // Prepare-stream is single-shot per #execute call — no resume path that
-      // would need the registration to outlive this scope, so always unregister.
-      effectiveMastra.__unregisterInternalWorkflow(executionWorkflow.id, executionRunId);
-      // The prepare-stream workflow opts out of persisting via `shouldPersistSnapshot: () => false`,
-      // but the evented engine's `EventedRun.start` still writes the initial 'running' row
-      // (see issue #17137). Drop it here so this throwaway internal workflow never leaves a
-      // row in the user's storage. Best-effort: swallow errors so a delete miss doesn't mask
-      // a real failure in the surrounding run.
-      try {
-        await executionWorkflow.deleteWorkflowRunById(executionRunId);
-      } catch (err) {
-        this.logger.debug('Failed to clean up internal execution-workflow run row', {
-          runId: executionRunId,
-          error: err instanceof Error ? err.message : String(err),
-        });
+      if (useEventedExecution) {
+        // The WEP's terminal event handlers (processWorkflowEnd / processWorkflowFail /
+        // processWorkflowSuspend) unregister the internal workflow after all events for
+        // this run have been fully processed. This safety-net covers the exceptional path
+        // where run.start() throws before a terminal event is published (e.g. subscription
+        // setup failure). In the normal case the WEP already unregistered, so this is a no-op.
+        effectiveMastra.__unregisterInternalWorkflow(executionWorkflow.id, executionRunId);
+        // The prepare-stream workflow opts out of persisting via `shouldPersistSnapshot: () => false`,
+        // but the evented engine's `EventedRun.start` still writes the initial 'running' row
+        // (see issue #17137). Drop it here so this throwaway internal workflow never leaves a
+        // row in the user's storage. Best-effort: swallow errors so a delete miss doesn't mask
+        // a real failure in the surrounding run.
+        try {
+          await executionWorkflow.deleteWorkflowRunById(executionRunId);
+        } catch (err) {
+          this.logger.debug('Failed to clean up internal execution-workflow run row', {
+            runId: executionRunId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
     }
   }
@@ -6767,8 +6804,16 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<any> & { model?: DynamicArgument<MastraModelConfig> };
+    const loopOptions = { ...mergedOptions };
+    const actor = mergedOptions.actor;
+    delete loopOptions.actor;
 
-    await this.#requireAgentExecutionFGA(mergedOptions);
+    await this.#requireAgentExecutionFGA({
+      requestContext: mergedOptions.requestContext,
+      memory: mergedOptions.memory,
+      runId: mergedOptions.runId,
+      actor,
+    });
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -6800,7 +6845,8 @@ export class Agent<
     }
 
     const executeOptions = {
-      ...mergedOptions,
+      ...loopOptions,
+      actor,
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,
@@ -6834,6 +6880,15 @@ export class Agent<
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text: 'An unknown error occurred while streaming',
+      });
+    }
+
+    if (typeof result.result?.getFullOutput !== 'function') {
+      throw new MastraError({
+        id: 'AGENT_GENERATE_MALFORMED_RESULT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.SYSTEM,
+        text: 'Execution workflow produced a result without getFullOutput — this usually means the evented engine failed to deliver events (e.g. socket publish failure)',
       });
     }
 
@@ -7120,6 +7175,9 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as AgentExecutionOptions<OUTPUT> & { model?: DynamicArgument<MastraModelConfig> };
+    const loopOptions = { ...mergedOptions };
+    const actor = mergedOptions.actor;
+    delete loopOptions.actor;
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set (from
     // per-call options OR defaultOptions). Strip `untilIdle` before passing
@@ -7138,7 +7196,12 @@ export class Agent<
       );
     }
 
-    await this.#requireAgentExecutionFGA(mergedOptions);
+    await this.#requireAgentExecutionFGA({
+      requestContext: mergedOptions.requestContext,
+      memory: mergedOptions.memory,
+      runId: mergedOptions.runId,
+      actor,
+    });
 
     const llm = await this.getLLM({
       requestContext: mergedOptions.requestContext,
@@ -7172,7 +7235,7 @@ export class Agent<
     const threadStreamPubSub = this.getPubSub();
     await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
       this as Agent<any, any, any, any>,
-      mergedOptions,
+      loopOptions as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
     );
 
@@ -7182,10 +7245,14 @@ export class Agent<
         source: 'agent',
         entityId: this.id,
       }) ?? randomUUID();
-    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(mergedOptions, threadStreamPubSub);
+    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
+      { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<OUTPUT>,
+      threadStreamPubSub,
+    );
 
     const executeOptions = {
       ...preparedOptions,
+      actor,
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,
@@ -7431,6 +7498,9 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (streamOptions ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+    const loopStreamOptions = { ...mergedStreamOptions };
+    const actor = mergedStreamOptions.actor;
+    delete loopStreamOptions.actor;
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set (from
     // per-call options OR defaultOptions). Strip `untilIdle` before passing
@@ -7459,6 +7529,7 @@ export class Agent<
         thread: mergedStreamOptions.memory?.thread ?? snapshotMemoryInfo.threadId,
         resource: mergedStreamOptions.memory?.resource ?? snapshotMemoryInfo.resourceId,
       };
+      loopStreamOptions.memory = mergedStreamOptions.memory;
     }
 
     await this.#requireAgentExecutionFGA({
@@ -7466,6 +7537,7 @@ export class Agent<
       memory: mergedStreamOptions.memory,
       runId: mergedStreamOptions.runId,
       snapshotMemoryInfo,
+      actor,
     });
 
     const llm = await this.getLLM({
@@ -7495,16 +7567,17 @@ export class Agent<
     const threadStreamPubSub = this.getPubSub();
     await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
       this as Agent<any, any, any, any>,
-      mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+      loopStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
     );
     const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
-      mergedStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
+      { ...loopStreamOptions, actor } as unknown as AgentExecutionOptions<OUTPUT>,
       threadStreamPubSub,
     );
 
     const result = await this.#execute({
       ...preparedOptions,
+      actor,
       structuredOutput: mergedStreamOptions.structuredOutput
         ? {
             ...mergedStreamOptions.structuredOutput,
@@ -7604,6 +7677,9 @@ export class Agent<
       defaultOptions as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
+    const loopOptions = { ...mergedOptions };
+    const actor = mergedOptions.actor;
+    delete loopOptions.actor;
 
     const runId = options?.runId ?? '';
     const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
@@ -7612,6 +7688,7 @@ export class Agent<
       memory: mergedOptions.memory,
       runId: mergedOptions.runId,
       snapshotMemoryInfo: this.#getSnapshotMemoryInfo(existingSnapshot),
+      actor,
     });
 
     const llm = await this.getLLM({
@@ -7643,7 +7720,8 @@ export class Agent<
     }
 
     const result = await this.#execute({
-      ...mergedOptions,
+      ...loopOptions,
+      actor,
       structuredOutput: mergedOptions.structuredOutput
         ? {
             ...mergedOptions.structuredOutput,
@@ -7677,6 +7755,15 @@ export class Agent<
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text: 'An unknown error occurred while generating',
+      });
+    }
+
+    if (typeof result.result?.getFullOutput !== 'function') {
+      throw new MastraError({
+        id: 'AGENT_GENERATE_MALFORMED_RESULT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.SYSTEM,
+        text: 'Execution workflow produced a result without getFullOutput — this usually means the evented engine failed to deliver events (e.g. socket publish failure)',
       });
     }
 

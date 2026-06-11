@@ -125,6 +125,59 @@ describe('Scorer Utils', () => {
       expect(result).toBe('User question');
     });
 
+    it('should extract user text from message parts when the content string is absent', () => {
+      const input: ScorerRunInputForAgent = {
+        inputMessages: [
+          {
+            id: 'user-msg-1',
+            role: 'user',
+            createdAt: new Date(),
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'What is the capital of France?' }],
+            },
+          },
+          {
+            id: 'assistant-msg-1',
+            role: 'assistant',
+            createdAt: new Date(),
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Paris.' }],
+            },
+          },
+        ],
+        rememberedMessages: [],
+        systemMessages: [],
+        taggedSystemMessages: {},
+      };
+
+      const result = getUserMessageFromRunInput(input);
+      expect(result).toBe('What is the capital of France?');
+    });
+
+    it('should fall back to parts when the content string is empty', () => {
+      const input: ScorerRunInputForAgent = {
+        inputMessages: [
+          {
+            id: 'user-msg-empty-content',
+            role: 'user',
+            createdAt: new Date(),
+            content: {
+              format: 2,
+              content: '',
+              parts: [{ type: 'text', text: 'What is the capital of France?' }],
+            },
+          },
+        ],
+        rememberedMessages: [],
+        systemMessages: [],
+        taggedSystemMessages: {},
+      };
+
+      expect(getUserMessageFromRunInput(input)).toBe('What is the capital of France?');
+    });
+
     it('should extract user text from workflow-style input', () => {
       expect(getUserMessageFromRunInput({ prompt: 'Workflow question' })).toBe('Workflow question');
       expect(getUserMessageFromRunInput('String question')).toBe('String question');

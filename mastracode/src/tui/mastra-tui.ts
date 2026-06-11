@@ -55,7 +55,6 @@ import {
   addPendingUserMessage,
   addUserMessage,
   removePendingUserMessage,
-  renderCompletedTasksInline,
   renderClearedTasksInline,
   renderExistingMessages,
 } from './render-messages.js';
@@ -191,15 +190,24 @@ export class MastraTUI {
     // Override editor input handling to check for active inline components
     const originalHandleInput = this.state.editor.handleInput.bind(this.state.editor);
     this.state.editor.handleInput = (data: string) => {
-      // If there's an active plan approval, route input to it
+      // If there's an active plan approval, route input to it. Ctrl+C still
+      // aborts: in raw mode the terminal delivers it as \x03 to the editor (the
+      // process SIGINT never fires), so the inline component would otherwise
+      // swallow it and leave the suspended submit_plan run parked. Fall through
+      // to the editor's Ctrl+C handler (which clears inline state and aborts).
       if (this.state.activeInlinePlanApproval) {
-        this.state.activeInlinePlanApproval.handleInput(data);
-        return;
+        if (data !== '\x03') {
+          this.state.activeInlinePlanApproval.handleInput(data);
+          return;
+        }
       }
-      // If there's an active inline question, route input to it
-      if (this.state.activeInlineQuestion) {
-        this.state.activeInlineQuestion.handleInput(data);
-        return;
+      // If there's an active inline question, route input to it (same Ctrl+C
+      // pass-through as plan approval above).
+      else if (this.state.activeInlineQuestion) {
+        if (data !== '\x03') {
+          this.state.activeInlineQuestion.handleInput(data);
+          return;
+        }
       }
       // If onboarding is active, route input there
       if (this.state.activeOnboarding) {
@@ -1071,8 +1079,6 @@ export class MastraTUI {
         startGoalWithDefaults(this.buildCommandContext(), objective, cancelMessage, options),
       queueFollowUpMessage: content => this.queueFollowUpMessage(content),
       renderExistingMessages: () => this.renderExistingMessagesAndSeedIdleCounter(),
-      renderCompletedTasksInline: (tasks, insertIndex, collapsed) =>
-        renderCompletedTasksInline(this.state, tasks, insertIndex, collapsed),
       renderClearedTasksInline: (clearedTasks, insertIndex) =>
         renderClearedTasksInline(this.state, clearedTasks, insertIndex),
       refreshModelAuthStatus: () => this.refreshModelAuthStatus(),

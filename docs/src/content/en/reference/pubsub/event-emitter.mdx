@@ -11,11 +11,11 @@ packages:
 
 Use it for single-process applications. For delivery across processes on one host, see [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub). For distributed delivery, see [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub).
 
-Because it is in-process, events are not persisted and are not shared with other processes. Wrap it in [`CachingPubSub`](/reference/pubsub/caching-pubsub) when you need replay for resumable streams.
+Because it's in-process, events aren't persisted and aren't shared with other processes. Wrap it in [`CachingPubSub`](/reference/pubsub/caching-pubsub) when you need replay for resumable streams.
 
 ## Usage example
 
-`EventEmitterPubSub` is used automatically when you do not configure a `pubsub` option, so most applications never construct it directly. Create one explicitly only when you want to configure or share it.
+`EventEmitterPubSub` is used automatically when you don't configure a `pubsub` option, so most applications never construct it directly. Create one explicitly only when you want to configure or share it.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -145,4 +145,4 @@ await pubsub.subscribe(
 )
 ```
 
-The buffer is in-memory and per-process, so batched state is not persisted and does not survive a restart. A flush triggered by `maxWaitMs` is best-effort: if a step such as a throwing `coalesce` fails, the error is surfaced through the configured `logger` rather than thrown. `flush()` drains every batched subscriber buffer before resolving.
+The buffer is in-memory and per-process, so batched state isn't persisted and doesn't survive a restart. A flush triggered by `maxWaitMs` is best-effort: if a step such as a throwing `coalesce` fails, the error is surfaced through the configured `logger` rather than thrown. `flush()` drains every batched subscriber buffer before resolving.

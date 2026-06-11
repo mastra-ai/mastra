@@ -42,10 +42,6 @@
     "test:e2e:setup": "node ./e2e/scripts/info.js && pnpm install --dir ./e2e/kitchen-sink && playwright install chromium"
   },
   "dependencies": {
-    "@assistant-ui/react": "^0.14.0",
-    "@assistant-ui/react-markdown": "^0.12.11",
-    "@assistant-ui/react-syntax-highlighter": "^0.12.9",
-    "@assistant-ui/react-ui": "^0.2.1",
     "@autoform/core": "^3.0.0",
     "@autoform/react": "^4.0.0",
     "@codemirror/lang-javascript": "^6.2.5",
@@ -75,7 +71,7 @@
     "@xyflow/react": "^12.10.1",
     "date-fns": "catalog:",
     "lucide-react": "^0.522.0",
-    "nanoid": "^5.1.7",
+    "nanoid": "^5.1.11",
     "papaparse": "^5.5.3",
     "posthog-js": "^1.369.3",
     "prism-react-renderer": "^2.4.1",
@@ -100,7 +96,7 @@
     "@internal/lint": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@playwright/test": "^1.58.2",
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4.2.2",
     "@tailwindcss/vite": "4.2.2",
     "@testing-library/react": "^16.3.2",

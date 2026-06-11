@@ -1,3 +1,4 @@
+import { EntityType } from '@mastra/core/observability';
 import { CornerDownRightIcon, ListTreeIcon } from 'lucide-react';
 import { DataListCell, DataListMonoCell } from '../data-list-cells';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
@@ -61,11 +62,13 @@ export function TracesDataListInputCell({ input }: TracesDataListInputCellProps)
 
 function EntityTypeIcon({ entityType, className }: { entityType: string; className?: string }) {
   const iconClass = cn('size-3.5 shrink-0 text-neutral2', className);
-  switch (entityType) {
-    case 'AGENT':
+  const normalizedEntityType = entityType.toLowerCase();
+
+  switch (normalizedEntityType) {
+    case EntityType.AGENT:
       return <AgentIcon className={iconClass} aria-hidden />;
-    case 'WORKFLOW':
-    case 'WORKFLOW_RUN':
+    case 'workflow':
+    case EntityType.WORKFLOW_RUN:
       return <WorkflowIcon className={iconClass} aria-hidden />;
     default:
       return null;

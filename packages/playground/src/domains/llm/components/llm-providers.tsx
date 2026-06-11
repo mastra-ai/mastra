@@ -25,7 +25,7 @@ export const LLMProviders = ({
   value,
   onValueChange,
   variant,
-  size = 'default',
+  size = 'md',
   className,
   open,
   onOpenChange,
