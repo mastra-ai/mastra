@@ -252,7 +252,7 @@ export interface WorkspaceConfig<
    * use `Agent.browser` for SDK providers.
    *
    * The browser is launched via Playwright and exposes a CDP URL that CLI tools
-   * (`agent-browser`, `browser-use`, `browse-cli`) can connect to.
+   * (`agent-browser`, `browser-use`, `browse`) can connect to.
    *
    * @example
    * ```typescript
