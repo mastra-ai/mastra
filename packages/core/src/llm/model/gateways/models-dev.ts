@@ -274,32 +274,34 @@ export class ModelsDevGateway extends MastraModelGateway {
 
     switch (providerId) {
       case 'openai':
-        return createOpenAI({ apiKey, headers: mastraHeaders }).responses(modelId);
+        return createOpenAI({ apiKey, baseURL, headers: mastraHeaders }).responses(modelId);
       case 'gemini':
       case 'google':
-        return createGoogleGenerativeAI({ apiKey, headers: mastraHeaders }).chat(modelId);
+        return createGoogleGenerativeAI({ apiKey, baseURL, headers: mastraHeaders }).chat(modelId);
       case 'anthropic':
-        return createAnthropic({ apiKey, headers: mastraHeaders })(modelId);
+        return createAnthropic({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'mistral':
-        return createMistral({ apiKey, headers: mastraHeaders })(modelId);
+        return createMistral({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'groq':
-        return createGroq({ apiKey, headers: mastraHeaders })(modelId);
+        return createGroq({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'openrouter':
-        return createOpenRouter({ apiKey, headers: mastraHeaders })(modelId) as unknown as GatewayLanguageModel;
+        return createOpenRouter({ apiKey, baseURL, headers: mastraHeaders })(
+          modelId,
+        ) as unknown as GatewayLanguageModel;
       case 'xai':
-        return createXai({ apiKey, headers: mastraHeaders })(modelId);
+        return createXai({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'deepseek':
-        return createDeepSeek({ apiKey, headers: mastraHeaders })(modelId);
+        return createDeepSeek({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'perplexity':
-        return createPerplexity({ apiKey, headers: mastraHeaders })(modelId);
+        return createPerplexity({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'cerebras':
-        return createCerebras({ apiKey, headers: mastraHeaders })(modelId);
+        return createCerebras({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'togetherai':
-        return createTogetherAI({ apiKey, headers: mastraHeaders })(modelId);
+        return createTogetherAI({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'deepinfra':
-        return createDeepInfra({ apiKey, headers: mastraHeaders })(modelId);
+        return createDeepInfra({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'vercel':
-        return createGateway({ apiKey, headers: mastraHeaders })(modelId);
+        return createGateway({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'moonshotai':
       case 'moonshotai-cn': {
         // moonshotai uses Anthropic-compatible API endpoint

@@ -189,6 +189,7 @@ describe('resolveModel', () => {
     mockAuthStorageInstance.getStoredApiKey.mockReturnValue(undefined);
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_BASE_URL;
     delete process.env.MOONSHOT_AI_API_KEY;
     delete process.env.MASTRA_GATEWAY_URL;
   });
@@ -314,6 +315,19 @@ describe('resolveModel', () => {
       expect(result.__provider).toBe('openai-direct');
       expect(result.__wrapped).toBe(true);
       expect(result.modelId).toBe('gpt-4o');
+    });
+
+    it('passes OPENAI_BASE_URL to the direct OpenAI API key provider', () => {
+      process.env.OPENAI_BASE_URL = 'http://127.0.0.1:4111/v1';
+      mockAuthStorageInstance.get.mockReturnValue({ type: 'api_key', key: 'sk-openai-key' });
+
+      resolveModel('openai/gpt-4o-mini');
+
+      expect(createOpenAI).toHaveBeenCalledWith({
+        apiKey: 'sk-openai-key',
+        baseURL: 'http://127.0.0.1:4111/v1',
+        headers: undefined,
+      });
     });
 
     it('uses model router when no OpenAI auth is configured', () => {

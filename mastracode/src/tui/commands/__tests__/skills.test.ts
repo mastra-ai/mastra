@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { handleSkillCommand } from '../skills.js';
+import { handleSkillCommand, handleSkillsCommand } from '../skills.js';
 
 function createCtx(options?: {
   pendingNewThread?: boolean;
@@ -51,6 +51,34 @@ function createCtx(options?: {
 }
 
 describe('handleSkillCommand', () => {
+  it('eagerly resolves the workspace for /skills when no message has resolved it yet', async () => {
+    const workspace = {
+      skills: {
+        list: vi.fn().mockResolvedValue([
+          { name: 'review', description: 'Review code' },
+          { name: 'internal-helper', description: 'Hidden helper', 'user-invocable': false },
+        ]),
+      },
+    };
+    const ctx = {
+      harness: {
+        hasWorkspace: vi.fn(() => true),
+        resolveWorkspace: vi.fn().mockResolvedValue(workspace),
+      },
+      getResolvedWorkspace: vi.fn(() => undefined),
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+
+    await handleSkillsCommand(ctx);
+
+    expect(ctx.harness.resolveWorkspace).toHaveBeenCalledTimes(1);
+    expect(workspace.skills.list).toHaveBeenCalledTimes(1);
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.stringContaining('Skills (1):\n  review - Review code'));
+    expect(ctx.showInfo).toHaveBeenCalledWith(expect.not.stringContaining('internal-helper'));
+    expect(ctx.showError).not.toHaveBeenCalled();
+  });
+
   it('loads a named skill and sends its instructions to the agent', async () => {
     const { ctx, harness, state } = createCtx();
 
