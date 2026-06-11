@@ -3560,7 +3560,7 @@ importers:
         specifier: ^9.6.1
         version: 9.6.1
       fastq:
-        specifier: ^1.19.1
+        specifier: ^1.20.1
         version: 1.20.1
       gray-matter:
         specifier: ^4.0.3
