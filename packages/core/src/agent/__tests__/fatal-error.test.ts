@@ -51,12 +51,14 @@ describe('FatalError propagation', () => {
       retryAfterSeconds: 60,
     });
 
-    try {
-      await agent.generate('hello');
-    } catch (err) {
-      expect(err).toBeInstanceOf(QuotaExceededError);
-      expect(err).not.toBeInstanceOf(FatalError);
-    }
+    const rejection = await agent.generate('hello').then(
+      () => {
+        throw new Error('expected agent.generate to reject with QuotaExceededError');
+      },
+      err => err,
+    );
+    expect(rejection).toBeInstanceOf(QuotaExceededError);
+    expect(rejection).not.toBeInstanceOf(FatalError);
   });
 
   it('FatalError thrown directly from a workflow step is captured on result.fatal', async () => {

@@ -930,6 +930,11 @@ export class ProcessorRunner {
       for (const state of processorStates.values()) {
         state.span?.error({ error: error as Error, endSpan: true });
       }
+      // FatalError must propagate so callers receive the original user error;
+      // swallowing it here would convert a fatal abort into a no-op.
+      if (isFatalError(error)) {
+        throw error;
+      }
       return { part, blocked: false };
     }
   }
