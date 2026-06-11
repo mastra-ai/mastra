@@ -318,7 +318,11 @@ export class RedisStreamsPubSub extends PubSub {
    * current value is already this owner, we refresh the TTL instead of
    * failing. Cross-process callers race here; Redis serializes them.
    */
-  override async acquireLease(key: string, owner: string, ttlMs: number): Promise<{ acquired: boolean; owner?: string }> {
+  override async acquireLease(
+    key: string,
+    owner: string,
+    ttlMs: number,
+  ): Promise<{ acquired: boolean; owner?: string }> {
     if (this.#closed) return { acquired: false };
     await this.#ensureWriterConnected();
     const redisKey = this.#leaseKey(key);
