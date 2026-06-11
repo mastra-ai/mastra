@@ -28,6 +28,22 @@ describe('buildToolMocksPayload', () => {
     });
   });
 
+  it('parses bare numbers and booleans to typed values; quoting forces a string', () => {
+    // JSON.parse is tried on everything: `20` mocks the number 20, `"20"` the
+    // string '20'. Only non-JSON words (parse failure) ride as raw text.
+    expect(
+      buildToolMocksPayload([
+        makeRow({ toolName: 'getTemperature', kind: 'output', outputText: '20' }),
+        makeRow({ toolName: 'isOpen', kind: 'output', outputText: 'true' }),
+        makeRow({ toolName: 'getCount', kind: 'output', outputText: '"20"' }),
+      ]),
+    ).toEqual({
+      getTemperature: { output: 20 },
+      isOpen: { output: true },
+      getCount: { output: '20' },
+    });
+  });
+
   it('builds the error shape with the optional name only when set', () => {
     expect(
       buildToolMocksPayload([
