@@ -1,10 +1,15 @@
 import type { Mastra } from '../../mastra';
 import type { ComputeStateSignalArgs, ComputeStateSignalResult } from '../../processors/index';
+import type { TaskRecord } from '../../storage/domains/tasks/base';
 import { getTasksFromRequestContext, TASKS_STATE_ID } from './task-tools';
 import type { TaskItemSnapshot } from './task-tools';
 
+// Typed in terms of the storage domain's `TaskRecord` (see the matching note in
+// task-tools.ts): the processor reads the durable list and projects it as
+// `TaskItemSnapshot`, so this assignment enforces that the two shapes stay
+// structurally identical.
 type ResolvedTaskStore = {
-  getTasks(threadId: string): Promise<TaskItemSnapshot[]>;
+  getTasks(threadId: string): Promise<TaskRecord[]>;
 };
 
 function isTaskStore(value: unknown): value is ResolvedTaskStore {
