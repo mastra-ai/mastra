@@ -268,3 +268,161 @@ describe('cross-process workflow event guard', () => {
     await mastra.shutdown();
   });
 });
+
+/**
+ * Tests for the `mastra.pubsub` proxy's `localOnly` tagging logic. The proxy
+ * decides which publishes can short-circuit the broker round-trip because
+ * only the publishing process consumes them. Getting this wrong causes
+ * cumulative `workflow.step.end` payloads (often 9 MB+) to be serialised
+ * across the unix socket on every event — manifesting as ECANCELED,
+ * `condition is not a function`, or missing `getFullOutput`.
+ */
+describe('mastra.pubsub proxy localOnly tagging', () => {
+  /**
+   * Wraps an EventEmitterPubSub so we can assert which calls received
+   * `localOnly: true` in their options.
+   */
+  class RecordingPushOnlyPubSub extends PushOnlyPubSub {
+    calls: Array<{ topic: string; event: Event; localOnly: boolean }> = [];
+    override async publish(
+      topic: string,
+      event: Omit<Event, 'id' | 'createdAt'>,
+      options?: { localOnly?: boolean },
+    ): Promise<void> {
+      this.calls.push({ topic, event: event as Event, localOnly: Boolean(options?.localOnly) });
+      await super.publish(topic, event, options);
+    }
+  }
+
+  function makeStepRunEvent(
+    workflowId: string,
+    runId: string,
+    parentWorkflow?: { workflowId: string; runId: string; parentWorkflow?: unknown },
+  ): Omit<Event, 'id' | 'createdAt'> {
+    return {
+      type: 'workflow.step.run',
+      runId,
+      data: {
+        workflowId,
+        runId,
+        executionPath: [0],
+        stepResults: {},
+        prevResult: { status: 'success', output: {} },
+        activeSteps: {},
+        requestContext: {},
+        ...(parentWorkflow ? { parentWorkflow } : {}),
+      },
+    } as Event;
+  }
+
+  it('tags internal workflow publishes as localOnly', async () => {
+    const pubsub = new RecordingPushOnlyPubSub();
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: {} as any, pubsub });
+    mastra.__registerInternalWorkflow(makeNoopWorkflow('execution-workflow') as any, 'run-1');
+
+    await mastra.pubsub.publish('workflows', makeStartEvent('execution-workflow', 'run-1'));
+
+    expect(pubsub.calls).toHaveLength(1);
+    expect(pubsub.calls[0]).toMatchObject({ topic: 'workflows', localOnly: true });
+    await mastra.shutdown();
+  });
+
+  it('does NOT tag publishes for workflows owned by no one as localOnly', async () => {
+    const pubsub = new RecordingPushOnlyPubSub();
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: {} as any, pubsub });
+
+    await mastra.pubsub.publish('workflows', makeStartEvent('foreign-workflow', 'run-foreign'));
+
+    expect(pubsub.calls).toHaveLength(1);
+    expect(pubsub.calls[0]!.localOnly).toBe(false);
+    await mastra.shutdown();
+  });
+
+  it('walks parentWorkflow chain so nested workflow events inherit the root owner', async () => {
+    const pubsub = new RecordingPushOnlyPubSub();
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: {} as any, pubsub });
+    // Owner registers the root agentic-loop run.
+    mastra.__registerInternalWorkflow(makeNoopWorkflow('agentic-loop') as any, 'root-run');
+
+    // The nested `executionWorkflow` step is NOT registered itself, but its
+    // parent chain points to the registered agentic-loop.
+    const nestedEvent = makeStepRunEvent('executionWorkflow', 'nested-run', {
+      workflowId: 'agentic-loop',
+      runId: 'root-run',
+    });
+    await mastra.pubsub.publish('workflows', nestedEvent);
+
+    expect(pubsub.calls).toHaveLength(1);
+    expect(pubsub.calls[0]!.localOnly).toBe(true);
+    await mastra.shutdown();
+  });
+
+  it('walks parentWorkflow chain across multiple levels of nesting', async () => {
+    const pubsub = new RecordingPushOnlyPubSub();
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: {} as any, pubsub });
+    mastra.__registerInternalWorkflow(makeNoopWorkflow('execution-workflow') as any, 'root-run');
+
+    const deeplyNested = makeStepRunEvent('innerWorkflow', 'inner-run', {
+      workflowId: 'agentic-loop',
+      runId: 'middle-run',
+      parentWorkflow: {
+        workflowId: 'execution-workflow',
+        runId: 'root-run',
+      },
+    });
+    await mastra.pubsub.publish('workflows', deeplyNested);
+
+    expect(pubsub.calls[0]!.localOnly).toBe(true);
+    await mastra.shutdown();
+  });
+
+  it('tags scheduler-spawned background workflow events as localOnly', async () => {
+    const pubsub = new RecordingPushOnlyPubSub();
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: {} as any, pubsub });
+
+    const schedRunId = 'sched_wf___mastra_notification_dispatcher__dispatch_1781099940000';
+    await mastra.pubsub.publish('workflows', makeStartEvent('__mastra_notification_dispatcher', schedRunId));
+
+    expect(pubsub.calls[0]!.localOnly).toBe(true);
+    await mastra.shutdown();
+  });
+
+  it('tags workflow.events.v2.* per-run stream events as localOnly', async () => {
+    const pubsub = new RecordingPushOnlyPubSub();
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: {} as any, pubsub });
+
+    await mastra.pubsub.publish('workflow.events.v2.run-xyz', {
+      type: 'watch',
+      runId: 'run-xyz',
+      data: { chunk: 'whatever' },
+    } as unknown as Event);
+
+    expect(pubsub.calls[0]!.localOnly).toBe(true);
+    await mastra.shutdown();
+  });
+
+  it('tags workflows-finish events for owned runs as localOnly', async () => {
+    const pubsub = new RecordingPushOnlyPubSub();
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: {} as any, pubsub });
+    mastra.__registerInternalWorkflow(makeNoopWorkflow('execution-workflow') as any, 'run-finish');
+
+    await mastra.pubsub.publish('workflows-finish', {
+      type: 'workflow.end',
+      runId: 'run-finish',
+      data: { workflowId: 'execution-workflow', runId: 'run-finish' },
+    } as Event);
+
+    expect(pubsub.calls[0]!.localOnly).toBe(true);
+    await mastra.shutdown();
+  });
+
+  it('does NOT touch unrelated topics', async () => {
+    const pubsub = new RecordingPushOnlyPubSub();
+    const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: {} as any, pubsub });
+
+    await mastra.pubsub.publish('some-other-topic', { type: 'whatever', runId: 'x', data: {} } as Event);
+
+    expect(pubsub.calls[0]!.localOnly).toBe(false);
+    await mastra.shutdown();
+  });
+});

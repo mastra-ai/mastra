@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { signalToXmlMarkup } from '../../agent/signals';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
@@ -66,12 +67,29 @@ describe('TaskStateProcessor', () => {
     expect(result).toMatchObject({
       id: 'tasks',
       mode: 'snapshot',
-      tagName: 'state',
+      tagName: 'current-task-list',
+      attributes: { count: TASKS.length },
       value: { tasks: TASKS },
     });
     expect((result as any).metadata.value.tasks).toEqual(TASKS);
-    expect((result as any).contents).toContain('<current-task-list>');
-    expect((result as any).contents).toContain('{id: a}');
+
+    // The framework wraps `contents` in the signal's own tag, so the model sees
+    // a single `<current-task-list>` element (not a double-wrapped, escaped one).
+    const markup = signalToXmlMarkup(result as any);
+    expect(markup).toContain('<current-task-list count="2">');
+    expect(markup).toContain('{id: a}');
+    expect(markup).not.toContain('&lt;current-task-list&gt;');
+  });
+
+  it('renders an empty task list as a self-closing tag', async () => {
+    // A change from a populated list to an empty one still emits; the framework
+    // renders empty `contents` as a self-closing `<current-task-list count="0" />`.
+    const { processor } = await createProcessor();
+    const result = await processor.computeStateSignal(createArgs({ currentTasks: [], lastSnapshotTasks: TASKS }));
+
+    expect(result).toBeTruthy();
+    expect((result as any).contents).toBe('');
+    expect(signalToXmlMarkup(result as any)).toBe('<current-task-list count="0" />');
   });
 
   it('reads the current list from the store when no task tool ran this turn', async () => {

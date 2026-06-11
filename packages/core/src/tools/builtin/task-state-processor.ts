@@ -31,13 +31,18 @@ function isTaskStore(value: unknown): value is ResolvedTaskStore {
 // no-op when the run is not memory backed, so the processor only ever sees task
 // state on memory-backed runs.
 
+// Renders the inner lines of the task list. The state-signal framework wraps
+// (and XML-escapes) this string inside the signal's `tagName`
+// (`current-task-list`), so this returns only the body — wrapping it in the tag
+// here would double-wrap and escape the markup the model sees. An empty list
+// returns an empty string so the framework emits `<current-task-list count="0" />`.
 function renderTaskList(tasks: TaskItemSnapshot[]): string {
-  if (tasks.length === 0) return '<current-task-list />';
+  if (tasks.length === 0) return '';
   const lines = tasks.map(task => {
     const icon = task.status === 'completed' ? '✓' : task.status === 'in_progress' ? '▸' : '○';
     return `  ${icon} [${task.status}] {id: ${task.id}} ${task.content}`;
   });
-  return `<current-task-list>\n${lines.join('\n')}\n</current-task-list>`;
+  return `\n${lines.join('\n')}\n`;
 }
 
 function getTasksFromSnapshot(snapshot: ComputeStateSignalArgs['lastSnapshot']): TaskItemSnapshot[] {
@@ -110,11 +115,15 @@ export class TaskStateProcessor {
       id: TASKS_STATE_ID,
       cacheKey: stableTasksCacheKey(currentTasks),
       mode: 'snapshot',
-      tagName: 'state',
+      // `current-task-list` is the signal's own tag (mirroring the wrapper that
+      // used to be injected into the system prompt). The framework wraps and
+      // escapes `contents` inside this tag, so `renderTaskList` returns only the
+      // inner lines — no inline tag here, or the model would see double-wrapped,
+      // XML-escaped markup.
+      tagName: 'current-task-list',
       contents: renderTaskList(currentTasks),
       value: { tasks: currentTasks },
       attributes: {
-        type: 'tasks',
         count: currentTasks.length,
       },
       metadata: {

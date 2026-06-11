@@ -499,6 +499,37 @@ describe('addUserMessage', () => {
   });
 });
 
+describe('renderExistingMessages signals', () => {
+  it('reconstructs persisted active signal messages without resurrecting pending previews', async () => {
+    const state = createState();
+    addPendingUserMessage(state, 'stale-signal', 'stale preview', undefined, { isInterjection: true });
+
+    state.harness = {
+      listMessages: vi
+        .fn()
+        .mockResolvedValue([
+          createUserMessage('continue from history', 'signal-history-1', { delivery: 'while-active' }),
+        ]),
+      getDisplayState: () => ({ isRunning: false }),
+    } as unknown as TUIState['harness'];
+
+    await renderExistingMessages(state);
+
+    expect(state.pendingSignalMessageComponentsById.size).toBe(0);
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.chatContainer.children[0]).toBeInstanceOf(UserMessageComponent);
+    expect(state.messageComponentsById.get('signal-history-1')).toBe(state.chatContainer.children[0]);
+
+    const rendered = (state.chatContainer.children[0] as UserMessageComponent)
+      .render(80)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('╭ steer ');
+    expect(rendered).toContain('continue from history');
+    expect(rendered).not.toContain('stale preview');
+  });
+});
+
 describe('renderExistingMessages subagents', () => {
   it('uses the current model id for persisted forked subagents when no metadata tag is present', async () => {
     const message: HarnessMessage = {

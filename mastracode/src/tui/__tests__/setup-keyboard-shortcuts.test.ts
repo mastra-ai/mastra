@@ -1,4 +1,6 @@
-import { describe, expect, it, vi } from 'vitest';
+import { execFileSync } from 'node:child_process';
+
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('node:child_process', () => ({
   execFileSync: vi.fn(),
@@ -14,6 +16,8 @@ const autocompleteProviders: Array<{
     description: string;
     getArgumentCompletions?: (prefix: string) => Array<{ value: string }>;
   }>;
+  cwd: string;
+  fdPath: string | null | undefined;
 }> = [];
 
 vi.mock('@mariozechner/pi-tui', () => ({
@@ -24,8 +28,10 @@ vi.mock('@mariozechner/pi-tui', () => ({
         description: string;
         getArgumentCompletions?: (prefix: string) => Array<{ value: string }>;
       }>,
+      cwd: string,
+      fdPath?: string,
     ) {
-      autocompleteProviders.push({ commands });
+      autocompleteProviders.push({ commands, cwd, fdPath });
     }
   },
   Container: class {},
@@ -50,9 +56,21 @@ vi.mock('../status-line.js', () => ({
   updateStatusLine: vi.fn(),
 }));
 
-import { showInfo } from '../display.js';
+import { showError, showInfo } from '../display.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
 import { refreshSkillsAutocomplete, setupAutocomplete, setupKeyboardShortcuts } from '../setup.js';
+
+const originalPlatform = process.platform;
+
+function setPlatform(platform: NodeJS.Platform) {
+  Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+}
+
+afterEach(() => {
+  Object.defineProperty(process, 'platform', { value: originalPlatform, configurable: true });
+  vi.mocked(execFileSync).mockReset();
+  vi.restoreAllMocks();
+});
 
 function createState(isRunning: boolean) {
   const actions = new Map<string, () => unknown>();
@@ -88,6 +106,9 @@ function createState(isRunning: boolean) {
     userInitiatedAbort: false,
     lastCtrlCTime: 0,
     lastClearedText: '',
+    customSlashCommands: [],
+    skillCommands: [],
+    goalSkillCommands: [],
     hideThinkingBlock: false,
     toolOutputExpanded: false,
     allToolComponents: [],
@@ -158,6 +179,62 @@ describe('setupKeyboardShortcuts', () => {
     expect(commandNames).toContain('goal/deploy');
     expect(commandNames).toContain('goal/review');
     expect(commandNames.slice(-5)).toEqual(['/deploy', 'goal/deploy', '/ship', 'skill/lint-fix', 'goal/review']);
+  });
+
+  it('passes detected fd path and cwd into the autocomplete provider', () => {
+    autocompleteProviders.length = 0;
+    vi.mocked(execFileSync).mockReturnValue('/opt/homebrew/bin/fd\n' as any);
+    const { state, editor } = createState(false);
+
+    setupAutocomplete(state);
+
+    expect(editor.setAutocompleteProvider).toHaveBeenCalledTimes(1);
+    expect(execFileSync).toHaveBeenCalledWith('which', ['fd'], { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+    expect(autocompleteProviders[0]?.cwd).toBe(process.cwd());
+    expect(autocompleteProviders[0]?.fdPath).toBe('/opt/homebrew/bin/fd');
+  });
+
+  it('falls back to fdfind and keeps slash autocomplete when fd is unavailable', () => {
+    autocompleteProviders.length = 0;
+    vi.mocked(execFileSync).mockImplementation((_command, args) => {
+      if (args?.[0] === 'fd') throw new Error('missing fd');
+      return '/usr/bin/fdfind\n' as any;
+    });
+    const { state } = createState(false);
+
+    setupAutocomplete(state);
+
+    const commandNames = autocompleteProviders[0]?.commands.map(command => command.name) ?? [];
+    expect(execFileSync).toHaveBeenNthCalledWith(1, 'which', ['fd'], {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    expect(execFileSync).toHaveBeenNthCalledWith(2, 'which', ['fdfind'], {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+    expect(autocompleteProviders[0]?.fdPath).toBe('/usr/bin/fdfind');
+    expect(commandNames[0]).toBe('new');
+    expect(commandNames).toContain('help');
+  });
+
+  it('omits fd path but preserves command autocomplete when no file search binary is found', () => {
+    autocompleteProviders.length = 0;
+    vi.mocked(execFileSync).mockImplementation(() => {
+      throw new Error('missing binary');
+    });
+    const { state, editor } = createState(false);
+    state.customSlashCommands = [{ name: 'ship', description: 'Ship release', template: '', sourcePath: '' }];
+
+    setupAutocomplete(state);
+
+    const commandNames = autocompleteProviders[0]?.commands.map(command => command.name) ?? [];
+    expect(editor.setAutocompleteProvider).toHaveBeenCalledTimes(1);
+    expect(execFileSync).toHaveBeenCalledTimes(2);
+    expect(autocompleteProviders[0]?.cwd).toBe(process.cwd());
+    expect(autocompleteProviders[0]?.fdPath).toBeNull();
+    expect(commandNames).toContain('help');
+    expect(commandNames).toContain('/ship');
   });
 
   it('refreshes autocomplete after workspace skills resolve', async () => {
@@ -380,6 +457,105 @@ describe('setupKeyboardShortcuts', () => {
     expect(state.activeInlinePlanApproval).toBeUndefined();
     expect(state.userInitiatedAbort).toBe(true);
     expect(editor.setText).not.toHaveBeenCalled();
+  });
+
+  it('suspends the process with Ctrl+Z and restarts rendering on SIGCONT', () => {
+    setPlatform('darwin');
+    const { state, actions } = createState(false);
+    const onceSpy = vi
+      .spyOn(process, 'once')
+      .mockImplementation((_event: string | symbol, _listener: (...args: any[]) => void) => {
+        return process;
+      });
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('suspend')?.();
+
+    expect(state.ui.stop).toHaveBeenCalledTimes(1);
+    expect(onceSpy).toHaveBeenCalledWith('SIGCONT', expect.any(Function));
+    expect(killSpy).toHaveBeenCalledWith(process.pid, 'SIGTSTP');
+    expect(state.ui.start).not.toHaveBeenCalled();
+
+    const onContinue = onceSpy.mock.calls[0]?.[1] as (() => void) | undefined;
+    onContinue?.();
+
+    expect(state.ui.start).toHaveBeenCalledTimes(1);
+    expect(state.ui.requestRender).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores the TUI and shows an error when process suspension fails', () => {
+    setPlatform('darwin');
+    vi.mocked(showError).mockClear();
+    const { state, actions } = createState(false);
+    const onceSpy = vi.spyOn(process, 'once').mockImplementation(() => process);
+    const offSpy = vi.spyOn(process, 'off').mockImplementation(() => process);
+    vi.spyOn(process, 'kill').mockImplementation(() => {
+      throw new Error('no tty');
+    });
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('suspend')?.();
+
+    const onContinue = onceSpy.mock.calls[0]?.[1];
+    expect(state.ui.stop).toHaveBeenCalledTimes(1);
+    expect(offSpy).toHaveBeenCalledWith('SIGCONT', onContinue);
+    expect(state.ui.start).toHaveBeenCalledTimes(1);
+    expect(state.ui.requestRender).toHaveBeenCalledTimes(1);
+    expect(showError).toHaveBeenCalledWith(state, 'Unable to suspend in the current terminal');
+  });
+
+  it('guards Ctrl+Z process suspension on Windows', () => {
+    setPlatform('win32');
+    vi.mocked(showInfo).mockClear();
+    const { state, actions } = createState(false);
+    const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('suspend')?.();
+
+    expect(showInfo).toHaveBeenCalledWith(state, 'Suspend is not supported on Windows');
+    expect(state.ui.stop).not.toHaveBeenCalled();
+    expect(killSpy).not.toHaveBeenCalled();
+  });
+
+  it('restores last cleared text with Alt+Z only when the editor is empty', () => {
+    const { state, editor, actions } = createState(false);
+    state.lastClearedText = 'restore me';
+    editor.getText.mockReturnValue('');
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('undo')?.();
+
+    expect(editor.setText).toHaveBeenCalledWith('restore me');
+    expect(state.lastClearedText).toBe('');
+    expect(state.ui.requestRender).toHaveBeenCalledTimes(1);
+
+    state.lastClearedText = 'do not restore';
+    editor.getText.mockReturnValue('current input');
+    actions.get('undo')?.();
+
+    expect(editor.setText).toHaveBeenCalledTimes(1);
   });
 
   it('toggles system reminder expansion with Ctrl+E', () => {

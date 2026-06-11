@@ -26,7 +26,7 @@ export function MemorySidebar({
   const { selectedTab, handleTabChange } = useMemorySidebarTab();
 
   return (
-    <div className="h-full w-full min-w-0 p-2">
+    <div className="h-full w-full min-w-0 p-2 pr-0">
       <div className="bg-surface3 rounded-studio-panel border border-border1/50 flex h-full min-h-0 flex-col overflow-hidden">
         {hasMemory ? (
           <Tabs
