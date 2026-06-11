@@ -131,10 +131,11 @@ export function decode(value: unknown): unknown {
         return BigInt(env.v);
       case 'RegExp': {
         // `isEnvelope` already constrained `flags` to the spec-defined set. A
-        // malformed `source` is the remaining failure mode — fall back to the
-        // raw envelope so a hostile peer cannot crash frame decoding.
+        // malformed or hostile `source` is escaped so untrusted input is
+        // treated literally; if construction still fails, fall back to the raw
+        // envelope so a hostile peer cannot crash frame decoding.
         try {
-          return new RegExp(env.v.source, env.v.flags);
+          return new RegExp(escapeRegExpLiteral(env.v.source), env.v.flags);
         } catch {
           return value;
         }
@@ -161,6 +162,14 @@ export function decode(value: unknown): unknown {
     out[k] = decode((value as Record<string, unknown>)[k]);
   }
   return out;
+}
+
+/**
+ * Escape regex metacharacters so untrusted input is treated as a literal
+ * pattern fragment when constructing a RegExp.
+ */
+function escapeRegExpLiteral(input: string): string {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
