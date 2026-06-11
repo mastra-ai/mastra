@@ -1,11 +1,11 @@
 import type { LanguageModelV2Prompt, LanguageModelV2CallWarning } from '@ai-sdk/provider-v5';
 import type { StepResult } from '@internal/ai-sdk-v5';
+import { FatalError, attachFatal, isFatalError } from '../agent/fatal-error';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
 import { createSignal } from '../agent/signals';
 import type { AgentSignalInput, AgentStateSignalInput, CreatedAgentSignal } from '../agent/signals';
 import { applyStateSignal, getStateSignalsMetadata, resolveStateSignalHistory } from '../agent/state-signals';
-import { FatalError, attachFatal, isFatalError } from '../agent/fatal-error';
 import { TripWire } from '../agent/trip-wire';
 import type { TripWireOptions } from '../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../agent/utils';

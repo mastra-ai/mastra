@@ -2,8 +2,8 @@ import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { createStep, createWorkflow } from '../../workflows';
-import { Agent } from '../index';
 import { FatalError } from '../fatal-error';
+import { Agent } from '../index';
 
 class QuotaExceededError extends Error {
   public readonly code = 'QUOTA_EXCEEDED' as const;
