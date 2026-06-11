@@ -79,8 +79,15 @@ export class TaskStateProcessor {
   /**
    * The Mastra instance this processor is registered with, used to resolve the
    * thread-scoped task store. Set by the agent/Mastra runtime via
-   * `__registerMastra`. We implement the hook directly (instead of extending
-   * `BaseProcessor`) to avoid a value-level import cycle with `processors/index`.
+   * `__registerMastra`.
+   *
+   * We implement this hook inline rather than extending `BaseProcessor`: a
+   * *value* import of `BaseProcessor` from `processors/index` pulls that module's
+   * runtime graph, which forms an initialization cycle through this tools module.
+   * At the test entry point that surfaces as `TypeError: Class extends value
+   * undefined` (BaseProcessor is not yet initialized when this class evaluates).
+   * Implementing the (structurally trivial) hook here keeps all imports from
+   * `processors/index` type-only, so there is no runtime edge and no cycle.
    */
   protected mastra?: Mastra<any, any, any, any, any, any, any, any, any, any>;
 
