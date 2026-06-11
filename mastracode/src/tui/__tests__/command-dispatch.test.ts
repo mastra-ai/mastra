@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
   handleGoalCommand: vi.fn().mockResolvedValue(undefined),
   handleSkillCommand: vi.fn().mockResolvedValue(undefined),
   handleJudgeCommand: vi.fn().mockResolvedValue(undefined),
+  handleGithubCommand: vi.fn().mockResolvedValue(undefined),
+  handleReportIssueCommand: vi.fn().mockResolvedValue(undefined),
+  handleMcpCommand: vi.fn().mockResolvedValue(undefined),
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
   startGoalWithDefaults: vi.fn().mockResolvedValue(undefined),
   showError: vi.fn(),
@@ -25,7 +28,7 @@ vi.mock('../commands/index.js', () => ({
   handleNameCommand: vi.fn(),
   handleExitCommand: vi.fn(),
   handleHooksCommand: vi.fn(),
-  handleMcpCommand: vi.fn(),
+  handleMcpCommand: mocks.handleMcpCommand,
   handleModeCommand: vi.fn(),
   handleSkillCommand: mocks.handleSkillCommand,
   handleSkillsCommand: vi.fn(),
@@ -42,7 +45,7 @@ vi.mock('../commands/index.js', () => ({
   handleSettingsCommand: vi.fn(),
   handleLoginCommand: vi.fn(),
   handleReviewCommand: vi.fn(),
-  handleReportIssueCommand: vi.fn(),
+  handleReportIssueCommand: mocks.handleReportIssueCommand,
   handleSetupCommand: vi.fn(),
   handleBrowserCommand: vi.fn(),
   handleThemeCommand: vi.fn(),
@@ -51,6 +54,7 @@ vi.mock('../commands/index.js', () => ({
   handleApiKeysCommand: vi.fn(),
   handleFeedbackCommand: vi.fn(),
   handleObservabilityCommand: vi.fn(),
+  handleGithubCommand: mocks.handleGithubCommand,
   handleGoalCommand: mocks.handleGoalCommand,
   handleJudgeCommand: mocks.handleJudgeCommand,
 }));
@@ -78,6 +82,9 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.handleGoalCommand.mockClear();
     mocks.handleSkillCommand.mockClear();
     mocks.handleJudgeCommand.mockClear();
+    mocks.handleGithubCommand.mockClear();
+    mocks.handleReportIssueCommand.mockClear();
+    mocks.handleMcpCommand.mockClear();
     mocks.processSlashCommand.mockClear();
     mocks.startGoalWithDefaults.mockClear();
     mocks.showError.mockClear();
@@ -152,6 +159,50 @@ describe('dispatchSlashCommand models routing', () => {
     expect(handled).toBe(true);
     expect(mocks.handleJudgeCommand).toHaveBeenCalledTimes(1);
     expect(mocks.handleJudgeCommand).toHaveBeenCalledWith(ctx);
+  });
+
+  it('routes /github to handleGithubCommand', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+
+    const handled = await dispatchSlashCommand('/github mastra-ai/mastra#17447', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.handleGithubCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.handleGithubCommand).toHaveBeenCalledWith(ctx, ['mastra-ai/mastra#17447']);
+  });
+
+  it('routes /report-issue to handleReportIssueCommand', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+
+    const handled = await dispatchSlashCommand('/report-issue startup hangs', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.handleReportIssueCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.handleReportIssueCommand).toHaveBeenCalledWith(ctx, ['startup', 'hangs']);
+  });
+
+  it('keeps removed /fix-issue command absent from dispatch', async () => {
+    const state = { customSlashCommands: [] } as any;
+
+    const handled = await dispatchSlashCommand('/fix-issue 123', state, () => ({}) as any);
+
+    expect(handled).toBe(true);
+    expect(mocks.handleReportIssueCommand).not.toHaveBeenCalled();
+    expect(mocks.showError).toHaveBeenCalledWith(state, 'Unknown command: fix-issue');
+  });
+
+  it('routes /mcp with the slash command context that owns the manager', async () => {
+    const mcpManager = { hasServers: vi.fn(() => true) };
+    const state = { customSlashCommands: [] } as any;
+    const ctx = { mcpManager } as any;
+
+    const handled = await dispatchSlashCommand('/mcp status', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(mocks.handleMcpCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.handleMcpCommand).toHaveBeenCalledWith(ctx, ['status']);
   });
 
   it('routes /skill/name to handleSkillCommand', async () => {
@@ -268,6 +319,39 @@ describe('dispatchSlashCommand models routing', () => {
       ctx,
       '# Skill goal: review\n\nReview the code carefully.\n\nARGUMENTS: focus tests',
     );
+  });
+
+  it('eagerly resolves workspace for /goal skill aliases before the first message', async () => {
+    const state = {
+      customSlashCommands: [],
+      goalSkillCommands: [
+        { name: 'review', path: '/skills/review', description: 'Review code', metadata: { goal: true } },
+      ],
+    } as any;
+    const skill = {
+      name: 'review',
+      instructions: 'Review the code carefully.',
+      metadata: { goal: true },
+    };
+    const workspace = { skills: { get: vi.fn().mockResolvedValue(skill) } };
+    const ctx = {
+      getResolvedWorkspace: vi.fn(() => undefined),
+      harness: {
+        hasWorkspace: vi.fn(() => true),
+        resolveWorkspace: vi.fn().mockResolvedValue(workspace),
+      },
+    } as any;
+
+    const handled = await dispatchSlashCommand('/goal/review focus tests', state, () => ctx);
+
+    expect(handled).toBe(true);
+    expect(ctx.harness.resolveWorkspace).toHaveBeenCalledTimes(1);
+    expect(workspace.skills.get).toHaveBeenCalledWith('/skills/review');
+    expect(mocks.startGoalWithDefaults).toHaveBeenCalledWith(
+      ctx,
+      '# Skill goal: review\n\nReview the code carefully.\n\nARGUMENTS: focus tests',
+    );
+    expect(mocks.showError).not.toHaveBeenCalled();
   });
 
   it('blocks custom slash commands while the goal judge is evaluating', async () => {

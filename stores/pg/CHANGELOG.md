@@ -1,5 +1,103 @@
 # @mastra/pg
 
+## 1.13.0-alpha.0
+
+### Minor Changes
+
+- Add the v-next observability storage domain for `@mastra/pg`, an insert-only, ([#16760](https://github.com/mastra-ai/mastra/pull/16760))
+  partitioned Postgres adapter for low-volume observability (~100 calls/sec,
+  up to roughly 1,500 calls/sec sustained on a single primary).
+
+  The new `PostgresStoreVNext` composes a primary `PostgresStore` (memory,
+  workflows, scores, agents, etc.) with an `ObservabilityStoragePostgresVNext`
+  for spans, logs, metrics, scores, and feedback. All observability writes go
+  through a single multi-row `INSERT ... ON CONFLICT DO NOTHING` path. Storage
+  is partitioned per day with three modes auto-detected at `init()` time:
+  TimescaleDB hypertables, pg_partman (4.x or 5.x), or native Postgres range
+  partitions. Root-span lookups are served by partial indexes, and OLAP queries
+  (aggregates, breakdowns, time-series, percentiles) prune partitions by
+  `timestamp`. A small discovery cache table powers stale-while-revalidate
+  lookups for entity names/types/labels.
+
+  The `observability` connection is **required** — callers always make an
+  explicit decision about where observability data lives. For production,
+  point it at a dedicated Postgres instance to keep OLAP scans from
+  contending with your primary OLTP workload. Reusing the primary
+  connection works for local development and logs a runtime warning on every
+  construction.
+
+  ```typescript
+  import { Mastra } from '@mastra/core';
+  import { PostgresStoreVNext } from '@mastra/pg';
+
+  export const mastra = new Mastra({
+    storage: new PostgresStoreVNext({
+      id: 'app',
+      connectionString: process.env.DATABASE_URL!,
+      observability: {
+        connectionString: process.env.OBSERVABILITY_DATABASE_URL!,
+      },
+    }),
+  });
+  ```
+
+  Delta polling uses Postgres transaction IDs and a safe transaction horizon so
+  concurrent writers cannot cause late-committing rows to be skipped. The
+  `observability-delta-polling` feature flag is opt-in.
+
+  `ensureNativePartitions()` swallows the `42P07 relation already exists`
+  error around `CREATE TABLE IF NOT EXISTS … PARTITION OF`, matching the
+  existing guard used for base-table and index DDL. This makes concurrent
+  `init()` from two processes (serverless cold-start, blue/green overlap, two
+  stores sharing a schema) idempotent instead of letting the loser surface an
+  unhandled duplicate-relation error.
+
+### Patch Changes
+
+- Added full Agent Builder storage support to the PostgreSQL adapter, bringing it to parity with libSQL. ([#17596](https://github.com/mastra-ai/mastra/pull/17596))
+
+  Previously, projects using PostgreSQL could not store tool provider connections or agent tool providers, and several Agent Builder tables were missing from the exported schema.
+  - Added storage for tool provider connections, so connections can be created, read, listed by author, and deleted on PostgreSQL.
+  - Agent versions now persist their tool providers on PostgreSQL across save and load.
+  - Fixed schema export so all Agent Builder tables are included.
+
+- Updated dependencies [[`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`e9be4e7`](https://github.com/mastra-ai/mastra/commit/e9be4e747ec3d8b65548bff92f9377db06105376), [`d53cfc2`](https://github.com/mastra-ai/mastra/commit/d53cfc2c7f8d78343a4aa84ec4e129ba25f3325e), [`65799d4`](https://github.com/mastra-ai/mastra/commit/65799d4d549e5ebb9c848fbe3f51ac090f64becf), [`c268c89`](https://github.com/mastra-ai/mastra/commit/c268c89f4c63a93ee474d3cffdf3ea60bf00d4f2), [`d468acb`](https://github.com/mastra-ai/mastra/commit/d468acb07aec1bb19a2cb0ada8042b05b46746b2), [`0c72f03`](https://github.com/mastra-ai/mastra/commit/0c72f032abb13254df5a7856d64be2f207b8006d), [`3b45ea9`](https://github.com/mastra-ai/mastra/commit/3b45ea95015557a6cb9d70dc5252af54ab1b78ac), [`f084be1`](https://github.com/mastra-ai/mastra/commit/f084be1fcbe33ad7480913e44d6130c421c0976f)]:
+  - @mastra/core@1.42.0-alpha.0
+
+## 1.12.1
+
+### Patch Changes
+
+- Added notification inbox storage support for Postgres stores. ([#17241](https://github.com/mastra-ai/mastra/pull/17241))
+
+  ```ts
+  import { PostgresStore } from '@mastra/pg';
+
+  const storage = new PostgresStore({ connectionString: process.env.POSTGRES_URL! });
+  ```
+
+  Agents using this store can persist thread-scoped notification inbox records for notification signals.
+
+- Updated dependencies [[`c973db4`](https://github.com/mastra-ai/mastra/commit/c973db428df1b564ff0c35d4b2a90e8f4f1e13fd), [`552285e`](https://github.com/mastra-ai/mastra/commit/552285e5af43cfc680a0972032cab8de8776c6a0), [`77e686c`](https://github.com/mastra-ai/mastra/commit/77e686c264e493e99ae5024e4dfe3ea5d5a09718), [`ece8dba`](https://github.com/mastra-ai/mastra/commit/ece8dba7ec1a5089eee8c33167cd762bfa91e509), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`e2a8380`](https://github.com/mastra-ai/mastra/commit/e2a838017a7657850404c1e94c70d79ffdc6f14a), [`be3f1cd`](https://github.com/mastra-ai/mastra/commit/be3f1cd81f0e2a649e8eac15a024d542d814aef8), [`a34d9db`](https://github.com/mastra-ai/mastra/commit/a34d9dbc39fedb722f271318e9355ecee70489ab)]:
+  - @mastra/core@1.39.0
+
+## 1.12.1-alpha.0
+
+### Patch Changes
+
+- Added notification inbox storage support for Postgres stores. ([#17241](https://github.com/mastra-ai/mastra/pull/17241))
+
+  ```ts
+  import { PostgresStore } from '@mastra/pg';
+
+  const storage = new PostgresStore({ connectionString: process.env.POSTGRES_URL! });
+  ```
+
+  Agents using this store can persist thread-scoped notification inbox records for notification signals.
+
+- Updated dependencies [[`c973db4`](https://github.com/mastra-ai/mastra/commit/c973db428df1b564ff0c35d4b2a90e8f4f1e13fd), [`552285e`](https://github.com/mastra-ai/mastra/commit/552285e5af43cfc680a0972032cab8de8776c6a0), [`77e686c`](https://github.com/mastra-ai/mastra/commit/77e686c264e493e99ae5024e4dfe3ea5d5a09718), [`ece8dba`](https://github.com/mastra-ai/mastra/commit/ece8dba7ec1a5089eee8c33167cd762bfa91e509), [`e751af2`](https://github.com/mastra-ai/mastra/commit/e751af219433fbf4c7035b2d771b4c9ec8813b05), [`e2a8380`](https://github.com/mastra-ai/mastra/commit/e2a838017a7657850404c1e94c70d79ffdc6f14a), [`be3f1cd`](https://github.com/mastra-ai/mastra/commit/be3f1cd81f0e2a649e8eac15a024d542d814aef8), [`a34d9db`](https://github.com/mastra-ai/mastra/commit/a34d9dbc39fedb722f271318e9355ecee70489ab)]:
+  - @mastra/core@1.39.0-alpha.0
+
 ## 1.12.0
 
 ### Minor Changes

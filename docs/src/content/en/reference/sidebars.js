@@ -11,11 +11,21 @@ const sidebars = {
     { type: 'doc', id: 'configuration', label: 'Configuration' },
     {
       type: 'category',
+      label: 'ACP',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'acp/acp-agent', label: 'AcpAgent' },
+        { type: 'doc', id: 'acp/create-acp-tool', label: 'createACPTool()' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Agents',
       collapsed: true,
       items: [
         { type: 'doc', id: 'agents/agent', label: 'Agent Class' },
         { type: 'doc', id: 'agents/channels', label: 'Channels' },
+        { type: 'doc', id: 'agents/durable-agent', label: 'DurableAgent' },
         { type: 'doc', id: 'agents/generate', label: '.generate()' },
         { type: 'doc', id: 'agents/generateLegacy', label: '.generateLegacy()' },
         {
@@ -151,6 +161,7 @@ const sidebars = {
         { type: 'doc', id: 'core/listScorers', label: '.listScorers()' },
         { type: 'doc', id: 'core/listVectors', label: '.listVectors()' },
         { type: 'doc', id: 'core/listWorkflows', label: '.listWorkflows()' },
+        { type: 'doc', id: 'core/removeWorkspace', label: '.removeWorkspace()' },
         { type: 'doc', id: 'core/setLogger', label: '.setLogger()' },
         { type: 'doc', id: 'core/setStorage', label: '.setStorage()' },
       ],
@@ -179,7 +190,6 @@ const sidebars = {
           type: 'category',
           label: 'Agent Builder',
           collapsed: true,
-          customProps: { tags: ['new'] },
           items: [
             {
               type: 'doc',
@@ -241,6 +251,7 @@ const sidebars = {
             { type: 'doc', id: 'evals/keyword-coverage', label: 'Keyword Coverage Scorer' },
             { type: 'doc', id: 'evals/noise-sensitivity', label: 'Noise Sensitivity Scorer' },
             { type: 'doc', id: 'evals/prompt-alignment', label: 'Prompt Alignment Scorer' },
+            { type: 'doc', id: 'evals/rubric', label: 'Rubric Scorer' },
             { type: 'doc', id: 'evals/textual-difference', label: 'Textual Difference Scorer' },
             { type: 'doc', id: 'evals/tone-consistency', label: 'Tone Consistency Scorer' },
             { type: 'doc', id: 'evals/tool-call-accuracy', label: 'Tool Call Accuracy Scorers' },
@@ -464,6 +475,19 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'PubSub',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'pubsub/caching-pubsub', label: 'CachingPubSub' },
+        { type: 'doc', id: 'pubsub/event-emitter', label: 'EventEmitterPubSub' },
+        { type: 'doc', id: 'pubsub/google-cloud-pubsub', label: 'GoogleCloudPubSub' },
+        { type: 'doc', id: 'pubsub/base', label: 'PubSub' },
+        { type: 'doc', id: 'pubsub/redis-streams', label: 'RedisStreamsPubSub' },
+        { type: 'doc', id: 'pubsub/unix-socket-pubsub', label: 'UnixSocketPubSub' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'RAG',
       collapsed: true,
       items: [
@@ -492,6 +516,32 @@ const sidebars = {
         { type: 'doc', id: 'server/nestjs-adapter', label: 'NestJS Adapter' },
         { type: 'doc', id: 'server/register-api-route', label: 'registerApiRoute()' },
         { type: 'doc', id: 'server/routes', label: 'Server Routes' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Signals',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'signals/create-notification-inbox-tool',
+          label: 'createNotificationInboxTool()',
+          customProps: { tags: ['alpha'] },
+        },
+        { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider', customProps: { tags: ['alpha'] } },
+        {
+          type: 'doc',
+          id: 'signals/task-signal-provider',
+          label: 'TaskSignalProvider',
+          customProps: { tags: ['alpha'] },
+        },
+        {
+          type: 'doc',
+          id: 'signals/webhook-signal-provider',
+          label: 'WebhookSignalProvider',
+          customProps: { tags: ['alpha'] },
+        },
       ],
     },
     {
@@ -562,6 +612,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'tools/brightdata', label: 'Bright Data Tools' },
+        { type: 'doc', id: 'tools/create-code-mode', label: 'createCodeMode()', customProps: { tags: ['alpha'] } },
         { type: 'doc', id: 'tools/document-chunker-tool', label: 'createDocumentChunkerTool()' },
         { type: 'doc', id: 'tools/graph-rag-tool', label: 'createGraphRAGTool()' },
         { type: 'doc', id: 'tools/create-tool', label: 'createTool()' },
@@ -679,7 +730,11 @@ const sidebars = {
       label: 'Workspaces',
       collapsed: true,
       items: [
-        { type: 'doc', id: 'workspace/agentcore-runtime-sandbox', label: 'AgentCoreRuntimeSandbox' },
+        {
+          type: 'doc',
+          id: 'workspace/agentcore-runtime-sandbox',
+          label: 'AgentCoreRuntimeSandbox',
+        },
         { type: 'doc', id: 'workspace/agentfs-filesystem', label: 'AgentFSFilesystem' },
         { type: 'doc', id: 'workspace/azure-blob-filesystem', label: 'AzureBlobFilesystem' },
         { type: 'doc', id: 'workspace/blaxel-sandbox', label: 'BlaxelSandbox' },
@@ -692,6 +747,7 @@ const sidebars = {
         { type: 'doc', id: 'workspace/local-filesystem', label: 'LocalFilesystem' },
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
         { type: 'doc', id: 'workspace/modal-sandbox', label: 'ModalSandbox' },
+        { type: 'doc', id: 'workspace/railway-sandbox', label: 'RailwaySandbox' },
         { type: 'doc', id: 'workspace/s3-filesystem', label: 'S3Filesystem' },
         { type: 'doc', id: 'workspace/process-manager', label: 'SandboxProcessManager' },
         { type: 'doc', id: 'workspace/vercel-microvm-sandbox', label: 'VercelMicroVMSandbox' },

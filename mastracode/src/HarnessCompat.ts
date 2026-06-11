@@ -13,7 +13,11 @@ type CloneSessionOptions = {
   modelId?: string;
 };
 
-type HarnessV1Session = Session;
+type HarnessV1Session<TState = {}> = Session<TState>;
+type SessionStateFields = {
+  currentModelId?: string;
+  modeId?: string;
+};
 
 export function v1ModeToLegacy<TState = {}>(mode: HarnessMode, agent: Agent): HarnessModeLegacy<TState> {
   const meta = mode.metadata ?? {};
@@ -28,26 +32,81 @@ export function v1ModeToLegacy<TState = {}>(mode: HarnessMode, agent: Agent): Ha
 }
 
 export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
-  #session!: Session;
-  #harnessV1: Harness<HarnessMode[]>;
+  #session?: Session<TState>;
+  #harnessV1: Harness<HarnessMode[], TState>;
 
-  constructor(args: HarnessConfig<TState>, harnessV1: Harness<HarnessMode[]>) {
+  constructor(args: HarnessConfig<TState>, harnessV1: Harness<HarnessMode[], TState>) {
     super(args);
 
     this.#harnessV1 = harnessV1;
   }
 
-  async switchThread({ threadId }: { threadId: string }): Promise<void> {
-    const modes = this.listModes();
+  getState(): Readonly<TState> {
+    const state = super.getState() as Readonly<TState> & SessionStateFields;
+    let session: Session<TState> | undefined;
+    try {
+      session = this.#session;
+    } catch {
+      session = undefined;
+    }
 
-    this.#session = await this.#harnessV1.session({
+    if (!session) {
+      return state;
+    }
+
+    return {
+      ...state,
+      ...session.getState(),
+      currentModelId: session.getModelId(),
+      modeId: session.getMode().id,
+    } as Readonly<TState>;
+  }
+
+  async setState(updates: Partial<TState>): Promise<void> {
+    const { currentModelId, modeId, ...harnessUpdates } = updates as Partial<TState> & SessionStateFields;
+    let session: Session<TState> | undefined;
+    try {
+      session = this.#session;
+    } catch {
+      session = undefined;
+    }
+
+    if (session) {
+      if (typeof currentModelId === 'string') {
+        session.setModelId(currentModelId);
+      }
+      if (typeof modeId === 'string' && modeId !== session.getMode().id) {
+        await this.switchMode({ modeId });
+      }
+    }
+
+    if (Object.keys(harnessUpdates).length > 0) {
+      if (session) {
+        await session.setState(harnessUpdates as Partial<TState>);
+      }
+      await super.setState(harnessUpdates as Partial<TState>);
+    }
+  }
+
+  getSubagentModelId({ agentType }: { agentType?: string } = {}): string | null {
+    return super.getSubagentModelId({ agentType });
+  }
+
+  async setSubagentModelId({ modelId, agentType }: { modelId: string; agentType?: string }): Promise<void> {
+    await super.setSubagentModelId({ modelId, agentType });
+  }
+
+  async switchThread({ threadId }: { threadId: string }): Promise<void> {
+    const currentModelId = (this.getState() as SessionStateFields).currentModelId;
+
+    const session = await this.#harnessV1.session({
       threadId,
       resourceId: this.getResourceId(),
     });
+    this.#session = session;
 
-    const defaultModelId = modes.find(mode => mode.id === this.#session.getMode().id)?.defaultModelId;
-    if (defaultModelId) {
-      this.#session.setModelId(defaultModelId);
+    if (typeof currentModelId === 'string' && currentModelId.length > 0) {
+      session.setModelId(currentModelId);
     }
 
     await super.switchThread({ threadId });
@@ -71,6 +130,7 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
         return {
           id: session.threadId,
           resourceId: session.resourceId,
+          title: legacyThread?.title,
           createdAt: session.createdAt,
           updatedAt: session.lastActivityAt,
           metadata: {
@@ -97,8 +157,8 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     ];
   }
 
-  async cloneSession(opts: CloneSessionOptions = {}): Promise<Session> {
-    const session = this.#session as HarnessV1Session | undefined;
+  async cloneSession(opts: CloneSessionOptions = {}): Promise<Session<TState>> {
+    const session = this.#session as HarnessV1Session<TState> | undefined;
     if (!session) {
       throw new Error('No active session to clone');
     }
@@ -121,8 +181,8 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     }
 
     const sourceResourceId = resourceId ?? this.getResourceId();
-    const currentSession = this.#session as HarnessV1Session | undefined;
-    const sourceSession: HarnessV1Session =
+    const currentSession = this.#session as HarnessV1Session<TState> | undefined;
+    const sourceSession: HarnessV1Session<TState> =
       currentSession?.threadId === sourceId && currentSession.resourceId === sourceResourceId
         ? currentSession
         : await this.#harnessV1.session({
@@ -158,7 +218,14 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
       throw new Error('HarnessCompat requires an initialized Mastra instance');
     }
 
-    return v1ModeToLegacy(mode, mastra.getAgentById(mode.agentId));
+    // Harness v1 modes no longer carry an `agentId` field (#17534); MastraCode
+    // stores the backing agent id in mode metadata instead.
+    const agentId = mode.metadata?.agentId;
+    if (typeof agentId !== 'string') {
+      return super.getCurrentMode();
+    }
+
+    return v1ModeToLegacy(mode, mastra.getAgentById(agentId));
   }
 
   /**
@@ -178,5 +245,19 @@ export class HarnessCompat<TState = {}> extends HarnessLegacy<TState> {
     this.#session.setMode(mode);
 
     await super.switchMode({ modeId });
+  }
+
+  /**
+   * Activate a skill on the current v1 session.
+   *
+   * Pass-through to `Session.useSkill` — returns the resolved instructions
+   * string, or throws `HarnessSkillNotFoundError` if the skill is missing.
+   * Throws if there is no active session.
+   */
+  async useSkill(name: string, _opts?: { args?: Record<string, unknown> }): Promise<string> {
+    if (!this.#session) {
+      throw new Error('No active session to use skill');
+    }
+    return this.#session.useSkill(name);
   }
 }

@@ -111,7 +111,6 @@ export function ScorersSection({ control, error, readOnly = false }: ScorersSect
                         emptyText="No scorers available"
                         disabled={isLoading || readOnly}
                         error={error}
-                        variant="default"
                       />
 
                       {selectedOptions.length > 0 && (

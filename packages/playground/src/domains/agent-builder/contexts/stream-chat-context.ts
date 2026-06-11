@@ -1,12 +1,13 @@
-import type { MastraUIMessage } from '@mastra/react';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { createContext, useContext } from 'react';
+import { useDebouncedRunning } from '../hooks/use-debounced-running';
 
 export interface RunningContextValue {
   isRunning: boolean;
 }
 
 export interface MessagesContextValue {
-  messages: MastraUIMessage[];
+  messages: MastraDBMessage[];
 }
 
 export interface SendContextValue {
@@ -27,7 +28,14 @@ export const StreamApprovalContext = createContext<ApprovalContextValue>({
 });
 
 export const useStreamRunning = (): boolean => useContext(StreamRunningContext).isRunning;
-export const useStreamMessages = (): MastraUIMessage[] => useContext(StreamMessagesContext).messages;
+
+/**
+ * Like `useStreamRunning`, but with the idle-gap grace period from
+ * `useDebouncedRunning` so brief mid-conversation drops don't flicker
+ * consumers. The false -> true transition still propagates immediately.
+ */
+export const useStreamRunningDebounced = (): boolean => useDebouncedRunning(useStreamRunning());
+export const useStreamMessages = (): MastraDBMessage[] => useContext(StreamMessagesContext).messages;
 export const useStreamSend = (): ((message: string) => void) => useContext(StreamSendContext).send;
 export const useStreamApproval = (): ApprovalContextValue => useContext(StreamApprovalContext);
 
@@ -45,8 +53,8 @@ export const useStreamRetry = (): (() => void) | null => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
       if (message.role !== 'user') continue;
-      const textPart = message.parts.find(part => part.type === 'text') as { text?: string } | undefined;
-      if (textPart?.text) return textPart.text;
+      const textPart = message.content.parts.find(part => part.type === 'text');
+      if (textPart && 'text' in textPart && textPart.text) return textPart.text;
     }
     return null;
   })();

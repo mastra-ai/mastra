@@ -1,9 +1,15 @@
 import type { MemoryConfigInternal } from '@mastra/core/memory';
 import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/core/schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '@mastra/core/schema';
+import type { ToolAction } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { JSONSchema7 } from 'json-schema';
+
+// Keep these in sync with @mastra/core/memory. @mastra/memory supports older
+// peer-compatible @mastra/core versions that may not export the newer names.
+const UPDATE_WORKING_MEMORY_TOOL_NAME = 'updateWorkingMemory';
+const SET_WORKING_MEMORY_TOOL_NAME = 'setWorkingMemory';
 
 /**
  * Deep merges two objects, with special handling for null values (delete) and arrays (replace).
@@ -160,9 +166,17 @@ export const updateWorkingMemoryTool = (memoryConfig?: MemoryConfigInternal) => 
   // For template-based (Markdown), we use replace semantics (existing behavior)
   const usesMergeSemantics = Boolean(schema);
 
+  const useStateSignals = memoryConfig?.workingMemory?.useStateSignals === true;
+
+  const stateSignalsPreamble = `The current working memory state is delivered to you each turn by the system inside a <working-memory>...</working-memory> block. That block is system-emitted state, NOT something the user typed — never describe it as the user sharing it. Read from it directly when answering. Only call this tool when the user provides genuinely NEW or CHANGED facts that should be persisted; do NOT call it to re-save unchanged data.`;
+
   const description = schema
-    ? `Update the working memory with new information. Data is merged with existing memory - only include fields you want to add or update. To preserve existing data, omit the field entirely. Arrays are replaced entirely when provided, so pass the complete array or omit it to keep the existing values.`
-    : `Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.`;
+    ? useStateSignals
+      ? `${stateSignalsPreamble} Data is merged with existing memory — only include fields you want to add or update.`
+      : `Update the working memory with new information. Data is merged with existing memory - only include fields you want to add or update. To preserve existing data, omit the field entirely. Arrays are replaced entirely when provided, so pass the complete array or omit it to keep the existing values.`
+    : useStateSignals
+      ? `${stateSignalsPreamble} Pass the full updated Markdown blob as a string in the memory field.`
+      : `Update the working memory with new information. Any data not included will be overwritten. Always pass data as string to the memory field. Never pass an object.`;
 
   return createTool({
     id: 'update-working-memory',
@@ -405,3 +419,28 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
     },
   });
 };
+
+/**
+ * Returns the working-memory tool plus the wire name it should be registered under.
+ *
+ * - Default delivery (`useStateSignals: false`): wire name `updateWorkingMemory`,
+ *   identical shape to today.
+ * - State-signals delivery (`useStateSignals: true`): wire name `setWorkingMemory`.
+ *   The rename keeps legacy strip filters (which match the literal `updateWorkingMemory`)
+ *   from removing tool-call parts so they persist as a normal audit trail. Any
+ *   future state-signal-specific tweaks to the tool (e.g. delta-aware results,
+ *   scoped descriptions) belong here.
+ *
+ * The VNext vs default tool body decision is left to the caller because Memory
+ * owns the `isVNextWorkingMemoryConfig` check; pass `vNext: true` to use the
+ * search-and-replace shape.
+ */
+export function createWorkingMemoryTool(
+  config: MemoryConfigInternal,
+  options: { vNext?: boolean } = {},
+): { name: string; tool: ToolAction<any, any, any> } {
+  const useStateSignals = config.workingMemory?.useStateSignals === true;
+  const tool = options.vNext ? __experimental_updateWorkingMemoryToolVNext(config) : updateWorkingMemoryTool(config);
+  const name = useStateSignals ? SET_WORKING_MEMORY_TOOL_NAME : UPDATE_WORKING_MEMORY_TOOL_NAME;
+  return { name, tool };
+}

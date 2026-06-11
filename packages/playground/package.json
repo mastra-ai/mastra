@@ -1,7 +1,7 @@
 {
   "name": "@internal/playground",
   "private": true,
-  "version": "1.11.0",
+  "version": "1.12.3-alpha.3",
   "type": "module",
   "main": "./src/exports.ts",
   "types": "./src/exports.ts",
@@ -42,10 +42,6 @@
     "test:e2e:setup": "node ./e2e/scripts/info.js && pnpm install --dir ./e2e/kitchen-sink && playwright install chromium"
   },
   "dependencies": {
-    "@assistant-ui/react": "^0.14.0",
-    "@assistant-ui/react-markdown": "^0.12.11",
-    "@assistant-ui/react-syntax-highlighter": "^0.12.9",
-    "@assistant-ui/react-ui": "^0.2.1",
     "@autoform/core": "^3.0.0",
     "@autoform/react": "^4.0.0",
     "@codemirror/lang-javascript": "^6.2.5",
@@ -98,8 +94,9 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@mastra/memory": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "@playwright/test": "^1.58.2",
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/postcss": "^4.2.2",
     "@tailwindcss/vite": "4.2.2",
     "@testing-library/react": "^16.3.2",
@@ -110,7 +107,7 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/semver": "^7.7.1",
     "@vitejs/plugin-react": "^5.2.0",
-    "eslint-plugin-react-hooks": "^7.1.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "jsdom": "^27",
     "react-grab": "^0.1.37",

@@ -1,6 +1,7 @@
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
 import { useChat } from '@mastra/react';
-import type { MastraUIMessage, SendMessageArgs } from '@mastra/react';
+import type { ClientToolsInput, SendMessageArgs } from '@mastra/react';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useDebounce } from 'use-debounce';
@@ -21,7 +22,7 @@ import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 export interface StreamChatProviderProps {
   agentId: string;
   threadId: string;
-  initialMessages: MastraUIMessage[];
+  initialMessages: MastraDBMessage[];
   /**
    * Optional starter prompt forwarded from the agent-builder starter page. When
    * present, it is dispatched once on mount, *after* `useChat`'s own
@@ -31,7 +32,7 @@ export interface StreamChatProviderProps {
    * ordering.
    */
   initialUserMessage?: string;
-  clientTools?: Record<string, unknown>;
+  clientTools?: ClientToolsInput;
   /**
    * Optional per-call system-prompt augmentation forwarded to the agent on
    * every send via `modelSettings.instructions`. Read fresh at send time so the
@@ -53,7 +54,12 @@ export const StreamChatProvider = ({
   debounceTime = 0,
   children,
 }: StreamChatProviderProps) => {
-  const { messages, isRunning, sendMessage, approveToolCall, declineToolCall } = useChat({ agentId, initialMessages });
+  const threadSignalsEnabled = window.MASTRA_AGENT_SIGNALS !== 'false';
+  const { messages, isRunning, sendMessage, approveToolCall, declineToolCall } = useChat({
+    agentId,
+    initialMessages,
+    enableThreadSignals: threadSignalsEnabled,
+  });
   const { data: currentUser } = useCurrentUser();
 
   // temping the fact that client tools open and closes multiple streams making the UI flicker with isStreaming: true, then false for a few MS
@@ -86,6 +92,11 @@ export const StreamChatProvider = ({
           // server_error on the next request.
           maxTokens: 5000,
           temperature: 1,
+          providerOptions: {
+            openai: {
+              reasoningEffort: 'low',
+            },
+          },
         },
         requestContext,
       };

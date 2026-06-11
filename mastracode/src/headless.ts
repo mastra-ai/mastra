@@ -205,28 +205,37 @@ function autoResolve<TState extends Record<string, unknown>>(
   event: HarnessEvent,
 ): { resolved: true; label: string; json: Record<string, unknown> } | { resolved: false } {
   switch (event.type) {
-    case 'sandbox_access_request': {
-      harness.respondToQuestion({ questionId: event.questionId, answer: 'Yes' });
-      return { resolved: true, label: `[auto-approved sandbox] ${event.path}`, json: { ...event, autoApproved: true } };
-    }
     case 'tool_approval_required': {
       harness.respondToToolApproval({ decision: 'approve' });
       return { resolved: true, label: `[auto-approved] ${event.toolName}`, json: { ...event, autoApproved: true } };
     }
-    case 'ask_question': {
-      harness.respondToQuestion({
-        questionId: event.questionId,
-        answer: 'Proceed with your best judgment. Do not ask further questions.',
+    case 'tool_suspended': {
+      const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
+      if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
+        void harness.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: 'Yes' });
+        return {
+          resolved: true,
+          label: `[auto-approved sandbox] ${String(payload.path ?? '')}`,
+          json: { ...event, autoApproved: true },
+        };
+      }
+      if (event.toolName === 'submit_plan') {
+        void harness.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: { action: 'approved' } });
+        return {
+          resolved: true,
+          label: `[auto-approved plan] ${String(payload.title ?? '')}`,
+          json: { ...event, autoApproved: true },
+        };
+      }
+      void harness.respondToToolSuspension({
+        toolCallId: event.toolCallId,
+        resumeData: 'Proceed with your best judgment. Do not ask further questions.',
       });
       return {
         resolved: true,
-        label: `[auto-answered] ${truncate(event.question, 100)}`,
+        label: `[auto-answered] ${truncate(String(payload.question ?? ''), 100)}`,
         json: { ...event, autoAnswered: true },
       };
-    }
-    case 'plan_approval_required': {
-      void harness.respondToPlanApproval({ planId: event.planId, response: { action: 'approved' } });
-      return { resolved: true, label: `[auto-approved plan] ${event.title}`, json: { ...event, autoApproved: true } };
     }
     default:
       return { resolved: false };
@@ -623,13 +632,19 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
 
   setupDebugLogging();
   await harness.init();
+  await harness.getMastra()?.startWorkers();
 
   const exitCode = await runHeadless(harness, { ...args, prompt }, effectiveDefaults);
 
   // Cleanup
   releaseAllThreadLocks();
   const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
-  await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats(), closeSignalsPubSub?.()]);
+  await Promise.allSettled([
+    mcpManager?.disconnect(),
+    harness.getMastra()?.stopWorkers(),
+    harness?.stopHeartbeats(),
+    closeSignalsPubSub?.(),
+  ]);
 
   process.exit(exitCode);
 }

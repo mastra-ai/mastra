@@ -38,6 +38,10 @@ function parseJson(v: unknown): any {
 
 /** Convert a DB row (snake_case) to a BackgroundTask object (camelCase). */
 function rowToTask(row: Record<string, any>): BackgroundTask {
+  const createdAt = row.createdAtZ || row.createdAt;
+  const startedAt = row.startedAtZ || row.startedAt;
+  const suspendedAt = row.suspendedAtZ || row.suspendedAt;
+  const completedAt = row.completedAtZ || row.completedAt;
   return {
     id: row.id,
     status: row.status as BackgroundTaskStatus,
@@ -54,10 +58,10 @@ function rowToTask(row: Record<string, any>): BackgroundTask {
     retryCount: Number(row.retry_count),
     maxRetries: Number(row.max_retries),
     timeoutMs: Number(row.timeout_ms),
-    createdAt: new Date(row.createdAtZ || row.createdAt),
-    startedAt: row.startedAtZ || row.startedAt ? new Date(row.startedAtZ || row.startedAt) : undefined,
-    suspendedAt: row.suspendedAtZ || row.suspendedAt ? new Date(row.suspendedAtZ || row.suspendedAt) : undefined,
-    completedAt: row.completedAtZ || row.completedAt ? new Date(row.completedAtZ || row.completedAt) : undefined,
+    createdAt: createdAt instanceof Date ? createdAt : new Date(createdAt),
+    startedAt: startedAt ? (startedAt instanceof Date ? startedAt : new Date(startedAt)) : undefined,
+    suspendedAt: suspendedAt ? (suspendedAt instanceof Date ? suspendedAt : new Date(suspendedAt)) : undefined,
+    completedAt: completedAt ? (completedAt instanceof Date ? completedAt : new Date(completedAt)) : undefined,
   };
 }
 
@@ -190,9 +194,13 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
         max_retries: task.maxRetries,
         timeout_ms: task.timeoutMs,
         createdAt: task.createdAt.toISOString(),
+        createdAtZ: task.createdAt.toISOString(),
         startedAt: task.startedAt?.toISOString() ?? null,
+        startedAtZ: task.startedAt?.toISOString() ?? null,
         suspendedAt: task.suspendedAt?.toISOString() ?? null,
+        suspendedAtZ: task.suspendedAt?.toISOString() ?? null,
         completedAt: task.completedAt?.toISOString() ?? null,
+        completedAtZ: task.completedAt?.toISOString() ?? null,
       },
     });
   }

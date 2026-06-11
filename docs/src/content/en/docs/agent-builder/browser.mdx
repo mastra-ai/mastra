@@ -56,7 +56,7 @@ new MastraEditor({
 
 - `id` — provider identifier, matched against `StorageBrowserConfig.provider` (e.g., `'stagehand'`).
 - `name` — display name shown in the Builder UI.
-- `createBrowser(config)` — hydrates a stored browser config into a runtime `MastraBrowser`. This is where you inject runtime-only credentials (API keys, project IDs) that are not stored in the agent snapshot.
+- `createBrowser(config)` — hydrates a stored browser config into a runtime `MastraBrowser`. This is where you inject runtime-only credentials (API keys, project IDs) that aren't stored in the agent snapshot.
 
 Browser classes ship as separate packages (e.g., `@mastra/stagehand`, `@mastra/agent-browser`). The provider entry is a plain object wrapping the class — register one entry per browser you want the Builder to expose to end users. See the [StorageBrowserRef reference](/reference/editor/storage-browser-ref) for the full `browser` field schema, including all `StorageBrowserConfig` options.
 

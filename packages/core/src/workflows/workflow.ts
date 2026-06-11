@@ -3,7 +3,7 @@ import { ReadableStream, TransformStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
 import type { MastraPrimitives } from '../action';
-import { Agent } from '../agent/agent';
+import type { Agent } from '../agent/agent';
 import type { AgentExecutionOptions } from '../agent/agent.types';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
@@ -12,6 +12,7 @@ import type { SubAgent } from '../agent/subagent';
 import { TripWire } from '../agent/trip-wire';
 import type { AgentStreamOptions } from '../agent/types';
 import { MastraFGAPermissions } from '../auth/ee';
+import type { ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
@@ -31,8 +32,8 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
-import { ProcessorRunner, ProcessorState, createProcessorSendSignal } from '../processors';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
+import { ProcessorRunner, ProcessorState, createProcessorSendSignal } from '../processors/runner';
 import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
@@ -145,15 +146,20 @@ function isToolStep(input: unknown): input is ToolStep<any, any, any, any, any> 
   return input instanceof Tool;
 }
 
+/**
+ * Check if something is an Agent or Tool without importing the Agent class
+ * (which would create an ESM init-time cycle with agent.ts).
+ * Uses the `component` discriminator from MastraBase instead of instanceof.
+ */
+function isAgentOrTool(input: unknown): boolean {
+  if (input instanceof Tool) return true;
+  const base = input as MastraBase;
+  if (base && base.component === RegisteredLogger.AGENT) return true;
+  return false;
+}
+
 function isStepParams(input: unknown): input is StepParams<any, any, any, any, any, any> {
-  return (
-    input !== null &&
-    typeof input === 'object' &&
-    'id' in input &&
-    'execute' in input &&
-    !(input instanceof Agent) &&
-    !(input instanceof Tool)
-  );
+  return input !== null && typeof input === 'object' && 'id' in input && 'execute' in input && !isAgentOrTool(input);
 }
 
 function areProcessorMessageArraysEqual(before: unknown[] | undefined, after: unknown[] | undefined): boolean {
@@ -277,7 +283,8 @@ export function createStep<TProcessorId extends string>(
     | (Processor<TProcessorId> & { processInputStep: Function })
     | (Processor<TProcessorId> & { processOutputStream: Function })
     | (Processor<TProcessorId> & { processOutputResult: Function })
-    | (Processor<TProcessorId> & { processOutputStep: Function }),
+    | (Processor<TProcessorId> & { processOutputStep: Function })
+    | (Processor<TProcessorId> & { computeStateSignal: Function }),
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
@@ -1273,16 +1280,17 @@ function createStepFromProcessor<TProcessorId extends string>(
                 if (part && (part as ChunkType).type === 'finish') {
                   // Output just totalChunks (workflow processors don't track accumulated text yet)
                   processorSpan?.end({ output: { totalChunks: (streamParts ?? []).length } });
-                  delete mutableState[spanKey];
+                  // Keep the ended span reference in mutableState so that
+                  // post-finish chunks (e.g. step-finish) don't trigger a
+                  // new span creation at the guard above.
                 }
               } catch (error) {
-                // End span with error and clean up state
+                // End span with error (keep reference to prevent re-creation)
                 if (error instanceof TripWire) {
                   processorSpan?.end({ output: { tripwire: error.message } });
                 } else {
                   processorSpan?.error({ error: error as Error, endSpan: true });
                 }
-                delete mutableState[spanKey];
                 throw error;
               }
 
@@ -1500,19 +1508,24 @@ export function cloneStep<TStepId extends string>(
  * A Processor must have an 'id' property and at least one processor method.
  */
 export function isProcessor(obj: unknown): obj is Processor {
+  if (
+    obj === null ||
+    typeof obj !== 'object' ||
+    !('id' in obj) ||
+    typeof (obj as Record<string, unknown>).id !== 'string' ||
+    isAgentOrTool(obj)
+  ) {
+    return false;
+  }
+  const rec = obj as Record<string, unknown>;
   return (
-    obj !== null &&
-    typeof obj === 'object' &&
-    'id' in obj &&
-    typeof (obj as any).id === 'string' &&
-    !(obj instanceof Agent) &&
-    !(obj instanceof Tool) &&
-    (typeof (obj as any).processInput === 'function' ||
-      typeof (obj as any).processInputStep === 'function' ||
-      typeof (obj as any).processOutputStream === 'function' ||
-      typeof (obj as any).processOutputResult === 'function' ||
-      typeof (obj as any).processOutputStep === 'function' ||
-      typeof (obj as any).processAPIError === 'function')
+    typeof rec.processInput === 'function' ||
+    typeof rec.processInputStep === 'function' ||
+    typeof rec.processOutputStream === 'function' ||
+    typeof rec.processOutputResult === 'function' ||
+    typeof rec.processOutputStep === 'function' ||
+    typeof rec.processAPIError === 'function' ||
+    typeof rec.computeStateSignal === 'function'
   );
 }
 
@@ -1522,108 +1535,6 @@ export function isProcessor(obj: unknown): obj is Processor {
  * adding or removing type parameters only requires updating one place.
  */
 export type AnyWorkflow = Workflow<any, any, any, any, any, any, any, any>;
-
-/**
- * Registration slot for the evented `createWorkflow` factory.
- *
- * The evented module registers itself here at module-load time. We use a
- * registration slot rather than a static import because `evented/workflow.ts`
- * already imports `Workflow` from this module, and a reverse static import
- * would create an init-time cycle that leaves `Workflow` undefined when
- * `class EventedWorkflow extends Workflow` evaluates.
- *
- * Any caller that needs schedule promotion must ensure the evented module is
- * loaded — typically by importing from `@mastra/core/workflows` (which
- * re-exports `./evented`) or by an explicit `import '@mastra/core/workflows/evented'`.
- */
-type EventedCreateWorkflowFn = (
-  params: WorkflowConfig<any, any, any, any, any, any>,
-) => Workflow<any, any, any, any, any, any, any, any>;
-
-// `var` is intentional: it is hoisted and initialized to `undefined` at the top
-// of module evaluation, which avoids TDZ if the evented module ends up being
-// evaluated before this module finishes its body (e.g. when both are reached
-// via different import chains during the same load).
-
-var eventedCreateWorkflow: EventedCreateWorkflowFn | undefined;
-
-/** @internal Called once by the evented module at load time. */
-export function __registerEventedCreateWorkflow(fn: EventedCreateWorkflowFn): void {
-  eventedCreateWorkflow = fn;
-}
-
-export function createWorkflow<
-  TWorkflowId extends string = string,
-  TState = unknown,
-  TInput = unknown,
-  TOutput = unknown,
-  TSteps extends Step<string, any, any, any, any, any, DefaultEngineType>[] = Step[],
-  TRequestContext extends Record<string, any> | unknown = unknown,
->(params: WorkflowConfig<TWorkflowId, TState, TInput, TOutput, TSteps, TRequestContext>) {
-  // A workflow that declares a `schedule` is auto-promoted to the evented engine.
-  // The public Workflow API surface is unchanged — EventedWorkflow extends Workflow
-  // and overrides createRun/start/startAsync/streamLegacy/stream/resume with matching
-  // signatures. Users keep calling it the same way; manual runs and scheduled fires
-  // share a single execution path.
-  if (params.schedule) {
-    if (!eventedCreateWorkflow) {
-      throw new MastraError({
-        id: 'MASTRA_WORKFLOW_SCHEDULE_EVENTED_MODULE_NOT_LOADED',
-        domain: ErrorDomain.MASTRA_WORKFLOW,
-        category: ErrorCategory.USER,
-        text:
-          `Workflow "${params.id}" declares a schedule, which auto-promotes it to the evented execution engine, ` +
-          `but the evented module has not been loaded. This usually means you imported \`createWorkflow\` from a deep path. ` +
-          `Import from \`@mastra/core/workflows\` or add \`import '@mastra/core/workflows/evented';\` to your entry file.`,
-        details: { workflowId: String(params.id ?? '') },
-      });
-    }
-    return eventedCreateWorkflow(params) as unknown as Workflow<
-      DefaultEngineType,
-      TSteps,
-      TWorkflowId,
-      TState,
-      TInput,
-      TOutput,
-      TInput,
-      TRequestContext
-    >;
-  }
-  return new Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TInput, TRequestContext>(params);
-}
-
-export function cloneWorkflow<
-  TWorkflowId extends string = string,
-  TState = unknown,
-  TInput = unknown,
-  TOutput = unknown,
-  TSteps extends Step<string, any, any, any, any, any, DefaultEngineType>[] = Step<
-    string,
-    any,
-    any,
-    any,
-    any,
-    any,
-    DefaultEngineType
-  >[],
-  TPrevSchema = TInput,
->(
-  workflow: Workflow<DefaultEngineType, TSteps, string, TState, TInput, TOutput, TPrevSchema>,
-  opts: { id: TWorkflowId },
-): Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> {
-  const wf: Workflow<DefaultEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, TPrevSchema> = new Workflow({
-    id: opts.id,
-    inputSchema: workflow.inputSchema,
-    outputSchema: workflow.outputSchema,
-    steps: workflow.stepDefs,
-    mastra: workflow.mastra,
-    options: workflow.options,
-  });
-
-  wf.setStepFlow(workflow.stepGraph);
-  wf.commit();
-  return wf;
-}
 
 export class Workflow<
   TEngineType = DefaultEngineType,
@@ -2536,6 +2447,7 @@ export class Workflow<
     outputWriter,
     validateInputs,
     perStep,
+    actor,
     engine: _engine,
     bail: _bail,
     ...rest
@@ -2572,6 +2484,7 @@ export class Workflow<
     outputWriter?: OutputWriter;
     validateInputs?: boolean;
     perStep?: boolean;
+    actor?: ActorSignal;
   } & Partial<ObservabilityContext>): Promise<TOutput | undefined> {
     const observabilityContext = resolveObservabilityContext(rest);
     this.__registerMastra(mastra);
@@ -2587,6 +2500,7 @@ export class Workflow<
         resource: { type: 'workflow', id: getWorkflowFGAResourceId(this.id) },
         permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
         requestContext,
+        actor,
         context: {
           resourceId,
         },

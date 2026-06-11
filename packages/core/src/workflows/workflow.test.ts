@@ -17,8 +17,9 @@ import { RequestContext } from '../request-context';
 import { MockStore } from '../storage/mock';
 import { createTool } from '../tools/tool';
 import { PUBSUB_SYMBOL } from './constants';
+import { createWorkflow } from './create';
 import type { Workflow } from './types';
-import { createStep, createWorkflow } from './workflow';
+import { createStep } from './workflow';
 
 // ============================================================================
 // Shared Test Suite (Default Engine)
@@ -780,6 +781,42 @@ describe('Workflow (Default Engine Specifics)', () => {
           bail: vi.fn(),
         }),
       ).rejects.toThrow('authenticated user is required');
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+    });
+
+    it('bypasses membership resolution for a tenant-scoped trusted actor', async () => {
+      const fgaProvider = {
+        require: vi.fn().mockResolvedValue(undefined),
+        check: vi.fn(),
+        filterAccessible: vi.fn(),
+      };
+      const workflow = createFGAWorkflow();
+      const mastra = new Mastra({
+        logger: false,
+        server: { fga: fgaProvider },
+      });
+      workflow.__registerMastra(mastra);
+
+      const requestContext = new RequestContext();
+      requestContext.set('organizationId', 'org-1');
+
+      const result = await (workflow as any).execute({
+        runId: 'run-3',
+        inputData: { value: 'ok' },
+        state: {},
+        setState: vi.fn(),
+        suspend: vi.fn(),
+        [PUBSUB_SYMBOL]: new EventEmitterPubSub(),
+        mastra,
+        requestContext,
+        actor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
+        abort: vi.fn(),
+        abortSignal: new AbortController().signal,
+        engine: 'default',
+        bail: vi.fn(),
+      });
+
+      expect(result).toEqual({ value: 'ok' });
       expect(fgaProvider.require).not.toHaveBeenCalled();
     });
   });

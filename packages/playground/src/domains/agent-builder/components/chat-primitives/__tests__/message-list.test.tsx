@@ -1,15 +1,31 @@
 // @vitest-environment jsdom
-import type { MastraUIMessage } from '@mastra/react';
+import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MessageList } from '../message-list';
 
-const buildAssistantMessage = (parts: MastraUIMessage['parts']): MastraUIMessage => ({
-  id: 'msg-1',
-  role: 'assistant',
-  parts,
-});
+const buildAssistantMessage = (parts: MastraMessagePart[]): MastraDBMessage =>
+  ({
+    id: 'msg-1',
+    role: 'assistant',
+    createdAt: new Date(),
+    content: {
+      format: 2,
+      parts,
+    },
+  }) as unknown as MastraDBMessage;
+
+const buildUserMessage = (text: string): MastraDBMessage =>
+  ({
+    id: 'user-1',
+    role: 'user',
+    createdAt: new Date(),
+    content: {
+      format: 2,
+      parts: [{ type: 'text', text } as unknown as MastraMessagePart],
+    },
+  }) as unknown as MastraDBMessage;
 
 describe('MessageList pending indicator', () => {
   afterEach(() => {
@@ -27,13 +43,13 @@ describe('MessageList pending indicator', () => {
   });
 
   it('hides the pending indicator when the last assistant message has a streaming reasoning part', () => {
-    const messages: MastraUIMessage[] = [
+    const messages: MastraDBMessage[] = [
       buildAssistantMessage([
         {
           type: 'reasoning',
           state: 'streaming',
           text: 'thinking',
-        } as MastraUIMessage['parts'][number],
+        } as unknown as MastraMessagePart,
       ]),
     ];
     const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
@@ -41,13 +57,7 @@ describe('MessageList pending indicator', () => {
   });
 
   it('shows the pending indicator after a user message while waiting for the assistant', () => {
-    const messages: MastraUIMessage[] = [
-      {
-        id: 'user-1',
-        role: 'user',
-        parts: [{ type: 'text', text: 'hello', state: 'done' } as MastraUIMessage['parts'][number]],
-      },
-    ];
+    const messages: MastraDBMessage[] = [buildUserMessage('hello')];
     const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
     expect(queryByTestId('agent-builder-chat-pending')).not.toBeNull();
   });
@@ -61,7 +71,7 @@ describe('MessageList pending indicator', () => {
     // Regression: once any tool call lands in `output-available`, the previous
     // implementation of `hasStreamingPart` returned true unconditionally for
     // tool parts, hiding the indicator during server-side retry pauses.
-    const messages: MastraUIMessage[] = [
+    const messages: MastraDBMessage[] = [
       buildAssistantMessage([
         {
           type: 'dynamic-tool',
@@ -70,7 +80,7 @@ describe('MessageList pending indicator', () => {
           state: 'output-available',
           input: { name: 'generic-assistant' },
           output: { success: true },
-        } as MastraUIMessage['parts'][number],
+        } as unknown as MastraMessagePart,
       ]),
     ];
     const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
@@ -81,7 +91,7 @@ describe('MessageList pending indicator', () => {
     // Regression: `hasStreamingPart` must treat both `dynamic-tool` and legacy
     // `tool-*` parts as terminated when they land in `output-available` or
     // `output-error`, so the indicator stays visible during retry pauses.
-    const messages: MastraUIMessage[] = [
+    const messages: MastraDBMessage[] = [
       buildAssistantMessage([
         {
           type: 'tool-skill',
@@ -90,7 +100,7 @@ describe('MessageList pending indicator', () => {
           state: 'output-error',
           input: { name: 'generic-assistant' },
           errorText: 'boom',
-        } as unknown as MastraUIMessage['parts'][number],
+        } as unknown as MastraMessagePart,
       ]),
     ];
     const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
@@ -98,7 +108,7 @@ describe('MessageList pending indicator', () => {
   });
 
   it('hides the pending indicator while a tool call is still streaming its input', () => {
-    const messages: MastraUIMessage[] = [
+    const messages: MastraDBMessage[] = [
       buildAssistantMessage([
         {
           type: 'dynamic-tool',
@@ -106,7 +116,7 @@ describe('MessageList pending indicator', () => {
           toolName: 'skill',
           state: 'input-available',
           input: { name: 'generic-assistant' },
-        } as MastraUIMessage['parts'][number],
+        } as unknown as MastraMessagePart,
       ]),
     ];
     const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
@@ -152,13 +162,7 @@ describe('MessageList deferred skeleton', () => {
       vi.advanceTimersByTime(150);
     });
 
-    const messages: MastraUIMessage[] = [
-      {
-        id: 'user-1',
-        role: 'user',
-        parts: [{ type: 'text', text: 'hi', state: 'done' } as MastraUIMessage['parts'][number]],
-      },
-    ];
+    const messages: MastraDBMessage[] = [buildUserMessage('hi')];
     rerender(<MessageList messages={messages} isLoading={false} skeletonTestId="msg-skeleton" />);
 
     act(() => {

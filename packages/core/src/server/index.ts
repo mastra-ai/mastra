@@ -16,9 +16,12 @@ export type {
   ValidationErrorContext,
   ValidationErrorResponse,
   ValidationErrorHook,
+  StudioConfig,
 } from './types';
 export { MastraAuthProvider } from './auth';
 export type { MastraAuthProviderOptions } from './auth';
+export type { HonoRequestLike, MastraAuthRequest } from './request-types';
+export { getRequestHeader, getWebRequest } from './request-types';
 export { CompositeAuth } from './composite-auth';
 export { MastraServerBase } from './base';
 export { SimpleAuth } from './simple-auth';

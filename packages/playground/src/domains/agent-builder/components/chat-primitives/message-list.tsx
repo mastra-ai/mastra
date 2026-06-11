@@ -1,7 +1,9 @@
-import type { MastraUIMessage } from '@mastra/react';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
+import type { MessageFactoryPart } from '@mastra/react';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { MessageRow, MessagesSkeleton, PendingIndicator } from './messages';
+import { MessageRow, MessagesSkeleton } from './messages';
 import { useAutoScroll } from '@/domains/agent-builder/hooks/use-auto-scroll';
 
 /**
@@ -25,7 +27,7 @@ const useDelayedFlag = (flag: boolean, delayMs: number) => {
 const SKELETON_DELAY_MS = 300;
 
 interface MessageListProps {
-  messages: MastraUIMessage[];
+  messages: MastraDBMessage[];
   isLoading?: boolean;
   isRunning?: boolean;
   emptyState?: ReactNode;
@@ -39,14 +41,20 @@ interface MessageListProps {
  * e.g. while the server is internally retrying via
  * `StreamErrorRetryProcessor` after the previous step finished cleanly.
  */
-const hasStreamingPart = (message: MastraUIMessage | undefined) => {
+const hasStreamingPart = (message: MastraDBMessage | undefined) => {
   if (!message) return false;
-  return message.parts.some(part => {
+  // `MastraMessagePart[]` widens into `MessageFactoryPart[]`, surfacing the
+  // runtime `dynamic-tool` / `tool-${string}` parts, so no cast is needed.
+  const parts: MessageFactoryPart[] = message.content.parts;
+  return parts.some(part => {
     if (part.type === 'reasoning' || part.type === 'text') {
-      return (part as { state?: string }).state === 'streaming';
+      return 'state' in part && part.state === 'streaming';
     }
-    if (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) {
-      const state = (part as { state?: string }).state;
+    if (part.type === 'tool-invocation') {
+      return 'toolInvocation' in part && part.toolInvocation.state !== 'result';
+    }
+    if (part.type === 'dynamic-tool' || part.type.startsWith('tool-')) {
+      const state = 'state' in part ? part.state : undefined;
       return state !== 'output-available' && state !== 'output-error';
     }
     return false;
@@ -85,7 +93,7 @@ export const MessageList = ({
           {messages.map(message => (
             <MessageRow key={message.id} message={message} />
           ))}
-          {showPending && <PendingIndicator />}
+          {showPending && <PendingIndicator testId="agent-builder-chat-pending" />}
         </div>
       )}
     </div>

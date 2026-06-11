@@ -2,6 +2,7 @@
  * Event dispatcher: maps HarnessEvent types to extracted handler functions.
  */
 import type { HarnessEvent, HarnessThread, TaskItemSnapshot } from '@mastra/core/harness';
+import type { AskUserSelectionMode } from '@mastra/core/tools';
 
 import { getCurrentGitBranchAsync } from '../utils/project.js';
 import {
@@ -40,6 +41,7 @@ import {
 } from './handlers/index.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import type { TUIState } from './state.js';
+import { getGithubPrSubscriptionsFromMetadata } from './state.js';
 
 /**
  * Dispatch a HarnessEvent to the appropriate handler.
@@ -164,8 +166,12 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       const currentThread = threads.find((t: HarnessThread) => t.id === event.threadId);
       if (currentThread) {
         state.currentThreadTitle = currentThread.title;
+        const metadata = currentThread.metadata as Record<string, unknown> | undefined;
+        state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
+        state.githubPrPollingActive = false;
+        state.githubPrGradientAnimator?.stop();
         // Load goal state from thread metadata
-        state.goalManager?.loadFromThreadMetadata(currentThread.metadata as Record<string, unknown> | undefined);
+        state.goalManager?.loadFromThreadMetadata(metadata);
       }
       break;
     }
@@ -174,6 +180,11 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       // Update current thread title for status line display
       state.currentThreadTitle = event.thread.title;
+      state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(
+        event.thread.metadata as Record<string, unknown> | undefined,
+      );
+      state.githubPrPollingActive = false;
+      state.githubPrGradientAnimator?.stop();
       // If /goal started without an existing thread, save that pending goal to the
       // newly-created thread. Otherwise load the thread's own goal metadata so goals
       // do not bleed into unrelated new threads.
@@ -344,14 +355,12 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
           state.taskToolInsertIndex = -1;
         }
 
-        // Check if all tasks are completed
-        const allCompleted = tasks && tasks.length > 0 && tasks.every(t => t.status === 'completed');
+        // When every task is completed the pinned list hides itself (the agent
+        // narrates completion), so we don't leave a redundant completed-task
+        // receipt in the transcript that reads like a second live list. We only
+        // render an inline receipt when the list is explicitly cleared.
         const previousTasks = state.harness.getDisplayState().previousTasks;
-        const wasAllCompleted = previousTasks.length > 0 && previousTasks.every(t => t.status === 'completed');
-        if (allCompleted && !wasAllCompleted) {
-          // Show collapsed completed list (pinned/live)
-          ectx.renderCompletedTasksInline(tasks, insertIndex, true);
-        } else if (previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
+        if (previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
           // Tasks were cleared
           ectx.renderClearedTasksInline(previousTasks, insertIndex);
         }
@@ -361,21 +370,31 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
     }
 
-    case 'ask_question':
-      await handleAskQuestion(ectx, event.questionId, event.question, event.options, event.selectionMode);
+    case 'tool_suspended': {
+      // Interactive built-in tools pause via the native tool-suspension primitive.
+      // Route the suspension to the matching prompt UI using the suspend payload;
+      // the UI resumes the tool by calling harness.respondToToolSuspension({ toolCallId }).
+      const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
+      if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
+        await handleSandboxAccessRequest(
+          ectx,
+          event.toolCallId,
+          String(payload.path ?? ''),
+          String(payload.reason ?? ''),
+        );
+      } else if (event.toolName === 'ask_user') {
+        await handleAskQuestion(
+          ectx,
+          event.toolCallId,
+          String(payload.question ?? ''),
+          payload.options as Array<{ label: string; description?: string }> | undefined,
+          payload.selectionMode as AskUserSelectionMode | undefined,
+        );
+      } else if (event.toolName === 'submit_plan') {
+        await handlePlanApproval(ectx, event.toolCallId, String(payload.title ?? ''), String(payload.plan ?? ''));
+      }
       break;
-
-    case 'sandbox_access_request':
-      await handleSandboxAccessRequest(ectx, event.questionId, event.path, event.reason);
-      break;
-
-    case 'plan_approval_required':
-      await handlePlanApproval(ectx, event.planId, event.title, event.plan);
-      break;
-
-    case 'plan_approved':
-      // Handled directly in onApprove callback to ensure proper sequencing
-      break;
+    }
 
     case 'display_state_changed':
       // The Harness emits this after every event with the updated display state.

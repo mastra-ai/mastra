@@ -55,11 +55,15 @@ export function setupKeyboardShortcuts(
       state.pendingInlineQuestions.length = 0;
       state.userInitiatedAbort = true;
       state.harness.abort();
-    } else if (state.harness.isRunning()) {
-      // Clean up active inline components on abort
+    } else if (state.harness.isRunning() || state.harness.hasPendingSuspensions()) {
+      // Clean up active inline components on abort. hasPendingSuspensions covers
+      // the case where the run is parked in a tool suspend() (e.g. ask_user) —
+      // isRunning() is false there because the AbortController was nulled, but the
+      // run is still pending and must be abortable.
       state.activeInlinePlanApproval = undefined;
       state.activeInlineQuestion = undefined;
       state.pendingInlineQuestions.length = 0;
+      state.pendingAskUserComponents?.clear();
       state.userInitiatedAbort = true;
       state.harness.abort();
     } else {
@@ -350,6 +354,17 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'api-keys', description: 'Manage API keys for model providers' },
     { name: 'observability', description: 'Configure cloud observability' },
     {
+      name: 'github',
+      description: 'Subscribe/sync/debug GitHub PR signals',
+      getArgumentCompletions: (argumentPrefix: string) =>
+        [
+          { value: 'subscribe', label: 'subscribe', description: 'Subscribe this thread to a GitHub PR' },
+          { value: 'unsubscribe', label: 'unsubscribe', description: 'Unsubscribe this thread from a GitHub PR' },
+          { value: 'sync', label: 'sync', description: 'Immediately sync subscribed GitHub PRs' },
+          { value: 'debug', label: 'debug', description: 'Show GitHub signal subscription debug info' },
+        ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+    },
+    {
       name: 'goal',
       description: 'Set/manage persistent goal (Ralph loop)',
       getArgumentCompletions: (argumentPrefix: string) =>
@@ -494,6 +509,7 @@ export function setupKeyHandlers(
     state.activeInlinePlanApproval = undefined;
     state.activeInlineQuestion = undefined;
     state.pendingInlineQuestions.length = 0;
+    state.pendingAskUserComponents?.clear();
     state.userInitiatedAbort = true;
     state.harness.abort();
   });

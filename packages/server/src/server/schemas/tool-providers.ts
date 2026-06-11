@@ -165,7 +165,10 @@ export const connectionUsageQuerySchema = z.object({
 
 export const authorizeToolProviderBodySchema = z.object({
   toolkit: z.string().describe('Toolkit slug being authorized'),
-  connectionId: z.string().describe('Existing or newly-minted connection bucket id'),
+  connectionId: z
+    .string()
+    .optional()
+    .describe('Existing connection bucket id when re-authorizing; omit for a brand-new connection'),
   toolName: z.string().optional().describe('Optional tool slug for tool-scoped authorization'),
   config: z
     .record(z.string(), z.unknown())

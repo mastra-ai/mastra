@@ -908,12 +908,16 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
           const shouldDrainBeforeFirstModelRequest = (inputData.output?.steps?.length ?? 0) === 0;
           if (shouldDrainBeforeFirstModelRequest) {
-            const pendingSignals = _internal?.drainPendingSignals?.(runId) ?? [];
-            if (pendingSignals.length > 0) {
+            // Pre-run signals were queued before this run made its first model
+            // request — fold them into it. Signals sent to an already-active run
+            // use the default scope and are drained later by `signalDrainStep`
+            // so each becomes its own turn.
+            const preRunSignals = _internal?.drainPendingSignals?.(runId, 'pre-run') ?? [];
+            if (preRunSignals.length > 0) {
               currentMessageId = _internal?.generateId?.() ?? generateId();
             }
-            for (const pendingSignal of pendingSignals) {
-              const signalForTranscript = messageList.addSignal(pendingSignal);
+            for (const preRunSignal of preRunSignals) {
+              const signalForTranscript = messageList.addSignal(preRunSignal);
               safeEnqueue(controller, signalForTranscript.toDataPart());
             }
           }
@@ -978,6 +982,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 stepNumber: inputData.output?.steps?.length || 0,
                 ...createObservabilityContext(stepTracingContext),
                 requestContext,
+                memory: _internal?.memory,
+                resourceId: _internal?.resourceId,
+                threadId: _internal?.threadId,
                 model,
                 steps: inputData.output?.steps || [],
                 messageId: currentStep.messageId,

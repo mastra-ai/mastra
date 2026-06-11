@@ -1,4 +1,3 @@
-import type { HonoRequest } from 'hono';
 import type {
   ISSOProvider,
   ISessionProvider,
@@ -9,6 +8,7 @@ import type {
   SSOLoginConfig,
 } from '../auth';
 import { MastraAuthProvider } from './auth';
+import type { MastraAuthRequest } from './request-types';
 
 type PrimitiveAuthUser = string | number | boolean | bigint | symbol | null | undefined;
 
@@ -78,6 +78,7 @@ export class CompositeAuth
     if (!providers.some(isUserProvider)) {
       this.getCurrentUser = undefined as any;
       this.getUser = undefined as any;
+      this.getUsers = undefined as any;
     }
   }
 
@@ -138,7 +139,7 @@ export class CompositeAuth
   // MastraAuthProvider Implementation
   // ============================================================================
 
-  async authenticateToken(token: string, request: HonoRequest): Promise<unknown | null> {
+  async authenticateToken(token: string, request: MastraAuthRequest): Promise<unknown | null> {
     for (const provider of this.providers) {
       try {
         const user = await provider.authenticateToken(token, request);
@@ -153,7 +154,7 @@ export class CompositeAuth
     return null;
   }
 
-  async authorizeUser(user: unknown, request: HonoRequest): Promise<boolean> {
+  async authorizeUser(user: unknown, request: MastraAuthRequest): Promise<boolean> {
     for (const provider of this.providers) {
       const authorized = await provider.authorizeUser(user, request);
       if (authorized) {
@@ -341,5 +342,16 @@ export class CompositeAuth
       }
     }
     return null;
+  }
+
+  /**
+   * Resolve multiple users by ID in one call. For each input ID, walks the
+   * providers in order and returns the first non-null match — preserving the
+   * existing "try each provider until one responds" semantics of `getUser`.
+   * Returns positionally-aligned results, with `null` for any ID no provider
+   * could resolve. Per-id lookups are performed in parallel.
+   */
+  async getUsers(userIds: string[]): Promise<Array<User | null>> {
+    return Promise.all(userIds.map(id => this.getUser(id)));
   }
 }

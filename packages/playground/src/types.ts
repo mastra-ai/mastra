@@ -1,7 +1,29 @@
+import type { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import type { GetAgentResponse } from '@mastra/client-js';
 import type { LLMStepResult } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { AiMessageType } from '@mastra/core/memory';
-import type { MastraUIMessage } from '@mastra/react';
+
+/**
+ * Local alias for the AI SDK v5 UIMessage shape that `toAISdkV5Messages` produces.
+ *
+ * The playground bridges `MastraDBMessage` -> AI SDK v5 UIMessage (this type)
+ * -> assistant-ui ThreadMessageLike. Components that consume the AI-SDK shape
+ * after `toAISdkV5Messages` should use this alias; components that consume
+ * `useChat().messages` directly should use `MastraDBMessage`.
+ *
+ * Carries the playground-specific stream metadata (mode, approval/suspension,
+ * background task, network, status, tripwire) the runtime stamps onto messages.
+ */
+export type AISdkUIMessageMetadata = {
+  mode?: 'generate' | 'stream' | 'network';
+  status?: 'warning' | 'error' | 'tripwire';
+  [key: string]: unknown;
+};
+
+export type AISdkUIMessage = ReturnType<typeof toAISdkV5Messages>[number] & {
+  metadata?: AISdkUIMessageMetadata;
+};
 
 export type Message = AiMessageType;
 
@@ -58,8 +80,9 @@ export interface ChatProps {
   agentName?: string;
   modelVersion?: string;
   agentVersionId?: string;
+  supportsMemory?: boolean;
   threadId: string;
-  initialMessages?: MastraUIMessage[];
+  initialMessages?: MastraDBMessage[];
   refreshThreadList?: () => void;
   settings?: AgentSettingsType;
   requestContext?: Record<string, any>;

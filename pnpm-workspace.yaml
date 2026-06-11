@@ -4,6 +4,7 @@ packages:
   - packages/_vendored/*
   - packages/_internals/*
   - packages/*
+  - embedders/*
   - agent-sdks/*
   - deployers/*
   - stores/*
@@ -12,6 +13,7 @@ packages:
   - examples/voice/aws-nova-sonic-test
   - workflows/*
   - workspaces/*
+  - signals/*
   - server-adapters/*
   - pubsub/*
   - client-sdks/*
@@ -39,6 +41,7 @@ catalog:
   typescript: ^6.0.3
   vitest: 4.1.5
   zod: ^4.4.3
+  tsx: ^4.22.4
 
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
@@ -69,6 +72,7 @@ minimumReleaseAgeExclude:
   - '@internal/*'
   - 'mastra'
   - 'create-mastra'
+  - 'mastracode'
 trustPolicyExclude:
   # Security fix for GHSA middleware-based route protection bypass (CVE).
   # 3.47.4 is published with provenance attestation rather than trusted publisher,
@@ -130,6 +134,7 @@ allowBuilds:
   koffi: false
   msgpackr-extract: false
   msw: false
+  node-pty: true
   onnxruntime-node: false
   protobufjs: false
   sharp: false

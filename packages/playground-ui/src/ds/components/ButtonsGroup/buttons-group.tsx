@@ -2,8 +2,8 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
-import { formElementSizes } from '@/ds/primitives/form-element';
-import type { FormElementSize } from '@/ds/primitives/form-element';
+import { controlSizeClasses } from '@/ds/primitives/control-size';
+import type { ControlSize } from '@/ds/primitives/control-size';
 import { cn } from '@/lib/utils';
 
 type Orientation = 'horizontal' | 'vertical';
@@ -153,10 +153,11 @@ const buttonsGroupTextVariants = cva(
   {
     variants: {
       size: {
-        sm: `${formElementSizes.sm} text-ui-sm`,
-        md: `${formElementSizes.md} text-ui-md`,
-        default: `${formElementSizes.default} text-ui-md`,
-        lg: `${formElementSizes.lg} text-ui-lg`,
+        xs: controlSizeClasses.xs,
+        sm: controlSizeClasses.sm,
+        md: controlSizeClasses.md,
+        default: controlSizeClasses.default,
+        lg: controlSizeClasses.lg,
       },
     },
     defaultVariants: {
@@ -166,7 +167,7 @@ const buttonsGroupTextVariants = cva(
 );
 
 export type ButtonsGroupTextProps = React.ComponentPropsWithoutRef<'div'> & {
-  size?: FormElementSize;
+  size?: ControlSize;
 };
 
 export const ButtonsGroupText = React.forwardRef<HTMLDivElement, ButtonsGroupTextProps>(

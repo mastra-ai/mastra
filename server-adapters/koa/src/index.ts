@@ -461,17 +461,20 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       taskStore: ctx.state.taskStore,
       abortSignal: ctx.state.abortSignal,
       routePrefix: prefix,
+      request: toWebRequest(ctx),
     };
 
     // Check route permission requirement (EE feature)
     // Uses convention-based permission derivation: permissions are auto-derived
     // from route path/method unless explicitly set or route is public
-    const authConfig = this.mastra.getServer()?.auth;
-    if (authConfig) {
+    const requestContext = ctx.state.requestContext;
+    // Check if any auth is configured (studio or server) for RBAC
+    const hasAuth = this.mastra.getStudio()?.auth || this.mastra.getServer()?.auth;
+    if (hasAuth) {
       const hasPermission = await loadHasPermission();
       if (hasPermission) {
-        const userPermissions = ctx.state.requestContext.get('mastra__userPermissions') as string[] | undefined;
-        const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+        const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+        const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
 
         if (permissionError) {
           ctx.status = permissionError.status;
@@ -485,7 +488,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     }
 
     // Check FGA authorization (EE feature)
-    const fgaError = await checkRouteFGA(this.mastra, route, ctx.state.requestContext, {
+    const fgaError = await checkRouteFGA(this.mastra, route, requestContext, {
       ...params.urlParams,
       ...params.queryParams,
       ...(typeof params.body === 'object' ? params.body : {}),
@@ -916,27 +919,35 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
                   ctx.set(key, value);
                 }
               }
+
               if (authError.error) {
                 ctx.status = authError.status;
                 ctx.body = { error: authError.error };
                 return;
               }
             }
+          }
 
-            const authConfig = server.mastra.getServer()?.auth;
-            if (authConfig) {
-              const hasPermission = await loadHasPermission();
-              if (hasPermission) {
-                const userPermissions = ctx.state.requestContext.get('mastra__userPermissions') as string[] | undefined;
-                const permissionError = server.checkRoutePermission(serverRoute, userPermissions, hasPermission);
-                if (permissionError) {
-                  ctx.status = permissionError.status;
-                  ctx.body = {
-                    error: permissionError.error,
-                    message: permissionError.message,
-                  };
-                  return;
-                }
+          const requestContext = ctx.state.requestContext;
+          // Check if any auth is configured (studio or server) for RBAC
+          const hasAuth = server.mastra.getStudio()?.auth || server.mastra.getServer()?.auth;
+          if (hasAuth) {
+            const hasPermission = await loadHasPermission();
+            if (hasPermission) {
+              const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+              const permissionError = server.checkRoutePermission(
+                serverRoute,
+                userPermissions,
+                hasPermission,
+                requestContext,
+              );
+              if (permissionError) {
+                ctx.status = permissionError.status;
+                ctx.body = {
+                  error: permissionError.error,
+                  message: permissionError.message,
+                };
+                return;
               }
             }
           }
