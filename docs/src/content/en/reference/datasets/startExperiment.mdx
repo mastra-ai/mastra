@@ -108,6 +108,13 @@ console.log(`Status: ${summary2.status}`)
     description: 'Pin to a specific dataset version. Defaults to the latest version.',
   },
   {
+    name: 'agentVersion',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Agent targets only: run a specific stored agent version instead of the current definition. Persisted on the experiment when provided; unpinned runs resolve the current definition and store no version.',
+  },
+  {
     name: 'maxConcurrency',
     type: 'number',
     isOptional: true,

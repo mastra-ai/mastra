@@ -263,8 +263,8 @@ The report also carries two recording-quality signals: `redactedPayloadCount` co
 Replay freezes the external world *as the recorded run observed it through tools* — nothing more. Knowing what stays live keeps comparisons honest:
 
 - **The model runs live.** A replay run is a real LLM run making its own decisions against frozen observations — that is the point. Identical scores are not guaranteed even with an unchanged agent; sampling alone can vary the output.
-- **The agent definition resolves at run time.** Instructions, model, and tools are whatever the agent is *now*. Pin `agentVersion` in the experiment config to run a recorded version, or leave it unpinned when the change is exactly what you are measuring. Experiments store the version they ran either way.
-- **No conversation state is involved.** Each experiment item executes as a standalone run without a memory thread, so conversation history and memory cannot drift between recording and replay.
+- **The agent definition resolves at run time.** Instructions, model, and tools are whatever the agent is *now*. Pin `agentVersion` in the experiment config to run a stored version, or leave it unpinned when the change is exactly what you are measuring. The pinned version is persisted on the experiment; unpinned runs resolve the current definition and store no version.
+- **No conversation state is involved.** Each experiment item executes as a standalone run without a memory thread, so between two experiments nothing can drift. One caveat: an item saved from a production trace replays that run's tool observations, not its conversation — if the original run leaned on thread memory, the replayed agent reasons without it.
 - **Item inputs can drift.** `staleRecording` flags an item edited after its recording was made; pin the dataset version (`version`) for stable inputs.
 - **`requestContext` passes through as configured.** If the agent reads it, keep it identical between the recording run and the replay run.
 
