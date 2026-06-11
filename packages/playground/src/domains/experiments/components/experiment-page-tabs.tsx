@@ -280,13 +280,15 @@ export function ExperimentPageTabs({
   );
 
   const featuredReport = isReplay && featuredResult ? getToolReplayReport(featuredResult) : null;
-  const showSourceTrace = (sourceTraceId: string) => {
+  const showSourceTrace = (sourceTraceId: string, spanId?: string) => {
     setFeaturedTraceId(sourceTraceId);
-    setFeaturedSpanId(undefined);
+    setFeaturedSpanId(spanId);
     setFeaturedScoreId(null);
     setResultCollapsed(true);
     setTraceCollapsed(false);
   };
+  // Light spans of the recording — powers the FIFO tape view in the result panel.
+  const { data: sourceTraceData } = useExperimentTrace(featuredReport?.sourceTraceId ?? null);
   // The replay run's own trace has no tool spans (tools never executed) —
   // explain that instead of looking broken, and offer the jump to the source.
   const viewingOwnReplayTrace = isReplay && Boolean(featuredTraceId) && featuredTraceId === featuredResult?.traceId;
@@ -410,6 +412,7 @@ export function ExperimentPageTabs({
                 onCollapsedChange={setResultCollapsed}
                 isReplayExperiment={isReplay}
                 onShowSourceTrace={showSourceTrace}
+                sourceTraceSpans={sourceTraceData?.spans}
               />
 
               {featuredScore && (

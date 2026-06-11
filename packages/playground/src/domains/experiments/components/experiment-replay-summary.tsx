@@ -65,7 +65,16 @@ export function ExperimentReplaySummary({
         </div>
       ) : aggregates ? (
         <div className="flex flex-wrap items-center gap-1.5">
-          <Chip color="green">{`${aggregates.fullyGrounded}/${aggregates.total} fully grounded`}</Chip>
+          {(() => {
+            // Items with an empty recording can't be grounded — keep them out
+            // of the denominator so the headline ratio stays honest, and color
+            // by the ratio itself (a 0/2 must never read as green).
+            const gradedTotal = aggregates.total - aggregates.emptyRecordings;
+            if (gradedTotal <= 0) return null;
+            const color =
+              aggregates.fullyGrounded === gradedTotal ? 'green' : aggregates.fullyGrounded > 0 ? 'yellow' : 'red';
+            return <Chip color={color}>{`${aggregates.fullyGrounded}/${gradedTotal} fully grounded`}</Chip>;
+          })()}
           {aggregates.withMisses > 0 && <Chip color="orange">{`${aggregates.withMisses} with misses`}</Chip>}
           {aggregates.withUnconsumed > 0 && <Chip color="blue">{`${aggregates.withUnconsumed} with unconsumed`}</Chip>}
           {aggregates.withArgMismatches > 0 && (

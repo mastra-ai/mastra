@@ -10,7 +10,9 @@ import {
   replayExperiment,
   replayResult,
 } from '../../__tests__/fixtures/tool-replay';
+import type { ReplayTapeSpan } from '../tool-replay';
 import {
+  buildReplayTape,
   classifyReplayDivergence,
   getReplayMarker,
   getToolReplayErrorLabel,
@@ -87,6 +89,67 @@ describe('getToolReplayErrorLabel', () => {
   it('returns null for other codes', () => {
     expect(getToolReplayErrorLabel('SOMETHING_ELSE')).toBeNull();
     expect(getToolReplayErrorLabel(undefined)).toBeNull();
+  });
+});
+
+describe('buildReplayTape', () => {
+  const span = (overrides: Partial<ReplayTapeSpan> & { spanId: string }): ReplayTapeSpan => ({
+    spanType: 'tool_call',
+    startedAt: '2026-06-01T10:00:00.000Z',
+    endedAt: '2026-06-01T10:00:01.000Z',
+    entityName: 'get-weather',
+    ...overrides,
+  });
+
+  it('rebuilds per-tool FIFO with mismatch, unconsumed tail, and misses overlaid', () => {
+    const spans: ReplayTapeSpan[] = [
+      span({ spanId: 's0', startedAt: '2026-06-01T10:00:00.000Z' }),
+      span({ spanId: 's1', startedAt: '2026-06-01T10:00:01.000Z', entityName: 'create-ticket' }),
+      span({ spanId: 's2', startedAt: '2026-06-01T10:00:02.000Z' }),
+      // Non-tool and nested spans are not part of the tape:
+      span({ spanId: 'llm', spanType: 'llm_generation' }),
+      span({ spanId: 'nested', parentSpanId: 's2' }),
+      // Unfinished recorded call (crashed source run) — skipped like the runner does:
+      span({ spanId: 'open', endedAt: null, startedAt: '2026-06-01T10:00:03.000Z' }),
+    ];
+    const tape = buildReplayTape(spans, {
+      sourceTraceId: 'trace-src-1',
+      totalRecorded: 3,
+      replayedCount: 2,
+      misses: [{ toolName: 'get-photos', action: 'error', input: {} }],
+      unconsumed: [{ toolName: 'create-ticket', count: 1 }],
+      argMismatches: [{ toolName: 'get-weather', sequence: 0, spanId: 's0' }],
+    });
+
+    expect(tape).toEqual([
+      {
+        toolName: 'get-weather',
+        events: [
+          { sequence: 0, spanId: 's0', status: 'arg-mismatch' },
+          { sequence: 2, spanId: 's2', status: 'replayed' },
+        ],
+        misses: [],
+      },
+      {
+        toolName: 'create-ticket',
+        events: [{ sequence: 1, spanId: 's1', status: 'unconsumed' }],
+        misses: [],
+      },
+      { toolName: 'get-photos', events: [], misses: [{ action: 'error' }] },
+    ]);
+  });
+
+  it('breaks startedAt ties by spanId like the runner', () => {
+    const spans: ReplayTapeSpan[] = [span({ spanId: 'b' }), span({ spanId: 'a' })];
+    const tape = buildReplayTape(spans, {
+      sourceTraceId: 't',
+      totalRecorded: 2,
+      replayedCount: 2,
+      misses: [],
+      unconsumed: [],
+      argMismatches: [],
+    });
+    expect(tape[0].events.map(e => e.spanId)).toEqual(['a', 'b']);
   });
 });
 

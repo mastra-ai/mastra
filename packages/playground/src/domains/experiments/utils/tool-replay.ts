@@ -79,3 +79,103 @@ export function classifyReplayDivergence(report: ToolReplayReport): ReplayDiverg
   if (report.unconsumed.length > 0) return 'unconsumed-only';
   return 'clean';
 }
+
+export interface ReplayTapeEvent {
+  /** Global position on the tape (matches the report's argMismatch sequences). */
+  sequence: number;
+  spanId: string;
+  status: 'replayed' | 'arg-mismatch' | 'unconsumed';
+}
+
+export interface ReplayTapeTool {
+  toolName: string;
+  /** Recorded events for this tool, in FIFO order. */
+  events: ReplayTapeEvent[];
+  /** Calls the new run made beyond the recording (no event left in the queue). */
+  misses: { action: 'error' | 'passthrough' }[];
+}
+
+/** Minimal span shape the tape needs (subset of LightSpanRecord). */
+export interface ReplayTapeSpan {
+  spanId: string;
+  parentSpanId?: string | null;
+  spanType: string;
+  isEvent?: boolean;
+  name?: string | null;
+  entityName?: string | null;
+  entityId?: string | null;
+  startedAt: string | Date;
+  endedAt?: string | Date | null;
+}
+
+const TAPE_TOOL_SPAN_TYPES = new Set(['tool_call', 'mcp_tool_call']);
+
+/**
+ * Rebuilds the per-tool FIFO tape from the source trace's spans and overlays
+ * the divergence report on it — mirroring the runner's extraction exactly
+ * (top-level completed tool spans, startedAt order with spanId tie-break).
+ * Unconsumed events are the tail of each tool's queue: FIFO consumption means
+ * whatever was never requested is whatever was left at the end.
+ */
+export function buildReplayTape(spans: ReplayTapeSpan[], report: ToolReplayReport): ReplayTapeTool[] {
+  const spansById = new Map(spans.map(span => [span.spanId, span]));
+  const isToolSpan = (span: ReplayTapeSpan) => TAPE_TOOL_SPAN_TYPES.has(span.spanType) && !span.isEvent;
+  const hasToolAncestor = (span: ReplayTapeSpan): boolean => {
+    const visited = new Set<string>([span.spanId]);
+    let parentId = span.parentSpanId ?? null;
+    while (parentId) {
+      if (visited.has(parentId)) return false;
+      visited.add(parentId);
+      const parent = spansById.get(parentId);
+      if (!parent) return false;
+      if (isToolSpan(parent)) return true;
+      parentId = parent.parentSpanId ?? null;
+    }
+    return false;
+  };
+
+  const toolSpans = spans
+    .filter(span => isToolSpan(span) && span.endedAt != null && !hasToolAncestor(span))
+    .sort((a, b) => {
+      const diff = new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime();
+      if (diff !== 0) return diff;
+      return a.spanId < b.spanId ? -1 : a.spanId > b.spanId ? 1 : 0;
+    });
+
+  const mismatchSequences = new Set(report.argMismatches.map(mismatch => mismatch.sequence));
+  const unconsumedByTool = new Map(report.unconsumed.map(entry => [entry.toolName, entry.count]));
+
+  const tools = new Map<string, ReplayTapeTool>();
+  toolSpans.forEach((span, sequence) => {
+    const toolName = span.entityName || span.entityId || span.name || 'unknown tool';
+    let tool = tools.get(toolName);
+    if (!tool) {
+      tool = { toolName, events: [], misses: [] };
+      tools.set(toolName, tool);
+    }
+    tool.events.push({
+      sequence,
+      spanId: span.spanId,
+      status: mismatchSequences.has(sequence) ? 'arg-mismatch' : 'replayed',
+    });
+  });
+
+  // FIFO: the unconsumed entries are the tail of each tool's queue.
+  for (const tool of tools.values()) {
+    const unconsumedCount = unconsumedByTool.get(tool.toolName) ?? 0;
+    for (let i = 0; i < unconsumedCount && i < tool.events.length; i++) {
+      tool.events[tool.events.length - 1 - i].status = 'unconsumed';
+    }
+  }
+
+  for (const miss of report.misses) {
+    let tool = tools.get(miss.toolName);
+    if (!tool) {
+      tool = { toolName: miss.toolName, events: [], misses: [] };
+      tools.set(miss.toolName, tool);
+    }
+    tool.misses.push({ action: miss.action });
+  }
+
+  return [...tools.values()];
+}

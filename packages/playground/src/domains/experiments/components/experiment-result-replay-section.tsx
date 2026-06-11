@@ -1,11 +1,25 @@
 import type { ToolReplayReport } from '@mastra/client-js';
-import { Button, Chip, DataKeysAndValues, DataPanel, TraceIcon } from '@mastra/playground-ui';
+import {
+  Button,
+  Chip,
+  DataKeysAndValues,
+  DataPanel,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TraceIcon,
+  cn,
+} from '@mastra/playground-ui';
 import { HistoryIcon } from 'lucide-react';
-import { classifyReplayDivergence } from '../utils/tool-replay';
+import { useMemo } from 'react';
+import type { ReplayTapeSpan } from '../utils/tool-replay';
+import { buildReplayTape, classifyReplayDivergence } from '../utils/tool-replay';
 
 export type ExperimentResultReplaySectionProps = {
   report: ToolReplayReport;
-  onShowSourceTrace?: (traceId: string) => void;
+  onShowSourceTrace?: (traceId: string, spanId?: string) => void;
+  /** Source-trace spans (light) — enables the per-tool tape view when provided. */
+  sourceTraceSpans?: ReplayTapeSpan[];
 };
 
 /**
@@ -13,10 +27,18 @@ export type ExperimentResultReplaySectionProps = {
  * Read the item's scores through this — a clean report means the grade is
  * fully comparable to the baseline.
  */
-export function ExperimentResultReplaySection({ report, onShowSourceTrace }: ExperimentResultReplaySectionProps) {
+export function ExperimentResultReplaySection({
+  report,
+  onShowSourceTrace,
+  sourceTraceSpans,
+}: ExperimentResultReplaySectionProps) {
   const isEmptyRecording = report.totalRecorded === 0;
   const isClean =
     !isEmptyRecording && classifyReplayDivergence(report) === 'clean' && report.replayedCount === report.totalRecorded;
+  const tape = useMemo(
+    () => (sourceTraceSpans && !isEmptyRecording ? buildReplayTape(sourceTraceSpans, report) : null),
+    [sourceTraceSpans, report, isEmptyRecording],
+  );
 
   return (
     <div className="grid gap-2">
@@ -48,6 +70,72 @@ export function ExperimentResultReplaySection({ report, onShowSourceTrace }: Exp
           The source run never called any tools — there was nothing to replay, so the model ran with no frozen
           observations. To exercise replay, record a baseline where the agent actually uses its tools.
         </p>
+      )}
+
+      {tape && tape.length > 0 && (
+        <div className="grid gap-1.5 rounded-lg border border-border1 bg-surface3/50 p-3">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-ui-xs uppercase tracking-widest text-neutral2">Recording tape (FIFO per tool)</span>
+            <span className="text-ui-xs text-neutral2">
+              ✓ replayed · ≈ args differed · ○ never requested · + new call
+            </span>
+          </div>
+          {tape.map(tool => (
+            <div key={tool.toolName} className="flex items-center gap-2 min-w-0">
+              <span className="text-ui-sm text-neutral5 font-mono truncate shrink-0 max-w-[40%]">{tool.toolName}</span>
+              <div className="flex flex-wrap items-center gap-1">
+                {tool.events.map(event => {
+                  const symbol = event.status === 'replayed' ? '✓' : event.status === 'arg-mismatch' ? '≈' : '○';
+                  const label =
+                    event.status === 'replayed'
+                      ? 'Replayed — the recorded answer was served'
+                      : event.status === 'arg-mismatch'
+                        ? 'Replayed, but the call asked with different args — click to inspect the recorded call'
+                        : 'Never requested by the new run (left in the queue)';
+                  return (
+                    <Tooltip key={event.spanId}>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={
+                            onShowSourceTrace && report.sourceTraceId
+                              ? () => onShowSourceTrace(report.sourceTraceId!, event.spanId)
+                              : undefined
+                          }
+                          className={cn(
+                            'h-6 min-w-6 px-1 rounded-md border text-ui-xs font-mono transition-colors',
+                            event.status === 'replayed' && 'border-green-700/50 bg-green-500/15 text-neutral5',
+                            event.status === 'arg-mismatch' && 'border-yellow-600/50 bg-yellow-500/20 text-neutral5',
+                            event.status === 'unconsumed' && 'border-border2 bg-transparent text-neutral3',
+                            onShowSourceTrace && 'hover:bg-surface5 cursor-pointer',
+                          )}
+                        >
+                          {symbol}
+                          {event.sequence}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>{label}</TooltipContent>
+                    </Tooltip>
+                  );
+                })}
+                {tool.misses.map((miss, i) => (
+                  <Tooltip key={`miss-${i}`}>
+                    <TooltipTrigger asChild>
+                      <span className="h-6 min-w-6 px-1 inline-flex items-center justify-center rounded-md border border-orange-600/50 bg-orange-500/20 text-ui-xs font-mono text-neutral5">
+                        +{miss.action === 'passthrough' ? 'live' : 'stop'}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      {miss.action === 'passthrough'
+                        ? 'New call beyond the recording — the live tool executed'
+                        : 'New call beyond the recording — the item stopped here'}
+                    </TooltipContent>
+                  </Tooltip>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       {(report.misses.length > 0 || report.unconsumed.length > 0 || report.argMismatches.length > 0) && (

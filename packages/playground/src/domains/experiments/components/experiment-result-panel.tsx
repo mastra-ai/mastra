@@ -35,7 +35,9 @@ export type ExperimentResultPanelProps = {
   onCollapsedChange?: (collapsed: boolean) => void;
   /** Gates the replay report section — only replay experiments read output.toolReplay. */
   isReplayExperiment?: boolean;
-  onShowSourceTrace?: (traceId: string) => void;
+  onShowSourceTrace?: (traceId: string, spanId?: string) => void;
+  /** Light spans of the source trace — enables the FIFO tape view. */
+  sourceTraceSpans?: import('../utils/tool-replay').ReplayTapeSpan[];
 };
 
 export function ExperimentResultPanel({
@@ -53,6 +55,7 @@ export function ExperimentResultPanel({
   onCollapsedChange,
   isReplayExperiment,
   onShowSourceTrace,
+  sourceTraceSpans,
 }: ExperimentResultPanelProps) {
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
@@ -127,7 +130,11 @@ export function ExperimentResultPanel({
             )}
 
             {replayReport && (
-              <ExperimentResultReplaySection report={replayReport} onShowSourceTrace={onShowSourceTrace} />
+              <ExperimentResultReplaySection
+                report={replayReport}
+                onShowSourceTrace={onShowSourceTrace}
+                sourceTraceSpans={sourceTraceSpans}
+              />
             )}
 
             {scores && scores.length > 0 && (
