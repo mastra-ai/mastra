@@ -225,6 +225,7 @@ async function prepareScenarioRun({
   options,
   fixturesDir,
   mainFile,
+  harnessBackend,
   mastracodeDir,
   runRoot,
   tsxBin,
@@ -233,6 +234,7 @@ async function prepareScenarioRun({
   options: Options;
   fixturesDir: string;
   mainFile: string;
+  harnessBackend: 'v0' | 'v1-compat';
   mastracodeDir: string;
   runRoot: string;
   tsxBin: string;
@@ -266,6 +268,7 @@ async function prepareScenarioRun({
     homeDir: isolatedHome,
     mastracodeDir,
     projectDir,
+    harnessBackend,
   };
   await scenario.prepare?.(scenarioContext);
 
@@ -338,7 +341,11 @@ const tmpRootDir = join(mastracodeDir, '.tmp-mc-e2e');
 const tmpDir = join(tmpRootDir, `${Date.now()}-${process.pid}`);
 const tuiTestBin = join(mastracodeDir, 'node_modules', '.bin', 'tui-test');
 const tsxBin = join(mastracodeDir, 'node_modules', '.bin', 'tsx');
-const mainFile = join(mastracodeDir, 'src/main.ts');
+const harnessBackend =
+  process.env.MASTRACODE_TEST_HARNESS_BACKEND === 'v1-compat' || process.env.MC_E2E_HARNESS === 'v1-compat'
+    ? 'v1-compat'
+    : 'v0';
+const mainFile = join(mastracodeDir, harnessBackend === 'v1-compat' ? 'src/main-v1.ts' : 'src/main.ts');
 const testFile = join(scriptDir, 'mc-e2e', 'tui.test.ts');
 
 mkdirSync(tmpRootDir, { recursive: true });
@@ -353,6 +360,7 @@ for (const scenario of selectedScenarios) {
     options,
     fixturesDir,
     mainFile,
+    harnessBackend,
     mastracodeDir,
     runRoot: join(tmpDir, 'runs', scenario.name),
     tsxBin,
@@ -363,6 +371,7 @@ for (const scenario of selectedScenarios) {
     process.stdout.write(`[mc-e2e] expecting startup branch context for ${scenario.name}: ${prepared.branch}\n`);
 }
 
+process.stdout.write(`[mc-e2e] harness backend: ${harnessBackend} (entrypoint: ${mainFile})\n`);
 process.stdout.write(
   `[mc-e2e] running ${runs.map(run => run.scenarioName).join(', ')} under @microsoft/tui-test (${options.columns}x${options.rows}, mode=${options.mode}, jobs=${options.jobs})...\n`,
 );

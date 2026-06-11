@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 
+const gatewaySyncGatewaysMock = vi.hoisted(() => vi.fn());
+const gatewayGetProvidersMock = vi.hoisted(() => vi.fn(() => ({})));
+
 vi.mock('@mastra/core/llm', () => ({
   GatewayRegistry: {
     getInstance: vi.fn(() => ({
-      syncGateways: vi.fn(),
-      getProviders: vi.fn(() => ({})),
+      syncGateways: gatewaySyncGatewaysMock,
+      getProviders: gatewayGetProvidersMock,
     })),
   },
   PROVIDER_REGISTRY: {},
@@ -15,13 +18,19 @@ vi.mock('@mastra/core/agent', () => ({
   SignalProvider: class {},
 }));
 
-vi.mock('@mastra/core/harness', () => ({
-  Harness: class {
-    subscribe() {}
-  },
-  taskWriteTool: {},
-  taskCheckTool: {},
-}));
+vi.mock('@mastra/core/harness', async importOriginal => {
+  if (process.env.MASTRACODE_TEST_HARNESS_BACKEND === 'v1-compat') {
+    return importOriginal();
+  }
+
+  return {
+    Harness: class {
+      subscribe() {}
+    },
+    taskWriteTool: {},
+    taskCheckTool: {},
+  };
+});
 
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {},
@@ -152,21 +161,14 @@ vi.mock('./utils/thread-lock.js', () => ({
 
 describe('createMastraCode startup performance', () => {
   it('does not wait for background gateway sync before returning storage warnings', async () => {
-    const [{ GatewayRegistry }, { createStorage }] = await Promise.all([
-      import('@mastra/core/llm'),
-      import('./utils/storage-factory.js'),
-    ]);
+    const { createStorage } = await import('./utils/storage-factory.js');
     let resolveSync: (() => void) | undefined;
-    const syncGateways = vi.fn(
+    gatewaySyncGatewaysMock.mockImplementation(
       () =>
         new Promise<void>(resolve => {
           resolveSync = resolve;
         }),
     );
-    vi.mocked(GatewayRegistry.getInstance).mockReturnValue({
-      syncGateways,
-      getProviders: vi.fn(() => ({})),
-    } as never);
     vi.mocked(createStorage).mockReturnValue({
       storage: {},
       backend: 'memory',
@@ -181,7 +183,7 @@ describe('createMastraCode startup performance', () => {
       ),
     ]);
 
-    expect(syncGateways).toHaveBeenCalledWith(true);
+    expect(gatewaySyncGatewaysMock).toHaveBeenCalledWith(true);
     expect(result.storageWarning).toBe('Storage fallback warning');
     resolveSync?.();
   });

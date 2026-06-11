@@ -58,7 +58,7 @@ function createTextStream() {
   });
 }
 
-describe('tool approval with LibSQLStore via Harness', () => {
+describe.skipIf(process.env.MASTRACODE_TEST_HARNESS_BACKEND === 'v1-compat')('tool approval with LibSQLStore via Harness', () => {
   it('should persist and load snapshot for tool approval resume', async () => {
     const mockExecute = vi.fn().mockResolvedValue({ content: 'file contents' });
 

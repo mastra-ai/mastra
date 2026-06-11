@@ -10,6 +10,8 @@ export async function getDynamicInstructions({ requestContext }: { requestContex
   const state = harnessContext?.getState?.();
   const modeId = harnessContext?.modeId ?? 'build';
   const projectPath = state?.projectPath ?? process.cwd();
+  // V1 harness context exposes `modelId` directly; legacy uses `state.currentModelId`
+  const currentModelId = (harnessContext as any)?.modelId ?? state?.currentModelId;
 
   const promptCtx: PromptContext = {
     projectPath,
@@ -19,7 +21,7 @@ export async function getDynamicInstructions({ requestContext }: { requestContex
     commonBinaries: await detectCommonBinariesAsync(),
     date: new Date().toISOString().split('T')[0]!,
     mode: modeId,
-    modelId: state?.currentModelId || undefined,
+    modelId: currentModelId || undefined,
     activePlan: state?.activePlan ?? null,
     modeId: modeId,
     currentDate: new Date().toISOString().split('T')[0]!,

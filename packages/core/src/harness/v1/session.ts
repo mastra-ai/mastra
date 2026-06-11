@@ -1,8 +1,15 @@
 import { randomUUID } from 'node:crypto';
 
 import { RequestContext } from '@internal/core/request-context';
-import type { Agent, ToolsInput } from '../../agent';
+import type {
+  Agent,
+  AgentMessageInput,
+  QueueAgentMessageOptions,
+  SendAgentMessageOptions,
+  ToolsInput,
+} from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
+import type { MastraModelGatewayInterface } from '../../llm';
 import type { MastraMemory, StorageThreadType } from '../../memory';
 import { toStandardSchema } from '../../schema';
 import type { PublicSchema, StandardSchemaWithJSON } from '../../schema';
@@ -15,16 +22,34 @@ import type {
 import type { DynamicArgument } from '../../types';
 import type { Workspace } from '../../workspace';
 import type { Skill as WorkspaceSkill, SkillMetadata as WorkspaceSkillMetadata } from '../../workspace/skills/types';
+import type { HarnessQuestionAnswer } from '../types';
 import { sessionCreatedPayload } from './events';
 import type { EventEmitter } from './events';
 import type { HarnessMode } from './mode';
-import type { PermissionPolicy, ToolCategoryResolver } from './permissions.types';
+import type {
+  PermissionCheckResult,
+  PermissionPolicy,
+  PermissionRequestedCallback,
+  PermissionRules,
+  SessionGrant,
+  ToolCategory,
+  ToolCategoryResolver,
+} from './permissions.types';
 import { buildHarnessRequestContext } from './request-context';
 import type { HarnessRequestContext, HarnessRequestContextSource } from './request-context';
-import type { CloneSessionOptions, SessionConfig, SessionSignalOptions } from './session.types';
+import type {
+  AgentResolver,
+  CloneSessionOptions,
+  SessionConfig,
+  SessionMessageOptions,
+  SessionQueueMessageResult,
+  SessionSendMessageResult,
+  SessionSubscribeToThreadOptions,
+  SessionThreadSubscription,
+} from './session.types';
 import { HarnessSkillNotFoundError } from './skills.types';
 import type { HarnessSkill, SkillSource } from './skills.types';
-import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
+import type { SubagentDefinition, SubagentRegistryConfig } from './subagents.types';
 import { buildHarnessBuiltInTools, buildSessionToolsets } from './tools';
 
 export class Session<TState = {}> {
@@ -54,8 +79,8 @@ export class Session<TState = {}> {
   readonly #workspace?: DynamicArgument<Workspace | undefined>;
   #resolvedWorkspace?: Workspace;
   #workspaceResolved = false;
-  readonly #resolveAgent?: (agentId: string) => Agent | Promise<Agent>;
-  readonly #resolveMode?: (modeId: string) => HarnessMode | Promise<HarnessMode>;
+  readonly #agentResolver?: AgentResolver;
+  readonly #modes?: Map<string, HarnessMode>;
   /**
    * Single-flight cache for workspace skill discovery (spec §4.6: concurrent
    * `listSkills`/`useSkill` calls must share the same in-flight promise so we
@@ -63,14 +88,25 @@ export class Session<TState = {}> {
    */
   #workspaceSkillsPromise?: Promise<HarnessSkill[]>;
   readonly #subagents?: SubagentRegistryConfig;
-  readonly #resolveModel?: ModelResolver;
+  readonly #gateways: Array<MastraModelGatewayInterface>;
   readonly #defaultPermissionPolicy: PermissionPolicy;
+  readonly #permissionRules?: PermissionRules;
+  #sessionGrants: SessionGrant[];
+  readonly #onPermissionRequested?: PermissionRequestedCallback;
   readonly #toolCategoryResolver?: ToolCategoryResolver;
   // readonly parentSessionId?: string;
   // readonly subagentDepth: number;
 
   #modelId: string;
   #mode: HarnessMode;
+
+  /**
+   * In-memory resolvers for blocking built-in tools (ask_user, submit_plan).
+   * The tool emits a UI event and awaits the resolver; the harness/TUI calls
+   * `resolveQuestion`/`resolvePlanApproval` to unblock the tool inline.
+   */
+  #questionResolvers = new Map<string, (answer: HarnessQuestionAnswer) => void>();
+  #planApprovalResolvers = new Map<string, (result: { action: 'approved' | 'rejected'; feedback?: string }) => void>();
 
   constructor(config: SessionConfig<TState>) {
     this.#id = config.id;
@@ -93,8 +129,8 @@ export class Session<TState = {}> {
     this.#events = config.events;
     this.#stateSchemaInput = config.stateSchema;
     this.#stateSchema = config.stateSchema ? toStandardSchema(config.stateSchema) : undefined;
-    this.#resolveAgent = config.resolveAgent;
-    this.#resolveMode = config.resolveMode;
+    this.#agentResolver = config.agentResolver;
+    this.#modes = config.modes;
     this.#state = {
       ...this.#getSchemaDefaults(),
       ...config.initialState,
@@ -102,10 +138,19 @@ export class Session<TState = {}> {
     } as TState;
     this.#workspace = config.workspace;
     this.#subagents = config.subagents;
-    this.#resolveModel = config.resolveModel;
     this.#defaultPermissionPolicy = config.defaultPermissionPolicy ?? 'ask';
+    this.#permissionRules = config.permissionRules;
+    this.#sessionGrants = [...(config.sessionGrants ?? [])];
+    this.#onPermissionRequested = config.onPermissionRequested;
     this.#toolCategoryResolver = config.toolCategoryResolver;
     this.#agent = config.agent;
+    this.#gateways = config.gateways;
+
+    // Propagate workspace to agent if it doesn't have its own (mirrors legacy harness)
+    // Guard for test mocks that may not be full Agent instances
+    if (config.workspace && config.agent && 'hasOwnWorkspace' in config.agent && !config.agent.hasOwnWorkspace()) {
+      config.agent.__setWorkspace(config.workspace);
+    }
   }
 
   get id(): string {
@@ -161,7 +206,7 @@ export class Session<TState = {}> {
   }
 
   getCurrentRunId(): string | null {
-    return this.#currentRunId;
+    return this.#getActiveThreadRunId() ?? this.#currentRunId;
   }
 
   getCurrentTraceId(): string | null {
@@ -172,6 +217,36 @@ export class Session<TState = {}> {
     return this.#pending.map(item => ({ ...item }));
   }
 
+  addSessionGrant(grant: SessionGrant): SessionGrant {
+    const record: SessionGrant = { ...grant, id: grant.id ?? randomUUID() };
+    this.#sessionGrants = [...this.#sessionGrants, record];
+    return { ...record };
+  }
+
+  removeSessionGrant(grantId: string): boolean {
+    const before = this.#sessionGrants.length;
+    this.#sessionGrants = this.#sessionGrants.filter(grant => grant.id !== grantId);
+    return this.#sessionGrants.length !== before;
+  }
+
+  listSessionGrants(): SessionGrant[] {
+    return this.#sessionGrants.filter(grant => this.#isSessionGrantActive(grant)).map(grant => ({ ...grant }));
+  }
+
+  async approveToolCall(approvalId: string, decision: 'allow' | 'deny'): Promise<HarnessPendingItemRecord> {
+    const approved = decision === 'allow';
+    const item = await this.respondToToolApproval(approvalId, { approved });
+    this.#events.emit({
+      type: 'permission.resolved',
+      payload: {
+        pendingItemId: item.id,
+        approved,
+        decision,
+      },
+    });
+    return item;
+  }
+
   async spawnSubagentSession(opts: { agentType: string; prompt: string; modelId?: string; forked?: boolean }): Promise<
     | {
         isError: false;
@@ -180,6 +255,75 @@ export class Session<TState = {}> {
         resourceId: string;
         agentType: string;
         depth: number;
+      }
+    | {
+        isError: true;
+        code: 'harness.subagent_depth_exceeded';
+        message: string;
+        details: { maxDepth: number; attemptedDepth: number };
+      }
+  > {
+    const created = await this.#createSubagentSession(opts);
+    if (created.isError) return created;
+    return created.result;
+  }
+
+  async executeSubagent(opts: { agentType: string; prompt: string; modelId?: string; forked?: boolean }): Promise<
+    | {
+        isError: false;
+        subagentSessionId: string;
+        threadId: string;
+        resourceId: string;
+        agentType: string;
+        depth: number;
+        content: string;
+      }
+    | {
+        isError: true;
+        code: string;
+        message: string;
+        details?: Record<string, unknown>;
+        content?: string;
+      }
+  > {
+    const created = await this.#createSubagentSession(opts);
+    if (created.isError) return created;
+
+    const { session, definition, result } = created;
+    const agent = await session.#resolveSessionAgent();
+    if (typeof agent.stream !== 'function') {
+      return { ...result, content: '' };
+    }
+
+    const requestContext = await session.#buildRequestContext();
+    const instructions =
+      definition.instructions && typeof definition.instructions !== 'function' ? definition.instructions : undefined;
+    const response = await agent.stream(opts.prompt, {
+      requestContext,
+      memory: { thread: result.threadId, resource: result.resourceId },
+      ...(instructions ? { instructions } : {}),
+      ...(definition.maxSteps !== undefined ? { maxSteps: definition.maxSteps } : {}),
+      ...(definition.stopWhen !== undefined ? { stopWhen: definition.stopWhen } : {}),
+      requireToolApproval: false,
+    });
+    const fullOutput = await response.getFullOutput();
+    const content = fullOutput.text ?? '';
+    return { ...result, content };
+  }
+
+  async #createSubagentSession(opts: { agentType: string; prompt: string; modelId?: string; forked?: boolean }): Promise<
+    | {
+        isError: false;
+        result: {
+          isError: false;
+          subagentSessionId: string;
+          threadId: string;
+          resourceId: string;
+          agentType: string;
+          depth: number;
+        };
+        session: Session<TState>;
+        definition: SubagentDefinition;
       }
     | {
         isError: true;
@@ -204,16 +348,12 @@ export class Session<TState = {}> {
       throw new Error(`Harness subagent type "${opts.agentType}" was not found`);
     }
 
-    if (!this.#resolveAgent) {
+    if (!this.#agentResolver) {
       throw new Error('Harness subagent spawn requires an agent resolver');
     }
-    await this.#resolveAgent(definition.agentId);
+    const agent = this.#agentResolver.getAgentById(definition.agentId);
 
     const modelId = opts.modelId ?? definition.defaultModelId ?? this.#modelId;
-    if (!this.#resolveModel) {
-      throw new Error('Harness subagent spawn requires a resolveModel function');
-    }
-    await this.#resolveModel(modelId);
 
     const now = new Date();
     const record: SessionRecord = {
@@ -248,13 +388,46 @@ export class Session<TState = {}> {
       payload: { agentType: opts.agentType, parentSessionId: this.#id, depth: attemptedDepth },
     });
 
-    return {
-      isError: false,
-      subagentSessionId: record.id,
+    const session = new Session<TState>({
+      id: record.id,
+      ownerId: this.#ownerId,
       threadId: record.threadId,
       resourceId: record.resourceId,
-      agentType: opts.agentType,
-      depth: attemptedDepth,
+      mode: this.#mode,
+      model: modelId,
+      createdAt: record.createdAt,
+      lastActivityAt: record.lastActivityAt,
+      agent,
+      memory: this.#memory,
+      storage: this.#storage,
+      events: this.#events.scoped({ sessionId: record.id }),
+      stateSchema: this.#stateSchemaInput,
+      initialState: this.getState() as Partial<TState>,
+      workspace: this.#workspace,
+      subagents: this.#subagents,
+      agentResolver: this.#agentResolver,
+      modes: this.#modes,
+      gateways: this.#gateways,
+      defaultPermissionPolicy: this.#defaultPermissionPolicy,
+      permissionRules: this.#permissionRules,
+      sessionGrants: this.#sessionGrants,
+      onPermissionRequested: this.#onPermissionRequested,
+      toolCategoryResolver: this.#toolCategoryResolver,
+      record,
+    });
+
+    return {
+      isError: false,
+      result: {
+        isError: false,
+        subagentSessionId: record.id,
+        threadId: record.threadId,
+        resourceId: record.resourceId,
+        agentType: opts.agentType,
+        depth: attemptedDepth,
+      },
+      session,
+      definition,
     };
   }
 
@@ -351,10 +524,13 @@ export class Session<TState = {}> {
       initialState: this.getState() as Partial<TState>,
       workspace: this.#workspace,
       subagents: this.#subagents,
-      resolveAgent: this.#resolveAgent,
-      resolveMode: this.#resolveMode,
-      resolveModel: this.#resolveModel,
+      agentResolver: this.#agentResolver,
+      modes: this.#modes,
+      gateways: this.#gateways,
       defaultPermissionPolicy: this.#defaultPermissionPolicy,
+      permissionRules: this.#permissionRules,
+      sessionGrants: this.#sessionGrants,
+      onPermissionRequested: this.#onPermissionRequested,
       toolCategoryResolver: this.#toolCategoryResolver,
     });
 
@@ -445,40 +621,228 @@ export class Session<TState = {}> {
     return { tools: this.#mode.tools, additionalTools: this.#mode.additionalTools };
   }
 
-  async signal({ messages, ...options }: SessionSignalOptions): Promise<unknown> {
-    if (!this.#resolveAgent) {
-      throw new Error('Harness session cannot signal because no agent resolver is configured');
+  async subscribeToThread<OUTPUT = unknown>(
+    options: SessionSubscribeToThreadOptions = {},
+  ): Promise<SessionThreadSubscription<OUTPUT>> {
+    const agent = await this.#resolveSessionAgent();
+
+    return agent.subscribeToThread<OUTPUT>({
+      ...options,
+      resourceId: this.#resourceId,
+      threadId: this.#threadId,
+    });
+  }
+
+  async sendMessage<OUTPUT = unknown>({
+    messages,
+    ...options
+  }: SessionMessageOptions<OUTPUT>): Promise<SessionSendMessageResult> {
+    const agent = await this.#resolveSessionAgent();
+    const target = await this.#buildMessageTarget(agent, options);
+    const result = agent.sendMessage<OUTPUT>(this.#toAgentMessageInput(messages), target);
+    void this.#persistSession({});
+    return result;
+  }
+
+  async queueMessage<OUTPUT = unknown>({
+    messages,
+    ...options
+  }: SessionMessageOptions<OUTPUT>): Promise<SessionQueueMessageResult> {
+    const agent = await this.#resolveSessionAgent();
+    const target = await this.#buildMessageTarget(agent, options);
+    const result = agent.queueMessage<OUTPUT>(this.#toAgentMessageInput(messages), target);
+    void this.#persistSession({});
+    return result;
+  }
+
+  async #resolveSessionAgent(): Promise<Agent> {
+    return this.#agent;
+  }
+
+  async #buildToolsets(agent: Agent): Promise<{ tools: ToolsInput; harnessToolNames: string[] }> {
+    const requestContext = await this.#buildRequestContext();
+    const agentTools = await agent.listTools({ requestContext });
+    const tools = buildSessionToolsets({
+      agentTools,
+      modeOverrides: this.#getToolOverrides(),
+      builtInTools: buildHarnessBuiltInTools(this),
+      permissionRules: this.#permissionRules,
+      permissions: {
+        sessionGrants: this.listSessionGrants(),
+        defaultPermissionPolicy: this.#defaultPermissionPolicy,
+        toolCategoryResolver: this.#toolCategoryResolver,
+        yolo: this.#isYoloEnabled(),
+        onPendingApproval: input => this.#registerPermissionApproval(input),
+      },
+    });
+    return { tools, harnessToolNames: Object.keys(tools) };
+  }
+
+  async #registerPermissionApproval(input: {
+    toolName: string;
+    category: ToolCategory | null;
+    args: unknown;
+    result: PermissionCheckResult;
+  }): Promise<{ pendingItemId: string; status: string }> {
+    const pending = await this.registerPendingItem({
+      id: randomUUID(),
+      kind: 'tool-approval',
+      status: 'pending',
+      runId: this.#getActiveThreadRunId() ?? this.#currentRunId ?? undefined,
+      traceId: this.#currentTraceId ?? undefined,
+      payload: {
+        source: 'permission-gate',
+        toolName: input.toolName,
+        category: input.category,
+        args: input.args,
+        permission: input.result,
+      },
+    });
+
+    const event = {
+      pendingItemId: pending.id,
+      toolName: input.toolName,
+      category: input.category,
+      result: input.result,
+    };
+    const metadata = Object.fromEntries(
+      Object.entries(input.result.metadata).filter(([, value]) => value !== undefined),
+    );
+    this.#events.emit({
+      type: 'permission.requested',
+      payload: {
+        pendingItemId: pending.id,
+        toolName: input.toolName,
+        category: input.category,
+        decision: input.result.decision,
+        policy: input.result.policy,
+        reasons: input.result.reasons,
+        metadata,
+      },
+    });
+    await this.#onPermissionRequested?.(event);
+    return { pendingItemId: pending.id, status: pending.status };
+  }
+
+  async #buildMessageTarget<OUTPUT>(
+    agent: Agent,
+    options: Omit<SessionMessageOptions<OUTPUT>, 'messages'>,
+  ): Promise<SendAgentMessageOptions<OUTPUT> & QueueAgentMessageOptions<OUTPUT>> {
+    const { ifActive, ifIdle, runId, ...executionOptions } = options;
+    const { tools, harnessToolNames } = await this.#buildToolsets(agent);
+    const modeInstructions = this.#mode.instructions;
+    const userStreamOptions = ifIdle?.streamOptions ?? {};
+    const requestedActiveTools = userStreamOptions.activeTools ?? executionOptions.activeTools;
+    const memory = userStreamOptions.memory ?? { thread: this.#threadId, resource: this.#resourceId };
+
+    const target = {
+      runId,
+      resourceId: this.#resourceId,
+      threadId: this.#threadId,
+      ifActive,
+      ifIdle: {
+        ...ifIdle,
+        behavior: ifIdle?.behavior ?? 'wake',
+        streamOptions: {
+          // Mode instructions as base (overrides agent's default)
+          ...(modeInstructions ? { instructions: modeInstructions } : {}),
+          // User execution options override mode instructions
+          ...executionOptions,
+          // ifIdle.streamOptions overrides everything
+          ...userStreamOptions,
+          memory,
+          requestContext: await this.#buildRequestContext(),
+          toolsets: { harness: tools },
+          activeTools: requestedActiveTools ? [...new Set([...requestedActiveTools, ...harnessToolNames])] : undefined,
+        },
+      },
+    };
+
+    return target as unknown as SendAgentMessageOptions<OUTPUT> & QueueAgentMessageOptions<OUTPUT>;
+  }
+
+  #toAgentMessageInput(messages: SessionMessageOptions['messages']): AgentMessageInput {
+    if (typeof messages === 'string') {
+      return messages;
     }
 
-    const agent = this.#agent;
-    const runId = options.runId ?? randomUUID();
-    this.#markRunning(runId);
+    if (Array.isArray(messages)) {
+      if (messages.every(part => this.#isSignalPart(part))) {
+        return messages as AgentMessageInput;
+      }
 
-    try {
-      const requestContext = await this.#buildRequestContext();
-      const agentTools = await agent.listTools({ requestContext });
-      const tools = buildSessionToolsets({
-        agentTools,
-        modeOverrides: this.#getToolOverrides(),
-        builtInTools: buildHarnessBuiltInTools(this),
-      });
-      const model = this.#resolveModel ? await this.#resolveModel(this.#modelId) : undefined;
-      const result = await agent.generate(messages, {
-        ...options,
-        runId,
-        requestContext,
-        ...(model ? { model } : {}),
-        toolsets: { harness: tools },
-        activeTools: options.activeTools
-          ? [...new Set([...options.activeTools, ...Object.keys(tools)])]
-          : Object.keys(tools),
-      });
-      this.#markIdle();
-      return result;
-    } catch (error) {
-      this.#markIdle();
-      throw error;
+      const text = messages
+        .map(message => this.#extractMessageText(message))
+        .filter(Boolean)
+        .join('\n');
+      if (text) {
+        return text;
+      }
     }
+
+    if (messages && typeof messages === 'object' && 'contents' in messages) {
+      return messages as AgentMessageInput;
+    }
+
+    const text = this.#extractMessageText(messages);
+    if (text) {
+      return text;
+    }
+
+    throw new Error('Harness session messages must be convertible to an agent message signal');
+  }
+
+  #isSignalPart(part: unknown): boolean {
+    return (
+      !!part &&
+      typeof part === 'object' &&
+      'type' in part &&
+      ((part as { type?: unknown }).type === 'text' || (part as { type?: unknown }).type === 'file')
+    );
+  }
+
+  #extractMessageText(message: unknown): string | undefined {
+    if (typeof message === 'string') {
+      return message;
+    }
+
+    if (!message || typeof message !== 'object') {
+      return undefined;
+    }
+
+    if ('text' in message && typeof (message as { text?: unknown }).text === 'string') {
+      return (message as { text: string }).text;
+    }
+
+    if ('content' in message) {
+      return this.#extractContentText((message as { content?: unknown }).content);
+    }
+
+    if ('parts' in message) {
+      return this.#extractContentText((message as { parts?: unknown }).parts);
+    }
+
+    return undefined;
+  }
+
+  #extractContentText(content: unknown): string | undefined {
+    if (typeof content === 'string') {
+      return content;
+    }
+
+    if (Array.isArray(content)) {
+      const text = content
+        .map(part => this.#extractMessageText(part))
+        .filter(Boolean)
+        .join('\n');
+      return text || undefined;
+    }
+
+    if (content && typeof content === 'object' && 'parts' in content) {
+      return this.#extractContentText((content as { parts?: unknown }).parts);
+    }
+
+    return undefined;
   }
 
   setMode(mode: HarnessMode) {
@@ -488,6 +852,19 @@ export class Session<TState = {}> {
       void this.#persistSession({ modeId: mode.id });
       this.#events.emit({ type: 'mode_changed', modeId: mode.id, previousModeId });
     }
+  }
+
+  /**
+   * Switch to a configured mode by id. Returns true when the mode exists and the
+   * switch was applied. Used by the submit_plan tool to honor a mode's
+   * `transitionsTo` handoff once a plan is approved.
+   */
+  switchModeById(modeId: string): boolean {
+    if (modeId === this.#mode.id) return true;
+    const mode = this.#modes?.get(modeId);
+    if (!mode) return false;
+    this.setMode(mode);
+    return true;
   }
 
   /**
@@ -649,13 +1026,28 @@ export class Session<TState = {}> {
     });
   }
 
+  #isSessionGrantActive(grant: SessionGrant): boolean {
+    if (!grant.expiresAt) return true;
+    const expiresAt = grant.expiresAt instanceof Date ? grant.expiresAt.getTime() : new Date(grant.expiresAt).getTime();
+    return Number.isFinite(expiresAt) && expiresAt > Date.now();
+  }
+
+  #isYoloEnabled(): boolean {
+    return (this.#state as Record<string, unknown>).yolo === true;
+  }
+
   #isBusySnapshot(): boolean {
     const hasActiveRun =
+      !!this.#getActiveThreadRunId() ||
       this.#runStatus === 'starting' ||
       this.#runStatus === 'running' ||
       this.#runStatus === 'waiting' ||
       this.#runStatus === 'resuming';
     return hasActiveRun || this.#pending.some(item => item.status === 'pending');
+  }
+
+  #getActiveThreadRunId(): string | null {
+    return this.#agent?.getActiveThreadRunId?.({ resourceId: this.#resourceId, threadId: this.#threadId }) ?? null;
   }
 
   #markRunning(runId: string, traceId: string | null = null): void {
@@ -721,10 +1113,10 @@ export class Session<TState = {}> {
       const runId = typeof payload.runId === 'string' ? payload.runId : item.runId;
       const toolCallId = typeof payload.toolCallId === 'string' ? payload.toolCallId : undefined;
       const agent =
-        typeof payload.agentId === 'string' && this.#resolveAgent
-          ? await this.#resolveAgent(payload.agentId)
+        typeof payload.agentId === 'string' && this.#agentResolver
+          ? await this.#agentResolver.getAgentById(payload.agentId)
           : this.#agent;
-      if (typeof approved !== 'boolean' || !runId || !this.#resolveAgent) return undefined;
+      if (typeof approved !== 'boolean' || !runId) return undefined;
 
       const result = approved
         ? await agent.approveToolCallGenerate({ runId, toolCallId, requestContext: await this.#buildRequestContext() })
@@ -734,10 +1126,12 @@ export class Session<TState = {}> {
 
     if (item.kind === 'plan-approval' && response.approved === true) {
       const transitionModeId = typeof payload.transitionModeId === 'string' ? payload.transitionModeId : undefined;
-      if (transitionModeId && transitionModeId !== this.#mode.id && this.#resolveMode) {
-        const mode = await this.#resolveMode(transitionModeId);
-        this.setMode(mode);
-        return { transitionModeId, modeChanged: true };
+      if (transitionModeId && transitionModeId !== this.#mode.id && this.#modes) {
+        const mode = this.#modes.get(transitionModeId);
+        if (mode) {
+          this.setMode(mode);
+          return { transitionModeId, modeChanged: true };
+        }
       }
     }
 
@@ -793,8 +1187,42 @@ export class Session<TState = {}> {
       parentSessionId: this.#parentSessionId,
       subagentDepth: this.#subagentDepth,
       source: this.#source,
+      state: this.getState(),
       getState: () => this.getState(),
+      setState: updates => this.setState(updates),
+      updateState: updater => this.updateState(updater),
+      emitEvent: event => this.#events.emit(event),
+      registerQuestion: ({ questionId, resolve }) => {
+        this.#questionResolvers.set(questionId, resolve);
+      },
+      registerPlanApproval: ({ planId, resolve }) => {
+        this.#planApprovalResolvers.set(planId, resolve);
+      },
     };
+  }
+
+  /**
+   * Resolve a pending blocking question registered by the ask_user tool.
+   * Returns true if a waiter was found and resolved.
+   */
+  resolveQuestion(questionId: string, answer: HarnessQuestionAnswer): boolean {
+    const resolve = this.#questionResolvers.get(questionId);
+    if (!resolve) return false;
+    this.#questionResolvers.delete(questionId);
+    resolve(answer);
+    return true;
+  }
+
+  /**
+   * Resolve a pending blocking plan approval registered by the submit_plan tool.
+   * Returns true if a waiter was found and resolved.
+   */
+  resolvePlanApproval(planId: string, result: { action: 'approved' | 'rejected'; feedback?: string }): boolean {
+    const resolve = this.#planApprovalResolvers.get(planId);
+    if (!resolve) return false;
+    this.#planApprovalResolvers.delete(planId);
+    resolve(result);
+    return true;
   }
 
   async #resolveMemory(): Promise<MastraMemory> {

@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect } from '@microsoft/tui-test';
+import { createMastraCodeModule } from './types.js';
 import type { McE2eScenario } from './types.js';
 
 const CONFIG_DIR = '.acme-code';
@@ -11,7 +12,7 @@ export const customConfigDirScenario: McE2eScenario = {
     'Launch an embedded TUI with createMastraCode({ configDir }) and verify config-backed commands and skills.',
   testName: 'uses a programmatic configDir for TUI custom commands and skills',
   projectFixture: 'long-branch',
-  prepare({ mastracodeDir, projectDir }) {
+  prepare({ mastracodeDir, projectDir, harnessBackend }) {
     const configRoot = join(projectDir, CONFIG_DIR);
     mkdirSync(join(configRoot, 'commands'), { recursive: true });
     mkdirSync(join(configRoot, 'skills', 'acme-skill'), { recursive: true });
@@ -37,7 +38,7 @@ export const customConfigDirScenario: McE2eScenario = {
 
     writeFileSync(
       join(projectDir, '.mc-e2e-custom-config-entrypoint.ts'),
-      `import { join } from 'node:path';\nimport { pathToFileURL } from 'node:url';\n\nconst mastracodeDir = ${JSON.stringify(mastracodeDir)};\nconst { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);\nconst { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);\nconst { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);\n\nprocess.on('SIGINT', () => process.exit(0));\nprocess.on('SIGTERM', () => process.exit(0));\n\nconst result = await createMastraCode({\n  cwd: process.cwd(),\n  configDir: '${CONFIG_DIR}',\n  disableMcp: true,\n  disableHooks: true,\n  unixSocketPubSub: false,\n  memory: false,\n});\n\nconst tui = new MastraTUI({\n  harness: result.harness,\n  hookManager: result.hookManager,\n  authStorage: result.authStorage,\n  mcpManager: result.mcpManager,\n  appName: 'Acme Code',\n  version: getCurrentVersion(),\n  inlineQuestions: true,\n});\n\nvoid tui.run().catch(error => {\n  process.stderr.write(String(error instanceof Error ? error.stack ?? error.message : error) + '\\n');\n  process.exit(1);\n});\n`,
+      `import { join } from 'node:path';\nimport { pathToFileURL } from 'node:url';\n\nconst mastracodeDir = ${JSON.stringify(mastracodeDir)};\nconst { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, '${createMastraCodeModule(harnessBackend)}')).href);\nconst { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);\nconst { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);\n\nprocess.on('SIGINT', () => process.exit(0));\nprocess.on('SIGTERM', () => process.exit(0));\n\nconst result = await createMastraCode({\n  cwd: process.cwd(),\n  configDir: '${CONFIG_DIR}',\n  disableMcp: true,\n  disableHooks: true,\n  unixSocketPubSub: false,\n  memory: false,\n});\n\nconst tui = new MastraTUI({\n  harness: result.harness,\n  hookManager: result.hookManager,\n  authStorage: result.authStorage,\n  mcpManager: result.mcpManager,\n  appName: 'Acme Code',\n  version: getCurrentVersion(),\n  inlineQuestions: true,\n});\n\nvoid tui.run().catch(error => {\n  process.stderr.write(String(error instanceof Error ? error.stack ?? error.message : error) + '\\n');\n  process.exit(1);\n});\n`,
     );
   },
   entrypoint({ projectDir }) {

@@ -1,5 +1,13 @@
 export { Harness } from './harness';
 export {
+  toNotificationContent,
+  toNotificationSummaryContent,
+  toReactiveSignalContent,
+  toStateSignalContent,
+  toSystemReminderContent,
+  toUserSignalMessage,
+} from './harness';
+export {
   askUserTool,
   assignTaskIds,
   parseSubagentMeta,

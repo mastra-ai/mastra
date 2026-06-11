@@ -1,4 +1,5 @@
 import type { Agent } from '../../agent';
+import type { MastraModelGatewayInterface } from '../../llm';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
 import type { PublicSchema } from '../../schema';
@@ -7,10 +8,18 @@ import type { HarnessStorage } from '../../storage/domains/harness';
 import type { DynamicArgument } from '../../types';
 import type { Workspace, WorkspaceConfig } from '../../workspace';
 import type { HarnessMode } from './mode';
-import type { PermissionPolicy, ToolCategory, ToolCategoryResolver } from './permissions.types';
-import type { ModelResolver, SubagentRegistryConfig } from './subagents.types';
+import type {
+  PermissionPolicy,
+  PermissionRequestedCallback,
+  PermissionRules,
+  SessionGrant,
+  ToolCategory,
+  ToolCategoryResolver,
+} from './permissions.types';
+import type { SubagentRegistryConfig } from './subagents.types';
 
 export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
+  id: string;
   /**
    * Operator-managed compatibility token for the configured runtime surface:
    * agents and prompts/tools, mode-to-agent bindings, model aliases, MCP
@@ -46,6 +55,8 @@ export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
    */
   workspace?: DynamicArgument<Workspace | undefined> | WorkspaceConfig;
 
+  gateways?: Array<MastraModelGatewayInterface>;
+
   /**
    * Session lifecycle policy. `maxSubagentDepth` caps durable child session
    * creation across all subagent entry points and defaults to `1`.
@@ -55,19 +66,11 @@ export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
   };
 
   /**
-   * Subagent type registry. When `types` is non-empty and {@link resolveModel}
-   * is also configured, the harness exposes a built-in `subagent` tool to the
-   * session agent. The tool's `agentType` enum is drawn from the keys of this
-   * map. Validated at construction.
+   * Subagent type registry. When `types` is non-empty, the harness exposes a
+   * built-in `subagent` tool to the session agent. The tool's `agentType` enum
+   * is drawn from the keys of this map. Validated at construction.
    */
   subagents?: SubagentRegistryConfig;
-
-  /**
-   * Resolves a model id string to a `LanguageModel`. Required when the
-   * built-in `subagent` tool is exposed (i.e. when {@link subagents} is set)
-   * so that fresh subagent runs can instantiate their model.
-   */
-  resolveModel?: ModelResolver;
 
   /**
    * Default permission policy applied when a tool's resolved category has no
@@ -75,6 +78,15 @@ export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
    * entirely; `'deny'` for a strict allow-list posture. Defaults to `'ask'`.
    */
   defaultPermissionPolicy?: PermissionPolicy;
+
+  /** Session permission rules layered above the default policy. */
+  permissionRules?: PermissionRules;
+
+  /** Initial grants for every session created by this harness. */
+  sessionGrants?: readonly SessionGrant[];
+
+  /** Called whenever a session creates a pending permission approval. */
+  onPermissionRequested?: PermissionRequestedCallback;
 
   /**
    * Resolves a tool name to its category for permission-gate evaluation.

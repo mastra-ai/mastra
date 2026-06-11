@@ -2,6 +2,7 @@ import { execFileSync, execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createMastraCodeModule } from './types.js';
 import type { McE2eScenario } from './types.js';
 
 const REASONING_SENTINEL = 'CEREBRAS_REASONING_SHOULD_BE_STRIPPED';
@@ -57,7 +58,7 @@ export const providerHistoryCompatScenario: McE2eScenario = {
       CEREBRAS_API_KEY: 'mc-e2e-cerebras-key',
     };
   },
-  prepare({ dbPath, mastracodeDir, projectDir }) {
+  prepare({ dbPath, mastracodeDir, projectDir, harnessBackend }) {
     mkdirSync(projectDir, { recursive: true });
     const now = new Date('2026-06-07T19:45:00.000Z');
     const resourceId = detectResourceId(mastracodeDir);
@@ -115,7 +116,7 @@ settings.customProviders = [
 ];
 writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 
-const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);
+const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, '${createMastraCodeModule(harnessBackend)}')).href);
 const { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);
 const { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);
 

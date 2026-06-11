@@ -14,9 +14,20 @@ import { z } from 'zod';
 import type { ToolsInput } from '../../agent/types';
 import { createTool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools';
-import type { PermissionPolicy } from './permissions.types';
+import { formatTaskCheckResult, formatTaskListResult, summarizeTaskCheck } from '../tools';
+import { evaluatePermission } from './permissions';
+import type {
+  PermissionCheckResult,
+  PermissionPolicy,
+  PermissionRules,
+  SessionGrant,
+  ToolCategory,
+  ToolCategoryResolver,
+} from './permissions.types';
 import type { HarnessRequestContext } from './request-context';
 import type { Session } from './session';
+
+export type { PermissionRules } from './permissions.types';
 
 type AnySession = Session<any>;
 
@@ -29,12 +40,19 @@ type HarnessTaskRecord = {
 
 type TaskState = { tasks?: HarnessTaskRecord[] };
 
-export interface PermissionRules {
-  /**
-   * Per-tool override map. `'allow'` exposes the tool unconditionally,
-   * `'deny'` strips it from the toolset, `'ask'` defers to the runtime gate.
-   */
-  tools?: Record<string, PermissionPolicy>;
+interface PermissionRuntimeContext {
+  permissionRules?: PermissionRules;
+  sessionGrants?: readonly SessionGrant[];
+  defaultPermissionPolicy?: PermissionPolicy;
+  toolCategoryResolver?: ToolCategoryResolver;
+  yolo?: boolean;
+  onPendingApproval?: (input: {
+    toolName: string;
+    category: ToolCategory | null;
+    args: unknown;
+    context: ToolExecutionContext;
+    result: PermissionCheckResult;
+  }) => Promise<{ pendingItemId: string; status: string }>;
 }
 
 export interface BuildSessionToolsetsOptions {
@@ -44,10 +62,11 @@ export interface BuildSessionToolsetsOptions {
   modeOverrides?: { tools?: ToolsInput; additionalTools?: ToolsInput };
   /** Harness built-in tools (ask_user, submit_plan, task_*, subagent, etc). */
   builtInTools?: ToolsInput;
-  /** Optional per-tool permission policy. `deny` filters the tool out. */
+  /** Optional permission policy. `deny` filters the tool out. */
   permissionRules?: PermissionRules;
   /** Tool ids the caller has explicitly disabled. */
   disabledTools?: readonly string[];
+  permissions?: Omit<PermissionRuntimeContext, 'permissionRules'>;
 }
 
 const taskSchema = z.object({
@@ -90,12 +109,20 @@ function recoverableError(error: unknown, code = 'harness.tool_failed') {
   };
 }
 
-function taskSummary(tasks: HarnessTaskRecord[]) {
+let questionCounter = 0;
+let planCounter = 0;
+
+function formatQuestionAnswer(answer: string | string[]): string {
+  return Array.isArray(answer) ? answer.join(', ') : answer;
+}
+
+function taskSummary(tasks: HarnessTaskRecord[], content: string) {
   const completed = tasks.filter(task => task.status === 'completed').length;
   const inProgress = tasks.filter(task => task.status === 'in_progress').length;
   const pending = tasks.filter(task => task.status === 'pending').length;
   const incompleteTasks = tasks.filter(task => task.status !== 'completed');
   return {
+    content,
     tasks,
     summary: {
       total: tasks.length,
@@ -116,10 +143,14 @@ function getTasks(session: AnySession): HarnessTaskRecord[] {
 }
 
 async function replaceTasks(session: AnySession, tasks: HarnessTaskRecord[]): Promise<HarnessTaskRecord[]> {
-  return session.updateState(() => ({
-    updates: { tasks: tasks.map(task => ({ ...task })) },
-    result: tasks.map(task => ({ ...task })),
-  }));
+  return session.updateState(() => {
+    const nextTasks = tasks.map(task => ({ ...task }));
+    return {
+      updates: { tasks: nextTasks },
+      events: [{ type: 'task_updated', tasks: nextTasks }],
+      result: nextTasks,
+    };
+  });
 }
 
 async function updateTask(
@@ -134,7 +165,7 @@ async function updateTask(
       throw new Error(`Harness task "${taskId}" was not found on session "${session.id}"`);
     }
     Object.assign(task, updates);
-    return { updates: { tasks }, result: tasks };
+    return { updates: { tasks }, events: [{ type: 'task_updated', tasks }], result: tasks };
   });
 }
 
@@ -143,7 +174,7 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
     task_write: createTool({
       id: 'task_write',
       description: 'Replace the task list for the current harness session.',
-      inputSchema: z.object({ tasks: z.array(taskSchema).min(1) }),
+      inputSchema: z.object({ tasks: z.array(taskSchema) }),
       execute: async ({ tasks }, context) => {
         try {
           assertOwningSession(session, context);
@@ -151,7 +182,7 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
             session,
             tasks.map(task => ({ ...task, id: task.id ?? randomUUID() })),
           );
-          return taskSummary(savedTasks);
+          return taskSummary(savedTasks, formatTaskListResult(savedTasks));
         } catch (error) {
           return recoverableError(error);
         }
@@ -164,7 +195,8 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
       execute: async ({ id, ...updates }, context) => {
         try {
           assertOwningSession(session, context);
-          return taskSummary(await updateTask(session, id, updates));
+          const updated = await updateTask(session, id, updates);
+          return taskSummary(updated, formatTaskListResult(updated));
         } catch (error) {
           return recoverableError(error);
         }
@@ -177,7 +209,8 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
       execute: async ({ id }, context) => {
         try {
           assertOwningSession(session, context);
-          return taskSummary(await updateTask(session, id, { status: 'completed' }));
+          const completed = await updateTask(session, id, { status: 'completed' });
+          return taskSummary(completed, formatTaskListResult(completed));
         } catch (error) {
           return recoverableError(error);
         }
@@ -190,7 +223,8 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
       execute: async (_input, context) => {
         try {
           assertOwningSession(session, context);
-          return taskSummary(getTasks(session));
+          const currentTasks = getTasks(session);
+          return taskSummary(currentTasks, formatTaskCheckResult(summarizeTaskCheck(currentTasks)));
         } catch (error) {
           return recoverableError(error);
         }
@@ -211,8 +245,14 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
       }),
       execute: async (input, context) => {
         try {
-          assertOwningSession(session, context);
-          const pending = await session.registerPendingItem({
+          const harnessCtx = assertOwningSession(session, context);
+          const options = input.options?.map(o => ({
+            label: o.label,
+            ...(o.description ? { description: o.description } : {}),
+          }));
+          const resolvedSelectionMode = options?.length ? (input.selectionMode ?? 'single_select') : undefined;
+
+          await session.registerPendingItem({
             id: randomUUID(),
             kind: 'question',
             status: 'pending',
@@ -220,7 +260,29 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
             traceId: context.traceId ?? null,
             payload: input,
           });
-          return { isError: false, pendingItemId: pending.id, status: pending.status };
+
+          if (!harnessCtx.emitEvent || !harnessCtx.registerQuestion) {
+            return {
+              isError: false,
+              content: `[Question for user]: ${input.question}${
+                options?.length ? '\nOptions: ' + options.map(o => o.label).join(', ') : ''
+              }`,
+            };
+          }
+
+          const questionId = `q_${++questionCounter}_${Date.now()}`;
+          const answer = await new Promise<string | string[]>(resolve => {
+            harnessCtx.registerQuestion!({ questionId, resolve });
+            harnessCtx.emitEvent!({
+              type: 'ask_question',
+              questionId,
+              question: input.question,
+              options,
+              selectionMode: resolvedSelectionMode,
+            });
+          });
+
+          return { isError: false, content: `User answered: ${formatQuestionAnswer(answer)}` };
         } catch (error) {
           return recoverableError(error);
         }
@@ -232,8 +294,9 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
       inputSchema: z.object({ title: z.string().nullable().optional(), plan: z.string() }),
       execute: async (input, context) => {
         try {
-          assertOwningSession(session, context);
-          const pending = await session.registerPendingItem({
+          const harnessCtx = assertOwningSession(session, context);
+
+          await session.registerPendingItem({
             id: randomUUID(),
             kind: 'plan-approval',
             status: 'pending',
@@ -241,7 +304,41 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
             traceId: context.traceId ?? null,
             payload: { ...input, transitionModeId: session.getMode().transitionsTo },
           });
-          return { isError: false, pendingItemId: pending.id, status: pending.status };
+
+          if (!harnessCtx.emitEvent || !harnessCtx.registerPlanApproval) {
+            return {
+              isError: false,
+              content: `[Plan submitted for review]\n\nTitle: ${input.title || 'Implementation Plan'}\n\n${input.plan}`,
+            };
+          }
+
+          const planId = `plan_${++planCounter}_${Date.now()}`;
+          const result = await new Promise<{ action: 'approved' | 'rejected'; feedback?: string }>(resolve => {
+            harnessCtx.registerPlanApproval!({ planId, resolve });
+            harnessCtx.emitEvent!({
+              type: 'plan_approval_required',
+              planId,
+              title: input.title || 'Implementation Plan',
+              plan: input.plan,
+            });
+          });
+
+          if (result.action === 'approved') {
+            const transitionsTo = session.getMode().transitionsTo;
+            if (transitionsTo) {
+              session.switchModeById(transitionsTo);
+            }
+            return {
+              isError: false,
+              content: 'Plan approved. Proceed with implementation following the approved plan.',
+            };
+          }
+
+          const feedback = result.feedback ? `\n\nUser feedback: ${result.feedback}` : '';
+          return {
+            isError: false,
+            content: `Plan was not approved. The user wants revisions.${feedback}\n\nPlease revise the plan based on the feedback and submit again with submit_plan.`,
+          };
         } catch (error) {
           return recoverableError(error);
         }
@@ -286,9 +383,83 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
   } as ToolsInput;
 }
 
+type ToolRecord = {
+  execute?: (input: unknown, context: ToolExecutionContext) => Promise<unknown>;
+  requireApproval?: boolean | ((input: unknown, context?: Record<string, unknown>) => boolean | Promise<boolean>);
+  needsApprovalFn?: (input: unknown, context?: Record<string, unknown>) => boolean | Promise<boolean>;
+};
+
+function getToolRecord(tool: unknown): ToolRecord | null {
+  return tool && typeof tool === 'object' ? (tool as ToolRecord) : null;
+}
+
+function isStaticToolApprovalRequired(tool: unknown): boolean {
+  return getToolRecord(tool)?.requireApproval === true;
+}
+
+async function isDynamicToolApprovalRequired(
+  tool: unknown,
+  input: unknown,
+  context: ToolExecutionContext,
+): Promise<boolean> {
+  const record = getToolRecord(tool);
+  const approvalContext = { requestContext: context.requestContext, workspace: context.workspace };
+  if (typeof record?.needsApprovalFn === 'function') {
+    return Boolean(await record.needsApprovalFn(input, approvalContext));
+  }
+  if (typeof record?.requireApproval === 'function') {
+    return Boolean(await record.requireApproval(input, approvalContext));
+  }
+  return false;
+}
+
+function wrapToolWithPermissionGate(
+  name: string,
+  tool: unknown,
+  permissions: PermissionRuntimeContext,
+): unknown {
+  const record = getToolRecord(tool);
+  if (!record?.execute) return tool;
+
+  const category = permissions.toolCategoryResolver?.(name) ?? null;
+  const originalExecute = record.execute.bind(tool);
+
+  record.execute = async (input: unknown, context: ToolExecutionContext) => {
+    const result = evaluatePermission({
+      toolName: name,
+      category,
+      args: input,
+      gate: 'pre-action',
+      permissionRules: permissions.permissionRules,
+      sessionGrants: permissions.sessionGrants,
+      defaultPermissionPolicy: permissions.defaultPermissionPolicy,
+      yolo: permissions.yolo,
+      toolConfigRequiresApproval: isStaticToolApprovalRequired(tool),
+      toolFnRequiresApproval: await isDynamicToolApprovalRequired(tool, input, context),
+    });
+
+    if (result.decision === 'deny') {
+      return recoverableError(new Error(`Tool "${name}" is denied by harness permission policy`), 'harness.permission_denied');
+    }
+
+    if (result.decision === 'pendingApproval') {
+      const pending = await permissions.onPendingApproval?.({ toolName: name, category, args: input, context, result });
+      return {
+        isError: false,
+        pendingItemId: pending?.pendingItemId,
+        status: pending?.status ?? 'pending',
+        permission: result,
+      };
+    }
+
+    return originalExecute(input, context);
+  };
+
+  return tool;
+}
+
 /**
- * Produce the final toolset visible to the agent on this request. Pure
- * function — no IO, no side effects.
+ * Produce the final toolset visible to the agent on this request.
  *
  * Layering order:
  *  1. Agent tools (or mode `tools` replacement)
@@ -297,7 +468,7 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
  *  4. Apply `permissionRules.deny` + `disabledTools` filters
  */
 export function buildSessionToolsets(opts: BuildSessionToolsetsOptions = {}): ToolsInput {
-  const { agentTools, modeOverrides, builtInTools, permissionRules, disabledTools } = opts;
+  const { agentTools, modeOverrides, builtInTools, permissionRules, disabledTools, permissions } = opts;
 
   const base: Record<string, unknown> = modeOverrides?.tools
     ? { ...(modeOverrides.tools as Record<string, unknown>) }
@@ -311,13 +482,42 @@ export function buildSessionToolsets(opts: BuildSessionToolsetsOptions = {}): To
     Object.assign(base, builtInTools);
   }
 
-  const denySet = new Set<string>(disabledTools ?? []);
-  for (const [name, policy] of Object.entries(permissionRules?.tools ?? {})) {
-    if (policy === 'deny') denySet.add(name);
-  }
+  const disabledSet = new Set<string>(disabledTools ?? []);
+  const runtimePermissions: PermissionRuntimeContext = { ...permissions, permissionRules };
+  const usePermissionGate = Boolean(
+    permissionRules ||
+      permissions?.defaultPermissionPolicy ||
+      permissions?.sessionGrants?.length ||
+      permissions?.toolCategoryResolver ||
+      permissions?.yolo,
+  );
 
-  for (const name of denySet) {
-    delete base[name];
+  for (const [name, tool] of Object.entries(base)) {
+    if (disabledSet.has(name)) {
+      delete base[name];
+      continue;
+    }
+
+    if (!usePermissionGate) continue;
+
+    const category = permissions?.toolCategoryResolver?.(name) ?? null;
+    const result = evaluatePermission({
+      toolName: name,
+      category,
+      gate: 'pre-exposure',
+      permissionRules,
+      sessionGrants: permissions?.sessionGrants,
+      defaultPermissionPolicy: permissions?.defaultPermissionPolicy,
+      yolo: permissions?.yolo,
+      toolConfigRequiresApproval: isStaticToolApprovalRequired(tool),
+    });
+
+    if (result.decision === 'deny') {
+      delete base[name];
+      continue;
+    }
+
+    base[name] = wrapToolWithPermissionGate(name, tool, runtimePermissions);
   }
 
   return base as ToolsInput;

@@ -10,6 +10,25 @@ import { setupDebugLogging } from './utils/debug-log.js';
 import { releaseAllThreadLocks } from './utils/thread-lock.js';
 import { createMastraCode } from './index.js';
 
+type HeadlessFactoryConfig = Pick<NonNullable<Parameters<typeof createMastraCode>[0]>, 'settingsPath'>;
+type HeadlessHarnessLifecycle = {
+  init(): Promise<void> | void;
+  getMastra(): { startWorkers?: () => Promise<void> | void; stopWorkers?: () => Promise<void> | void } | undefined;
+  stopHeartbeats(): Promise<void> | void;
+};
+type HeadlessMcpManager = {
+  hasServers(): boolean;
+  initInBackground(): Promise<unknown>;
+  disconnect(): Promise<void> | void;
+};
+type HeadlessFactoryResult = {
+  harness: HeadlessHarnessLifecycle;
+  mcpManager?: HeadlessMcpManager;
+  effectiveDefaults?: Record<string, string>;
+  signalsPubSub?: unknown;
+};
+type CreateMastraCodeFactory = (config?: HeadlessFactoryConfig) => Promise<HeadlessFactoryResult>;
+
 const VALID_MODES = ['build', 'plan', 'fast'] as const;
 const VALID_THINKING_LEVELS = ['off', 'low', 'medium', 'high', 'xhigh'] as const;
 
@@ -580,7 +599,10 @@ export async function runHeadless<TState extends Record<string, unknown>>(
  * Headless mode main entry point: parse arguments, read stdin, initialize
  * MastraCode, and run headless mode.
  */
-export async function headlessMain(predrainedInput?: string | null): Promise<never> {
+export async function headlessMain(
+  predrainedInput?: string | null,
+  createMastraCodeFactory: CreateMastraCodeFactory = createMastraCode,
+): Promise<never> {
   if (process.argv.includes('--help') || process.argv.includes('-h')) {
     printHeadlessUsage();
     process.exit(0);
@@ -617,7 +639,7 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
     process.exit(1);
   }
 
-  const result = await createMastraCode({ settingsPath: args.settings });
+  const result = await createMastraCodeFactory({ settingsPath: args.settings });
   const { harness, mcpManager, effectiveDefaults } = result;
 
   if (mcpManager?.hasServers()) {
@@ -628,16 +650,16 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
 
   setupDebugLogging();
   await harness.init();
-  await harness.getMastra()?.startWorkers();
+  await harness.getMastra()?.startWorkers?.();
 
-  const exitCode = await runHeadless(harness, { ...args, prompt }, effectiveDefaults);
+  const exitCode = await runHeadless(harness as Harness<Record<string, unknown>>, { ...args, prompt }, effectiveDefaults);
 
   // Cleanup
   releaseAllThreadLocks();
   const closeSignalsPubSub = (result.signalsPubSub as { close?: () => Promise<void> | void } | undefined)?.close;
   await Promise.allSettled([
     mcpManager?.disconnect(),
-    harness.getMastra()?.stopWorkers(),
+    harness.getMastra()?.stopWorkers?.(),
     harness?.stopHeartbeats(),
     closeSignalsPubSub?.(),
   ]);

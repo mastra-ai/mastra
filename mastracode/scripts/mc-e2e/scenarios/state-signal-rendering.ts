@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect } from '@microsoft/tui-test';
+import { createMastraCodeModule } from './types.js';
 import type { McE2eScenario } from './types.js';
 
 export const stateSignalRenderingScenario: McE2eScenario = {
@@ -9,7 +10,7 @@ export const stateSignalRenderingScenario: McE2eScenario = {
   testName: 'renders a live state signal emitted into the active TUI thread',
   useOpenAIModel: true,
   aimockFixture: 'state-signal-rendering.json',
-  prepare({ mastracodeDir, projectDir }) {
+  prepare({ mastracodeDir, projectDir, harnessBackend }) {
     mkdirSync(projectDir, { recursive: true });
     writeFileSync(
       join(projectDir, '.mc-e2e-state-signal-entrypoint.ts'),
@@ -17,7 +18,7 @@ export const stateSignalRenderingScenario: McE2eScenario = {
 import { pathToFileURL } from 'node:url';
 
 const mastracodeDir = ${JSON.stringify(mastracodeDir)};
-const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);
+const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, '${createMastraCodeModule(harnessBackend)}')).href);
 const { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);
 const { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);
 

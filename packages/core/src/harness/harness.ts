@@ -139,7 +139,7 @@ function signalContentsToHarnessContent(contents: AgentSignalContents): HarnessM
   });
 }
 
-function toSystemReminderContent(
+export function toSystemReminderContent(
   payload: Record<string, unknown>,
 ): Extract<HarnessMessageContent, { type: 'system_reminder' }> | undefined {
   const attributes = getRecordValue(payload.attributes);
@@ -172,7 +172,7 @@ function toSystemReminderContent(
   };
 }
 
-function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage | undefined {
+export function toUserSignalMessage(payload: Record<string, unknown>): HarnessMessage | undefined {
   const id = getStringValue(payload.id);
   const rawContents = payload.contents;
   if (!id || rawContents === undefined) return undefined;
@@ -206,7 +206,7 @@ function signalContentsToText(contents: unknown): string {
     .join('\n');
 }
 
-function toStateSignalContent(
+export function toStateSignalContent(
   payload: Record<string, unknown>,
 ): Extract<HarnessMessageContent, { type: 'state_signal' }> | undefined {
   const stateMetadata = getRecordValue(getRecordValue(payload.metadata)?.state);
@@ -223,7 +223,7 @@ function toStateSignalContent(
   };
 }
 
-function toNotificationSummaryContent(
+export function toNotificationSummaryContent(
   payload: Record<string, unknown>,
 ): Extract<HarnessMessageContent, { type: 'notification_summary' }> | undefined {
   const metadataSummary = getRecordValue(getRecordValue(payload.metadata)?.notificationSummary);
@@ -249,7 +249,7 @@ function toNotificationSummaryContent(
   };
 }
 
-function toReactiveSignalContent(
+export function toReactiveSignalContent(
   payload: Record<string, unknown>,
 ): Extract<HarnessMessageContent, { type: 'reactive_signal' }> | undefined {
   const tagName = getStringValue(payload.tagName);
@@ -265,7 +265,7 @@ function toReactiveSignalContent(
   };
 }
 
-function toNotificationContent(
+export function toNotificationContent(
   payload: Record<string, unknown>,
 ): Extract<HarnessMessageContent, { type: 'notification' }> | undefined {
   const attributes = getRecordValue(payload.attributes) ?? {};

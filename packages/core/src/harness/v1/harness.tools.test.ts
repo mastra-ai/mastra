@@ -148,7 +148,6 @@ describe('Harness — tools/skills/subagents config', () => {
 
   it('creates durable child sessions through the subagent built-in and enforces depth cap', async () => {
     const storage = new MemStore();
-    const resolveModel = vi.fn().mockReturnValue({});
     const mastra = {
       getStorage: vi.fn(() => undefined),
       getAgentById: vi.fn((agentId: string) => {
@@ -168,7 +167,6 @@ describe('Harness — tools/skills/subagents config', () => {
       subagents: {
         types: { explore: { name: 'Explore', description: 'd', agentId: 'default', defaultModelId: 'm-sub' } },
       },
-      resolveModel,
     });
     const parent = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
     const tools = buildHarnessBuiltInTools(parent) as Record<
@@ -185,7 +183,6 @@ describe('Harness — tools/skills/subagents config', () => {
 
     expect(result).toMatchObject({ isError: false, agentType: 'explore', depth: 1 });
     const childId = (result as { subagentSessionId: string }).subagentSessionId;
-    expect(resolveModel).toHaveBeenCalledWith('m-sub');
     expect(storage.records.get(childId)).toMatchObject({
       id: childId,
       parentSessionId: parent.id,
@@ -238,7 +235,6 @@ describe('Harness — tools/skills/subagents config', () => {
       subagents: {
         types: { broken: { name: 'Broken', description: 'd', agentId: 'missing', defaultModelId: 'm-sub' } },
       },
-      resolveModel: vi.fn(),
     });
     const parent = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
     const tools = buildHarnessBuiltInTools(parent) as Record<
@@ -266,7 +262,6 @@ describe('Harness — tools/skills/subagents config', () => {
       defaultModeId: 'build',
       sessions: { maxSubagentDepth: 2 },
       subagents: { types: { explore: { name: 'Explore', description: 'd', agentId: 'default' } } },
-      resolveModel: vi.fn(),
     });
 
     await expect(harness.init()).resolves.toBeUndefined();

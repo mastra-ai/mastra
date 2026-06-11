@@ -1,4 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import {
+  getHarnessConstructorCalls,
+  recordHarnessConfig,
+  resetHarnessCaptures,
+  setHarnessTestControls,
+} from '../test-utils/harness-test-captures.js';
 
 const gatewayRegistrySyncGateways = vi.fn();
 const gatewayRegistryGetProviders = vi.fn(() => ({}));
@@ -101,36 +107,43 @@ function createMockSettings() {
   };
 }
 
-vi.mock('@mastra/core/harness', () => ({
-  Harness: class {
-    constructor(config: unknown) {
-      harnessConstructorMock(config);
-    }
-    subscribe(eventHandler: unknown) {
-      harnessSubscribeMock(eventHandler);
-    }
-    getCurrentThreadId() {
-      return harnessGetCurrentThreadIdMock();
-    }
-    getResourceId() {
-      return 'project-resource';
-    }
-    getState() {
-      return harnessStateMock;
-    }
-    listThreads(options: unknown) {
-      return harnessListThreadsMock(options);
-    }
-    setState(state: unknown) {
-      return harnessSetStateMock(state);
-    }
-    setThreadSetting(setting: unknown) {
-      return harnessSetThreadSettingMock(setting);
-    }
-  },
-  taskWriteTool: {},
-  taskCheckTool: {},
-}));
+vi.mock('@mastra/core/harness', async importOriginal => {
+  if (process.env.MASTRACODE_TEST_HARNESS_BACKEND === 'v1-compat') {
+    return importOriginal();
+  }
+
+  return {
+    Harness: class {
+      constructor(config: unknown) {
+        harnessConstructorMock(config);
+        recordHarnessConfig(config);
+      }
+      subscribe(eventHandler: unknown) {
+        harnessSubscribeMock(eventHandler);
+      }
+      getCurrentThreadId() {
+        return harnessGetCurrentThreadIdMock();
+      }
+      getResourceId() {
+        return 'project-resource';
+      }
+      getState() {
+        return harnessStateMock;
+      }
+      listThreads(options: unknown) {
+        return harnessListThreadsMock(options);
+      }
+      setState(state: unknown) {
+        return harnessSetStateMock(state);
+      }
+      setThreadSetting(setting: unknown) {
+        return harnessSetThreadSettingMock(setting);
+      }
+    },
+    taskWriteTool: {},
+    taskCheckTool: {},
+  };
+});
 
 vi.mock('@mastra/core/processors', () => ({
   AgentsMDInjector: class {
@@ -283,6 +296,7 @@ vi.mock('./utils/thread-lock.js', () => ({
 describe('createMastraCode', () => {
   beforeEach(() => {
     vi.resetModules();
+    resetHarnessCaptures();
     gatewayRegistrySyncGateways.mockReset();
     gatewayRegistryGetProviders.mockReset();
     gatewayRegistryGetProviders.mockReturnValue({});
@@ -318,6 +332,15 @@ describe('createMastraCode', () => {
       contextFiles: [],
     });
     harnessStateMock = { cavemanObservations: false };
+    setHarnessTestControls({
+      subscribe: harnessSubscribeMock,
+      getCurrentThreadId: harnessGetCurrentThreadIdMock,
+      getResourceId: () => 'project-resource',
+      getState: () => harnessStateMock,
+      listThreads: harnessListThreadsMock,
+      setState: harnessSetStateMock,
+      setThreadSetting: harnessSetThreadSettingMock,
+    });
     loadSettingsMock.mockReset();
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
@@ -376,8 +399,8 @@ describe('createMastraCode', () => {
 
     await createMastraCode();
 
-    expect(harnessConstructorMock).toHaveBeenCalled();
-    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { memory?: unknown } | undefined;
+    expect(getHarnessConstructorCalls()).toHaveLength(1);
+    const harnessConfig = getHarnessConstructorCalls()[0]?.[0] as { memory?: unknown } | undefined;
     expect(typeof harnessConfig?.memory).toBe('function');
   });
 
@@ -401,7 +424,7 @@ describe('createMastraCode', () => {
       initialState: { configDir: '.wrong-code' },
     });
 
-    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+    const harnessConfig = getHarnessConstructorCalls()[0]?.[0] as
       | { memory?: unknown; initialState?: Record<string, unknown> }
       | undefined;
     expect(harnessConfig?.memory).toBe(customMemory);
@@ -418,7 +441,7 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ workspace: customWorkspace as any });
 
-    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { workspace?: unknown } | undefined;
+    const harnessConfig = getHarnessConstructorCalls()[0]?.[0] as { workspace?: unknown } | undefined;
     expect(harnessConfig?.workspace).toBe(customWorkspace);
     expect(getDynamicWorkspaceMock).not.toHaveBeenCalled();
   });
@@ -428,7 +451,7 @@ describe('createMastraCode', () => {
 
     await createMastraCode();
 
-    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as { workspace?: unknown } | undefined;
+    const harnessConfig = getHarnessConstructorCalls()[0]?.[0] as { workspace?: unknown } | undefined;
     expect(typeof harnessConfig?.workspace).toBe('function');
     expect(harnessConfig?.workspace).not.toEqual({ id: 'custom-workspace' });
   });
@@ -454,7 +477,7 @@ describe('createMastraCode', () => {
       ],
     });
 
-    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+    const harnessConfig = getHarnessConstructorCalls()[0]?.[0] as
       | { modes?: { id: string; default?: boolean; defaultModelId: string }[] }
       | undefined;
     expect(harnessConfig?.modes).toEqual(
@@ -479,7 +502,7 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ cwd: projectPath });
 
-    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+    const harnessConfig = getHarnessConstructorCalls()[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;
     expect(harnessConfig?.initialState?.projectPath).toBe(projectPath);
@@ -507,7 +530,7 @@ describe('createMastraCode', () => {
     expect(getStorageConfigMock).toHaveBeenCalledWith(projectPath, expect.anything(), '.acme-code');
     expect(createMcpManagerMock).toHaveBeenCalledWith(projectPath, '.acme-code', undefined);
     expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code');
-    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+    const harnessConfig = getHarnessConstructorCalls()[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;
     expect(harnessConfig?.initialState?.configDir).toBe('.acme-code');
@@ -555,7 +578,7 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ pubsub, unixSocketPubSub: true });
 
-    const harnessConfig = harnessConstructorMock.mock.calls.at(-1)?.[0] as
+    const harnessConfig = getHarnessConstructorCalls().at(-1)?.[0] as
       | { pubsub?: unknown; threadLock?: unknown }
       | undefined;
     expect(harnessConfig?.pubsub).toBe(pubsub);
@@ -568,7 +591,7 @@ describe('createMastraCode', () => {
 
     await createMastraCode({ pubsub, crossProcessPubSub: true });
 
-    const harnessConfig = harnessConstructorMock.mock.calls.at(-1)?.[0] as
+    const harnessConfig = getHarnessConstructorCalls().at(-1)?.[0] as
       | { pubsub?: unknown; threadLock?: unknown }
       | undefined;
     expect(harnessConfig?.pubsub).toBe(pubsub);
@@ -608,7 +631,7 @@ describe('createMastraCode', () => {
 
     await createMastraCode();
 
-    const harnessCall = harnessConstructorMock.mock.calls[0]?.[0] as
+    const harnessCall = getHarnessConstructorCalls()[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;
     expect(harnessCall?.initialState?.observeAttachments).toBe(false);
@@ -619,7 +642,7 @@ describe('createMastraCode', () => {
 
     await createMastraCode();
 
-    const harnessCall = harnessConstructorMock.mock.calls[0]?.[0] as
+    const harnessCall = getHarnessConstructorCalls()[0]?.[0] as
       | { initialState?: Record<string, unknown> }
       | undefined;
     expect(harnessCall?.initialState?.observeAttachments).toBe('auto');

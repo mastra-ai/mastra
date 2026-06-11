@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import { expect } from '@microsoft/tui-test';
 
+import { createMastraCodeModule } from './types.js';
 import type { McE2ePrepareContext, McE2eScenario } from './types.js';
 
 const DEBUG_SENTINEL = 'MC_E2E_DEBUG_LOG_SENTINEL';
@@ -16,7 +17,7 @@ export const debugLoggingScenario: McE2eScenario = {
       MC_E2E_DEBUG_LOG_PATH: join(appDataDir, 'debug.log'),
     };
   },
-  prepare({ mastracodeDir, projectDir }: McE2ePrepareContext) {
+  prepare({ mastracodeDir, projectDir, harnessBackend }: McE2ePrepareContext) {
     mkdirSync(projectDir, { recursive: true });
     const entrypoint = join(projectDir, '.mc-e2e-debug-logging-entrypoint.ts');
     const source = `import { join } from 'node:path';
@@ -24,7 +25,7 @@ import { pathToFileURL } from 'node:url';
 
 const mastracodeDir = ${JSON.stringify(mastracodeDir)};
 const { setupDebugLogging } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/debug-log.ts')).href);
-const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);
+const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, '${createMastraCodeModule(harnessBackend)}')).href);
 const { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);
 const { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);
 

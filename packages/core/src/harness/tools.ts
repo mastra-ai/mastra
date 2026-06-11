@@ -272,7 +272,7 @@ async function readTasks(harnessCtx: HarnessRequestContext<Record<string, unknow
   return getCurrentTasks(harnessCtx);
 }
 
-function formatTaskListResult(tasks: TaskItemSnapshot[]): string {
+export function formatTaskListResult(tasks: TaskItemSnapshot[]): string {
   const completed = tasks.filter(t => t.status === 'completed').length;
   const inProgress = tasks.find(t => t.status === 'in_progress');
   const total = tasks.length;
@@ -288,7 +288,7 @@ function formatTaskListResult(tasks: TaskItemSnapshot[]): string {
   return summary;
 }
 
-function summarizeTaskCheck(tasks: TaskItemSnapshot[]): {
+export function summarizeTaskCheck(tasks: TaskItemSnapshot[]): {
   summary: TaskCheckSummary;
   inProgressTasks: TaskItemSnapshot[];
   pendingTasks: TaskItemSnapshot[];
@@ -315,7 +315,7 @@ function summarizeTaskCheck(tasks: TaskItemSnapshot[]): {
   };
 }
 
-function formatTaskCheckResult(taskCheck: ReturnType<typeof summarizeTaskCheck>): string {
+export function formatTaskCheckResult(taskCheck: ReturnType<typeof summarizeTaskCheck>): string {
   const { summary, inProgressTasks, pendingTasks } = taskCheck;
 
   if (!summary.hasTasks) {
