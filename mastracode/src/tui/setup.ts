@@ -427,8 +427,9 @@ export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
     // which may be a subdirectory (e.g. when running `pnpm --dir mastracode`).
     const harnessState = state.harness.getState() as Record<string, unknown> | undefined;
     const projectDir = (harnessState?.projectPath as string | undefined) || process.cwd();
-    const globalCommands = await loadCustomCommands();
-    const localCommands = await loadCustomCommands(projectDir);
+    const configDir = harnessState?.configDir as string | undefined;
+    const globalCommands = await loadCustomCommands(undefined, configDir);
+    const localCommands = await loadCustomCommands(projectDir, configDir);
 
     // Merge commands, with local taking precedence over global for same names
     const commandMap = new Map<string, (typeof globalCommands)[number]>();
