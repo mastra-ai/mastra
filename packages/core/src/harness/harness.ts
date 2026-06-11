@@ -345,11 +345,7 @@ export class Harness<TState = {}> {
    * than single fields) lets multiple tools (e.g. parallel `ask_user` calls in one
    * step — see issue #13642) stay suspended and be resumed independently.
    */
-  private pendingSuspensions = new Map<string, { runId: string }>();
-  private pendingPlanApprovals = new Map<
-    string,
-    (result: { action: 'approved' | 'rejected'; feedback?: string }) => void
-  >();
+  private pendingSuspensions = new Map<string, { runId: string; toolName: string }>();
   private workspace: Workspace | undefined = undefined;
   private workspaceFn:
     | ((ctx: {
@@ -2753,7 +2749,7 @@ export class Harness<TState = {}> {
         const suspResumeSchema = chunk.payload.resumeSchema;
 
         if (this.currentRunId) {
-          this.pendingSuspensions.set(suspToolCallId, { runId: this.currentRunId });
+          this.pendingSuspensions.set(suspToolCallId, { runId: this.currentRunId, toolName: suspToolName });
         }
         state.isSuspended = true;
 
@@ -3252,7 +3248,6 @@ export class Harness<TState = {}> {
     this.displayState.toolInputBuffers = new Map();
     this.displayState.pendingApproval = null;
     this.displayState.pendingSuspensions = new Map();
-    this.displayState.pendingPlanApproval = null;
     this.displayState.activeSubagents = new Map();
     this.displayState.currentMessage = null;
     this.followUpQueue = [];
@@ -3313,7 +3308,22 @@ export class Harness<TState = {}> {
     const resolvedToolCallId = this.resolvePendingSuspensionToolCallId(toolCallId);
     if (!resolvedToolCallId) return;
 
+    const suspension = this.pendingSuspensions.get(resolvedToolCallId);
+
     try {
+      // `submit_plan` resumes carry a plan-approval decision. Approval additionally
+      // switches the Harness from its planning mode to its default execution mode, so
+      // it is handled separately from a plain tool resume. Non-Harness consumers skip
+      // this entirely and resume the tool directly via agent.resumeStream.
+      if (suspension?.toolName === 'submit_plan') {
+        await this.handlePlanApprovalResume({
+          toolCallId: resolvedToolCallId,
+          response: resumeData as { action: 'approved' | 'rejected'; feedback?: string },
+          requestContext,
+        });
+        return;
+      }
+
       await this.handleToolResume({
         resumeData,
         toolCallId: resolvedToolCallId,
@@ -3346,52 +3356,53 @@ export class Harness<TState = {}> {
   // ===========================================================================
 
   /**
-   * Register a pending plan approval resolver.
-   * Called by agent tools (e.g., submit_plan) to pause execution until approval.
+   * Respond to a suspended `submit_plan` tool call.
+   *
+   * `submit_plan` is an agent-agnostic tool that pauses via the native tool-suspension
+   * primitive. The Harness layers its planning UX on top of that generic pause here:
+   *
+   * - On **rejection**, the plan-mode run is resumed with the feedback so the agent can
+   *   revise and submit again. This is an ordinary tool resume.
+   * - On **approval**, the parked plan-mode suspension is abandoned and the Harness
+   *   switches to its default (execution) mode. switchMode aborts the plan-mode run, so
+   *   there is no point resuming it first; the next signal/message drives the fresh
+   *   default-mode run. The model still sees the "approved" tool result on the rebuilt
+   *   message history when the default-mode run starts.
+   *
+   * Non-Harness consumers (a plain Agent in Studio or a customer app) instead resume the
+   * tool directly via `agent.resumeStream({ action, feedback })` — no modes involved.
    */
-  registerPlanApproval({
-    planId,
-    resolve,
-  }: {
-    planId: string;
-    resolve: (result: { action: 'approved' | 'rejected'; feedback?: string }) => void;
-  }): void {
-    this.pendingPlanApprovals.set(planId, resolve);
-  }
-
-  /**
-   * Respond to a pending plan approval.
-   * On approval: resolves the suspended plan tool, then switches to the default mode.
-   * On rejection: resolves with feedback (stays in current mode).
-   */
-  async respondToPlanApproval({
-    planId,
+  private async handlePlanApprovalResume({
+    toolCallId,
     response,
+    requestContext,
   }: {
-    planId: string;
+    toolCallId: string;
     response: { action: 'approved' | 'rejected'; feedback?: string };
+    requestContext?: RequestContext;
   }): Promise<void> {
-    const resolve = this.pendingPlanApprovals.get(planId);
-    if (!resolve) return;
+    if (response.action === 'rejected') {
+      await this.handleToolResume({ resumeData: response, toolCallId, requestContext });
+      return;
+    }
 
-    this.pendingPlanApprovals.delete(planId);
-    resolve(response);
+    // Approved: drop the parked suspension (its run is about to be aborted by the mode
+    // switch) and move to the default execution mode.
+    this.pendingSuspensions.delete(toolCallId);
 
-    if (response.action === 'approved') {
-      const defaultMode = this.config.modes.find(m => m.default) ?? this.config.modes[0];
-      if (defaultMode && defaultMode.id !== this.currentModeId) {
-        await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
-        await this.switchMode({ modeId: defaultMode.id });
-        // switchMode aborts the in-flight run but does not wait for it to
-        // finalize. If the caller (e.g. mastracode's plan-approval handler)
-        // immediately fires a system-reminder signal, that signal can land in
-        // the dying run's pending queue and later get drained with the run's
-        // already-aborted abortSignal — manifesting as a hang where the agent
-        // never resumes after "The user has approved the plan, begin
-        // executing.". Waiting for the stream to be fully idle here ensures
-        // the next sendSignal() always starts a fresh run.
-        await this.waitForCurrentThreadStreamIdle();
-      }
+    const defaultMode = this.config.modes.find(m => m.default) ?? this.config.modes[0];
+    if (defaultMode && defaultMode.id !== this.currentModeId) {
+      await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
+      await this.switchMode({ modeId: defaultMode.id });
+      // switchMode aborts the in-flight run but does not wait for it to
+      // finalize. If the caller (e.g. mastracode's plan-approval handler)
+      // immediately fires a system-reminder signal, that signal can land in
+      // the dying run's pending queue and later get drained with the run's
+      // already-aborted abortSignal — manifesting as a hang where the agent
+      // never resumes after "The user has approved the plan, begin
+      // executing.". Waiting for the stream to be fully idle here ensures
+      // the next sendSignal() always starts a fresh run.
+      await this.waitForCurrentThreadStreamIdle();
     }
   }
 
@@ -3607,7 +3618,6 @@ export class Harness<TState = {}> {
         if (event.reason !== 'suspended') {
           ds.pendingSuspensions.clear();
         }
-        ds.pendingPlanApproval = null;
         // Mark any still-running tools as errored (handles abort mid-run)
         for (const [, tool] of ds.activeTools) {
           if (tool.status === 'running' || tool.status === 'streaming_input') {
@@ -3737,19 +3747,6 @@ export class Harness<TState = {}> {
           suspendPayload: event.suspendPayload,
           resumeSchema: event.resumeSchema,
         });
-        break;
-
-      // ── Interactive prompts ────────────────────────────────────────────
-      case 'plan_approval_required':
-        ds.pendingPlanApproval = {
-          planId: event.planId,
-          title: event.title,
-          plan: event.plan,
-        };
-        break;
-
-      case 'plan_approved':
-        ds.pendingPlanApproval = null;
         break;
 
       // ── Subagent tracking ──────────────────────────────────────────────
@@ -4090,7 +4087,6 @@ export class Harness<TState = {}> {
       abortSignal: this.abortController?.signal,
       workspace: this.workspace,
       emitEvent: event => this.emit(event),
-      registerPlanApproval: params => this.registerPlanApproval(params),
       getSubagentModelId: params => this.getSubagentModelId(params),
     };
 

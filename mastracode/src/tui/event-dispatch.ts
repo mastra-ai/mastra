@@ -392,17 +392,11 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
           payload.options as Array<{ label: string; description?: string }> | undefined,
           payload.selectionMode as AskUserSelectionMode | undefined,
         );
+      } else if (event.toolName === 'submit_plan') {
+        await handlePlanApproval(ectx, event.toolCallId, String(payload.title ?? ''), String(payload.plan ?? ''));
       }
       break;
     }
-
-    case 'plan_approval_required':
-      await handlePlanApproval(ectx, event.planId, event.title, event.plan);
-      break;
-
-    case 'plan_approved':
-      // Handled directly in onApprove callback to ensure proper sequencing
-      break;
 
     case 'display_state_changed':
       // The Harness emits this after every event with the updated display state.

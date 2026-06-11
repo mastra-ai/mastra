@@ -435,6 +435,30 @@ describe('setupKeyboardShortcuts', () => {
     expect(editor.setText).not.toHaveBeenCalled();
   });
 
+  it('aborts and clears an active plan approval parked in a tool suspension', () => {
+    // Regression: Ctrl+C while a submit_plan approval box is up must abort the
+    // parked suspension (not hang). The editor-level handleInput override lets
+    // \x03 fall through to this 'clear' action; here we assert the action
+    // aborts and clears the inline plan-approval component.
+    const { state, editor, actions } = createState(false);
+    editor.getText.mockReturnValue('');
+    state.harness.hasPendingSuspensions.mockReturnValue(true);
+    state.activeInlinePlanApproval = { handleInput: vi.fn() } as any;
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('clear')?.();
+
+    expect(state.harness.abort).toHaveBeenCalledTimes(1);
+    expect(state.activeInlinePlanApproval).toBeUndefined();
+    expect(state.userInitiatedAbort).toBe(true);
+    expect(editor.setText).not.toHaveBeenCalled();
+  });
+
   it('suspends the process with Ctrl+Z and restarts rendering on SIGCONT', () => {
     setPlatform('darwin');
     const { state, actions } = createState(false);

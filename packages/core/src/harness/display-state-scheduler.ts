@@ -12,8 +12,6 @@ export const CRITICAL_DISPLAY_STATE_EVENT_TYPES: ReadonlySet<HarnessEvent['type'
   'error',
   'tool_approval_required',
   'tool_suspended',
-  'plan_approval_required',
-  'plan_approved',
   'thread_changed',
   'thread_created',
   'thread_deleted',
@@ -113,7 +111,6 @@ function cloneDisplayState(state: HarnessDisplayState): HarnessDisplayState {
         },
       ]),
     ),
-    pendingPlanApproval: state.pendingPlanApproval ? { ...state.pendingPlanApproval } : null,
     activeSubagents: new Map(
       Array.from(state.activeSubagents, ([id, subagent]) => [
         id,

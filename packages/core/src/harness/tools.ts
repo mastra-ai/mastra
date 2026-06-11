@@ -5,12 +5,11 @@ import type { ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import { RequestContext } from '../request-context';
 import { askUserTool } from '../tools/builtin/ask-user';
+import { submitPlanTool } from '../tools/builtin/submit-plan';
 import { createTool } from '../tools/tool';
 import { createWorkspaceTools } from '../workspace/tools/tools';
 
 import type { HarnessRequestContext, HarnessSubagent } from './types';
-
-let planCounter = 0;
 
 // `ask_user` is an agent-agnostic built-in tool. It is defined in
 // `../tools/builtin/ask-user` and re-exported here so the Harness toolset and
@@ -25,78 +24,14 @@ const FORKED_SUBAGENT_NESTING_NOTICE =
 const FORKED_SUBAGENT_TASK_NOTICE =
   'Do not call `task_write`, `task_update`, `task_complete`, or `task_check` inside a forked subagent. Forked subagents keep the parent task-tool schemas for prompt-cache stability, but the parent agent owns the visible task list. Track forked subagent work in your final answer instead.';
 
-/**
- * Built-in harness tool: submit a plan for user review.
- * The plan renders in the UI with approve/reject options.
- * On approval, the harness switches to the default mode.
- */
-export const submitPlanTool = createTool({
-  id: 'submit_plan',
-  description:
-    'Submit a completed implementation plan for user review. The plan will be rendered as markdown and the user can approve, reject, or request changes. Use this when your exploration is complete and you have a concrete plan ready for review. On approval, the system automatically switches to the default mode so you can implement.',
-  inputSchema: z.object({
-    title: z.string().optional().describe("Short title for the plan (e.g., 'Add dark mode toggle')"),
-    plan: z
-      .string()
-      .min(1)
-      .describe('The full plan content in markdown format. Should include Overview, Steps, and Verification sections.'),
-  }),
-  execute: async ({ title, plan }, context) => {
-    try {
-      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext | undefined;
-
-      if (!harnessCtx?.emitEvent || !harnessCtx?.registerPlanApproval) {
-        return {
-          content: `[Plan submitted for review]\n\nTitle: ${title || 'Implementation Plan'}\n\n${plan}`,
-          isError: false,
-        };
-      }
-
-      const planId = `plan_${++planCounter}_${Date.now()}`;
-
-      const result = await new Promise<{ action: 'approved' | 'rejected'; feedback?: string }>((resolve, reject) => {
-        const signal = harnessCtx.abortSignal;
-        if (signal?.aborted) {
-          reject(new DOMException('Aborted', 'AbortError'));
-          return;
-        }
-        const onAbort = () => reject(new DOMException('Aborted', 'AbortError'));
-        signal?.addEventListener('abort', onAbort, { once: true });
-
-        harnessCtx.registerPlanApproval!({
-          planId,
-          resolve: res => {
-            signal?.removeEventListener('abort', onAbort);
-            resolve(res);
-          },
-        });
-
-        harnessCtx.emitEvent!({
-          type: 'plan_approval_required',
-          planId,
-          title: title || 'Implementation Plan',
-          plan,
-        });
-      });
-
-      if (result.action === 'approved') {
-        return {
-          content: 'Plan approved. Proceed with implementation following the approved plan.',
-          isError: false,
-        };
-      }
-
-      const feedback = result.feedback ? `\n\nUser feedback: ${result.feedback}` : '';
-      return {
-        content: `Plan was not approved. The user wants revisions.${feedback}\n\nPlease revise the plan based on the feedback and submit again with submit_plan.`,
-        isError: false,
-      };
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : 'Unknown error';
-      return { content: `Failed to submit plan: ${msg}`, isError: true };
-    }
-  },
-});
+// `submit_plan` is an agent-agnostic built-in tool. It is defined in
+// `../tools/builtin/submit-plan` and re-exported here so the Harness toolset and
+// existing imports keep referencing the same tool object (preserving toolset
+// identity and the prompt-cache prefix). It pauses via the native tool
+// suspension primitive rather than any harness-specific request context; the
+// Harness layers its plan→default mode switch on top of the approval in its own
+// `respondToToolSuspension` handling.
+export { submitPlanTool };
 
 // =============================================================================
 // Task Tools
