@@ -488,9 +488,9 @@ export function ExperimentPageTabs({
                           <Notice.Message>
                             {replayMarker?.mockedTools?.length
                               ? replayMarker.onMiss
-                                ? 'Tool calls were served from a recording or mocks — those calls leave no tool spans in this trace.'
-                                : 'Mocked tools were stubbed — mocked calls leave no tool spans in this trace; unmocked tools ran live.'
-                              : 'Tools were replayed from a recording — replayed calls leave no tool spans in this trace.'}
+                                ? 'Tool calls were served from a recording or mocks — their tool spans are synthetic markers, not live executions.'
+                                : 'Mocked tools were stubbed — their tool spans are synthetic markers, not live executions; unmocked tools ran live.'
+                              : 'Tools were replayed from a recording — their tool spans are synthetic markers, not live executions.'}
                             {featuredReport?.sourceTraceId ? (
                               <>
                                 {' '}
