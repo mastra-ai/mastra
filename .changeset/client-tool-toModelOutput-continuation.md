@@ -2,10 +2,8 @@
 "@mastra/core": patch
 ---
 
-fix(agent): apply toModelOutput transform to client tool results in sendToolApproval continuation
+Fixed multimodal outputs (images, files) from client tools being stringified instead of properly formatted for the model.
 
-Client tools execute on the client and send results back via sendToolApproval. Unlike server tools which go through llm-mapping-step where toModelOutput runs, client tool results arrived pre-formed with output: { type: 'json', value: result }, bypassing the toModelOutput transform entirely. This caused multimodal output (images, files) from client tools to be stringified instead of sent as proper inlineData to the model.
-
-The fix applies each tool's toModelOutput transform to incoming tool-result parts in sendToolApproval before passing messages to continueWithMessages.
+Previously, when client tools returned multimodal content (images, files), the outputs were converted to plain text JSON strings before reaching the LLM. Now, client tools correctly transform their multimodal outputs into model-ready formats (e.g., inlineData), ensuring images and files are sent to the LLM as structured content.
 
 Fixes #17792

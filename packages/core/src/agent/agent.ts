@@ -7758,8 +7758,13 @@ export class Agent<
    * This method intercepts those messages and applies each tool's toModelOutput
    * transform so multimodal output (images, files) reaches the LLM correctly.
    */
-  async #applyToModelOutputToMessages(messages: MessageListInput, requestContext?: RequestContext): Promise<MessageListInput> {
-    const tools = await this.listTools({ requestContext: requestContext ?? new RequestContext() });
+  async #applyToModelOutputToMessages(
+    messages: MessageListInput,
+    requestContext?: RequestContext,
+    extraTools?: Record<string, { toModelOutput?: (output: unknown) => unknown }>,
+  ): Promise<MessageListInput> {
+    const registryTools = await this.listTools({ requestContext: requestContext ?? new RequestContext() });
+    const tools = { ...registryTools, ...extraTools };
     const transformed = await Promise.all(
       (messages as any[]).map(async (message: any) => {
         if (!message || typeof message !== 'object') return message;
@@ -7808,7 +7813,11 @@ export class Agent<
     const { threadId, resourceId, approved, messages, streamOptions, ...executionOptions } = options;
 
     if (messages && approved) {
-      const transformedMessages = await this.#applyToModelOutputToMessages(messages, executionOptions.requestContext);
+      const transformedMessages = await this.#applyToModelOutputToMessages(
+        messages,
+        executionOptions.requestContext,
+        streamOptions?.clientTools as Record<string, { toModelOutput?: (output: unknown) => unknown }> | undefined,
+      );
       const continuation = agentThreadStreamRuntime.continueWithMessages(
         this as Agent<any, any, any, any>,
         transformedMessages,
