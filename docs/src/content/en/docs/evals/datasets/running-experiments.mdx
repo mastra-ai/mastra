@@ -204,7 +204,7 @@ An item with no recording at all fails with `TOOL_REPLAY_NO_RECORDING` regardles
 
 By default, recorded events match the agent's calls per tool, in recorded order (`matching: 'fifo'`): the next recorded event for a tool is served regardless of arguments, and argument drift is reported in `argMismatches` rather than prevented. This is the right mode for evaluating a changed agent — a modified prompt reformulates its arguments by nature, and an exact-match requirement would fail the very thing being measured.
 
-For contract-style tests where any deviation must fail, use `matching: 'strict'`: a recorded event is served only when the call's arguments exactly match the recorded call's arguments (canonicalized comparison — runtime-injected nullish keys are ignored). Anything else is a miss, handled by `onMiss`. With multiple recorded argument variants for the same tool, each variant answers only its exact arguments; `argMismatches` is empty by construction in this mode.
+For contract-style tests where any deviation must fail, use `matching: 'strict'`: a recorded event is served only when the call's arguments exactly match the recorded call's arguments (canonicalized comparison — runtime-injected nullish keys are ignored). Anything else is a miss, handled by `onMiss`. With multiple recorded argument variants for the same tool, each variant answers only its exact arguments; `argMismatches` is empty by construction in this mode. The contract cuts both ways: recorded calls the agent never consumed fail the item with `TOOL_REPLAY_UNCONSUMED` (not retried) — an agent that stops calling an expected tool cannot pass silently. Under `'fifo'`, leftover events are only reported in `unconsumed`.
 
 ```typescript
 const strict = await dataset.startExperiment({

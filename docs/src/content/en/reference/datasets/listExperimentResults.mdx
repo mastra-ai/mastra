@@ -138,6 +138,12 @@ for (const result of results) {
                     description: 'Trace ID for observability.',
                   },
                   {
+                    name: 'toolReplay',
+                    type: 'ToolReplayReport | null',
+                    description:
+                      'Tool replay/mock report for items executed with toolReplay or toolMocks (misses, unconsumed events, arg mismatches, call flow, mock usage, expectation outcomes). Null for live runs.',
+                  },
+                  {
                     name: 'createdAt',
                     type: 'Date',
                     description: 'When the result record was created.',

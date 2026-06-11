@@ -536,3 +536,98 @@ describe('call flow (report.calls)', () => {
     expect(finalizeReplayReport(idle).calls).toBeUndefined();
   });
 });
+
+describe('codex review regressions', () => {
+  it('records mock-error when a function mock rejects', async () => {
+    const state = createReplayState([], null, {
+      replayActive: false,
+      mocks: {
+        broken: async () => {
+          throw new Error('replacement blew up');
+        },
+      },
+    });
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    await expect(callHook(hooks, 'broken', {})).rejects.toThrowError('replacement blew up');
+    expect(finalizeReplayReport(state).calls).toEqual([{ order: 0, toolName: 'broken', outcome: 'mock-error' }]);
+  });
+});
+
+describe('adversarial review regressions', () => {
+  it('rejects mock keys that collide after tool-name formatting', () => {
+    expect(() =>
+      createReplayState([], null, {
+        replayActive: false,
+        mocks: { 'my.tool': { output: 1 }, my_tool: { output: 2 } },
+      }),
+    ).toThrowError(/both normalize to tool name 'my_tool'/);
+  });
+
+  it('reports mocks and expectations under the formatted tool name, joinable with calls[]', async () => {
+    const state = createReplayState([], null, {
+      replayActive: false,
+      mocks: { 'my.tool': { output: 'stub', expect: { calledTimes: 1 } } },
+    });
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+    await callHook(hooks, 'my_tool', {});
+
+    const report = finalizeReplayReport(state);
+    expect(report.mocks).toEqual([{ toolName: 'my_tool', calls: 1, kind: 'output' }]);
+    expect(report.expectations).toEqual([{ toolName: 'my_tool', satisfied: true, calledTimes: 1 }]);
+    expect(report.calls).toEqual([{ order: 0, toolName: 'my_tool', outcome: 'mocked' }]);
+  });
+
+  it('error wins when a data mock sets both output and error', async () => {
+    const state = createReplayState([], null, {
+      replayActive: false,
+      mocks: { flaky: { output: 'never served', error: { message: 'injected' } } },
+    });
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    await expect(callHook(hooks, 'flaky', {})).rejects.toThrowError('injected');
+    const report = finalizeReplayReport(state);
+    expect(report.mocks).toEqual([{ toolName: 'flaky', calls: 1, kind: 'error' }]);
+    expect(report.calls?.[0]?.outcome).toBe('mock-error');
+  });
+
+  it('arg-filtered calledTimes: 0 fails only when the forbidden args are used', async () => {
+    const makeState = () =>
+      createReplayState([], null, {
+        replayActive: false,
+        mocks: { lookup: { expect: { args: { key: 'forbidden' }, calledTimes: 0 } } },
+      });
+
+    const okState = makeState();
+    await callHook(buildReplayHooks(okState, { onMiss: 'error' }), 'lookup', { key: 'allowed' });
+    expect(finalizeReplayReport(okState).expectations).toEqual([
+      { toolName: 'lookup', satisfied: true, calledTimes: 0 },
+    ]);
+
+    const failState = makeState();
+    await callHook(buildReplayHooks(failState, { onMiss: 'error' }), 'lookup', { key: 'forbidden' });
+    expect(finalizeReplayReport(failState).expectations).toEqual([
+      {
+        toolName: 'lookup',
+        satisfied: false,
+        calledTimes: 1,
+        reason: 'expected 0 call(s) with matching args, got 1',
+      },
+    ]);
+  });
+
+  it('a mock on a strict-matched tool intercepts the call and leaves the recording unconsumed', async () => {
+    const state = createReplayState(
+      [{ toolName: 'lookup', input: { key: 'a' }, output: 'recorded', error: null, spanId: 's-0', sequence: 0 }],
+      'trace-1',
+      { matching: 'strict', mocks: { lookup: { output: 'mocked' } } },
+    );
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    await expect(callHook(hooks, 'lookup', { key: 'a' })).resolves.toEqual({ proceed: false, output: 'mocked' });
+    const report = finalizeReplayReport(state);
+    expect(report.replayedCount).toBe(0);
+    expect(report.unconsumed).toEqual([{ toolName: 'lookup', count: 1 }]);
+    expect(report.calls).toEqual([{ order: 0, toolName: 'lookup', outcome: 'mocked' }]);
+  });
+});

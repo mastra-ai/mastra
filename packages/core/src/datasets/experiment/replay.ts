@@ -1,3 +1,4 @@
+import { MastraError } from '../../error/index.js';
 import { RETHROWN_TOOL_ERROR_NAMES } from '../../loop/workflows/errors';
 import { SpanType } from '../../observability';
 import type { SpanRecord } from '../../storage/domains/observability/tracing';
@@ -78,6 +79,12 @@ export interface ToolMockDataConfig {
 /**
  * Function mock: replaces the tool's execute entirely. Code-only — functions
  * cannot cross the HTTP API (Studio and clients can only send data mocks).
+ *
+ * A thrown error (or rejected promise) propagates exactly like a throwing
+ * live `execute` — unlike `{ error }` data mocks, the error name is NOT
+ * sanitized against the loop's rethrown-name list, so reserved names abort
+ * the run instead of becoming a model-visible tool error. The call is
+ * recorded in `calls[]` with outcome 'mock-error'.
  */
 export type ToolMockFunction = (call: { input: unknown; callIndex: number }) => Promise<unknown> | unknown;
 
@@ -87,7 +94,11 @@ export type ToolMockConfig = ToolMockDataConfig | ToolMockFunction;
 export interface ToolMockUsage {
   toolName: string;
   calls: number;
-  /** What the mock did on each call. 'observe' = expect-only entry, call executed normally. */
+  /**
+   * Static classification of the mock config, not a per-call record.
+   * 'observe' = expect-only entry (calls executed normally). When a data mock
+   * sets both `output` and `error`, the error wins on every call ('error').
+   */
   kind: 'output' | 'error' | 'function' | 'observe';
 }
 
@@ -153,7 +164,7 @@ export interface ToolReplayReport {
   replayedCount: number;
   /** Live calls that had no recorded event remaining. */
   misses: ToolReplayMiss[];
-  /** Recorded events the agent never requested. */
+  /** Recorded events never consumed — the agent didn't request them, or a mock intercepted the calls. */
   unconsumed: { toolName: string; count: number }[];
   /** Calls replayed in order but with args differing from the recording (diagnostic only). */
   argMismatches: ToolReplayArgMismatch[];
@@ -352,6 +363,32 @@ function containsRedactionMarker(payload: unknown): boolean {
 }
 
 /**
+ * Map each toolMocks key to its agent-formatted tool name, refusing keys that
+ * collide after formatting. A silently dropped mock means a silently skipped
+ * assertion — the exact failure class mocks exist to eliminate — so the
+ * runner calls this at setup to fail the experiment before any item runs.
+ */
+export function validateToolMockNames(mocks: Record<string, ToolMockConfig>): Map<string, string> {
+  const keysBySource = new Map<string, string>();
+  const sourcesByKey = new Map<string, string>();
+  for (const toolName of Object.keys(mocks)) {
+    const key = formatToolName(toolName);
+    const existing = sourcesByKey.get(key);
+    if (existing !== undefined) {
+      throw new MastraError({
+        id: 'TOOL_MOCK_NAME_COLLISION',
+        text: `toolMocks entries '${existing}' and '${toolName}' both normalize to tool name '${key}' — merge them into one entry`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+    sourcesByKey.set(key, toolName);
+    keysBySource.set(toolName, key);
+  }
+  return keysBySource;
+}
+
+/**
  * Fresh per-attempt state: per-tool FIFO queues plus report accumulators.
  * Queue keys are formatted tool names — spans record original tool names while
  * the hook context carries the agent-formatted name, so both sides normalize
@@ -382,8 +419,10 @@ export function createReplayState(
     }
   }
   const mocks = new Map<string, { toolName: string; config: ToolMockConfig; calls: { input: unknown }[] }>();
-  for (const [toolName, config] of Object.entries(options?.mocks ?? {})) {
-    mocks.set(formatToolName(toolName), { toolName, config, calls: [] });
+  for (const [toolName, key] of validateToolMockNames(options?.mocks ?? {})) {
+    // Report under the formatted name so mocks[]/expectations[] stay joinable
+    // with misses[]/calls[], which carry the agent-formatted hook name.
+    mocks.set(key, { toolName: key, config: options!.mocks![toolName]!, calls: [] });
   }
   return {
     queues,
@@ -446,9 +485,17 @@ export function buildReplayHooks(
       if (mock) {
         mock.calls.push({ input });
         if (typeof mock.config === 'function') {
-          state.calls.push({ order: state.calls.length, toolName, outcome: 'mocked' });
-          const output = await mock.config({ input, callIndex: mock.calls.length - 1 });
-          return { proceed: false, output };
+          // Allocate the entry before suspending (keeps arrival order), then
+          // settle the outcome — a rejecting replacement is a mock-error.
+          const call: ToolReplayCall = { order: state.calls.length, toolName, outcome: 'mocked' };
+          state.calls.push(call);
+          try {
+            const output = await mock.config({ input, callIndex: mock.calls.length - 1 });
+            return { proceed: false, output };
+          } catch (error) {
+            call.outcome = 'mock-error';
+            throw error;
+          }
         }
         if (mock.config.error) {
           const error = new Error(mock.config.error.message);

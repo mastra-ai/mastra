@@ -319,6 +319,60 @@ describe('ExperimentsInMemory', () => {
       expect(result.output).toEqual({ text: 'Hi there' });
     });
 
+    it('round-trips the toolReplay report column', async () => {
+      const experiment = await storage.createExperiment({
+        datasetId: 'ds-1',
+        datasetVersion: 1,
+        targetType: 'agent',
+        targetId: 'a1',
+        totalItems: 1,
+      });
+
+      const report = {
+        sourceTraceId: 'trace-1',
+        totalRecorded: 2,
+        replayedCount: 1,
+        misses: [{ toolName: 'lookup', action: 'error' as const, input: { key: 'second' } }],
+        unconsumed: [{ toolName: 'lookup', count: 1 }],
+        argMismatches: [],
+        calls: [{ order: 0, toolName: 'lookup', outcome: 'replayed' as const, sequence: 0 }],
+      };
+      const added = await storage.addExperimentResult({
+        experimentId: experiment.id,
+        itemId: 'item-1',
+        itemDatasetVersion: 1,
+        input: 'x',
+        output: { text: 'y' },
+        groundTruth: null,
+        error: null,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+        toolReplay: report,
+      });
+      expect(added.toolReplay).toEqual(report);
+
+      const listed = await storage.listExperimentResults({
+        experimentId: experiment.id,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(listed.results[0]?.toolReplay).toEqual(report);
+
+      const withoutReport = await storage.addExperimentResult({
+        experimentId: experiment.id,
+        itemId: 'item-2',
+        itemDatasetVersion: 1,
+        input: 'x',
+        output: null,
+        groundTruth: null,
+        error: null,
+        startedAt: new Date(),
+        completedAt: new Date(),
+        retryCount: 0,
+      });
+      expect(withoutReport.toolReplay ?? null).toBeNull();
+    });
+
     it('stores itemDatasetVersion as integer', async () => {
       const experiment = await storage.createExperiment({
         datasetId: 'ds-1',
