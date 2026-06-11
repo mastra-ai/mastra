@@ -296,7 +296,7 @@ function formatAvailableTaskIds(tasks: TaskItemSnapshot[]): string {
 }
 
 // -----------------------------------------------------------------------------
-// Task list read/write through the thread-scoped TaskStore
+// Task list read/write through the thread-scoped `threadState` store
 // -----------------------------------------------------------------------------
 //
 // The `tasks` storage domain is the source of truth for the task list. It is
@@ -355,7 +355,7 @@ async function resolveTaskStore(context: TaskToolContext): Promise<ResolvedThrea
  * Optional Harness display bridge. When the run carries a Harness request
  * context, emit a `task_updated` event so the Harness can update its display
  * state and any pinned task UI. This is display-only — the task list itself
- * lives in the TaskStore + state-signal lane, not in Harness state.
+ * lives in the `threadState` store + state-signal lane, not in Harness state.
  */
 interface HarnessDisplayBridge {
   emitEvent?: (event: { type: 'task_updated'; tasks: TaskItemSnapshot[] }) => void;

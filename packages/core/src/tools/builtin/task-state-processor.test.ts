@@ -254,4 +254,19 @@ describe('TaskStateProcessor', () => {
     expect(second).toBeTruthy();
     expect((second as any).value.tasks).toEqual(changed);
   });
+
+  it('produces distinct cacheKeys when delimiter chars in content could collide', async () => {
+    const { processor } = await createProcessor();
+
+    // Both lists naively join to the same string with a plain `:`/`|` delimiter:
+    //   "a:b:c:d"  vs  ids/fields split so the concatenation matches.
+    // Length-prefixing each field must keep the two cacheKeys distinct.
+    const listA: TaskItemSnapshot[] = [{ id: 'a', content: 'b:c', status: 'pending', activeForm: 'd' }];
+    const listB: TaskItemSnapshot[] = [{ id: 'a:b', content: 'c', status: 'pending', activeForm: 'd' }];
+
+    const a = await processor.computeStateSignal(createArgs({ currentTasks: listA }));
+    const b = await processor.computeStateSignal(createArgs({ currentTasks: listB }));
+
+    expect((a as any).cacheKey).not.toEqual((b as any).cacheKey);
+  });
 });

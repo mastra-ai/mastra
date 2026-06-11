@@ -114,8 +114,15 @@ function effectivePriorTasks(args: ComputeStateSignalArgs): TaskItemSnapshot[] {
   return tasks;
 }
 
+// Length-prefix each field so a value containing the `:` / `|` delimiters cannot
+// shift a boundary and collide with a different task list (e.g. content "a:b"
+// vs id "a" + status "b"). Each field is encoded as `<byteLength>:<value>`.
+function lp(value: string): string {
+  return `${value.length}:${value}`;
+}
+
 function taskFingerprint(t: TaskItemSnapshot): string {
-  return `${t.id}:${t.status}:${t.content}:${t.activeForm}`;
+  return `${lp(t.id)}${lp(t.status)}${lp(t.content)}${lp(t.activeForm)}`;
 }
 
 function stableTasksCacheKey(tasks: TaskItemSnapshot[]): string {
