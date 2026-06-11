@@ -4633,3 +4633,14 @@ Break validations:
 - Disabled live quiet conversion in `handlers/tool.ts`; the live tool rendered expanded output instead of compact quiet chrome and failed.
 
 Focused verification: `pnpm --filter ./mastracode run e2e:test quiet-tool-history-parity`.
+
+### OM global settings persistence
+
+Added `om-global-settings-persistence` TUI e2e coverage for the Settings: Onboarding and global settings row. The scenario creates an active AIMock-backed thread, opens `/om`, toggles Caveman observations and Observe attachments through real keyboard navigation, then uses shell passthrough to prove global `settings.json` persisted `omCavemanObservations=true` and `omObserveAttachments=true`, and that active-thread metadata contains the corresponding OM setting keys.
+
+Break validations:
+- Forced caveman global persistence to write `false`; the scenario timed out waiting for `OM_GLOBAL_CAVEMAN=true`.
+- Forced observe-attachments global persistence to write `auto`; the scenario timed out waiting for `OM_GLOBAL_ATTACH=true`.
+- Changed the visible Observe attachments value projection from `On` to `Enabled`; the scenario timed out waiting for `Observe attachments On`.
+
+Focused verification: `pnpm --filter ./mastracode run e2e:test om-global-settings-persistence`.

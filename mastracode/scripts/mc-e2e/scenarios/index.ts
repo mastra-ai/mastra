@@ -19,6 +19,7 @@ import { mcpServerConfigScenario } from './mcp-server-config.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
 import { notificationInboxToolFlowScenario } from './notification-inbox-tool-flow.js';
 import { notificationSignalRenderingScenario } from './notification-signal-rendering.js';
+import { omGlobalSettingsPersistenceScenario } from './om-global-settings-persistence.js';
 import { omSettingsScenario } from './om-settings.js';
 import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
 import { persistentGoalCommandsScenario } from './persistent-goal-commands.js';
@@ -85,6 +86,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'mcp-server-config': mcpServerConfigScenario,
   'notification-inbox-tool-flow': notificationInboxToolFlowScenario,
   'notification-signal-rendering': notificationSignalRenderingScenario,
+  'om-global-settings-persistence': omGlobalSettingsPersistenceScenario,
   'om-settings': omSettingsScenario,
   'openai-strict-schema': openaiStrictSchemaScenario,
   'persistent-goal-commands': persistentGoalCommandsScenario,

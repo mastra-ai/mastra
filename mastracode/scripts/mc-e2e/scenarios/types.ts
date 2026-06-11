@@ -33,6 +33,7 @@ export type ScenarioName =
   | 'notification-inbox-tool-flow'
   | 'notification-signal-rendering'
   | 'om-settings'
+  | 'om-global-settings-persistence'
   | 'quiet-settings'
   | 'quiet-tool-history-parity'
   | 'report-issue-command'
