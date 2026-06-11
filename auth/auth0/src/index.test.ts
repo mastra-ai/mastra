@@ -309,9 +309,7 @@ describe('MastraAuthAuth0', () => {
     it('should throw on invalid state', async () => {
       const auth0 = new MastraAuthAuth0(mockSSOOptions) as any;
 
-      await expect(auth0.handleCallback('code123', 'invalid-state')).rejects.toThrow(
-        'Invalid state token format',
-      );
+      await expect(auth0.handleCallback('code123', 'invalid-state')).rejects.toThrow('Invalid state token format');
     });
 
     it('should throw on expired state', async () => {

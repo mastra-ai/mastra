@@ -178,7 +178,10 @@ function hmacSign(data: string, secret: string): string {
   const view = new DataView(sigBytes.buffer);
   view.setUint32(0, h1 >>> 0);
   view.setUint32(4, h2 >>> 0);
-  return btoa(String.fromCharCode(...sigBytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  return btoa(String.fromCharCode(...sigBytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
 }
 
 /**
