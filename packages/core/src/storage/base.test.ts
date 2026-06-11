@@ -106,6 +106,73 @@ describe('MastraCompositeStore — default delegation (issue #16782)', () => {
   });
 });
 
+describe('MastraCompositeStore.close', () => {
+  const setParent = (store: MastraCompositeStore, parent: MastraCompositeStore) =>
+    ((store as unknown as { parentDefault?: MastraCompositeStore }).parentDefault = parent);
+
+  it('closes the underlying `default` store', async () => {
+    const inner = new InMemoryStore({ id: 'close-inner' });
+    const innerCloseSpy = vi.spyOn(inner, 'close').mockResolvedValue(undefined);
+
+    const composite = new MastraCompositeStore({ id: 'close-outer', default: inner });
+
+    await composite.close();
+
+    expect(innerCloseSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes domain overrides that expose their own close()', async () => {
+    // Stands in for e.g. @mastra/duckdb's observability store, which holds
+    // its own native connection independent of the `default` store.
+    const domainClose = vi.fn().mockResolvedValue(undefined);
+    const observability = { close: domainClose } as unknown as NonNullable<
+      ConstructorParameters<typeof MastraCompositeStore>[0]['domains']
+    >['observability'];
+
+    const composite = new MastraCompositeStore({
+      id: 'close-domains',
+      default: new InMemoryStore({ id: 'close-domains-inner' }),
+      domains: { observability },
+    });
+
+    await composite.close();
+
+    expect(domainClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('only closes a shared parent once when used as both default and editor', async () => {
+    const shared = new InMemoryStore({ id: 'close-shared' });
+    const sharedCloseSpy = vi.spyOn(shared, 'close').mockResolvedValue(undefined);
+
+    const composite = new MastraCompositeStore({ id: 'close-outer-shared', default: shared, editor: shared });
+
+    await composite.close();
+
+    expect(sharedCloseSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('traverses through plain composite parents to reach adapters with close()', async () => {
+    const adapter = new InMemoryStore({ id: 'close-adapter' });
+    const adapterCloseSpy = vi.spyOn(adapter, 'close').mockResolvedValue(undefined);
+
+    const middle = new MastraCompositeStore({ id: 'close-middle', default: adapter });
+    const outer = new MastraCompositeStore({ id: 'close-outer-nested', default: middle });
+
+    await outer.close();
+
+    expect(adapterCloseSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('terminates on a parent cycle (A -> B -> A) without stack overflow', async () => {
+    const a = new MastraCompositeStore({ id: 'close-a', default: new InMemoryStore({ id: 'close-a-inner' }) });
+    const b = new MastraCompositeStore({ id: 'close-b', default: new InMemoryStore({ id: 'close-b-inner' }) });
+    setParent(a, b);
+    setParent(b, a);
+
+    await expect(a.close()).resolves.toBeUndefined();
+  });
+});
+
 describe('MastraCompositeStore.__registerMastra', () => {
   const mastra: StorageMastraRef = { getAgentById: () => undefined };
 

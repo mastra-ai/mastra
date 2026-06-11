@@ -177,6 +177,7 @@ export const createMastraProject = async ({
   mcpServer,
   observability,
   needsInteractive,
+  agentBuilder,
   onObservabilitySelected,
 }: {
   projectName?: string;
@@ -188,6 +189,7 @@ export const createMastraProject = async ({
   mcpServer?: string;
   observability?: boolean;
   needsInteractive?: boolean;
+  agentBuilder?: boolean;
   onObservabilitySelected?: (event: {
     command?: 'create' | 'init';
     enabled: boolean;
@@ -195,13 +197,13 @@ export const createMastraProject = async ({
     selection_method: 'interactive';
   }) => void;
 }) => {
-  p.intro(color.inverse(' Mastra Create '));
+  p.intro(color.inverse(agentBuilder ? ' Agent Builder Create ' : ' Mastra Create '));
 
   const projectName =
     name ??
     (await p.text({
       message: 'What do you want to name your project?',
-      placeholder: 'my-mastra-app',
+      placeholder: agentBuilder ? 'my-agent-builder' : 'my-mastra-app',
       validate: value => {
         if (!value || value.length === 0) return 'Project name cannot be empty';
         if (fsSync.existsSync(value)) {
@@ -223,10 +225,10 @@ export const createMastraProject = async ({
     result = await interactivePrompt({
       options: { command: 'create', showBanner: false, onObservabilitySelected },
       skip: {
-        llmProvider: llmProvider !== undefined,
-        llmApiKey: llmApiKey !== undefined,
-        skills: skills !== undefined && skills.length > 0,
-        mcpServer: mcpServer !== undefined,
+        llmProvider: agentBuilder || llmProvider !== undefined,
+        llmApiKey: agentBuilder || llmApiKey !== undefined,
+        skills: agentBuilder || (skills !== undefined && skills.length > 0),
+        mcpServer: agentBuilder || mcpServer !== undefined,
         observability: observability !== undefined,
         directory: true,
         gitInit: skipGitInit,
@@ -330,13 +332,10 @@ onlyBuiltDependencies:
 
     s.start('Installing Mastra dependencies');
     try {
-      await installMastraDependencies(
-        pm,
-        ['@mastra/core', '@mastra/libsql', '@mastra/memory'],
-        versionTag,
-        false,
-        timeout,
-      );
+      const deps = agentBuilder
+        ? ['@mastra/core', '@mastra/libsql', '@mastra/duckdb', '@mastra/editor', '@mastra/observability']
+        : ['@mastra/core', '@mastra/libsql', '@mastra/memory'];
+      await installMastraDependencies(pm, deps, versionTag, false, timeout);
     } catch (error) {
       throw new Error(
         `Failed to install Mastra dependencies: ${error instanceof Error ? error.message : 'Unknown error'}`,

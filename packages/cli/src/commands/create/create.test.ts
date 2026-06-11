@@ -497,3 +497,75 @@ describe('create command with --template flag', () => {
     });
   });
 });
+
+describe('create command with agentBuilder flag', () => {
+  const interactiveResult = {
+    directory: '/some/path',
+    llmProvider: 'openai' as const,
+    llmApiKey: 'test-key',
+    observability: undefined,
+    observabilityToken: undefined,
+    observabilityOrgId: undefined,
+    observabilityOrgName: undefined,
+    skills: undefined,
+    mcpServer: undefined,
+    addExample: false,
+    initGit: false,
+  };
+
+  it('forces the OpenAI provider, disables examples, and threads agentBuilder through to init', async () => {
+    const { createMastraProject } = await import('./utils');
+    const { init } = await import('../init/init');
+
+    vi.mocked(createMastraProject).mockResolvedValue({
+      projectName: 'my-agent-builder',
+      result: interactiveResult,
+    });
+    vi.mocked(init).mockResolvedValue({ success: true });
+
+    const { create } = await import('./create');
+    await create({
+      projectName: 'my-agent-builder',
+      // Mirrors the args passed by the create-agentbuilder binary
+      llmApiKey: 'test-key',
+      agentBuilder: true,
+    });
+
+    // agentBuilder always runs the interactive project flow with OpenAI pre-filled
+    expect(createMastraProject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        projectName: 'my-agent-builder',
+        llmProvider: 'openai',
+        needsInteractive: true,
+        agentBuilder: true,
+      }),
+    );
+
+    // ...and scaffolds the Agent Builder template without the weather example
+    expect(init).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentBuilder: true,
+        addExample: false,
+        llmProvider: 'openai',
+        llmApiKey: 'test-key',
+      }),
+    );
+  });
+
+  it('shows the Agent Builder URL in the post-create note', async () => {
+    const { createMastraProject } = await import('./utils');
+    const { init } = await import('../init/init');
+    const { note } = await import('@clack/prompts');
+
+    vi.mocked(createMastraProject).mockResolvedValue({
+      projectName: 'my-agent-builder',
+      result: interactiveResult,
+    });
+    vi.mocked(init).mockResolvedValue({ success: true });
+
+    const { create } = await import('./create');
+    await create({ projectName: 'my-agent-builder', llmApiKey: 'test-key', agentBuilder: true });
+
+    expect(note).toHaveBeenCalledWith(expect.stringContaining('http://localhost:4111/agent-builder'));
+  });
+});

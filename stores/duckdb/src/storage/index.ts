@@ -134,6 +134,18 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.init(...args);
   }
 
+  /**
+   * Release the underlying DuckDB instance so the native file lock is freed.
+   * Lets composed setups (e.g. `MastraCompositeStore` with this store as the
+   * `observability` domain override) release the DuckDB lock on
+   * Mastra.shutdown() — without this, the lock persists during dev hot
+   * reloads, causing "Conflicting lock is held" errors on the next start.
+   * Safe to call more than once; subsequent calls are no-ops.
+   */
+  async close(): Promise<void> {
+    await this.db.close();
+  }
+
   async migrateSpans(
     ...args: Parameters<ObservabilityStoreImpl['migrateSpans']>
   ): ReturnType<ObservabilityStoreImpl['migrateSpans']> {

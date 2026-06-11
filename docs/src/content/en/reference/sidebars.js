@@ -103,6 +103,7 @@ const sidebars = {
       label: 'CLI',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'cli/create-agentbuilder', label: 'create-agentbuilder' },
         { type: 'doc', id: 'cli/create-mastra', label: 'create-mastra' },
         { type: 'doc', id: 'cli/mastra', label: 'mastra' },
       ],

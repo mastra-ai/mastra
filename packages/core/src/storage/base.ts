@@ -469,12 +469,56 @@ export class MastraCompositeStore extends MastraBase {
     return true;
   }
   /**
-   * Optional lifecycle hook: release underlying client/connection handles.
-   * Implementations (e.g. LibSQLStore) override this to checkpoint WAL files
-   * and close the database client so OS handles are freed synchronously.
-   * Called automatically by Mastra.shutdown().
+   * Lifecycle hook: release underlying client/connection handles.
+   * Adapter subclasses (e.g. LibSQLStore, DuckDBStore) override this to
+   * checkpoint WAL files / release native locks and close their database
+   * client so OS handles are freed synchronously.
+   *
+   * The composite implementation cascades to the parent stores supplied via
+   * `default`/`editor` and to any domain overrides that expose their own
+   * `close()`, deduped by identity so a store reachable through multiple
+   * paths is only closed once. Called automatically by Mastra.shutdown().
    */
-  close?(): Promise<void>;
+  async close(): Promise<void> {
+    const seen = new Set<unknown>([this]);
+    const closeTasks: Promise<void>[] = [];
+
+    // Walk the composition graph structurally (instead of recursing through
+    // each composite's close()) so parent cycles terminate — mirroring the
+    // shared `seen` set in __registerMastra().
+    const visit = (target: unknown) => {
+      if (!target || typeof target !== 'object' || seen.has(target)) return;
+      seen.add(target);
+
+      // Plain composite wrappers (close() not overridden) own no client of
+      // their own; traverse into their parents and domains instead.
+      if (target instanceof MastraCompositeStore && target.close === MastraCompositeStore.prototype.close) {
+        visit(target.parentDefault);
+        visit(target.parentEditor);
+        if (target.stores) {
+          for (const domain of Object.values(target.stores)) visit(domain);
+        }
+        return;
+      }
+
+      // Adapters with their own close() (e.g. LibSQLStore, DuckDBStore) and
+      // domain overrides that hold their own connection (e.g. @mastra/duckdb's
+      // observability store) release their handles here. Domains owned by a
+      // parent typically don't implement close(), so this is a no-op for them.
+      const fn = (target as { close?: () => Promise<void> }).close;
+      if (typeof fn === 'function') {
+        closeTasks.push(fn.call(target));
+      }
+    };
+
+    visit(this.parentDefault);
+    visit(this.parentEditor);
+    if (this.stores) {
+      for (const domain of Object.values(this.stores)) visit(domain);
+    }
+
+    await Promise.all(closeTasks);
+  }
 }
 
 /**

@@ -72,6 +72,14 @@ export function augmentWithInit(storage: MastraCompositeStore): MastraCompositeS
           };
         }
 
+        // close() releases handles — it must never trigger initialization
+        // (creating tables just to tear the connection down).
+        if (prop === 'close') {
+          return async (...args: unknown[]) => {
+            return Reflect.apply(value, target, args);
+          };
+        }
+
         // All other functions wait for init
         return async (...args: unknown[]) => {
           await ensureInit();

@@ -1,0 +1,98 @@
+---
+title: "Reference: create-agentbuilder | CLI"
+description: Documentation for the create-agentbuilder command, which creates a new Mastra project with the Agent Builder pre-configured.
+packages:
+  - "create-agentbuilder"
+---
+
+# create-agentbuilder
+
+The `create-agentbuilder` command creates a new standalone Mastra project with the [Agent Builder](/docs/agent-builder/overview) pre-configured. The scaffolded project registers the Builder agent, composes LibSQL and DuckDB storage, and enables Mastra Observability exporters.
+
+The command prompts for a project name and whether to enable [Mastra Observability](/docs/observability/overview). The model provider is fixed to OpenAI because the Builder agent runs on an OpenAI model.
+
+:::note
+The Agent Builder is part of the Mastra Enterprise Edition. It works without a license key in local development, but production deployments require a valid EE license set via the `MASTRA_EE_LICENSE` environment variable. [Contact sales](https://mastra.ai/contact) for more information.
+:::
+
+## Usage
+
+```bash npm2yarn
+npx create-agentbuilder@latest
+```
+
+You can also pass the project name and OpenAI API key directly:
+
+```bash npm2yarn
+npx create-agentbuilder@latest my-agent-builder-app -- --llm-api-key <openai-api-key>
+```
+
+After scaffolding, start the dev server:
+
+```bash
+cd my-agent-builder-app
+npm run dev
+```
+
+The Agent Builder is mounted at `http://localhost:4111/agent-builder`.
+
+## CLI flags
+
+<PropertiesTable
+  content={[
+  {
+    name: '--version',
+    type: 'boolean',
+    description: 'Output the version number',
+    isOptional: true,
+  },
+  {
+    name: '--project-name',
+    type: 'string',
+    description: 'Project name that will be used in package.json and as the project directory name',
+    isOptional: true,
+  },
+  {
+    name: '--llm-api-key',
+    type: 'string',
+    description:
+      'API key for OpenAI (required for the Builder agent). If omitted, an .env.example placeholder is written instead of .env',
+    isOptional: true,
+  },
+  {
+    name: '--timeout',
+    type: 'number',
+    description: 'Configurable timeout for package installation, defaults to 60000 ms',
+    isOptional: true,
+  },
+  {
+    name: '--observe',
+    type: 'boolean',
+    description:
+      'Enable Observability on the Mastra platform during project creation. This opens browser login when needed, prompts for an organization, provisions a platform project, and configures the observability exporters.',
+    isOptional: true,
+  },
+  {
+    name: '--no-observe',
+    type: 'boolean',
+    description: 'Skip the Observability prompt during project creation.',
+    isOptional: true,
+  },
+  {
+    name: '--help',
+    type: 'boolean',
+    description: 'Display help for command',
+    isOptional: true,
+  },
+]}
+/>
+
+## Telemetry
+
+By default, Mastra collects anonymous information about your project like your OS, Mastra version or Node.js version. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/cli/src/analytics/index.ts) to check what's collected.
+
+You can opt out of the CLI analytics by setting an environment variable:
+
+```bash
+MASTRA_TELEMETRY_DISABLED=1 npx create-agentbuilder@latest
+```
