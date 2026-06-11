@@ -42,7 +42,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.0.0",
-    "eslint": "^9.39.4",
+    "eslint": "^10.4.1",
     "ioredis": "^5.11.1",
     "tsup": "^8.5.0",
     "tsx": "catalog:",

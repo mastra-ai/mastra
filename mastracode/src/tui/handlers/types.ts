@@ -27,7 +27,6 @@ export interface EventHandlerContext {
   startGoal: (objective: string, cancelMessage?: string, options?: StartGoalOptions) => Promise<void>;
   queueFollowUpMessage: (content: string) => void;
   renderExistingMessages: () => Promise<void>;
-  renderCompletedTasksInline: (tasks: TaskItemSnapshot[], insertIndex?: number, collapsed?: boolean) => void;
   renderClearedTasksInline: (clearedTasks: TaskItemSnapshot[], insertIndex?: number) => void;
   refreshModelAuthStatus: () => Promise<void>;
 }
