@@ -11,6 +11,7 @@ import { debugLoggingScenario } from './debug-logging.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
 import { firstRunOnboardingScenario } from './first-run-onboarding.js';
 import { githubSignalsCommandScenario } from './github-signals-command.js';
+import { githubSignalsIncrementalScenario } from './github-signals-incremental.js';
 import { harnessApiConfigScenario } from './harness-api-config.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { mcpServerConfigScenario } from './mcp-server-config.js';
@@ -70,6 +71,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'file-autocomplete': fileAutocompleteScenario,
   'first-run-onboarding': firstRunOnboardingScenario,
   'github-signals-command': githubSignalsCommandScenario,
+  'github-signals-incremental': githubSignalsIncrementalScenario,
   'harness-api-config': harnessApiConfigScenario,
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,

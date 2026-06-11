@@ -33,10 +33,10 @@
 ### 3. GitHub signals incremental flow
 
 - Row: `Git: GitHub signal subscriptions`.
+- Completed: `github-signals-incremental` seeds a persisted subscribed thread whose cursor last observed failing CI, points `MASTRACODE_GITCRAWL_BIN` at a deterministic recovered gitcrawl sqlite snapshot, runs `/github sync`, and asserts the `pull-request-ci-recovered` notification plus `/github debug` `ci=success` cursor update.
 - Proposed scenarios:
-  - `github-signals-incremental`: extend the temp `MASTRACODE_GITCRAWL_BIN` mock to return baseline data, then changed CI/check/review data on a second sync; assert incremental notification classification.
   - `github-signals-unsubscribe-reload`: subscribe via `/github subscribe`, unsubscribe via `/github unsubscribe`, reload `/github debug`, and assert metadata/polling stops.
-- Fixture/data needs: sanitized sqlite fixture derived from `~/.config/gitcrawl/gitcrawl.db`; mock gitcrawl binary that can serve multiple snapshots by call count.
+- Fixture/data needs: sanitized sqlite fixture derived from `~/.config/gitcrawl/gitcrawl.db`; mock gitcrawl binary for unsubscribe/reload or multi-process polling breadth.
 
 ### 4. MCP and browser integration depth
 

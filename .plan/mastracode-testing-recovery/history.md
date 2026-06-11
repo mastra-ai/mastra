@@ -4568,3 +4568,13 @@ Break validations proved the scenario fails if the `Use as /goal` option label c
   - Renaming the visible state-signal title timed out waiting for the canonical `State delta: browser` label.
 - Clean focused verification: `pnpm build:core`; `pnpm --filter ./mastracode run e2e:test state-signal-reload`; `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
 - Tracker update: `Chat: Processor state signals` remains `needs-follow-up` but now covers both active `sendStateSignal()` rendering and persisted signal reload parity. Remaining gaps are live browser-processor context and long-session snapshot/delta pruning.
+
+## 2026-06-11 — GitHub incremental signal remediation
+
+- Added `github-signals-incremental` TUI e2e scenario and AIMock fixture. The scenario seeds a persisted subscribed thread whose GitHub cursor last observed failing CI, points `MASTRACODE_GITCRAWL_BIN` and `GITCRAWL_DB_PATH` at a deterministic sanitized gitcrawl sqlite snapshot where CI has recovered, switches to the thread through `/threads`, runs `/github sync`, and verifies the real TUI renders the `pull-request-ci-recovered` notification plus `/github debug` `ci=success` cursor projection.
+- Break validations rebuilt `@mastra/github-signals` after temporary source changes and proved the scenario catches regressions:
+  - Disabling non-first-observation change detection caused no recovered-CI notification request and the scenario timed out.
+  - Corrupting the recovered-CI notification summary caused the visible recovered notification assertion to time out.
+  - Disabling `lastObservedCiState` cursor persistence allowed the notification but timed out on `/github debug` waiting for `ci=success`.
+- Clean focused verification: `pnpm --filter @mastra/github-signals build`; `pnpm --filter ./mastracode run e2e:test github-signals-incremental`; `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
+- Tracker update: `Git: GitHub signal subscriptions` remains `needs-follow-up` but now covers command subscribe/baseline notification/debug projection and manual-sync incremental recovered-CI notification classification/cursor persistence. Remaining gaps are interval polling delivery, notification inbox read transitions, branch auto-subscribe lifecycle, unsubscribe/reload, and reload/history parity.

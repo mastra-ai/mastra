@@ -13,6 +13,7 @@ export type ScenarioName =
   | 'file-autocomplete'
   | 'first-run-onboarding'
   | 'github-signals-command'
+  | 'github-signals-incremental'
   | 'harness-api-config'
   | 'openai-strict-schema'
   | 'plan-approval-goal-handoff'

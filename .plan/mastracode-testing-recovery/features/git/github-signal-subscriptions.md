@@ -70,12 +70,13 @@
 - `mastracode/src/tui/commands/__tests__/github.test.ts` — command parsing/status/sync behavior, disabled setting guard, missing processor guard, no-current-PR no-op, and swallowed subscribe errors.
 - `mastracode/src/__tests__/index.test.ts` — enabling `experimentalGithubSignals` wires the processor and starts polling for existing subscriptions.
 - `mastracode/src/tui/__tests__/render-messages.test.ts` and `handlers/__tests__/message.test.ts` — raw GitHub subscribe/unsubscribe reactive signals are hidden from chat rendering.
-- `mastracode/scripts/mc-e2e/scenarios/github-signals-command.ts` — partial TUI e2e coverage for `/new` + a real model turn + `/github subscribe mastra-ai/mastra#17637` + baseline notification + `/github debug`, using `MASTRACODE_GITCRAWL_BIN` to point at a temp mock gitcrawl binary and a sanitized sqlite fixture derived from the local `~/.config/gitcrawl/gitcrawl.db` schema/data shape.
+- `mastracode/scripts/mc-e2e/scenarios/github-signals-command.ts` — TUI e2e coverage for `/new` + a real model turn + `/github subscribe mastra-ai/mastra#17637` + baseline notification + `/github debug`, using `MASTRACODE_GITCRAWL_BIN` to point at a temp mock gitcrawl binary and a sanitized sqlite fixture derived from the local `~/.config/gitcrawl/gitcrawl.db` schema/data shape.
+- `mastracode/scripts/mc-e2e/scenarios/github-signals-incremental.ts` — TUI e2e coverage for a persisted subscribed thread whose cursor last observed failing CI, `/github sync` against a recovered sanitized gitcrawl snapshot, the `pull-request-ci-recovered` notification card, and `/github debug` showing the persisted `ci=success` cursor.
 
 ## Missing tests
 
 - Full local integration with the real gitcrawl binary, real GitHub CLI/git remote configuration, and non-sanitized live GitHub state remains outside CI.
-- End-to-end TUI run from polling-delivered changes through `notification_inbox read` and thread reload. The `github-signals-command` scenario covers subscribe/sync snapshot ingestion, the immediate baseline notification card, and debug metadata projection, but not later interval polling, inbox read transitions, branch auto-subscribe, or reload parity.
+- End-to-end TUI run from polling-delivered changes through `notification_inbox read` and thread reload. The checked-in scenarios cover command subscribe, baseline notification, manual sync incremental notification classification, and debug metadata projection, but not later interval polling, inbox read transitions, branch auto-subscribe, unsubscribe/reload, or reload parity.
 - Multi-thread/process polling handoff regression for more than one open Mastra Code process.
 - Direct `handleAgentEnd()` lifecycle test proving auto-subscribe runs once per thread and does not run on abort/error cleanup paths unless intentionally added.
 
