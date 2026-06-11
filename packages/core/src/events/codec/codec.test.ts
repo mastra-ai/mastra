@@ -188,6 +188,18 @@ describe('codec', () => {
       expect(out).not.toBeInstanceOf(RegExp);
       expect(out).toEqual(broken);
     });
+
+    it('treats an oversized source as user data instead of constructing a RegExp', () => {
+      // Bound check: `isEnvelope` caps `source` length so a hostile peer
+      // cannot push an unbounded pattern into `new RegExp(...)`.
+      const oversized = {
+        __m_codec__: 'RegExp',
+        v: { source: 'a'.repeat(2000), flags: 'g' },
+      };
+      const out = decode(oversized);
+      expect(out).not.toBeInstanceOf(RegExp);
+      expect(out).toEqual(oversized);
+    });
   });
 
   describe('URL', () => {

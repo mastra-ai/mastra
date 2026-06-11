@@ -130,14 +130,17 @@ export function decode(value: unknown): unknown {
       case 'BigInt':
         return BigInt(env.v);
       case 'RegExp': {
-        // `isEnvelope` already constrained `flags` to the spec-defined set,
-        // and we only reach this branch for our own envelopes — `source` came
-        // from a peer that previously called `encode()` on a real `RegExp`.
-        // Reconstruct with the raw source so metacharacter semantics survive
-        // the round-trip (`/foo.*/gi` must come back as `/foo.*/gi`, not
-        // `/foo\.\*/gi`). The try/catch keeps a malformed/hostile `source`
-        // from crashing frame decoding — we fall back to the raw envelope.
+        // `isEnvelope` already constrained `flags` to the spec-defined set
+        // (`d g i m s u y`, no duplicates) and `source` to a bounded length
+        // (`MAX_REGEXP_SOURCE_LENGTH`). We only reach this branch for our own
+        // envelopes — `source` came from a peer that previously called
+        // `encode()` on a real `RegExp`. Reconstruct with the raw source so
+        // metacharacter semantics survive the round-trip (`/foo.*/gi` must
+        // come back as `/foo.*/gi`, not `/foo\.\*/gi`). The try/catch keeps a
+        // malformed/hostile `source` from crashing frame decoding — we fall
+        // back to the raw envelope.
         try {
+          // lgtm[js/regex-injection] -- input bounded by isEnvelope (flag whitelist + length cap) and wrapped in try/catch
           return new RegExp(env.v.source, env.v.flags);
         } catch {
           return value;
