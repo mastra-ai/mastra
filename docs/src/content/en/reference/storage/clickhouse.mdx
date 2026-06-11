@@ -261,6 +261,8 @@ Manual maintenance such as `optimizeTable()` and `materializeTtl()` runs on ever
 
 If existing Mastra tables use local `MergeTree` or `ReplacingMergeTree` engines, initialization fails while `replication` is enabled. Mastra refuses to silently convert local tables because copy-and-swap is unsafe across replicas. To migrate, recreate the affected tables as `Replicated*` (typically: rename the local table, `CREATE TABLE ... ENGINE = ReplicatedMergeTree(...) ON CLUSTER ...`, `INSERT INTO ... SELECT * FROM <renamed_local>`, then drop the renamed local table) before enabling replication.
 
+Do not set `replication` on ClickHouse Cloud. Cloud rewrites `MergeTree` to `SharedMergeTree` server-side, and emitting explicit `ReplicatedMergeTree` engines produces incorrect DDL. `replication` is only for self-managed multi-replica clusters.
+
 ### Observability domain options
 
 `ObservabilityStorageClickhouse` and `ObservabilityStorageClickhouseVNext` accept the same connection options as `ClickhouseStore` (`url`, `username`, `password`, or a pre-configured `client`).
