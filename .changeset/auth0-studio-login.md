@@ -1,5 +1,7 @@
 ---
 '@mastra/auth-auth0': minor
+'@mastra/core': patch
+'@mastra/server': patch
 ---
 
 Added full Studio authentication support for Auth0 users.
@@ -26,3 +28,5 @@ const auth = new MastraAuthAuth0({
   session: { cookiePassword: process.env.AUTH0_COOKIE_PASSWORD },
 });
 ```
+
+**Note:** This release includes updates to `@mastra/core` (ISSOProvider interface now supports async getLoginUrl) and `@mastra/server` (handles async login URLs). All three packages should be updated together.
