@@ -3,6 +3,7 @@ import { DataKeysAndValues, PageLayout } from '@mastra/playground-ui';
 import { format } from 'date-fns';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { ExperimentStats } from '@/domains/experiments/components/experiment-stats';
+import { getReplayMarker } from '@/domains/experiments/utils/tool-replay';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { useLinkComponent } from '@/lib/framework';
@@ -55,6 +56,13 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
       ? `${paths.agentLink(experiment.targetId)}/editor?version=${encodeURIComponent(experiment.agentVersion)}`
       : null;
 
+  const replayMarker = getReplayMarker(experiment);
+  const replaySourceHref = replayMarker?.fromExperimentId
+    ? experiment.datasetId
+      ? paths.datasetExperimentLink(experiment.datasetId, replayMarker.fromExperimentId)
+      : paths.experimentLink(replayMarker.fromExperimentId)
+    : null;
+
   return (
     <PageLayout.TopArea>
       <PageLayout.Row>
@@ -85,6 +93,18 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
                   </DataKeysAndValues.ValueLink>
                 ) : (
                   <DataKeysAndValues.Value>{experiment.agentVersion}</DataKeysAndValues.Value>
+                )}
+              </>
+            )}
+            {replayMarker && (
+              <>
+                <DataKeysAndValues.Key>Tool replay</DataKeysAndValues.Key>
+                {replaySourceHref && replayMarker.fromExperimentId ? (
+                  <DataKeysAndValues.ValueLink href={replaySourceHref} as={LinkComponent}>
+                    {`from ${replayMarker.fromExperimentId.slice(0, 8)} · on miss: ${replayMarker.onMiss}`}
+                  </DataKeysAndValues.ValueLink>
+                ) : (
+                  <DataKeysAndValues.Value>{`enabled · on miss: ${replayMarker.onMiss}`}</DataKeysAndValues.Value>
                 )}
               </>
             )}

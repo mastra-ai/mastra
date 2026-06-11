@@ -1,3 +1,4 @@
+import type { ToolReplayOnMiss } from '@mastra/client-js';
 import {
   Button,
   Spinner,
@@ -19,6 +20,7 @@ import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { ScorerSelector } from './scorer-selector';
 import type { TargetType } from './target-selector';
 import { TargetSelector } from './target-selector';
+import { ToolReplaySelector } from './tool-replay-selector';
 import { DynamicForm } from '@/lib/form';
 import { resolveSerializedZodOutput } from '@/lib/form/utils';
 
@@ -77,12 +79,17 @@ export function ExperimentTriggerDialog({
   const [selectedScorers, setSelectedScorers] = useState<string[]>([]);
   const [requestContextValues, setRequestContextValues] = useState<Record<string, unknown>>({});
   const [requestContextRaw, setRequestContextRaw] = useState('');
+  const [replayEnabled, setReplayEnabled] = useState(false);
+  const [replayFromExperimentId, setReplayFromExperimentId] = useState('');
+  const [replayOnMiss, setReplayOnMiss] = useState<ToolReplayOnMiss>('error');
 
   const { triggerExperiment } = useDatasetMutations();
 
   const hasSchema = Boolean(requestContextSchema && Object.keys(requestContextSchema).length > 0);
 
-  const canRun = targetType && targetId;
+  // Tool replay is agent-only (the API rejects other targets up-front).
+  const replayActive = targetType === 'agent' && replayEnabled;
+  const canRun = targetType && targetId && (!replayActive || Boolean(replayFromExperimentId));
   const isRunning = triggerExperiment.isPending;
 
   const resetState = () => {
@@ -91,6 +98,9 @@ export function ExperimentTriggerDialog({
     setSelectedScorers([]);
     setRequestContextValues({});
     setRequestContextRaw('');
+    setReplayEnabled(false);
+    setReplayFromExperimentId('');
+    setReplayOnMiss('error');
   };
 
   const resolveRequestContext = (): Record<string, unknown> | undefined => {
@@ -133,6 +143,9 @@ export function ExperimentTriggerDialog({
         scorerIds: selectedScorers.length > 0 ? selectedScorers : undefined,
         version,
         requestContext,
+        ...(replayActive && replayFromExperimentId
+          ? { toolReplay: { fromExperimentId: replayFromExperimentId, onMiss: replayOnMiss } }
+          : {}),
       });
 
       toast.success('Experiment triggered successfully');
@@ -179,6 +192,22 @@ export function ExperimentTriggerDialog({
             <ScorerSelector
               selectedScorers={selectedScorers}
               setSelectedScorers={setSelectedScorers}
+              disabled={isRunning}
+              container={contentRef}
+            />
+          )}
+
+          {/* Tool replay is agent-only — the section disappears (and is ignored) for other targets */}
+          {targetType === 'agent' && (
+            <ToolReplaySelector
+              datasetId={datasetId}
+              enabled={replayEnabled}
+              onEnabledChange={setReplayEnabled}
+              fromExperimentId={replayFromExperimentId}
+              onFromExperimentIdChange={setReplayFromExperimentId}
+              onMiss={replayOnMiss}
+              onMissChange={setReplayOnMiss}
+              selectedTargetId={targetId || undefined}
               disabled={isRunning}
               container={contentRef}
             />

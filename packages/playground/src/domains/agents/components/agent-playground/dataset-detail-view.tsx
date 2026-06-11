@@ -1,3 +1,4 @@
+import type { ToolReplayOnMiss } from '@mastra/client-js';
 import {
   Button,
   Chip,
@@ -21,10 +22,12 @@ import { Play, Sparkles, Clock, ChevronRight, ChevronDown, Pencil, Save, X, Tras
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { formatVersionLabel } from './format-version-label';
 import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
+import { ToolReplaySelector } from '@/domains/datasets/components/experiment-trigger/tool-replay-selector';
 import { useDatasetExperiments } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { useDatasetVersions } from '@/domains/datasets/hooks/use-dataset-versions';
+import { ToolReplayChip } from '@/domains/experiments/components/tool-replay-chip';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
@@ -97,6 +100,9 @@ export function DatasetDetailView({
   const [attachScorerSearch, setAttachScorerSearch] = useState('');
   const [selectedDatasetVersion, setSelectedDatasetVersion] = useState<string>('');
   const [selectedAgentVersion, setSelectedAgentVersion] = useState<string>('');
+  const [replayEnabled, setReplayEnabled] = useState(false);
+  const [replayFromExperimentId, setReplayFromExperimentId] = useState('');
+  const [replayOnMiss, setReplayOnMiss] = useState<ToolReplayOnMiss>('error');
 
   // Scorers for dataset attachment
   const { data: allScorers } = useScorers();
@@ -152,6 +158,9 @@ export function DatasetDetailView({
 
   useEffect(() => {
     setSelectedDatasetVersion('');
+    setReplayEnabled(false);
+    setReplayFromExperimentId('');
+    setReplayOnMiss('error');
   }, [datasetId]);
 
   useEffect(() => {
@@ -193,6 +202,9 @@ export function DatasetDetailView({
         ...(hasRequestContext ? { requestContext: mergedRequestContext } : {}),
         ...(selectedDatasetVersion ? { version: Number(selectedDatasetVersion) } : {}),
         ...(selectedAgentVersion ? { agentVersion: selectedAgentVersion } : {}),
+        ...(expTargetType === 'agent' && replayEnabled && replayFromExperimentId
+          ? { toolReplay: { fromExperimentId: replayFromExperimentId, onMiss: replayOnMiss } }
+          : {}),
       });
       void queryClient.invalidateQueries({ queryKey: ['agent-experiments', agentId] });
       void refetchExperiments();
@@ -218,6 +230,9 @@ export function DatasetDetailView({
     refetchExperiments,
     selectedDatasetVersion,
     selectedAgentVersion,
+    replayEnabled,
+    replayFromExperimentId,
+    replayOnMiss,
   ]);
 
   return (
@@ -255,7 +270,7 @@ export function DatasetDetailView({
               variant="primary"
               size="sm"
               onClick={handleRunExperiment}
-              disabled={items.length === 0 || isRunning}
+              disabled={items.length === 0 || isRunning || (isAgentTarget && replayEnabled && !replayFromExperimentId)}
             >
               {isRunning ? (
                 <>
@@ -324,6 +339,19 @@ export function DatasetDetailView({
             </div>
           )}
         </div>
+        {isAgentTarget && (
+          <ToolReplaySelector
+            datasetId={datasetId}
+            enabled={replayEnabled}
+            onEnabledChange={setReplayEnabled}
+            fromExperimentId={replayFromExperimentId}
+            onFromExperimentIdChange={setReplayFromExperimentId}
+            onMiss={replayOnMiss}
+            onMissChange={setReplayOnMiss}
+            selectedTargetId={agentId}
+            disabled={isRunning}
+          />
+        )}
       </div>
 
       {/* Scorers + Items + Past runs */}
@@ -491,9 +519,12 @@ export function DatasetDetailView({
                     >
                       <ExperimentStatusDot status={exp.status} />
                       <div className="flex-1 min-w-0">
-                        <Txt variant="ui-xs" className="text-neutral5 block">
-                          {exp.startedAt ? formatTimestamp(exp.startedAt) : 'Unknown'}
-                        </Txt>
+                        <div className="flex items-center gap-1.5">
+                          <Txt variant="ui-xs" className="text-neutral5 block">
+                            {exp.startedAt ? formatTimestamp(exp.startedAt) : 'Unknown'}
+                          </Txt>
+                          <ToolReplayChip experiment={exp} />
+                        </div>
                         <Txt variant="ui-xs" className="text-neutral3">
                           {exp.succeededCount}/{exp.totalItems} passed
                           {exp.datasetVersion != null && ` · ${formatVersionLabel('Dataset', exp.datasetVersion)}`}

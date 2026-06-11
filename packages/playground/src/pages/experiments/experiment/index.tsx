@@ -119,6 +119,7 @@ function ExperimentPage() {
         <ExperimentPageTabs
           experimentId={experimentId}
           datasetId={datasetId}
+          experiment={experiment!}
           experimentStatus={experiment!.status}
           results={results ?? []}
           isLoading={resultsLoading}

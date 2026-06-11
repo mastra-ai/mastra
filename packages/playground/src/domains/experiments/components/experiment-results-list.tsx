@@ -1,5 +1,6 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
-import { DataList, DataListSkeleton, Tooltip, TooltipContent, TooltipTrigger, cn } from '@mastra/playground-ui';
+import { Chip, DataList, DataListSkeleton, Tooltip, TooltipContent, TooltipTrigger, cn } from '@mastra/playground-ui';
+import { classifyReplayDivergence, getToolReplayReport } from '../utils/tool-replay';
 
 export type ExperimentResultsListProps = {
   results: DatasetExperimentResult[];
@@ -14,6 +15,8 @@ export type ExperimentResultsListProps = {
   hasNextPage?: boolean;
   selectedIds?: Set<string>;
   onToggleSelect?: (resultId: string) => void;
+  /** Renders the per-row divergence cell — must match a 'replay' entry in `columns`. */
+  showReplayColumn?: boolean;
 };
 
 /**
@@ -32,6 +35,7 @@ export function ExperimentResultsList({
   hasNextPage,
   selectedIds,
   onToggleSelect,
+  showReplayColumn,
 }: ExperimentResultsListProps) {
   const hasSelection = Boolean(selectedIds && onToggleSelect);
   const gridColumns = [hasSelection ? 'auto' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
@@ -84,6 +88,12 @@ export function ExperimentResultsList({
 
                 {hasInputColumn && <DataList.MonoCell>{truncate(formatValue(result.input), 200)}</DataList.MonoCell>}
 
+                {showReplayColumn && (
+                  <DataList.Cell height="compact">
+                    <ReplayDivergenceCell result={result} />
+                  </DataList.Cell>
+                )}
+
                 {scorerIds?.map(scorerId => {
                   const scores = scoresByItemId?.[result.itemId];
                   const score = scores?.find(s => s.scorerId === scorerId);
@@ -132,6 +142,25 @@ export function ExperimentResultsList({
       )}
     </DataList>
   );
+}
+
+/**
+ * Worst divergence signal of one replayed result. Clean runs render nothing —
+ * the absence of a chip is the good news.
+ */
+function ReplayDivergenceCell({ result }: { result: DatasetExperimentResult }) {
+  const report = getToolReplayReport(result);
+  if (!report) return null;
+  const divergence = classifyReplayDivergence(report);
+  if (divergence === 'clean') return null;
+  if (divergence === 'misses') {
+    return <Chip color="orange">{`${report.misses.length} miss${report.misses.length > 1 ? 'es' : ''}`}</Chip>;
+  }
+  if (divergence === 'arg-mismatches') {
+    return <Chip color="yellow">{`${report.argMismatches.length} args`}</Chip>;
+  }
+  const unconsumedCount = report.unconsumed.reduce((sum, entry) => sum + entry.count, 0);
+  return <Chip color="blue">{`${unconsumedCount} unconsumed`}</Chip>;
 }
 
 /** Format unknown value for display */

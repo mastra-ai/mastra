@@ -1,11 +1,12 @@
 'use client';
 
-import type { DatasetExperimentResult } from '@mastra/client-js';
+import type { DatasetExperiment, DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
 import {
   Button,
   Chip,
   Icon,
+  Notice,
   SpanDataPanelView,
   Tabs,
   Tab,
@@ -22,6 +23,9 @@ import { ClipboardCheck } from 'lucide-react';
 import { useState, useMemo, useCallback } from 'react';
 
 import { useExperimentTrace } from '../hooks/use-experiment-trace';
+import { useReplayAggregates } from '../hooks/use-replay-aggregates';
+import { getReplayMarker, getToolReplayReport } from '../utils/tool-replay';
+import { ExperimentReplaySummary } from './experiment-replay-summary';
 import { ExperimentResultPanel } from './experiment-result-panel';
 import { ExperimentResultsList } from './experiment-results-list';
 import { ExperimentScorePanel } from './experiment-score-panel';
@@ -35,6 +39,8 @@ import { Link } from '@/lib/link';
 export type ExperimentPageTabsProps = {
   experimentId: string;
   datasetId: string;
+  /** Experiment record — enables the replay surfaces when it carries the replay marker. */
+  experiment?: DatasetExperiment;
   experimentStatus?: ExperimentStatus;
   results: DatasetExperimentResult[];
   isLoading: boolean;
@@ -50,6 +56,7 @@ export type ExperimentPageTabsProps = {
 export function ExperimentPageTabs({
   experimentId,
   datasetId,
+  experiment,
   experimentStatus,
   results,
   isLoading,
@@ -143,6 +150,17 @@ export function ExperimentPageTabs({
   const reviewCount = (reviewItemsForExperiment ?? []).filter(item => item.experimentId === experimentId).length;
 
   const { data: scoresByExperimentId } = useScoresByExperimentId(experimentId, experimentStatus);
+
+  // Replay surfaces are double-gated: the experiment must carry the exact
+  // replay marker AND each result must carry a shape-valid report.
+  const replayMarker = experiment ? getReplayMarker(experiment) : null;
+  const isReplay = replayMarker !== null;
+  const { data: replayAggregates, isLoading: isReplayAggregatesLoading } = useReplayAggregates({
+    datasetId,
+    experimentId,
+    enabled: isReplay,
+    experimentStatus,
+  });
 
   const scorerIds = useMemo(() => {
     if (!scoresByExperimentId) return [];
@@ -255,10 +273,23 @@ export function ExperimentPageTabs({
       { name: 'itemId', label: 'Item ID', size: '7rem' },
       { name: 'status', label: 'Status', size: '5rem' },
       { name: 'input', label: 'Input', size: 'minmax(15rem,1fr)' },
+      ...(isReplay ? [{ name: 'replay', label: 'Replay', size: '8rem' }] : []),
       ...scorerIds.map(id => ({ name: id, label: id, size: '12rem' })),
     ],
-    [scorerIds],
+    [scorerIds, isReplay],
   );
+
+  const featuredReport = isReplay && featuredResult ? getToolReplayReport(featuredResult) : null;
+  const showSourceTrace = (sourceTraceId: string) => {
+    setFeaturedTraceId(sourceTraceId);
+    setFeaturedSpanId(undefined);
+    setFeaturedScoreId(null);
+    setResultCollapsed(true);
+    setTraceCollapsed(false);
+  };
+  // The replay run's own trace has no tool spans (tools never executed) —
+  // explain that instead of looking broken, and offer the jump to the source.
+  const viewingOwnReplayTrace = isReplay && Boolean(featuredTraceId) && featuredTraceId === featuredResult?.traceId;
 
   return (
     <Tabs
@@ -277,6 +308,15 @@ export function ExperimentPageTabs({
       </TabList>
 
       <TabContent value="summary" className="overflow-y-auto mt-5">
+        {replayMarker && (
+          <ExperimentReplaySummary
+            marker={replayMarker}
+            datasetId={experiment?.datasetId ?? datasetId}
+            aggregates={replayAggregates}
+            isLoading={isReplayAggregatesLoading}
+            experimentStatus={experimentStatus}
+          />
+        )}
         <ExperimentScorerSummary scoresByItemId={scoresByExperimentId} experimentStatus={experimentStatus} />
       </TabContent>
 
@@ -333,6 +373,7 @@ export function ExperimentPageTabs({
                 hasNextPage={hasNextPage}
                 selectedIds={selectedIds}
                 onToggleSelect={toggleSelect}
+                showReplayColumn={isReplay}
               />
             </div>
           </div>
@@ -367,6 +408,8 @@ export function ExperimentPageTabs({
                 onFlagForReview={resultId => flagForReview([resultId])}
                 collapsed={resultCollapsed}
                 onCollapsedChange={setResultCollapsed}
+                isReplayExperiment={isReplay}
+                onShowSourceTrace={showSourceTrace}
               />
 
               {featuredScore && (
@@ -412,6 +455,27 @@ export function ExperimentPageTabs({
                     onCollapsedChange={setTraceCollapsed}
                     LinkComponent={Link}
                     traceHref={`/traces/${featuredTraceId}`}
+                    noticeSlot={
+                      viewingOwnReplayTrace ? (
+                        <Notice variant="info" title="Tool replay">
+                          <Notice.Message>
+                            Tools were replayed from a recording — this run&apos;s trace contains no tool spans.
+                            {featuredReport?.sourceTraceId ? (
+                              <>
+                                {' '}
+                                <button
+                                  type="button"
+                                  className="underline text-accent1"
+                                  onClick={() => showSourceTrace(featuredReport.sourceTraceId!)}
+                                >
+                                  View the source trace
+                                </button>
+                              </>
+                            ) : null}
+                          </Notice.Message>
+                        </Notice>
+                      ) : undefined
+                    }
                   />
 
                   {featuredSpanId && (

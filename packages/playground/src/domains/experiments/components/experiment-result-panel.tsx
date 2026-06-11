@@ -14,6 +14,8 @@ import {
   TargetIcon,
 } from 'lucide-react';
 import { useState } from 'react';
+import { getToolReplayErrorLabel, getToolReplayReport, stripToolReplayFromOutput } from '../utils/tool-replay';
+import { ExperimentResultReplaySection } from './experiment-result-replay-section';
 
 export type ExperimentResultPanelProps = {
   result: DatasetExperimentResult;
@@ -31,6 +33,9 @@ export type ExperimentResultPanelProps = {
   collapsed?: boolean;
   /** When provided, the collapse button appears in the header and notifies the parent on toggle. */
   onCollapsedChange?: (collapsed: boolean) => void;
+  /** Gates the replay report section — only replay experiments read output.toolReplay. */
+  isReplayExperiment?: boolean;
+  onShowSourceTrace?: (traceId: string) => void;
 };
 
 export function ExperimentResultPanel({
@@ -46,14 +51,20 @@ export function ExperimentResultPanel({
   onFlagForReview,
   collapsed: controlledCollapsed,
   onCollapsedChange,
+  isReplayExperiment,
+  onShowSourceTrace,
 }: ExperimentResultPanelProps) {
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
   const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
 
   const hasError = Boolean(result?.error);
+  // Double gate: experiment-level marker + result-level report shape.
+  const replayReport = isReplayExperiment ? getToolReplayReport(result) : null;
+  const replayErrorLabel = isReplayExperiment ? getToolReplayErrorLabel(result?.error?.code) : null;
   const inputStr = formatValue(result?.input);
-  const outputStr = formatValue(result?.output);
+  // The report is rendered in its own section — keep the Output view clean.
+  const outputStr = formatValue(replayReport ? stripToolReplayFromOutput(result?.output) : result?.output);
   const groundTruthStr = formatValue(result?.groundTruth);
   const canFlag = onFlagForReview && result.status !== 'needs-review' && result.status !== 'complete';
   const tags = Array.isArray(result.tags) ? result.tags : [];
@@ -103,7 +114,7 @@ export function ExperimentResultPanel({
             </DataKeysAndValues>
 
             {hasError && (
-              <Notice variant="destructive" title="Error">
+              <Notice variant="destructive" title={result?.error?.code ? `Error · ${result.error.code}` : 'Error'}>
                 <Notice.Message>
                   {formatValue(
                     result?.error && typeof result.error === 'object'
@@ -111,7 +122,12 @@ export function ExperimentResultPanel({
                       : result?.error,
                   )}
                 </Notice.Message>
+                {replayErrorLabel && <Notice.Message>{replayErrorLabel}</Notice.Message>}
               </Notice>
+            )}
+
+            {replayReport && (
+              <ExperimentResultReplaySection report={replayReport} onShowSourceTrace={onShowSourceTrace} />
             )}
 
             {scores && scores.length > 0 && (

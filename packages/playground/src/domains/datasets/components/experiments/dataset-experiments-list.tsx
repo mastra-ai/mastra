@@ -2,6 +2,7 @@ import type { DatasetExperiment } from '@mastra/client-js';
 import { Chip, DataList, EmptyState, Tooltip, TooltipContent, TooltipTrigger, cn } from '@mastra/playground-ui';
 import { format, isThisYear, isToday } from 'date-fns';
 import { Play } from 'lucide-react';
+import { ToolReplayChip } from '@/domains/experiments/components/tool-replay-chip';
 
 const experimentsListColumns = [
   { name: 'experimentId', label: 'ID', size: '7rem' },
@@ -86,7 +87,12 @@ export function DatasetExperimentsList({
                 </Tooltip>
               )}
             </DataList.Cell>
-            <DataList.Cell height="compact">{experiment.targetType}</DataList.Cell>
+            <DataList.Cell height="compact">
+              <span className="flex items-center gap-1.5">
+                {experiment.targetType}
+                <ToolReplayChip experiment={experiment} />
+              </span>
+            </DataList.Cell>
             <DataList.Cell height="compact" className="min-w-0">
               <span className="block truncate">{experiment.targetId}</span>
             </DataList.Cell>

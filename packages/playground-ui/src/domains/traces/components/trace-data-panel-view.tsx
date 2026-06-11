@@ -49,6 +49,11 @@ export interface TraceDataPanelViewProps {
    * handlers (e.g. inline below an experiment result).
    */
   showUnavailableFeaturesMsg?: boolean;
+  /**
+   * Consumer-provided notice rendered at the top of the panel content (e.g.
+   * "tools were replayed" context for replay-run traces). Omitted → no change.
+   */
+  noticeSlot?: React.ReactNode;
 }
 
 export function TraceDataPanelView({
@@ -70,6 +75,7 @@ export function TraceDataPanelView({
   traceHref,
   anchorSpanId,
   showUnavailableFeaturesMsg = true,
+  noticeSlot,
 }: TraceDataPanelViewProps) {
   const isOnTracePage = placement === 'trace-page';
   const [internalCollapsed, setInternalCollapsed] = useState(false);
@@ -185,6 +191,8 @@ export function TraceDataPanelView({
         ) : (
           <DataPanel.Content ref={contentRef}>
             {!isOnTracePage && rootSpan && <TraceKeysAndValues rootSpan={rootSpan} className="mb-6" />}
+
+            {noticeSlot && <div className="mb-6">{noticeSlot}</div>}
 
             {!isOnTracePage && (onEvaluateTrace || onSaveAsDatasetItem) && (
               <div className="mb-6 flex justify-between items-center gap-4">

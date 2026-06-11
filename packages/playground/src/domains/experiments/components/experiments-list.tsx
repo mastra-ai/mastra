@@ -6,6 +6,7 @@ import {
   StatusBadge,
 } from '@mastra/playground-ui';
 import { useMemo } from 'react';
+import { ToolReplayChip } from './tool-replay-chip';
 import { useLinkComponent } from '@/lib/framework';
 
 export interface ExperimentsListProps {
@@ -107,6 +108,7 @@ export function ExperimentsList({
               <span className="truncate">
                 {exp.targetType} {exp.targetId}
               </span>
+              <ToolReplayChip experiment={exp} />
             </EntityList.Cell>
             <EntityList.Cell>
               <StatusBadge variant={STATUS_VARIANT[status] ?? 'neutral'} withDot>
