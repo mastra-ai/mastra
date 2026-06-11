@@ -55,7 +55,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['status', 'tags'],
+      ifNotExists: ['status', 'tags', 'toolReplay'],
     });
 
     // Indexes — idempotent, safe to run on every init
@@ -124,6 +124,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
       traceId: (row.traceId as string | null) ?? null,
       status: (row.status as ExperimentResult['status']) ?? null,
       tags: row.tags ? safelyParseJSON(row.tags as string) : null,
+      toolReplay: row.toolReplay ? safelyParseJSON(row.toolReplay as string) : null,
       createdAt: ensureDate(row.createdAt as string | Date)!,
     };
   }
@@ -413,6 +414,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
           traceId: input.traceId ?? null,
           status: input.status ?? null,
           tags: input.tags !== undefined && input.tags !== null ? JSON.stringify(input.tags) : null,
+          toolReplay: input.toolReplay ?? null,
           createdAt: nowIso,
         },
       });
@@ -432,6 +434,7 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
         traceId: input.traceId ?? null,
         status: input.status ?? null,
         tags: input.tags ?? null,
+        toolReplay: input.toolReplay ?? null,
         createdAt: now,
       };
     } catch (error) {

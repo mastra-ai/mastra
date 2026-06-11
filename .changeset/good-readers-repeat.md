@@ -30,3 +30,22 @@ const replayed = await dataset.startExperiment({
 - Per-item recordings can also be pinned explicitly with `replayTraceId` on inline data items or `metadata.replayTraceId` on stored items. When using `fromExperimentId` with inline data, give items explicit `id`s.
 
 Agent targets only in this release; tools inside sub-agents are not intercepted.
+
+**Matching policy.** `toolReplay.matching` selects how recorded events match the agent's calls: `'fifo'` (default) serves per-tool events in recorded order and reports argument drift in `argMismatches`; `'strict'` serves an event only on an exact args match — anything else is a miss, for contract-style tests where deviation must fail.
+
+**Tool mocks.** `toolMocks` overrides individual tools without needing a recording, with or without `toolReplay`:
+
+```typescript
+await dataset.startExperiment({
+  targetType: 'agent',
+  targetId: 'support-agent',
+  toolMocks: {
+    weatherInfo: { output: { temp: 20 } }, // static stub
+    paymentApi: { error: { message: 'timed out' } }, // failure injection
+    createTicket: { output: { ok: true }, expect: { args: { priority: 'high' }, calledTimes: 1 } }, // assertion
+    searchDocs: async ({ input }) => fakeIndex.search(input), // function mock (code-only)
+  },
+})
+```
+
+An unsatisfied `expect` fails the item with `TOOL_MOCK_EXPECTATION_FAILED`. Mock usage and expectation outcomes appear in the divergence report (`mocks`, `expectations`), and the report itself now persists in a dedicated `toolReplay` column on experiment results instead of riding inside the stored output.
