@@ -404,9 +404,9 @@ describe('MastraAuthClerk', () => {
   });
 
   describe('SSO - getLoginUrl', () => {
-    it('should generate correct Clerk OAuth authorize URL with signed state token', () => {
+    it('should generate correct Clerk OAuth authorize URL with signed state token', async () => {
       const auth = new MastraAuthClerk(mockSSOOptions) as any;
-      const url = auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'test-state-id');
+      const url = await auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'test-state-id');
 
       expect(url).toContain('https://brief-amoeba-71.clerk.accounts.dev/oauth/authorize');
       expect(url).toContain('client_id=test-oauth-client-id');
@@ -423,7 +423,7 @@ describe('MastraAuthClerk', () => {
     it('should produce signed state that round-trips through handleCallback', async () => {
       const auth = new MastraAuthClerk(mockSSOOptions) as any;
       const redirectUri = 'http://localhost:4111/api/auth/sso/callback';
-      const url = auth.getLoginUrl(redirectUri, 'test-uuid|%2Fstudio');
+      const url = await auth.getLoginUrl(redirectUri, 'test-uuid|%2Fstudio');
       const signedState = new URL(url).searchParams.get('state')!;
 
       // Mock token exchange
@@ -476,7 +476,7 @@ describe('MastraAuthClerk', () => {
         const auth = new MastraAuthClerk(mockSSOOptions) as any;
 
         // Generate login URL which returns signed state token
-        const loginUrl = auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'expired-state');
+        const loginUrl = await auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'expired-state');
         const signedState = new URL(loginUrl).searchParams.get('state')!;
 
         // Advance time past state expiry (10 minutes + 1ms)
@@ -492,7 +492,7 @@ describe('MastraAuthClerk', () => {
       const auth = new MastraAuthClerk(mockSSOOptions) as any;
 
       // Generate login URL which returns signed state token
-      const loginUrl = auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'valid-state');
+      const loginUrl = await auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'valid-state');
       const signedState = new URL(loginUrl).searchParams.get('state')!;
 
       // Mock token exchange response
@@ -563,7 +563,7 @@ describe('MastraAuthClerk', () => {
       const auth = new MastraAuthClerk(mockSSOOptions) as any;
 
       // Generate login URL which returns signed state token
-      const loginUrl = auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'state-no-idtoken');
+      const loginUrl = await auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'state-no-idtoken');
       const signedState = new URL(loginUrl).searchParams.get('state')!;
 
       // Token exchange - no id_token
@@ -609,7 +609,7 @@ describe('MastraAuthClerk', () => {
       const auth = new MastraAuthClerk(mockSSOOptions) as any;
 
       // Generate login URL which returns signed state token
-      const loginUrl = auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'state-fail');
+      const loginUrl = await auth.getLoginUrl('http://localhost:4111/api/auth/sso/callback', 'state-fail');
       const signedState = new URL(loginUrl).searchParams.get('state')!;
 
       mockFetch.mockResolvedValueOnce({

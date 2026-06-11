@@ -92,37 +92,26 @@ interface StatePayload {
 }
 
 /**
- * Simple synchronous HMAC-like signature for state tokens.
- * Uses FNV-1a inspired hash — good enough for short-lived CSRF tokens.
+ * Sign data using HMAC-SHA256 (Web Crypto API).
  * Returns base64url-encoded signature.
  */
-function hmacSign(data: string, secret: string): string {
+async function hmacSign(data: string, secret: string): Promise<string> {
   const encoder = new TextEncoder();
-  const keyBytes = encoder.encode(secret);
+  const keyData = encoder.encode(secret);
   const dataBytes = encoder.encode(data);
 
-  // Simple HMAC: hash(key + data + key)
-  const combined = new Uint8Array(keyBytes.length + dataBytes.length + keyBytes.length);
-  combined.set(keyBytes);
-  combined.set(dataBytes, keyBytes.length);
-  combined.set(keyBytes, keyBytes.length + dataBytes.length);
+  // Import the secret key for HMAC-SHA256
+  const cryptoKey = await crypto.subtle.importKey('raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
 
-  // FNV-1a inspired hash with two accumulators for 64-bit output
-  let h1 = 0x811c9dc5;
-  let h2 = 0x1000193;
-  for (let i = 0; i < combined.length; i++) {
-    h1 ^= combined[i]!;
-    h1 = Math.imul(h1, 0x01000193);
-    h2 ^= combined[i]!;
-    h2 = Math.imul(h2, 0x85ebca6b);
-  }
+  // Sign the data
+  const signature = await crypto.subtle.sign('HMAC', cryptoKey, dataBytes);
 
   // Convert to base64url
-  const sigBytes = new Uint8Array(8);
-  const view = new DataView(sigBytes.buffer);
-  view.setUint32(0, h1 >>> 0);
-  view.setUint32(4, h2 >>> 0);
-  return btoa(String.fromCharCode(...sigBytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  const sigBytes = new Uint8Array(signature);
+  return btoa(String.fromCharCode(...sigBytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
 }
 
 /**
@@ -141,14 +130,14 @@ function timingSafeEqual(a: string, b: string): boolean {
  * Create a signed state token for OAuth CSRF protection (stateless).
  * Format: base64(payload).base64url(signature)
  */
-function createStateToken(originalState: string, redirectUri: string, secret: string): string {
+async function createStateToken(originalState: string, redirectUri: string, secret: string): Promise<string> {
   const payload: StatePayload = {
     s: originalState,
     r: redirectUri,
     e: Date.now() + STATE_TOKEN_EXPIRY_MS,
   };
   const payloadB64 = btoa(JSON.stringify(payload));
-  const signature = hmacSign(payloadB64, secret);
+  const signature = await hmacSign(payloadB64, secret);
   return `${payloadB64}.${signature}`;
 }
 
@@ -156,14 +145,17 @@ function createStateToken(originalState: string, redirectUri: string, secret: st
  * Verify and decode a state token.
  * Returns the original state and redirectUri if valid and not expired.
  */
-function verifyStateToken(stateToken: string, secret: string): { originalState: string; redirectUri: string } {
+async function verifyStateToken(
+  stateToken: string,
+  secret: string,
+): Promise<{ originalState: string; redirectUri: string }> {
   const parts = stateToken.split('.');
   if (parts.length !== 2) {
     throw new Error('Invalid state token format');
   }
 
   const [payloadB64, signature] = parts;
-  const expectedSig = hmacSign(payloadB64!, secret);
+  const expectedSig = await hmacSign(payloadB64!, secret);
   if (!timingSafeEqual(signature!, expectedSig)) {
     throw new Error('Invalid state token signature');
   }
@@ -530,7 +522,10 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
   private _attachSSOProvider() {
     const self = this;
 
-    (this as unknown as ISSOProvider<EEUser>).getLoginUrl = function (redirectUri: string, state: string): string {
+    (this as unknown as ISSOProvider<EEUser>).getLoginUrl = async function (
+      redirectUri: string,
+      state: string,
+    ): Promise<string> {
       // Create signed state token containing redirectUri and expiry
       // This is stateless — works in serverless and load-balanced environments
       const actualRedirectUri = redirectUri ?? self._redirectUri;
@@ -538,7 +533,7 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
         throw new Error('Redirect URI is required for SSO login');
       }
 
-      const signedState = createStateToken(state, actualRedirectUri, self.cookiePassword);
+      const signedState = await createStateToken(state, actualRedirectUri, self.cookiePassword);
 
       const params = new URLSearchParams({
         client_id: self.oauthClientId!,
@@ -556,7 +551,7 @@ export class MastraAuthClerk extends MastraAuthProvider<ClerkUser> implements IU
       stateToken: string,
     ): Promise<SSOCallbackResult<EEUser>> {
       // Verify and decode the signed state token (throws if invalid/expired)
-      const { redirectUri } = verifyStateToken(stateToken, self.cookiePassword);
+      const { redirectUri } = await verifyStateToken(stateToken, self.cookiePassword);
 
       // Exchange code for tokens using client_secret (confidential client)
       const tokenResponse = await fetch(`${self.fapiUrl}/oauth/token`, {
