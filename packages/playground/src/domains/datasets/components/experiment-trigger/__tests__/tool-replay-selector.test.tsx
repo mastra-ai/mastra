@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -51,7 +51,7 @@ describe('getEligibleReplaySources', () => {
 describe('ToolReplaySelector', () => {
   afterEach(cleanup);
 
-  it('shows the on-miss choice and source picker when enabled', async () => {
+  it('shows the safe-default reassurance and keeps passthrough behind the Advanced disclosure', async () => {
     server.use(
       http.get(`${BASE_URL}/api/datasets/dataset-1/experiments`, () =>
         HttpResponse.json(listExperimentsResponse([liveExperiment, replayExperiment])),
@@ -61,8 +61,13 @@ describe('ToolReplaySelector', () => {
     renderWithProviders(<ToolReplaySelector {...baseProps} enabled onEnabledChange={vi.fn()} />);
 
     await waitFor(() => expect(screen.getByText('Recording source')).toBeDefined());
-    expect(screen.getByText('Fail the item (safe default)')).toBeDefined();
-    expect(screen.getByText('Run the live tool (passthrough)')).toBeDefined();
+    expect(screen.getByText(/the item stops safely — nothing real ever runs/)).toBeDefined();
+    // The dangerous passthrough option is hidden until Advanced is opened.
+    expect(screen.queryByText('Allow live execution for unrecorded calls (passthrough)')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }));
+
+    expect(screen.getByText('Allow live execution for unrecorded calls (passthrough)')).toBeDefined();
   });
 
   it('warns about live execution when passthrough is selected', async () => {
@@ -74,7 +79,9 @@ describe('ToolReplaySelector', () => {
 
     renderWithProviders(<ToolReplaySelector {...baseProps} enabled onEnabledChange={vi.fn()} onMiss="passthrough" />);
 
+    // Advanced auto-opens for an active passthrough, so the warning is immediately visible.
     await waitFor(() => expect(screen.getByText(/Unmatched calls will execute against real systems/)).toBeDefined());
+    expect(screen.getByText('Allow live execution for unrecorded calls (passthrough)')).toBeDefined();
   });
 
   it('switches the helper text for the item-recordings source', async () => {
@@ -85,12 +92,7 @@ describe('ToolReplaySelector', () => {
     );
 
     renderWithProviders(
-      <ToolReplaySelector
-        {...baseProps}
-        enabled
-        onEnabledChange={vi.fn()}
-        fromExperimentId={ITEM_RECORDINGS_SOURCE}
-      />,
+      <ToolReplaySelector {...baseProps} enabled onEnabledChange={vi.fn()} fromExperimentId={ITEM_RECORDINGS_SOURCE} />,
     );
 
     await waitFor(() => expect(screen.getByText(/Each item replays the trace it was saved from/)).toBeDefined());

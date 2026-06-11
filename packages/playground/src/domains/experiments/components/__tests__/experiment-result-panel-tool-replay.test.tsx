@@ -72,4 +72,33 @@ describe('ExperimentResultPanel tool replay', () => {
     // The user-owned key stays visible in the raw output.
     expect(screen.getByText(/oops-user-data/)).toBeDefined();
   });
+
+  it('shows the original and replay outputs side by side when the original result is provided', () => {
+    const originalResult = { ...replayResult, id: 'orig-1', output: { text: 'I will refund you right away.' } };
+    render(
+      <ExperimentResultPanel
+        result={replayResult}
+        onClose={vi.fn()}
+        isReplayExperiment
+        originalResult={originalResult}
+      />,
+    );
+
+    expect(screen.getByText('Output — original run')).toBeDefined();
+    expect(screen.getByText('Output — this replay')).toBeDefined();
+    // Both answers are visible at once: the source run's text and the replay's text.
+    expect(screen.getByText(/I will refund you right away\./)).toBeDefined();
+    expect(screen.getByText(/Please send a photo first\./)).toBeDefined();
+    expect(screen.getByText(/Same item, same recorded world/)).toBeDefined();
+    // The single Output section is replaced by the comparison.
+    expect(screen.queryByText('Output')).toBeNull();
+  });
+
+  it('keeps the single Output section when no original result is available', () => {
+    render(<ExperimentResultPanel result={replayResult} onClose={vi.fn()} isReplayExperiment />);
+
+    expect(screen.getByText('Output')).toBeDefined();
+    expect(screen.queryByText('Output — original run')).toBeNull();
+    expect(screen.queryByText('Output — this replay')).toBeNull();
+  });
 });

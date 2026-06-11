@@ -24,6 +24,7 @@ import { useState, useMemo, useCallback } from 'react';
 
 import { useExperimentTrace } from '../hooks/use-experiment-trace';
 import { useReplayAggregates } from '../hooks/use-replay-aggregates';
+import { useSourceExperimentResults } from '../hooks/use-source-experiment-results';
 import { getReplayMarker, getToolReplayReport } from '../utils/tool-replay';
 import { ExperimentReplaySummary } from './experiment-replay-summary';
 import { ExperimentResultPanel } from './experiment-result-panel';
@@ -161,6 +162,14 @@ export function ExperimentPageTabs({
     enabled: isReplay,
     experimentStatus,
   });
+  // Original per-item results from the replay's source experiment, keyed by
+  // itemId — powers the original-vs-replay output comparison in the panel.
+  const { data: sourceResults } = useSourceExperimentResults({
+    datasetId,
+    sourceExperimentId: replayMarker?.fromExperimentId,
+    enabled: isReplay && Boolean(replayMarker?.fromExperimentId) && Boolean(featuredResult),
+  });
+  const originalResult = featuredResult ? (sourceResults?.get(featuredResult.itemId) ?? null) : null;
 
   const scorerIds = useMemo(() => {
     if (!scoresByExperimentId) return [];
@@ -313,6 +322,7 @@ export function ExperimentPageTabs({
         {replayMarker && (
           <ExperimentReplaySummary
             marker={replayMarker}
+            experimentId={experimentId}
             datasetId={experiment?.datasetId ?? datasetId}
             aggregates={replayAggregates}
             isLoading={isReplayAggregatesLoading}
@@ -413,6 +423,7 @@ export function ExperimentPageTabs({
                 isReplayExperiment={isReplay}
                 onShowSourceTrace={showSourceTrace}
                 sourceTraceSpans={sourceTraceData?.spans}
+                originalResult={originalResult}
               />
 
               {featuredScore && (

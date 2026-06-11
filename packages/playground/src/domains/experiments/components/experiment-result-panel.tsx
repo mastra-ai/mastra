@@ -14,6 +14,7 @@ import {
   TargetIcon,
 } from 'lucide-react';
 import { useState } from 'react';
+import type { ReplayTapeSpan } from '../utils/tool-replay';
 import { getToolReplayErrorLabel, getToolReplayReport, stripToolReplayFromOutput } from '../utils/tool-replay';
 import { ExperimentResultReplaySection } from './experiment-result-replay-section';
 
@@ -37,7 +38,9 @@ export type ExperimentResultPanelProps = {
   isReplayExperiment?: boolean;
   onShowSourceTrace?: (traceId: string, spanId?: string) => void;
   /** Light spans of the source trace — enables the FIFO tape view. */
-  sourceTraceSpans?: import('../utils/tool-replay').ReplayTapeSpan[];
+  sourceTraceSpans?: ReplayTapeSpan[];
+  /** Same item's result from the replay's source experiment — enables the original-vs-replay output comparison. */
+  originalResult?: DatasetExperimentResult | null;
 };
 
 export function ExperimentResultPanel({
@@ -56,6 +59,7 @@ export function ExperimentResultPanel({
   isReplayExperiment,
   onShowSourceTrace,
   sourceTraceSpans,
+  originalResult,
 }: ExperimentResultPanelProps) {
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
@@ -69,6 +73,9 @@ export function ExperimentResultPanel({
   // The report is rendered in its own section — keep the Output view clean.
   const outputStr = formatValue(replayReport ? stripToolReplayFromOutput(result?.output) : result?.output);
   const groundTruthStr = formatValue(result?.groundTruth);
+  // Side-by-side original-vs-replay output: only when this is a replay result
+  // (report present) AND the matching source-experiment result is available.
+  const showOriginalComparison = Boolean(isReplayExperiment && replayReport && originalResult);
   const canFlag = onFlagForReview && result.status !== 'needs-review' && result.status !== 'complete';
   const tags = Array.isArray(result.tags) ? result.tags : [];
 
@@ -205,7 +212,23 @@ export function ExperimentResultPanel({
 
           <div className="grid gap-3">
             <DataPanel.CodeSection title="Input" icon={<FileCodeIcon />} codeStr={inputStr} />
-            <DataPanel.CodeSection title="Output" icon={<FileOutputIcon />} codeStr={outputStr} />
+            {showOriginalComparison && originalResult ? (
+              <div className="grid gap-2">
+                <p className="text-ui-sm text-neutral3">
+                  Same item, same recorded world — any difference below comes from the agent change.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <DataPanel.CodeSection
+                    title="Output — original run"
+                    icon={<FileOutputIcon />}
+                    codeStr={formatValue(stripToolReplayFromOutput(originalResult.output))}
+                  />
+                  <DataPanel.CodeSection title="Output — this replay" icon={<FileOutputIcon />} codeStr={outputStr} />
+                </div>
+              </div>
+            ) : (
+              <DataPanel.CodeSection title="Output" icon={<FileOutputIcon />} codeStr={outputStr} />
+            )}
             <DataPanel.CodeSection title="Ground Truth" icon={<TargetIcon />} codeStr={groundTruthStr} />
           </div>
         </DataPanel.Content>

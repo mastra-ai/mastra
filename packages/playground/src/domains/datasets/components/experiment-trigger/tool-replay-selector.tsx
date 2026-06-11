@@ -1,7 +1,8 @@
 import type { DatasetExperiment, ToolReplayOnMiss } from '@mastra/client-js';
-import { Combobox, Label, Notice, RadioGroup, RadioGroupItem, Switch } from '@mastra/playground-ui';
+import { Button, Combobox, Icon, Label, Notice, Switch } from '@mastra/playground-ui';
 import { format } from 'date-fns';
-import { useMemo } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useDatasetExperiments } from '../../hooks/use-dataset-experiments';
 import { isReplayExperiment } from '@/domains/experiments/utils/tool-replay';
 
@@ -50,6 +51,12 @@ export function ToolReplaySelector({
   container,
 }: ToolReplaySelectorProps) {
   const { data, isLoading } = useDatasetExperiments(datasetId, { page: 0, perPage: 100 });
+
+  // Passthrough is the dangerous state: if it arrives already enabled, the
+  // Advanced disclosure starts open — and stays open while active — so the
+  // live-execution switch and its warning are never hidden.
+  const [advancedOpen, setAdvancedOpen] = useState(onMiss === 'passthrough');
+  const showAdvanced = advancedOpen || onMiss === 'passthrough';
 
   const sourceOptions = useMemo(() => {
     const eligible = getEligibleReplaySources(data?.experiments ?? []);
@@ -111,37 +118,50 @@ export function ToolReplaySelector({
             </p>
           </div>
 
-          <div className="grid gap-2">
-            <Label>When a call has no recorded event</Label>
-            <RadioGroup
-              value={onMiss}
-              onValueChange={value => onMissChange(value === 'passthrough' ? 'passthrough' : 'error')}
-              disabled={disabled}
-              className="grid gap-2"
-            >
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="error" id="tool-replay-on-miss-error" />
-                <Label htmlFor="tool-replay-on-miss-error" className="font-normal">
-                  Fail the item (safe default)
-                </Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <RadioGroupItem value="passthrough" id="tool-replay-on-miss-passthrough" />
-                <Label htmlFor="tool-replay-on-miss-passthrough" className="font-normal">
-                  Run the live tool (passthrough)
-                </Label>
-              </div>
-            </RadioGroup>
-          </div>
+          <p className="text-ui-sm text-neutral3">
+            If the agent makes a call that isn&apos;t on the recording, the item stops safely — nothing real ever runs.
+          </p>
 
-          {onMiss === 'passthrough' && (
-            <Notice variant="warning" title="Live execution on miss">
-              <Notice.Message>
-                Unmatched calls will execute against real systems, including writes. Every passthrough is recorded in
-                the divergence report.
-              </Notice.Message>
-            </Notice>
-          )}
+          <div className="grid gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="justify-self-start"
+              aria-expanded={showAdvanced}
+              onClick={() => setAdvancedOpen(!showAdvanced)}
+              disabled={disabled}
+            >
+              <Icon size="sm">{showAdvanced ? <ChevronDown /> : <ChevronRight />}</Icon>
+              Advanced
+            </Button>
+
+            {showAdvanced && (
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="tool-replay-on-miss-passthrough" className="font-normal">
+                    Allow live execution for unrecorded calls (passthrough)
+                  </Label>
+                  <Switch
+                    id="tool-replay-on-miss-passthrough"
+                    checked={onMiss === 'passthrough'}
+                    onCheckedChange={checked => onMissChange(checked ? 'passthrough' : 'error')}
+                    disabled={disabled}
+                    aria-label="Allow live execution for unrecorded calls (passthrough)"
+                  />
+                </div>
+
+                {onMiss === 'passthrough' && (
+                  <Notice variant="warning" title="Live execution on miss">
+                    <Notice.Message>
+                      Unmatched calls will execute against real systems, including writes. Every passthrough is recorded
+                      in the divergence report.
+                    </Notice.Message>
+                  </Notice>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

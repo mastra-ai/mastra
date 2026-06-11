@@ -1,12 +1,14 @@
 import type { ExperimentStatus } from '@mastra/core/storage';
-import { Chip, Spinner, Txt } from '@mastra/playground-ui';
-import { HistoryIcon } from 'lucide-react';
+import { Button, Chip, Spinner, Txt } from '@mastra/playground-ui';
+import { GitCompareArrows, HistoryIcon } from 'lucide-react';
 import type { ReplayAggregates } from '../hooks/use-replay-aggregates';
 import type { ToolReplayMarker } from '../utils/tool-replay';
 import { useLinkComponent } from '@/lib/framework';
 
 export type ExperimentReplaySummaryProps = {
   marker: ToolReplayMarker;
+  /** The replay experiment's own id — contender side of "Compare with source". */
+  experimentId: string;
   datasetId?: string | null;
   aggregates?: ReplayAggregates;
   isLoading: boolean;
@@ -20,6 +22,7 @@ export type ExperimentReplaySummaryProps = {
  */
 export function ExperimentReplaySummary({
   marker,
+  experimentId,
   datasetId,
   aggregates,
   isLoading,
@@ -33,6 +36,14 @@ export function ExperimentReplaySummary({
       ? paths.datasetExperimentLink(datasetId, marker.fromExperimentId)
       : paths.experimentLink(marker.fromExperimentId)
     : null;
+
+  // Side-by-side comparison view (CompareDatasetExperimentsPage) with the
+  // source experiment as baseline and this replay as contender. The route is
+  // dataset-scoped, so without a datasetId there is nothing to link to.
+  const compareHref =
+    marker.fromExperimentId && datasetId
+      ? `/datasets/${datasetId}/experiments?baseline=${marker.fromExperimentId}&contender=${experimentId}`
+      : null;
 
   return (
     <div className="rounded-lg border border-border1 p-4 mb-5 grid gap-3">
@@ -54,6 +65,12 @@ export function ExperimentReplaySummary({
         <Txt variant="ui-sm" className="text-neutral3">
           · on miss: {marker.onMiss}
         </Txt>
+        {compareHref && (
+          <Button as={LinkComponent} href={compareHref} size="sm" className="ml-auto">
+            <GitCompareArrows />
+            Compare with source
+          </Button>
+        )}
       </div>
 
       {isLoading && !aggregates ? (
