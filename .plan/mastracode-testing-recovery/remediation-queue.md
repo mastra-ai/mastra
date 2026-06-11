@@ -22,8 +22,9 @@
 ### 2. Notification and state signals beyond first render
 
 - Rows: `Chat: Notification inbox signals`, `Chat: Processor state signals`.
+- Completed: `notification-inbox-tool-flow` sends a public medium-priority notification signal during an active run, renders the active summary card, then uses AIMock to call `notification_inbox read` and asserts the delivered details render in the same TUI thread.
 - Proposed scenarios:
-  - `notification-inbox-tool-flow`: send a public notification signal during active run, then use AIMock to call `notification_inbox` actions (`list`, `read`, `markSeen`) and assert rendered summary/details and state transition.
+  - `notification-inbox-crud-flow`: use AIMock to call `notification_inbox list`, `markSeen`, `dismiss`, `archive`, and `search` against multiple deterministic records.
   - `notification-reload`: seed notification signal/message history and assert summary/provenance survives `/threads` reload.
   - `state-signal-reload-pruning`: public `sendStateSignal()` plus seeded/reloaded long-session state to verify snapshot/delta projection and pruning behavior.
 - Fixture/data needs: sanitized notification/state-signal DB rows; AIMock `notification_inbox` tool-call fixtures.

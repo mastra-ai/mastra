@@ -73,11 +73,12 @@
 - `mastracode/src/agents/extra-tools.test.ts` — tool registration, category, tool-guidance inclusion, and Mastra Code wrapper coverage proving `notification_inbox read` reaches the notifications storage domain, delivers unread details, and marks records seen for the current thread.
 - `mastracode/src/tui/__tests__/render-messages.test.ts` — loaded-history notification and summary rendering.
 - `mastracode/src/tui/handlers/__tests__/message.test.ts` — streamed notification and summary rendering.
-- `mastracode/scripts/mc-e2e/scenarios/notification-signal-rendering.ts` — checked-in PTY e2e coverage for a custom entrypoint that emits `agent.sendNotificationSignal()` into the active TUI thread, renders the `notification from github` card with priority/kind/status and alert body, and verifies the captured AIMock request body includes the notification contents.
+- `mastracode/scripts/mc-e2e/scenarios/notification-signal-rendering.ts` — checked-in PTY e2e coverage for a custom entrypoint that emits urgent `agent.sendNotificationSignal()` into the active TUI thread, renders the `notification from github` card with priority/kind/status and alert body, and verifies the captured AIMock request body includes the notification contents.
+- `mastracode/scripts/mc-e2e/scenarios/notification-inbox-tool-flow.ts` — checked-in PTY e2e coverage for active medium-priority summary delivery followed by an AIMock-driven `notification_inbox read` tool call; asserts the summary prompt, delivered detail card, and read-result follow-up through the real TUI.
 
 ## Missing tests
 
-- End-to-end Mastra Code run where a summarized notification appears, the model calls `notification_inbox read`, and the full notification is delivered into the same thread.
+- End-to-end Mastra Code CRUD flow for `notification_inbox list`, `markSeen`, `dismiss`, `archive`, and `search` against multiple records.
 - Persistence/reload regression covering pending, delivered, seen, dismissed, archived, and coalesced notification records across a real storage backend.
 
 ## Known risks / regressions

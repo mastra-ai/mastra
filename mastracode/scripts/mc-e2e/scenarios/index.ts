@@ -15,6 +15,7 @@ import { harnessApiConfigScenario } from './harness-api-config.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { mcpServerConfigScenario } from './mcp-server-config.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
+import { notificationInboxToolFlowScenario } from './notification-inbox-tool-flow.js';
 import { notificationSignalRenderingScenario } from './notification-signal-rendering.js';
 import { omSettingsScenario } from './om-settings.js';
 import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
@@ -73,6 +74,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'integration-commands': integrationCommandsScenario,
   'modal-and-shell': modalAndShellScenario,
   'mcp-server-config': mcpServerConfigScenario,
+  'notification-inbox-tool-flow': notificationInboxToolFlowScenario,
   'notification-signal-rendering': notificationSignalRenderingScenario,
   'om-settings': omSettingsScenario,
   'openai-strict-schema': openaiStrictSchemaScenario,
