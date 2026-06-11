@@ -33,6 +33,7 @@ import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { quietSettingsScenario } from './quiet-settings.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
+import { setupNestedModelSelectorScenario } from './setup-nested-model-selector.js';
 import { startupScenario } from './startup.js';
 import { stateCommandsScenario } from './state-commands.js';
 import { stateSignalReloadScenario } from './state-signal-reload.js';
@@ -100,6 +101,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'state-commands': stateCommandsScenario,
   'state-signal-reload': stateSignalReloadScenario,
   'state-signal-rendering': stateSignalRenderingScenario,
+  'setup-nested-model-selector': setupNestedModelSelectorScenario,
   'storage-settings': storageSettingsScenario,
   'stream-error-retry': streamErrorRetryScenario,
   'streaming-tool-args': streamingToolArgsScenario,

@@ -4611,3 +4611,14 @@ Break validations proved the scenario fails if the `Use as /goal` option label c
   - Propagating `No` from the queued access prompt despite selecting `Yes` rendered `Access denied` and failed the access-granted assertion.
 - Clean focused verification: `pnpm --filter ./mastracode run e2e:test prompt-queue-interleave`.
 - Tracker update: `TUI: Interactive prompts and access requests` is now `validated`. It has checked-in real PTY coverage for masked prompt input, request_access approval/same-turn external reads, ask_user multiline/custom/multi-select prompt shapes, and queued ask_user/request_access interleaving. Remaining long-answer/dialog/headless breadth is documented as deferred lower-priority/non-TUI breadth on the feature card.
+
+## 2026-06-11 — setup nested model selector remediation
+
+- Selected `TUI: Configuration modal overlays` as the next high-priority unfinished row after prompt queue interleaving.
+- Added `setup-nested-model-selector` TUI e2e scenario. The scenario opens `/setup`, continues past the welcome step, skips auth, chooses the custom model pack, enters a deterministic custom pack name, verifies the nested `ModelSelectorComponent` overlay appears for plan mode, cancels it with Escape, and asserts the parent setup overlay resumes at Observational Memory while the selector is gone.
+- Break validations proved the scenario catches regressions:
+  - Removing `hideOverlay()` from the nested model selector cancel callback left the selector stuck and timed out waiting for the parent setup overlay.
+  - Skipping the parent `omPack` render after custom-pack model selector cancel left setup stalled after the collapsed model-pack line and timed out waiting for Observational Memory.
+  - Disabling the model selector Escape cancel callback left the selector visible and failed the same parent-overlay recovery assertion.
+- Clean focused verification: `pnpm --filter ./mastracode run e2e:test setup-nested-model-selector`.
+- Tracker update: `TUI: Configuration modal overlays` is now `validated`. It has checked-in real PTY coverage for simple `/sandbox` overlay open/Escape and nested `/setup` model-selector Escape/back navigation. Remaining visual snapshot contrast and less common config command breadth are documented as follow-up breadth.

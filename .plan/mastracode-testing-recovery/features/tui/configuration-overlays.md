@@ -65,12 +65,13 @@
 - `mastracode/src/tui/__tests__/modal-question.test.ts` — `askModalQuestion()` shows/focuses the modal, forwards overlay options, hides the overlay on submit/cancel, and resolves submitted answers or `null` on cancel.
 - Command tests that mock `askModalQuestion()` / `showModalOverlay()` (for example `commands/__tests__/github.test.ts`, `goal.test.ts`, `memory-gateway.test.ts`) — prove modal helpers are invoked for focused command flows.
 - `mastracode/src/tui/__tests__/mastra-tui-quiet-mode.test.ts` — quiet-mode rollout prompt uses `askModalQuestion()`.
-- `mastracode/scripts/mc-e2e/scenarios/modal-and-shell.ts` — partial real PTY coverage: opens `/sandbox`, asserts the modal question/action text, cancels with Escape, and proves the overlay returns focus to the normal editor.
+- `mastracode/scripts/mc-e2e/scenarios/modal-and-shell.ts` — real PTY coverage: opens `/sandbox`, asserts the modal question/action text, cancels with Escape, and proves the overlay returns focus to the normal editor.
+- `mastracode/scripts/mc-e2e/scenarios/setup-nested-model-selector.ts` — real PTY coverage: opens `/setup`, chooses the custom model pack, enters a pack name, opens the nested model selector, cancels with Escape, and proves the parent setup overlay resumes while the selector is gone.
 
 ## Missing tests
 
-- Broader keyboard/PTY regression covering `/setup` → nested model selector → Escape/back navigation inside the overlay; `/sandbox` open/Escape coverage exists but does not cover nested flows.
 - Snapshot/visual regression for neutral tool pending/success backgrounds across dark/light themes.
+- Additional command-specific modal breadth for the less common config commands (`/memory-gateway`, `/observability`, `/subagents`) remains follow-up.
 
 ## Known risks / regressions
 
