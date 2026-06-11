@@ -3,4 +3,4 @@
 '@mastra/core': patch
 ---
 
-Fixed createTool execute return type to use pre-transform output schema shape when using Zod .transform(), instead of incorrectly requiring the post-transform type
+Fixed `createTool` `execute` callback to accept raw return values when using Zod `.transform()` in output schemas, eliminating type errors that previously required `as any` workarounds.
