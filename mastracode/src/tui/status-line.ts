@@ -29,19 +29,16 @@ function formatGithubPrLabel(
   subscription: GithubPrSubscriptionBadge,
 ): { plain: string; styled: string } {
   const plain = `PR#${subscription.prNumber}`;
-  const threadId = state.harness.getCurrentThreadId?.();
-  const resourceId = state.harness.getResourceId?.();
-  const polling = !!threadId && !!resourceId && state.options.githubSignals?.isPollingThread({ threadId, resourceId });
   const label = plain;
   const color = subscription.lastNotificationPriority === 'high' ? mastra.orange : extendedColors.skyBlue;
-  if (polling && state.gradientAnimator?.isRunning()) {
+  if (state.githubPrPollingActive && state.githubPrGradientAnimator?.isRunning()) {
     return {
       plain: label,
       styled: applyGradientSweep(
         label,
-        state.gradientAnimator.getOffset(),
+        state.githubPrGradientAnimator.getOffset(),
         color,
-        state.gradientAnimator.getFadeProgress(),
+        state.githubPrGradientAnimator.getFadeProgress(),
       ),
     };
   }
@@ -183,7 +180,7 @@ export function updateStatusLine(state: TUIState): void {
   const queuedCount = state.pendingQueuedActions.length + state.harness.getFollowUpCount();
   const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
   const goalState = state.goalManager?.getGoal();
-  const goalDuration = goalState?.status === 'active' ? formatGoalDuration(goalState) : null;
+  const goalDuration = !isJudging && goalState?.status === 'active' ? formatGoalDuration(goalState) : null;
   const goalLabel = goalDuration ? `pursuing goal (${goalDuration})` : null;
   const shortGoalLabel = goalDuration ? `goal (${goalDuration})` : null;
   const activeGithubPr = state.activeGithubPrSubscriptions?.[0];
@@ -278,6 +275,7 @@ export function updateStatusLine(state: TUIState): void {
     memCompact?: 'percentOnly' | 'noBuffer' | 'full';
     showDir: boolean;
     dir?: string | null;
+    allowDirTruncation?: boolean;
     badge?: 'full' | 'short';
     showQueue?: boolean;
     compactGoal?: boolean;
@@ -313,8 +311,8 @@ export function updateStatusLine(state: TUIState): void {
             )
         : undefined;
     const omProg = state.harness.getDisplayState().omProgress;
-    const obs = formatObservationStatus(omProg, opts.memCompact, msgLabelStyler);
-    const ref = formatReflectionStatus(omProg, opts.memCompact, obsLabelStyler);
+    const obs = isJudging ? '' : formatObservationStatus(omProg, opts.memCompact, msgLabelStyler);
+    const ref = isJudging ? '' : formatReflectionStatus(omProg, opts.memCompact, obsLabelStyler);
     if (obs) {
       parts.push({ plain: obs, styled: obs });
     }
@@ -346,6 +344,9 @@ export function updateStatusLine(state: TUIState): void {
       const availableForDir = termWidth - nonDirWidth - SEP.length - 1; // -1 buffer for ambiguous-width chars
       const dirWidth = visibleWidth(dirPart.plain);
       const MIN_TRUNCATED_DIR = 10; // don't show a tiny sliver
+      if (dirWidth > availableForDir && opts.allowDirTruncation === false) {
+        return null;
+      }
       if (dirWidth > availableForDir && availableForDir >= MIN_TRUNCATED_DIR) {
         const reservedPrefix = githubPrLabel ? `${githubPrLabel.plain} ` : '';
         const availableForText = availableForDir - visibleWidth(reservedPrefix);
@@ -402,9 +403,23 @@ export function updateStatusLine(state: TUIState): void {
   // Priority: token fractions + buffer > labels > provider > badge > buffer > fractions
   const result =
     // 1. Full badge + full model + long labels + queue count + full dir
-    buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false, dir: dirFull, showQueue: true }) ??
+    buildLine({
+      modelId: fullModelId,
+      memCompact: 'full',
+      showDir: false,
+      dir: dirFull,
+      allowDirTruncation: false,
+      showQueue: true,
+    }) ??
     // 2. Full badge + full model + queue count + branch only (drop path)
-    buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false, dir: dirBranchOnly, showQueue: true }) ??
+    buildLine({
+      modelId: fullModelId,
+      memCompact: 'full',
+      showDir: false,
+      dir: dirBranchOnly,
+      allowDirTruncation: false,
+      showQueue: true,
+    }) ??
     // 3. Full badge + full model + queue count + abbreviated branch
     buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false, dir: dirBranchShort, showQueue: true }) ??
     // 4. Drop directory entirely

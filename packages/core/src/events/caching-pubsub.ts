@@ -29,6 +29,15 @@ export interface CachingPubSubOptions {
  * This enables resumable streams - clients can disconnect and reconnect
  * without missing events.
  *
+ * ## Batching
+ *
+ * `CachingPubSub` is transparent to `options.batch`: `subscribe()` forwards
+ * the option to the inner PubSub, and `supportsNativeBatching` mirrors the
+ * inner's value. Wrapping a non-native inner with `{ batch: {...} }` results
+ * in unbatched delivery — use an inner that returns
+ * `supportsNativeBatching === true` (e.g. `EventEmitterPubSub`) if you need
+ * batched delivery.
+ *
  * @example
  * ```typescript
  * import { EventEmitterPubSub, CachingPubSub } from '@mastra/core/events';
@@ -57,6 +66,10 @@ export class CachingPubSub extends PubSub {
     super();
     this.keyPrefix = options.keyPrefix ?? 'pubsub:';
     this.logger = options.logger;
+  }
+
+  get supportsNativeBatching(): boolean {
+    return this.inner.supportsNativeBatching;
   }
 
   /**
@@ -91,11 +104,15 @@ export class CachingPubSub extends PubSub {
    * Uses atomic increment for index assignment to prevent race conditions
    * when multiple events are published concurrently.
    */
-  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt' | 'index'>): Promise<void> {
+  async publish(
+    topic: string,
+    event: Omit<Event, 'id' | 'createdAt' | 'index'>,
+    options?: { localOnly?: boolean },
+  ): Promise<void> {
     const cacheKey = this.getCacheKey(topic);
     const counterKey = this.getCounterKey(topic);
 
-    let index = 0;
+    let index: number | undefined;
     let indexFailed = false;
     try {
       // Atomically get next index (increment returns value after incrementing, so subtract 1 for 0-based index)
@@ -105,11 +122,14 @@ export class CachingPubSub extends PubSub {
       indexFailed = true;
     }
 
+    // On counter failure leave `index` undefined rather than defaulting to 0:
+    // downstream consumers that key off `index` (e.g. replay-from-offset)
+    // would otherwise see colliding indices across failed publishes.
     const fullEvent: Event = {
       ...event,
       id: crypto.randomUUID(),
       createdAt: new Date(),
-      index,
+      ...(index !== undefined ? { index } : {}),
     };
 
     if (!indexFailed) {
@@ -122,7 +142,7 @@ export class CachingPubSub extends PubSub {
     }
 
     // Always publish to inner PubSub — cache failure must not block live delivery
-    await this.inner.publish(topic, fullEvent);
+    await this.inner.publish(topic, fullEvent, options);
   }
 
   /**
@@ -241,7 +261,7 @@ export class CachingPubSub extends PubSub {
   }
 
   /**
-   * Flush any pending operations.
+   * Flush any pending operations on the inner PubSub.
    */
   async flush(): Promise<void> {
     await this.inner.flush();

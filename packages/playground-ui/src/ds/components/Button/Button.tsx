@@ -3,11 +3,8 @@ import type { VariantProps } from 'class-variance-authority';
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons/Icon';
-import {
-  formElementSizes,
-  sharedFormElementFocusStyle,
-  sharedFormElementDisabledStyle,
-} from '@/ds/primitives/form-element';
+import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size';
+import { controlFocusBorderVisible, sharedFormElementDisabledStyle } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
 
 // Adornments for text-mode buttons: gap between icon+label, larger radius, and SVG sizing for
@@ -24,7 +21,7 @@ export const buttonVariants = cva(
     'inline-flex items-center justify-center leading-0 cursor-pointer',
     'transition-all duration-normal ease-out-custom',
     sharedFormElementDisabledStyle,
-    sharedFormElementFocusStyle,
+    controlFocusBorderVisible,
   ),
   {
     variants: {
@@ -39,20 +36,21 @@ export const buttonVariants = cva(
           'bg-transparent border border-border1 hover:bg-surface3 hover:text-neutral6 active:bg-surface4 text-neutral5',
       },
       size: {
-        sm: cn(`${formElementSizes.sm} text-ui-sm px-[.9em]`, TEXT_MODE_ADORNMENTS),
-        md: cn(`${formElementSizes.md} text-ui-md px-[.9em]`, TEXT_MODE_ADORNMENTS),
-        default: cn(`${formElementSizes.default} text-ui-md px-[1em]`, TEXT_MODE_ADORNMENTS),
-        lg: cn(`${formElementSizes.lg} text-ui-lg px-[1.15em]`, TEXT_MODE_ADORNMENTS),
+        xs: cn(controlSizeClasses.xs, 'px-[.8em]', TEXT_MODE_ADORNMENTS),
+        sm: cn(controlSizeClasses.sm, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
+        md: cn(controlSizeClasses.md, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
+        lg: cn(controlSizeClasses.default, 'px-[1em]', TEXT_MODE_ADORNMENTS),
         // Icon sizes: square dimensions, fully rounded → circle. Active state inherits from variant
         // (e.g. `active:bg-surface5`) — same press feedback as text-mode for consistency.
-        'icon-sm': `${formElementSizes.sm} w-form-sm rounded-full`,
-        'icon-md': `${formElementSizes.md} w-form-md rounded-full`,
-        'icon-lg': `${formElementSizes.lg} w-form-lg rounded-full`,
+        'icon-xs': cn(controlHeight.xs, 'w-form-xs rounded-full'),
+        'icon-sm': cn(controlHeight.sm, 'w-form-sm rounded-full'),
+        'icon-md': cn(controlHeight.md, 'w-form-md rounded-full'),
+        'icon-lg': cn(controlHeight.lg, 'w-form-lg rounded-full'),
       },
     },
     defaultVariants: {
       variant: 'default',
-      size: 'default',
+      size: 'md',
     },
   },
 );
@@ -63,6 +61,7 @@ type ButtonVariantsProps = VariantProps<typeof buttonVariants>;
 export type ButtonVariant = NonNullable<ButtonVariantsProps['variant']>;
 export type ButtonSize = NonNullable<ButtonVariantsProps['size']>;
 export type IconButtonSize = Extract<ButtonSize, `icon-${string}`>;
+export type TextButtonSize = Exclude<ButtonSize, IconButtonSize>;
 
 export interface ButtonProps
   extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'>, ButtonVariantsProps {
@@ -80,6 +79,7 @@ export interface ButtonProps
 
 // Button's icon-* sizes don't match `<Icon>`'s own size scale (`sm | default | lg`).
 const iconChildSizeMap: Record<IconButtonSize, 'sm' | 'default' | 'lg'> = {
+  'icon-xs': 'sm',
   'icon-sm': 'sm',
   'icon-md': 'default',
   'icon-lg': 'lg',
@@ -119,7 +119,7 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ) => {
     const Component = as || 'button';
     const iconMode = isIconButtonSize(size);
-    const resolvedSize: ButtonSize = size ?? 'default';
+    const resolvedSize: ButtonSize = size ?? 'md';
     const isLabelless = !iconMode && isIconOnly(children);
 
     // Icon-only buttons need an a11y label. If a string tooltip is provided, reuse it.

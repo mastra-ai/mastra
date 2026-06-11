@@ -363,4 +363,106 @@ describe('MCP Server FGA checks', () => {
       }),
     );
   });
+
+  it('should use server FGA mapping overrides when filtering tools/list', async () => {
+    const deriveId = vi.fn(({ user }) => user.id);
+    mcpServer = new MCPServer({
+      name: 'test-server',
+      version: '1.0.0',
+      tools: {
+        'test-tool': createTool({
+          id: 'test-tool',
+          description: 'A test tool',
+          inputSchema: z.object({}),
+          execute: vi.fn(),
+        }),
+      },
+      fga: {
+        resourceMapping: {
+          tool: {
+            fgaResourceType: 'mcp-user',
+            deriveId,
+          },
+        },
+        permissionMapping: {
+          [MastraFGAPermissions.TOOLS_EXECUTE]: 'read',
+        },
+      },
+    });
+    const mockFGAProvider = {
+      check: vi.fn(),
+      require: vi.fn(),
+      filterAccessible: vi.fn(),
+    };
+    mcpServer.__registerMastra(createMockMastra(mockFGAProvider) as any);
+
+    const requestContext = createRequestContext({ id: 'user-1' });
+    const result = await mcpServer.getToolListInfo(requestContext as any);
+
+    expect(result.tools.map(tool => tool.name)).toEqual(['test-tool']);
+    expect(deriveId).toHaveBeenCalledWith({
+      user: { id: 'user-1' },
+      resourceId: JSON.stringify([mcpServer.getServerInfo().id, 'test-tool']),
+      requestContext,
+    });
+    expect(mockFGAProvider.require).toHaveBeenCalledWith(
+      { id: 'user-1' },
+      expect.objectContaining({
+        resource: { type: 'mcp-user', id: 'user-1' },
+        permission: 'read',
+      }),
+    );
+  });
+
+  it('should use server FGA mapping overrides when enforcing tools/call', async () => {
+    const execute = vi.fn().mockResolvedValue({ output: 'success' });
+    const deriveId = vi.fn(({ user }) => user.id);
+    mcpServer = new MCPServer({
+      name: 'test-server',
+      version: '1.0.0',
+      tools: {
+        'test-tool': createTool({
+          id: 'test-tool',
+          description: 'A test tool',
+          inputSchema: z.object({ input: z.string() }),
+          execute,
+        }),
+      },
+      fga: {
+        resourceMapping: {
+          tool: {
+            fgaResourceType: 'mcp-user',
+            deriveId,
+          },
+        },
+        permissionMapping: {
+          [MastraFGAPermissions.TOOLS_EXECUTE]: 'read',
+        },
+      },
+    });
+    const mockFGAProvider = {
+      check: vi.fn(),
+      require: vi.fn(),
+      filterAccessible: vi.fn(),
+    };
+    mcpServer.__registerMastra(createMockMastra(mockFGAProvider) as any);
+
+    const requestContext = createRequestContext({ id: 'user-1' });
+
+    await mcpServer.executeTool('test-tool', { input: 'hello' }, { requestContext: requestContext as any });
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(deriveId).toHaveBeenCalledWith({
+      user: { id: 'user-1' },
+      resourceId: JSON.stringify([mcpServer.getServerInfo().id, 'test-tool']),
+      requestContext,
+    });
+    expect(mockFGAProvider.require).toHaveBeenCalledWith(
+      { id: 'user-1' },
+      expect.objectContaining({
+        resource: { type: 'mcp-user', id: 'user-1' },
+        permission: 'read',
+      }),
+    );
+  });
 });

@@ -163,7 +163,7 @@ function DatasetPage() {
                 )}
                 <DropdownMenu>
                   <DropdownMenu.Trigger asChild>
-                    <Button size="default" aria-label="Dataset actions menu">
+                    <Button size="lg" aria-label="Dataset actions menu">
                       <MoreVertical />
                     </Button>
                   </DropdownMenu.Trigger>
@@ -195,6 +195,7 @@ function DatasetPage() {
       <ExperimentTriggerDialog
         datasetId={datasetId}
         version={activeVersion ?? undefined}
+        requestContextSchema={dataset?.requestContextSchema}
         open={experimentDialogOpen}
         onOpenChange={setExperimentDialogOpen}
         onSuccess={handleExperimentSuccess}
@@ -211,8 +212,10 @@ function DatasetPage() {
             id: dataset.id,
             name: dataset.name,
             description: dataset?.description || '',
+            targetType: dataset.targetType,
             inputSchema: dataset.inputSchema,
             groundTruthSchema: dataset.groundTruthSchema,
+            requestContextSchema: dataset.requestContextSchema,
           }}
         />
       )}
@@ -225,6 +228,7 @@ function DatasetPage() {
           sourceDatasetId={dataset.id}
           sourceDatasetName={dataset.name}
           sourceDatasetDescription={(dataset as { description?: string }).description}
+          sourceDatasetTargetType={dataset.targetType}
         />
       )}
 

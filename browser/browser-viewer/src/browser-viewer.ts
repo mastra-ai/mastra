@@ -2,7 +2,7 @@
  * BrowserViewer - Playwright-managed Chrome for CLI providers
  *
  * Launches Chrome via Playwright and exposes the CDP URL for CLI tools
- * (agent-browser, browser-use, browse-cli) to connect as secondary clients.
+ * (agent-browser, browser-use, and browse) to connect as secondary clients.
  *
  * This gives us:
  * - Direct page-level CDP sessions (fixes screencast sessionId issues)

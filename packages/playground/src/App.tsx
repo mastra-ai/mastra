@@ -7,6 +7,7 @@ import { createBrowserRouter, RouterProvider, Outlet, useNavigate, redirect } fr
 import type { LoaderFunctionArgs, RouteObject } from 'react-router';
 import { AgentBuilderRootLayout } from './domains/agent-builder/layouts/agent-builder-root-layout';
 import { RoutePermissionGuard } from './domains/auth/components/route-permission-guard';
+import { RoutePermissionsGate } from './domains/auth/components/route-permissions-gate';
 import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
 import { PostHogProvider } from './lib/analytics';
@@ -58,6 +59,7 @@ import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
 import Evaluation from './pages/evaluation';
 import Experiments from './pages/experiments';
 import ExperimentPage from './pages/experiments/experiment';
+import IntegrationsPage from './pages/integrations';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
 import MCPs from './pages/mcps';
@@ -459,6 +461,12 @@ export const routes: RouteObject[] = [
         handle: navHandleWithChildren('/tools', [{ id: 'tool', Component: ToolCrumb, heading: 'Tool' }]),
       },
 
+      {
+        path: '/integrations',
+        element: <IntegrationsPage />,
+        handle: { crumbs: [{ id: 'integrations', label: 'Integrations' }] } satisfies RouteHeaderHandle,
+      },
+
       { path: '/processors', element: <Processors />, handle: navHandle('/processors') },
       {
         path: '/processors/:processorId',
@@ -680,7 +688,9 @@ function App() {
     <MastraReactProvider baseUrl={baseUrl} headers={studioHeaders} apiPrefix={apiPrefix} customFetch={customFetch}>
       <RoleImpersonationProvider>
         <PostHogProvider>
-          <RouterProvider router={router} />
+          <RoutePermissionsGate baseUrl={baseUrl}>
+            <RouterProvider router={router} />
+          </RoutePermissionsGate>
         </PostHogProvider>
       </RoleImpersonationProvider>
     </MastraReactProvider>

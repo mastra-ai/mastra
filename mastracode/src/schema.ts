@@ -3,16 +3,22 @@ import { DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID } from './constants';
 
 export type PermissionPolicy = 'allow' | 'ask' | 'deny';
 
+export type MastraCodeSessionState = {
+  currentModelId: string;
+  modeId: string;
+};
+
+export type MastraCodeComposedState = MastraCodeState & MastraCodeSessionState;
+
 export interface MastraCodeState {
   [key: string]: unknown;
   [key: `subagentModelId_${string}`]: string | undefined;
+  subagentModelId?: string;
   projectPath?: string;
   projectName?: string;
   configDir: string;
   gitBranch?: string;
   lastCommand?: string;
-  currentModelId: string;
-  subagentModelId?: string;
   observerModelId: string;
   reflectorModelId: string;
   observationThreshold: number;
@@ -58,14 +64,18 @@ export interface MastraCodeState {
 }
 
 export const stateSchema = z.object({
+  // Session-scoped selection. The legacy Harness stores these in its state and
+  // validates state against this schema, so they MUST be declared here — Zod
+  // strips unknown keys on parse, which would otherwise silently discard the
+  // seeded model and leave the harness with no model selected.
+  currentModelId: z.string().optional(),
+  modeId: z.string().optional(),
+  subagentModelId: z.string().optional(),
   projectPath: z.string().optional(),
   projectName: z.string().optional(),
   configDir: z.string().default(DEFAULT_CONFIG_DIR),
   gitBranch: z.string().optional(),
   lastCommand: z.string().optional(),
-  currentModelId: z.string().default(''),
-  // Subagent model settings (per-thread/per-mode)
-  subagentModelId: z.string().optional(), // Thread-level default for subagents
   // Observational Memory model settings
   observerModelId: z.string().default(DEFAULT_OM_MODEL_ID),
   reflectorModelId: z.string().default(DEFAULT_OM_MODEL_ID),

@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.22.2",
+  "version": "0.22.3-alpha.3",
   "description": "",
   "type": "module",
   "files": [
@@ -46,24 +46,29 @@
   },
   "scripts": {
     "cli": "tsx src/main.ts",
+    "tui-v1": "tsx src/harness-tui-v1.ts",
     "check": "tsc --noEmit",
     "build:lib": "tsup --silent --config tsup.config.ts",
-    "prepack": "pnpx tsx ../scripts/generate-package-docs.ts",
+    "prepack": "tsx ../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build --watch",
     "test": "vitest",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "e2e:list": "tsx scripts/mc-e2e.ts --list",
+    "e2e:test": "tsx scripts/mc-e2e.ts --run --default-all",
+    "e2e:observe": "tsx scripts/mc-e2e.ts --observe"
   },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.76",
+    "@ai-sdk/anthropic": "^3.0.82",
     "@ai-sdk/openai": "^3.0.63",
     "@ai-sdk/openai-compatible": "^2.0.47",
     "@ast-grep/napi": "^0.42.0",
     "@mariozechner/pi-tui": "^0.73.1",
     "@mastra/agent-browser": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/github-signals": "workspace:*",
     "@mastra/duckdb": "workspace:*",
     "@mastra/fastembed": "workspace:*",
     "@mastra/libsql": "workspace:*",
@@ -89,14 +94,16 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@copilotkit/aimock": "^1.29.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@microsoft/tui-test": "^0.0.4",
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.2.1",
+    "eslint": "^10.4.1",
     "tsup": "^8.5.1",
-    "tsx": "^4.21.0",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "typescript-eslint": "^8.57.0",
     "vitest": "catalog:"

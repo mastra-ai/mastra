@@ -37,12 +37,17 @@ import {
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';
+import type { MessageMetadata } from '../../../../lib/ai-ui/messages/message-metadata';
+import { MessageText } from '../../../../lib/ai-ui/messages/renderers/message-text';
+import {
+  WarningStatusRenderer,
+  TripwireStatusRenderer,
+} from '../../../../lib/ai-ui/messages/renderers/status-renderers';
 import { useAgentPrimitives } from '../../contexts/agent-primitives-context';
 import { useStreamApproval, useStreamRetry } from '../../contexts/stream-chat-context';
 import { useAvailableAgentTools } from '../../hooks/use-available-agent-tools';
 import { parseStreamErrorText } from './parse-stream-error';
 import type { ParsedStreamError } from './parse-stream-error';
-import { Shimmer } from './shimmer';
 import type { AgentBuilderEditFormValues } from '@/domains/agent-builder/schemas';
 import {
   SET_AGENT_BROWSER_ENABLED_TOOL_NAME,
@@ -55,6 +60,7 @@ import {
   SET_AGENT_WORKSPACE_ID_TOOL_NAME,
 } from '@/domains/agent-builder/services/tool-constants';
 import { ProviderLogo } from '@/domains/llm';
+import { ReasoningStreamingLine } from '@/lib/ai-ui/messages/reasoning-streaming-line';
 import { SignalBadge } from '@/lib/ai-ui/messages/signal-badge';
 import { isSignalData } from '@/lib/ai-ui/messages/signal-data';
 
@@ -191,12 +197,14 @@ export const MessageRow = ({ message }: MessageRowProps) => {
   const dbMessage = toDisplayMessage(message);
   if (dbMessage === null) return null;
 
+  const metadata = message.content.metadata as MessageMetadata | undefined;
+
   const renderers: MessageRenderers = {
-    Text: part => <Txtmessage txt={part.text ?? ''} role={displayRole} />,
+    Text: part => <Txtmessage txt={part.text ?? ''} role={displayRole} metadata={metadata} />,
     Reasoning: part => {
       const state = 'state' in part ? part.state : undefined;
       if (state !== 'streaming') return null;
-      return <ReasoningMessage text="Reasoning..." streaming />;
+      return <ReasoningStreamingLine text="Reasoning..." />;
     },
     Data: part => (part.type === 'data-signal' && isSignalData(part.data) ? <SignalBadge signal={part.data} /> : null),
     ToolInvocation: (part: ToolInvocationPart) => {
@@ -223,12 +231,22 @@ export const MessageRow = ({ message }: MessageRowProps) => {
 
   const status: MessageStatusRenderers = {
     Error: ({ text }) => <ErrorMessage error={parseStreamErrorText(text)} onRetry={retry} />,
+    Warning: WarningStatusRenderer,
+    Tripwire: TripwireStatusRenderer,
   };
 
   return <MessageFactory message={dbMessage} {...renderers} status={status} />;
 };
 
-export const Txtmessage = ({ txt, role }: { txt: string; role: MastraDBMessage['role'] | null }) => {
+export const Txtmessage = ({
+  txt,
+  role,
+  metadata,
+}: {
+  txt: string;
+  role: MastraDBMessage['role'] | null;
+  metadata?: MessageMetadata;
+}) => {
   if (role === 'user') {
     return (
       <div className="flex justify-end">
@@ -250,7 +268,7 @@ export const Txtmessage = ({ txt, role }: { txt: string; role: MastraDBMessage['
         className="text-neutral4 max-w-[80%] [&_ul]:!space-y-1 [&_ol]:!space-y-1 [&_li]:!my-0 [&_p]:!leading-normal [&_p]:!whitespace-normal [&_li]:!leading-normal"
         as="div"
       >
-        <MarkdownRenderer>{txt}</MarkdownRenderer>
+        <MessageText text={txt} metadata={metadata} />
       </Txt>
     );
   }
@@ -328,44 +346,6 @@ export const ErrorMessage = ({ error, onRetry }: { error: ParsedStreamError; onR
         )
       )}
     </Card>
-  );
-};
-
-export const PendingIndicator = () => {
-  return (
-    <Txt
-      variant="ui-md"
-      className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%] flex items-center gap-2"
-      as="div"
-      data-testid="agent-builder-chat-pending"
-    >
-      <Loader2 className="animate-spin size-4 text-neutral3" />
-      <Shimmer>Thinking…</Shimmer>
-    </Txt>
-  );
-};
-
-export const ReasoningMessage = ({ text, streaming = false }: { text: string; streaming?: boolean }) => {
-  return (
-    <Txt
-      variant="ui-md"
-      className="whitespace-pre-wrap leading-relaxed text-neutral4 max-w-[80%] flex items-center gap-2"
-      as="div"
-    >
-      {streaming ? (
-        <>
-          <Loader2 className="animate-spin size-4 text-neutral3" />
-
-          <Shimmer>{text}</Shimmer>
-        </>
-      ) : (
-        <>
-          <Check className="text-neutral3 size-4" />
-
-          {text}
-        </>
-      )}
-    </Txt>
   );
 };
 
@@ -469,7 +449,7 @@ export const ToolCard = ({
 );
 
 const SkillToolLine = ({ icon, label, value }: { icon: ReactNode; label: string; value: ReactNode }) => (
-  <div className="flex items-start gap-2 min-w-0 max-w-full">
+  <div className="flex items-start gap-2 min-w-0 max-w-full animate-in fade-in slide-in-from-right-4 duration-500 ease-out">
     <div className="pt-0.5">
       <Icon>{icon}</Icon>
     </div>

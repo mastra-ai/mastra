@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import type { StoredAgentResponse } from '@mastra/client-js';
 import type * as PlaygroundUi from '@mastra/playground-ui';
 import { TooltipProvider } from '@mastra/playground-ui';
 import { MastraReactProvider } from '@mastra/react';
@@ -10,6 +11,12 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import AgentBuilderAgentEdit from '../edit';
+import {
+  composioGmailConnections,
+  composioGmailTools,
+  composioProviderList,
+  composioToolkits,
+} from './fixtures/tool-providers';
 import type * as AgentBuilderModule from '@/domains/agent-builder';
 import { LinkComponentProvider } from '@/lib/framework';
 import { server } from '@/test/msw-server';
@@ -60,6 +67,7 @@ vi.mock('@/domains/agent-builder/components/agent-edit/conversation-panel', () =
 
 vi.mock('@/domains/agent-builder/contexts/stream-chat-context', () => ({
   useStreamRunning: () => false,
+  useStreamRunningDebounced: () => false,
   useStreamMessages: () => [],
   useStreamSend: () => () => {},
 }));
@@ -127,14 +135,14 @@ function renderPage() {
   );
 }
 
-const storedAgent = {
+const storedAgent: StoredAgentResponse = {
   id: 'agent-123',
   name: 'Existing',
   description: 'An existing agent',
   instructions: 'Do things',
-  tools: [],
-  agents: [],
-  workflows: [],
+  tools: {},
+  agents: {},
+  workflows: {},
   status: 'draft',
   visibility: 'private',
   model: { provider: 'openai', name: 'gpt-4' },
@@ -170,6 +178,9 @@ const commonHandlers = (overrides?: { agent?: Partial<typeof storedAgent>; meDel
     return HttpResponse.json({ id: 'user-1' });
   }),
   http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json({ ...storedAgent, ...overrides?.agent })),
+  http.get(`${BASE_URL}/api/stored/agents/agent-123/dependents`, () =>
+    HttpResponse.json({ dependents: [], hiddenCount: 0 }),
+  ),
   http.get(`${BASE_URL}/api/stored/workspaces`, () => HttpResponse.json({ workspaces: [] })),
   http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json([])),
   http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({})),
@@ -252,6 +263,59 @@ describe('AgentBuilderAgentEdit — navigation, header, autosave', () => {
     expect(screen.getByTestId('current-location').textContent).toBe('/agent-builder/agents/agent-123/edit');
   });
 
+  it('does not autosave when integration provider tools finish loading', async () => {
+    const patchAgent = vi.fn();
+    const listToolkits = vi.fn();
+    const listTools = vi.fn();
+    const listConnections = vi.fn();
+
+    server.use(
+      ...commonHandlers({
+        agent: {
+          toolProviders: {
+            composio: {
+              tools: {
+                GMAIL_FETCH_EMAILS: { toolkit: 'gmail', description: 'Fetch emails from Gmail' },
+              },
+              connections: {
+                gmail: [{ kind: 'author', toolkit: 'gmail', connectionId: 'conn-gmail', scope: 'per-author' }],
+              },
+            },
+          },
+        },
+      }),
+      http.get(`${BASE_URL}/api/tool-providers`, () => HttpResponse.json(composioProviderList)),
+      http.get(`${BASE_URL}/api/tool-providers/composio/toolkits`, () => {
+        listToolkits();
+        return HttpResponse.json(composioToolkits);
+      }),
+      http.get(`${BASE_URL}/api/tool-providers/composio/tools`, () => {
+        listTools();
+        return HttpResponse.json(composioGmailTools);
+      }),
+      http.get(`${BASE_URL}/api/tool-providers/composio/connections`, () => {
+        listConnections();
+        return HttpResponse.json(composioGmailConnections);
+      }),
+      http.patch(`${BASE_URL}/api/stored/agents/agent-123`, async ({ request }) => {
+        patchAgent(await request.json());
+        return HttpResponse.json(storedAgent);
+      }),
+    );
+
+    renderPage();
+
+    await screen.findByTestId('agent-configure-name');
+    await waitFor(() => expect(listToolkits).toHaveBeenCalled());
+    await waitFor(() => expect(listTools).toHaveBeenCalled());
+    await waitFor(() => expect(listConnections).toHaveBeenCalled());
+    // Autosave debounce is 600ms (use-autosave-agent); wait well past it so a
+    // wrongly-triggered autosave would reliably fire before this assertion.
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    expect(patchAgent).not.toHaveBeenCalled();
+  });
+
   it('requests the latest draft so freshly saved edits appear', async () => {
     const draftRequests: string[] = [];
     server.use(
@@ -323,6 +387,7 @@ describe('AgentBuilderAgentEdit — navigation, header, autosave', () => {
     fireEvent.click(deleteButton);
 
     const confirm = await screen.findByTestId('agent-builder-delete-agent-confirm');
+    await waitFor(() => expect((confirm as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(confirm);
 
     await waitFor(() => expect(deleteCount).toBe(1));

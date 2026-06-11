@@ -11,7 +11,7 @@ import type { Event, EventCallback, SubscribeOptions } from './types';
 type ClientFrame =
   | { type: 'subscribe'; topic: string }
   | { type: 'unsubscribe'; topic: string }
-  | { type: 'publish'; topic: string; event: Omit<Event, 'id' | 'createdAt'> }
+  | { type: 'publish'; topic: string; event: Omit<Event, 'id' | 'createdAt'>; localOnly?: boolean }
   | { type: 'ack'; id?: string }
   | { type: 'nack'; id?: string };
 
@@ -156,10 +156,33 @@ export class UnixSocketPubSub extends PubSub {
     return this.#isBroker ? this.#brokerClients.size : 0;
   }
 
-  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+  async publish(
+    topic: string,
+    event: Omit<Event, 'id' | 'createdAt'>,
+    options?: { localOnly?: boolean },
+  ): Promise<void> {
     await this.#ensureStarted();
+
+    // `localOnly` events stay entirely within the publishing process. They are
+    // never serialized over a unix socket, so live methods on payload values
+    // (e.g. `MastraModelOutput.getFullOutput`, `step.condition` functions on
+    // serialized step graphs) survive intact. This is the semantic the agent's
+    // execution-workflow relies on: the run result is delivered via
+    // `workflows-finish` and includes the `MastraModelOutput` instance —
+    // round-tripping it through the broker would strip its methods.
+    if (options?.localOnly) {
+      const localEvent: Event = {
+        ...event,
+        id: randomUUID(),
+        createdAt: new Date(),
+        deliveryAttempt: 1,
+      };
+      this.#deliverLocal(topic, localEvent);
+      return;
+    }
+
     if (this.#isBroker) {
-      await this.#publishFromBroker(topic, event);
+      await this.#publishFromBroker(topic, event, undefined, options?.localOnly);
       return;
     }
 
@@ -167,7 +190,7 @@ export class UnixSocketPubSub extends PubSub {
     if (!socket || socket.destroyed) {
       await this.#ensureStarted(true);
     }
-    await this.#sendToBroker({ type: 'publish', topic, event });
+    await this.#sendToBroker({ type: 'publish', topic, event, localOnly: options?.localOnly });
   }
 
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
@@ -499,7 +522,7 @@ export class UnixSocketPubSub extends PubSub {
       } else if (clientFrame.type === 'unsubscribe') {
         client.subscriptions.delete(clientFrame.topic);
       } else if (clientFrame.type === 'publish') {
-        void this.#publishFromBroker(clientFrame.topic, clientFrame.event);
+        void this.#publishFromBroker(clientFrame.topic, clientFrame.event, client, clientFrame.localOnly);
       }
     });
     socket.on('close', () => this.#removeBrokerClient(client));
@@ -560,7 +583,12 @@ export class UnixSocketPubSub extends PubSub {
     this.#deliverLocal(frame.topic, event);
   }
 
-  async #publishFromBroker(topic: string, event: Omit<Event, 'id' | 'createdAt'>) {
+  async #publishFromBroker(
+    topic: string,
+    event: Omit<Event, 'id' | 'createdAt'>,
+    sourceClient?: BrokerClient,
+    localOnly?: boolean,
+  ) {
     const brokerEvent: Event = {
       ...event,
       id: randomUUID(),
@@ -572,6 +600,19 @@ export class UnixSocketPubSub extends PubSub {
 
     // Skip serialization entirely when no remote clients could receive the event.
     if (this.#brokerClients.size === 0) return;
+
+    // `localOnly` events are scoped to the publishing instance.
+    // When the publisher is the broker, the `#deliverLocal` above is enough.
+    // When the publisher is a remote client, relay the event back ONLY to
+    // that client so its subscription callback fires, but do NOT fan out to
+    // other clients — their WEP would just drop the event via `#ownsWorkflow`
+    // and the multi-MB payload would waste socket/kernel buffer for nothing.
+    if (localOnly) {
+      if (sourceClient && sourceClient.subscriptions.has(topic) && !sourceClient.socket.destroyed) {
+        this.#enqueueBrokerClientWrite(sourceClient, { type: 'event', topic, event: brokerEvent });
+      }
+      return;
+    }
 
     let frame: ServerFrame | undefined;
     for (const client of this.#brokerClients.values()) {

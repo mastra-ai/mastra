@@ -29,7 +29,7 @@ export function AgentVersionCombobox({
   onValueChange,
   className,
   disabled = false,
-  variant = 'default',
+  variant,
   activeVersionId,
 }: AgentVersionComboboxProps) {
   const { data, isLoading } = useAgentVersions({

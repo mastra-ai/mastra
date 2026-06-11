@@ -41,6 +41,7 @@ import { LoginDialogComponent } from './components/login-dialog.js';
 import { promptAuthMode } from './components/login-mode-selector.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
 import type { ModelItem } from './components/model-selector.js';
+import { GradientAnimator } from './components/obi-loader.js';
 import type { IToolExecutionComponent } from './components/tool-execution-interface.js';
 import { showError, showInfo, showFormattedError, notify } from './display.js';
 import { dispatchEvent } from './event-dispatch.js';
@@ -90,6 +91,9 @@ export type { MastraTUIOptions } from './state.js';
  * active run it is tagged as while-active; when it starts a new run it is a message.
  * The LLM sees these as XML attributes on the `<user-message>` element.
  */
+type GithubPollingChangedHandler = (event: { threadId: string; resourceId: string; running: boolean }) => void;
+type GithubSignalsWithPollingEvents = { onPollingChanged?: (handler: GithubPollingChangedHandler) => void };
+
 const USER_SIGNAL_DELIVERY_OPTIONS: {
   ifActive: { attributes: AgentSignalAttributes };
   ifIdle: { attributes: AgentSignalAttributes };
@@ -163,6 +167,22 @@ export class MastraTUI {
       this.state.ui.requestRender();
     });
 
+    (options.githubSignals as GithubSignalsWithPollingEvents | undefined)?.onPollingChanged?.(event => {
+      const currentThreadId = this.state.harness.getCurrentThreadId?.();
+      const currentResourceId = this.state.harness.getResourceId?.();
+      if (event.threadId !== currentThreadId || (currentResourceId && event.resourceId !== currentResourceId)) return;
+      if (!this.state.githubPrGradientAnimator) {
+        this.state.githubPrGradientAnimator = new GradientAnimator(() => {
+          updateStatusLine(this.state);
+        });
+      }
+      this.state.githubPrPollingActive = event.running;
+      if (event.running) this.state.githubPrGradientAnimator.start();
+      else this.state.githubPrGradientAnimator.stop();
+      updateStatusLine(this.state);
+      this.state.ui.requestRender();
+    });
+
     // Load user preferences
     const savedSettings = loadSettings();
     this.state.quietMode = savedSettings.preferences.quietMode;
@@ -171,15 +191,24 @@ export class MastraTUI {
     // Override editor input handling to check for active inline components
     const originalHandleInput = this.state.editor.handleInput.bind(this.state.editor);
     this.state.editor.handleInput = (data: string) => {
-      // If there's an active plan approval, route input to it
+      // If there's an active plan approval, route input to it. Ctrl+C still
+      // aborts: in raw mode the terminal delivers it as \x03 to the editor (the
+      // process SIGINT never fires), so the inline component would otherwise
+      // swallow it and leave the suspended submit_plan run parked. Fall through
+      // to the editor's Ctrl+C handler (which clears inline state and aborts).
       if (this.state.activeInlinePlanApproval) {
-        this.state.activeInlinePlanApproval.handleInput(data);
-        return;
+        if (data !== '\x03') {
+          this.state.activeInlinePlanApproval.handleInput(data);
+          return;
+        }
       }
-      // If there's an active inline question, route input to it
-      if (this.state.activeInlineQuestion) {
-        this.state.activeInlineQuestion.handleInput(data);
-        return;
+      // If there's an active inline question, route input to it (same Ctrl+C
+      // pass-through as plan approval above).
+      else if (this.state.activeInlineQuestion) {
+        if (data !== '\x03') {
+          this.state.activeInlineQuestion.handleInput(data);
+          return;
+        }
       }
       // If onboarding is active, route input there
       if (this.state.activeOnboarding) {

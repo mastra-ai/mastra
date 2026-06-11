@@ -11,11 +11,11 @@ packages:
 
 Use it for single-process applications. For delivery across processes on one host, see [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub). For distributed delivery, see [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub).
 
-Because it is in-process, events are not persisted and are not shared with other processes. Wrap it in [`CachingPubSub`](/reference/pubsub/caching-pubsub) when you need replay for resumable streams.
+Because it's in-process, events aren't persisted and aren't shared with other processes. Wrap it in [`CachingPubSub`](/reference/pubsub/caching-pubsub) when you need replay for resumable streams.
 
 ## Usage example
 
-`EventEmitterPubSub` is used automatically when you do not configure a `pubsub` option, so most applications never construct it directly. Create one explicitly only when you want to configure or share it.
+`EventEmitterPubSub` is used automatically when you don't configure a `pubsub` option, so most applications never construct it directly. Create one explicitly only when you want to configure or share it.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -36,6 +36,14 @@ const emitter = new EventEmitter()
 const pubsub = new EventEmitterPubSub(emitter)
 ```
 
+To surface batched-delivery errors, pass a logger:
+
+```typescript
+import { EventEmitterPubSub } from '@mastra/core/events'
+
+const pubsub = new EventEmitterPubSub(undefined, { logger })
+```
+
 ## Constructor parameters
 
 <PropertiesTable
@@ -45,6 +53,21 @@ const pubsub = new EventEmitterPubSub(emitter)
     type: 'EventEmitter',
     description: 'An existing Node.js EventEmitter to use for delivery. When omitted, a new EventEmitter is created.',
     isOptional: true,
+  },
+  {
+    name: 'options',
+    type: 'EventEmitterPubSubOptions',
+    description: 'Optional configuration.',
+    isOptional: true,
+    properties: [
+      {
+        name: 'logger',
+        type: 'IMastraLogger',
+        description:
+          'Logger used to surface errors from batched delivery, such as a throwing `coalesce`. Falls back to `console.error` when omitted.',
+        isOptional: true,
+      },
+    ],
   },
 ]}
 />
@@ -59,6 +82,11 @@ const pubsub = new EventEmitterPubSub(emitter)
     description:
       'Returns `["pull", "push"]`. The emitter can serve a pull-style worker or push events directly to listeners.',
   },
+  {
+    name: 'supportsNativeBatching',
+    type: 'boolean',
+    description: 'Returns `true`. Subscribers can opt in to batched delivery with `options.batch`.',
+  },
 ]}
 />
 
@@ -69,6 +97,8 @@ const pubsub = new EventEmitterPubSub(emitter)
 ### `subscribe(topic, cb, options?)`
 
 Registers a callback for a topic. Without `options.group`, every subscriber receives every event. With a group, events are distributed round-robin across members of that group.
+
+Pass `options.batch` to opt in to batched delivery. See [Batching](#batching) below.
 
 ```typescript
 await pubsub.subscribe('workflow.events', (event, ack, nack) => {
@@ -95,3 +125,24 @@ await pubsub.close()
 ## Redelivery
 
 When a grouped subscriber calls `nack`, the event is redelivered to the group after a short delay, and its `deliveryAttempt` count increases. Calling `ack` clears the tracking for that event. Fan-out subscribers receive no-op `ack` and `nack` functions, since each event reaches every subscriber once.
+
+## Batching
+
+`EventEmitterPubSub` honors `options.batch` natively. When a subscriber opts in, events are held in a per-subscriber in-memory buffer and delivered as consecutive callback invocations once a flush condition is met. Both fan-out and group subscribers can batch. See [`SubscribeBatchOptions`](/reference/pubsub/base#subscribebatchoptions) for the full policy.
+
+```typescript
+await pubsub.subscribe(
+  'workflow.events',
+  event => {
+    console.log(event)
+  },
+  {
+    batch: {
+      maxSize: 10, // flush once 10 events have queued
+      maxWaitMs: 500, // ...or after 500ms, whichever comes first
+    },
+  },
+)
+```
+
+The buffer is in-memory and per-process, so batched state isn't persisted and doesn't survive a restart. A flush triggered by `maxWaitMs` is best-effort: if a step such as a throwing `coalesce` fails, the error is surfaced through the configured `logger` rather than thrown. `flush()` drains every batched subscriber buffer before resolving.

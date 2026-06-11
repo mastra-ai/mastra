@@ -7,11 +7,11 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-  SideDialog,
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@mastra/playground-ui';
+import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { AlertTriangle, ChevronDown, ChevronRight, CopyIcon, Globe, LockIcon, Pencil, Settings2 } from 'lucide-react';
 import { nanoid } from 'nanoid';
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';

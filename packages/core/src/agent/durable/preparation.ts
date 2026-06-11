@@ -8,7 +8,7 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcesso
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
-import type { CoreTool } from '../../tools/types';
+import type { CoreTool, ToolHooks } from '../../tools/types';
 import type { Workspace } from '../../workspace';
 import type { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
@@ -43,6 +43,7 @@ interface DurablePreparationAgent {
     requestContext?: RequestContext;
     memoryConfig?: MemoryConfig;
     autoResumeSuspendedTools?: boolean;
+    hooks?: ToolHooks;
   }): Promise<Record<string, CoreTool>>;
   listInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
   listOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]>;
@@ -255,6 +256,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       requestContext,
       memoryConfig: execOptions?.memory?.options,
       autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
+      hooks: execOptions?.hooks,
     });
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error converting tools: ${error}`);
