@@ -108,8 +108,8 @@ importers:
         specifier: ^16.4.0
         version: 16.4.0
       npm-run-all2:
-        specifier: ^8.0.4
-        version: 8.0.4
+        specifier: ^9.0.1
+        version: 9.0.1
       path-to-regexp:
         specifier: ^8.3.0
         version: 8.4.2
@@ -22706,9 +22706,9 @@ packages:
     resolution: {integrity: sha512-fi0NG4bPjCHunUJffmLd0gxssIgkNmArMvis4iNah6Owg1MCJjWhEcDLmsK6iGkJq3tHwbDkTlce70/tmXN4cQ==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
 
-  json-parse-even-better-errors@4.0.0:
-    resolution: {integrity: sha512-lR4MXjGNgkJc7tkQ97kb2nuEMnNCyU//XYVH0MKTGcXEiSudQ5MKGKen3C5QubYy0vmq+JGitUg92uuywGEwIA==}
-    engines: {node: ^18.17.0 || >=20.5.0}
+  json-parse-even-better-errors@6.0.0:
+    resolution: {integrity: sha512-2/8adwnK1/+Fdjyts4r6wSpfANWw8zdNhU9U/Llk59c6O+DjSisPWPykwoL8gZmocP9Dy64S7oie2g+Mia123A==}
+    engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
 
   json-rpc-2.0@1.7.1:
     resolution: {integrity: sha512-JqZjhjAanbpkXIzFE7u8mE/iFblawwlXtONaCvRqI+pyABVz7B4M1EUNpyVW+dZjqgQ2L5HFmZCmOCgUKm00hg==}
@@ -24095,9 +24095,9 @@ packages:
     resolution: {integrity: sha512-dMxCf+zZ+3zeQZXKxmyuCKlIDPGuv8EF940xbkC4kQVDTtqoh6rJFO+JTKSA6/Rwi0getWmtuy4Itup0AMcaDQ==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
 
-  npm-normalize-package-bin@4.0.0:
-    resolution: {integrity: sha512-TZKxPvItzai9kN9H/TkmCtx/ZN/hvr3vUycjlfmH0ootY9yFBzNOpiXAdIn1Iteqsvk4lQn6B5PTrt+n6h8k/w==}
-    engines: {node: ^18.17.0 || >=20.5.0}
+  npm-normalize-package-bin@6.0.0:
+    resolution: {integrity: sha512-tdt4aFn9QamlhdN3HV2D2ccpBwO5/fyjjbXUxYA6uBjyekMZcZvDq0aSj9t5Jo+tih6AYFnt/cuIRn9013e0Uw==}
+    engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
 
   npm-package-arg@11.0.3:
     resolution: {integrity: sha512-sHGJy8sOC1YraBywpzQlIKBE4pBbGbiF95U6Auspzyem956E0+FtDtsx1ZxlOJkQCZ1AFXAY/yuvtFYrOxF+Bw==}
@@ -24107,9 +24107,9 @@ packages:
     resolution: {integrity: sha512-nkc+3pIIhqHVQr085X9d2JzPzLyjzQS96zbruppqC9aZRm/x8xx6xhI98gHtsfELP2bE+loHq8ZaHFHhe+NauA==}
     engines: {node: ^16.14.0 || >=18.0.0}
 
-  npm-run-all2@8.0.4:
-    resolution: {integrity: sha512-wdbB5My48XKp2ZfJUlhnLVihzeuA1hgBnqB2J9ahV77wLS+/YAJAlN8I+X3DIFIPZ3m5L7nplmlbhNiFDmXRDA==}
-    engines: {node: ^20.5.0 || >=22.0.0, npm: '>= 10'}
+  npm-run-all2@9.0.1:
+    resolution: {integrity: sha512-ZtK8WXZBUA9x0XD6nxYdFLe86FxpkCTq2LiQxzX0LeXQY/vyAigQZXjjj/xfTwgV4Yqe/vYNIq2W09lrHKTcuQ==}
+    engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0, npm: '>= 10'}
     hasBin: true
 
   npm-run-path@4.0.1:
@@ -25694,9 +25694,9 @@ packages:
     resolution: {integrity: sha512-0J+Msgym3vrLOUB3hzQCuZHII0xkNGCtz/HJH9xZshwv9DbDwkw1KaE3gx/e2J5rpEY5rtOy6cyhKOPrkP7FZw==}
     engines: {node: ^14.17.0 || ^16.13.0 || >=18.0.0}
 
-  read-package-json-fast@4.0.0:
-    resolution: {integrity: sha512-qpt8EwugBWDw2cgE2W+/3oxC+KTez2uSVR8JU9Q36TXPAGCaozfQUs59v4j4GFpWTaw0i6hAZSvOmu1J0uOEUg==}
-    engines: {node: ^18.17.0 || >=20.5.0}
+  read-package-json-fast@6.0.0:
+    resolution: {integrity: sha512-PNaGjoCnw9DBA2Kl8D+8po957z778q/HOPuY2u3Bkw/JO3eC8MDx7jn/PgMtSgpcBbs+6UOjDbwReGpXmRvs0g==}
+    engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
 
   read-yaml-file@1.1.0:
     resolution: {integrity: sha512-VIMnQi/Z4HT2Fxuwg5KrY174U1VdUIASQVWXXyqtNRtxSr9IYkn1rsI6Tb6HsrHCmB7gVpNwX6JxPTHcH6IoTA==}
@@ -28204,6 +28204,11 @@ packages:
   which@6.0.1:
     resolution: {integrity: sha512-oGLe46MIrCRqX7ytPUf66EAYvdeMIZYn3WaocqqKZAxrBpkqHfL/qvTyJ/bTk5+AqHCjXmrv3CEWgy368zhRUg==}
     engines: {node: ^20.17.0 || >=22.9.0}
+    hasBin: true
+
+  which@7.0.0:
+    resolution: {integrity: sha512-RancgH2dmbLdHl6LRhEqvklWMgl/Hdnun0Y90KhBOLkMefg8Qa7/Zel8Sm+8HEcP6DEjzsWzpkuBQEZok58isA==}
+    engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
     hasBin: true
 
   why-is-node-running@2.3.0:
@@ -46460,7 +46465,7 @@ snapshots:
 
   json-parse-even-better-errors@3.0.2: {}
 
-  json-parse-even-better-errors@4.0.0: {}
+  json-parse-even-better-errors@6.0.0: {}
 
   json-rpc-2.0@1.7.1: {}
 
@@ -48365,7 +48370,7 @@ snapshots:
 
   npm-normalize-package-bin@3.0.1: {}
 
-  npm-normalize-package-bin@4.0.0: {}
+  npm-normalize-package-bin@6.0.0: {}
 
   npm-package-arg@11.0.3:
     dependencies:
@@ -48381,16 +48386,16 @@ snapshots:
       npm-package-arg: 11.0.3
       semver: 7.8.0
 
-  npm-run-all2@8.0.4:
+  npm-run-all2@9.0.1:
     dependencies:
       ansi-styles: 6.2.3
       cross-spawn: 7.0.6
       memorystream: 0.3.1
       picomatch: 4.0.4
       pidtree: 0.6.0
-      read-package-json-fast: 4.0.0
+      read-package-json-fast: 6.0.0
       shell-quote: 1.8.3
-      which: 5.0.0
+      which: 7.0.0
 
   npm-run-path@4.0.1:
     dependencies:
@@ -50233,10 +50238,10 @@ snapshots:
       json-parse-even-better-errors: 3.0.2
       npm-normalize-package-bin: 3.0.1
 
-  read-package-json-fast@4.0.0:
+  read-package-json-fast@6.0.0:
     dependencies:
-      json-parse-even-better-errors: 4.0.0
-      npm-normalize-package-bin: 4.0.0
+      json-parse-even-better-errors: 6.0.0
+      npm-normalize-package-bin: 6.0.0
 
   read-yaml-file@1.1.0:
     dependencies:
@@ -53816,6 +53821,10 @@ snapshots:
       isexe: 3.1.1
 
   which@6.0.1:
+    dependencies:
+      isexe: 4.0.0
+
+  which@7.0.0:
     dependencies:
       isexe: 4.0.0
 
