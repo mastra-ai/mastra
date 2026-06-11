@@ -89,6 +89,7 @@ import {
   Workspace,
   Responses,
   Channels,
+  Harness,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -155,6 +156,7 @@ import type {
   BuilderRegistryPreviewResponse,
   BuilderRegistryInstallBody,
   BuilderRegistryInstallResponse,
+  ListHarnessesResponse,
   ListScoresResponse as ListScoresResponseOld,
   GetObservationalMemoryParams,
   GetObservationalMemoryResponse,
@@ -553,6 +555,23 @@ export class MastraClient extends BaseResource {
    */
   public getWorkflow(workflowId: string) {
     return new Workflow(this.options, workflowId);
+  }
+
+  /**
+   * Lists all registered harnesses
+   * @returns Promise containing array of harness summaries
+   */
+  public listHarnesses(): Promise<ListHarnessesResponse> {
+    return this.request('/harnesses');
+  }
+
+  /**
+   * Gets a harness instance by ID or key
+   * @param harnessId - ID or registered key of the harness
+   * @returns Harness instance
+   */
+  public getHarness(harnessId: string): Harness {
+    return new Harness(this.options, harnessId);
   }
 
   /**

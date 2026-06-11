@@ -3260,3 +3260,99 @@ export interface BuilderRegistryInstallResponse {
   name: string;
   filesWritten: number;
 }
+
+// Harness types
+
+export interface HarnessMode {
+  id: string;
+  defaultModelId: string;
+  description?: string;
+  instructions?: string;
+  transitionsTo?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface HarnessSummary {
+  id: string;
+  ownerId: string;
+  modes: HarnessMode[];
+}
+
+export interface HarnessPendingItem {
+  id: string;
+  kind: 'tool-approval' | 'tool-suspension' | 'question' | 'plan-approval';
+  status: 'pending' | 'responded' | 'canceled' | 'failed';
+  sessionId: string;
+  runId?: string | null;
+  traceId?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  payload?: Record<string, unknown>;
+  response?: Record<string, unknown>;
+}
+
+export interface HarnessSessionRecord {
+  id: string;
+  ownerId: string;
+  resourceId: string;
+  threadId: string;
+  parentSessionId?: string;
+  origin: 'top-level' | 'subagent-tool' | 'direct-local' | 'remote-resolve';
+  modeId: string;
+  modelId: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+  state?: Record<string, unknown>;
+  pending?: HarnessPendingItem[];
+  createdAt: Date;
+  lastActivityAt: Date;
+  closedAt?: Date | null;
+}
+
+export interface HarnessSessionInfo extends HarnessSessionRecord {
+  isBusy: boolean;
+  queueDepth: number;
+  currentRunId: string | null;
+  currentTraceId: string | null;
+}
+
+export interface CreateHarnessSessionParams {
+  resourceId: string;
+  threadId: string;
+  modeId?: string;
+  modelId?: string;
+}
+
+export interface ListHarnessSessionsParams {
+  resourceId?: string;
+  threadId?: string;
+}
+
+export interface SendHarnessMessageParams {
+  messages: unknown;
+  options?: Record<string, unknown>;
+}
+
+export interface ListHarnessesResponse {
+  harnesses: HarnessSummary[];
+}
+
+export interface GetHarnessResponse {
+  harness: HarnessSummary;
+}
+
+export interface ListHarnessModesResponse {
+  modes: HarnessMode[];
+}
+
+export interface ListHarnessSessionsResponse {
+  sessions: HarnessSessionRecord[];
+}
+
+export interface GetHarnessSessionResponse {
+  session: HarnessSessionInfo;
+}
+
+export interface SendHarnessMessageResponse {
+  result: unknown;
+}
