@@ -520,6 +520,8 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const response = stripMastraCreatedAt(await result.response);
 
           expect(response.id).toBe('id-0');
+          // With direct execution (default), timestamps remain as Date objects.
+          // With evented execution they would be serialized to ISO strings via JSON.stringify.
           expect(response.timestamp).toEqual(new Date(0));
           expect(response).toMatchObject({
             modelId: 'mock-model-id',

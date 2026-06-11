@@ -16,7 +16,7 @@ ClickHouse is most commonly used as the dedicated observability backend in a [co
 
 Production observability for traces, logs, metrics, scores, and feedback.
 
-For local development, use a composite store that combines [LibSQL](/reference/storage/libsql) (for memory and workflows) and `@mastra/duckdb` (for observability). Neither alone covers a development setup: LibSQL does not implement the observability domain, and DuckDB does not implement the other domains. See the [observability overview](/docs/observability/overview) for an example.
+For local development, use a composite store that combines [LibSQL](/reference/storage/libsql) (for memory and workflows) and `@mastra/duckdb` (for observability). Neither alone covers a development setup: LibSQL doesn't implement the observability domain, and DuckDB doesn't implement the other domains. See the [observability overview](/docs/observability/overview) for an example.
 
 ## Installation
 
@@ -32,7 +32,7 @@ You will also need a running ClickHouse server. See [Hosting options](#hosting-o
 
 `ObservabilityStorageClickhouseVNext` is the current observability domain implementation. It uses an insert-only schema backed by `ReplacingMergeTree` and is optimized for the volume produced by traces, logs, metrics, scores, and feedback.
 
-Compose it with another storage adapter so observability writes do not contend with your application data:
+Compose it with another storage adapter so observability writes don't contend with your application data:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -73,7 +73,7 @@ export const mastra = new Mastra({
 
 ### Observability with the legacy domain
 
-`ObservabilityStorageClickhouse` is the original observability adapter and remains supported for projects that have not migrated to the vNext schema. The configuration shape is the same as the vNext class.
+`ObservabilityStorageClickhouse` is the original observability adapter and remains supported for projects that haven't migrated to the vNext schema. The configuration shape is the same as the vNext class.
 
 ```typescript
 import { ObservabilityStorageClickhouse } from '@mastra/clickhouse'
@@ -289,7 +289,7 @@ Two ways to provision the database:
 The same approach applies to other hosts with ephemeral filesystems. For application data that should also live off-host, pair this setup with a managed PostgreSQL or LibSQL/Turso instance for the `default` storage.
 
 :::warning
-Do not point an embedded backend like DuckDB at a path inside an ephemeral container filesystem. Data written there is lost when the container restarts, and on some platforms the path is read-only.
+Don't point an embedded backend like DuckDB at a path inside an ephemeral container filesystem. Data written there is lost when the container restarts, and on some platforms the path is read-only.
 :::
 
 ## Initialization

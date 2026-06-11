@@ -9,7 +9,7 @@ import type { IACLProvider } from './interfaces/acl';
 import type { IFGAProvider } from './interfaces/fga';
 import type { IRBACProvider } from './interfaces/rbac';
 import type { EEUser } from './interfaces/user';
-import { isLicenseValid, isDevEnvironment, getSafeLicenseSummary } from './license';
+import { isLicenseValid, isDevEnvironment, getSafeLicenseSummary, warnIfDevEENeedsLicense } from './license';
 
 /**
  * Public capabilities response (no authentication required).
@@ -249,6 +249,9 @@ export async function buildCapabilities(
   const isCloud = isMastraCloudAuth(auth);
   const isSimple = isSimpleAuth(auth);
   const isDev = isDevEnvironment();
+  if (isDev && !hasLicense) {
+    warnIfDevEENeedsLicense();
+  }
   const isLicensedOrCloud = hasLicense || isCloud || isSimple || isDev;
 
   // Build login configuration (always public)

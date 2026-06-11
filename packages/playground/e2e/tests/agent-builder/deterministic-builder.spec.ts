@@ -52,7 +52,8 @@ test.describe('Agent Builder deterministic flow', () => {
 });
 
 async function assertBuilderOutput(page: Page, expectedName: string) {
-  await expect(page.getByText(new RegExp(`Done.*${expectedName}`, 'i'))).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('agent-builder-ready-heading')).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('p').filter({ hasText: `Done — I configured ${expectedName}.` })).toBeVisible();
 
   // Regression guard: each deterministic client tool call should execute exactly once.
   // This catches duplicate continuation execution, missing tool execution, and empty/bad args in the browser path.
@@ -60,6 +61,7 @@ async function assertBuilderOutput(page: Page, expectedName: string) {
   await expect(page.getByText('Setting the agent description:')).toHaveCount(1);
   await expect(page.getByText('Setting the agent instructions:')).toHaveCount(1);
 
+  await page.getByTestId('agent-builder-ready-review').click();
   await expect(page.getByTestId('agent-configure-name')).toHaveValue(expectedName);
   await expect(page.getByTestId('agent-configure-description')).not.toHaveValue('');
 }

@@ -4,6 +4,7 @@ packages:
   - packages/_vendored/*
   - packages/_internals/*
   - packages/*
+  - embedders/*
   - agent-sdks/*
   - deployers/*
   - stores/*
@@ -133,6 +134,7 @@ allowBuilds:
   koffi: false
   msgpackr-extract: false
   msw: false
+  node-pty: true
   onnxruntime-node: false
   protobufjs: false
   sharp: false

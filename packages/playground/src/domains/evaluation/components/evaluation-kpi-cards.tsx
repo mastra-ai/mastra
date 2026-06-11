@@ -1,5 +1,5 @@
 import type { DatasetExperiment, DatasetRecord, GetScorerResponse } from '@mastra/client-js';
-import { MetricsKpiCard } from '@mastra/playground-ui';
+import { MetricsKpiCard } from '@mastra/playground-ui/components/MetricsKpiCard';
 
 interface EvaluationKpiCardsProps {
   scorers?: Record<string, GetScorerResponse>;

@@ -1,0 +1,50 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Task tool progress e2e complete."
+      }
+    },
+    {
+      "match": {
+        "userMessage": "Create a visible task list using the task tool.",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_task_progress_e2e_write",
+            "name": "task_write",
+            "arguments": {
+              "tasks": [
+                {
+                  "id": "plan-task-e2e",
+                  "content": "Plan task progress e2e",
+                  "status": "completed",
+                  "activeForm": "Planning task progress e2e"
+                },
+                {
+                  "id": "verify-task-e2e",
+                  "content": "Verify task progress e2e",
+                  "status": "in_progress",
+                  "activeForm": "Verifying task progress e2e"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "streamingProfile": {
+        "ttft": 200,
+        "tps": 30
+      }
+    }
+  ]
+}

@@ -6,13 +6,13 @@ import {
   KeyValueList,
   Label,
   Sections,
-  SideDialog,
   TextAndIcon,
   getShortId,
   Icon,
   toast,
 } from '@mastra/playground-ui';
-import type { SideDialogRootProps } from '@mastra/playground-ui';
+import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
+import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { format } from 'date-fns/format';
 import { HashIcon, FileInputIcon, FileOutputIcon, TagIcon, RouteIcon, BracesIcon, Pencil, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';

@@ -152,7 +152,16 @@ const omTriggerTool = createTool({
   },
 });
 
-let count = 0;
+const fixtureCounts = new Map<Fixtures, number>();
+
+function getNextFixtureChunk(fixture: Fixtures, fixtureData: unknown[]) {
+  const count = fixtureCounts.get(fixture) ?? 0;
+  const chunk = fixtureData[count];
+
+  fixtureCounts.set(fixture, count + 1 >= fixtureData.length ? 0 : count + 1);
+
+  return chunk;
+}
 
 // Helper function to create a delayed readable stream
 
@@ -286,13 +295,7 @@ export const weatherAgent = new Agent({
           return defaultResponse;
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const chunk = fixtureData[count] as Array<any>;
-
-        count++;
-        if (count >= fixtureData.length) {
-          count = 0;
-        }
+        const chunk = getNextFixtureChunk(fixture, fixtureData) as Array<any>;
 
         // Extract text from fixture chunks
 
@@ -321,13 +324,7 @@ export const weatherAgent = new Agent({
           };
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const chunk = fixtureData[count] as Array<any>;
-
-        count++;
-        if (count >= fixtureData.length) {
-          count = 0;
-        }
+        const chunk = getNextFixtureChunk(fixture, fixtureData) as Array<any>;
 
         return {
           stream: createDelayedStream(chunk, 20),

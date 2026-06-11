@@ -50,6 +50,7 @@ describe('ViewTopBar', () => {
 
     const link = screen.getByRole('link', { name: /agent list/i });
     expect(link.getAttribute('href')).toBe('/agent-builder/agents');
+    expect(screen.getByTestId('agent-builder-back-to-list').getAttribute('href')).toBe('/agent-builder/agents');
     expect(screen.getByText('Support agent')).toBeTruthy();
 
     fireEvent.click(link);
