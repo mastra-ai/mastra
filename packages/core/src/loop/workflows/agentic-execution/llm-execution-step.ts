@@ -1336,14 +1336,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   },
                   includeRawChunks,
                   structuredOutput: currentStep.structuredOutput,
-                  // Merge headers: memory context first, then modelConfig headers, then modelSettings overrides
-                  // x-thread-id / x-resource-id enable server-side memory enrichment (e.g. Memory Gateway)
+                  // Merge headers: modelSettings overrides modelConfig headers.
+                  // Do not forward internal thread/resource context as provider headers; Gateway uses
+                  // x-thread-id/x-resource-id to activate platform-managed memory.
                   headers: (() => {
-                    const memoryHeaders: Record<string, string> = {};
-                    if (_internal?.threadId) memoryHeaders['x-thread-id'] = _internal.threadId;
-                    if (_internal?.resourceId) memoryHeaders['x-resource-id'] = _internal.resourceId;
                     const merged = {
-                      ...memoryHeaders,
                       ...modelHeaders,
                       ...currentStep.modelSettings?.headers,
                     };
