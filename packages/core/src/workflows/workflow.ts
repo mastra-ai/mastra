@@ -12,6 +12,7 @@ import type { SubAgent } from '../agent/subagent';
 import { TripWire } from '../agent/trip-wire';
 import type { AgentStreamOptions } from '../agent/types';
 import { MastraFGAPermissions } from '../auth/ee';
+import type { ActorSignal } from '../auth/ee';
 import { MastraBase } from '../base';
 import { RequestContext } from '../di';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
@@ -2446,6 +2447,7 @@ export class Workflow<
     outputWriter,
     validateInputs,
     perStep,
+    actor,
     engine: _engine,
     bail: _bail,
     ...rest
@@ -2482,6 +2484,7 @@ export class Workflow<
     outputWriter?: OutputWriter;
     validateInputs?: boolean;
     perStep?: boolean;
+    actor?: ActorSignal;
   } & Partial<ObservabilityContext>): Promise<TOutput | undefined> {
     const observabilityContext = resolveObservabilityContext(rest);
     this.__registerMastra(mastra);
@@ -2497,6 +2500,7 @@ export class Workflow<
         resource: { type: 'workflow', id: getWorkflowFGAResourceId(this.id) },
         permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
         requestContext,
+        actor,
         context: {
           resourceId,
         },

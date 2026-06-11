@@ -2,6 +2,7 @@
  * Event dispatcher: maps HarnessEvent types to extracted handler functions.
  */
 import type { HarnessEvent, HarnessThread, TaskItemSnapshot } from '@mastra/core/harness';
+import type { AskUserSelectionMode } from '@mastra/core/tools';
 
 import { getCurrentGitBranchAsync } from '../utils/project.js';
 import {
@@ -371,21 +372,31 @@ export async function dispatchEvent(event: HarnessEvent, ectx: EventHandlerConte
       break;
     }
 
-    case 'ask_question':
-      await handleAskQuestion(ectx, event.questionId, event.question, event.options, event.selectionMode);
+    case 'tool_suspended': {
+      // Interactive built-in tools pause via the native tool-suspension primitive.
+      // Route the suspension to the matching prompt UI using the suspend payload;
+      // the UI resumes the tool by calling harness.respondToToolSuspension({ toolCallId }).
+      const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
+      if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
+        await handleSandboxAccessRequest(
+          ectx,
+          event.toolCallId,
+          String(payload.path ?? ''),
+          String(payload.reason ?? ''),
+        );
+      } else if (event.toolName === 'ask_user') {
+        await handleAskQuestion(
+          ectx,
+          event.toolCallId,
+          String(payload.question ?? ''),
+          payload.options as Array<{ label: string; description?: string }> | undefined,
+          payload.selectionMode as AskUserSelectionMode | undefined,
+        );
+      } else if (event.toolName === 'submit_plan') {
+        await handlePlanApproval(ectx, event.toolCallId, String(payload.title ?? ''), String(payload.plan ?? ''));
+      }
       break;
-
-    case 'sandbox_access_request':
-      await handleSandboxAccessRequest(ectx, event.questionId, event.path, event.reason);
-      break;
-
-    case 'plan_approval_required':
-      await handlePlanApproval(ectx, event.planId, event.title, event.plan);
-      break;
-
-    case 'plan_approved':
-      // Handled directly in onApprove callback to ensure proper sequencing
-      break;
+    }
 
     case 'display_state_changed':
       // The Harness emits this after every event with the updated display state.
