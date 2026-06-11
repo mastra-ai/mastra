@@ -1114,7 +1114,11 @@ export class AgentChannels {
     if (result.ownerStream) {
       try {
         const ownerStream = await result.ownerStream;
-        await ownerStream.consumeStream();
+        // Loser Lambda gets undefined: another invocation acquired the lease
+        // and will drive the run. Nothing to do here.
+        if (ownerStream) {
+          await ownerStream.consumeStream();
+        }
       } catch (err) {
         this.log('debug', 'ownerStream consume failed', err);
       }
