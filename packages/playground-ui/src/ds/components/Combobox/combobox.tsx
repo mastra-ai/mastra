@@ -3,7 +3,7 @@ import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import * as React from 'react';
 import { comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
-import type { ControlSize } from '@/ds/primitives/control-size';
+import type { TextButtonSize } from '@/ds/components/Button/Button';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 
 export type { ComboboxVariant } from './combobox-styles';
@@ -26,7 +26,7 @@ export type ComboboxProps = {
   className?: string;
   disabled?: boolean;
   variant?: ComboboxVariant;
-  size?: ControlSize;
+  size?: TextButtonSize;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
@@ -43,7 +43,7 @@ export function Combobox({
   className,
   disabled = false,
   variant = 'default',
-  size = 'default',
+  size = 'md',
   open,
   onOpenChange,
   container,
@@ -64,6 +64,7 @@ export function Combobox({
   return (
     <div className={comboboxStyles.root}>
       <BaseCombobox.Root
+        autoHighlight
         items={options}
         value={selectedOption}
         onValueChange={handleSelect}

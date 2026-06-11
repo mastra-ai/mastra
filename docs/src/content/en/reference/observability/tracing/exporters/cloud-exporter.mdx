@@ -150,7 +150,7 @@ async onMetricEvent(event: MetricEvent): Promise<void>
 
 Processes metric signals for Cloud export.
 
-Every `MetricEvent` passed to this handler is buffered and exported to the Cloud metrics endpoint derived from the configured base endpoint. There is no additional filtering by metric subtype or status inside `CloudExporter`; the exporter forwards every metric event it receives unless it is disabled.
+Every `MetricEvent` passed to this handler is buffered and exported to the Cloud metrics endpoint derived from the configured base endpoint. Additional filtering by metric subtype or status inside `CloudExporter` isn't performed; the exporter forwards every metric event it receives unless it's disabled.
 
 <PropertiesTable
   props={[
@@ -173,7 +173,7 @@ async onScoreEvent(event: ScoreEvent): Promise<void>
 
 Processes score signals for Cloud export.
 
-Every `ScoreEvent` passed to this handler is buffered and exported to the Cloud scores endpoint derived from the configured base endpoint. There is no extra filtering at the exporter layer beyond the disabled-exporter check, so all score events received by this method are forwarded.
+Every `ScoreEvent` passed to this handler is buffered and exported to the Cloud scores endpoint derived from the configured base endpoint. No extra filtering at the exporter layer beyond the disabled-exporter check is performed, so all score events received by this method are forwarded.
 
 <PropertiesTable
   props={[
@@ -196,7 +196,7 @@ async onFeedbackEvent(event: FeedbackEvent): Promise<void>
 
 Processes feedback signals for Cloud export.
 
-Every `FeedbackEvent` passed to this handler is buffered and exported to the Cloud feedback endpoint derived from the configured base endpoint. There is no feedback-type filtering inside `CloudExporter`; all feedback events received here are forwarded unless the exporter is disabled.
+Every `FeedbackEvent` passed to this handler is buffered and exported to the Cloud feedback endpoint derived from the configured base endpoint. No feedback-type filtering inside `CloudExporter` is performed; all feedback events received here are forwarded unless the exporter is disabled.
 
 <PropertiesTable
   props={[

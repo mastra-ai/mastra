@@ -6295,19 +6295,30 @@ export class Agent<
     // Idempotent: the LLM was already given this.#mastra (or undefined) in
     // getLLM; re-register so the ephemeral case takes effect.
     llm.__registerMastra(effectiveMastra);
-    // Ensure the evented engine's workers are running on the effective Mastra.
-    // Users who just do `new Mastra({ agents })` without calling startWorkers
-    // would otherwise hang here — events would publish but no worker would
-    // consume them. startWorkers is idempotent.
-    await effectiveMastra?.startWorkers();
-    // Register as internal so the evented engine's event processor can resolve
-    // `execution-workflow` by id via __hasInternalWorkflow/getInternalWorkflow.
-    // We pick the runId up front and register run-scoped (not unscoped), so
-    // concurrent or nested agent invocations never resolve each other's
-    // closure-bound instance. __registerInternalWorkflow also calls
-    // __registerMastra under the hood, which wires the pubsub `createRun` needs.
+
+    const useEventedExecution = process.env.MASTRA_EVENTED_EXECUTION === 'true';
     const executionRunId = randomUUID();
-    effectiveMastra?.__registerInternalWorkflow(executionWorkflow, executionRunId);
+
+    if (useEventedExecution) {
+      // Evented engine path: needs pubsub workers and internal workflow registration.
+      // Ensure the evented engine's workers are running on the effective Mastra.
+      // Users who just do `new Mastra({ agents })` without calling startWorkers
+      // would otherwise hang here — events would publish but no worker would
+      // consume them. startWorkers is idempotent.
+      await effectiveMastra?.startWorkers();
+      // Register as internal so the evented engine's event processor can resolve
+      // `execution-workflow` by id via __hasInternalWorkflow/getInternalWorkflow.
+      // We pick the runId up front and register run-scoped (not unscoped), so
+      // concurrent or nested agent invocations never resolve each other's
+      // closure-bound instance. __registerInternalWorkflow also calls
+      // __registerMastra under the hood, which wires the pubsub `createRun` needs.
+      effectiveMastra?.__registerInternalWorkflow(executionWorkflow, executionRunId);
+    } else {
+      // Direct execution path (default): register Mastra for storage/observability
+      // but skip pubsub workers and internal workflow registration (not needed
+      // without events). Avoids requestContext serialisation loss.
+      executionWorkflow.__registerMastra(effectiveMastra);
+    }
 
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
     try {
@@ -6315,21 +6326,26 @@ export class Agent<
       const result = await run.start({ ...observabilityContext });
       return result;
     } finally {
-      // Prepare-stream is single-shot per #execute call — no resume path that
-      // would need the registration to outlive this scope, so always unregister.
-      effectiveMastra.__unregisterInternalWorkflow(executionWorkflow.id, executionRunId);
-      // The prepare-stream workflow opts out of persisting via `shouldPersistSnapshot: () => false`,
-      // but the evented engine's `EventedRun.start` still writes the initial 'running' row
-      // (see issue #17137). Drop it here so this throwaway internal workflow never leaves a
-      // row in the user's storage. Best-effort: swallow errors so a delete miss doesn't mask
-      // a real failure in the surrounding run.
-      try {
-        await executionWorkflow.deleteWorkflowRunById(executionRunId);
-      } catch (err) {
-        this.logger.debug('Failed to clean up internal execution-workflow run row', {
-          runId: executionRunId,
-          error: err instanceof Error ? err.message : String(err),
-        });
+      if (useEventedExecution) {
+        // The WEP's terminal event handlers (processWorkflowEnd / processWorkflowFail /
+        // processWorkflowSuspend) unregister the internal workflow after all events for
+        // this run have been fully processed. This safety-net covers the exceptional path
+        // where run.start() throws before a terminal event is published (e.g. subscription
+        // setup failure). In the normal case the WEP already unregistered, so this is a no-op.
+        effectiveMastra.__unregisterInternalWorkflow(executionWorkflow.id, executionRunId);
+        // The prepare-stream workflow opts out of persisting via `shouldPersistSnapshot: () => false`,
+        // but the evented engine's `EventedRun.start` still writes the initial 'running' row
+        // (see issue #17137). Drop it here so this throwaway internal workflow never leaves a
+        // row in the user's storage. Best-effort: swallow errors so a delete miss doesn't mask
+        // a real failure in the surrounding run.
+        try {
+          await executionWorkflow.deleteWorkflowRunById(executionRunId);
+        } catch (err) {
+          this.logger.debug('Failed to clean up internal execution-workflow run row', {
+            runId: executionRunId,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
       }
     }
   }
@@ -6841,6 +6857,15 @@ export class Agent<
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text: 'An unknown error occurred while streaming',
+      });
+    }
+
+    if (typeof result.result?.getFullOutput !== 'function') {
+      throw new MastraError({
+        id: 'AGENT_GENERATE_MALFORMED_RESULT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.SYSTEM,
+        text: 'Execution workflow produced a result without getFullOutput — this usually means the evented engine failed to deliver events (e.g. socket publish failure)',
       });
     }
 
@@ -7684,6 +7709,15 @@ export class Agent<
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
         text: 'An unknown error occurred while generating',
+      });
+    }
+
+    if (typeof result.result?.getFullOutput !== 'function') {
+      throw new MastraError({
+        id: 'AGENT_GENERATE_MALFORMED_RESULT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.SYSTEM,
+        text: 'Execution workflow produced a result without getFullOutput — this usually means the evented engine failed to deliver events (e.g. socket publish failure)',
       });
     }
 

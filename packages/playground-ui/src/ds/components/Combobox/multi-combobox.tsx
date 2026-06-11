@@ -4,7 +4,7 @@ import * as React from 'react';
 import type { ComboboxOption } from './combobox';
 import { comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
-import type { ControlSize } from '@/ds/primitives/control-size';
+import type { TextButtonSize } from '@/ds/components/Button/Button';
 import { cn } from '@/lib/utils';
 
 export type { ComboboxOption };
@@ -19,7 +19,7 @@ export type MultiComboboxProps = {
   className?: string;
   disabled?: boolean;
   variant?: ComboboxVariant;
-  size?: ControlSize;
+  size?: TextButtonSize;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;

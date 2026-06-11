@@ -635,6 +635,35 @@ describe('taskCompleteTool', () => {
       { id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
     ]);
   });
+
+  it('uses getState for restored tasks when the compatibility state projection is stale', async () => {
+    const restoredState = {
+      tasks: [
+        { id: 'restored', content: 'Restored task', status: 'in_progress', activeForm: 'Restoring task' },
+        { id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
+      ],
+    };
+    const requestContext = new RequestContext();
+    const setState = vi.fn(async updates => Object.assign(restoredState, updates));
+    const events: HarnessEvent[] = [];
+    requestContext.set('harness', {
+      state: { tasks: [] },
+      getState: () => restoredState,
+      setState,
+      emitEvent: (event: HarnessEvent) => events.push(event),
+    });
+
+    const result = await (taskCompleteTool as any).execute({ id: 'restored' }, { requestContext });
+
+    expect(result.isError).toBe(false);
+    expect(result.tasks).toEqual([
+      { id: 'restored', content: 'Restored task', status: 'completed', activeForm: 'Restoring task' },
+      { id: 'tests', content: 'Write tests', status: 'pending', activeForm: 'Writing tests' },
+    ]);
+    expect(setState).toHaveBeenCalledWith({ tasks: result.tasks });
+    expect(restoredState.tasks).toEqual(result.tasks);
+    expect(events).toEqual([{ type: 'task_updated', tasks: result.tasks }]);
+  });
 });
 
 describe('taskCheckTool', () => {

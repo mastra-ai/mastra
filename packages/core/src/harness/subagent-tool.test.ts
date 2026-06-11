@@ -225,6 +225,55 @@ describe('createSubagentTool requestContext forwarding', () => {
     expect(streamOpts.requestContext).toBeInstanceOf(RequestContext);
   });
 
+  it('returns partial subagent output when the parent aborts during streaming', async () => {
+    const abortController = new AbortController();
+    let getFullOutput: ReturnType<typeof vi.fn> | undefined;
+    mockStream.mockImplementation(async (_task, opts) => {
+      getFullOutput = vi.fn().mockResolvedValue({ text: 'final answer should not be used' });
+      return {
+        fullStream: {
+          async *[Symbol.asyncIterator]() {
+            yield { type: 'text-delta', payload: { text: 'partial answer' } };
+            if (opts.abortSignal === abortController.signal) {
+              abortController.abort();
+            }
+          },
+        },
+        getFullOutput,
+      };
+    });
+
+    const emitEvent = vi.fn();
+    const tool = createSubagentTool({
+      subagents,
+      resolveModel,
+      fallbackModelId: 'test-model',
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('harness', { emitEvent, abortSignal: abortController.signal });
+
+    const result = await (tool as any).execute(
+      { agentType: 'explore', task: 'Do abortable work' },
+      { requestContext, agent: { toolCallId: 'tc-abort' } },
+    );
+
+    expect(result).toEqual({
+      content: '[Aborted by user]\n\nPartial output:\npartial answer',
+      isError: false,
+    });
+    expect(getFullOutput).not.toHaveBeenCalled();
+    expect(emitEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'subagent_end',
+        toolCallId: 'tc-abort',
+        agentType: 'explore',
+        result: '[Aborted by user]\n\nPartial output:\npartial answer',
+        isError: false,
+      }),
+    );
+  });
+
   it('does not default maxSteps when stopWhen is configured', async () => {
     const stopFn = vi.fn().mockReturnValue({ continue: true });
     mockStream.mockResolvedValue(createMockStreamResponse('done'));
