@@ -13,7 +13,7 @@ function createCtx() {
     },
     options: { inlineQuestions: true },
     harness: {
-      respondToQuestion: vi.fn(),
+      respondToToolSuspension: vi.fn(),
       getDisplayState: vi.fn(() => ({ isRunning: false })),
     },
     pendingInlineQuestions: [],
@@ -50,7 +50,7 @@ describe('handleAskQuestion goal mode', () => {
 
     expect(answerQuestion).not.toHaveBeenCalled();
     expect(state.activeInlineQuestion).toBeDefined();
-    expect(state.harness.respondToQuestion).not.toHaveBeenCalled();
+    expect(state.harness.respondToToolSuspension).not.toHaveBeenCalled();
     expect(ctx.addChildBeforeFollowUps).not.toHaveBeenCalled();
     expect(state.activeGoalJudge).toBeUndefined();
 
@@ -74,9 +74,9 @@ describe('handleAskQuestion goal mode', () => {
 
     await promise;
 
-    expect(state.harness.respondToQuestion).toHaveBeenCalledWith({
-      questionId: 'q1',
-      answer: ['React', 'Svelte'],
+    expect(state.harness.respondToToolSuspension).toHaveBeenCalledWith({
+      toolCallId: 'q1',
+      resumeData: ['React', 'Svelte'],
     });
   });
 });

@@ -541,34 +541,6 @@ export interface ActiveSubagentState {
 export type HarnessSubagentHistoryEntry = Omit<ActiveSubagentState, 'status'>;
 
 /**
- * Controls whether an `ask_user` prompt accepts one choice or multiple choices.
- *
- * `single_select` is the default for prompts that provide options, preserving the
- * original one-answer behavior. `multi_select` tells the UI that the user may choose
- * more than one option and return those selections as an array.
- */
-export type HarnessQuestionSelectionMode = 'single_select' | 'multi_select';
-
-/**
- * A structured choice rendered by the UI for an `ask_user` prompt.
- *
- * The label is the value returned to the model when the option is selected. The
- * optional description gives the UI more context without changing the answer value.
- */
-export interface HarnessQuestionOption {
-  label: string;
-  description?: string;
-}
-
-/**
- * Answer shape accepted by `respondToQuestion()` for pending `ask_user` prompts.
- *
- * Free-text and single-select prompts resolve with a string. Multi-select prompts
- * resolve with a string array containing each selected option label.
- */
-export type HarnessQuestionAnswer = string | string[];
-
-/**
  * Canonical display state maintained by the Harness.
  *
  * This is the single source of truth for *what to display*.
@@ -612,24 +584,23 @@ export interface HarnessDisplayState {
   } | null;
 
   // ── Tool suspension ─────────────────────────────────────────────────
-  /** A tool awaiting resume data after calling suspend() (null when none) */
-  pendingSuspension: {
-    toolCallId: string;
-    toolName: string;
-    args: unknown;
-    suspendPayload: unknown;
-    resumeSchema?: string;
-  } | null;
+  /**
+   * Tools awaiting resume data after calling suspend(), keyed by toolCallId.
+   * Multiple tools can be parked at once (e.g. parallel `ask_user` prompts), so
+   * resuming one leaves the others intact for the UI to keep rendering.
+   */
+  pendingSuspensions: Map<
+    string,
+    {
+      toolCallId: string;
+      toolName: string;
+      args: unknown;
+      suspendPayload: unknown;
+      resumeSchema?: string;
+    }
+  >;
 
   // ── Interactive prompts ──────────────────────────────────────────────
-  /** A question from the agent awaiting user answer (null when none) */
-  pendingQuestion: {
-    questionId: string;
-    question: string;
-    options?: HarnessQuestionOption[];
-    selectionMode?: HarnessQuestionSelectionMode;
-  } | null;
-
   /** A plan awaiting user approval (null when none) */
   pendingPlanApproval: {
     planId: string;
@@ -675,8 +646,7 @@ export function defaultDisplayState(): HarnessDisplayState {
     activeTools: new Map(),
     toolInputBuffers: new Map(),
     pendingApproval: null,
-    pendingSuspension: null,
-    pendingQuestion: null,
+    pendingSuspensions: new Map(),
     pendingPlanApproval: null,
     activeSubagents: new Map(),
     omProgress: defaultOMProgressState(),
@@ -859,14 +829,6 @@ export type HarnessEvent =
       currentModel?: string;
     }
   | { type: 'om_thread_title_updated'; cycleId: string; threadId: string; oldTitle?: string; newTitle: string }
-  | { type: 'sandbox_access_request'; questionId: string; path: string; reason: string }
-  | {
-      type: 'ask_question';
-      questionId: string;
-      question: string;
-      options?: HarnessQuestionOption[];
-      selectionMode?: HarnessQuestionSelectionMode;
-    }
   | {
       type: 'plan_approval_required';
       planId: string;
@@ -1090,9 +1052,6 @@ export interface HarnessRequestContext<TState = unknown> {
 
   /** Emit a harness event (used by tools to forward events) */
   emitEvent?: (event: HarnessEvent) => void;
-
-  /** Register a pending question resolver (used by ask_user tools) */
-  registerQuestion?: (params: { questionId: string; resolve: (answer: HarnessQuestionAnswer) => void }) => void;
 
   /** Register a pending plan approval resolver (used by submit_plan tools) */
   registerPlanApproval?: (params: {
