@@ -1,5 +1,6 @@
 import type { z } from 'zod/v4';
 import type { AgentExecutionOptionsBase } from '../agent/agent.types';
+import type { ToolReplayReport } from '../datasets/experiment/replay';
 import type { SerializedError } from '../error';
 import type { ScoringSamplingConfig } from '../evals/types';
 import type { MastraDBMessage, StorageThreadType, SerializedMemoryConfig } from '../memory/types';
@@ -2578,6 +2579,8 @@ export interface ExperimentResult {
   traceId: string | null;
   status: ExperimentResultStatus | null;
   tags: string[] | null;
+  /** Tool replay divergence report — present only on items executed with tool replay. */
+  toolReplay: ToolReplayReport | null;
   createdAt: Date;
 }
 
@@ -2631,6 +2634,8 @@ export interface AddExperimentResultInput {
   traceId?: string | null;
   status?: ExperimentResultStatus | null;
   tags?: string[] | null;
+  /** Tool replay divergence report — only set for items executed with tool replay. */
+  toolReplay?: ToolReplayReport | null;
 }
 
 export interface ListExperimentsInput {

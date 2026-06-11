@@ -573,6 +573,7 @@ export const EXPERIMENT_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   traceId: { type: 'text', nullable: true },
   status: { type: 'text', nullable: true },
   tags: { type: 'jsonb', nullable: true },
+  toolReplay: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
 };
 

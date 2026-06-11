@@ -606,6 +606,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         requestContext: rawRequestContext,
         versions,
         toolReplay,
+        toolMocks,
       } = params as {
         targetType: 'agent' | 'workflow' | 'scorer';
         targetId: string;
@@ -615,7 +616,15 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         maxConcurrency?: number;
         requestContext?: Record<string, unknown> | RequestContext;
         versions?: { agents?: Record<string, { versionId: string } | { status: 'draft' | 'published' }> };
-        toolReplay?: { fromExperimentId?: string; onMiss?: 'error' | 'passthrough' };
+        toolReplay?: { fromExperimentId?: string; onMiss?: 'error' | 'passthrough'; matching?: 'fifo' | 'strict' };
+        toolMocks?: Record<
+          string,
+          {
+            output?: unknown;
+            error?: { name?: string; message: string };
+            expect?: { args?: unknown; calledTimes?: number };
+          }
+        >;
       };
       // Belt and braces with the body-schema refinement: adapters merge
       // unvalidated query params into handler params, so the schema-level
@@ -625,6 +634,11 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       if (toolReplay && targetType !== 'agent') {
         throw new HTTPException(400, {
           message: `toolReplay is only supported for agent targets (got targetType '${targetType}')`,
+        });
+      }
+      if (toolMocks && targetType !== 'agent') {
+        throw new HTTPException(400, {
+          message: `toolMocks is only supported for agent targets (got targetType '${targetType}')`,
         });
       }
       // The adapter middleware merges body + query requestContext into a RequestContext instance.
@@ -641,6 +655,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         requestContext,
         versions,
         toolReplay,
+        toolMocks,
       });
       // Return shape matching experimentSummaryResponseSchema
       return {
