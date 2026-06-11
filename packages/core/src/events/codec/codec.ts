@@ -130,12 +130,15 @@ export function decode(value: unknown): unknown {
       case 'BigInt':
         return BigInt(env.v);
       case 'RegExp': {
-        // `isEnvelope` already constrained `flags` to the spec-defined set. A
-        // malformed or hostile `source` is escaped so untrusted input is
-        // treated literally; if construction still fails, fall back to the raw
-        // envelope so a hostile peer cannot crash frame decoding.
+        // `isEnvelope` already constrained `flags` to the spec-defined set,
+        // and we only reach this branch for our own envelopes — `source` came
+        // from a peer that previously called `encode()` on a real `RegExp`.
+        // Reconstruct with the raw source so metacharacter semantics survive
+        // the round-trip (`/foo.*/gi` must come back as `/foo.*/gi`, not
+        // `/foo\.\*/gi`). The try/catch keeps a malformed/hostile `source`
+        // from crashing frame decoding — we fall back to the raw envelope.
         try {
-          return new RegExp(escapeRegExpLiteral(env.v.source), env.v.flags);
+          return new RegExp(env.v.source, env.v.flags);
         } catch {
           return value;
         }
@@ -162,14 +165,6 @@ export function decode(value: unknown): unknown {
     out[k] = decode((value as Record<string, unknown>)[k]);
   }
   return out;
-}
-
-/**
- * Escape regex metacharacters so untrusted input is treated as a literal
- * pattern fragment when constructing a RegExp.
- */
-function escapeRegExpLiteral(input: string): string {
-  return input.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**

@@ -155,6 +155,22 @@ describe('codec', () => {
       expect(out.flags).toBe('gi');
     });
 
+    it('preserves metacharacter semantics across encode/decode', () => {
+      // Regression for a previous decode-side autofix that escaped every
+      // metacharacter in `source` before reconstruction, turning `/foo.*/gi`
+      // into a regex matching the literal string `foo.*`.
+      const cases: RegExp[] = [/foo.*/gi, /\d+-\d+/, /[a-z]{2,4}/i, /^(yes|no)$/, /a\.b\\c/];
+      for (const r of cases) {
+        const out = roundTrip(r) as RegExp;
+        expect(out).toBeInstanceOf(RegExp);
+        expect(out.source).toBe(r.source);
+        expect(out.flags).toBe(r.flags);
+        // Behavioural check: matching parity on a representative input.
+        const sample = 'a.b\\c yes 12-34 foozzz';
+        expect(sample.match(out)?.toString()).toBe(sample.match(r)?.toString());
+      }
+    });
+
     it('treats a RegExp envelope with hostile flags as user data', () => {
       // Crafted payload as if a peer tried to inject non-spec flags. The
       // decoder must not construct a RegExp from it.
