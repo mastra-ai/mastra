@@ -14,6 +14,7 @@ import { z } from 'zod';
 import type { ToolsInput } from '../../agent/types';
 import { createTool } from '../../tools';
 import type { ToolExecutionContext } from '../../tools';
+import { formatTaskCheckResult, formatTaskListResult, summarizeTaskCheck } from '../tools';
 import { evaluatePermission } from './permissions';
 import type {
   PermissionCheckResult,
@@ -108,12 +109,20 @@ function recoverableError(error: unknown, code = 'harness.tool_failed') {
   };
 }
 
-function taskSummary(tasks: HarnessTaskRecord[]) {
+let questionCounter = 0;
+let planCounter = 0;
+
+function formatQuestionAnswer(answer: string | string[]): string {
+  return Array.isArray(answer) ? answer.join(', ') : answer;
+}
+
+function taskSummary(tasks: HarnessTaskRecord[], content: string) {
   const completed = tasks.filter(task => task.status === 'completed').length;
   const inProgress = tasks.filter(task => task.status === 'in_progress').length;
   const pending = tasks.filter(task => task.status === 'pending').length;
   const incompleteTasks = tasks.filter(task => task.status !== 'completed');
   return {
+    content,
     tasks,
     summary: {
       total: tasks.length,
@@ -134,10 +143,14 @@ function getTasks(session: AnySession): HarnessTaskRecord[] {
 }
 
 async function replaceTasks(session: AnySession, tasks: HarnessTaskRecord[]): Promise<HarnessTaskRecord[]> {
-  return session.updateState(() => ({
-    updates: { tasks: tasks.map(task => ({ ...task })) },
-    result: tasks.map(task => ({ ...task })),
-  }));
+  return session.updateState(() => {
+    const nextTasks = tasks.map(task => ({ ...task }));
+    return {
+      updates: { tasks: nextTasks },
+      events: [{ type: 'task_updated', tasks: nextTasks }],
+      result: nextTasks,
+    };
+  });
 }
 
 async function updateTask(
@@ -152,7 +165,7 @@ async function updateTask(
       throw new Error(`Harness task "${taskId}" was not found on session "${session.id}"`);
     }
     Object.assign(task, updates);
-    return { updates: { tasks }, result: tasks };
+    return { updates: { tasks }, events: [{ type: 'task_updated', tasks }], result: tasks };
   });
 }
 
@@ -161,7 +174,7 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
     task_write: createTool({
       id: 'task_write',
       description: 'Replace the task list for the current harness session.',
-      inputSchema: z.object({ tasks: z.array(taskSchema).min(1) }),
+      inputSchema: z.object({ tasks: z.array(taskSchema) }),
       execute: async ({ tasks }, context) => {
         try {
           assertOwningSession(session, context);
@@ -169,7 +182,7 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
             session,
             tasks.map(task => ({ ...task, id: task.id ?? randomUUID() })),
           );
-          return taskSummary(savedTasks);
+          return taskSummary(savedTasks, formatTaskListResult(savedTasks));
         } catch (error) {
           return recoverableError(error);
         }
@@ -182,7 +195,8 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
       execute: async ({ id, ...updates }, context) => {
         try {
           assertOwningSession(session, context);
-          return taskSummary(await updateTask(session, id, updates));
+          const updated = await updateTask(session, id, updates);
+          return taskSummary(updated, formatTaskListResult(updated));
         } catch (error) {
           return recoverableError(error);
         }
@@ -195,7 +209,8 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
       execute: async ({ id }, context) => {
         try {
           assertOwningSession(session, context);
-          return taskSummary(await updateTask(session, id, { status: 'completed' }));
+          const completed = await updateTask(session, id, { status: 'completed' });
+          return taskSummary(completed, formatTaskListResult(completed));
         } catch (error) {
           return recoverableError(error);
         }
@@ -208,7 +223,8 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
       execute: async (_input, context) => {
         try {
           assertOwningSession(session, context);
-          return taskSummary(getTasks(session));
+          const currentTasks = getTasks(session);
+          return taskSummary(currentTasks, formatTaskCheckResult(summarizeTaskCheck(currentTasks)));
         } catch (error) {
           return recoverableError(error);
         }
@@ -229,8 +245,14 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
       }),
       execute: async (input, context) => {
         try {
-          assertOwningSession(session, context);
-          const pending = await session.registerPendingItem({
+          const harnessCtx = assertOwningSession(session, context);
+          const options = input.options?.map(o => ({
+            label: o.label,
+            ...(o.description ? { description: o.description } : {}),
+          }));
+          const resolvedSelectionMode = options?.length ? (input.selectionMode ?? 'single_select') : undefined;
+
+          await session.registerPendingItem({
             id: randomUUID(),
             kind: 'question',
             status: 'pending',
@@ -238,7 +260,29 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
             traceId: context.traceId ?? null,
             payload: input,
           });
-          return { isError: false, pendingItemId: pending.id, status: pending.status };
+
+          if (!harnessCtx.emitEvent || !harnessCtx.registerQuestion) {
+            return {
+              isError: false,
+              content: `[Question for user]: ${input.question}${
+                options?.length ? '\nOptions: ' + options.map(o => o.label).join(', ') : ''
+              }`,
+            };
+          }
+
+          const questionId = `q_${++questionCounter}_${Date.now()}`;
+          const answer = await new Promise<string | string[]>(resolve => {
+            harnessCtx.registerQuestion!({ questionId, resolve });
+            harnessCtx.emitEvent!({
+              type: 'ask_question',
+              questionId,
+              question: input.question,
+              options,
+              selectionMode: resolvedSelectionMode,
+            });
+          });
+
+          return { isError: false, content: `User answered: ${formatQuestionAnswer(answer)}` };
         } catch (error) {
           return recoverableError(error);
         }
@@ -250,8 +294,9 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
       inputSchema: z.object({ title: z.string().nullable().optional(), plan: z.string() }),
       execute: async (input, context) => {
         try {
-          assertOwningSession(session, context);
-          const pending = await session.registerPendingItem({
+          const harnessCtx = assertOwningSession(session, context);
+
+          await session.registerPendingItem({
             id: randomUUID(),
             kind: 'plan-approval',
             status: 'pending',
@@ -259,7 +304,41 @@ export function buildHarnessBuiltInTools(session: AnySession): ToolsInput {
             traceId: context.traceId ?? null,
             payload: { ...input, transitionModeId: session.getMode().transitionsTo },
           });
-          return { isError: false, pendingItemId: pending.id, status: pending.status };
+
+          if (!harnessCtx.emitEvent || !harnessCtx.registerPlanApproval) {
+            return {
+              isError: false,
+              content: `[Plan submitted for review]\n\nTitle: ${input.title || 'Implementation Plan'}\n\n${input.plan}`,
+            };
+          }
+
+          const planId = `plan_${++planCounter}_${Date.now()}`;
+          const result = await new Promise<{ action: 'approved' | 'rejected'; feedback?: string }>(resolve => {
+            harnessCtx.registerPlanApproval!({ planId, resolve });
+            harnessCtx.emitEvent!({
+              type: 'plan_approval_required',
+              planId,
+              title: input.title || 'Implementation Plan',
+              plan: input.plan,
+            });
+          });
+
+          if (result.action === 'approved') {
+            const transitionsTo = session.getMode().transitionsTo;
+            if (transitionsTo) {
+              session.switchModeById(transitionsTo);
+            }
+            return {
+              isError: false,
+              content: 'Plan approved. Proceed with implementation following the approved plan.',
+            };
+          }
+
+          const feedback = result.feedback ? `\n\nUser feedback: ${result.feedback}` : '';
+          return {
+            isError: false,
+            content: `Plan was not approved. The user wants revisions.${feedback}\n\nPlease revise the plan based on the feedback and submit again with submit_plan.`,
+          };
         } catch (error) {
           return recoverableError(error);
         }

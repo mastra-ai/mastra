@@ -280,6 +280,16 @@ const RESERVED_EVENT_TYPES = new Set([
   'thread_cloned',
   'state_changed',
   'subagent_start',
+  // Harness UI events emitted by built-in tools via HarnessRequestContext.emitEvent.
+  // These are typed harness events (not dot-namespaced custom events), so they must
+  // bypass the custom-event validation that requires a "." in the type.
+  'task_updated',
+  'ask_question',
+  'plan_approval_required',
+  'subagent_text_delta',
+  'subagent_tool_start',
+  'subagent_tool_end',
+  'subagent_end',
 ]);
 
 const RESERVED_EVENT_PREFIXES = ['session_', 'thread_'];

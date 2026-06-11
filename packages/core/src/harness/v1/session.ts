@@ -22,6 +22,7 @@ import type {
 import type { DynamicArgument } from '../../types';
 import type { Workspace } from '../../workspace';
 import type { Skill as WorkspaceSkill, SkillMetadata as WorkspaceSkillMetadata } from '../../workspace/skills/types';
+import type { HarnessQuestionAnswer } from '../types';
 import { sessionCreatedPayload } from './events';
 import type { EventEmitter } from './events';
 import type { HarnessMode } from './mode';
@@ -98,6 +99,14 @@ export class Session<TState = {}> {
 
   #modelId: string;
   #mode: HarnessMode;
+
+  /**
+   * In-memory resolvers for blocking built-in tools (ask_user, submit_plan).
+   * The tool emits a UI event and awaits the resolver; the harness/TUI calls
+   * `resolveQuestion`/`resolvePlanApproval` to unblock the tool inline.
+   */
+  #questionResolvers = new Map<string, (answer: HarnessQuestionAnswer) => void>();
+  #planApprovalResolvers = new Map<string, (result: { action: 'approved' | 'rejected'; feedback?: string }) => void>();
 
   constructor(config: SessionConfig<TState>) {
     this.#id = config.id;
@@ -732,6 +741,19 @@ export class Session<TState = {}> {
   }
 
   /**
+   * Switch to a configured mode by id. Returns true when the mode exists and the
+   * switch was applied. Used by the submit_plan tool to honor a mode's
+   * `transitionsTo` handoff once a plan is approved.
+   */
+  switchModeById(modeId: string): boolean {
+    if (modeId === this.#mode.id) return true;
+    const mode = this.#modes?.get(modeId);
+    if (!mode) return false;
+    this.setMode(mode);
+    return true;
+  }
+
+  /**
    * Returns the workspace skill catalog. Workspace discovery is async on first
    * call and cached for the lifetime of the session (use `refreshSkills` to
    * invalidate).
@@ -1051,8 +1073,42 @@ export class Session<TState = {}> {
       parentSessionId: this.#parentSessionId,
       subagentDepth: this.#subagentDepth,
       source: this.#source,
+      state: this.getState(),
       getState: () => this.getState(),
+      setState: updates => this.setState(updates),
+      updateState: updater => this.updateState(updater),
+      emitEvent: event => this.#events.emit(event),
+      registerQuestion: ({ questionId, resolve }) => {
+        this.#questionResolvers.set(questionId, resolve);
+      },
+      registerPlanApproval: ({ planId, resolve }) => {
+        this.#planApprovalResolvers.set(planId, resolve);
+      },
     };
+  }
+
+  /**
+   * Resolve a pending blocking question registered by the ask_user tool.
+   * Returns true if a waiter was found and resolved.
+   */
+  resolveQuestion(questionId: string, answer: HarnessQuestionAnswer): boolean {
+    const resolve = this.#questionResolvers.get(questionId);
+    if (!resolve) return false;
+    this.#questionResolvers.delete(questionId);
+    resolve(answer);
+    return true;
+  }
+
+  /**
+   * Resolve a pending blocking plan approval registered by the submit_plan tool.
+   * Returns true if a waiter was found and resolved.
+   */
+  resolvePlanApproval(planId: string, result: { action: 'approved' | 'rejected'; feedback?: string }): boolean {
+    const resolve = this.#planApprovalResolvers.get(planId);
+    if (!resolve) return false;
+    this.#planApprovalResolvers.delete(planId);
+    resolve(result);
+    return true;
   }
 
   async #resolveMemory(): Promise<MastraMemory> {

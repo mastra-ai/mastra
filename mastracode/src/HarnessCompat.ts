@@ -393,6 +393,11 @@ export class HarnessCompat<TState = {}> {
         } as HarnessEvent);
         return;
       }
+      if (event.type === 'task_updated' && 'tasks' in event) {
+        const nextTasks = (event as { tasks?: unknown }).tasks;
+        this.#displayState.previousTasks = [...this.#displayState.tasks];
+        this.#displayState.tasks = (Array.isArray(nextTasks) ? nextTasks : []) as HarnessDisplayState['tasks'];
+      }
       this.#emit(event as unknown as HarnessEvent);
     });
   }
@@ -978,6 +983,8 @@ export class HarnessCompat<TState = {}> {
     const accepted = (async () => {
       const session = await this.#ensureSession();
 
+      this.#emitReactiveSignalMessage(signal);
+
       if (this.isCurrentThreadStreamActive()) {
         const result = await session.sendMessage({ messages: signal as any, ...options });
         return { accepted: true as const, runId: result.runId };
@@ -1011,6 +1018,35 @@ export class HarnessCompat<TState = {}> {
     this.#displayState = { ...this.#displayState, isRunning: true };
     this.#emit({ type: 'agent_start' });
     this.#emitDisplayState();
+  }
+
+  /**
+   * v0 renders reactive `system-reminder` signals inline by surfacing a user
+   * message that carries a `system_reminder` content part. The v1 session
+   * sendMessage path doesn't synthesize that part, so we emit the renderable
+   * message here to keep TUI parity (used by plan-approval and goal handoffs).
+   */
+  #emitReactiveSignalMessage(signal: unknown): void {
+    if (!signal || typeof signal !== 'object') return;
+    const record = signal as Record<string, unknown>;
+    if (record.type !== 'system-reminder') return;
+    const message = typeof record.contents === 'string' ? record.contents : String(record.contents ?? '');
+    if (!message) return;
+    const reminderType =
+      typeof record.reminderType === 'string'
+        ? record.reminderType
+        : typeof (record.attributes as Record<string, unknown> | undefined)?.type === 'string'
+          ? ((record.attributes as Record<string, unknown>).type as string)
+          : 'system-reminder';
+    this.#emit({
+      type: 'message_update',
+      message: {
+        id: typeof record.id === 'string' ? record.id : randomUUID(),
+        role: 'assistant',
+        createdAt: new Date(),
+        content: [{ type: 'system_reminder', reminderType, message } as any],
+      } as HarnessMessage,
+    });
   }
 
   async #failStreamStart(subscription: StreamSubscription, error: unknown): Promise<void> {
@@ -1166,6 +1202,13 @@ export class HarnessCompat<TState = {}> {
     }
 
     if (type === 'tool-call-input-streaming-start' && toolCallId) {
+      this.#displayState.toolInputBuffers.set(toolCallId, { text: '', toolName });
+      const existing = this.#displayState.activeTools.get(toolCallId);
+      if (existing) {
+        existing.status = 'streaming_input';
+      } else {
+        this.#displayState.activeTools.set(toolCallId, { name: toolName, args: {}, status: 'streaming_input' });
+      }
       this.#emit({ type: 'tool_input_start', toolCallId, toolName });
       this.#emitDisplayState();
       return started;
@@ -1176,12 +1219,15 @@ export class HarnessCompat<TState = {}> {
         getStringField(payload, 'argsTextDelta', 'inputTextDelta', 'textDelta', 'delta') ??
         getStringField(record, 'argsTextDelta', 'inputTextDelta', 'textDelta', 'delta') ??
         '';
+      const buffer = this.#displayState.toolInputBuffers.get(toolCallId);
+      if (buffer) buffer.text += argsTextDelta;
       this.#emit({ type: 'tool_input_delta', toolCallId, toolName, argsTextDelta });
       this.#emitDisplayState();
       return started;
     }
 
     if (type === 'tool-call-input-streaming-end' && toolCallId) {
+      this.#displayState.toolInputBuffers.delete(toolCallId);
       this.#emit({ type: 'tool_input_end', toolCallId });
       this.#emitDisplayState();
       return started;
@@ -1190,6 +1236,18 @@ export class HarnessCompat<TState = {}> {
     if (type === 'tool-call' && toolCallId) {
       const args = payload?.args ?? payload?.input ?? record.args ?? record.input ?? {};
       assistantMessage.content.push({ type: 'tool_call', id: toolCallId, name: toolName, args });
+      const existingTool = this.#displayState.activeTools.get(toolCallId);
+      if (existingTool) {
+        existingTool.name = toolName;
+        existingTool.args = args as Record<string, unknown>;
+        existingTool.status = 'running';
+      } else {
+        this.#displayState.activeTools.set(toolCallId, {
+          name: toolName,
+          args: args as Record<string, unknown>,
+          status: 'running',
+        });
+      }
       this.#displayState = { ...this.#displayState, currentMessage: assistantMessage };
       this.#emit({ type: 'tool_start', toolCallId, toolName, args });
       this.#emit({ type: 'message_update', message: assistantMessage });
@@ -1201,6 +1259,12 @@ export class HarnessCompat<TState = {}> {
       const result = payload?.result ?? payload?.output ?? record.result ?? record.output;
       const isError = getBooleanField(payload, 'isError') ?? getBooleanField(record, 'isError') ?? false;
       assistantMessage.content.push({ type: 'tool_result', id: toolCallId, name: toolName, result, isError });
+      const endedTool = this.#displayState.activeTools.get(toolCallId);
+      if (endedTool) {
+        endedTool.status = isError ? 'error' : 'completed';
+        endedTool.result = result;
+        endedTool.isError = isError;
+      }
       this.#displayState = { ...this.#displayState, currentMessage: assistantMessage };
       this.#emit({ type: 'tool_end', toolCallId, result, isError });
       this.#emit({ type: 'message_update', message: assistantMessage });
@@ -1273,6 +1337,9 @@ export class HarnessCompat<TState = {}> {
       resolve(answer);
       return;
     }
+    if (this.#session?.resolveQuestion(questionId, (Array.isArray(answer) ? answer : String(answer ?? '')) as any)) {
+      return;
+    }
     if (!this.#session) throw new Error('No active session to respond to question');
     await this.#session.respondToQuestion(
       questionId,
@@ -1291,7 +1358,9 @@ export class HarnessCompat<TState = {}> {
     if (resolve) {
       this.#pendingPlanApprovals.delete(planId);
       resolve(response);
+      return;
     }
+    this.#session?.resolvePlanApproval(planId, response);
   }
 
   async respondToToolApproval(
@@ -1382,7 +1451,8 @@ export class HarnessCompat<TState = {}> {
    * Uses the provider registry's `apiKeyEnvVar` and the optional `modelAuthChecker` hook.
    */
   async getCurrentModelAuthStatus(): Promise<ModelAuthStatus> {
-    const modelId = this.#session!.getModelId();
+    const modelId = this.getCurrentModelId();
+    if (!modelId) return { hasAuth: true };
 
     try {
       const availableModels = await this.listAvailableModels();
