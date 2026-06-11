@@ -5,7 +5,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getEligibleReplaySources, ToolReplaySelector } from '../tool-replay-selector';
+import { getEligibleReplaySources, ITEM_RECORDINGS_SOURCE, ToolReplaySelector } from '../tool-replay-selector';
 import {
   completedWorkflowExperiment,
   junkMarkerExperiment,
@@ -60,7 +60,7 @@ describe('ToolReplaySelector', () => {
 
     renderWithProviders(<ToolReplaySelector {...baseProps} enabled onEnabledChange={vi.fn()} />);
 
-    await waitFor(() => expect(screen.getByText('Source experiment')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Recording source')).toBeDefined());
     expect(screen.getByText('Fail the item (safe default)')).toBeDefined();
     expect(screen.getByText('Run the live tool (passthrough)')).toBeDefined();
   });
@@ -77,19 +77,26 @@ describe('ToolReplaySelector', () => {
     await waitFor(() => expect(screen.getByText(/Unmatched calls will execute against real systems/)).toBeDefined());
   });
 
-  it('explains how to get a recording when no eligible source exists', async () => {
+  it('switches the helper text for the item-recordings source', async () => {
     server.use(
       http.get(`${BASE_URL}/api/datasets/dataset-1/experiments`, () =>
         HttpResponse.json(listExperimentsResponse([replayExperiment, completedWorkflowExperiment])),
       ),
     );
 
-    renderWithProviders(<ToolReplaySelector {...baseProps} enabled onEnabledChange={vi.fn()} />);
-
-    await waitFor(() =>
-      expect(screen.getByText(/Run a live experiment first — its traces become the recording/)).toBeDefined(),
+    renderWithProviders(
+      <ToolReplaySelector
+        {...baseProps}
+        enabled
+        onEnabledChange={vi.fn()}
+        fromExperimentId={ITEM_RECORDINGS_SOURCE}
+      />,
     );
-    expect(screen.queryByText('Source experiment')).toBeNull();
+
+    await waitFor(() => expect(screen.getByText(/Each item replays the trace it was saved from/)).toBeDefined());
+    // The picker itself stays available even with zero eligible experiments —
+    // the item-recordings source is always offered.
+    expect(screen.getByText('Recording source')).toBeDefined();
   });
 
   it('renders only the toggle row while disabled', () => {

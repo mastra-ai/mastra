@@ -22,7 +22,10 @@ import { Play, Sparkles, Clock, ChevronRight, ChevronDown, Pencil, Save, X, Tras
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { formatVersionLabel } from './format-version-label';
 import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
-import { ToolReplaySelector } from '@/domains/datasets/components/experiment-trigger/tool-replay-selector';
+import {
+  ITEM_RECORDINGS_SOURCE,
+  ToolReplaySelector,
+} from '@/domains/datasets/components/experiment-trigger/tool-replay-selector';
 import { useDatasetExperiments } from '@/domains/datasets/hooks/use-dataset-experiments';
 import { useDatasetItems } from '@/domains/datasets/hooks/use-dataset-items';
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
@@ -203,7 +206,14 @@ export function DatasetDetailView({
         ...(selectedDatasetVersion ? { version: Number(selectedDatasetVersion) } : {}),
         ...(selectedAgentVersion ? { agentVersion: selectedAgentVersion } : {}),
         ...(expTargetType === 'agent' && replayEnabled && replayFromExperimentId
-          ? { toolReplay: { fromExperimentId: replayFromExperimentId, onMiss: replayOnMiss } }
+          ? {
+              toolReplay: {
+                ...(replayFromExperimentId !== ITEM_RECORDINGS_SOURCE
+                  ? { fromExperimentId: replayFromExperimentId }
+                  : {}),
+                onMiss: replayOnMiss,
+              },
+            }
           : {}),
       });
       void queryClient.invalidateQueries({ queryKey: ['agent-experiments', agentId] });

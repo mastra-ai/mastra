@@ -160,6 +160,12 @@ export function SaveAsDatasetItemDialog({
         groundTruth: parsedGroundTruth,
         expectedTrajectory: parsedTrajectory,
         ...(source ? { source } : {}),
+        // An item saved from a traced run keeps a pointer to that trace so
+        // tool replay can use it as the item's recording (replayTraceId is
+        // the highest-priority replay source in the experiment runner).
+        ...(source?.type === 'trace' && source.referenceId
+          ? { metadata: { replayTraceId: source.referenceId } }
+          : {}),
       });
 
       const targetDataset = datasets.find(d => d.id === selectedDatasetId);

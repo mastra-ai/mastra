@@ -20,7 +20,7 @@ import { useDatasetMutations } from '../../hooks/use-dataset-mutations';
 import { ScorerSelector } from './scorer-selector';
 import type { TargetType } from './target-selector';
 import { TargetSelector } from './target-selector';
-import { ToolReplaySelector } from './tool-replay-selector';
+import { ITEM_RECORDINGS_SOURCE, ToolReplaySelector } from './tool-replay-selector';
 import { DynamicForm } from '@/lib/form';
 import { resolveSerializedZodOutput } from '@/lib/form/utils';
 
@@ -144,7 +144,16 @@ export function ExperimentTriggerDialog({
         version,
         requestContext,
         ...(replayActive && replayFromExperimentId
-          ? { toolReplay: { fromExperimentId: replayFromExperimentId, onMiss: replayOnMiss } }
+          ? {
+              toolReplay: {
+                // The item-recordings source omits fromExperimentId: each item
+                // resolves its own metadata.replayTraceId in the runner.
+                ...(replayFromExperimentId !== ITEM_RECORDINGS_SOURCE
+                  ? { fromExperimentId: replayFromExperimentId }
+                  : {}),
+                onMiss: replayOnMiss,
+              },
+            }
           : {}),
       });
 

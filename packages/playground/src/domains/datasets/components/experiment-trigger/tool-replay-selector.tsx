@@ -20,6 +20,13 @@ export interface ToolReplaySelectorProps {
 }
 
 /**
+ * Sentinel source value: replay each item from its own recorded trace
+ * (`metadata.replayTraceId` — stamped when an item is saved from a traced
+ * run) instead of mapping items through a prior experiment's results.
+ */
+export const ITEM_RECORDINGS_SOURCE = '__item-recordings__';
+
+/**
  * Replay sources must be completed live agent runs: a replay experiment's
  * traces contain no tool spans, so the backend rejects it as a source — the
  * picker mirrors that rule instead of surfacing a doomed option.
@@ -54,14 +61,21 @@ export function ToolReplaySelector({
       }
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-    return sorted.map(exp => ({
-      value: exp.id,
-      label: exp.name ? `${exp.name} (${exp.id.slice(0, 8)})` : `${exp.id.slice(0, 8)} · ${exp.targetId}`,
-      description: exp.completedAt ? `Completed ${format(new Date(exp.completedAt), 'MMM d, yyyy h:mm a')}` : undefined,
-    }));
+    return [
+      {
+        value: ITEM_RECORDINGS_SOURCE,
+        label: "Each item's recorded trace",
+        description: 'Items saved from a traced run replay their own recording (replayTraceId)',
+      },
+      ...sorted.map(exp => ({
+        value: exp.id,
+        label: exp.name ? `${exp.name} (${exp.id.slice(0, 8)})` : `${exp.id.slice(0, 8)} · ${exp.targetId}`,
+        description: exp.completedAt
+          ? `Completed ${format(new Date(exp.completedAt), 'MMM d, yyyy h:mm a')}`
+          : undefined,
+      })),
+    ];
   }, [data?.experiments, selectedTargetId]);
-
-  const hasSources = sourceOptions.length > 0;
 
   return (
     <div className="grid gap-2">
@@ -78,29 +92,24 @@ export function ToolReplaySelector({
 
       {enabled && (
         <div className="grid gap-4 pt-1">
-          {hasSources || isLoading ? (
-            <div className="grid gap-2">
-              <Label>Source experiment</Label>
-              <Combobox
-                options={sourceOptions}
-                value={fromExperimentId}
-                onValueChange={onFromExperimentIdChange}
-                placeholder="Select a completed live experiment"
-                searchPlaceholder="Search experiments..."
-                emptyText="No completed live agent experiments"
-                disabled={disabled || isLoading}
-                container={container}
-              />
-              <p className="text-ui-sm text-neutral3">
-                Tool calls return the outputs recorded in the source experiment&apos;s traces — no live tools run.
-              </p>
-            </div>
-          ) : (
+          <div className="grid gap-2">
+            <Label>Recording source</Label>
+            <Combobox
+              options={sourceOptions}
+              value={fromExperimentId}
+              onValueChange={onFromExperimentIdChange}
+              placeholder="Select a recording source"
+              searchPlaceholder="Search sources..."
+              emptyText="No recording sources"
+              disabled={disabled || isLoading}
+              container={container}
+            />
             <p className="text-ui-sm text-neutral3">
-              No completed live agent experiments to replay from. Run a live experiment first — its traces become the
-              recording.
+              {fromExperimentId === ITEM_RECORDINGS_SOURCE
+                ? 'Each item replays the trace it was saved from. Items without a recorded trace fail explicitly — they never run live unnoticed.'
+                : "Tool calls return the outputs recorded in the source experiment's traces — no live tools run."}
             </p>
-          )}
+          </div>
 
           <div className="grid gap-2">
             <Label>When a call has no recorded event</Label>
