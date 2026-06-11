@@ -80,6 +80,16 @@ export const cleanReport: ToolReplayReport = {
   argMismatches: [],
 };
 
+/** Source run never called any tools — nothing was on the tape. */
+export const emptyRecordingReport: ToolReplayReport = {
+  sourceTraceId: 'trace-src-3',
+  totalRecorded: 0,
+  replayedCount: 0,
+  misses: [],
+  unconsumed: [],
+  argMismatches: [],
+};
+
 const resultBase = {
   experimentId: 'exp-replay-1',
   itemDatasetVersion: 1,

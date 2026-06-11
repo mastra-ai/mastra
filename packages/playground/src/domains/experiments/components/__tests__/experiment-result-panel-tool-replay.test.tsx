@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { failedReplayResult, liveResultWithJunkToolReplay, replayResult } from '../../__tests__/fixtures/tool-replay';
+import {
+  emptyRecordingReport,
+  failedReplayResult,
+  liveResultWithJunkToolReplay,
+  replayResult,
+} from '../../__tests__/fixtures/tool-replay';
 import { ExperimentResultPanel } from '../experiment-result-panel';
 
 describe('ExperimentResultPanel tool replay', () => {
@@ -46,6 +51,18 @@ describe('ExperimentResultPanel tool replay', () => {
 
     screen.getByText('View source trace').click();
     expect(onShowSourceTrace).toHaveBeenCalledWith('trace-src-1');
+  });
+
+  it('explains an empty recording instead of a vacuous green chip', () => {
+    const emptyRecordingResult = {
+      ...replayResult,
+      output: { text: 'answered without tools', toolReplay: emptyRecordingReport },
+    };
+    render(<ExperimentResultPanel result={emptyRecordingResult} onClose={vi.fn()} isReplayExperiment />);
+
+    expect(screen.getByText('no recorded tool calls')).toBeDefined();
+    expect(screen.getByText(/The source run never called any tools/)).toBeDefined();
+    expect(screen.queryByText('replayed 0/0')).toBeNull();
   });
 
   it('renders zero replay chrome outside replay experiments — even with a user toolReplay key', () => {

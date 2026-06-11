@@ -5,13 +5,15 @@ import { getToolReplayReport } from '../utils/tool-replay';
 
 export interface ReplayAggregates {
   total: number;
-  /** Report present, zero misses/unconsumed/argMismatches, no error. */
+  /** Report present with recorded events, zero misses/unconsumed/argMismatches, no error. */
   fullyGrounded: number;
   withMisses: number;
   withUnconsumed: number;
   withArgMismatches: number;
   /** Items failed with a TOOL_REPLAY_* error code. */
   failedReplay: number;
+  /** Recordings that contained zero tool calls — nothing was replayed for these items. */
+  emptyRecordings: number;
   staleRecordings: number;
   redactedPayloads: number;
 }
@@ -45,6 +47,7 @@ export const useReplayAggregates = ({
         withUnconsumed: 0,
         withArgMismatches: 0,
         failedReplay: 0,
+        emptyRecordings: 0,
         staleRecordings: 0,
         redactedPayloads: 0,
       };
@@ -67,7 +70,10 @@ export const useReplayAggregates = ({
           if (report.argMismatches.length > 0) aggregates.withArgMismatches++;
           if (report.staleRecording) aggregates.staleRecordings++;
           if ((report.redactedPayloadCount ?? 0) > 0) aggregates.redactedPayloads++;
-          if (
+          if (report.totalRecorded === 0) {
+            // Nothing was on the tape — "grounded" would be vacuously true.
+            aggregates.emptyRecordings++;
+          } else if (
             !result.error &&
             report.misses.length === 0 &&
             report.unconsumed.length === 0 &&

@@ -64,6 +64,7 @@ describe('useReplayAggregates', () => {
       withUnconsumed: 101,
       withArgMismatches: 101,
       failedReplay: 1,
+      emptyRecordings: 0,
       staleRecordings: 101,
       redactedPayloads: 101,
       // liveResultWithJunkToolReplay contributes to total only — junk key is not a report.

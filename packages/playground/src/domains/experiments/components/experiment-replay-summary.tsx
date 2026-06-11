@@ -72,6 +72,9 @@ export function ExperimentReplaySummary({
             <Chip color="yellow">{`${aggregates.withArgMismatches} with arg mismatches`}</Chip>
           )}
           {aggregates.failedReplay > 0 && <Chip color="red">{`${aggregates.failedReplay} failed (replay)`}</Chip>}
+          {aggregates.emptyRecordings > 0 && (
+            <Chip color="gray">{`${aggregates.emptyRecordings} without recorded tool calls`}</Chip>
+          )}
           {aggregates.staleRecordings > 0 && (
             <Chip color="gray">{`${aggregates.staleRecordings} stale recordings`}</Chip>
           )}

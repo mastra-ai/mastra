@@ -14,7 +14,9 @@ export type ExperimentResultReplaySectionProps = {
  * fully comparable to the baseline.
  */
 export function ExperimentResultReplaySection({ report, onShowSourceTrace }: ExperimentResultReplaySectionProps) {
-  const isClean = classifyReplayDivergence(report) === 'clean' && report.replayedCount === report.totalRecorded;
+  const isEmptyRecording = report.totalRecorded === 0;
+  const isClean =
+    !isEmptyRecording && classifyReplayDivergence(report) === 'clean' && report.replayedCount === report.totalRecorded;
 
   return (
     <div className="grid gap-2">
@@ -23,7 +25,11 @@ export function ExperimentResultReplaySection({ report, onShowSourceTrace }: Exp
       </DataPanel.SectionHeading>
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <Chip color={isClean ? 'green' : 'gray'}>{`replayed ${report.replayedCount}/${report.totalRecorded}`}</Chip>
+        {isEmptyRecording ? (
+          <Chip color="gray">no recorded tool calls</Chip>
+        ) : (
+          <Chip color={isClean ? 'green' : 'gray'}>{`replayed ${report.replayedCount}/${report.totalRecorded}`}</Chip>
+        )}
         {report.misses.length > 0 && <Chip color="orange">{`${report.misses.length} misses`}</Chip>}
         {report.unconsumed.length > 0 && (
           <Chip color="blue">{`${report.unconsumed.reduce((sum, u) => sum + u.count, 0)} unconsumed`}</Chip>
@@ -36,6 +42,13 @@ export function ExperimentResultReplaySection({ report, onShowSourceTrace }: Exp
           <Chip color="gray">{`${report.redactedPayloadCount} redacted payloads`}</Chip>
         )}
       </div>
+
+      {isEmptyRecording && (
+        <p className="text-ui-sm text-neutral3">
+          The source run never called any tools — there was nothing to replay, so the model ran with no frozen
+          observations. To exercise replay, record a baseline where the agent actually uses its tools.
+        </p>
+      )}
 
       {(report.misses.length > 0 || report.unconsumed.length > 0 || report.argMismatches.length > 0) && (
         <ul className="grid gap-1 text-ui-sm text-neutral4">
