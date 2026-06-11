@@ -60,14 +60,14 @@
 
 ### 6. Workspace, skills, hooks, and shell surfaces
 
-- Rows: `Skills command and workspace resolution`, `Lifecycle hooks`, `Shell passthrough streaming`, `Process suspend shortcut`, `Interactive prompts and access requests`, `File attachments in chat input`, `Observational memory`.
+- Rows: `Skills command and workspace resolution`, `Lifecycle hooks`, `Shell passthrough streaming`, `Process suspend shortcut`, `File attachments in chat input`, `Observational memory`.
 - Proposed scenarios:
   - `skills-goal-alias`: create deterministic skill aliases and assert `/skills` plus goal-skill resolution through a real prompt.
   - `hooks-configured-blocking`: pre-launch hook config that blocks a tool or emits visible status; assert `/hooks` and model/tool run behavior.
   - `shell-streaming-long-output`: run shell command with multi-line/streamed output and verify bordered stdout/stderr truncation.
   - Completed: `request-access-modal` uses an AIMock `request_access` tool call to an inaccessible path, asserts the real approval prompt, approves via Enter, renders the granted result, and reads a deterministic external file through `view` after the path is allowed.
   - Completed: `ask-user-advanced-prompts` uses AIMock `ask_user` calls to assert multiline free-text input, single-select `Custom response...` switching to typed input, and fixed-option multi-select toggling through the real PTY TUI.
-  - `prompt-queue-interleave`: drive parallel or sequentially queued `ask_user` plus approval prompts through AIMock/tool fixtures and assert focus moves to the next queued prompt after the first answer.
+  - Completed: `prompt-queue-interleave` uses simultaneous AIMock `ask_user` and `request_access` tool calls to assert the access prompt is queued behind the active ask_user prompt, activates after the first answer, accepts the default Yes option, and resolves the model turn.
   - `file-attachment-submit`: text file + image attachment through real input, assert request body attachment counts/content.
   - `om-background-recall`: seed sanitized observational memory, drive a prompt that recalls it, assert provenance/rendering.
 - Fixture/data needs: deterministic skill/hook config files, AIMock tool-call fixtures, sanitized OM observations from local Application Support if needed.

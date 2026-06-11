@@ -4600,3 +4600,14 @@ Break validations proved the scenario fails if the `Use as /goal` option label c
   - Dropping `selectionMode` propagation prevented the multi-select prompt from reaching the expected checkbox/hint state and failed the scenario.
 - Clean verification: `pnpm --filter ./mastracode run e2e:test ask-user-advanced-prompts`; `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`; `pnpm run build:mastracode`; `pnpm --filter ./mastracode run e2e:test -- --jobs 2` (56/56).
 - Tracker update: `TUI: Interactive prompts and access requests` remains `needs-follow-up` but now covers masked sensitive input, request_access approval/same-turn external-read behavior, and ask_user multiline/custom/multi-select prompts through checked-in real PTY e2e coverage. Remaining gap is queued prompt interleaving through the real TUI.
+
+## 2026-06-11 — queued prompt interleaving remediation
+
+- Continued the `TUI: Interactive prompts and access requests` row after `ask-user-advanced-prompts` by targeting the remaining real-TUI prompt queue interleaving gap.
+- Added `prompt-queue-interleave` TUI e2e scenario and AIMock fixture. The fixture emits simultaneous `ask_user` and `request_access` tool calls. The scenario verifies the `ask_user` prompt remains active and answerable while the access request is pending, then the access prompt activates after the first answer, accepts the default `Yes` option, renders `Access granted`, and the model turn completes.
+- Break validations proved the scenario catches regressions:
+  - Activating the sandbox access prompt immediately instead of queueing it overwrote the active prompt input target; the scenario timed out waiting for the first prompt answer.
+  - Disabling `processNextInlineQuestion()` queue draining left the request_access tool pending forever; the scenario timed out waiting for the access prompt.
+  - Propagating `No` from the queued access prompt despite selecting `Yes` rendered `Access denied` and failed the access-granted assertion.
+- Clean focused verification: `pnpm --filter ./mastracode run e2e:test prompt-queue-interleave`.
+- Tracker update: `TUI: Interactive prompts and access requests` is now `validated`. It has checked-in real PTY coverage for masked prompt input, request_access approval/same-turn external reads, ask_user multiline/custom/multi-select prompt shapes, and queued ask_user/request_access interleaving. Remaining long-answer/dialog/headless breadth is documented as deferred lower-priority/non-TUI breadth on the feature card.

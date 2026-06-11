@@ -25,6 +25,7 @@ export type ScenarioName =
   | 'process-shortcuts'
   | 'provider-history-compat'
   | 'prompt-context-instructions'
+  | 'prompt-queue-interleave'
   | 'visible-commands'
   | 'integration-commands'
   | 'modal-and-shell'

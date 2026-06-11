@@ -28,6 +28,7 @@ import { planApprovalGoalHandoffScenario } from './plan-approval-goal-handoff.js
 import { planApprovalHandoffScenario } from './plan-approval-handoff.js';
 import { processShortcutsScenario } from './process-shortcuts.js';
 import { promptContextInstructionsScenario } from './prompt-context-instructions.js';
+import { promptQueueInterleaveScenario } from './prompt-queue-interleave.js';
 import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { quietSettingsScenario } from './quiet-settings.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
@@ -92,6 +93,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'process-shortcuts': processShortcutsScenario,
   'provider-history-compat': providerHistoryCompatScenario,
   'prompt-context-instructions': promptContextInstructionsScenario,
+  'prompt-queue-interleave': promptQueueInterleaveScenario,
   'quiet-settings': quietSettingsScenario,
   'report-issue-command': reportIssueCommandScenario,
   'request-access-modal': requestAccessModalScenario,
