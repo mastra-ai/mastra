@@ -33,6 +33,7 @@ import {
   TABLE_TOOL_PROVIDER_CONNECTIONS,
   TABLE_NOTIFICATIONS,
   TABLE_HARNESS_SESSIONS,
+  TABLE_THREAD_STATE,
 } from '@mastra/core/storage';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
@@ -75,6 +76,7 @@ export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_HARNESS_SESSIONS]: `ReplacingMergeTree()`,
   mastra_channel_installations: `ReplacingMergeTree()`,
   mastra_channel_config: `ReplacingMergeTree()`,
+  [TABLE_THREAD_STATE]: `ReplacingMergeTree()`,
 };
 
 export const COLUMN_TYPES: Record<StorageColumn['type'], string> = {
