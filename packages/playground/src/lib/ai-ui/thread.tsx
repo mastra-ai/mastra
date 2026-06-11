@@ -1,6 +1,7 @@
 import type { MessagePrimitive } from '@assistant-ui/react';
 import { ComposerPrimitive, ThreadPrimitive, useComposer, useComposerRuntime } from '@assistant-ui/react';
-import { Avatar, Button, ButtonsGroup, cn, useAutoscroll } from '@mastra/playground-ui';
+import { Avatar, Button, ButtonsGroup, cn, ScrollArea, useAutoscroll } from '@mastra/playground-ui';
+import { useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, EyeIcon, Mic, PlusIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AttachFileDialog } from './attachments/attach-file-dialog';
@@ -16,8 +17,8 @@ import { ComposerModelSettings } from '@/domains/agents/components/composer-mode
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
-import { useSpeechRecognition } from '@/domains/voice/hooks/use-speech-recognition';
 import { Link } from '@/lib/link';
+import { usePlaygroundStore } from '@/store/playground-store';
 // import { useBackgroundTaskStream } from '@/hooks';
 
 export interface ThreadProps {
@@ -133,7 +134,7 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher }: Compos
   const { setThreadInput } = useThreadInput();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const composerRuntime = useComposerRuntime();
-  const { isStreaming, canSendWhileStreaming, pendingSignals, hasPendingMessages } = useThreadRuntimeState();
+  const { isStreaming, canSendWhileStreaming } = useThreadRuntimeState();
   const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
@@ -173,19 +174,6 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher }: Compos
       <ComposerPrimitive.Root onSubmit={() => setSendPulseKey(k => k + 1)}>
         <div className="max-w-3xl w-full mx-auto pb-2">
           <ComposerAttachments />
-          {hasPendingMessages ? (
-            <div
-              className="mt-2 flex flex-col gap-1 text-icon-xs leading-icon-xs text-neutral3"
-              data-testid="pending-signal-message"
-            >
-              {pendingSignals.map(signal => (
-                <div key={signal.id} className="flex min-w-0 items-center gap-1 animate-pulse">
-                  <span className="shrink-0">pending:</span>
-                  <span className="truncate">{signal.preview}</span>
-                </div>
-              ))}
-            </div>
-          ) : null}
         </div>
 
         <div
@@ -196,29 +184,35 @@ const Composer = ({ agentId, threadId, hasModelList, hideModelSwitcher }: Compos
         >
           <ComposerSendingGradient pulseKey={sendPulseKey} />
           <div className="relative z-10">
-            <ComposerPrimitive.Input
-              asChild
-              className="w-full"
-              submitMode={isStreaming && !canSendWhileStreaming ? 'none' : undefined}
-            >
-              <textarea
-                ref={textareaRef}
-                autoFocus={false}
-                className="text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50 px-3 pt-3 pb-2"
-                placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
-                name=""
-                id=""
-                onChange={e => setThreadInput?.(e.target.value)}
-                onKeyDownCapture={e => {
-                  if (isStreaming && canSendWhileStreaming && e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    composerRuntime.send();
+            {/* The textarea grows with its content (field-sizing); the ScrollArea caps the
+                height and fades the clipped edges once the content overflows. */}
+            <ScrollArea maxHeight="212px">
+              <ComposerPrimitive.Input
+                asChild
+                className="w-full"
+                submitMode={isStreaming && !canSendWhileStreaming ? 'none' : undefined}
+              >
+                <textarea
+                  ref={textareaRef}
+                  autoFocus={false}
+                  className="field-sizing-content min-h-17 text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50 px-3 pt-3 pb-2"
+                  placeholder={
+                    canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"
                   }
-                }}
-                disabled={!canExecuteAgent}
-              />
-            </ComposerPrimitive.Input>
+                  name=""
+                  id=""
+                  onChange={e => setThreadInput?.(e.target.value)}
+                  onKeyDownCapture={e => {
+                    if (isStreaming && canSendWhileStreaming && e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      composerRuntime.send();
+                    }
+                  }}
+                  disabled={!canExecuteAgent}
+                />
+              </ComposerPrimitive.Input>
+            </ScrollArea>
             {agentId && !hasModelList && !hideModelSwitcher && <ComposerModelWarning agentId={agentId} />}
             <ComposerActionRow
               canExecute={canExecuteAgent}
@@ -259,7 +253,8 @@ const ComposerSendingGradient = ({ pulseKey }: { pulseKey: number }) => {
 
 const SpeechInput = ({ agentId }: { agentId?: string }) => {
   const composerRuntime = useComposerRuntime();
-  const { start, stop, isListening, transcript } = useSpeechRecognition({ agentId });
+  const { requestContext } = usePlaygroundStore();
+  const { start, stop, isListening, transcript } = useSpeechRecognition({ agentId, requestContext });
 
   useEffect(() => {
     if (!transcript) return;

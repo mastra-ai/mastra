@@ -409,6 +409,15 @@ export type PostAgentsAgentIdClone_Response = {
   status: string;
   activeVersionId?: string | undefined;
   authorId?: string | undefined;
+  /** Resolved author identity (when an auth provider is configured) */
+  author?:
+    | {
+        id: string;
+        name?: string | undefined;
+        email?: string | undefined;
+        avatarUrl?: string | undefined;
+      }
+    | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -8120,7 +8129,7 @@ export interface PostAgentsAgentIdVoiceSpeak_RouteContract {
   body: PostAgentsAgentIdVoiceSpeak_Body;
   request: PostAgentsAgentIdVoiceSpeak_Request;
   response: PostAgentsAgentIdVoiceSpeak_Response;
-  responseType: 'stream';
+  responseType: 'datastream-response';
 }
 
 // ============================================================================
@@ -8159,7 +8168,7 @@ export interface PostAgentsAgentIdSpeak_RouteContract {
   body: PostAgentsAgentIdSpeak_Body;
   request: PostAgentsAgentIdSpeak_Request;
   response: PostAgentsAgentIdSpeak_Response;
-  responseType: 'stream';
+  responseType: 'datastream-response';
 }
 
 // ============================================================================
@@ -21331,6 +21340,15 @@ export type GetStoredAgents_Response = {
     status: string;
     activeVersionId?: string | undefined;
     authorId?: string | undefined;
+    /** Resolved author identity (when an auth provider is configured) */
+    author?:
+      | {
+          id: string;
+          name?: string | undefined;
+          email?: string | undefined;
+          avatarUrl?: string | undefined;
+        }
+      | undefined;
     metadata?:
       | {
           [key: string]: unknown;
@@ -30252,6 +30270,15 @@ export type GetStoredAgentsStoredAgentId_Response = {
   status: string;
   activeVersionId?: string | undefined;
   authorId?: string | undefined;
+  /** Resolved author identity (when an auth provider is configured) */
+  author?:
+    | {
+        id: string;
+        name?: string | undefined;
+        email?: string | undefined;
+        avatarUrl?: string | undefined;
+      }
+    | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -38954,6 +38981,15 @@ export type PostStoredAgents_Response = {
   status: string;
   activeVersionId?: string | undefined;
   authorId?: string | undefined;
+  /** Resolved author identity (when an auth provider is configured) */
+  author?:
+    | {
+        id: string;
+        name?: string | undefined;
+        email?: string | undefined;
+        avatarUrl?: string | undefined;
+      }
+    | undefined;
   metadata?:
     | {
         [key: string]: unknown;
@@ -47708,6 +47744,15 @@ export type PatchStoredAgentsStoredAgentId_Response =
       status: string;
       activeVersionId?: string | undefined;
       authorId?: string | undefined;
+      /** Resolved author identity (when an auth provider is configured) */
+      author?:
+        | {
+            id: string;
+            name?: string | undefined;
+            email?: string | undefined;
+            avatarUrl?: string | undefined;
+          }
+        | undefined;
       metadata?:
         | {
             [key: string]: unknown;
@@ -79948,8 +79993,8 @@ export type PostToolProvidersProviderIdAuthorize_PathParams = {
 export type PostToolProvidersProviderIdAuthorize_Body = {
   /** Toolkit slug being authorized */
   toolkit: string;
-  /** Existing or newly-minted connection bucket id */
-  connectionId: string;
+  /** Existing connection bucket id when re-authorizing; omit for a brand-new connection */
+  connectionId?: string | undefined;
   /** Optional tool slug for tool-scoped authorization */
   toolName?: string | undefined;
   /** Provider-specific user-supplied connection fields (e.g. subdomain) */

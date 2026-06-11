@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ReadableStream } from 'node:stream/web';
 
 import { Agent } from '@mastra/core/agent';
+import type { StructuredOutputOptions } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
@@ -17,6 +18,8 @@ import {
   enqueueFinishChunks,
   enqueueStartChunks,
   enqueueTextDelta,
+  getStructuredOutputFromValue,
+  getStructuredOutputSchema,
   promptToText,
   sumDefined,
   toFullOutput,
@@ -38,6 +41,26 @@ type OpenAIUsageTotals = {
 };
 
 type OpenAIToolTelemetry = Pick<SDKAgentTelemetry, 'startToolCall' | 'endToolCall'>;
+type OpenAIStructuredOutputOption<OUTPUT> = OUTPUT extends {} ? StructuredOutputOptions<OUTPUT> : never;
+
+export type OpenAISDKAgentResumeData = {
+  /**
+   * Message to send while continuing the OpenAI Agents SDK run.
+   */
+  message: MessageListInput;
+  /**
+   * Previous OpenAI response id to continue from.
+   */
+  previousResponseId?: string;
+  /**
+   * OpenAI conversation id for server-managed conversation state.
+   */
+  conversationId?: string;
+  /**
+   * OpenAI Agents SDK session object for client-managed conversation state.
+   */
+  session?: unknown;
+};
 
 type OpenAISDKAgentBaseOptions = {
   /**
@@ -107,7 +130,7 @@ export class OpenAISDKAgent extends Agent {
   ): Promise<FullOutput<OUTPUT>> {
     const prompt = promptToText(messages);
     const runId = options?.runId ?? randomUUID();
-    const sdkAgent = this.resolveOpenAIAgent();
+    const sdkAgent = getRunOpenAIAgent(this.resolveOpenAIAgent(), options);
     const modelId = getModelId(this.options, sdkAgent);
     const requestContext = options?.requestContext ?? new RequestContext();
     const instructions = options?.instructions ? promptToText(options.instructions) : undefined;
@@ -145,7 +168,7 @@ export class OpenAISDKAgent extends Agent {
       runId,
       provider: PROVIDER,
       result,
-      options: telemetry.outputOptions(),
+      options: { ...telemetry.outputOptions(), structuredOutput: getStructuredOutputOption(options) },
     });
   }
 
@@ -155,7 +178,7 @@ export class OpenAISDKAgent extends Agent {
   ): Promise<MastraModelOutput<OUTPUT>> {
     const prompt = promptToText(messages);
     const runId = options?.runId ?? randomUUID();
-    const sdkAgent = this.resolveOpenAIAgent();
+    const sdkAgent = getRunOpenAIAgent(this.resolveOpenAIAgent(), options);
     const modelId = getModelId(this.options, sdkAgent);
     const requestContext = options?.requestContext ?? new RequestContext();
     const instructions = options?.instructions ? promptToText(options.instructions) : undefined;
@@ -185,14 +208,65 @@ export class OpenAISDKAgent extends Agent {
       modelId,
       provider: PROVIDER,
       stream: telemetry.wrapStream(runOpenAIAsMastraStream(prompt, sdkAgent, runId, modelId, telemetry, options)),
-      options: telemetry.outputOptions(),
+      options: { ...telemetry.outputOptions(), structuredOutput: getStructuredOutputOption(options) },
     });
+  }
+
+  async resumeGenerate<OUTPUT = undefined>(
+    resumeData: OpenAISDKAgentResumeData,
+    options?: SDKAgentRunOptions<OUTPUT>,
+  ): Promise<FullOutput<OUTPUT>> {
+    const data = validateOpenAIResumeData(resumeData);
+    return this.generate(data.message, createOpenAIResumeRunOptions(data, options));
+  }
+
+  async resumeStream<OUTPUT = undefined>(
+    resumeData: OpenAISDKAgentResumeData,
+    options?: SDKAgentRunOptions<OUTPUT>,
+  ): Promise<MastraModelOutput<OUTPUT>> {
+    const data = validateOpenAIResumeData(resumeData);
+    return this.stream(data.message, createOpenAIResumeRunOptions(data, options));
   }
 
   private resolveOpenAIAgent(): OpenAIAgent {
     this.#createdAgent ??= this.options.agent ?? new OpenAIAgent(toOpenAIAgentOptions(this.options));
     return this.#createdAgent;
   }
+}
+
+function getStructuredOutputOption<OUTPUT>(
+  options?: SDKAgentRunOptions<OUTPUT>,
+): OpenAIStructuredOutputOption<OUTPUT> | undefined {
+  return options?.structuredOutput as OpenAIStructuredOutputOption<OUTPUT> | undefined;
+}
+
+function validateOpenAIResumeData(resumeData: OpenAISDKAgentResumeData): OpenAISDKAgentResumeData {
+  const record = toRecord(resumeData);
+  if (!record || !('message' in record)) {
+    throw new Error('OpenAISDKAgent resumeData must include a message.');
+  }
+
+  if (
+    typeof resumeData.previousResponseId === 'string' ||
+    typeof resumeData.conversationId === 'string' ||
+    resumeData.session !== undefined
+  ) {
+    return resumeData;
+  }
+
+  throw new Error('OpenAISDKAgent resumeData must include previousResponseId, conversationId, or session.');
+}
+
+function createOpenAIResumeRunOptions<OUTPUT>(
+  resumeData: OpenAISDKAgentResumeData,
+  options?: SDKAgentRunOptions<OUTPUT>,
+): SDKAgentRunOptions<OUTPUT> {
+  return {
+    ...options,
+    previousResponseId: resumeData.previousResponseId ?? options?.previousResponseId,
+    conversationId: resumeData.conversationId ?? options?.conversationId,
+    session: resumeData.session ?? options?.session,
+  };
 }
 
 async function runOpenAIGenerate<OUTPUT>(
@@ -202,11 +276,7 @@ async function runOpenAIGenerate<OUTPUT>(
   telemetry: SDKAgentTelemetry<OUTPUT>,
   options?: SDKAgentRunOptions<OUTPUT>,
 ): Promise<SDKModelGenerateResult> {
-  const result = await run(agent, prompt, {
-    stream: false,
-    maxTurns: options?.maxSteps,
-    signal: getAbortSignal(options),
-  });
+  const result = await run(agent, prompt, createOpenAIRunOptions(options, false));
 
   recordOpenAIToolTelemetry(result.newItems, telemetry);
   const text = getTextFromFinalOutput(result.finalOutput);
@@ -232,6 +302,7 @@ async function runOpenAIGenerate<OUTPUT>(
       timestamp: new Date(),
     },
     providerMetadata,
+    object: await getStructuredOutputFromValue(result.finalOutput, options?.structuredOutput),
   };
 }
 
@@ -251,11 +322,7 @@ function runOpenAIAsMastraStream<OUTPUT>(
       let modelId = requestedModelId;
 
       try {
-        const result = await run(agent, prompt, {
-          stream: true,
-          maxTurns: options?.maxSteps,
-          signal: getAbortSignal(options),
-        });
+        const result = await run(agent, prompt, createOpenAIRunOptions(options, true));
 
         enqueueStartChunks(controller, {
           runId,
@@ -305,6 +372,7 @@ function runOpenAIAsMastraStream<OUTPUT>(
           modelId,
           usage: toLanguageModelUsage(toV3Usage(usage)),
           providerMetadata,
+          object: await getStructuredOutputFromValue(result.finalOutput, options?.structuredOutput),
         });
         controller.close();
       } catch (error) {
@@ -327,8 +395,41 @@ function toOpenAIAgentOptions(options: OpenAISDKAgentOptions): OpenAIAgentOption
   };
 }
 
-function getAbortSignal<OUTPUT>(options?: SDKAgentRunOptions<OUTPUT>): AbortSignal | undefined {
-  return options?.abortSignal ?? options?.signal;
+function getRunOpenAIAgent<OUTPUT>(agent: OpenAIAgent, options?: SDKAgentRunOptions<OUTPUT>): OpenAIAgent {
+  const outputType = getStructuredOutputSchema(options?.structuredOutput);
+  if (!outputType) {
+    return agent;
+  }
+
+  return (agent as { clone(config: Record<string, unknown>): OpenAIAgent }).clone({ outputType });
+}
+
+function createOpenAIRunOptions<OUTPUT>(
+  options: SDKAgentRunOptions<OUTPUT> | undefined,
+  stream: false,
+): Record<string, unknown> & { stream: false };
+function createOpenAIRunOptions<OUTPUT>(
+  options: SDKAgentRunOptions<OUTPUT> | undefined,
+  stream: true,
+): Record<string, unknown> & { stream: true };
+function createOpenAIRunOptions<OUTPUT>(
+  options: SDKAgentRunOptions<OUTPUT> | undefined,
+  stream: boolean,
+): Record<string, unknown> & { stream: boolean } {
+  const runOptions: Record<string, unknown> & { stream: boolean } = { stream };
+  addDefined(runOptions, 'maxTurns', options?.maxSteps);
+  addDefined(runOptions, 'signal', options?.abortSignal ?? options?.signal);
+  addDefined(runOptions, 'conversationId', options?.conversationId);
+  addDefined(runOptions, 'previousResponseId', options?.previousResponseId);
+  addDefined(runOptions, 'session', options?.session);
+
+  return runOptions;
+}
+
+function addDefined(target: Record<string, unknown>, key: string, value: unknown): void {
+  if (value !== undefined) {
+    target[key] = value;
+  }
 }
 
 function getModelId(options?: OpenAISDKAgentOptions, agent?: OpenAIAgent, rawResponse?: unknown): string {

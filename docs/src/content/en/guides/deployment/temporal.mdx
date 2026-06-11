@@ -142,7 +142,7 @@ const worker = await Worker.create({
 await worker.run()
 ```
 
-`MastraPlugin` rewrites the entry file into a workflow-only bundle and wires step handlers in as Temporal activities. You do not need to pass `activities` or `workflowsPath` to `Worker.create()` manually.
+`MastraPlugin` rewrites the entry file into a workflow-only bundle and wires step handlers in as Temporal activities. You don't need to pass `activities` or `workflowsPath` to `Worker.create()` manually.
 
 ## Running workflows
 
@@ -188,7 +188,7 @@ TEMPORAL_API_KEY=your-api-key
 See the [Temporal Cloud connection docs](https://docs.temporal.io/cloud/get-started) for mTLS and API key options.
 
 :::warning
-The Temporal worker must run as a long-lived process. Do not deploy it to serverless platforms with short execution limits, such as AWS Lambda or Vercel functions. Use a container, VM, or worker-friendly platform such as Fly.io, Railway, or Kubernetes.
+The Temporal worker must run as a long-lived process. Don't deploy it to serverless platforms with short execution limits, such as AWS Lambda or Vercel functions. Use a container, VM, or worker-friendly platform such as Fly.io, Railway, or Kubernetes.
 :::
 
 ## Configuration options
@@ -212,7 +212,7 @@ export const { createWorkflow, createStep } = init({
 ## Constraints and notes
 
 - Workflow ids must be static string literals. The build-time transformer reads the literal value to derive Temporal workflow export names.
-- Activities are generated automatically from `createStep()` handlers. Do not pass them in `Worker.create({ activities })`.
+- Activities are generated automatically from `createStep()` handlers. Don't pass them in `Worker.create({ activities })`.
 
 ## Related
 

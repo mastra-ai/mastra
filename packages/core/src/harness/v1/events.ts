@@ -47,6 +47,16 @@ export interface StateChangedEvent extends HarnessEventBase {
   changedKeys: string[];
 }
 
+export interface SubagentStartEvent extends HarnessEventBase {
+  type: 'subagent_start';
+  subagentSessionId: string;
+  payload: {
+    agentType: string;
+    parentSessionId: string;
+    depth: number;
+  };
+}
+
 export interface CustomEvent extends HarnessEventBase {
   type: string;
   payload?: JsonSerializable;
@@ -58,6 +68,7 @@ export type HarnessEvent =
   | ModelChangedEvent
   | ThreadClonedEvent
   | StateChangedEvent
+  | SubagentStartEvent
   | CustomEvent;
 export type HarnessEventListener = (event: HarnessEvent) => void | Promise<void>;
 export type HarnessEventUnsubscribe = () => void;
@@ -268,6 +279,7 @@ const RESERVED_EVENT_TYPES = new Set([
   'model_changed',
   'thread_cloned',
   'state_changed',
+  'subagent_start',
 ]);
 
 const RESERVED_EVENT_PREFIXES = ['session_', 'thread_'];

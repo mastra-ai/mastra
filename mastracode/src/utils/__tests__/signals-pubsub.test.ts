@@ -114,7 +114,6 @@ describe('SignalsPubSub', () => {
     const subscribePromise = pubsub.subscribe(topic, vi.fn());
 
     await Promise.resolve();
-    expect(mocks.mkdir).toHaveBeenCalledTimes(1);
     expect(mocks.instances).toHaveLength(0);
 
     mkdir.resolve();
@@ -143,5 +142,36 @@ describe('SignalsPubSub', () => {
     await expect(publishPromise).rejects.toThrow('SignalsPubSub is closed');
     expect(mocks.instances).toHaveLength(0);
     expect(pubsub.getSocket(topic)).toBeUndefined();
+  });
+
+  it('routes non-signal topics through Unix sockets', async () => {
+    const { createSignalsPubSub } = await import('../signals-pubsub.js');
+    const resourceId = '11111111-1111-4111-8111-111111111111';
+
+    const pubsub = createSignalsPubSub(resourceId);
+    await pubsub.publish('workflows', event);
+    await pubsub.publish('workflows-finish', event);
+
+    // Non-signal topics should create Unix sockets (no in-memory fallback)
+    expect(mocks.instances).toHaveLength(2);
+    expect(mocks.instances[0]?.socketPath).toBe(`/tmp/mc/${resourceId}/workflows.sock`);
+    expect(mocks.instances[1]?.socketPath).toBe(`/tmp/mc/${resourceId}/workflows-finish.sock`);
+  });
+
+  it('hashes long socket paths that would exceed macOS sun_path limit', async () => {
+    const { createSignalsPubSub } = await import('../signals-pubsub.js');
+    const resourceId = '11111111-1111-4111-8111-111111111111';
+    // Simulate a scheduler-generated runId that produces a path > 104 bytes
+    const longTopic = 'workflow_events_v2_sched_wf___mastra_notification_dispatcher__dispatch_1781048760000';
+
+    const pubsub = createSignalsPubSub(resourceId);
+    await pubsub.publish(longTopic, event);
+
+    expect(mocks.instances).toHaveLength(1);
+    const socketPath = mocks.instances[0]?.socketPath;
+    // The full path must be ≤ 104 bytes (macOS sun_path limit)
+    expect(Buffer.byteLength(socketPath!)).toBeLessThanOrEqual(104);
+    // Should use a hash-based filename instead of the raw topic
+    expect(socketPath).toMatch(/\/tmp\/mc\/[^/]+\/[a-f0-9]{16}\.sock$/);
   });
 });

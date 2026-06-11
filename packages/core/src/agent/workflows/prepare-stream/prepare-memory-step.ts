@@ -12,6 +12,7 @@ import type { InnerAgentExecutionOptions } from '../../agent.types';
 import { MessageList } from '../../message-list';
 import { mastraDBMessageToSignal } from '../../signals';
 import type { AgentMethodType } from '../../types';
+import type { PrepareStreamRunScope } from './run-scope';
 import type { AgentCapabilities } from './schema';
 import { prepareMemoryStepOutputSchema } from './schema';
 
@@ -56,6 +57,7 @@ interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
   isResume?: boolean;
+  runScope: PrepareStreamRunScope<OUTPUT>;
 }
 
 export function createPrepareMemoryStep<OUTPUT = undefined>({
@@ -70,6 +72,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
   memoryConfig,
   memory,
   isResume,
+  runScope,
 }: PrepareMemoryStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-memory-step',
@@ -123,13 +126,17 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
           }));
         }
 
+        // Class instances (MessageList) and Maps (processorStates) live on the
+        // factory closure's runScope instead of step outputs, because the evented
+        // engine serializes step outputs via JSON and would strip them. CreatedAgentSignal
+        // carries `toDataPart`/`toLLMMessage`/`toDBMessage` methods that would not survive.
+        runScope.messageList = messageList;
+        runScope.processorStates = processorStates;
+        runScope.initialSignalEchoes = initialSignalEchoes;
         return {
           threadExists: false,
           thread: thread as StorageThreadType | undefined,
-          messageList,
-          processorStates,
           tripwire,
-          initialSignalEchoes,
         };
       }
 
@@ -205,12 +212,12 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         }));
       }
 
+      runScope.messageList = messageList;
+      runScope.processorStates = processorStates;
+      runScope.initialSignalEchoes = initialSignalEchoes;
       return {
         thread: threadObject,
-        messageList: messageList,
-        processorStates,
         tripwire,
-        initialSignalEchoes,
         threadExists: !!existingThread,
       };
     },

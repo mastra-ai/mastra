@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.22.3-alpha.0",
+  "version": "0.22.3-alpha.3",
   "description": "",
   "type": "module",
   "files": [
@@ -52,13 +52,16 @@
     "prepack": "tsx ../scripts/generate-package-docs.ts",
     "build:watch": "pnpm build --watch",
     "test": "vitest",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "e2e:list": "tsx scripts/mc-e2e.ts --list",
+    "e2e:test": "tsx scripts/mc-e2e.ts --run --default-all",
+    "e2e:observe": "tsx scripts/mc-e2e.ts --observe"
   },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@ai-sdk/anthropic": "^3.0.76",
+    "@ai-sdk/anthropic": "^3.0.82",
     "@ai-sdk/openai": "^3.0.63",
     "@ai-sdk/openai-compatible": "^2.0.47",
     "@ast-grep/napi": "^0.42.0",
@@ -91,8 +94,10 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@copilotkit/aimock": "^1.29.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
+    "@microsoft/tui-test": "^0.0.4",
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",

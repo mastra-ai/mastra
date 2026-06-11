@@ -188,8 +188,12 @@ function toDatadogMessages(
         role: m.role,
         content: m.content == null ? '' : toMessageContent(m.content),
       };
-      if (m.toolCalls) {
-        message.toolCalls = m.toolCalls;
+      if (Array.isArray(m.toolCalls) && m.toolCalls.length > 0) {
+        // Normalize to Datadog's tool-call shape ({name, arguments, toolId, type}).
+        // Raw Mastra tool calls ({toolName, toolCallId, args}) are not recognized by
+        // dd-trace's tagger and would be emitted as empty objects, dropping the tool
+        // call from the LLM input in Datadog.
+        message.toolCalls = toDatadogToolCalls(m.toolCalls);
       }
       return message;
     })
@@ -215,9 +219,12 @@ function parseToolArguments(args: unknown): Record<string, any> | undefined {
 }
 
 function toDatadogToolCalls(toolCalls: any[]): DatadogToolCall[] {
+  // Accept both raw Mastra tool calls ({toolName, args, toolCallId}) and
+  // already-normalized Datadog tool calls ({name, arguments, toolId}) so this is
+  // idempotent — callers may pass messages that were normalized upstream.
   return toolCalls.map(c => ({
     name: c?.toolName ?? c?.name ?? c?.function?.name ?? 'unknown',
-    arguments: parseToolArguments(c?.args ?? c?.input ?? c?.function?.arguments),
+    arguments: parseToolArguments(c?.args ?? c?.input ?? c?.arguments ?? c?.function?.arguments),
     toolId: c?.toolCallId ?? c?.toolId ?? c?.id,
     type: c?.type === 'function' ? c.type : 'function',
   }));
