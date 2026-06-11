@@ -50,6 +50,7 @@ export function SearchFieldBlock({
   onMinimizedChange,
 }: SearchFieldBlockProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const buttonSize = size === 'default' ? 'lg' : size;
 
   useEffect(() => {
     if (isMinimized === false) {
@@ -62,7 +63,7 @@ export function SearchFieldBlock({
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
-            size={size || 'sm'}
+            size={buttonSize || 'sm'}
             aria-label={label || 'Search'}
             disabled={disabled}
             onClick={() => onMinimizedChange?.(false)}
@@ -120,7 +121,7 @@ export function SearchFieldBlock({
           {onReset && (value || isMinimized === false) && (
             <Button
               variant="ghost"
-              size={size || 'default'}
+              size={buttonSize || 'lg'}
               aria-label="Clear search"
               onClick={() => {
                 if (value) {
