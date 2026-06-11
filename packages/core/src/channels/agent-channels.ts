@@ -342,42 +342,6 @@ export class AgentChannels {
           let toolName: string | undefined;
           let toolArgs: Record<string, unknown> | undefined;
 
-          const stashed = this.pendingApprovalCards.get(toolCallId);
-          if (stashed?.runId) {
-            runId = stashed.runId;
-            toolName = stashed.toolName;
-            toolArgs = stashed.args;
-          } else {
-            const storage = mastra.getStorage();
-            const memoryStore = storage ? await storage.getStore('memory') : undefined;
-            if (!memoryStore) {
-              throw new Error('Storage is required for tool approval lookups');
-            }
-
-            const { messages } = await memoryStore.listMessages({
-              threadId: mastraThread.id,
-              perPage: 50,
-              orderBy: { field: 'createdAt', direction: 'DESC' },
-            });
-
-            for (const msg of messages) {
-              const pending = msg.content?.metadata?.pendingToolApprovals as
-                | Record<string, { toolCallId: string; runId: string; toolName: string; args: Record<string, unknown> }>
-                | undefined;
-              if (pending) {
-                for (const toolData of Object.values(pending)) {
-                  if (toolData.toolCallId === toolCallId) {
-                    runId = toolData.runId;
-                    toolName = toolData.toolName;
-                    toolArgs = toolData.args;
-                    break;
-                  }
-                }
-                if (runId) break;
-              }
-            }
-          }
-
           if (!runId) {
             this.log('info', `No pending approval found for toolCallId=${toolCallId}`);
             return;
