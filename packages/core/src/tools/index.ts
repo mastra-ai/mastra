@@ -6,3 +6,5 @@ export { isProviderDefinedTool, isProviderTool, isVercelTool } from './toolcheck
 export { ToolStream } from './stream';
 export { type ValidationError, isValidationError } from './validation';
 export * from './code-mode';
+export { askUserTool, formatQuestionAnswer } from './builtin/ask-user';
+export type { AskUserAnswer, AskUserOption, AskUserSelectionMode, AskUserSuspendPayload } from './builtin/ask-user';
