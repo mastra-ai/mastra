@@ -28,6 +28,7 @@ import {
 import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
 import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
+import { TaskStateProcessor } from '@mastra/core/tools';
 import { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
@@ -474,6 +475,7 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         },
       }),
       new ProviderHistoryCompat(),
+      new TaskStateProcessor(),
     ],
     errorProcessors: [new StreamErrorRetryProcessor(), new PrefillErrorHandler(), new ProviderHistoryCompat()],
   });

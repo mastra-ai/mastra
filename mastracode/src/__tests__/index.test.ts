@@ -333,6 +333,21 @@ describe('createMastraCode', () => {
     expect(typeof harnessConfig?.memory).toBe('function');
   });
 
+  it('registers the TaskStateProcessor on the code agent so task tools persist via state signals', async () => {
+    const { TaskStateProcessor } = await import('@mastra/core/tools');
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(agentConstructorMock).toHaveBeenCalled();
+    const codeAgentConfig = agentConstructorMock.mock.calls
+      .map(call => call?.[0] as { id?: string; inputProcessors?: unknown[] } | undefined)
+      .find(config => config?.id === 'code-agent');
+
+    expect(codeAgentConfig).toBeDefined();
+    expect(codeAgentConfig?.inputProcessors?.some(processor => processor instanceof TaskStateProcessor)).toBe(true);
+  });
+
   it('uses the configured default mode when constructing Harness', async () => {
     const { createMastraCode } = await import('../index.js');
 

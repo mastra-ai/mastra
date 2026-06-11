@@ -1,0 +1,125 @@
+import type { Mastra } from '../../mastra';
+import type { ComputeStateSignalArgs, ComputeStateSignalResult } from '../../processors/index';
+import { getTasksFromRequestContext, TASKS_STATE_ID } from './task-tools';
+import type { TaskItemSnapshot } from './task-tools';
+
+type ResolvedTaskStore = {
+  getTasks(threadId: string): Promise<TaskItemSnapshot[]>;
+};
+
+function isTaskStore(value: unknown): value is ResolvedTaskStore {
+  return !!value && typeof (value as ResolvedTaskStore).getTasks === 'function';
+}
+
+// =============================================================================
+// Task state processor
+// =============================================================================
+//
+// Carries the agent's task list on the agent state-signal lane (`stateId:
+// 'tasks'`). This keeps the task list:
+//
+//  - **cache-aware**: the snapshot supersedes by cacheKey rather than being
+//    appended to the cached system-prompt prefix, so task updates do not
+//    invalidate the prompt cache prefix.
+//  - **OM-aware**: when observational-memory truncation drops the snapshot from
+//    the window (`contextWindow.hasSnapshot === false`), the snapshot is
+//    re-emitted so the agent never loses track of its tasks.
+//
+// The task list itself lives in the thread-scoped `tasks` storage domain (the
+// TaskStore); this processor projects it onto the model context. State signals
+// require a memory-backed thread; the runtime enforces this. The task tools
+// no-op when the run is not memory backed, so the processor only ever sees task
+// state on memory-backed runs.
+
+function renderTaskList(tasks: TaskItemSnapshot[]): string {
+  if (tasks.length === 0) return '<current-task-list />';
+  const lines = tasks.map(task => {
+    const icon = task.status === 'completed' ? '✓' : task.status === 'in_progress' ? '▸' : '○';
+    return `  ${icon} [${task.status}] {id: ${task.id}} ${task.content}`;
+  });
+  return `<current-task-list>\n${lines.join('\n')}\n</current-task-list>`;
+}
+
+function getTasksFromSnapshot(snapshot: ComputeStateSignalArgs['lastSnapshot']): TaskItemSnapshot[] {
+  const value = snapshot?.metadata?.value as { tasks?: unknown } | undefined;
+  const tasks = value?.tasks;
+  if (Array.isArray(tasks)) return tasks as TaskItemSnapshot[];
+  return [];
+}
+
+function stableTasksCacheKey(tasks: TaskItemSnapshot[]): string {
+  const fingerprint = tasks.map(t => `${t.id}:${t.status}:${t.content}:${t.activeForm}`).join('|');
+  return `tasks:${fingerprint}`;
+}
+
+function tasksEqual(a: TaskItemSnapshot[], b: TaskItemSnapshot[]): boolean {
+  return stableTasksCacheKey(a) === stableTasksCacheKey(b);
+}
+
+/**
+ * Input processor that publishes the agent's task list as a state signal.
+ *
+ * Add it to an agent's `inputProcessors` alongside the task tools so the task
+ * list is carried across turns and survives observational-memory truncation.
+ */
+export class TaskStateProcessor {
+  readonly id = 'task-state';
+  readonly stateId = TASKS_STATE_ID;
+
+  /**
+   * The Mastra instance this processor is registered with, used to resolve the
+   * thread-scoped task store. Set by the agent/Mastra runtime via
+   * `__registerMastra`. We implement the hook directly (instead of extending
+   * `BaseProcessor`) to avoid a value-level import cycle with `processors/index`.
+   */
+  protected mastra?: Mastra<any, any, any, any, any, any, any, any, any, any>;
+
+  __registerMastra(mastra: Mastra<any, any, any, any, any, any, any, any, any, any>): void {
+    this.mastra = mastra;
+  }
+
+  private async resolveTaskStore(): Promise<ResolvedTaskStore | undefined> {
+    const store = await this.mastra?.getStorage?.()?.getStore('tasks');
+    return isTaskStore(store) ? store : undefined;
+  }
+
+  async computeStateSignal(args: ComputeStateSignalArgs): Promise<ComputeStateSignalResult> {
+    const previousTasks = getTasksFromSnapshot(args.lastSnapshot);
+
+    // Current task list for this turn: the working list a task tool surfaced on
+    // the shared RequestContext this step (reflects the latest mutation), else
+    // the durable TaskStore for the thread, else the last snapshot.
+    const carried = getTasksFromRequestContext(args.requestContext);
+    let currentTasks = carried;
+    if (currentTasks === undefined) {
+      const store = await this.resolveTaskStore();
+      currentTasks = store ? await store.getTasks(args.threadId) : previousTasks;
+    }
+
+    // Nothing to track yet.
+    if (currentTasks.length === 0 && previousTasks.length === 0) return;
+
+    const snapshotMissing = Boolean(args.lastSnapshot) && !args.contextWindow.hasSnapshot;
+    const changed = !tasksEqual(previousTasks, currentTasks);
+
+    // No change and the window still has the snapshot: emit nothing so the
+    // cached prefix and the active window stay stable.
+    if (!changed && !snapshotMissing && args.contextWindow.hasSnapshot) return;
+
+    return {
+      id: TASKS_STATE_ID,
+      cacheKey: stableTasksCacheKey(currentTasks),
+      mode: 'snapshot',
+      tagName: 'state',
+      contents: renderTaskList(currentTasks),
+      value: { tasks: currentTasks },
+      attributes: {
+        type: 'tasks',
+        count: currentTasks.length,
+      },
+      metadata: {
+        value: { tasks: currentTasks },
+      },
+    };
+  }
+}

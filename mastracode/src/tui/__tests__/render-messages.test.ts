@@ -82,6 +82,28 @@ describe('addUserMessage', () => {
     expect(state.messageComponentsById.get('state-signal-1')).toBeInstanceOf(StateSignalComponent);
   });
 
+  it('does not render the tasks state signal inline (the pinned task UI shows it)', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'tasks-state-signal-1',
+      role: 'user',
+      content: [
+        {
+          type: 'state_signal',
+          stateId: 'tasks',
+          mode: 'snapshot',
+          version: 1,
+          message: '<current-task-list>\n  ○ [pending] {id: alpha} Alpha\n</current-task-list>',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
+    expect(state.messageComponentsById.has('tasks-state-signal-1')).toBe(false);
+  });
+
   it('renders generic reactive signals as inline signal components', () => {
     const state = createState();
 

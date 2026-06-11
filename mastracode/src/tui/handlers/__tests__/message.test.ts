@@ -198,6 +198,24 @@ describe('handleMessageUpdate system reminders', () => {
     expect(stripAnsi(state.streamingComponent!.render(80).join('\n'))).toContain('Done.');
   });
 
+  it('does not render the tasks state signal inline (the pinned task UI shows it)', () => {
+    handleMessageUpdate(
+      ctx,
+      createAssistantMessage([
+        {
+          type: 'state_signal',
+          stateId: 'tasks',
+          mode: 'snapshot',
+          cacheKey: 'tasks:v1',
+          message: '<current-task-list>\n  ○ [pending] {id: alpha} Alpha\n</current-task-list>',
+        } as never,
+        { type: 'text', text: 'Tasks created.' },
+      ]),
+    );
+
+    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
+  });
+
   it('renders a streamed notification summary as an inline component', () => {
     handleMessageUpdate(
       ctx,
