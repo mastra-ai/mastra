@@ -47,6 +47,7 @@ export type ScenarioName =
   | 'update-command-prompt'
   | 'web-search-rendering'
   | 'workspace-commands'
+  | 'workspace-plan-mode-tools'
   | 'workspace-tool-names'
   | 'workspace-tool-output-rendering';
 

@@ -59,6 +59,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   logger,
   agentId,
   mastra,
+  requestContext: agentRequestContext,
   requireToolApproval: requireToolApprovalFromFactory,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
@@ -521,8 +522,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           tracingContext: modelSpanTracker?.getTracingContext(),
           // Pass workspace from _internal (set by llmExecutionStep via prepareStep/processInputStep)
           workspace: _internal?.stepWorkspace,
-          // Forward requestContext so tools receive values set by the workflow step
-          requestContext,
+          // Forward the agent request context; the workflow step context can be a fresh engine context.
+          requestContext: agentRequestContext ?? requestContext,
           // Let tools that read thread history mid-stream (e.g. forked subagents
           // cloning the parent thread) drain the save queue so the store reflects
           // the latest user/assistant messages before they read.

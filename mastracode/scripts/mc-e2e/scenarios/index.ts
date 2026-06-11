@@ -47,6 +47,7 @@ import { updateCommandPromptScenario } from './update-command-prompt.js';
 import { visibleCommandsScenario } from './visible-commands.js';
 import { webSearchRenderingScenario } from './web-search-rendering.js';
 import { workspaceCommandsScenario } from './workspace-commands.js';
+import { workspacePlanModeToolsScenario } from './workspace-plan-mode-tools.js';
 import { workspaceToolNamesScenario } from './workspace-tool-names.js';
 import { workspaceToolOutputRenderingScenario } from './workspace-tool-output-rendering.js';
 
@@ -101,6 +102,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'update-command-prompt': updateCommandPromptScenario,
   'web-search-rendering': webSearchRenderingScenario,
   'workspace-commands': workspaceCommandsScenario,
+  'workspace-plan-mode-tools': workspacePlanModeToolsScenario,
   'workspace-tool-names': workspaceToolNamesScenario,
   'workspace-tool-output-rendering': workspaceToolOutputRenderingScenario,
 };

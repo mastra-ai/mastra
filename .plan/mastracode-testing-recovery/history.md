@@ -4532,3 +4532,19 @@ Break validations proved the scenario fails if the `Use as /goal` option label c
   - Stripping task content from prompt task lines caused the same fixture miss.
 - Clean focused verification: `pnpm --filter ./mastracode run e2e:test task-prompt-context-next-turn`; `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
 - Tracker update: `Tools: Task tracking tools and TUI progress` moved to `validated` because checked-in TUI e2e now covers live progress, loaded-history replay, completed/cleared inline transitions, patch/check rendering, and next-turn prompt-context agreement.
+
+## 2026-06-11 — Workspace plan-mode tools and request-context regression
+
+- Fast-forwarded local `tests/mc` to `origin/tests/mc` after the Jun 9 main merge by Abhi Aiyer. Confirmed no one had continued the recovery queue: the branch still had 46 checked-in e2e scenarios and the workspace plan-mode write-tool gap remained open.
+- Added `workspace-plan-mode-tools` TUI e2e scenario and AIMock fixture. The scenario submits one prompt in Build mode and one after `/mode plan`, then verifies the provider-visible tool dictionaries:
+  - Build mode includes workspace write/edit tools: `write_file`, `string_replace_lsp`, `ast_smart_edit`.
+  - Plan mode removes those write/edit tools while preserving `view`, `find_files`, `search_content`, and `lsp_inspect`.
+- Break validations proved the scenario catches regressions in `mastracode/src/agents/workspace.ts`:
+  - Disabled plan-mode filtering entirely; the scenario failed because `write_file` leaked into plan mode.
+  - Removed only `write_file` from the plan-mode disabled set; the scenario failed because `write_file` leaked.
+  - Accidentally disabled `view`; the scenario failed because plan mode lost a read tool.
+- During validation, the full TUI e2e suite exposed a Jun 9 merge regression: task tools returned `Unable to update task list (no harness context)`. Root cause: `tool-call-step` forwarded the workflow engine step context into tool execution instead of the agent run request context, dropping the Harness context.
+- Fixed `packages/core/src/loop/workflows/agentic-execution/tool-call-step.ts` to prefer the agent request context over the workflow-step context, and added a focused core regression test proving this preserves Harness context for tool execution.
+- Full-suite validation also exposed a stale `github-signals-command` fixture schema after the main merge: current `@mastra/github-signals` queries `comments.body`, but the sanitized DB fixture table did not include that column, so baseline snapshot loading returned `undefined` and no notification rendered. Added the missing fixture column; the scenario passes again.
+- Clean verification: `pnpm --filter ./packages/core exec vitest run src/loop/workflows/agentic-execution/tool-call-step.test.ts --bail 1 --reporter=dot`; `pnpm build:core`; `pnpm run build:mastracode`; `pnpm --filter ./mastracode run e2e:test task-progress-events`; `pnpm --filter ./mastracode run e2e:test task-inline-transitions`; `pnpm --filter ./mastracode run e2e:test task-patch-tools`; `pnpm --filter ./mastracode run e2e:test task-prompt-context-next-turn`; `pnpm --filter ./mastracode run e2e:test workspace-plan-mode-tools`; `pnpm --filter ./mastracode run e2e:test github-signals-command`; `pnpm --filter ./mastracode run e2e:test harness-api-config`; `pnpm --filter ./packages/core check`; `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`; `pnpm --filter ./mastracode run e2e:test -- --jobs 2` (51/51).
+- Tracker update: `Tools: Workspace-backed coding tools` moved to `validated`. Current tracker state: 28 validated, 28 `needs-follow-up`, 56 total.

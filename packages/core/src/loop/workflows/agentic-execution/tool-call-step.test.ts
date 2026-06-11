@@ -805,6 +805,38 @@ describe('createToolCallStep requestContext forwarding', () => {
     expect(result).toEqual({ result: { ok: true }, ...inputData });
   });
 
+  it('prefers the agent requestContext over the workflow engine step context', async () => {
+    const agentRequestContext = new RequestContext();
+    agentRequestContext.set('harness', { harnessId: 'harness-ctx' });
+    const workflowRequestContext = new RequestContext();
+    workflowRequestContext.set('harness', { harnessId: 'workflow-ctx' });
+
+    let capturedOptions: MastraToolInvocationOptions | undefined;
+    const tools = {
+      'ctx-tool': {
+        execute: vi.fn((_args: any, opts: MastraToolInvocationOptions) => {
+          capturedOptions = opts;
+          return Promise.resolve({ ok: true });
+        }),
+      },
+    };
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'ctx-run',
+      streamState,
+      requestContext: agentRequestContext,
+    });
+
+    await toolCallStep.execute(makeExecuteParams({ requestContext: workflowRequestContext }));
+
+    expect(capturedOptions).toBeDefined();
+    expect(capturedOptions!.requestContext).toBe(agentRequestContext);
+    expect(capturedOptions!.requestContext!.get('harness')).toEqual({ harnessId: 'harness-ctx' });
+  });
+
   it('forwards an empty requestContext when no values are set', async () => {
     const requestContext = new RequestContext();
 
