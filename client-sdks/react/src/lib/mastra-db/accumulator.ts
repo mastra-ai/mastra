@@ -67,6 +67,16 @@ const clearPendingStatus = (message: MastraDBMessage): MastraDBMessage => {
   return withMetadata(message, rest);
 };
 
+// Like `clearPendingStatus` but retains the `clientMessageId` correlation key.
+// Used during `data-user-message` reconciliation so the rendered row key (which
+// prefers `clientMessageId`) stays stable across the id swap, preventing a
+// React unmount/remount and the resulting layout shift. `clientMessageId` is
+// still stripped from persisted threads by `resolveInitialMessages`.
+const clearPendingStatusKeepClientId = (message: MastraDBMessage): MastraDBMessage => {
+  const { status: _status, ...rest } = message.content.metadata ?? {};
+  return withMetadata(message, rest);
+};
+
 const replaceLast = (conversation: MastraDBMessage[], message: MastraDBMessage): MastraDBMessage[] => [
   ...conversation.slice(0, -1),
   message,
@@ -118,6 +128,7 @@ const partProviderMetadata = (part: MastraMessagePart): Record<string, unknown> 
 export const finishStreamingAssistantMessage = (conversation: MastraDBMessage[]): MastraDBMessage[] => {
   const lastMessage = conversation[conversation.length - 1];
   if (!lastMessage || lastMessage.role !== 'assistant') return conversation;
+  if (lastMessage.content.parts.length === 0) return conversation.slice(0, -1);
 
   const nextParts = lastMessage.content.parts.map(part => {
     if ((part.type === 'text' || part.type === 'reasoning') && partState(part) === 'streaming') {
@@ -461,19 +472,23 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
             message.content.metadata[CLIENT_MESSAGE_ID_KEY] === echoedClientMessageId,
         )
       ) {
-        return result.map(message =>
-          message.content.metadata?.status === 'pending' &&
-          message.content.metadata[CLIENT_MESSAGE_ID_KEY] === echoedClientMessageId
-            ? clearPendingStatus(typeof signalId === 'string' ? { ...message, id: signalId } : message)
-            : message,
+        return finishStreamingAssistantMessage(
+          result.map(message =>
+            message.content.metadata?.status === 'pending' &&
+            message.content.metadata[CLIENT_MESSAGE_ID_KEY] === echoedClientMessageId
+              ? clearPendingStatusKeepClientId(typeof signalId === 'string' ? { ...message, id: signalId } : message)
+              : message,
+          ),
         );
       }
 
       if (typeof signalId === 'string' && result.some(message => message.id === signalId)) {
-        return result.map(message =>
-          message.id === signalId && message.content.metadata?.status === 'pending'
-            ? clearPendingStatus(message)
-            : message,
+        return finishStreamingAssistantMessage(
+          result.map(message =>
+            message.id === signalId && message.content.metadata?.status === 'pending'
+              ? clearPendingStatus(message)
+              : message,
+          ),
         );
       }
 

@@ -97,7 +97,7 @@ export function ScoreDialog({
           </TextAndIcon>
           |
           <SideDialog.Nav onNext={onNext} onPrevious={onPrevious} />
-          <Button size="default" className="ml-auto mr-8" disabled={!score} onClick={() => setDatasetDialogOpen(true)}>
+          <Button size="lg" className="ml-auto mr-8" disabled={!score} onClick={() => setDatasetDialogOpen(true)}>
             <Icon>
               <SaveIcon />
             </Icon>

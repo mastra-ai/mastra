@@ -41,7 +41,7 @@ import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../obs
 import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
-import type { ApiRoute, Middleware, ServerConfig } from '../server/types';
+import type { ApiRoute, Middleware, ServerConfig, StudioConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
 import { InMemoryStore } from '../storage';
 import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inmemory';
@@ -320,6 +320,38 @@ export interface Config<
   server?: ServerConfig;
 
   /**
+   * Studio-specific authentication and authorization configuration.
+   *
+   * When configured, Studio uses separate auth from the server (API) auth,
+   * allowing different providers for internal team members vs external customers.
+   *
+   * - `server.auth` handles API authentication (external customers)
+   * - `studio.auth` handles Studio authentication (internal team)
+   *
+   * **Dual auth is opt-in:** If `studio.auth` is not configured, Studio requests
+   * fall back to `server.auth` for backward compatibility. To enable strict
+   * separation between Studio and API auth, configure both `studio.auth` and
+   * `server.auth`.
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   server: {
+   *     auth: new MastraAuthWorkos({ ... }), // External customers
+   *   },
+   *   studio: {
+   *     auth: new MastraAuthOkta({ ... }), // Internal team
+   *     rbac: new StaticRBACProvider({
+   *       roles: DEFAULT_ROLES,
+   *       getUserRoles: (user) => [user.role],
+   *     }),
+   *   },
+   * });
+   * ```
+   */
+  studio?: StudioConfig;
+
+  /**
    * MCP servers provide tools and resources that agents can use.
    */
   mcpServers?: TMCPServers;
@@ -567,6 +599,7 @@ export class Mastra<
   #workspace?: Workspace;
   #workspaces: Record<string, RegisteredWorkspace> = {};
   #server?: ServerConfig;
+  #studio?: StudioConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
@@ -664,9 +697,43 @@ export class Mastra<
                 const data = event.data as Record<string, unknown> | undefined;
                 const wfId = data?.workflowId as string | undefined;
                 const rId = data?.runId as string | undefined;
-                if (wfId && rId && self.__hasInternalWorkflow(wfId, rId)) {
+                // Walk parentWorkflow chain to root — nested internal workflows
+                // (e.g. `executionWorkflow` inside `agentic-loop`) carry an
+                // immediate workflowId that isn't itself in the internal registry,
+                // but their root parent (the registered agentic-loop) is. If any
+                // ancestor matches an internal registration, this instance owns
+                // the run and the event should stay local. Also tag publishes
+                // for workflow ids only known to this instance's public registry
+                // (e.g. background scheduler runs like the notification
+                // dispatcher) — they have no cross-instance consumer.
+                const isOwnedHere = (() => {
+                  if (wfId && rId && self.__hasInternalWorkflow(wfId, rId)) return true;
+                  let parent = data?.parentWorkflow as
+                    | { workflowId?: string; runId?: string; parentWorkflow?: unknown }
+                    | undefined;
+                  let depth = 0;
+                  while (parent && depth < 16) {
+                    const pwfId = parent.workflowId;
+                    const prId = parent.runId;
+                    if (pwfId && prId && self.__hasInternalWorkflow(pwfId, prId)) return true;
+                    parent = parent.parentWorkflow as typeof parent;
+                    depth++;
+                  }
+                  // Scheduler-spawned background workflows: runId carries the
+                  // workflow id prefix `sched_wf_<workflowId>_<timestamp>`. These
+                  // ticks fire on every instance independently — events are
+                  // only meaningful to the publishing process.
+                  if (rId && rId.startsWith('sched_wf_')) return true;
+                  return false;
+                })();
+                if (isOwnedHere) {
                   return target.publish(topic, event, { localOnly: true });
                 }
+              } else if (topic.startsWith('workflow.events.v2.')) {
+                // Per-run watch stream events. Only the publishing process
+                // consumes these (execution-engine subscribes per-run). No
+                // cross-instance fan-out needed.
+                return target.publish(topic, event, { localOnly: true });
               }
               return target.publish(topic, event);
             };
@@ -1295,6 +1362,10 @@ export class Mastra<
 
     if (config?.server) {
       this.#server = config.server;
+    }
+
+    if (config?.studio) {
+      this.#studio = config.studio;
     }
 
     // Register channels and merge their routes into server config
@@ -3849,6 +3920,23 @@ export class Mastra<
 
   public getServer() {
     return this.#server;
+  }
+
+  /**
+   * Gets the Studio-specific authentication and authorization configuration.
+   *
+   * @returns The studio config, or undefined if not configured
+   *
+   * @example
+   * ```typescript
+   * const studioConfig = mastra.getStudio();
+   * if (studioConfig?.auth) {
+   *   // Studio has separate auth configured
+   * }
+   * ```
+   */
+  public getStudio() {
+    return this.#studio;
   }
 
   /**
