@@ -19,7 +19,8 @@ type ReasoningRuntimeExtensions = Partial<
 /** Narrowed part shape passed to the `Text` renderer. */
 export type TextPart = Omit<PartByType<'text'>, keyof TextRuntimeExtensions> & TextRuntimeExtensions;
 /** Narrowed part shape passed to the `Reasoning` renderer. */
-export type ReasoningPart = Omit<PartByType<'reasoning'>, keyof ReasoningRuntimeExtensions> & ReasoningRuntimeExtensions;
+export type ReasoningPart = Omit<PartByType<'reasoning'>, keyof ReasoningRuntimeExtensions> &
+  ReasoningRuntimeExtensions;
 /** Narrowed part shape passed to the `File` renderer. */
 export type FilePart = PartByType<'file'>;
 /** Narrowed part shape passed to the `StepStart` renderer. */
