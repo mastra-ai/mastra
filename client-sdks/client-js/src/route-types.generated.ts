@@ -82431,6 +82431,8 @@ export type PostDatasetsDatasetIdExperiments_Body = {
   scorerIds?: string[] | undefined;
   /** Pin to specific dataset version */
   version?: number | undefined;
+  /** Run only these dataset item IDs (after version resolution). Matching no items fails the experiment at setup. */
+  itemIds?: string[] | undefined;
   /** Agent version ID to use for experiment */
   agentVersion?: string | undefined;
   /** Maximum concurrent executions */

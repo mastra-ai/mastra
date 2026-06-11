@@ -2645,7 +2645,9 @@ export interface DatasetExperiment {
  * `toolReplay` field carries a `ToolReplayReport` divergence report
  * (persisted in its own column, not merged into `output`), and failed items
  * use the error codes `TOOL_REPLAY_MISS`, `TOOL_REPLAY_NO_RECORDING`,
- * `TOOL_REPLAY_LOAD_FAILED`, or `TOOL_MOCK_EXPECTATION_FAILED`.
+ * `TOOL_REPLAY_LOAD_FAILED`, `TOOL_REPLAY_UNCONSUMED` (strict matching:
+ * recorded calls left unconsumed fail the item), or
+ * `TOOL_MOCK_EXPECTATION_FAILED`.
  */
 export interface DatasetExperimentResult {
   id: string;
@@ -2769,6 +2771,12 @@ export interface TriggerDatasetExperimentParams {
   targetId: string;
   scorerIds?: string[];
   version?: number;
+  /**
+   * Run only these dataset item IDs (after version resolution) — for subset
+   * or single-item re-runs. Unknown IDs are ignored; if nothing matches, the
+   * experiment fails at setup with `EXPERIMENT_NO_ITEMS`.
+   */
+  itemIds?: string[];
   agentVersion?: string;
   maxConcurrency?: number;
   requestContext?: Record<string, unknown>;

@@ -926,7 +926,7 @@ describe('MastraClient', () => {
       client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
     });
 
-    it('triggerDatasetExperiment forwards toolReplay, matching, and toolMocks in the POST body', async () => {
+    it('triggerDatasetExperiment forwards toolReplay, matching, toolMocks, and itemIds in the POST body', async () => {
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
         headers: { get: () => 'application/json' },
@@ -945,6 +945,7 @@ describe('MastraClient', () => {
         targetId: 'support-agent',
         toolReplay: { fromExperimentId: 'prior-exp', onMiss: 'passthrough', matching: 'strict' },
         toolMocks,
+        itemIds: ['item-2'],
       });
 
       const [url, init] = (global.fetch as any).mock.calls[0];
@@ -953,10 +954,11 @@ describe('MastraClient', () => {
       const body = JSON.parse(init.body);
       expect(body.toolReplay).toEqual({ fromExperimentId: 'prior-exp', onMiss: 'passthrough', matching: 'strict' });
       expect(body.toolMocks).toEqual(toolMocks);
+      expect(body.itemIds).toEqual(['item-2']);
       expect(body.datasetId).toBeUndefined(); // path param never leaks into the body
     });
 
-    it('triggerDatasetExperiment omits toolReplay and toolMocks when not provided', async () => {
+    it('triggerDatasetExperiment omits toolReplay, toolMocks, and itemIds when not provided', async () => {
       (global.fetch as any).mockResolvedValueOnce({
         ok: true,
         headers: { get: () => 'application/json' },
@@ -972,6 +974,7 @@ describe('MastraClient', () => {
       const body = JSON.parse((global.fetch as any).mock.calls[0][1].body);
       expect('toolReplay' in body).toBe(false);
       expect('toolMocks' in body).toBe(false);
+      expect('itemIds' in body).toBe(false);
     });
   });
 });
