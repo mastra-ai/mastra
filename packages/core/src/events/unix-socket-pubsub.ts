@@ -298,7 +298,10 @@ export class UnixSocketPubSub extends PubSub {
         throw new Error('UnixSocketPubSub is closed');
       }
       const code = (error as NodeJS.ErrnoException).code;
-      if (code !== 'EADDRINUSE') throw error;
+      // EADDRINUSE: another broker bound the socket. EEXIST: another process
+      // created the socket file but hasn't bound yet (macOS race). Both mean
+      // "fall through and try to connect as a client".
+      if (code !== 'EADDRINUSE' && code !== 'EEXIST') throw error;
     }
 
     try {
@@ -627,31 +630,86 @@ export class UnixSocketPubSub extends PubSub {
     const callbacks = this.#callbacks.get(topic);
     if (!callbacks) return;
     for (const cb of callbacks) {
-      try {
-        const result = (cb as (event: Event, ack: () => Promise<void>, nack: () => Promise<void>) => unknown)(
-          event,
-          async () => {},
-          async () => {},
-        );
-        if (result && typeof (result as Promise<void>).catch === 'function') {
-          void (result as Promise<void>).catch(() => {});
-        }
-      } catch {
-        // Ignore subscriber failures so one callback cannot poison topic delivery.
+      this.#invokeLocalCallback(topic, event, cb, 0);
+    }
+  }
+
+  #invokeLocalCallback(topic: string, event: Event, cb: EventCallback, attempt: number) {
+    // Keep this aligned with the consumer-side retry budget (e.g.
+    // WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS = 5). The transport must
+    // give the consumer enough redeliveries to exhaust its own retry budget
+    // and surface a terminal failure, otherwise the consumer never sees
+    // attempt N and the run silently hangs.
+    const MAX_LOCAL_REDELIVERIES = 6;
+    const REDELIVERY_DELAY_MS = 100;
+    let nacked = false;
+    const nack = async () => {
+      if (nacked || this.#closed) return;
+      nacked = true;
+      if (attempt >= MAX_LOCAL_REDELIVERIES) return;
+      const stillSubscribed = this.#callbacks.get(topic)?.has(cb);
+      if (!stillSubscribed) return;
+      const timer = setTimeout(
+        () => {
+          if (this.#closed) return;
+          if (!this.#callbacks.get(topic)?.has(cb)) return;
+          this.#invokeLocalCallback(topic, event, cb, attempt + 1);
+        },
+        REDELIVERY_DELAY_MS * (attempt + 1),
+      );
+      timer.unref?.();
+    };
+    try {
+      const result = (cb as (event: Event, ack: () => Promise<void>, nack: () => Promise<void>) => unknown)(
+        event,
+        async () => {},
+        nack,
+      );
+      if (result && typeof (result as Promise<void>).catch === 'function') {
+        void (result as Promise<void>).catch(() => {});
       }
+    } catch {
+      // Ignore subscriber failures so one callback cannot poison topic delivery.
     }
   }
 
   async #sendToBroker(frame: ClientFrame) {
-    try {
-      await this.#sendToActiveBroker(frame);
-    } catch (error) {
-      if (this.#closed) throw error;
-      const failedSocket = this.#clientSocket;
-      this.#clientSocket = undefined;
-      failedSocket?.destroy();
-      await this.#ensureStarted(true);
-      await this.#sendToActiveBroker(frame);
+    // If the broker died mid-write (EPIPE) or while election is rotating, we
+    // reconnect and retry. The first attempt is the normal path. Each retry
+    // forces a fresh broker resolution. Retry budget is bounded so a truly
+    // unreachable broker still errors instead of looping forever.
+    const maxRetries = 3;
+    let lastError: unknown;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        if (attempt === 0) {
+          await this.#sendToActiveBroker(frame);
+        } else {
+          if (this.#closed) throw lastError;
+          const failedSocket = this.#clientSocket;
+          this.#clientSocket = undefined;
+          failedSocket?.destroy();
+          await this.#ensureStarted(true);
+          await this.#sendToActiveBroker(frame);
+        }
+        return;
+      } catch (error) {
+        lastError = error;
+        if (this.#closed) throw error;
+        const code = (error as NodeJS.ErrnoException)?.code;
+        // EPIPE/ECONNRESET/ENOTCONN: broker died mid-write — retry against a
+        // fresh broker. Anything else (e.g. closed pubsub, validation error)
+        // is not safe to retry blindly.
+        const transient =
+          code === 'EPIPE' ||
+          code === 'ECONNRESET' ||
+          code === 'ENOTCONN' ||
+          (error as Error)?.message?.includes('broker connection closed') ||
+          (error as Error)?.message?.includes('not connected to a broker');
+        if (!transient || attempt === maxRetries) throw error;
+        // Tiny backoff so concurrent senders don't dogpile re-election.
+        await new Promise(resolve => setTimeout(resolve, 10 * (attempt + 1)));
+      }
     }
   }
 

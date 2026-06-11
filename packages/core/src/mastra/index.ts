@@ -4305,7 +4305,7 @@ export class Mastra<
       const modes = this.#pubsub.supportedModes ?? ['pull'];
       const pushOnly = modes.includes('push') && !modes.includes('pull');
       if (pushOnly && !this.#pushSubscription) {
-        const cb: EventCallback = (event, ack) => {
+        const cb: EventCallback = (event, ack, nack) => {
           // In cross-process push environments (e.g. UnixSocketPubSub),
           // every subscriber receives every event — including events for
           // internal workflows registered on a different process. Skip
@@ -4326,13 +4326,29 @@ export class Mastra<
 
           void this.handleWorkflowEvent(event)
             .then(result => {
-              if (result.ok && ack) {
-                return ack().catch(err =>
-                  this.#logger?.error?.('Error acking workflow event in push subscription', err),
+              if (result.ok) {
+                if (ack) {
+                  return ack().catch(err =>
+                    this.#logger?.error?.('Error acking workflow event in push subscription', err),
+                  );
+                }
+                return;
+              }
+              // Non-ok result: ask the transport to redeliver (nack) when the
+              // handle layer says retry. The WEP tracks per-event delivery
+              // attempts and eventually returns `retry: false` to break the
+              // loop and surface a terminal workflow.fail. For terminal
+              // failures we ack so the event is dropped from the transport.
+              if (result.retry && nack) {
+                return nack().catch(err =>
+                  this.#logger?.error?.('Error nacking workflow event in push subscription', err),
                 );
               }
-              // Push transports without nack semantics (EventEmitter) treat
-              // a non-ack as a failure signal; we already logged inside handle().
+              if (ack) {
+                return ack().catch(err =>
+                  this.#logger?.error?.('Error acking terminal workflow event in push subscription', err),
+                );
+              }
             })
             .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
         };
