@@ -471,9 +471,22 @@ export function ExperimentPageTabs({
                     traceHref={`/traces/${featuredTraceId}`}
                     noticeSlot={
                       viewingOwnReplayTrace ? (
-                        <Notice variant="info" title="Tool replay">
+                        <Notice
+                          variant="info"
+                          title={
+                            replayMarker?.mockedTools?.length
+                              ? replayMarker.onMiss
+                                ? 'Tool replay + mocks'
+                                : 'Tool mocks'
+                              : 'Tool replay'
+                          }
+                        >
                           <Notice.Message>
-                            Tools were replayed from a recording — this run&apos;s trace contains no tool spans.
+                            {replayMarker?.mockedTools?.length
+                              ? replayMarker.onMiss
+                                ? 'Tool calls were served from a recording or mocks — those calls leave no tool spans in this trace.'
+                                : 'Mocked tools were stubbed — mocked calls leave no tool spans in this trace; unmocked tools ran live.'
+                              : 'Tools were replayed from a recording — replayed calls leave no tool spans in this trace.'}
                             {featuredReport?.sourceTraceId ? (
                               <>
                                 {' '}
