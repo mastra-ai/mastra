@@ -236,3 +236,173 @@ class TransactionClient implements TxClient {
     return Promise.all(promises);
   }
 }
+
+/**
+ * DbClient adapter that pins all queries to a single PoolClient.
+ *
+ * Used during PostgresStore.init() to funnel every domain's DDL through
+ * one backend connection. This collapses ~200 per-statement pool checkouts
+ * into a single connection acquisition, which:
+ *   - removes connection-handshake RTT on remote/managed Postgres
+ *   - makes the entire init look like one transaction to a transaction
+ *     pooler (PgBouncer/Supabase), avoiding pooler-budget exhaustion
+ *   - eliminates inter-statement lock contention by construction (a single
+ *     backend serializes statements naturally)
+ *
+ * The wrapped client is the caller's responsibility to release.
+ */
+export class PinnedClientAdapter implements DbClient {
+  constructor(
+    public readonly $pool: Pool,
+    private readonly pinnedClient: PoolClient,
+  ) {}
+
+  connect(): Promise<PoolClient> {
+    // Returning a wrapper around the pinned client would risk callers
+    // releasing it prematurely. Domain init paths don't call connect(),
+    // so we fall back to the pool here.
+    return this.$pool.connect();
+  }
+
+  async none(query: string, values?: QueryValues): Promise<null> {
+    await this.pinnedClient.query(query, values);
+    return null;
+  }
+
+  async one<T = any>(query: string, values?: QueryValues): Promise<T> {
+    const result = await this.pinnedClient.query(query, values);
+    if (result.rows.length === 0) {
+      throw new Error(`No data returned from query: ${truncateQuery(query)}`);
+    }
+    if (result.rows.length > 1) {
+      throw new Error(`Multiple rows returned when one was expected: ${truncateQuery(query)}`);
+    }
+    return result.rows[0] as T;
+  }
+
+  async oneOrNone<T = any>(query: string, values?: QueryValues): Promise<T | null> {
+    const result = await this.pinnedClient.query(query, values);
+    if (result.rows.length === 0) {
+      return null;
+    }
+    if (result.rows.length > 1) {
+      throw new Error(`Multiple rows returned when one or none was expected: ${truncateQuery(query)}`);
+    }
+    return result.rows[0] as T;
+  }
+
+  async any<T = any>(query: string, values?: QueryValues): Promise<T[]> {
+    const result = await this.pinnedClient.query(query, values);
+    return result.rows as T[];
+  }
+
+  async manyOrNone<T = any>(query: string, values?: QueryValues): Promise<T[]> {
+    return this.any<T>(query, values);
+  }
+
+  async many<T = any>(query: string, values?: QueryValues): Promise<T[]> {
+    const result = await this.pinnedClient.query(query, values);
+    if (result.rows.length === 0) {
+      throw new Error(`No data returned from query: ${truncateQuery(query)}`);
+    }
+    return result.rows as T[];
+  }
+
+  async query(query: string, values?: QueryValues): Promise<QueryResult> {
+    return this.pinnedClient.query(query, values);
+  }
+
+  async tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T> {
+    // Run BEGIN/COMMIT/ROLLBACK on the pinned client itself rather than
+    // checking out a new one. Safe to use during init.
+    await this.pinnedClient.query('BEGIN');
+    try {
+      const result = await callback(new TransactionClient(this.pinnedClient));
+      await this.pinnedClient.query('COMMIT');
+      return result;
+    } catch (error) {
+      try {
+        await this.pinnedClient.query('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Transaction rollback failed:', rollbackError);
+      }
+      throw error;
+    }
+  }
+}
+
+/**
+ * DbClient wrapper that routes to an alternate client when one is pinned.
+ *
+ * Most of the time this just forwards to the underlying PoolAdapter.
+ * During PostgresStore.init() we temporarily pin a single-client adapter
+ * so every domain's DDL flows through one backend connection.
+ */
+export class RoutingDbClient implements DbClient {
+  #base: DbClient;
+  #pinned: DbClient | null = null;
+
+  constructor(base: DbClient) {
+    this.#base = base;
+  }
+
+  /** Returns the currently active client (pinned if set, otherwise base). */
+  private get active(): DbClient {
+    return this.#pinned ?? this.#base;
+  }
+
+  /**
+   * Pin a DbClient so all subsequent calls route through it until unpinned.
+   * Throws if a client is already pinned to avoid silent overrides.
+   */
+  pin(client: DbClient): void {
+    if (this.#pinned) {
+      throw new Error('RoutingDbClient already has a pinned client');
+    }
+    this.#pinned = client;
+  }
+
+  unpin(): void {
+    this.#pinned = null;
+  }
+
+  get $pool(): Pool {
+    return this.#base.$pool;
+  }
+
+  connect(): Promise<PoolClient> {
+    return this.active.connect();
+  }
+
+  none(query: string, values?: QueryValues): Promise<null> {
+    return this.active.none(query, values);
+  }
+
+  one<T = any>(query: string, values?: QueryValues): Promise<T> {
+    return this.active.one<T>(query, values);
+  }
+
+  oneOrNone<T = any>(query: string, values?: QueryValues): Promise<T | null> {
+    return this.active.oneOrNone<T>(query, values);
+  }
+
+  any<T = any>(query: string, values?: QueryValues): Promise<T[]> {
+    return this.active.any<T>(query, values);
+  }
+
+  manyOrNone<T = any>(query: string, values?: QueryValues): Promise<T[]> {
+    return this.active.manyOrNone<T>(query, values);
+  }
+
+  many<T = any>(query: string, values?: QueryValues): Promise<T[]> {
+    return this.active.many<T>(query, values);
+  }
+
+  query(query: string, values?: QueryValues): Promise<QueryResult> {
+    return this.active.query(query, values);
+  }
+
+  tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T> {
+    return this.active.tx<T>(callback);
+  }
+}

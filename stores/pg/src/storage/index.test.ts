@@ -487,13 +487,26 @@ describe('PostgresStore.init() — parallel DDL fan-out (issue #17679)', () => {
   }
 
   /**
-   * Wraps `pool.query()` to count concurrent in-flight queries and
-   * returns `{ peakInFlight, totalQueries }`. `pool.query()` is the
-   * entry point every domain's DDL goes through via PoolAdapter.none,
-   * so this is a direct, mechanism-level witness to the fan-out.
+   * Instruments a Pool to observe init-time fan-out. Tracks:
+   *   - totalQueries / peakInFlight: concurrent `pool.query()` calls
+   *   - totalConnects / peakClientsCheckedOut: concurrent `pool.connect()`
+   *     checkouts (the underlying resource a transaction pooler bills)
+   *
+   * Both metrics are needed because different fixes show up in different
+   * places: per-statement serialization shows up in `pool.query()`, while
+   * pinning all DDL to one backend shows up as a single `pool.connect()`
+   * with zero `pool.query()` traffic.
    */
   function instrumentPool(pool: Pool) {
-    const state = { inFlight: 0, peakInFlight: 0, totalQueries: 0 };
+    const state = {
+      inFlight: 0,
+      peakInFlight: 0,
+      totalQueries: 0,
+      checkedOut: 0,
+      peakClientsCheckedOut: 0,
+      totalConnects: 0,
+    };
+
     const originalQuery = pool.query.bind(pool);
     (pool as any).query = async (...args: any[]) => {
       state.inFlight++;
@@ -505,6 +518,21 @@ describe('PostgresStore.init() — parallel DDL fan-out (issue #17679)', () => {
         state.inFlight--;
       }
     };
+
+    const originalConnect = pool.connect.bind(pool);
+    (pool as any).connect = async () => {
+      const client = await (originalConnect as any)();
+      state.checkedOut++;
+      state.totalConnects++;
+      state.peakClientsCheckedOut = Math.max(state.peakClientsCheckedOut, state.checkedOut);
+      const originalRelease = client.release.bind(client);
+      client.release = (...args: any[]) => {
+        state.checkedOut--;
+        return originalRelease(...args);
+      };
+      return client;
+    };
+
     return state;
   }
 
@@ -535,11 +563,16 @@ describe('PostgresStore.init() — parallel DDL fan-out (issue #17679)', () => {
 
     try {
       await store.init();
-      // Sanity: init actually ran some DDL (so we know we measured the
-      // right thing and didn't pass via a no-op).
-      expect(probe.totalQueries).toBeGreaterThan(20);
-      // The actual assertion: no concurrent DDL.
-      expect(probe.peakInFlight).toBe(1);
+      // Sanity: init actually ran DDL through SOME path (either pooled
+      // queries via pool.query, or a pinned client via pool.connect()).
+      expect(probe.totalQueries + probe.totalConnects).toBeGreaterThan(0);
+      // The real invariant: at most one backend is in use at any moment
+      // during init, whether it's because we serialized per-statement
+      // queries (peakInFlight stays at 1, peakClientsCheckedOut === 0)
+      // or because we pinned every domain's DDL to a single backend
+      // (peakClientsCheckedOut === 1, peakInFlight === 0).
+      const peakBackendsInUse = Math.max(probe.peakInFlight, probe.peakClientsCheckedOut);
+      expect(peakBackendsInUse).toBe(1);
     } finally {
       await dropSchema(schemaName);
       await store.close();
@@ -551,13 +584,14 @@ describe('PostgresStore.init() — parallel DDL fan-out (issue #17679)', () => {
     // Complementary check: the bug isn't just about peak concurrency
     // in a generous pool — it manifests as "every domain is asking for
     // a connection right now" under any pool size. Here we shrink the
-    // pool to 2 and assert peakInFlight is still 1.
+    // pool to 2 and assert at most one backend is in use.
     //
     // BEFORE THE FIX: peakInFlight saturates at 2 (the pool max) and
     //   the other ~340 calls just queue. The init "succeeds" but the
     //   pool is a bottleneck and any per-connection latency (real
     //   Supabase pooler) amplifies that queue into seconds.
-    // AFTER THE FIX: peakInFlight === 1, pool size is irrelevant.
+    // AFTER THE FIX (either per-statement serial or single-backend
+    //   pinning): at most one backend in use.
     const schemaName = `it17679_small_pool_${Date.now()}`;
     const pool = new Pool({ connectionString, max: 2 });
     const probe = instrumentPool(pool);
@@ -566,7 +600,8 @@ describe('PostgresStore.init() — parallel DDL fan-out (issue #17679)', () => {
 
     try {
       await store.init();
-      expect(probe.peakInFlight).toBe(1);
+      const peakBackendsInUse = Math.max(probe.peakInFlight, probe.peakClientsCheckedOut);
+      expect(peakBackendsInUse).toBe(1);
     } finally {
       await dropSchema(schemaName);
       await store.close();
