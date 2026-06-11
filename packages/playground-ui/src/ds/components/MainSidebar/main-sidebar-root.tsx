@@ -2,6 +2,7 @@ import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import { useCallback, useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
+import { ResizeHandleIndicator } from '@/ds/primitives/resize-handle-indicator';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
 
@@ -52,11 +53,21 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
       event.preventDefault();
 
       draggedRef.current = false;
+      // Active styles on press, not after drag threshold.
+      setGestureActive(true);
 
       const startX = event.clientX;
 
       const handle = event.currentTarget;
       const pointerId = event.pointerId;
+
+      // Capture pointer: keeps :hover + col-resize cursor on handle for the
+      // whole drag, even when cursor leaves the hotzone (collapsed snap-zone).
+      try {
+        handle.setPointerCapture(pointerId);
+      } catch {
+        // Pointer already gone.
+      }
 
       // WYSIWYG resize: sidebar width = cursor X relative to sidebar's left edge.
       // Captured once — sidebar is `shrink-0`, left edge is stable during the gesture.
@@ -74,7 +85,6 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
           draggedRef.current = true;
           document.body.style.cursor = 'col-resize';
           document.body.style.userSelect = 'none';
-          setGestureActive(true);
         }
 
         // Single rule, no started-state branch: cursor position alone defines state.
@@ -265,14 +275,11 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
           'focus-visible:outline-hidden',
         )}
       >
-        <span
-          aria-hidden
+        <ResizeHandleIndicator
           className={cn(
-            'block h-10 w-0.5 translate-x-0 group-hover:translate-x-1.5 rounded-full bg-transparent scale-50 group-hover:scale-100',
-            'transition duration-150 ease-out motion-reduce:transition-none pointer-events-none',
-            'group-hover:bg-surface5',
-            'group-focus-visible:bg-accent1',
-            'in-data-[sidebar-gesture=active]:bg-accent1',
+            'group-hover:opacity-100',
+            'group-focus-visible:opacity-100 group-focus-visible:via-accent1',
+            'in-data-[sidebar-gesture=active]:opacity-100 in-data-[sidebar-gesture=active]:via-neutral6/45',
           )}
         />
       </div>
