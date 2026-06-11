@@ -70,3 +70,9 @@ om-reflector-fixture.json
 .notion
 .dev/lima
 .mastracode/
+
+# Local-only working folders — never part of the repo
+.superset/
+.codacy/
+eric-work/
+.github/instructions/codacy.instructions.md

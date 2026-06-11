@@ -34,6 +34,72 @@ export interface ToolReplayEvent {
 /** Behavior when a tool call has no remaining recorded event. */
 export type ToolReplayOnMiss = 'error' | 'passthrough';
 
+/**
+ * How recorded events are matched to the agent's calls.
+ * - `'fifo'` (default): per-tool order — the next recorded event for the tool
+ *   is served regardless of args; arg drift is reported, not prevented. Right
+ *   for evaluating a *changed* agent, which reformulates args by nature.
+ * - `'strict'`: per-tool lookup by canonicalized args — an event is served
+ *   only when the call's args exactly match a recorded call's args; anything
+ *   else is a miss. Right for contract-style tests where deviation must fail.
+ *   `argMismatches` is empty by construction in this mode.
+ */
+export type ToolReplayMatching = 'fifo' | 'strict';
+
+/** Assertion attached to a tool mock — evaluated after the run completes. */
+export interface ToolMockExpectation {
+  /**
+   * Args the agent is expected to call the tool with (canonicalized deep
+   * equality; runtime-injected nullish keys are ignored). When set,
+   * `calledTimes` counts only calls with matching args.
+   */
+  args?: unknown;
+  /**
+   * Exact number of (matching) calls required. Omitted → at least one.
+   * `0` asserts the tool must NOT be called (with those args, if set).
+   */
+  calledTimes?: number;
+}
+
+/**
+ * Data-shaped tool mock: a static stub (`output`), an injected failure
+ * (`error`), an assertion (`expect`), or combinations. An entry with only
+ * `expect` doesn't stub anything — the call executes normally (replayed or
+ * live) and only the assertion is recorded.
+ */
+export interface ToolMockDataConfig {
+  /** Static output returned for every call — the tool never executes. */
+  output?: unknown;
+  /** Error thrown for every call (failure injection) — the tool never executes. */
+  error?: { name?: string; message: string };
+  expect?: ToolMockExpectation;
+}
+
+/**
+ * Function mock: replaces the tool's execute entirely. Code-only — functions
+ * cannot cross the HTTP API (Studio and clients can only send data mocks).
+ */
+export type ToolMockFunction = (call: { input: unknown; callIndex: number }) => Promise<unknown> | unknown;
+
+export type ToolMockConfig = ToolMockDataConfig | ToolMockFunction;
+
+/** Per-tool mock usage accounting, included in the report. */
+export interface ToolMockUsage {
+  toolName: string;
+  calls: number;
+  /** What the mock did on each call. 'observe' = expect-only entry, call executed normally. */
+  kind: 'output' | 'error' | 'function' | 'observe';
+}
+
+/** Outcome of one ToolMockExpectation, included in the report. */
+export interface ToolMockExpectationResult {
+  toolName: string;
+  satisfied: boolean;
+  /** Calls counted against the expectation (arg-filtered when expect.args is set). */
+  calledTimes: number;
+  reason?: string;
+}
+
 export interface ToolReplayMiss {
   toolName: string;
   /** What happened: 'passthrough' = live execution proceeded, 'error' = the run was aborted. */
@@ -79,6 +145,13 @@ export interface ToolReplayReport {
    * with the item's new input.
    */
   staleRecording?: boolean;
+  /** Mock usage accounting — present when toolMocks were configured. */
+  mocks?: ToolMockUsage[];
+  /**
+   * Expectation outcomes — present when any mock carried an `expect`.
+   * Any unsatisfied entry fails the item (TOOL_MOCK_EXPECTATION_FAILED).
+   */
+  expectations?: ToolMockExpectationResult[];
 }
 
 /** Mutable per-attempt replay state. Create a fresh one for every execution attempt. */
@@ -92,6 +165,14 @@ export interface ToolReplayState {
   argMismatches: ToolReplayArgMismatch[];
   /** Recorded payloads containing the sensitive-data redaction marker. */
   redactedPayloadCount: number;
+  matching: ToolReplayMatching;
+  /**
+   * False when only toolMocks are configured (no replay source): unmocked
+   * tools then execute live instead of missing against empty queues.
+   */
+  replayActive: boolean;
+  /** Mocks keyed by formatted tool name, with per-call accounting. */
+  mocks: Map<string, { toolName: string; config: ToolMockConfig; calls: { input: unknown }[] }>;
 }
 
 const TOOL_SPAN_TYPES: ReadonlySet<SpanType> = new Set([SpanType.TOOL_CALL, SpanType.MCP_TOOL_CALL]);
@@ -245,7 +326,16 @@ function containsRedactionMarker(payload: unknown): boolean {
  * the hook context carries the agent-formatted name, so both sides normalize
  * through {@link formatToolName} to match.
  */
-export function createReplayState(events: ToolReplayEvent[], sourceTraceId: string | null): ToolReplayState {
+export function createReplayState(
+  events: ToolReplayEvent[],
+  sourceTraceId: string | null,
+  options?: {
+    matching?: ToolReplayMatching;
+    /** Defaults to true; pass false for mock-only runs (no replay source). */
+    replayActive?: boolean;
+    mocks?: Record<string, ToolMockConfig>;
+  },
+): ToolReplayState {
   const queues = new Map<string, ToolReplayEvent[]>();
   let redactedPayloadCount = 0;
   for (const event of events) {
@@ -260,6 +350,10 @@ export function createReplayState(events: ToolReplayEvent[], sourceTraceId: stri
       redactedPayloadCount++;
     }
   }
+  const mocks = new Map<string, { toolName: string; config: ToolMockConfig; calls: { input: unknown }[] }>();
+  for (const [toolName, config] of Object.entries(options?.mocks ?? {})) {
+    mocks.set(formatToolName(toolName), { toolName, config, calls: [] });
+  }
   return {
     queues,
     sourceTraceId,
@@ -268,7 +362,30 @@ export function createReplayState(events: ToolReplayEvent[], sourceTraceId: stri
     misses: [],
     argMismatches: [],
     redactedPayloadCount,
+    matching: options?.matching ?? 'fifo',
+    replayActive: options?.replayActive ?? true,
+    mocks,
   };
+}
+
+/**
+ * Override keys the tool builder splices into every tool's args schema
+ * (background runs and suspend/resume — see tools/tool-builder/builder.ts).
+ * Models routinely emit them as nulls, and capture points differ on whether
+ * they're present, so nullish values are ignored when diagnosing arg drift —
+ * `{ city: 'Paris' }` recorded vs `{ city: 'Paris', _background: null }`
+ * requested is the same question. Non-null values (e.g. `_background: true`)
+ * still compare: they change execution semantics.
+ */
+const RUNTIME_INJECTED_ARG_KEYS = ['_background', 'suspendedToolRunId', 'resumeData'] as const;
+
+function normalizeArgsForComparison(args: unknown): unknown {
+  if (typeof args !== 'object' || args === null || Array.isArray(args)) return args;
+  const normalized = { ...(args as Record<string, unknown>) };
+  for (const key of RUNTIME_INJECTED_ARG_KEYS) {
+    if (key in normalized && normalized[key] == null) delete normalized[key];
+  }
+  return normalized;
 }
 
 /**
@@ -288,8 +405,48 @@ export function buildReplayHooks(
   options: { onMiss: ToolReplayOnMiss; onFatalMiss?: (error: Error) => void },
 ): ToolHooks {
   return {
-    beforeToolCall: ({ toolName, input }) => {
-      const event = state.queues.get(formatToolName(toolName))?.shift();
+    beforeToolCall: async ({ toolName, input }) => {
+      const key = formatToolName(toolName);
+
+      // Mocks take precedence over the replay queues, per tool. An expect-only
+      // entry records the call and falls through to replay/live execution.
+      const mock = state.mocks.get(key);
+      if (mock) {
+        mock.calls.push({ input });
+        if (typeof mock.config === 'function') {
+          const output = await mock.config({ input, callIndex: mock.calls.length - 1 });
+          return { proceed: false, output };
+        }
+        if (mock.config.error) {
+          const error = new Error(mock.config.error.message);
+          // Same guard as replayed errors: never reuse names the tool-call
+          // step re-throws instead of converting to a tool-error result.
+          if (mock.config.error.name && !RETHROWN_TOOL_ERROR_NAMES.has(mock.config.error.name)) {
+            error.name = mock.config.error.name;
+          }
+          throw error;
+        }
+        if ('output' in mock.config) {
+          return { proceed: false, output: mock.config.output };
+        }
+        // expect-only: fall through.
+      }
+
+      // Mock-only runs: unmocked tools execute live — the experiment never
+      // configured a replay source, so there is nothing to miss against.
+      if (!state.replayActive) return;
+
+      const queue = state.queues.get(key);
+      let event: ToolReplayEvent | undefined;
+      if (state.matching === 'strict') {
+        // Serve only an exact-args recorded call (canonicalized comparison).
+        // Anything else is a miss — argMismatches stays empty by construction.
+        const normalizedInput = normalizeArgsForComparison(input);
+        const index = queue?.findIndex(e => deepEqual(normalizedInput, normalizeArgsForComparison(e.input))) ?? -1;
+        if (index >= 0) event = queue!.splice(index, 1)[0];
+      } else {
+        event = queue?.shift();
+      }
 
       if (!event) {
         state.misses.push({ toolName, action: options.onMiss, input });
@@ -299,14 +456,19 @@ export function buildReplayHooks(
         // "aborted" in the message also suppresses the experiment retry loop —
         // a replay miss is deterministic, retrying cannot fix it.
         const error = new Error(
-          `Tool replay miss for '${toolName}': no recorded call remaining — execution aborted (onMiss: 'error')`,
+          `Tool replay miss for '${toolName}': no recorded call ${
+            state.matching === 'strict' ? 'with matching args ' : ''
+          }remaining — execution aborted (onMiss: 'error')`,
         );
         options.onFatalMiss?.(error);
         throw error;
       }
 
       state.replayedCount++;
-      if (!deepEqual(input, event.input)) {
+      if (
+        state.matching !== 'strict' &&
+        !deepEqual(normalizeArgsForComparison(input), normalizeArgsForComparison(event.input))
+      ) {
         state.argMismatches.push({ toolName, sequence: event.sequence, spanId: event.spanId });
       }
 
@@ -325,6 +487,13 @@ export function buildReplayHooks(
   };
 }
 
+function mockKind(config: ToolMockConfig): ToolMockUsage['kind'] {
+  if (typeof config === 'function') return 'function';
+  if (config.error) return 'error';
+  if ('output' in config) return 'output';
+  return 'observe';
+}
+
 /** Snapshot the divergence report, including events that were never consumed. */
 export function finalizeReplayReport(state: ToolReplayState): ToolReplayReport {
   const unconsumed: { toolName: string; count: number }[] = [];
@@ -333,6 +502,38 @@ export function finalizeReplayReport(state: ToolReplayState): ToolReplayReport {
       unconsumed.push({ toolName, count: queue.length });
     }
   }
+
+  const mocks: ToolMockUsage[] = [];
+  const expectations: ToolMockExpectationResult[] = [];
+  for (const { toolName, config, calls } of state.mocks.values()) {
+    mocks.push({ toolName, calls: calls.length, kind: mockKind(config) });
+
+    const expect = typeof config === 'function' ? undefined : config.expect;
+    if (!expect) continue;
+    // When expected args are set, only calls with those args count.
+    const counted =
+      expect.args !== undefined
+        ? calls.filter(call =>
+            deepEqual(normalizeArgsForComparison(call.input), normalizeArgsForComparison(expect.args)),
+          )
+        : calls;
+    const calledTimes = counted.length;
+    const satisfied = expect.calledTimes != null ? calledTimes === expect.calledTimes : calledTimes >= 1;
+    expectations.push({
+      toolName,
+      satisfied,
+      calledTimes,
+      ...(satisfied
+        ? {}
+        : {
+            reason:
+              expect.calledTimes != null
+                ? `expected ${expect.calledTimes} call(s)${expect.args !== undefined ? ' with matching args' : ''}, got ${calledTimes}`
+                : `expected at least one call${expect.args !== undefined ? ' with matching args' : ''}, got ${calledTimes}`,
+          }),
+    });
+  }
+
   return {
     sourceTraceId: state.sourceTraceId,
     totalRecorded: state.totalRecorded,
@@ -341,5 +542,7 @@ export function finalizeReplayReport(state: ToolReplayState): ToolReplayReport {
     unconsumed,
     argMismatches: [...state.argMismatches],
     ...(state.redactedPayloadCount > 0 ? { redactedPayloadCount: state.redactedPayloadCount } : {}),
+    ...(mocks.length > 0 ? { mocks } : {}),
+    ...(expectations.length > 0 ? { expectations } : {}),
   };
 }

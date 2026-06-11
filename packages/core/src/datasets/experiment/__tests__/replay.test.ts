@@ -186,8 +186,8 @@ describe('buildReplayHooks', () => {
     const state = createReplayState(recordedEvents(), TRACE_ID);
     const hooks = buildReplayHooks(state, { onMiss: 'error' });
 
-    expect(callHook(hooks, 'lookup', { key: 'first' })).toEqual({ proceed: false, output: { value: 'one' } });
-    expect(callHook(hooks, 'lookup', { key: 'second' })).toEqual({ proceed: false, output: { value: 'two' } });
+    expect(await callHook(hooks, 'lookup', { key: 'first' })).toEqual({ proceed: false, output: { value: 'one' } });
+    expect(await callHook(hooks, 'lookup', { key: 'second' })).toEqual({ proceed: false, output: { value: 'two' } });
 
     const report = finalizeReplayReport(state);
     expect(report.replayedCount).toBe(2);
@@ -200,8 +200,8 @@ describe('buildReplayHooks', () => {
     const hooks = buildReplayHooks(state, { onMiss: 'error' });
 
     // Agent calls 'send' before 'lookup' — opposite of the recorded order
-    expect(callHook(hooks, 'send', { to: 'a' })).toEqual({ proceed: false, output: { sent: true } });
-    expect(callHook(hooks, 'lookup', { key: 'first' })).toEqual({ proceed: false, output: { value: 'one' } });
+    expect(await callHook(hooks, 'send', { to: 'a' })).toEqual({ proceed: false, output: { sent: true } });
+    expect(await callHook(hooks, 'lookup', { key: 'first' })).toEqual({ proceed: false, output: { value: 'one' } });
 
     expect(finalizeReplayReport(state).misses).toEqual([]);
   });
@@ -210,11 +210,38 @@ describe('buildReplayHooks', () => {
     const state = createReplayState(recordedEvents(), TRACE_ID);
     const hooks = buildReplayHooks(state, { onMiss: 'error' });
 
-    expect(callHook(hooks, 'lookup', { key: 'DIFFERENT' })).toEqual({ proceed: false, output: { value: 'one' } });
+    expect(await callHook(hooks, 'lookup', { key: 'DIFFERENT' })).toEqual({ proceed: false, output: { value: 'one' } });
 
     const report = finalizeReplayReport(state);
     expect(report.replayedCount).toBe(1);
     expect(report.argMismatches).toEqual([{ toolName: 'lookup', sequence: 0, spanId: 's1' }]);
+  });
+
+  it('ignores nullish runtime-injected override keys when diagnosing arg drift', async () => {
+    const state = createReplayState(recordedEvents(), TRACE_ID);
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    // The tool builder splices _background/suspendedToolRunId/resumeData into
+    // every tool's args schema; models emit them as nulls and capture points
+    // differ on their presence. Same semantic question → no mismatch.
+    expect(
+      await callHook(hooks, 'lookup', { key: 'first', _background: null, suspendedToolRunId: null, resumeData: null }),
+    ).toEqual({ proceed: false, output: { value: 'one' } });
+
+    expect(finalizeReplayReport(state).argMismatches).toEqual([]);
+  });
+
+  it('still flags a mismatch when an injected override key carries a real value', async () => {
+    const state = createReplayState(recordedEvents(), TRACE_ID);
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    // _background: true changes execution semantics — that is a real drift.
+    expect(await callHook(hooks, 'lookup', { key: 'first', _background: true })).toEqual({
+      proceed: false,
+      output: { value: 'one' },
+    });
+
+    expect(finalizeReplayReport(state).argMismatches).toEqual([{ toolName: 'lookup', sequence: 0, spanId: 's1' }]);
   });
 
   it('re-throws recorded errors so the agent sees the same failure', async () => {
@@ -224,7 +251,7 @@ describe('buildReplayHooks', () => {
     const state = createReplayState(events, TRACE_ID);
     const hooks = buildReplayHooks(state, { onMiss: 'error' });
 
-    expect(() => callHook(hooks, 'flaky', {})).toThrowError(
+    await expect(callHook(hooks, 'flaky', {})).rejects.toThrowError(
       expect.objectContaining({ name: 'TimeoutError', message: 'timed out' }),
     );
     expect(finalizeReplayReport(state).replayedCount).toBe(1);
@@ -238,7 +265,7 @@ describe('buildReplayHooks', () => {
       const state = createReplayState(events, TRACE_ID);
       const hooks = buildReplayHooks(state, { onMiss: 'error' });
 
-      expect(() => callHook(hooks, 'guarded', {})).toThrowError(
+      await expect(callHook(hooks, 'guarded', {})).rejects.toThrowError(
         expect.objectContaining({ name: 'Error', message: 'denied' }),
       );
     }
@@ -248,7 +275,7 @@ describe('buildReplayHooks', () => {
     const state = createReplayState([], TRACE_ID);
     const hooks = buildReplayHooks(state, { onMiss: 'passthrough' });
 
-    expect(callHook(hooks, 'lookup', { key: 'x' })).toBeUndefined();
+    expect(await callHook(hooks, 'lookup', { key: 'x' })).toBeUndefined();
 
     const report = finalizeReplayReport(state);
     expect(report.misses).toEqual([{ toolName: 'lookup', action: 'passthrough', input: { key: 'x' } }]);
@@ -278,14 +305,14 @@ describe('buildReplayHooks', () => {
       const events = extractToolReplayEvents([toolSpan('p1', name, 1000, { output: { ok: true } })]);
       const state = createReplayState(events, TRACE_ID);
       const hooks = buildReplayHooks(state, { onMiss: 'error' });
-      expect(callHook(hooks, agentFormatted, {}), `tool name '${name}' → '${agentFormatted}'`).toEqual({
+      expect(await callHook(hooks, agentFormatted, {}), `tool name '${name}' → '${agentFormatted}'`).toEqual({
         proceed: false,
         output: { ok: true },
       });
     }
   });
 
-  it('matches spans recorded under original tool names against agent-formatted hook names', () => {
+  it('matches spans recorded under original tool names against agent-formatted hook names', async () => {
     // Spans record the tool's ORIGINAL name; the hook context carries the
     // agent-formatted name (invalid chars replaced, max 63 chars) — see
     // Agent.formatTools. Both sides must normalize identically.
@@ -296,8 +323,8 @@ describe('buildReplayHooks', () => {
     const state = createReplayState(events, TRACE_ID);
     const hooks = buildReplayHooks(state, { onMiss: 'error' });
 
-    expect(callHook(hooks, 'my_namespaced_tool', { a: 1 })).toEqual({ proceed: false, output: { ok: 1 } });
-    expect(callHook(hooks, '_1starts-with-digit', { a: 2 })).toEqual({ proceed: false, output: { ok: 2 } });
+    expect(await callHook(hooks, 'my_namespaced_tool', { a: 1 })).toEqual({ proceed: false, output: { ok: 1 } });
+    expect(await callHook(hooks, '_1starts-with-digit', { a: 2 })).toEqual({ proceed: false, output: { ok: 2 } });
     expect(finalizeReplayReport(state).misses).toEqual([]);
   });
 
@@ -306,8 +333,170 @@ describe('buildReplayHooks', () => {
     const onFatalMiss = vi.fn();
     const hooks = buildReplayHooks(state, { onMiss: 'error', onFatalMiss });
 
-    expect(() => callHook(hooks, 'lookup', { key: 'x' })).toThrowError(/aborted/);
+    await expect(callHook(hooks, 'lookup', { key: 'x' })).rejects.toThrowError(/aborted/);
     expect(onFatalMiss).toHaveBeenCalledTimes(1);
     expect(finalizeReplayReport(state).misses).toEqual([{ toolName: 'lookup', action: 'error', input: { key: 'x' } }]);
+  });
+});
+
+describe('strict matching', () => {
+  const recordedEvents = () =>
+    extractToolReplayEvents([
+      toolSpan('s1', 'lookup', 1000, { input: { key: 'first' }, output: { value: 'one' } }),
+      toolSpan('s2', 'lookup', 2000, { input: { key: 'second' }, output: { value: 'two' } }),
+    ]);
+
+  it('serves events by exact args regardless of call order', async () => {
+    const state = createReplayState(recordedEvents(), TRACE_ID, { matching: 'strict' });
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    // Calls arrive in the opposite of recorded order — strict matches by args.
+    expect(await callHook(hooks, 'lookup', { key: 'second' })).toEqual({ proceed: false, output: { value: 'two' } });
+    expect(await callHook(hooks, 'lookup', { key: 'first' })).toEqual({ proceed: false, output: { value: 'one' } });
+
+    const report = finalizeReplayReport(state);
+    expect(report.replayedCount).toBe(2);
+    expect(report.misses).toEqual([]);
+    expect(report.argMismatches).toEqual([]);
+  });
+
+  it('treats different args as a miss instead of re-pairing — argMismatches stays empty', async () => {
+    const state = createReplayState(recordedEvents(), TRACE_ID, { matching: 'strict' });
+    const onFatalMiss = vi.fn();
+    const hooks = buildReplayHooks(state, { onMiss: 'error', onFatalMiss });
+
+    await expect(callHook(hooks, 'lookup', { key: 'DIFFERENT' })).rejects.toThrowError(/matching args/);
+
+    const report = finalizeReplayReport(state);
+    expect(report.argMismatches).toEqual([]);
+    expect(report.misses).toEqual([{ toolName: 'lookup', action: 'error', input: { key: 'DIFFERENT' } }]);
+    expect(onFatalMiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores nullish runtime-injected keys in strict comparison too', async () => {
+    const state = createReplayState(recordedEvents(), TRACE_ID, { matching: 'strict' });
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    expect(await callHook(hooks, 'lookup', { key: 'first', _background: null })).toEqual({
+      proceed: false,
+      output: { value: 'one' },
+    });
+  });
+
+  it('consumes identical-args duplicates in recorded order', async () => {
+    const events = extractToolReplayEvents([
+      toolSpan('d1', 'lookup', 1000, { input: { key: 'same' }, output: { value: 'first-recorded' } }),
+      toolSpan('d2', 'lookup', 2000, { input: { key: 'same' }, output: { value: 'second-recorded' } }),
+    ]);
+    const state = createReplayState(events, TRACE_ID, { matching: 'strict' });
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    expect(await callHook(hooks, 'lookup', { key: 'same' })).toEqual({
+      proceed: false,
+      output: { value: 'first-recorded' },
+    });
+    expect(await callHook(hooks, 'lookup', { key: 'same' })).toEqual({
+      proceed: false,
+      output: { value: 'second-recorded' },
+    });
+  });
+});
+
+describe('tool mocks', () => {
+  const recordedEvents = () =>
+    extractToolReplayEvents([toolSpan('s1', 'lookup', 1000, { input: { key: 'first' }, output: { value: 'one' } })]);
+
+  it('static output stub takes precedence over the replay queue', async () => {
+    const state = createReplayState(recordedEvents(), TRACE_ID, {
+      mocks: { lookup: { output: { value: 'stubbed' } } },
+    });
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    expect(await callHook(hooks, 'lookup', { key: 'first' })).toEqual({ proceed: false, output: { value: 'stubbed' } });
+
+    const report = finalizeReplayReport(state);
+    // The recorded event was never consumed — the mock answered instead.
+    expect(report.unconsumed).toEqual([{ toolName: 'lookup', count: 1 }]);
+    expect(report.mocks).toEqual([{ toolName: 'lookup', calls: 1, kind: 'output' }]);
+  });
+
+  it('error mock injects the failure and respects the rethrown-name guard', async () => {
+    const state = createReplayState([], TRACE_ID, {
+      replayActive: false,
+      mocks: { flaky: { error: { name: 'TimeoutError', message: 'injected timeout' } } },
+    });
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    await expect(callHook(hooks, 'flaky', {})).rejects.toThrowError('injected timeout');
+    expect(finalizeReplayReport(state).mocks).toEqual([{ toolName: 'flaky', calls: 1, kind: 'error' }]);
+  });
+
+  it('function mock replaces execute and receives input + callIndex', async () => {
+    const impl = vi.fn(({ input, callIndex }: { input: unknown; callIndex: number }) => ({
+      echoed: input,
+      callIndex,
+    }));
+    const state = createReplayState([], null, { replayActive: false, mocks: { search: impl } });
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    expect(await callHook(hooks, 'search', { q: 'a' })).toEqual({
+      proceed: false,
+      output: { echoed: { q: 'a' }, callIndex: 0 },
+    });
+    expect(await callHook(hooks, 'search', { q: 'b' })).toEqual({
+      proceed: false,
+      output: { echoed: { q: 'b' }, callIndex: 1 },
+    });
+    expect(finalizeReplayReport(state).mocks).toEqual([{ toolName: 'search', calls: 2, kind: 'function' }]);
+  });
+
+  it('expect-only mock observes the call and falls through to replay', async () => {
+    const state = createReplayState(recordedEvents(), TRACE_ID, {
+      mocks: { lookup: { expect: { args: { key: 'first' } } } },
+    });
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    // Falls through: the recorded answer is served, and the call is counted.
+    expect(await callHook(hooks, 'lookup', { key: 'first' })).toEqual({ proceed: false, output: { value: 'one' } });
+
+    const report = finalizeReplayReport(state);
+    expect(report.mocks).toEqual([{ toolName: 'lookup', calls: 1, kind: 'observe' }]);
+    expect(report.expectations).toEqual([{ toolName: 'lookup', satisfied: true, calledTimes: 1 }]);
+  });
+
+  it('mock-only runs let unmocked tools execute live', async () => {
+    const state = createReplayState([], null, { replayActive: false, mocks: { other: { output: 1 } } });
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    // No mock, no replay source → undefined = proceed with live execution.
+    expect(await callHook(hooks, 'unmocked', {})).toBeUndefined();
+    expect(finalizeReplayReport(state).misses).toEqual([]);
+  });
+
+  it('evaluates expectations: arg-filtered counts, calledTimes, and never-called', async () => {
+    const state = createReplayState([], null, {
+      replayActive: false,
+      mocks: {
+        priority: { output: { ok: true }, expect: { args: { level: 'high' }, calledTimes: 1 } },
+        forbidden: { output: { ok: true }, expect: { calledTimes: 0 } },
+        required: { output: { ok: true }, expect: {} },
+      },
+    });
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    await callHook(hooks, 'priority', { level: 'low' }); // wrong args — doesn't count
+    await callHook(hooks, 'priority', { level: 'high' }); // counts
+
+    const report = finalizeReplayReport(state);
+    expect(report.expectations).toEqual([
+      { toolName: 'priority', satisfied: true, calledTimes: 1 },
+      { toolName: 'forbidden', satisfied: true, calledTimes: 0 },
+      {
+        toolName: 'required',
+        satisfied: false,
+        calledTimes: 0,
+        reason: 'expected at least one call, got 0',
+      },
+    ]);
   });
 });

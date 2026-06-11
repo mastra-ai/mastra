@@ -205,13 +205,14 @@ describe('tool replay integration', () => {
     // this object, and replay runs must score identically to baselines.
     expect(output.toolReplay).toBeUndefined();
 
-    // The report persists through the experiment-result output column
-    // (merged after scoring, for API consumers).
+    // The report persists in its own column — and the stored output stays as
+    // clean as the in-memory one (no replay metadata smuggled inside).
     const persisted = await experimentsStorage.listExperimentResults({
       experimentId: summary.experimentId,
       pagination: { page: 0, perPage: false },
     });
-    expect((persisted.results[0]?.output as { toolReplay?: ToolReplayReport }).toolReplay?.replayedCount).toBe(2);
+    expect(persisted.results[0]?.toolReplay?.replayedCount).toBe(2);
+    expect((persisted.results[0]?.output as { toolReplay?: ToolReplayReport }).toolReplay).toBeUndefined();
   });
 
   it('resolves the source trace per item from a prior experiment (fromExperimentId)', async () => {
@@ -369,10 +370,9 @@ describe('tool replay integration', () => {
       experimentId: summary.experimentId,
       pagination: { page: 0, perPage: false },
     });
-    const storedOutput = persisted.results[0]?.output as { toolReplay?: ToolReplayReport };
     // Failures are when the report matters most — it must survive persistence
-    expect(storedOutput.toolReplay?.replayedCount).toBe(1);
-    expect(storedOutput.toolReplay?.misses).toHaveLength(1);
+    expect(persisted.results[0]?.toolReplay?.replayedCount).toBe(1);
+    expect(persisted.results[0]?.toolReplay?.misses).toHaveLength(1);
   });
 
   it('fails only the affected item when its trace cannot be loaded', async () => {
@@ -665,7 +665,7 @@ describe('tool replay integration', () => {
       experimentId: summary.experimentId,
       pagination: { page: 0, perPage: false },
     });
-    expect((persisted.results[0]?.output as { toolReplay?: ToolReplayReport }).toolReplay?.replayedCount).toBe(1);
+    expect(persisted.results[0]?.toolReplay?.replayedCount).toBe(1);
   });
 
   it('reports the first miss when parallel calls miss in the same step', async () => {
@@ -749,5 +749,114 @@ describe('tool replay integration', () => {
         toolReplay: {},
       }),
     ).rejects.toThrowError(/toolReplay is only supported for agent targets/);
+  });
+
+  describe('tool mocks (runner integration)', () => {
+    it('mock-only runs stub the mocked tool, run others live, and stamp mockedTools', async () => {
+      const summary = await runExperiment(mastra, {
+        data: [{ id: 'item-1', input: 'Look up first and second' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        toolMocks: { lookup: { output: { value: 'mocked!' } } },
+      });
+
+      expect(summary.succeededCount).toBe(1);
+      // The stub answered both calls — the live tool never executed.
+      expect(liveExecute).not.toHaveBeenCalled();
+      const output = summary.results[0]?.output as { toolResults?: unknown[] };
+      expect(JSON.stringify(output.toolResults)).toContain('mocked!');
+
+      const report = summary.results[0]?.toolReplay;
+      expect(report?.mocks).toEqual([{ toolName: 'lookup', calls: 2, kind: 'output' }]);
+      expect(report?.sourceTraceId).toBeNull();
+      expect(report?.totalRecorded).toBe(0);
+
+      const experiment = await experimentsStorage.getExperimentById({ id: summary.experimentId });
+      expect(experiment?.metadata).toMatchObject({ toolReplay: { mockedTools: ['lookup'] } });
+    });
+
+    it('an unsatisfied expectation fails the item without retries', async () => {
+      const summary = await runExperiment(mastra, {
+        data: [{ id: 'item-1', input: 'Look up first and second' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        maxRetries: 2,
+        toolMocks: {
+          lookup: { output: { value: 'ok' } },
+          // The model never calls this tool — the assertion must fail the item.
+          neverCalled: { output: { ok: true }, expect: { calledTimes: 1 } },
+        },
+      });
+
+      expect(summary.failedCount).toBe(1);
+      const result = summary.results[0]!;
+      expect(result.error?.code).toBe('TOOL_MOCK_EXPECTATION_FAILED');
+      expect(result.error?.message).toContain('neverCalled');
+      // Deterministic — the retry loop must not have re-run the item.
+      expect(result.retryCount).toBe(0);
+      expect(result.toolReplay?.expectations).toEqual([
+        {
+          toolName: 'neverCalled',
+          satisfied: false,
+          calledTimes: 0,
+          reason: 'expected 1 call(s), got 0',
+        },
+      ]);
+      expect(result.toolReplay?.mocks).toEqual([
+        { toolName: 'lookup', calls: 2, kind: 'output' },
+        { toolName: 'neverCalled', calls: 0, kind: 'output' },
+      ]);
+    });
+
+    it('strict matching through the runner: rephrased args fail instead of re-pairing', async () => {
+      await seedRecordedTrace('rec-trace-strict', [
+        { input: { key: 'COMPLETELY-DIFFERENT' }, output: { value: 'recorded' } },
+      ]);
+
+      const summary = await runExperiment(mastra, {
+        data: [{ id: 'item-1', input: 'Look up first and second', replayTraceId: 'rec-trace-strict' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        toolReplay: { matching: 'strict' },
+      });
+
+      expect(summary.failedCount).toBe(1);
+      expect(summary.results[0]?.error?.code).toBe('TOOL_REPLAY_MISS');
+      const report = summary.results[0]?.toolReplay;
+      expect(report?.argMismatches).toEqual([]);
+      expect(report?.misses.length).toBeGreaterThan(0);
+
+      const experiment = await experimentsStorage.getExperimentById({ id: summary.experimentId });
+      expect(experiment?.metadata).toMatchObject({ toolReplay: { matching: 'strict' } });
+    });
+
+    it('rejects a mock-marked experiment as a replay source', async () => {
+      const mockRun = await runExperiment(mastra, {
+        data: [{ id: 'item-1', input: 'Look up first and second' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        toolMocks: { lookup: { output: { value: 'mocked' } } },
+      });
+
+      await expect(
+        runExperiment(mastra, {
+          data: [{ id: 'item-1', input: 'Look up first and second' }],
+          targetType: 'agent',
+          targetId: 'replay-test-agent',
+          toolReplay: { fromExperimentId: mockRun.experimentId },
+        }),
+      ).rejects.toThrowError(/itself a tool replay run/);
+    });
+
+    it('rejects toolMocks for non-agent targets at setup', async () => {
+      await expect(
+        runExperiment(mastra, {
+          data: [{ id: 'item-1', input: 'hello' }],
+          targetType: 'workflow',
+          targetId: 'some-workflow',
+          toolMocks: { lookup: { output: 1 } },
+        }),
+      ).rejects.toThrowError(/toolMocks is only supported for agent targets/);
+    });
   });
 });

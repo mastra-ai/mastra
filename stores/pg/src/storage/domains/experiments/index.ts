@@ -74,7 +74,7 @@ export class ExperimentsPG extends ExperimentsStorage {
     await this.#db.alterTable({
       tableName: TABLE_EXPERIMENT_RESULTS,
       schema: EXPERIMENT_RESULTS_SCHEMA,
-      ifNotExists: ['status', 'tags'],
+      ifNotExists: ['status', 'tags', 'toolReplay'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
@@ -156,6 +156,7 @@ export class ExperimentsPG extends ExperimentsStorage {
       traceId: (row.traceId as string | null) ?? null,
       status: (row.status as ExperimentResult['status']) ?? null,
       tags: row.tags ? safelyParseJSON(row.tags) : null,
+      toolReplay: row.toolReplay ? safelyParseJSON(row.toolReplay) : null,
       createdAt: ensureDate(row.createdAtZ || row.createdAt)!,
     };
   }
@@ -444,6 +445,7 @@ export class ExperimentsPG extends ExperimentsStorage {
           traceId: input.traceId ?? null,
           status: input.status ?? null,
           tags: input.tags ?? null,
+          toolReplay: input.toolReplay ?? null,
           createdAt: nowIso,
         },
       });
@@ -463,6 +465,7 @@ export class ExperimentsPG extends ExperimentsStorage {
         traceId: input.traceId ?? null,
         status: input.status ?? null,
         tags: input.tags ?? null,
+        toolReplay: input.toolReplay ?? null,
         createdAt: now,
       };
     } catch (error) {
