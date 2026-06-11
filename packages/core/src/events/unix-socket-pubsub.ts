@@ -162,6 +162,25 @@ export class UnixSocketPubSub extends PubSub {
     options?: { localOnly?: boolean },
   ): Promise<void> {
     await this.#ensureStarted();
+
+    // `localOnly` events stay entirely within the publishing process. They are
+    // never serialized over a unix socket, so live methods on payload values
+    // (e.g. `MastraModelOutput.getFullOutput`, `step.condition` functions on
+    // serialized step graphs) survive intact. This is the semantic the agent's
+    // execution-workflow relies on: the run result is delivered via
+    // `workflows-finish` and includes the `MastraModelOutput` instance —
+    // round-tripping it through the broker would strip its methods.
+    if (options?.localOnly) {
+      const localEvent: Event = {
+        ...event,
+        id: randomUUID(),
+        createdAt: new Date(),
+        deliveryAttempt: 1,
+      };
+      this.#deliverLocal(topic, localEvent);
+      return;
+    }
+
     if (this.#isBroker) {
       await this.#publishFromBroker(topic, event, undefined, options?.localOnly);
       return;
