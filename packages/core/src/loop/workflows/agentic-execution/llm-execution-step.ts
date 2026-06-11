@@ -47,6 +47,8 @@ import { getProviderToolName, isMastraTool, isProviderTool } from '../../../tool
 import { makeCoreTool } from '../../../utils';
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
+import type { RunScopeContext } from '../../run-scope-access';
+import { readScoped, writeScoped } from '../../run-scope-access';
 import {
   AGENT_BACKGROUND_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_KEY,
@@ -62,7 +64,6 @@ import {
   TOOL_PAYLOAD_TRANSFORM_KEY,
   TRANSPORT_REF_KEY,
 } from '../../run-scope-keys';
-import { readScoped, writeScoped, type RunScopeContext } from '../../run-scope-access';
 import type { LoopConfig, OuterLLMRun } from '../../types';
 import { AgenticRunState } from '../run-state';
 import { llmIterationOutputSchema } from '../schema';
@@ -1698,8 +1699,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // Publish modified tools/workspace to the run scope so toolCallStep can read them
       // without going through workflow serialization (which would lose execute functions).
       writeScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools', stepTools);
-      const existingWorkspace =
-        stepWorkspace ?? readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace');
+      const existingWorkspace = stepWorkspace ?? readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace');
       if (existingWorkspace !== undefined) {
         writeScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace', existingWorkspace);
       }

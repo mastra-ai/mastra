@@ -65,7 +65,8 @@ import { computeNextFireAt } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, WorkflowSchedulerConfig, WorkflowScheduler } from '../workflows/scheduler';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import { createOnScorerHook } from './hooks';
-import { createRunScope, type RunScope } from './run-scope';
+import type { RunScope } from './run-scope';
+import { createRunScope } from './run-scope';
 import type { VersionOverrides, VersionSelector } from './types';
 
 /**

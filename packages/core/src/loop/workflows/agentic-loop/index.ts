@@ -7,7 +7,8 @@ import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { createWorkflow as createDirectWorkflow, createEventedWorkflow } from '../../../workflows/create';
 import type { OutputWriter } from '../../../workflows/types';
-import type { LoopRun } from '../../types';
+import type { RunScopeContext } from '../../run-scope-access';
+import { readScoped, writeScoped } from '../../run-scope-access';
 import {
   DELEGATION_BAILED_KEY,
   DRAIN_PENDING_SIGNALS_KEY,
@@ -15,7 +16,7 @@ import {
   RESOURCE_ID_KEY,
   THREAD_ID_KEY,
 } from '../../run-scope-keys';
-import { readScoped, writeScoped, type RunScopeContext } from '../../run-scope-access';
+import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
@@ -93,8 +94,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
       let hasFinishedSteps = false;
 
-      const pendingSignals =
-        readScoped(scopeCtx, DRAIN_PENDING_SIGNALS_KEY, 'drainPendingSignals')?.(runId) ?? [];
+      const pendingSignals = readScoped(scopeCtx, DRAIN_PENDING_SIGNALS_KEY, 'drainPendingSignals')?.(runId) ?? [];
       if (pendingSignals.length > 0) {
         typedInputData.messageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? randomUUID();
         for (const pendingSignal of pendingSignals) {

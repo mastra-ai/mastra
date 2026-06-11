@@ -24,7 +24,8 @@ import { noopObserve } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
-import type { OuterLLMRun } from '../../types';
+import type { RunScopeContext } from '../../run-scope-access';
+import { readScoped, writeScoped } from '../../run-scope-access';
 import {
   AGENT_BACKGROUND_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_CONFIG_KEY,
@@ -41,7 +42,7 @@ import {
   THREAD_ID_KEY,
   TOOL_PAYLOAD_TRANSFORM_KEY,
 } from '../../run-scope-keys';
-import { readScoped, writeScoped, type RunScopeContext } from '../../run-scope-access';
+import type { OuterLLMRun } from '../../types';
 import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
 
@@ -1070,7 +1071,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     const sqm = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
                     const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
                     if (sqm && tid) {
-                      await sqm.flushMessages(messageList, tid, readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig'));
+                      await sqm.flushMessages(
+                        messageList,
+                        tid,
+                        readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig'),
+                      );
                     }
                   }
                 },

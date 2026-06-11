@@ -13,12 +13,9 @@ import {
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { createStep } from '../../../workflows/workflow';
-import {
-  DELEGATION_BAILED_KEY,
-  STEP_TOOLS_KEY,
-  TOOL_PAYLOAD_TRANSFORM_KEY,
-} from '../../run-scope-keys';
-import { readScoped, writeScoped, type RunScopeContext } from '../../run-scope-access';
+import { readScoped, writeScoped } from '../../run-scope-access';
+import type { RunScopeContext } from '../../run-scope-access';
+import { DELEGATION_BAILED_KEY, STEP_TOOLS_KEY, TOOL_PAYLOAD_TRANSFORM_KEY } from '../../run-scope-keys';
 import type { OuterLLMRun } from '../../types';
 import { deserializeToolError } from '../errors';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
