@@ -109,4 +109,32 @@ describe('AIV5Adapter — FileUIPart (url-based) through fromModelMessage', () =
       expect(parts[1].data).toBe('https://example.com/report.pdf');
     }
   });
+
+  it('passes through an OpenAI Files API file ID without base64-encoding it', () => {
+    const fileId = 'file-XkZk6RV6jeACpVewBphWEX';
+    const dbMessage = {
+      id: 'msg-1',
+      role: 'user' as const,
+      content: {
+        format: 2 as const,
+        parts: [
+          {
+            type: 'file' as const,
+            data: fileId,
+            mimeType: 'application/pdf',
+          },
+        ],
+      },
+    };
+
+    const uiMsg = AIV5Adapter.toUIMessage(dbMessage as any);
+    const filePart = uiMsg.parts.find((p: { type: string }) => p.type === 'file');
+
+    expect(filePart).toBeDefined();
+    if (filePart && filePart.type === 'file') {
+      expect((filePart as any).url).toBe(fileId);
+      expect((filePart as any).url).not.toMatch(/^data:/);
+      expect((filePart as any).mediaType).toBe('application/pdf');
+    }
+  });
 });
