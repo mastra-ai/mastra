@@ -82465,6 +82465,33 @@ export type PostDatasetsDatasetIdExperiments_Body = {
         fromExperimentId?: string | undefined;
         /** Behavior when a tool call has no remaining recorded event (default: 'error') */
         onMiss?: ('error' | 'passthrough') | undefined;
+        /** How recorded events are matched to the agent's calls (default: 'fifo'). 'strict' serves an event only on an exact args match — anything else is a miss. */
+        matching?: ('fifo' | 'strict') | undefined;
+      }
+    | undefined;
+  /** Per-tool data mocks (function mocks are code-only and not accepted over HTTP) */
+  toolMocks?:
+    | {
+        [key: string]: {
+          /** Static output returned for every call — the tool never executes */
+          output?: unknown | undefined;
+          /** Error thrown for every call (failure injection) — the tool never executes */
+          error?:
+            | {
+                name?: string | undefined;
+                message: string;
+              }
+            | undefined;
+          /** Assertion on how the tool must be called (an unsatisfied expectation fails the item) */
+          expect?:
+            | {
+                /** Expected args — calls with different args do not count */
+                args?: unknown | undefined;
+                /** Exact number of expected calls */
+                calledTimes?: number | undefined;
+              }
+            | undefined;
+        };
       }
     | undefined;
 };
@@ -82606,6 +82633,8 @@ export type GetDatasetsDatasetIdExperimentsExperimentIdResults_Response = {
     traceId: string | null;
     status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
     tags?: (string[] | null) | undefined;
+    /** Tool replay divergence report — present only for items executed with tool replay or tool mocks */
+    toolReplay?: (unknown | null) | undefined;
     createdAt: Date;
   }[];
   pagination: {
@@ -82674,6 +82703,8 @@ export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Respons
   traceId: string | null;
   status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
   tags?: (string[] | null) | undefined;
+  /** Tool replay divergence report — present only for items executed with tool replay or tool mocks */
+  toolReplay?: (unknown | null) | undefined;
   createdAt: Date;
 };
 

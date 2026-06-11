@@ -11,6 +11,7 @@ import type {
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry } from '@mastra/core/agent-builder/ee';
+import type { ToolReplayReport } from '@mastra/core/datasets';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
 import type { CoreMessage, Provider as ModelProviderId } from '@mastra/core/llm';
 import type { LogLevel } from '@mastra/core/logger';
@@ -2603,14 +2604,23 @@ export interface DatasetRecord {
 }
 
 // Re-exported from @mastra/core/datasets for convenience: the divergence
-// report shape carried by replay-run experiment results (output.toolReplay).
-export type { ToolReplayReport, ToolReplayOnMiss } from '@mastra/core/datasets';
+// report shape carried by the top-level `toolReplay` field of replay-run
+// experiment results, plus the replay/mock config and report sub-types.
+export type {
+  ToolReplayReport,
+  ToolReplayOnMiss,
+  ToolReplayMatching,
+  ToolMockConfig,
+  ToolMockExpectation,
+  ToolMockUsage,
+  ToolMockExpectationResult,
+} from '@mastra/core/datasets';
 
 export interface DatasetExperiment {
   id: string;
   name?: string;
   description?: string;
-  /** Arbitrary experiment metadata. Experiments run with tool replay carry a `toolReplay` marker here. */
+  /** Arbitrary experiment metadata. Experiments run with tool replay or tool mocks carry a `toolReplay` marker here. */
   metadata?: Record<string, unknown>;
   datasetId: string | null;
   datasetVersion: number | null;
@@ -2631,10 +2641,11 @@ export interface DatasetExperiment {
 /**
  * A single item result of a dataset experiment.
  *
- * For experiments run with tool replay, `output` carries a
- * `toolReplay: ToolReplayReport` divergence report, and failed items use the
- * error codes `TOOL_REPLAY_MISS`, `TOOL_REPLAY_NO_RECORDING`, or
- * `TOOL_REPLAY_LOAD_FAILED`.
+ * For experiments run with tool replay or tool mocks, the top-level
+ * `toolReplay` field carries a `ToolReplayReport` divergence report
+ * (persisted in its own column, not merged into `output`), and failed items
+ * use the error codes `TOOL_REPLAY_MISS`, `TOOL_REPLAY_NO_RECORDING`,
+ * `TOOL_REPLAY_LOAD_FAILED`, or `TOOL_MOCK_EXPECTATION_FAILED`.
  */
 export interface DatasetExperimentResult {
   id: string;
@@ -2651,6 +2662,8 @@ export interface DatasetExperimentResult {
   traceId: string | null;
   status: 'needs-review' | 'reviewed' | 'complete' | null;
   tags: string[] | null;
+  /** Tool replay divergence report — present only for items executed with tool replay or tool mocks. */
+  toolReplay?: ToolReplayReport | null;
   scores: Array<{
     scorerId: string;
     scorerName: string;
@@ -2772,7 +2785,28 @@ export interface TriggerDatasetExperimentParams {
   toolReplay?: {
     fromExperimentId?: string;
     onMiss?: 'error' | 'passthrough';
+    /**
+     * How recorded events are matched to the agent's calls (default: 'fifo').
+     * 'strict' serves an event only on an exact args match — anything else is
+     * a miss.
+     */
+    matching?: 'fifo' | 'strict';
   };
+  /**
+   * Per-tool data mocks, by tool name. Agent targets only. A mock stubs a
+   * static `output`, injects an `error`, and/or asserts how the tool must be
+   * called via `expect` (an unsatisfied expectation fails the item). Function
+   * mocks are code-only and cannot cross the HTTP API — use @mastra/core's
+   * `startExperiment` directly for those.
+   */
+  toolMocks?: Record<
+    string,
+    {
+      output?: unknown;
+      error?: { name?: string; message: string };
+      expect?: { args?: unknown; calledTimes?: number };
+    }
+  >;
 }
 
 // Compile-time drift detectors: TriggerDatasetExperimentParams is
