@@ -429,7 +429,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
             resourceId,
             modeId: harness.getCurrentModeId(),
             workspace: harness.getWorkspace(),
-            registerQuestion: params => harness.registerQuestion(params),
             registerPlanApproval: params => harness.registerPlanApproval(params),
             getSubagentModelId: params => harness.getSubagentModelId(params),
           };

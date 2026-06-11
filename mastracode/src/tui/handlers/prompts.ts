@@ -1,8 +1,8 @@
 /**
  * Event handlers for interactive prompt events:
- * ask_question, sandbox_access_request, plan_approval_required.
+ * tool_suspended (ask_user / request_access), plan_approval_required.
  */
-import type { HarnessQuestionSelectionMode } from '@mastra/core/harness';
+import type { AskUserSelectionMode } from '@mastra/core/tools';
 import { savePlanToDisk } from '../../utils/plans.js';
 import { AskQuestionDialogComponent } from '../components/ask-question-dialog.js';
 import { AskQuestionInlineComponent } from '../components/ask-question-inline.js';
@@ -33,18 +33,21 @@ function processNextInlineQuestion(state: TUIState): void {
  */
 export async function handleAskQuestion(
   ctx: EventHandlerContext,
-  questionId: string,
+  toolCallId: string,
   question: string,
   options?: Array<{ label: string; description?: string }>,
-  selectionMode?: HarnessQuestionSelectionMode,
+  selectionMode?: AskUserSelectionMode,
 ): Promise<void> {
   const { state } = ctx;
 
   return new Promise(resolve => {
     if (state.options.inlineQuestions) {
-      // Capture the current ask_user component reference now, before it can be
-      // overwritten by a subsequent parallel tool call.
-      const askUserComponent = state.lastAskUserComponent;
+      // Look up the streaming component created for THIS tool call. Using the
+      // per-toolCallId map (instead of the single lastAskUserComponent field)
+      // keeps parallel ask_user suspensions bound to their own components so
+      // each question renders distinctly (#13642).
+      const askUserComponent = state.pendingAskUserComponents?.get(toolCallId) ?? state.lastAskUserComponent;
+      state.pendingAskUserComponents?.delete(toolCallId);
 
       const activate = () => {
         try {
@@ -62,19 +65,19 @@ export async function handleAskQuestion(
               tui: state.ui,
               onSubmit: answer => {
                 state.activeInlineQuestion = undefined;
-                state.harness.respondToQuestion({ questionId, answer });
+                state.harness.respondToToolSuspension({ toolCallId, resumeData: answer });
                 resolve();
                 processNextInlineQuestion(state);
               },
               onSubmitMulti: answers => {
                 state.activeInlineQuestion = undefined;
-                state.harness.respondToQuestion({ questionId, answer: answers });
+                state.harness.respondToToolSuspension({ toolCallId, resumeData: answers });
                 resolve();
                 processNextInlineQuestion(state);
               },
               onCancel: () => {
                 state.activeInlineQuestion = undefined;
-                state.harness.respondToQuestion({ questionId, answer: '(skipped)' });
+                state.harness.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
                 resolve();
                 processNextInlineQuestion(state);
               },
@@ -91,19 +94,19 @@ export async function handleAskQuestion(
                 multiline: true,
                 onSubmit: answer => {
                   state.activeInlineQuestion = undefined;
-                  state.harness.respondToQuestion({ questionId, answer });
+                  state.harness.respondToToolSuspension({ toolCallId, resumeData: answer });
                   resolve();
                   processNextInlineQuestion(state);
                 },
                 onSubmitMulti: answers => {
                   state.activeInlineQuestion = undefined;
-                  state.harness.respondToQuestion({ questionId, answer: answers });
+                  state.harness.respondToToolSuspension({ toolCallId, resumeData: answers });
                   resolve();
                   processNextInlineQuestion(state);
                 },
                 onCancel: () => {
                   state.activeInlineQuestion = undefined;
-                  state.harness.respondToQuestion({ questionId, answer: '(skipped)' });
+                  state.harness.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
                   resolve();
                   processNextInlineQuestion(state);
                 },
@@ -126,7 +129,7 @@ export async function handleAskQuestion(
         } catch {
           // Don't let ask_user errors crash the process — skip the question
           state.activeInlineQuestion = undefined;
-          state.harness.respondToQuestion({ questionId, answer: '(skipped)' });
+          state.harness.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
           resolve();
           processNextInlineQuestion(state);
         }
@@ -148,17 +151,17 @@ export async function handleAskQuestion(
         tui: state.ui,
         onSubmit: answer => {
           state.ui.hideOverlay();
-          state.harness.respondToQuestion({ questionId, answer });
+          state.harness.respondToToolSuspension({ toolCallId, resumeData: answer });
           resolve();
         },
         onSubmitMulti: answers => {
           state.ui.hideOverlay();
-          state.harness.respondToQuestion({ questionId, answer: answers });
+          state.harness.respondToToolSuspension({ toolCallId, resumeData: answers });
           resolve();
         },
         onCancel: () => {
           state.ui.hideOverlay();
-          state.harness.respondToQuestion({ questionId, answer: '(skipped)' });
+          state.harness.respondToToolSuspension({ toolCallId, resumeData: '(skipped)' });
           resolve();
         },
       });
@@ -179,7 +182,7 @@ export async function handleAskQuestion(
  */
 export async function handleSandboxAccessRequest(
   ctx: EventHandlerContext,
-  questionId: string,
+  toolCallId: string,
   requestedPath: string,
   reason: string,
 ): Promise<void> {
@@ -195,13 +198,13 @@ export async function handleSandboxAccessRequest(
           ],
           onSubmit: answer => {
             state.activeInlineQuestion = undefined;
-            state.harness.respondToQuestion({ questionId, answer });
+            state.harness.respondToToolSuspension({ toolCallId, resumeData: answer });
             resolve();
             processNextInlineQuestion(state);
           },
           onCancel: () => {
             state.activeInlineQuestion = undefined;
-            state.harness.respondToQuestion({ questionId, answer: 'No' });
+            state.harness.respondToToolSuspension({ toolCallId, resumeData: 'No' });
             resolve();
             processNextInlineQuestion(state);
           },

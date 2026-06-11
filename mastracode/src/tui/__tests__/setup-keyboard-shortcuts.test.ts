@@ -91,6 +91,7 @@ function createState(isRunning: boolean) {
     editor,
     harness: {
       isRunning: vi.fn(() => isRunning),
+      hasPendingSuspensions: vi.fn(() => false),
       getState: vi.fn(() => ({})),
       listModes: vi.fn(() => []),
       getCurrentModeId: vi.fn(),
@@ -414,6 +415,24 @@ describe('setupKeyboardShortcuts', () => {
     expect(state.goalManager.saveToThread).not.toHaveBeenCalled();
     expect(showInfo).not.toHaveBeenCalledWith(state, 'Goal paused (interrupted). Use /goal resume to continue.');
     expect(state.ui.requestRender).toHaveBeenCalled();
+  });
+
+  it('aborts when parked in a tool suspension even though isRunning() is false', () => {
+    const { state, editor, actions } = createState(false);
+    editor.getText.mockReturnValue('');
+    state.harness.hasPendingSuspensions.mockReturnValue(true);
+
+    setupKeyboardShortcuts(state, {
+      stop: vi.fn(),
+      doubleCtrlCMs: 500,
+      queueFollowUpMessage: vi.fn(),
+    });
+
+    actions.get('clear')?.();
+
+    expect(state.harness.abort).toHaveBeenCalledTimes(1);
+    expect(state.userInitiatedAbort).toBe(true);
+    expect(editor.setText).not.toHaveBeenCalled();
   });
 
   it('suspends the process with Ctrl+Z and restarts rendering on SIGCONT', () => {

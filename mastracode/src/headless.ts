@@ -224,22 +224,27 @@ function autoResolve<TState extends Record<string, unknown>>(
   event: HarnessEvent,
 ): { resolved: true; label: string; json: Record<string, unknown> } | { resolved: false } {
   switch (event.type) {
-    case 'sandbox_access_request': {
-      harness.respondToQuestion({ questionId: event.questionId, answer: 'Yes' });
-      return { resolved: true, label: `[auto-approved sandbox] ${event.path}`, json: { ...event, autoApproved: true } };
-    }
     case 'tool_approval_required': {
       harness.respondToToolApproval({ decision: 'approve' });
       return { resolved: true, label: `[auto-approved] ${event.toolName}`, json: { ...event, autoApproved: true } };
     }
-    case 'ask_question': {
-      harness.respondToQuestion({
-        questionId: event.questionId,
-        answer: 'Proceed with your best judgment. Do not ask further questions.',
+    case 'tool_suspended': {
+      const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
+      if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
+        void harness.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: 'Yes' });
+        return {
+          resolved: true,
+          label: `[auto-approved sandbox] ${String(payload.path ?? '')}`,
+          json: { ...event, autoApproved: true },
+        };
+      }
+      void harness.respondToToolSuspension({
+        toolCallId: event.toolCallId,
+        resumeData: 'Proceed with your best judgment. Do not ask further questions.',
       });
       return {
         resolved: true,
-        label: `[auto-answered] ${truncate(event.question, 100)}`,
+        label: `[auto-answered] ${truncate(String(payload.question ?? ''), 100)}`,
         json: { ...event, autoAnswered: true },
       };
     }

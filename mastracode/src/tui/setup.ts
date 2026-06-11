@@ -55,11 +55,15 @@ export function setupKeyboardShortcuts(
       state.pendingInlineQuestions.length = 0;
       state.userInitiatedAbort = true;
       state.harness.abort();
-    } else if (state.harness.isRunning()) {
-      // Clean up active inline components on abort
+    } else if (state.harness.isRunning() || state.harness.hasPendingSuspensions()) {
+      // Clean up active inline components on abort. hasPendingSuspensions covers
+      // the case where the run is parked in a tool suspend() (e.g. ask_user) —
+      // isRunning() is false there because the AbortController was nulled, but the
+      // run is still pending and must be abortable.
       state.activeInlinePlanApproval = undefined;
       state.activeInlineQuestion = undefined;
       state.pendingInlineQuestions.length = 0;
+      state.pendingAskUserComponents?.clear();
       state.userInitiatedAbort = true;
       state.harness.abort();
     } else {
@@ -510,6 +514,7 @@ export function setupKeyHandlers(
     state.activeInlinePlanApproval = undefined;
     state.activeInlineQuestion = undefined;
     state.pendingInlineQuestions.length = 0;
+    state.pendingAskUserComponents?.clear();
     state.userInitiatedAbort = true;
     state.harness.abort();
   });
