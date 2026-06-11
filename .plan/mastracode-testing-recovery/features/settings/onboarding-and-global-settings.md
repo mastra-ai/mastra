@@ -103,13 +103,14 @@
 - `mastracode/scripts/mc-e2e/scenarios/api-key-prompt.ts` — partial real PTY coverage for `/api-keys`: provider status list, masked add-key dialog, stored-key persistence, and refreshed stored status.
 - `mastracode/scripts/mc-e2e/scenarios/om-global-settings-persistence.ts` — partial real PTY coverage for `/om`: creates an AIMock-backed active thread, toggles caveman observations and attachment forwarding through the OM settings overlay, then verifies `settings.json` global defaults and active-thread metadata keys through shell passthrough.
 - `mastracode/scripts/mc-e2e/scenarios/setup-completion-persistence.ts` — partial real PTY coverage for `/setup`: seeds deterministic Memory Gateway provider access, walks Welcome → auth skip → OpenAI mode pack → OpenAI Mini OM pack → Disable YOLO, then verifies onboarding completion, mode/OM pack IDs, YOLO preference, skipped-state cleanup, and built-in-pack defaults in `settings.json` through shell passthrough.
+- `mastracode/scripts/mc-e2e/scenarios/models-pack-activation-persistence.ts` — partial real PTY coverage for `/models`: seeds a custom OpenAI-compatible provider plus saved custom pack, activates the pack through the real switch/custom-pack action overlay, then verifies `settings.json` active pack ID, custom mode defaults, stale subagent override cleanup, and saved custom pack retention through shell passthrough.
 
 ## Missing tests
 
 - First-run onboarding wizard breadth still missing for login refresh and custom pack completion; built-in OpenAI mode/OM pack completion, YOLO persistence, skipped-state cleanup, and persisted setup settings are covered by `setup-completion-persistence`.
 - Reload after `/setup`: footer/runtime model, thread metadata, subagent defaults, and OM defaults all agree.
 - Direct Mastra Code `/om` threshold model/settings regression; caveman and observe-attachments global/thread persistence are now covered by real PTY e2e.
-- `/models` activation/import/share/delete/targeted-edit flow through real TUI overlay, not only helper functions.
+- `/models` import/share/delete/targeted-edit flow through real TUI overlay, not only helper functions; activation and persisted custom-pack defaults are now covered by `models-pack-activation-persistence`.
 - Missing-key model selection flow through real TUI overlay, including storing a key, cancelling, masking the typed value, and preserving env-var precedence; direct `/api-keys` add-key e2e exists but does not cover model-selection-triggered prompts or env precedence.
 - Direct MaskedInput regression for storage connection strings and login dialogs proving render output is masked while submitted value remains raw; `/api-keys` masked input is covered by real PTY e2e.
 - Headless startup with active model pack, custom pack settings, browser settings, and Memory Gateway base URL/env values.

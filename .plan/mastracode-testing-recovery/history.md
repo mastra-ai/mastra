@@ -4655,3 +4655,14 @@ Break validations:
 - Forced `settings.preferences.yolo=true`; the scenario failed waiting for `SETUP_YOLO=false`.
 
 Verification: `pnpm run build:mastracode`; `pnpm --filter ./mastracode run e2e:test setup-completion-persistence`; `pnpm --filter ./mastracode run e2e:test --jobs 2` (61/61); `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
+
+### Models pack activation persistence
+
+Added `models-pack-activation-persistence` TUI e2e coverage for the Settings: Onboarding and global settings row. The scenario seeds a deterministic custom OpenAI-compatible provider plus saved custom model pack, opens `/models`, activates the pack through the real switcher and custom-pack action overlay, then uses shell passthrough to assert `settings.json` has `activeModelPackId=custom:Models Pack E2E`, the three custom mode defaults, cleared stale subagent overrides, and retained custom-pack storage.
+
+Break validations:
+- Disabled active custom-pack persistence in `/models`; the scenario failed waiting for `MODELS_ACTIVE=custom:Models Pack E2E`.
+- Cleared custom mode defaults during activation; the scenario failed waiting for the expected `MODELS_DEFAULTS` values.
+- Skipped stale subagent override cleanup; the scenario failed waiting for `MODELS_SUBAGENTS=0`.
+
+Verification: `pnpm run build:mastracode`; `pnpm --filter ./mastracode run e2e:test models-pack-activation-persistence`; `pnpm --filter ./mastracode run e2e:test --jobs 2` (62/62); `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
