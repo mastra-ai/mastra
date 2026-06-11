@@ -309,21 +309,61 @@ export const triggerExperimentBodySchema = z
           .enum(['error', 'passthrough'])
           .optional()
           .describe("Behavior when a tool call has no remaining recorded event (default: 'error')"),
+        matching: z
+          .enum(['fifo', 'strict'])
+          .optional()
+          .describe(
+            "How recorded events are matched to the agent's calls (default: 'fifo'). 'strict' serves an event only on an exact args match — anything else is a miss.",
+          ),
       })
       .optional()
       .describe(
         'Replay recorded tool outputs from prior traced runs instead of executing live tools. Agent targets only.',
       ),
+    toolMocks: z
+      .record(
+        z.string(),
+        z
+          .object({
+            output: z.unknown().optional().describe('Static output returned for every call — the tool never executes'),
+            error: z
+              .object({ name: z.string().optional(), message: z.string() })
+              .optional()
+              .describe('Error thrown for every call (failure injection) — the tool never executes'),
+            expect: z
+              .object({
+                args: z.unknown().optional().describe('Expected args — calls with different args do not count'),
+                calledTimes: z.number().int().min(0).optional().describe('Exact number of expected calls'),
+              })
+              .optional()
+              .describe('Assertion on how the tool must be called (an unsatisfied expectation fails the item)'),
+          })
+          .refine(m => m.output !== undefined || m.error !== undefined || m.expect !== undefined, {
+            message: 'a tool mock needs at least one of output, error, or expect',
+          })
+          .refine(m => !(m.output !== undefined && m.error !== undefined), {
+            message: 'a tool mock cannot set both output and error',
+          }),
+      )
+      .optional()
+      .describe('Per-tool data mocks (function mocks are code-only and not accepted over HTTP)'),
   })
   // The trigger route is fire-and-forget — without this boundary check, a
-  // non-agent target with toolReplay would return 200/pending and only fail
-  // the experiment in the background.
+  // non-agent target with toolReplay/toolMocks would return 200/pending and
+  // only fail the experiment in the background.
   .superRefine((body, ctx) => {
     if (body.toolReplay && body.targetType !== 'agent') {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['toolReplay'],
         message: `toolReplay is only supported for agent targets (got targetType '${body.targetType}')`,
+      });
+    }
+    if (body.toolMocks && body.targetType !== 'agent') {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['toolMocks'],
+        message: `toolMocks is only supported for agent targets (got targetType '${body.targetType}')`,
       });
     }
   });
@@ -424,6 +464,10 @@ export const experimentResultResponseSchema = z.object({
   traceId: z.string().nullable(),
   status: z.enum(['needs-review', 'reviewed', 'complete']).nullable().optional(),
   tags: z.array(z.string()).nullable().optional(),
+  toolReplay: z
+    .unknown()
+    .nullish()
+    .describe('Tool replay divergence report — present only for items executed with tool replay or tool mocks'),
   createdAt: z.coerce.date(),
 });
 

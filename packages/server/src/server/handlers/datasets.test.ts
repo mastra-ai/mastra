@@ -135,6 +135,56 @@ describe('Datasets Handlers', () => {
       expect(startSpy).not.toHaveBeenCalled();
     });
 
+    it('passes toolMocks and the matching policy through to startExperimentAsync', async () => {
+      const startSpy = vi.spyOn(Dataset.prototype, 'startExperimentAsync').mockResolvedValue({
+        experimentId: 'exp-mocks',
+        status: 'pending',
+        totalItems: 1,
+      });
+      const dataset = await mastra.datasets.create({ name: 'Mocks Dataset' });
+      const toolMocks = {
+        weatherTool: { output: { temperature: 70 } },
+        paymentTool: { error: { name: 'PaymentError', message: 'declined' } },
+        searchTool: { expect: { args: { query: 'mastra' }, calledTimes: 1 } },
+      };
+
+      const result = await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        targetType: 'agent',
+        targetId: 'my-agent',
+        toolReplay: { fromExperimentId: 'prior-exp', matching: 'strict' },
+        toolMocks,
+      });
+
+      expect(result.status).toBe('pending');
+      expect(startSpy).toHaveBeenCalledTimes(1);
+      expect(startSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          targetType: 'agent',
+          targetId: 'my-agent',
+          toolReplay: { fromExperimentId: 'prior-exp', matching: 'strict' },
+          toolMocks,
+        }),
+      );
+    });
+
+    it('rejects toolMocks for non-agent targets in the handler (covers the query-param merge path)', async () => {
+      const startSpy = vi.spyOn(Dataset.prototype, 'startExperimentAsync');
+      const dataset = await mastra.datasets.create({ name: 'Mocks Bypass Dataset' });
+
+      await expect(
+        TRIGGER_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          targetType: 'workflow',
+          targetId: 'my-workflow',
+          toolMocks: { weatherTool: { output: { temperature: 70 } } },
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(startSpy).not.toHaveBeenCalled();
+    });
+
     it('omits toolReplay from the config when not provided', async () => {
       const startSpy = vi.spyOn(Dataset.prototype, 'startExperimentAsync').mockResolvedValue({
         experimentId: 'exp-2',
@@ -178,6 +228,18 @@ describe('Datasets Handlers', () => {
         expect(() => triggerExperimentBodySchema.parse({ ...base, toolReplay: { onMiss: 'retry' } })).toThrowError();
       });
 
+      it('accepts the matching policy and rejects invalid values', () => {
+        expect(
+          triggerExperimentBodySchema.parse({ ...base, toolReplay: { matching: 'strict' } }).toolReplay,
+        ).toEqual({ matching: 'strict' });
+        expect(triggerExperimentBodySchema.parse({ ...base, toolReplay: { matching: 'fifo' } }).toolReplay).toEqual({
+          matching: 'fifo',
+        });
+        expect(() =>
+          triggerExperimentBodySchema.parse({ ...base, toolReplay: { matching: 'exact' } }),
+        ).toThrowError();
+      });
+
       it('rejects toolReplay for non-agent targets at the boundary', () => {
         // The route is fire-and-forget — this must 400 instead of failing the
         // experiment in the background after a 200/pending response.
@@ -193,13 +255,57 @@ describe('Datasets Handlers', () => {
         }
       });
 
-      it('still converts to JSON schema for OpenAPI despite the refinement', () => {
+      it('accepts data-shaped toolMocks (output, error, or expect entries)', () => {
+        const toolMocks = {
+          weatherTool: { output: { temperature: 70 } },
+          paymentTool: { error: { name: 'PaymentError', message: 'declined' } },
+          searchTool: { expect: { args: { query: 'mastra' }, calledTimes: 2 } },
+        };
+        expect(triggerExperimentBodySchema.parse({ ...base, toolMocks }).toolMocks).toEqual(toolMocks);
+      });
+
+      it('rejects a tool mock with none of output, error, or expect', () => {
+        const result = triggerExperimentBodySchema.safeParse({ ...base, toolMocks: { weatherTool: {} } });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error.issues[0]?.message).toContain('at least one of output, error, or expect');
+        }
+      });
+
+      it('rejects a tool mock that sets both output and error', () => {
+        const result = triggerExperimentBodySchema.safeParse({
+          ...base,
+          toolMocks: { weatherTool: { output: { ok: true }, error: { message: 'boom' } } },
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error.issues[0]?.message).toContain('cannot set both output and error');
+        }
+      });
+
+      it('rejects toolMocks for non-agent targets at the boundary', () => {
+        const result = triggerExperimentBodySchema.safeParse({
+          targetType: 'workflow',
+          targetId: 'my-workflow',
+          toolMocks: { weatherTool: { output: { temperature: 70 } } },
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error.issues[0]?.message).toBe(
+            "toolMocks is only supported for agent targets (got targetType 'workflow')",
+          );
+          expect(result.error.issues[0]?.path).toEqual(['toolMocks']);
+        }
+      });
+
+      it('still converts to JSON schema for OpenAPI despite the refinements', () => {
         // superRefine wraps the schema in ZodEffects — the OpenAPI pipeline
         // (toStandardSchema → JSON schema) must keep working.
         const jsonSchema = schemaToJsonSchema(triggerExperimentBodySchema) as {
           properties?: Record<string, unknown>;
         };
         expect(jsonSchema.properties?.toolReplay).toBeDefined();
+        expect(jsonSchema.properties?.toolMocks).toBeDefined();
       });
     });
   });
