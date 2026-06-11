@@ -5016,6 +5016,9 @@ importers:
 
   packages/schema-compat:
     dependencies:
+      '@types/json-schema':
+        specifier: ^7.0.15
+        version: 7.0.15
       json-schema-to-zod:
         specifier: ^2.7.0
         version: 2.7.0
@@ -5062,9 +5065,6 @@ importers:
       '@standard-schema/spec':
         specifier: ^1.1.0
         version: 1.1.0
-      '@types/json-schema':
-        specifier: ^7.0.15
-        version: 7.0.15
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
