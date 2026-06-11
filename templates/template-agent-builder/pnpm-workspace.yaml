@@ -1,0 +1,14 @@
+packages:
+  - .
+
+allowBuilds:
+  '@google/genai': true
+  bufferutil: true
+  esbuild: true
+  protobufjs: true
+
+onlyBuiltDependencies:
+  - '@google/genai'
+  - bufferutil
+  - esbuild
+  - protobufjs

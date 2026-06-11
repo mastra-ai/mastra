@@ -264,6 +264,89 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(output).not.toContain('sources');
   });
 
+  it('renders normal Anthropic web search results without encrypted content', () => {
+    const component = new ToolExecutionComponentEnhanced('web_search_20250305', { query: 'mastra docs' }, {}, ui);
+
+    component.updateResult({
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify([
+            {
+              title: 'Mastra Docs',
+              url: 'https://mastra.ai/docs',
+              pageAge: '1 week ago',
+              encryptedContent: 'do-not-render-this-blob',
+            },
+            {
+              title: 'Mastra Reference',
+              url: 'https://mastra.ai/reference',
+              encryptedContent: 'another-hidden-blob',
+            },
+          ]),
+        },
+      ],
+      isError: false,
+    });
+
+    const output = stripAnsi(component.render(120).join('\n'));
+    expect(output).toContain('Mastra Docs (1 week ago)');
+    expect(output).toContain('https://mastra.ai/docs');
+    expect(output).toContain('Mastra Reference');
+    expect(output).toContain('╰── web_search "mastra docs" ✓');
+    expect(output).not.toContain('encryptedContent');
+    expect(output).not.toContain('do-not-render-this-blob');
+  });
+
+  it('renders normal OpenAI web search sources and falls back to the result action query', () => {
+    const component = new ToolExecutionComponentEnhanced('web_search', {}, {}, ui);
+
+    component.updateResult({
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            action: { query: 'latest mastra release' },
+            sources: [
+              { title: 'Release notes', url: 'https://mastra.ai/changelog' },
+              { url: 'https://github.com/mastra-ai/mastra/releases' },
+            ],
+          }),
+        },
+      ],
+      isError: false,
+    });
+
+    const output = stripAnsi(component.render(120).join('\n'));
+    expect(output).toContain('Release notes');
+    expect(output).toContain('https://mastra.ai/changelog');
+    expect(output).toContain('https://github.com/mastra-ai/mastra/releases');
+    expect(output).toContain('╰── web_search "latest mastra release" ✓');
+    expect(output).not.toContain('sources');
+    expect(output).not.toContain('action');
+  });
+
+  it('passes Tavily markdown through normal web search rendering without JSON double-formatting', () => {
+    const component = new ToolExecutionComponentEnhanced('web_search', { query: 'agent frameworks' }, {}, ui);
+
+    component.updateResult({
+      content: [
+        {
+          type: 'text',
+          text: 'Answer: Mastra is an agent framework.\n\n## Mastra\nhttps://mastra.ai\nBuild agents and workflows.',
+        },
+      ],
+      isError: false,
+    });
+
+    const output = stripAnsi(component.render(120).join('\n'));
+    expect(output).toContain('Answer: Mastra is an agent framework.');
+    expect(output).toContain('## Mastra');
+    expect(output).toContain('https://mastra.ai');
+    expect(output).toContain('╰── web_search "agent frameworks" ✓');
+    expect(output).not.toContain('"Answer:');
+  });
+
   it('colors quiet compact tool labels by status', () => {
     const active = new ToolExecutionComponentEnhanced(
       'view',
