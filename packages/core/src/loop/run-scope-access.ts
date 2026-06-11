@@ -38,7 +38,11 @@ export function getRunScope(ctx: RunScopeContext): RunScope | undefined {
  * `_internal`. Use this in step factories migrated to the scope so legacy tests
  * that pass `_internal` without populating the scope still work.
  */
-export function readScoped<T>(ctx: RunScopeContext, key: RunScopeKey<T>, internalField: keyof StreamInternal): T | undefined {
+export function readScoped<T>(
+  ctx: RunScopeContext,
+  key: RunScopeKey<T>,
+  internalField: keyof StreamInternal,
+): T | undefined {
   const scope = getRunScope(ctx);
   if (scope) {
     const v = scope.get(key);

@@ -22,14 +22,11 @@ import type { CreatedAgentSignal } from '../../signals';
 
 export const MESSAGE_LIST_KEY = createRunScopeKey<MessageList>('prepare-stream.messageList');
 
-export const CONVERTED_TOOLS_KEY =
-  createRunScopeKey<Record<string, any>>('prepare-stream.convertedTools');
+export const CONVERTED_TOOLS_KEY = createRunScopeKey<Record<string, any>>('prepare-stream.convertedTools');
 
-export const PROCESSOR_STATES_KEY =
-  createRunScopeKey<Map<string, ProcessorState>>('prepare-stream.processorStates');
+export const PROCESSOR_STATES_KEY = createRunScopeKey<Map<string, ProcessorState>>('prepare-stream.processorStates');
 
-export const INITIAL_SIGNAL_ECHOES_KEY =
-  createRunScopeKey<CreatedAgentSignal[]>('prepare-stream.initialSignalEchoes');
+export const INITIAL_SIGNAL_ECHOES_KEY = createRunScopeKey<CreatedAgentSignal[]>('prepare-stream.initialSignalEchoes');
 
 /**
  * Loop options carry the per-call `OUTPUT` generic. We expose a single shared
@@ -38,5 +35,4 @@ export const INITIAL_SIGNAL_ECHOES_KEY =
  * `unknown` at the key and narrowed at the read site where the factory
  * generic is in scope.
  */
-export const LOOP_OPTIONS_KEY =
-  createRunScopeKey<ModelLoopStreamArgs<ToolSet, unknown>>('prepare-stream.loopOptions');
+export const LOOP_OPTIONS_KEY = createRunScopeKey<ModelLoopStreamArgs<ToolSet, unknown>>('prepare-stream.loopOptions');

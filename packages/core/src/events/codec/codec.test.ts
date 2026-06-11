@@ -103,7 +103,10 @@ describe('codec', () => {
 
   describe('Map', () => {
     it('round-trips a Map', () => {
-      const m = new Map<string, number>([['a', 1], ['b', 2]]);
+      const m = new Map<string, number>([
+        ['a', 1],
+        ['b', 2],
+      ]);
       const out = roundTrip(m) as Map<string, number>;
       expect(out).toBeInstanceOf(Map);
       expect(out.get('a')).toBe(1);

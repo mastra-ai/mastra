@@ -54,8 +54,9 @@ export const DELEGATION_BAILED_KEY = createRunScopeKey<boolean>('loop:delegation
 export const TRANSPORT_REF_KEY = createRunScopeKey<StreamTransportRef>('loop:transportRef');
 export const BACKGROUND_TASK_MANAGER_KEY = createRunScopeKey<BackgroundTaskManager>('loop:backgroundTaskManager');
 export const AGENT_BACKGROUND_CONFIG_KEY = createRunScopeKey<AgentBackgroundConfig>('loop:agentBackgroundConfig');
-export const BACKGROUND_TASK_MANAGER_CONFIG_KEY =
-  createRunScopeKey<BackgroundTaskManagerConfig>('loop:backgroundTaskManagerConfig');
+export const BACKGROUND_TASK_MANAGER_CONFIG_KEY = createRunScopeKey<BackgroundTaskManagerConfig>(
+  'loop:backgroundTaskManagerConfig',
+);
 export const SKIP_BG_TASK_WAIT_KEY = createRunScopeKey<boolean>('loop:skipBgTaskWait');
 
 // --- Signal drain / echoes -------------------------------------------------
