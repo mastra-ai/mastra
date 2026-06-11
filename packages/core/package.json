@@ -281,6 +281,16 @@
         "default": "./dist/integration/index.cjs"
       }
     },
+    "./license": {
+      "import": {
+        "types": "./dist/license/index.d.ts",
+        "default": "./dist/license/index.js"
+      },
+      "require": {
+        "types": "./dist/license/index.d.ts",
+        "default": "./dist/license/index.cjs"
+      }
+    },
     "./llm": {
       "import": {
         "types": "./dist/llm/index.d.ts",
