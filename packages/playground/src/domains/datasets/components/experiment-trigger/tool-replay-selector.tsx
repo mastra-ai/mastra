@@ -79,12 +79,12 @@ export function ToolReplaySelector({
 }: ToolReplaySelectorProps) {
   const { data, isLoading } = useDatasetExperiments(datasetId, { page: 0, perPage: 100 });
 
-  // Passthrough is the dangerous state and strict matching changes what counts
-  // as a miss: if either arrives already enabled, the Advanced disclosure
+  // Passthrough is the dangerous state: if it arrives already enabled, the
+  // Advanced disclosure
   // starts open — and stays open while active — so those switches and their
   // notes are never hidden.
-  const [advancedOpen, setAdvancedOpen] = useState(onMiss === 'passthrough' || matching === 'strict');
-  const showAdvanced = advancedOpen || onMiss === 'passthrough' || matching === 'strict';
+  const [advancedOpen, setAdvancedOpen] = useState(onMiss === 'passthrough');
+  const showAdvanced = advancedOpen || onMiss === 'passthrough';
 
   const sourceOptions = useMemo(() => {
     const eligible = getEligibleReplaySources(data?.experiments ?? []);
@@ -151,6 +151,24 @@ export function ToolReplaySelector({
           </p>
 
           <div className="grid gap-2">
+            <div className="flex items-center justify-between gap-2">
+              <Label htmlFor="tool-replay-strict-matching">Strict args matching</Label>
+              <Switch
+                id="tool-replay-strict-matching"
+                checked={matching === 'strict'}
+                onCheckedChange={checked => onMatchingChange(checked ? 'strict' : 'fifo')}
+                disabled={disabled}
+                aria-label="Strict args matching"
+              />
+            </div>
+            <p className="text-ui-sm text-neutral3">
+              {matching === 'strict'
+                ? 'Recorded answers are served only for exact argument matches — anything else is a miss, and recorded calls left unconsumed fail the item.'
+                : 'Off: recorded answers are served per tool in recorded order; argument drift is reported, not failed.'}
+            </p>
+          </div>
+
+          <div className="grid gap-2">
             <Button
               type="button"
               variant="ghost"
@@ -166,25 +184,6 @@ export function ToolReplaySelector({
 
             {showAdvanced && (
               <div className="grid gap-2">
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="tool-replay-strict-matching" className="font-normal">
-                    Strict args matching (exact tool arguments only)
-                  </Label>
-                  <Switch
-                    id="tool-replay-strict-matching"
-                    checked={matching === 'strict'}
-                    onCheckedChange={checked => onMatchingChange(checked ? 'strict' : 'fifo')}
-                    disabled={disabled}
-                    aria-label="Strict args matching (exact tool arguments only)"
-                  />
-                </div>
-
-                {matching === 'strict' && (
-                  <p className="text-ui-sm text-neutral3">
-                    Recorded answers are served only for exact argument matches — anything else is a miss.
-                  </p>
-                )}
-
                 <div className="flex items-center justify-between gap-2">
                   <Label htmlFor="tool-replay-on-miss-passthrough" className="font-normal">
                     Allow live execution for unrecorded calls (passthrough)

@@ -1,9 +1,9 @@
 import type { ExperimentStatus } from '@mastra/core/storage';
 import { Button, Chip, Spinner, Txt } from '@mastra/playground-ui';
 import { GitCompareArrows, HistoryIcon } from 'lucide-react';
-import type { ReplayAggregates } from '../hooks/use-replay-aggregates';
-import type { ToolReplayMarker } from '../utils/tool-replay';
-import { formatMockedToolNames } from '../utils/tool-replay';
+import type { ReplayAggregates, ReplayItemFlow } from '../hooks/use-replay-aggregates';
+import type { ToolReplayCallsSummary, ToolReplayMarker } from '../utils/tool-replay';
+import { formatMockedToolNames, getCallOutcomeView } from '../utils/tool-replay';
 import { useLinkComponent } from '@/lib/framework';
 
 export type ExperimentReplaySummaryProps = {
@@ -14,6 +14,8 @@ export type ExperimentReplaySummaryProps = {
   aggregates?: ReplayAggregates;
   isLoading: boolean;
   experimentStatus?: ExperimentStatus;
+  /** Opens one item's result panel (Results tab) from the flow table. */
+  onSelectResult?: (resultId: string) => void;
 };
 
 /**
@@ -28,6 +30,7 @@ export function ExperimentReplaySummary({
   aggregates,
   isLoading,
   experimentStatus,
+  onSelectResult,
 }: ExperimentReplaySummaryProps) {
   const { Link: LinkComponent, paths } = useLinkComponent();
   const isRunning = experimentStatus === 'running' || experimentStatus === 'pending';
@@ -126,11 +129,164 @@ export function ExperimentReplaySummary({
         </div>
       ) : null}
 
+      {aggregates && aggregates.callTotals.total > 0 && (
+        <div className="grid gap-1.5" data-testid="replay-flow-graph">
+          <Txt variant="ui-sm" className="text-neutral4">
+            {formatExperimentCallsVerdict(aggregates.callTotals, aggregates.itemFlows.length)}
+          </Txt>
+          <div className="flex h-2 w-full overflow-hidden rounded-full bg-surface4">
+            {flowBarSegments(aggregates.callTotals).map(segment => (
+              <div
+                key={segment.key}
+                className={segment.barClassName}
+                style={{ width: `${(segment.count / aggregates.callTotals.total) * 100}%` }}
+                title={`${segment.count} ${segment.label}`}
+              />
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-ui-xs text-neutral3">
+            {flowBarSegments(aggregates.callTotals).map(segment => (
+              <span key={segment.key}>
+                <span className={segment.glyphClassName}>{segment.glyph}</span> {segment.count} {segment.label}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {aggregates && aggregates.itemFlows.length > 0 && (
+        <div className="grid gap-0.5" data-testid="replay-flow-table">
+          <Txt variant="ui-xs" className="text-neutral2 uppercase tracking-widest mb-1">
+            Run flow per item
+          </Txt>
+          {aggregates.itemFlows.slice(0, MAX_FLOW_ROWS).map(flow => (
+            <button
+              key={flow.resultId}
+              type="button"
+              onClick={() => onSelectResult?.(flow.resultId)}
+              aria-label={`Open result for item ${flow.itemId}`}
+              className="grid grid-cols-[6rem_auto_1fr] items-center gap-3 rounded-md px-2 py-1 text-left hover:bg-surface4 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent1"
+            >
+              <span className="font-mono text-ui-smd text-neutral3 truncate">{flow.itemId.slice(0, 8)}</span>
+              <span
+                role="img"
+                aria-label={flow.hasError ? 'Error' : 'Success'}
+                className={`w-2 h-2 rounded-full ${flow.hasError ? 'bg-red-700' : 'bg-green-600'}`}
+              />
+              <span className="font-mono text-ui-smd tracking-[0.2em] truncate">
+                {flow.outcomes.length === 0 ? (
+                  <span className="text-neutral2 tracking-normal">no tool calls</span>
+                ) : (
+                  <>
+                    {flow.outcomes.slice(0, MAX_FLOW_GLYPHS).map((call, i) => (
+                      <FlowGlyph key={i} call={call} />
+                    ))}
+                    {flow.outcomes.length > MAX_FLOW_GLYPHS && (
+                      <span className="text-neutral3 tracking-normal"> +{flow.outcomes.length - MAX_FLOW_GLYPHS}</span>
+                    )}
+                  </>
+                )}
+              </span>
+            </button>
+          ))}
+          {aggregates.itemFlows.length > MAX_FLOW_ROWS && (
+            <Txt variant="ui-xs" className="text-neutral3 px-2">
+              Showing the first {MAX_FLOW_ROWS} of {aggregates.itemFlows.length} items — the Results tab has them all.
+            </Txt>
+          )}
+        </div>
+      )}
+
       {isRunning && (
         <Txt variant="ui-xs" className="text-neutral3">
           Experiment in progress — groundedness updates live.
         </Txt>
       )}
     </div>
+  );
+}
+
+const MAX_FLOW_ROWS = 30;
+const MAX_FLOW_GLYPHS = 24;
+
+/** "12 tool calls across 4 items — 8 replayed (2 with different args) · 2 mocked · 1 missed · 1 ran live" */
+function formatExperimentCallsVerdict(totals: ToolReplayCallsSummary, itemCount: number): string {
+  const segments: string[] = [];
+  if (totals.replayed > 0) {
+    const drift = totals.replayedWithDrift > 0 ? ` (${totals.replayedWithDrift} with different args)` : '';
+    segments.push(`${totals.replayed} replayed${drift}`);
+  }
+  if (totals.mocked > 0) segments.push(`${totals.mocked} mocked`);
+  if (totals.missed > 0) segments.push(`${totals.missed} missed`);
+  if (totals.live > 0) segments.push(`${totals.live} ran live`);
+  const head = `${totals.total} tool call${totals.total === 1 ? '' : 's'} across ${itemCount} item${itemCount === 1 ? '' : 's'}`;
+  return segments.length > 0 ? `${head} — ${segments.join(' · ')}` : head;
+}
+
+type FlowBarSegment = {
+  key: string;
+  count: number;
+  label: string;
+  glyph: string;
+  glyphClassName: string;
+  barClassName: string;
+};
+
+/** Non-zero outcome buckets in display order — drives both the stacked bar and its legend. */
+function flowBarSegments(totals: ToolReplayCallsSummary): FlowBarSegment[] {
+  const cleanReplays = totals.replayed - totals.replayedWithDrift;
+  return [
+    {
+      key: 'replayed',
+      count: cleanReplays,
+      label: 'replayed',
+      glyph: '✓',
+      glyphClassName: 'text-green-400',
+      barClassName: 'bg-green-400',
+    },
+    {
+      key: 'drift',
+      count: totals.replayedWithDrift,
+      label: 'args differed',
+      glyph: '✓',
+      glyphClassName: 'text-yellow-400',
+      barClassName: 'bg-yellow-400',
+    },
+    {
+      key: 'mocked',
+      count: totals.mocked,
+      label: 'mocked',
+      glyph: 'Ⓜ',
+      glyphClassName: 'text-purple-400',
+      barClassName: 'bg-purple-400',
+    },
+    {
+      key: 'missed',
+      count: totals.missed,
+      label: 'missed',
+      glyph: '✗',
+      glyphClassName: 'text-red-400',
+      barClassName: 'bg-red-400',
+    },
+    {
+      key: 'live',
+      count: totals.live,
+      label: 'ran live',
+      glyph: '⚡',
+      glyphClassName: 'text-blue-400',
+      barClassName: 'bg-blue-400',
+    },
+  ].filter(segment => segment.count > 0);
+}
+
+/** One call in an item's flow row — drifted replays render yellow to match the bar. */
+function FlowGlyph({ call }: { call: ReplayItemFlow['outcomes'][number] }) {
+  const view = getCallOutcomeView(call.outcome);
+  const className = call.argsDiffered && call.outcome === 'replayed' ? 'text-yellow-400' : view.glyphClassName;
+  const title = `${view.label || call.outcome}${call.argsDiffered ? ' · args differed' : ''}${view.note ? ` · ${view.note}` : ''}`;
+  return (
+    <span className={className} title={title}>
+      {view.glyph}
+    </span>
   );
 }

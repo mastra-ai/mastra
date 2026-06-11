@@ -327,6 +327,10 @@ export function ExperimentPageTabs({
             aggregates={replayAggregates}
             isLoading={isReplayAggregatesLoading}
             experimentStatus={experimentStatus}
+            onSelectResult={resultId => {
+              selectResult(resultId);
+              setActiveTab('results');
+            }}
           />
         )}
         <ExperimentScorerSummary scoresByItemId={scoresByExperimentId} experimentStatus={experimentStatus} />

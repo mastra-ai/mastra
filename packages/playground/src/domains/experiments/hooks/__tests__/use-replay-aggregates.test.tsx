@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import type { PropsWithChildren } from 'react';
 import { describe, expect, it } from 'vitest';
 import {
+  callFlowResult,
   expectationFailedResult,
   failedReplayResult,
   listResultsResponse,
@@ -72,8 +73,53 @@ describe('useReplayAggregates', () => {
       emptyRecordings: 1,
       staleRecordings: 101,
       redactedPayloads: 101,
+      // None of these fixtures carry a call-flow report.
+      callTotals: { total: 0, replayed: 0, replayedWithDrift: 0, mocked: 0, missed: 0, live: 0 },
+      itemFlows: [],
       // liveResultWithJunkToolReplay contributes to total only — junk key is not a report.
     });
+  });
+
+  it('folds call flows into experiment-level totals and per-item flows', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/datasets/dataset-1/experiments/exp-replay-1/results`, () =>
+        HttpResponse.json(listResultsResponse([callFlowResult])),
+      ),
+    );
+
+    const { result } = renderHook(
+      () =>
+        useReplayAggregates({
+          datasetId: 'dataset-1',
+          experimentId: 'exp-replay-1',
+          enabled: true,
+          experimentStatus: 'completed',
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data?.callTotals).toEqual({
+      total: 4,
+      replayed: 2,
+      replayedWithDrift: 1,
+      mocked: 1,
+      missed: 0,
+      live: 1,
+    });
+    expect(result.current.data?.itemFlows).toEqual([
+      {
+        resultId: 'result-replay-3',
+        itemId: 'item-5',
+        outcomes: [
+          { outcome: 'replayed' },
+          { outcome: 'replayed', argsDiffered: true },
+          { outcome: 'mocked' },
+          { outcome: 'miss-passthrough' },
+        ],
+        hasError: false,
+      },
+    ]);
   });
 
   it('stays idle when disabled', async () => {

@@ -27,6 +27,10 @@ describe('ExperimentResultPanel tool replay', () => {
     expect(screen.getByText('1 arg mismatches')).toBeDefined();
     expect(screen.getByText('stale recording')).toBeDefined();
     expect(screen.getByText('trace-src-1')).toBeDefined();
+    // The miss line carries the rejected call's args — under strict matching
+    // this is where the differing arguments become visible per item.
+    expect(screen.getByText(/called with/)).toBeDefined();
+    expect(screen.getByText('{"city":"Paris"}')).toBeDefined();
   });
 
   it('strips the report from the Output code section', () => {

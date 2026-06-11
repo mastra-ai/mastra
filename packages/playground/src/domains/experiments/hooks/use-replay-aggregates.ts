@@ -1,7 +1,16 @@
 import type { ExperimentStatus } from '@mastra/core/storage';
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-import { getToolReplayReport } from '../utils/tool-replay';
+import type { ToolReplayCall, ToolReplayCallsSummary } from '../utils/tool-replay';
+import { getToolReplayReport, summarizeReplayCalls } from '../utils/tool-replay';
+
+/** One item's run flow, in call order — the per-item row of the experiment flow table. */
+export interface ReplayItemFlow {
+  resultId: string;
+  itemId: string;
+  outcomes: { outcome: ToolReplayCall['outcome']; argsDiffered?: boolean }[];
+  hasError: boolean;
+}
 
 export interface ReplayAggregates {
   total: number;
@@ -18,6 +27,10 @@ export interface ReplayAggregates {
   emptyRecordings: number;
   staleRecordings: number;
   redactedPayloads: number;
+  /** Call outcomes summed across every item that has a call-flow report. */
+  callTotals: ToolReplayCallsSummary;
+  /** Per-item run flows in result order (only items whose report carries calls). */
+  itemFlows: ReplayItemFlow[];
 }
 
 const PER_PAGE = 100;
@@ -53,6 +66,8 @@ export const useReplayAggregates = ({
         emptyRecordings: 0,
         staleRecordings: 0,
         redactedPayloads: 0,
+        callTotals: { total: 0, replayed: 0, replayedWithDrift: 0, mocked: 0, missed: 0, live: 0 },
+        itemFlows: [],
       };
 
       let page = 0;
@@ -73,6 +88,24 @@ export const useReplayAggregates = ({
           if (report.argMismatches.length > 0) aggregates.withArgMismatches++;
           if (report.expectations?.some(expectation => !expectation.satisfied)) aggregates.withFailedExpectations++;
           if (report.staleRecording) aggregates.staleRecordings++;
+          const callsSummary = summarizeReplayCalls(report);
+          if (callsSummary) {
+            aggregates.callTotals.total += callsSummary.total;
+            aggregates.callTotals.replayed += callsSummary.replayed;
+            aggregates.callTotals.replayedWithDrift += callsSummary.replayedWithDrift;
+            aggregates.callTotals.mocked += callsSummary.mocked;
+            aggregates.callTotals.missed += callsSummary.missed;
+            aggregates.callTotals.live += callsSummary.live;
+            aggregates.itemFlows.push({
+              resultId: result.id,
+              itemId: result.itemId,
+              outcomes: (report.calls ?? []).map(call => ({
+                outcome: call.outcome,
+                ...(call.argsDiffered ? { argsDiffered: true } : {}),
+              })),
+              hasError: Boolean(result.error),
+            });
+          }
           if ((report.redactedPayloadCount ?? 0) > 0) aggregates.redactedPayloads++;
           if (report.totalRecorded === 0) {
             // Nothing was on the tape — "grounded" would be vacuously true.

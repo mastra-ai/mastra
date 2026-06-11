@@ -80,17 +80,17 @@ describe('ToolReplaySelector', () => {
 
     await waitFor(() => expect(screen.getByText('Recording source')).toBeDefined());
     expect(screen.getByText(/the item stops safely — nothing real ever runs/)).toBeDefined();
+    // Matching is a first-class choice — visible without opening Advanced.
+    expect(screen.getByText('Strict args matching')).toBeDefined();
     // The dangerous passthrough option is hidden until Advanced is opened.
     expect(screen.queryByText('Allow live execution for unrecorded calls (passthrough)')).toBeNull();
-    expect(screen.queryByText('Strict args matching (exact tool arguments only)')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Advanced' }));
 
     expect(screen.getByText('Allow live execution for unrecorded calls (passthrough)')).toBeDefined();
-    expect(screen.getByText('Strict args matching (exact tool arguments only)')).toBeDefined();
   });
 
-  it('toggles strict matching from the Advanced disclosure', async () => {
+  it('toggles strict matching from its first-class row', async () => {
     server.use(
       http.get(`${BASE_URL}/api/datasets/dataset-1/experiments`, () =>
         HttpResponse.json(listExperimentsResponse([liveExperiment])),
@@ -103,16 +103,16 @@ describe('ToolReplaySelector', () => {
     );
 
     await waitFor(() => expect(screen.getByText('Recording source')).toBeDefined());
-    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }));
-    // FIFO is the default — the strict note only appears once strict is on.
+    // FIFO is the default — the helper explains the tolerant mode until strict is on.
     expect(screen.queryByText(/served only for exact argument matches/)).toBeNull();
+    expect(screen.getByText(/argument drift is reported, not failed/)).toBeDefined();
 
-    fireEvent.click(screen.getByRole('switch', { name: 'Strict args matching (exact tool arguments only)' }));
+    fireEvent.click(screen.getByRole('switch', { name: 'Strict args matching' }));
 
     expect(onMatchingChange).toHaveBeenCalledWith('strict');
   });
 
-  it('auto-opens Advanced when strict matching arrives enabled and explains the miss semantics', async () => {
+  it('explains the two-way contract when strict matching arrives enabled', async () => {
     server.use(
       http.get(`${BASE_URL}/api/datasets/dataset-1/experiments`, () =>
         HttpResponse.json(listExperimentsResponse([liveExperiment])),
@@ -121,10 +121,8 @@ describe('ToolReplaySelector', () => {
 
     renderWithProviders(<ToolReplaySelector {...baseProps} enabled onEnabledChange={vi.fn()} matching="strict" />);
 
-    await waitFor(() => expect(screen.getByText('Strict args matching (exact tool arguments only)')).toBeDefined());
-    expect(
-      screen.getByText('Recorded answers are served only for exact argument matches — anything else is a miss.'),
-    ).toBeDefined();
+    await waitFor(() => expect(screen.getByText('Strict args matching')).toBeDefined());
+    expect(screen.getByText(/anything else is a miss, and recorded calls left unconsumed fail the item/)).toBeDefined();
   });
 
   it('warns about live execution when passthrough is selected', async () => {

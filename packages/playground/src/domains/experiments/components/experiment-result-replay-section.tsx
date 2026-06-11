@@ -14,12 +14,17 @@ import { HistoryIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import type {
   ReplayTapeSpan,
-  ToolReplayCall,
   ToolReplayCallsSummary,
   ToolReplayMockKind,
   ToolReplayReportExtended,
 } from '../utils/tool-replay';
-import { buildReplayTape, classifyReplayDivergence, summarizeReplayCalls } from '../utils/tool-replay';
+import {
+  buildReplayTape,
+  classifyReplayDivergence,
+  summarizeReplayCalls,
+  CALL_OUTCOME_VIEWS,
+  UNKNOWN_CALL_OUTCOME_VIEW,
+} from '../utils/tool-replay';
 
 export type ExperimentResultReplaySectionProps = {
   report: ToolReplayReportExtended;
@@ -34,38 +39,6 @@ const MOCK_KIND_LABELS: Record<ToolReplayMockKind, string> = {
   function: 'function',
   observe: 'observed',
 };
-
-type ReplayCallOutcomeView = {
-  glyph: string;
-  glyphClassName: string;
-  label: string;
-  /** Fixed explanation shown in the Notes column. */
-  note?: string;
-};
-
-/** How each run-flow outcome renders: glyph + label in Outcome, fixed note in Notes. */
-const CALL_OUTCOME_VIEWS: Record<ToolReplayCall['outcome'], ReplayCallOutcomeView> = {
-  replayed: { glyph: '✓', glyphClassName: 'text-green-400', label: 'replayed' },
-  'replayed-error': {
-    glyph: '✓',
-    glyphClassName: 'text-green-400',
-    label: 'replayed',
-    note: 'recorded error re-thrown',
-  },
-  mocked: { glyph: 'Ⓜ', glyphClassName: 'text-purple-400', label: 'mocked' },
-  'mock-error': { glyph: 'Ⓜ', glyphClassName: 'text-purple-400', label: 'mocked', note: 'error injected' },
-  'miss-error': { glyph: '✗', glyphClassName: 'text-red-400', label: 'miss', note: 'no recorded call left' },
-  'miss-passthrough': {
-    glyph: '⚡',
-    glyphClassName: 'text-amber-400',
-    label: 'miss',
-    note: 'ran live (passthrough)',
-  },
-  live: { glyph: '⚡', glyphClassName: 'text-blue-400', label: 'live', note: 'ran live (not mocked)' },
-};
-
-/** Future-proof fallback — reports come from storage, so an unknown outcome must not crash the panel. */
-const UNKNOWN_CALL_OUTCOME_VIEW: ReplayCallOutcomeView = { glyph: '•', glyphClassName: 'text-neutral3', label: '' };
 
 /** "4 tool calls — 2 replayed (1 with different args) · 1 mocked · 1 ran live" (zero-count segments are skipped). */
 function formatReplayCallsVerdict(summary: ToolReplayCallsSummary): string {
@@ -293,6 +266,12 @@ export function ExperimentResultReplaySection({
             <li key={`miss-${i}`}>
               <span className="text-neutral5">{miss.toolName}</span> — no recorded event left (
               {miss.action === 'passthrough' ? 'ran live' : 'item stopped'})
+              {miss.input !== undefined && (
+                <>
+                  {' '}
+                  · called with <span className="font-mono text-neutral3">{formatMissArgs(miss.input)}</span>
+                </>
+              )}
             </li>
           ))}
           {report.unconsumed.map((entry, i) => (
@@ -328,4 +307,15 @@ export function ExperimentResultReplaySection({
       )}
     </div>
   );
+}
+
+/** Compact args for the misses list — under strict matching this is the rejected call's input. */
+function formatMissArgs(input: unknown): string {
+  let text: string;
+  try {
+    text = JSON.stringify(input) ?? String(input);
+  } catch {
+    text = String(input);
+  }
+  return text.length > 120 ? `${text.slice(0, 119)}…` : text;
 }

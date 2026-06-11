@@ -306,3 +306,44 @@ export function buildReplayTape(spans: ReplayTapeSpan[], report: ToolReplayRepor
 
   return [...tools.values()];
 }
+
+/** How one run-flow outcome renders anywhere in the UI: glyph + label, plus a fixed note. */
+export type ReplayCallOutcomeView = {
+  glyph: string;
+  glyphClassName: string;
+  label: string;
+  /** Fixed explanation shown next to the outcome where there is room. */
+  note?: string;
+};
+
+/** Single source of truth for outcome glyphs — result panel, summary card, and tests all read this. */
+export const CALL_OUTCOME_VIEWS: Record<ToolReplayCall['outcome'], ReplayCallOutcomeView> = {
+  replayed: { glyph: '✓', glyphClassName: 'text-green-400', label: 'replayed' },
+  'replayed-error': {
+    glyph: '✓',
+    glyphClassName: 'text-green-400',
+    label: 'replayed',
+    note: 'recorded error re-thrown',
+  },
+  mocked: { glyph: 'Ⓜ', glyphClassName: 'text-purple-400', label: 'mocked' },
+  'mock-error': { glyph: 'Ⓜ', glyphClassName: 'text-purple-400', label: 'mocked', note: 'error injected' },
+  'miss-error': { glyph: '✗', glyphClassName: 'text-red-400', label: 'miss', note: 'no recorded call left' },
+  'miss-passthrough': {
+    glyph: '⚡',
+    glyphClassName: 'text-amber-400',
+    label: 'miss',
+    note: 'ran live (passthrough)',
+  },
+  live: { glyph: '⚡', glyphClassName: 'text-blue-400', label: 'live', note: 'ran live (not mocked)' },
+};
+
+/** Future-proof fallback — reports come from storage, so an unknown outcome must not crash the UI. */
+export const UNKNOWN_CALL_OUTCOME_VIEW: ReplayCallOutcomeView = {
+  glyph: '•',
+  glyphClassName: 'text-neutral3',
+  label: '',
+};
+
+export function getCallOutcomeView(outcome: ToolReplayCall['outcome']): ReplayCallOutcomeView {
+  return CALL_OUTCOME_VIEWS[outcome] ?? UNKNOWN_CALL_OUTCOME_VIEW;
+}
