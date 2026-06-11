@@ -34,6 +34,7 @@ import {
   TABLE_NOTIFICATIONS,
   TABLE_HARNESS_SESSIONS,
 } from '@mastra/core/storage';
+import type { ClickhouseReplicationConfig } from './replication';
 
 export const TABLE_ENGINES: Record<TABLE_NAMES, string> = {
   [TABLE_MESSAGES]: `MergeTree()`,
@@ -105,6 +106,7 @@ export type ClickhouseConfig = {
   url: string;
   username: string;
   password: string;
+  replication?: ClickhouseReplicationConfig;
   ttl?: {
     [TableKey in TABLE_NAMES]?: {
       row?: { interval: number; unit: IntervalUnit; ttlKey?: string };

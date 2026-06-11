@@ -23,14 +23,14 @@ Reference these guidelines when:
 
 Rules are prioritized by impact:
 
-| Priority | Category                  | Impact      |
-| -------- | ------------------------- | ----------- |
-| 1        | Eliminating Waterfalls    | CRITICAL    |
-| 2        | Bundle Size Optimization  | CRITICAL    |
-| 3        | Client-Side Data Fetching | MEDIUM-HIGH |
-| 4        | Re-render Optimization    | MEDIUM      |
-| 5        | Rendering Performance     | MEDIUM      |
-| 6        | JavaScript Performance    | LOW-MEDIUM  |
+| Priority | Category                  | Impact                        |
+| -------- | ------------------------- | ----------------------------- |
+| 1        | Eliminating Waterfalls    | CRITICAL                      |
+| 2        | Bundle Size Optimization  | CRITICAL                      |
+| 3        | Client-Side Data Fetching | MEDIUM-HIGH                   |
+| 4        | Re-render Optimization    | MEDIUM                        |
+| 5        | Rendering Performance     | MEDIUM                        |
+| 6        | JavaScript Performance    | LOW-MEDIUM                    |
 | 7        | Component Structure       | MEDIUM-HIGH (maintainability) |
 
 ## Quick Reference

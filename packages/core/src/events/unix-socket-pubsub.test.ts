@@ -69,6 +69,156 @@ describe('UnixSocketPubSub', () => {
     expect(secondCb.mock.calls[0]![0].type).toBe('hello');
   });
 
+  it('relays client-published events back to the publishing client', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const client = new UnixSocketPubSub(path);
+    pubsubs.push(broker, client);
+
+    const brokerCb = vi.fn();
+    const clientCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb);
+    await client.subscribe('topic-a', clientCb);
+
+    expect(broker.isBroker).toBe(true);
+    expect(client.isBroker).toBe(false);
+
+    // Client publishes — broker should relay back to the client
+    await client.publish('topic-a', makeEvent({ type: 'from-client' }));
+
+    await waitFor(() => {
+      expect(brokerCb).toHaveBeenCalledTimes(1);
+      expect(clientCb).toHaveBeenCalledTimes(1);
+    });
+    expect(brokerCb.mock.calls[0]![0].type).toBe('from-client');
+    expect(clientCb.mock.calls[0]![0].type).toBe('from-client');
+  });
+
+  it('_localOnly events stay entirely within the publishing instance', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const clientA = new UnixSocketPubSub(path);
+    const clientB = new UnixSocketPubSub(path);
+    pubsubs.push(broker, clientA, clientB);
+
+    const brokerCb = vi.fn();
+    const clientACb = vi.fn();
+    const clientBCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb);
+    await clientA.subscribe('topic-a', clientACb);
+    await clientB.subscribe('topic-a', clientBCb);
+
+    // ClientA publishes a localOnly event — only clientA's own subscribers
+    // see it. The broker and clientB are different PubSub instances (even when
+    // they share an OS process in this test) and must not receive the event,
+    // because crossing the broker would JSON-serialize the payload and strip
+    // any live methods (e.g. MastraModelOutput.getFullOutput).
+    await clientA.publish('topic-a', makeEvent({ type: 'internal' }), { localOnly: true });
+
+    await waitFor(() => {
+      expect(clientACb).toHaveBeenCalledTimes(1);
+    });
+    // Allow extra time for any unintended relay to broker or clientB
+    await new Promise(r => setTimeout(r, 100));
+    expect(brokerCb).not.toHaveBeenCalled();
+    expect(clientBCb).not.toHaveBeenCalled();
+  });
+
+  it('_localOnly events published by the broker only fire the broker subscribers', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const client = new UnixSocketPubSub(path);
+    pubsubs.push(broker, client);
+
+    const brokerCb = vi.fn();
+    const clientCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb);
+    await client.subscribe('topic-a', clientCb);
+
+    // Broker publishes localOnly — only broker's own subscribers fire.
+    await broker.publish('topic-a', makeEvent({ type: 'internal' }), { localOnly: true });
+
+    await waitFor(() => {
+      expect(brokerCb).toHaveBeenCalledTimes(1);
+    });
+    await new Promise(r => setTimeout(r, 100));
+    expect(clientCb).not.toHaveBeenCalled();
+  });
+
+  it('localOnly prevents large payloads from crossing the wire to any other instance', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const clientA = new UnixSocketPubSub(path);
+    const clientB = new UnixSocketPubSub(path);
+    pubsubs.push(broker, clientA, clientB);
+
+    const brokerCb = vi.fn();
+    const clientACb = vi.fn();
+    const clientBCb = vi.fn();
+    await broker.subscribe('topic-a', brokerCb);
+    await clientA.subscribe('topic-a', clientACb);
+    await clientB.subscribe('topic-a', clientBCb);
+
+    // Simulate the real problem: a 2 MB cumulative stepResults payload
+    const largePayload = 'x'.repeat(2 * 1024 * 1024);
+
+    // With localOnly: only clientA (the publisher) sees it.
+    await clientA.publish('topic-a', makeEvent({ type: 'step.end', data: { stepResults: largePayload } }), {
+      localOnly: true,
+    });
+
+    await waitFor(() => {
+      expect(clientACb).toHaveBeenCalledTimes(1);
+    });
+    await new Promise(r => setTimeout(r, 200));
+    expect(brokerCb).not.toHaveBeenCalled();
+    expect(clientBCb).not.toHaveBeenCalled();
+
+    // Without localOnly: same large event fans out to broker + both clients
+    await clientA.publish('topic-a', makeEvent({ type: 'step.end', data: { stepResults: largePayload } }));
+
+    await waitFor(() => {
+      expect(clientBCb).toHaveBeenCalledTimes(1);
+    });
+    expect(brokerCb).toHaveBeenCalledTimes(1);
+    expect(clientACb).toHaveBeenCalledTimes(2);
+  });
+
+  it('localOnly preserves non-serializable payload values (live class instances)', async () => {
+    const path = await socketPath();
+    const broker = new UnixSocketPubSub(path);
+    const clientA = new UnixSocketPubSub(path);
+    pubsubs.push(broker, clientA);
+
+    const clientACb = vi.fn();
+    await clientA.subscribe('topic-a', clientACb);
+
+    // Payload with a live method that JSON.stringify would drop. This is the
+    // exact shape `processWorkflowEnd` publishes on `workflows-finish` for the
+    // execution-workflow: the run result is a MastraModelOutput instance whose
+    // getFullOutput() method must survive delivery.
+    class LiveResult {
+      getValue() {
+        return 'still alive';
+      }
+    }
+    const liveResult = new LiveResult();
+
+    await clientA.publish('topic-a', makeEvent({ type: 'workflow.end', data: { result: liveResult } as any }), {
+      localOnly: true,
+    });
+
+    await waitFor(() => {
+      expect(clientACb).toHaveBeenCalledTimes(1);
+    });
+    const delivered = clientACb.mock.calls[0]![0] as Event;
+    const deliveredResult = (delivered.data as { result: LiveResult }).result;
+    // Must be the same instance with the method intact
+    expect(deliveredResult).toBe(liveResult);
+    expect(typeof deliveredResult.getValue).toBe('function');
+    expect(deliveredResult.getValue()).toBe('still alive');
+  });
+
   it('allows a temporarily backpressured remote client to catch up below the queue cap', async () => {
     const path = await socketPath();
     const broker = new UnixSocketPubSub(path, { maxRemoteClientQueuedBytes: 1024 * 1024 });

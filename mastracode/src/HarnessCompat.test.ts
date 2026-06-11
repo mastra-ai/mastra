@@ -65,8 +65,8 @@ vi.mock('@mastra/core/harness', () => ({
   },
 }));
 
-const buildMode = { id: 'build', agentId: 'agent', defaultModelId: 'default-model' };
-const planMode = { id: 'plan', agentId: 'agent', defaultModelId: 'plan-model' };
+const buildMode = { id: 'build', defaultModelId: 'default-model', metadata: { agentId: 'agent' } };
+const planMode = { id: 'plan', defaultModelId: 'plan-model', metadata: { agentId: 'agent' } };
 
 function createSession(initialModelId = 'session-model') {
   let modelId = initialModelId;
