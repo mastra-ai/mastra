@@ -7791,8 +7791,8 @@ importers:
         specifier: ^4.12.8
         version: 4.12.18
       inngest-cli:
-        specifier: ^1.17.5
-        version: 1.19.2(encoding@0.1.13)
+        specifier: ^1.26.0
+        version: 1.27.0(encoding@0.1.13)
       koa:
         specifier: ^3.1.2
         version: 3.2.0
@@ -22075,8 +22075,8 @@ packages:
   inline-style-parser@0.2.4:
     resolution: {integrity: sha512-0aO8FkhNZlj/ZIbNi7Lxxr12obT7cL1moPfE4tg1LkX7LlLfC6DeX4l2ZEud1ukP9jNQyNnfzQVqwbwmAATY4Q==}
 
-  inngest-cli@1.19.2:
-    resolution: {integrity: sha512-+NaCbmD/ore6fGVLVVR8hBNyoWIO/zHNH6zuvOhMoqWhWgO0GkJ0y5LuBYB49P6qrM/tmxZ7G10qcsyPRzRx1w==}
+  inngest-cli@1.27.0:
+    resolution: {integrity: sha512-NRsyx2xvSOw0G5PqpovBxdhADCuZUc085qMtFUU0Xw+ej/VN791wqS8D7XHLGsDRGPQ9V70yg1+5WiG5mtQyYQ==}
     hasBin: true
 
   inngest@4.3.0:
@@ -45681,7 +45681,7 @@ snapshots:
 
   inline-style-parser@0.2.4: {}
 
-  inngest-cli@1.19.2(encoding@0.1.13):
+  inngest-cli@1.27.0(encoding@0.1.13):
     dependencies:
       adm-zip: 0.5.16
       debug: 4.4.3
