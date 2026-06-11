@@ -79,12 +79,13 @@
 - `mastracode/src/tui/components/__tests__/tool-execution-enhanced.test.ts` — quiet compact tool summaries, previews, colors, grouping/continuation behavior, code/list previews, path-prefix trimming, and web-search preview rendering.
 - `mastracode/src/tui/handlers/__tests__/message.test.ts` and `chat-spacing` / `chat-boundary-spacer` coverage — spacing around quiet tool previews and grouped compact tools, plus quiet pending-tool error cleanup when an assistant run fails.
 - `mastracode/src/tui/__tests__/render-messages.test.ts` — loaded-history rendering, including quiet-mode-sensitive paths.
-- `mastracode/scripts/mc-e2e/scenarios/quiet-settings.ts` — partial e2e coverage: toggles Quiet mode through `/settings`, verifies the conditional preview-line row, updates preview lines, and closes/reopens `/settings` to prove both values persist in the real TUI.
+- `mastracode/scripts/mc-e2e/scenarios/quiet-settings.ts` — e2e coverage: toggles Quiet mode through `/settings`, verifies the conditional preview-line row, updates preview lines, and closes/reopens `/settings` to prove both values persist in the real TUI.
+- `mastracode/scripts/mc-e2e/scenarios/quiet-tool-history-parity.ts` — e2e coverage: starts with Quiet mode enabled, drives AIMock-backed live `view` + `task_write` tool calls through the real TUI, asserts compact `▐view▌` quiet chrome, preview-cap output, and quiet task summary, then opens a seeded `/threads` history fixture and asserts reloaded `view` history uses the same compact quiet rendering.
 
 ## Missing tests
 
-- End-to-end live quiet tool + loaded-history parity with AIMock-backed tool/subagent output.
-- Manual TUI smoke covering quiet-mode grouped tools, Ctrl+E expansion, and task summaries in a real terminal width.
+- End-to-end quiet subagent output and Ctrl+E expansion breadth.
+- Manual TUI smoke covering quiet-mode grouped tools and varied terminal widths.
 
 ## Known risks / regressions
 

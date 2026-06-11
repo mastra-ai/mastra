@@ -31,6 +31,7 @@ import { promptContextInstructionsScenario } from './prompt-context-instructions
 import { promptQueueInterleaveScenario } from './prompt-queue-interleave.js';
 import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { quietSettingsScenario } from './quiet-settings.js';
+import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
 import { setupNestedModelSelectorScenario } from './setup-nested-model-selector.js';
@@ -96,6 +97,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'prompt-context-instructions': promptContextInstructionsScenario,
   'prompt-queue-interleave': promptQueueInterleaveScenario,
   'quiet-settings': quietSettingsScenario,
+  'quiet-tool-history-parity': quietToolHistoryParityScenario,
   'report-issue-command': reportIssueCommandScenario,
   'request-access-modal': requestAccessModalScenario,
   'state-commands': stateCommandsScenario,

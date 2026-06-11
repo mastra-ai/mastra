@@ -4622,3 +4622,14 @@ Break validations proved the scenario fails if the `Use as /goal` option label c
   - Disabling the model selector Escape cancel callback left the selector visible and failed the same parent-overlay recovery assertion.
 - Clean focused verification: `pnpm --filter ./mastracode run e2e:test setup-nested-model-selector`.
 - Tracker update: `TUI: Configuration modal overlays` is now `validated`. It has checked-in real PTY coverage for simple `/sandbox` overlay open/Escape and nested `/setup` model-selector Escape/back navigation. Remaining visual snapshot contrast and less common config command breadth are documented as follow-up breadth.
+
+### Quiet mode live/history parity
+
+Added `quiet-tool-history-parity` TUI e2e coverage. The scenario seeds Quiet mode and a two-line preview cap, drives AIMock-backed live `view` + `task_write` tool calls, asserts compact `▐view▌` quiet chrome, preview-cap output, and quiet task summary, then switches through `/threads` to a seeded persisted tool-history thread and asserts loaded `view` history also renders with compact quiet chrome and preview text.
+
+Break validations:
+- Disabled quiet `view` previews in `tool-execution-enhanced.ts`; the scenario timed out waiting for the compact preview.
+- Disabled loaded-history quiet conversion in `render-messages.ts`; the scenario showed expanded historical tool output instead of compact `▐view▌` chrome and failed.
+- Disabled live quiet conversion in `handlers/tool.ts`; the live tool rendered expanded output instead of compact quiet chrome and failed.
+
+Focused verification: `pnpm --filter ./mastracode run e2e:test quiet-tool-history-parity`.

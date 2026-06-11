@@ -34,6 +34,7 @@ export type ScenarioName =
   | 'notification-signal-rendering'
   | 'om-settings'
   | 'quiet-settings'
+  | 'quiet-tool-history-parity'
   | 'report-issue-command'
   | 'request-access-modal'
   | 'state-commands'
