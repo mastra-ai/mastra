@@ -17,7 +17,16 @@ export {
   taskWriteTool,
 } from '../../../packages/core/src/harness/tools.js';
 export { defaultDisplayState, defaultOMProgressState } from '../../../packages/core/src/harness/types.js';
+export {
+  toNotificationContent,
+  toNotificationSummaryContent,
+  toReactiveSignalContent,
+  toStateSignalContent,
+  toSystemReminderContent,
+  toUserSignalMessage,
+} from '../../../packages/core/src/harness/harness.js';
 export type * from '../../../packages/core/src/harness/index.js';
+
 
 type LegacyMode<TState = {}> = HarnessModeV1 & {
   name?: string;

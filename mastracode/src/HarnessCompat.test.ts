@@ -355,16 +355,21 @@ describe('HarnessCompat standalone V1 adapter', () => {
   });
 
   it('does not treat stale display running state as active signal delivery', async () => {
-    const pending = deferred();
-    async function* pendingStream() {
-      await pending.promise;
+    const firstRun = deferred();
+    // Persistent-subscription model: the harness subscribes to the thread once
+    // and splits the single stream into runs delimited by terminal chunks. The
+    // first run blocks until released, the signal's run terminates immediately.
+    async function* persistentStream() {
+      await firstRun.promise;
+      yield { type: 'finish' };
       yield { type: 'finish' };
     }
     const session = createSession('session-model', 'thread-id', []);
     session.queueMessage.mockResolvedValueOnce({ accepted: true, queued: true });
-    session.subscribeToThread
-      .mockResolvedValueOnce({ stream: pendingStream(), unsubscribe: vi.fn(async () => {}) })
-      .mockResolvedValueOnce({ stream: toStream([{ type: 'finish' }]), unsubscribe: vi.fn(async () => {}) });
+    session.subscribeToThread.mockResolvedValueOnce({
+      stream: persistentStream(),
+      unsubscribe: vi.fn(async () => {}),
+    });
     const { harness } = createHarness(session);
     await harness.switchThread({ threadId: 'thread-id' });
 
@@ -373,16 +378,23 @@ describe('HarnessCompat standalone V1 adapter', () => {
     expect(harness.isRunning()).toBe(true);
     expect(harness.isCurrentThreadStreamActive()).toBe(false);
 
+    // Stale display state must still route the idle signal through sendMessage
+    // (not queueMessage) since the stream is not actually active.
     const signal = harness.sendSignal({ id: 'signal-idle', content: 'idle despite display state' });
-    await signal.accepted;
+    await flush();
 
-    expect(session.subscribeToThread).toHaveBeenCalledTimes(2);
     expect(session.sendMessage).toHaveBeenCalledWith({
       messages: { id: 'signal-idle', type: 'user-message', contents: 'idle despite display state' },
     });
 
-    pending.resolve();
+    // Release the shared persistent stream so both the message run and the
+    // signal run reach their terminal chunks.
+    firstRun.resolve();
+    await signal.accepted;
     await running;
+
+    // A single persistent subscription is reused across the message and signal.
+    expect(session.subscribeToThread).toHaveBeenCalledTimes(1);
   });
 
   it('streams payload-shaped idle signal responses through the compat event bridge', async () => {

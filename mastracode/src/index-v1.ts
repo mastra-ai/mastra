@@ -474,6 +474,11 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     name: 'Code Agent',
     instructions: getDynamicInstructions,
     model: getDynamicModel,
+    // Give the agent its own memory so agent-initiated runs that bypass the
+    // harness (e.g. notification/state signal wakes sent directly via
+    // agent.send*Signal) can resolve memory. v0's Harness injects this via
+    // agent.__setMemory; HarnessCompat doesn't, so wire it at construction.
+    memory,
     tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage),
     hooks: createToolHooks(hookManager),
     scorers: {

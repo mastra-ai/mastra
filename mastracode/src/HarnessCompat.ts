@@ -42,6 +42,45 @@ type SessionStateFields = {
   subagentModelIds?: Record<string, string>;
 };
 
+/**
+ * Signal-content converters live in `@mastra/core/harness`, which the
+ * harness-v1-compat vitest project aliases to a module that `extends`
+ * HarnessCompat. A static value import would form an evaluation-order cycle
+ * (alias → HarnessCompat → alias) and crash with "Class extends value
+ * undefined". Loading them lazily breaks that cycle while keeping production
+ * resolution against the real package. The loader is awaited once before the
+ * stream loop processes chunks, so the sync converter call sites can rely on
+ * the cached references.
+ */
+type SignalConverters = Pick<
+  typeof import('@mastra/core/harness'),
+  | 'toNotificationContent'
+  | 'toNotificationSummaryContent'
+  | 'toReactiveSignalContent'
+  | 'toStateSignalContent'
+  | 'toSystemReminderContent'
+  | 'toUserSignalMessage'
+>;
+
+let signalConvertersCache: SignalConverters | undefined;
+let signalConvertersPromise: Promise<SignalConverters> | undefined;
+
+async function loadSignalConverters(): Promise<SignalConverters> {
+  if (signalConvertersCache) return signalConvertersCache;
+  signalConvertersPromise ??= import('@mastra/core/harness').then(mod => {
+    signalConvertersCache = {
+      toNotificationContent: mod.toNotificationContent,
+      toNotificationSummaryContent: mod.toNotificationSummaryContent,
+      toReactiveSignalContent: mod.toReactiveSignalContent,
+      toStateSignalContent: mod.toStateSignalContent,
+      toSystemReminderContent: mod.toSystemReminderContent,
+      toUserSignalMessage: mod.toUserSignalMessage,
+    };
+    return signalConvertersCache;
+  });
+  return signalConvertersPromise;
+}
+
 type HarnessCompatRuntimeState = SessionStateFields & {
   observerModelId?: string;
   reflectorModelId?: string;
@@ -175,29 +214,90 @@ function toDate(value: unknown, fallback = new Date()): Date {
   return fallback;
 }
 
-function getMessageText(message: unknown): string {
-  if (!message || typeof message !== 'object') return '';
-  const record = message as Record<string, unknown>;
+function getMessageParts(record: Record<string, unknown>): unknown[] | undefined {
   const content = record.content ?? record.contents;
-  if (typeof content === 'string') return content;
   if (content && typeof content === 'object' && !Array.isArray(content)) {
     const c = content as Record<string, unknown>;
-    if (typeof c.content === 'string') return c.content;
-    if (Array.isArray(c.parts)) return getMessageText({ content: c.parts });
+    if (Array.isArray(c.parts)) return c.parts;
   }
-  if (Array.isArray(content)) {
-    return content
-      .map(part => {
-        if (typeof part === 'string') return part;
-        if (part && typeof part === 'object') {
-          const p = part as Record<string, unknown>;
-          return typeof p.text === 'string' ? p.text : '';
+  if (Array.isArray(content)) return content;
+  return undefined;
+}
+
+/**
+ * Convert a stored message (MastraMessageV2 shape with `content.parts`) into the
+ * harness content array the TUI renderer consumes. v0 Harness reconstructs full
+ * tool-call/result/reasoning history on reload; this mirrors that so loaded
+ * threads render their tool runs, not just text.
+ */
+function toHarnessMessageContent(record: Record<string, unknown>): HarnessMessageContent[] {
+  const rawContent = record.content ?? record.contents;
+  if (typeof rawContent === 'string') {
+    return rawContent ? [{ type: 'text', text: rawContent }] : [];
+  }
+  if (rawContent && typeof rawContent === 'object' && !Array.isArray(rawContent)) {
+    const inner = (rawContent as Record<string, unknown>).content;
+    if (typeof inner === 'string') {
+      return inner ? [{ type: 'text', text: inner }] : [];
+    }
+  }
+
+  const parts = getMessageParts(record);
+  if (!Array.isArray(parts)) return [];
+
+  const content: HarnessMessageContent[] = [];
+  for (const part of parts) {
+    if (typeof part === 'string') {
+      if (part) content.push({ type: 'text', text: part });
+      continue;
+    }
+    if (!part || typeof part !== 'object') continue;
+    const p = part as Record<string, unknown>;
+    const type = typeof p.type === 'string' ? p.type : undefined;
+
+    switch (type) {
+      case 'text': {
+        if (typeof p.text === 'string' && p.text.length > 0) {
+          content.push({ type: 'text', text: p.text });
         }
-        return '';
-      })
-      .join('');
+        break;
+      }
+      case 'reasoning':
+      case 'thinking': {
+        const thinking =
+          typeof p.text === 'string' ? p.text : typeof p.reasoning === 'string' ? p.reasoning : undefined;
+        if (thinking) content.push({ type: 'thinking', thinking });
+        break;
+      }
+      case 'tool-call':
+      case 'tool_call': {
+        const id = getStringField(p, 'toolCallId', 'id');
+        const name = getStringField(p, 'toolName', 'name');
+        if (id && name) {
+          content.push({ type: 'tool_call', id, name, args: p.args ?? p.input ?? {} });
+        }
+        break;
+      }
+      case 'tool-result':
+      case 'tool_result': {
+        const id = getStringField(p, 'toolCallId', 'id');
+        const name = getStringField(p, 'toolName', 'name');
+        if (id && name) {
+          content.push({
+            type: 'tool_result',
+            id,
+            name,
+            result: p.result ?? p.output,
+            isError: getBooleanField(p, 'isError') ?? false,
+          });
+        }
+        break;
+      }
+      default:
+        break;
+    }
   }
-  return '';
+  return content;
 }
 
 function toHarnessMessage(message: unknown): HarnessMessage | undefined {
@@ -206,8 +306,7 @@ function toHarnessMessage(message: unknown): HarnessMessage | undefined {
   const role = record.role;
   if (role !== 'user' && role !== 'assistant' && role !== 'system') return undefined;
 
-  const text = getMessageText(message);
-  const content: HarnessMessageContent[] = text ? [{ type: 'text', text }] : [];
+  const content = toHarnessMessageContent(record);
   return {
     id: typeof record.id === 'string' ? record.id : randomUUID(),
     role,
@@ -359,6 +458,17 @@ export class HarnessCompat<TState = {}> {
   #resourceId: string;
   #currentThreadId: string | null = null;
   #displayState = createEmptyDisplayState();
+  /**
+   * One long-lived thread subscription per thread, mirroring v0's
+   * `agentThreadSubscription` + `processSubscribedThreadStream`. Keeping the
+   * subscription alive across idle gaps lets agent-initiated runs (notification
+   * / state signal wakes sent directly via `agent.send*Signal`) stream into the
+   * TUI instead of being dropped once the triggering message run finishes.
+   */
+  #persistentSubscription?: StreamSubscription;
+  #persistentSubscriptionThreadId: string | null = null;
+  /** Resolves the in-flight run's terminal promise so callers can await completion. */
+  #activeRunWaiters: Array<(value: { terminalType: string | undefined; error?: unknown }) => void> = [];
   #pendingQuestions = new Map<string, (answer: any) => void>();
   #pendingPlanApprovals = new Map<string, (result: { action: 'approved' | 'rejected'; feedback?: string }) => void>();
   #resolvedWorkspace?: unknown;
@@ -422,6 +532,20 @@ export class HarnessCompat<TState = {}> {
     for (const listener of this.#listeners) {
       void listener(event);
     }
+  }
+
+  /**
+   * Emit an event and await all listener completions. v0 emits `thread_changed`
+   * synchronously inside `switchThread`, so its TUI listener (which re-renders
+   * the loaded thread) finishes before the picker's own post-switch rendering
+   * runs. Awaiting here reproduces that ordering so info banners added after the
+   * switch (e.g. "Switched to: <title>") are not clobbered by a late re-render.
+   */
+  async #emitAndWait(event: HarnessEvent): Promise<void> {
+    if (event.type === 'display_state_changed') {
+      this.#displayState = event.displayState;
+    }
+    await Promise.all([...this.#listeners].map(listener => Promise.resolve(listener(event))));
   }
 
   #emitDisplayState(): void {
@@ -495,10 +619,14 @@ export class HarnessCompat<TState = {}> {
   }
 
   async setResourceId({ resourceId }: { resourceId: string }): Promise<void> {
+    // Update identity synchronously so callers that don't await (e.g. headless
+    // resource scoping) immediately observe the new resourceId before listing
+    // threads. The async subscription teardown can happen afterwards.
     this.#resourceId = resourceId;
     this.#session = undefined;
     this.#currentThreadId = null;
     this.#emit({ type: 'thread_changed', threadId: '', previousThreadId: null });
+    await this.#teardownPersistentSubscription();
   }
 
   _setCurrentResourceId(resourceId: string): void {
@@ -586,6 +714,7 @@ export class HarnessCompat<TState = {}> {
 
   async switchThread({ threadId, resourceId }: { threadId: string; resourceId?: string }): Promise<void> {
     const previousThreadId = this.#currentThreadId;
+    await this.#teardownPersistentSubscription();
     const currentModeId = this.#state.modeId ?? this.getCurrentModeId();
     const currentModelId = (this.getState() as SessionStateFields).currentModelId;
     this.#session = await this.#harnessV1.session({
@@ -601,7 +730,7 @@ export class HarnessCompat<TState = {}> {
       this.#session.setModelId(currentModelId);
     }
 
-    this.#emit({ type: 'thread_changed', threadId, previousThreadId });
+    await this.#emitAndWait({ type: 'thread_changed', threadId, previousThreadId });
   }
 
   async listThreads(options?: { allResources?: boolean; includeForkedSubagents?: boolean }): Promise<HarnessThread[]> {
@@ -929,6 +1058,7 @@ export class HarnessCompat<TState = {}> {
   }
 
   async session(opts: Parameters<Harness<HarnessCompatMode[], TState>['session']>[0]): Promise<Session<TState>> {
+    await this.#teardownPersistentSubscription();
     this.#session = await this.#harnessV1.session(opts);
     this.#resourceId = this.#session.resourceId;
     this.#currentThreadId = this.#session.threadId;
@@ -989,18 +1119,23 @@ export class HarnessCompat<TState = {}> {
   async sendMessage(text: string | { text?: string; content?: string }, _opts?: unknown): Promise<void> {
     const content = typeof text === 'string' ? text : (text.text ?? text.content ?? '');
     const session = await this.#ensureSession();
-    const subscription = (await session.subscribeToThread()) as StreamSubscription;
+    await this.#ensurePersistentSubscription(session);
 
+    const runComplete = this.#awaitNextRun();
     this.#startStreamRun();
 
     try {
       await session.queueMessage({ messages: content });
     } catch (error) {
-      await this.#failStreamStart(subscription, error);
+      this.#resolveRunWaiters({ terminalType: 'error', error });
+      this.#emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
+      this.#emit({ type: 'agent_end', reason: 'error' });
+      this.#displayState = { ...this.#displayState, isRunning: false, currentMessage: null };
+      this.#emitDisplayState();
       throw error;
     }
 
-    await this.#consumeSignalSubscription(subscription);
+    await runComplete;
   }
 
   sendSignal(signalInput: unknown): SendSignalResult {
@@ -1015,24 +1150,151 @@ export class HarnessCompat<TState = {}> {
         return { accepted: true as const, runId: result.runId };
       }
 
-      const subscription = (await session.subscribeToThread()) as StreamSubscription;
+      await this.#ensurePersistentSubscription(session);
+      const runComplete = this.#awaitNextRun();
       this.#startStreamRun();
 
-      let streamOwned = false;
+      let started = false;
       try {
         const result = await session.sendMessage({ messages: signal as any, ...options });
-        streamOwned = true;
-        await this.#consumeSignalSubscription(subscription, { rejectOnTerminalError: true });
+        started = true;
+        const outcome = await runComplete;
+        if (outcome.error) throw outcome.error;
         return { accepted: true as const, runId: result.runId };
       } catch (error) {
-        if (!streamOwned) {
-          await this.#failStreamStart(subscription, error);
+        if (!started) {
+          this.#resolveRunWaiters({ terminalType: 'error', error });
+          this.#emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
+          this.#emit({ type: 'agent_end', reason: 'error' });
+          this.#displayState = { ...this.#displayState, isRunning: false, currentMessage: null };
+          this.#emitDisplayState();
         }
         throw error;
       }
     })();
 
     return { id, type, accepted };
+  }
+
+  /**
+   * Subscribe once to the active thread and start the persistent processing
+   * loop. Subsequent sends reuse the same subscription so agent-initiated wake
+   * runs (notification/state signals) stream into the TUI even while otherwise
+   * idle. Re-subscribes when the active thread changes.
+   */
+  async #ensurePersistentSubscription(session: Session<TState>): Promise<void> {
+    const threadId = session.threadId ?? this.#currentThreadId;
+    if (this.#persistentSubscription && this.#persistentSubscriptionThreadId === threadId) return;
+
+    await this.#teardownPersistentSubscription();
+
+    const subscription = (await session.subscribeToThread()) as StreamSubscription;
+    this.#persistentSubscription = subscription;
+    this.#persistentSubscriptionThreadId = threadId;
+    void this.#runPersistentLoop(subscription);
+  }
+
+  async #teardownPersistentSubscription(): Promise<void> {
+    const subscription = this.#persistentSubscription;
+    this.#persistentSubscription = undefined;
+    this.#persistentSubscriptionThreadId = null;
+    if (subscription) await subscription.unsubscribe?.();
+  }
+
+  /** Promise resolved when the next run reaches a terminal chunk. */
+  #awaitNextRun(): Promise<{ terminalType: string | undefined; error?: unknown }> {
+    return new Promise(resolve => {
+      this.#activeRunWaiters.push(resolve);
+    });
+  }
+
+  #resolveRunWaiters(outcome: { terminalType: string | undefined; error?: unknown }): void {
+    const waiters = this.#activeRunWaiters;
+    this.#activeRunWaiters = [];
+    for (const resolve of waiters) resolve(outcome);
+  }
+
+  /**
+   * Continuously consume the persistent thread stream, splitting it into runs
+   * delimited by terminal chunks. Each run emits the same message/agent events
+   * as the legacy per-send consumer, and resolves any callers waiting on run
+   * completion. Mirrors v0's `processSubscribedThreadStream`.
+   */
+  async #runPersistentLoop(subscription: StreamSubscription): Promise<void> {
+    while (this.#persistentSubscription === subscription) {
+      let assistantMessage: HarnessMessage = {
+        id: randomUUID(),
+        role: 'assistant',
+        content: [],
+        createdAt: new Date(),
+      };
+      let started = false;
+      const streamState: StreamMessageState = {
+        textContentById: new Map(),
+        thinkingContentById: new Map(),
+      };
+
+      // Ensure signal-content converters are loaded before processing chunks so
+      // the sync data-signal handlers can render notification/state/reminder parts.
+      await loadSignalConverters();
+
+      try {
+        let runHadChunks = false;
+        for await (const chunk of subscription.stream) {
+          if (this.#persistentSubscription !== subscription) return;
+          runHadChunks = true;
+          if (this.#handleStreamChunk(chunk, assistantMessage, started, streamState)) {
+            started = true;
+          }
+          if (isTerminalChunk(chunk)) {
+            const terminalType = getChunkType(chunk);
+            let runError: Error | undefined;
+            if (terminalType === 'error') {
+              runError = extractStreamError(chunk);
+              this.#emit({ type: 'error', error: runError });
+            }
+            if (started) this.#emit({ type: 'message_end', message: assistantMessage });
+            this.#emit({
+              type: 'agent_end',
+              reason:
+                terminalType === 'error'
+                  ? 'error'
+                  : terminalType === 'abort'
+                    ? 'aborted'
+                    : terminalType === 'tool-call-suspended'
+                      ? 'suspended'
+                      : 'complete',
+            });
+            this.#displayState = { ...this.#displayState, isRunning: false, currentMessage: null };
+            this.#emitDisplayState();
+            this.#resolveRunWaiters({ terminalType, error: runError });
+
+            // Reset accumulators for the next run on this persistent stream.
+            assistantMessage = { id: randomUUID(), role: 'assistant', content: [], createdAt: new Date() };
+            started = false;
+            streamState.textContentById.clear();
+            streamState.thinkingContentById.clear();
+          }
+        }
+        // Stream ended without a terminal chunk (subscription closed).
+        if (runHadChunks && started) {
+          this.#emit({ type: 'message_end', message: assistantMessage });
+          this.#emit({ type: 'agent_end', reason: 'complete' });
+          this.#displayState = { ...this.#displayState, isRunning: false, currentMessage: null };
+          this.#emitDisplayState();
+        }
+        this.#resolveRunWaiters({ terminalType: undefined });
+        return;
+      } catch (error) {
+        if (this.#persistentSubscription !== subscription) return;
+        this.#emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
+        this.#emit({ type: 'agent_end', reason: 'error' });
+        this.#displayState = { ...this.#displayState, isRunning: false, currentMessage: null };
+        this.#emitDisplayState();
+        this.#resolveRunWaiters({ terminalType: 'error', error });
+        return;
+      }
+    }
   }
 
   async sendNotificationSignal(signal: unknown): Promise<void> {
@@ -1074,73 +1336,21 @@ export class HarnessCompat<TState = {}> {
     });
   }
 
-  async #failStreamStart(subscription: StreamSubscription, error: unknown): Promise<void> {
-    this.#emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
-    this.#emit({ type: 'agent_end', reason: 'error' });
-    this.#displayState = { ...this.#displayState, isRunning: false, currentMessage: null };
-    await subscription.unsubscribe?.();
-    this.#emitDisplayState();
-  }
-
-  async #consumeSignalSubscription(
-    subscription: StreamSubscription,
-    options: { rejectOnTerminalError?: boolean } = {},
-  ): Promise<void> {
-    const assistantMessage: HarnessMessage = {
-      id: randomUUID(),
-      role: 'assistant',
-      content: [],
-      createdAt: new Date(),
-    };
-    let started = false;
-    let terminalChunk: unknown;
-    let rejection: unknown;
-    const streamState: StreamMessageState = {
-      textContentById: new Map(),
-      thinkingContentById: new Map(),
-    };
-
-    try {
-      for await (const chunk of subscription.stream) {
-        if (this.#handleStreamChunk(chunk, assistantMessage, started, streamState)) {
-          started = true;
-        }
-        if (isTerminalChunk(chunk)) {
-          terminalChunk = chunk;
-          break;
-        }
-      }
-
-      const terminalType = getChunkType(terminalChunk);
-      if (terminalType === 'error') {
-        const streamError = extractStreamError(terminalChunk);
-        this.#emit({ type: 'error', error: streamError });
-        if (options.rejectOnTerminalError) rejection = streamError;
-      }
-      if (started) this.#emit({ type: 'message_end', message: assistantMessage });
-
-      this.#emit({
-        type: 'agent_end',
-        reason:
-          terminalType === 'error'
-            ? 'error'
-            : terminalType === 'abort'
-              ? 'aborted'
-              : terminalType === 'tool-call-suspended'
-                ? 'suspended'
-                : 'complete',
-      });
-    } catch (error) {
-      rejection = error;
-      this.#emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
-      this.#emit({ type: 'agent_end', reason: 'error' });
-    } finally {
-      this.#displayState = { ...this.#displayState, isRunning: false, currentMessage: null };
-      await subscription.unsubscribe?.();
-      this.#emitDisplayState();
-    }
-
-    if (rejection) throw rejection;
+  /**
+   * Convert a live `data-signal` stream payload into a renderable message
+   * content part, mirroring v0's data-signal handling in processStreamChunk.
+   */
+  #signalDataToContent(data: Record<string, unknown>): HarnessMessageContent | undefined {
+    const converters = signalConvertersCache;
+    if (!converters) return undefined;
+    if (data.type === 'state') return converters.toStateSignalContent(data);
+    if (data.type === 'reactive' && data.tagName === 'system-reminder')
+      return converters.toSystemReminderContent(data);
+    if (data.type === 'notification' && data.tagName === 'notification-summary')
+      return converters.toNotificationSummaryContent(data);
+    if (data.type === 'notification' && data.tagName === 'notification') return converters.toNotificationContent(data);
+    if (data.type === 'reactive') return converters.toReactiveSignalContent(data);
+    return undefined;
   }
 
   #handleStreamChunk(
@@ -1314,6 +1524,54 @@ export class HarnessCompat<TState = {}> {
         resumeSchema: getStringField(payload, 'resumeSchema') ?? getStringField(record, 'resumeSchema'),
       });
       this.#emitDisplayState();
+      return started;
+    }
+
+    if (type === 'data-signal') {
+      const data =
+        record.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : payload ?? {};
+      const part = this.#signalDataToContent(data);
+      if (part) {
+        assistantMessage.content.push(part);
+        this.#displayState = { ...this.#displayState, currentMessage: assistantMessage };
+        this.#emit({ type: started ? 'message_update' : 'message_start', message: assistantMessage });
+        this.#emitDisplayState();
+        return true;
+      }
+      return started;
+    }
+
+    if (type === 'data-user-message') {
+      const data =
+        record.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : payload ?? {};
+      const message = signalConvertersCache?.toUserSignalMessage(data);
+      if (message?.content?.length) {
+        // Mirror v0: a user-message chunk is a standalone message (e.g. the run's
+        // triggering prompt or an injected signal), not assistant output. Close
+        // any in-progress assistant message, then emit the user message on its
+        // own so it never bleeds into assistant text (headless output relies on
+        // this separation).
+        if (assistantMessage.content.length > 0) {
+          this.#emit({ type: 'message_end', message: assistantMessage });
+        }
+        this.#emit({ type: 'message_start', message });
+        this.#emit({ type: 'message_end', message });
+        return started;
+      }
+      return started;
+    }
+
+    if (type === 'data-system-reminder') {
+      const data =
+        record.data && typeof record.data === 'object' ? (record.data as Record<string, unknown>) : payload ?? {};
+      const reminder = signalConvertersCache?.toSystemReminderContent(data);
+      if (reminder) {
+        assistantMessage.content.push(reminder);
+        this.#displayState = { ...this.#displayState, currentMessage: assistantMessage };
+        this.#emit({ type: started ? 'message_update' : 'message_start', message: assistantMessage });
+        this.#emitDisplayState();
+        return true;
+      }
       return started;
     }
 
