@@ -5,6 +5,28 @@ import type { MessageList, MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalInput, AgentStateSignalInput, CreatedAgentSignal } from '../agent/signals';
 import type { ApplyStateSignalResult } from '../agent/state-signals';
 import type { TripWireOptions } from '../agent/trip-wire';
+
+/**
+ * Abort callback exposed to processors and processor-workflow steps.
+ *
+ * Calling it as a function throws a `TripWire`, which is caught by the
+ * framework and converted into a structured `tripwire` result (recoverable;
+ * supports retry / metadata).
+ *
+ * Calling `abort.fatal(err)` throws a `FatalError` wrapping `err`, which
+ * the framework re-throws unwrapped to the caller — preserving class
+ * identity, custom properties, and the cause chain. Use this when the
+ * caller must receive your typed error directly (non-recoverable).
+ */
+export interface ProcessorAbortFn<TTripwireMetadata = unknown> {
+  (reason?: string, options?: TripWireOptions<TTripwireMetadata>): never;
+  /**
+   * Terminate execution immediately and propagate `error` to the caller
+   * unwrapped. The caller will receive the exact instance passed here, so
+   * `instanceof` checks and custom properties survive.
+   */
+  fatal: (error: unknown) => never;
+}
 import type { ModelRouterModelId } from '../llm/model';
 import type { MastraLanguageModel, OpenAICompatibleConfig, SharedProviderOptions } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
@@ -55,7 +77,7 @@ export interface ProcessorContext<TTripwireMetadata = unknown> extends Partial<O
    * @param reason - The reason for aborting
    * @param options - Options including retry flag and metadata
    */
-  abort: (reason?: string, options?: TripWireOptions<TTripwireMetadata>) => never;
+  abort: ProcessorAbortFn<TTripwireMetadata>;
   /** Optional runtime context with execution metadata */
   requestContext?: RequestContext;
   /**

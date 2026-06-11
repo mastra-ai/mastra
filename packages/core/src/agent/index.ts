@@ -1,4 +1,5 @@
 export { TripWire } from './trip-wire';
+export { FatalError, isFatalError } from './fatal-error';
 export { MessageList, convertMessages, aiV5ModelMessageToV2PromptMessage, TypeDetector } from './message-list';
 export type { OutputFormat } from './message-list';
 export * from './types';

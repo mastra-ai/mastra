@@ -9,6 +9,7 @@ import { MessageList, messagesAreEqual } from '../agent/message-list';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { isAgentCompatible } from '../agent/subagent';
 import type { SubAgent } from '../agent/subagent';
+import { attachFatal } from '../agent/fatal-error';
 import { TripWire } from '../agent/trip-wire';
 import type { AgentStreamOptions } from '../agent/types';
 import { MastraFGAPermissions } from '../auth/ee';
@@ -772,10 +773,14 @@ function createStepFromProcessor<TProcessorId extends string>(
         abortSignal,
       } = input;
 
-      // Create a minimal abort function that throws TripWire
-      const abort = (reason?: string, options?: { retry?: boolean; metadata?: unknown }): never => {
-        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-      };
+      // Create a minimal abort function that throws TripWire, plus a `.fatal()`
+      // escape hatch that propagates the original user error unwrapped.
+      const abort = attachFatal(
+        (reason?: string, options?: { retry?: boolean; metadata?: unknown }): never => {
+          throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+        },
+        processor.id,
+      );
       const initialMessageId = messageId;
       let currentMessageId = messageId;
       const rotateCurrentResponseMessageId = rotateResponseMessageId
