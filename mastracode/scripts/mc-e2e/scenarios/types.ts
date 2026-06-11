@@ -65,13 +65,25 @@ export type McE2eScenarioRuntime = {
   waitForScreenText: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
 };
 
+export type McE2eHarnessBackend = 'v0' | 'v1-compat';
+
 export type McE2ePrepareContext = {
   appDataDir: string;
   dbPath: string;
   homeDir: string;
   mastracodeDir: string;
   projectDir: string;
+  harnessBackend: McE2eHarnessBackend;
 };
+
+/**
+ * Returns the mastracode entrypoint module that exports `createMastraCode` for
+ * the active harness backend. Custom-entrypoint scenarios import from this so
+ * they exercise the same harness (v0 or v1-compat) as the rest of the suite.
+ */
+export function createMastraCodeModule(harnessBackend: McE2eHarnessBackend): string {
+  return harnessBackend === 'v1-compat' ? 'src/index-v1.ts' : 'src/index.ts';
+}
 
 export type McE2eScenario = {
   name: ScenarioName;

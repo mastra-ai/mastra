@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createMastraCodeModule } from './types.js';
 import type { McE2eScenario } from './types.js';
 
 const PROMPT = 'Trigger a retryable stream error once.';
@@ -11,7 +12,7 @@ export const streamErrorRetryScenario: McE2eScenario = {
   testName: 'retries a retryable provider error and completes the TUI response',
   useOpenAIModel: true,
   aimockFixture: 'stream-error-retry.json',
-  prepare({ mastracodeDir, projectDir }) {
+  prepare({ mastracodeDir, projectDir, harnessBackend }) {
     mkdirSync(projectDir, { recursive: true });
     writeFileSync(
       join(projectDir, '.mc-e2e-stream-error-retry-entrypoint.ts'),
@@ -34,7 +35,7 @@ globalThis.fetch = async (input, init) => {
   return originalFetch(input, init);
 };
 
-const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);
+const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, '${createMastraCodeModule(harnessBackend)}')).href);
 const { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);
 const { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);
 

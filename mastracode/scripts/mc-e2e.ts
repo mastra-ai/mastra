@@ -225,6 +225,7 @@ async function prepareScenarioRun({
   options,
   fixturesDir,
   mainFile,
+  harnessBackend,
   mastracodeDir,
   runRoot,
   tsxBin,
@@ -233,6 +234,7 @@ async function prepareScenarioRun({
   options: Options;
   fixturesDir: string;
   mainFile: string;
+  harnessBackend: 'v0' | 'v1-compat';
   mastracodeDir: string;
   runRoot: string;
   tsxBin: string;
@@ -266,6 +268,7 @@ async function prepareScenarioRun({
     homeDir: isolatedHome,
     mastracodeDir,
     projectDir,
+    harnessBackend,
   };
   await scenario.prepare?.(scenarioContext);
 
@@ -354,6 +357,7 @@ for (const scenario of selectedScenarios) {
     options,
     fixturesDir,
     mainFile,
+    harnessBackend,
     mastracodeDir,
     runRoot: join(tmpDir, 'runs', scenario.name),
     tsxBin,
@@ -365,14 +369,6 @@ for (const scenario of selectedScenarios) {
 }
 
 process.stdout.write(`[mc-e2e] harness backend: ${harnessBackend} (entrypoint: ${mainFile})\n`);
-if (harnessBackend === 'v1-compat') {
-  const overrideScenarios = selectedScenarios.filter(scenario => scenario.entrypoint).map(scenario => scenario.name);
-  if (overrideScenarios.length > 0) {
-    process.stdout.write(
-      `[mc-e2e] note: scenarios with custom entrypoints still launch their own bootstrap (v0 createMastraCode): ${overrideScenarios.join(', ')}\n`,
-    );
-  }
-}
 process.stdout.write(
   `[mc-e2e] running ${runs.map(run => run.scenarioName).join(', ')} under @microsoft/tui-test (${options.columns}x${options.rows}, mode=${options.mode}, jobs=${options.jobs})...\n`,
 );

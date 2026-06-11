@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createMastraCodeModule } from './types.js';
 import type { McE2eScenario } from './types.js';
 
 function visit(value: unknown, visitor: (value: any) => void): void {
@@ -37,7 +38,7 @@ export const openaiStrictSchemaScenario: McE2eScenario = {
   testName: 'sends strict OpenAI-compatible optional tool schemas from a TUI prompt',
   useOpenAIModel: true,
   aimockFixture: 'openai-strict-schema.json',
-  prepare({ mastracodeDir, projectDir }) {
+  prepare({ mastracodeDir, projectDir, harnessBackend }) {
     mkdirSync(projectDir, { recursive: true });
     writeFileSync(
       join(projectDir, '.mc-e2e-openai-strict-entrypoint.ts'),
@@ -47,7 +48,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 const mastracodeDir = ${JSON.stringify(mastracodeDir)};
-const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);
+const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, '${createMastraCodeModule(harnessBackend)}')).href);
 const { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);
 const { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);
 

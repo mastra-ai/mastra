@@ -527,8 +527,21 @@ export class HarnessCompat<TState = {}> {
     return typeof memory === 'function' ? await memory({ mastra: this.#config.mastra, requestContext }) : memory;
   }
 
-  async _addThread(thread: HarnessThread): Promise<void> {
+  /**
+   * Resolve the configured memory, tolerating `memory: false`/undefined. Returns
+   * undefined when memory is disabled so thread/message helpers can fall back to
+   * harness session storage instead of throwing (mirrors v0, which lists threads
+   * from harness storage rather than agent memory).
+   */
+  async #tryResolveMemory(): Promise<MastraMemory | undefined> {
+    if (!this.#config.memory) return undefined;
     const memory = await this.#resolveMemory();
+    return memory && typeof (memory as { listThreads?: unknown }).listThreads === 'function' ? memory : undefined;
+  }
+
+  async _addThread(thread: HarnessThread): Promise<void> {
+    const memory = await this.#tryResolveMemory();
+    if (!memory) return;
     await memory.createThread({
       threadId: thread.id,
       resourceId: thread.resourceId,
@@ -544,13 +557,22 @@ export class HarnessCompat<TState = {}> {
   }: { title?: string; resourceId?: string; metadata?: Record<string, unknown> } = {}): Promise<HarnessThread> {
     const threadId = randomUUID();
     const threadResourceId = resourceId ?? this.#resourceId;
-    const memory = await this.#resolveMemory();
-    const thread = await memory.createThread({
-      threadId,
-      resourceId: threadResourceId,
-      title,
-      metadata,
-    });
+    const memory = await this.#tryResolveMemory();
+    const thread = memory
+      ? await memory.createThread({
+          threadId,
+          resourceId: threadResourceId,
+          title,
+          metadata,
+        })
+      : {
+          id: threadId,
+          resourceId: threadResourceId,
+          title,
+          metadata,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
 
     const modeId = this.#state.modeId ?? this.getCurrentModeId();
     const modelId = this.getCurrentModelId();
@@ -583,11 +605,13 @@ export class HarnessCompat<TState = {}> {
   }
 
   async listThreads(options?: { allResources?: boolean; includeForkedSubagents?: boolean }): Promise<HarnessThread[]> {
-    const [sessions, memory] = await Promise.all([this.#harnessV1.listSessions(), this.#resolveMemory()]);
-    const memoryResult = await memory.listThreads({
-      perPage: false,
-      filter: options?.allResources ? undefined : { resourceId: this.#resourceId },
-    } as any);
+    const [sessions, memory] = await Promise.all([this.#harnessV1.listSessions(), this.#tryResolveMemory()]);
+    const memoryResult = memory
+      ? await memory.listThreads({
+          perPage: false,
+          filter: options?.allResources ? undefined : { resourceId: this.#resourceId },
+        } as any)
+      : { threads: [] };
 
     const byKey = new Map<string, HarnessThread>();
     for (const thread of memoryResult.threads ?? []) {
@@ -638,7 +662,8 @@ export class HarnessCompat<TState = {}> {
 
   async renameThread({ title }: { title: string }): Promise<void> {
     if (!this.#currentThreadId) return;
-    const memory = await this.#resolveMemory();
+    const memory = await this.#tryResolveMemory();
+    if (!memory) return;
     const thread = await memory.getThreadById({ threadId: this.#currentThreadId });
     if (!thread) return;
     await memory.saveThread({
@@ -861,7 +886,7 @@ export class HarnessCompat<TState = {}> {
     metadata?: Record<string, unknown>;
   }): Promise<HarnessMessage | null> {
     if (!this.#currentThreadId) return null;
-    const memory = await this.#resolveMemory();
+    const memory = await this.#tryResolveMemory();
     const createdAt = new Date();
     const dbMessage = {
       id: randomUUID(),
@@ -878,7 +903,7 @@ export class HarnessCompat<TState = {}> {
         },
       },
     };
-    await memory.saveMessages({ messages: [dbMessage as any] });
+    if (memory) await memory.saveMessages({ messages: [dbMessage as any] });
     return {
       id: dbMessage.id,
       role,
@@ -1392,7 +1417,8 @@ export class HarnessCompat<TState = {}> {
     const key = typeof setting === 'string' ? setting : setting.key;
     const settingValue = typeof setting === 'string' ? value : setting.value;
     if (!this.#currentThreadId) return;
-    const memory = await this.#resolveMemory();
+    const memory = await this.#tryResolveMemory();
+    if (!memory) return;
     const thread = await memory.getThreadById({ threadId: this.#currentThreadId });
     if (!thread) return;
     await memory.saveThread({

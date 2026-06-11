@@ -1,12 +1,13 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createMastraCodeModule } from './types.js';
 import type { McE2eScenario } from './types.js';
 
 export const mcpServerConfigScenario = {
   name: 'mcp-server-config',
   description: 'shows programmatic MCP server configuration in the real TUI status command',
   testName: 'renders configured stdio MCP servers in /mcp status through the real TUI',
-  prepare({ mastracodeDir, projectDir }) {
+  prepare({ mastracodeDir, projectDir, harnessBackend }) {
     mkdirSync(projectDir, { recursive: true });
     writeFileSync(
       join(projectDir, '.mc-e2e-mcp-config-entrypoint.ts'),
@@ -14,7 +15,7 @@ export const mcpServerConfigScenario = {
 import { pathToFileURL } from 'node:url';
 
 const mastracodeDir = ${JSON.stringify(mastracodeDir)};
-const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);
+const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, '${createMastraCodeModule(harnessBackend)}')).href);
 const { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);
 const { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);
 

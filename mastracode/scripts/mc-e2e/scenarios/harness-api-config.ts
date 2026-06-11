@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect } from '@microsoft/tui-test';
+import { createMastraCodeModule } from './types.js';
 import type { McE2eScenario } from './types.js';
 
 const CONFIG_DIR = '.harness-api-e2e';
@@ -11,7 +12,7 @@ export const harnessApiConfigScenario: McE2eScenario = {
   description: 'Launch a custom createMastraCode entrypoint and verify public config reaches the real TUI.',
   testName: 'honors createMastraCode configDir and initialState in the TUI',
   projectFixture: 'long-branch',
-  prepare({ mastracodeDir, projectDir }) {
+  prepare({ mastracodeDir, projectDir, harnessBackend }) {
     const configRoot = join(projectDir, CONFIG_DIR);
     const wrongConfigRoot = join(projectDir, WRONG_CONFIG_DIR);
     mkdirSync(join(configRoot, 'commands'), { recursive: true });
@@ -32,7 +33,7 @@ export const harnessApiConfigScenario: McE2eScenario = {
 import { pathToFileURL } from 'node:url';
 
 const mastracodeDir = ${JSON.stringify(mastracodeDir)};
-const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);
+const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, '${createMastraCodeModule(harnessBackend)}')).href);
 const { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);
 const { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);
 

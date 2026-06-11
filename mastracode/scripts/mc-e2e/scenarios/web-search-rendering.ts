@@ -3,6 +3,7 @@ import { join } from 'node:path';
 
 import { expect } from '@microsoft/tui-test';
 
+import { createMastraCodeModule } from './types.js';
 import type { McE2eScenario } from './types.js';
 
 export const webSearchRenderingScenario: McE2eScenario = {
@@ -11,7 +12,7 @@ export const webSearchRenderingScenario: McE2eScenario = {
   testName: 'renders web search tool results without raw provider payloads',
   useOpenAIModel: true,
   aimockFixture: 'web-search-rendering.json',
-  prepare({ mastracodeDir, projectDir }) {
+  prepare({ mastracodeDir, projectDir, harnessBackend }) {
     mkdirSync(projectDir, { recursive: true });
     writeFileSync(
       join(projectDir, '.mc-e2e-web-search-rendering-entrypoint.ts'),
@@ -21,7 +22,7 @@ import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 const mastracodeDir = ${JSON.stringify(mastracodeDir)};
-const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, 'src/index.ts')).href);
+const { createMastraCode } = await import(pathToFileURL(join(mastracodeDir, '${createMastraCodeModule(harnessBackend)}')).href);
 const { MastraTUI } = await import(pathToFileURL(join(mastracodeDir, 'src/tui/index.ts')).href);
 const { getCurrentVersion } = await import(pathToFileURL(join(mastracodeDir, 'src/utils/update-check.ts')).href);
 
