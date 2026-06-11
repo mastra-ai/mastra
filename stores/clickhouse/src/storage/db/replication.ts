@@ -179,12 +179,32 @@ export function addOnClusterToDDL(sql: string, replication?: ClickhouseReplicati
   return out;
 }
 
+function rewriteEngineClauses(sql: string, replication: ClickhouseReplicationConfig): string {
+  return sql.replace(/ENGINE\s*=\s*(\w+)\s*/gi, (match, engineName: string, offset: number, source: string) => {
+    const argsStart = offset + match.length;
+    if (source[argsStart] !== '(') {
+      return `ENGINE = ${buildReplicatedTableEngine(engineName, replication)}`;
+    }
+
+    let depth = 0;
+    for (let i = argsStart; i < source.length; i++) {
+      const char = source[i];
+      if (char === '(') depth++;
+      else if (char === ')') {
+        depth--;
+        if (depth === 0) {
+          const engine = `${engineName}${source.slice(argsStart, i + 1)}`;
+          return `ENGINE = ${buildReplicatedTableEngine(engine, replication)}`;
+        }
+      }
+    }
+
+    return match;
+  });
+}
+
 export function applyReplicationToDDL(sql: string, replication?: ClickhouseReplicationConfig): string {
-  const withReplicatedEngine = replication
-    ? sql.replace(/ENGINE\s*=\s*(\w+\s*(?:\([^)]*\))?)/gi, (_match, engine: string) => {
-        return `ENGINE = ${buildReplicatedTableEngine(engine, replication)}`;
-      })
-    : sql;
+  const withReplicatedEngine = replication ? rewriteEngineClauses(sql, replication) : sql;
   return addOnClusterToDDL(withReplicatedEngine, replication);
 }
 

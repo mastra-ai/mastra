@@ -1,3 +1,4 @@
+import { createClient } from '@clickhouse/client';
 import { TABLE_SCHEMAS, TABLE_SPANS } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 import {
@@ -134,6 +135,18 @@ ORDER BY id`;
     );
   });
 
+  it('rewrites table DDL engines with nested parentheses in engine args', () => {
+    const ddl = `CREATE TABLE IF NOT EXISTS mastra_threads (
+  id String
+)
+ENGINE = ReplacingMergeTree(toUInt64(updatedAt))
+ORDER BY id`;
+
+    expect(applyReplicationToDDL(ddl, { cluster: 'cluster-a' })).toContain(
+      "ENGINE = ReplicatedReplacingMergeTree('/clickhouse/tables/{shard}/{database}/{table}', '{replica}', toUInt64(updatedAt))",
+    );
+  });
+
   it('validates configured string values', () => {
     expect(() => validateReplicationConfig({ cluster: '   ' })).toThrow(
       'replication.cluster must be a non-empty string',
@@ -189,5 +202,26 @@ ORDER BY id`;
     );
     expect(queries).toHaveLength(1);
     expect(queries[0]).toContain('FROM system.tables');
+  });
+
+  it('emits ON CLUSTER syntax accepted by ClickHouse', async () => {
+    const client = createClient({
+      url: 'http://localhost:8123',
+      username: 'default',
+      password: 'password',
+    });
+
+    const query = addOnClusterToDDL(
+      'CREATE TABLE IF NOT EXISTS mastra_cluster_syntax_check (id String) ENGINE = MergeTree ORDER BY id',
+      {
+        cluster: 'mastra_missing_cluster',
+      },
+    );
+
+    try {
+      await expect(client.command({ query })).rejects.toMatchObject({ type: 'CLUSTER_DOESNT_EXIST' });
+    } finally {
+      await client.close();
+    }
   });
 });

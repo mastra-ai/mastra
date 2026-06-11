@@ -257,11 +257,11 @@ new ClickhouseStoreVNext({
 
 Set `cluster` to add `ON CLUSTER` to Mastra-owned DDL such as table creation, materialized view creation, column migrations, TTL changes, and table drops.
 
-Manual maintenance such as `optimizeTable()` and `materializeTtl()` runs on every replica when `cluster` is set. These are heavy operations on a large cluster — prefer running them out of peak hours, and let routine merges happen on the background merge queue rather than triggering them on every restart.
+Manual maintenance such as `optimizeTable()` and `materializeTtl()` runs on every replica when `cluster` is set. These operations can be expensive on a large cluster. Prefer running them outside peak hours, and let routine merges happen on the background merge queue rather than triggering them on every restart.
 
-If existing Mastra tables use local `MergeTree` or `ReplacingMergeTree` engines, initialization fails while `replication` is enabled. Mastra refuses to silently convert local tables because copy-and-swap is unsafe across replicas. To migrate, recreate the affected tables as `Replicated*` (typically: rename the local table, `CREATE TABLE ... ENGINE = ReplicatedMergeTree(...) ON CLUSTER ...`, `INSERT INTO ... SELECT * FROM <renamed_local>`, then drop the renamed local table) before enabling replication.
+If existing Mastra tables use local `MergeTree` or `ReplacingMergeTree` engines, initialization fails while `replication` is enabled. Mastra refuses to silently convert local tables because copy-and-swap is unsafe across replicas. To migrate, recreate the affected tables as `Replicated*` before enabling replication. The typical sequence is: rename the local table, run `CREATE TABLE ... ENGINE = ReplicatedMergeTree(...) ON CLUSTER ...`, run `INSERT INTO ... SELECT * FROM <renamed_local>`, then drop the renamed local table.
 
-Do not set `replication` on ClickHouse Cloud. Cloud rewrites `MergeTree` to `SharedMergeTree` server-side, and emitting explicit `ReplicatedMergeTree` engines produces incorrect DDL. `replication` is only for self-managed multi-replica clusters.
+Do not set `replication` on ClickHouse Cloud. Cloud rewrites `MergeTree` to `SharedMergeTree` server-side, and explicit `ReplicatedMergeTree` engines produce incorrect DDL. `replication` is only for self-managed multi-replica clusters.
 
 ### Observability domain options
 

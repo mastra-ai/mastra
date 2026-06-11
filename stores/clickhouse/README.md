@@ -91,9 +91,9 @@ const store = new ClickhouseStore({
 });
 ```
 
-The default `zookeeperPath` is `/clickhouse/tables/{shard}/{database}/{table}`. If your cluster's existing tables use a different layout (for example `/clickhouse/tables/{shard}/{table}` without the `{database}` segment), set `zookeeperPath` explicitly to match — Mastra does not infer your cluster's convention from Keeper.
+The default `zookeeperPath` is `/clickhouse/tables/{shard}/{database}/{table}`. If your cluster's existing tables use a different layout (for example `/clickhouse/tables/{shard}/{table}` without the `{database}` segment), set `zookeeperPath` explicitly to match. Mastra does not infer your cluster's convention from Keeper.
 
-Manual maintenance such as `optimizeTable()` and `materializeTtl()` runs on every replica when `cluster` is set. These are heavy operations on a large cluster — prefer running them out of peak hours.
+Manual maintenance such as `optimizeTable()` and `materializeTtl()` runs on every replica when `cluster` is set. These operations can be expensive on a large cluster. Prefer running them outside peak hours.
 
 If Mastra finds an existing local `MergeTree` or `ReplacingMergeTree` table while replication is enabled, initialization fails instead of silently mixing local and replicated tables. Migrate existing local tables manually before enabling this option.
 
