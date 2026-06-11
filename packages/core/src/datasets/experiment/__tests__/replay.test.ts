@@ -217,6 +217,33 @@ describe('buildReplayHooks', () => {
     expect(report.argMismatches).toEqual([{ toolName: 'lookup', sequence: 0, spanId: 's1' }]);
   });
 
+  it('ignores nullish runtime-injected override keys when diagnosing arg drift', async () => {
+    const state = createReplayState(recordedEvents(), TRACE_ID);
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    // The tool builder splices _background/suspendedToolRunId/resumeData into
+    // every tool's args schema; models emit them as nulls and capture points
+    // differ on their presence. Same semantic question → no mismatch.
+    expect(
+      callHook(hooks, 'lookup', { key: 'first', _background: null, suspendedToolRunId: null, resumeData: null }),
+    ).toEqual({ proceed: false, output: { value: 'one' } });
+
+    expect(finalizeReplayReport(state).argMismatches).toEqual([]);
+  });
+
+  it('still flags a mismatch when an injected override key carries a real value', async () => {
+    const state = createReplayState(recordedEvents(), TRACE_ID);
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    // _background: true changes execution semantics — that is a real drift.
+    expect(callHook(hooks, 'lookup', { key: 'first', _background: true })).toEqual({
+      proceed: false,
+      output: { value: 'one' },
+    });
+
+    expect(finalizeReplayReport(state).argMismatches).toEqual([{ toolName: 'lookup', sequence: 0, spanId: 's1' }]);
+  });
+
   it('re-throws recorded errors so the agent sees the same failure', async () => {
     const events = extractToolReplayEvents([
       toolSpan('e1', 'flaky', 1000, { error: { name: 'TimeoutError', message: 'timed out' } }),

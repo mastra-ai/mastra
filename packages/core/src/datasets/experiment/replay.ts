@@ -272,6 +272,26 @@ export function createReplayState(events: ToolReplayEvent[], sourceTraceId: stri
 }
 
 /**
+ * Override keys the tool builder splices into every tool's args schema
+ * (background runs and suspend/resume — see tools/tool-builder/builder.ts).
+ * Models routinely emit them as nulls, and capture points differ on whether
+ * they're present, so nullish values are ignored when diagnosing arg drift —
+ * `{ city: 'Paris' }` recorded vs `{ city: 'Paris', _background: null }`
+ * requested is the same question. Non-null values (e.g. `_background: true`)
+ * still compare: they change execution semantics.
+ */
+const RUNTIME_INJECTED_ARG_KEYS = ['_background', 'suspendedToolRunId', 'resumeData'] as const;
+
+function normalizeArgsForComparison(args: unknown): unknown {
+  if (typeof args !== 'object' || args === null || Array.isArray(args)) return args;
+  const normalized = { ...(args as Record<string, unknown>) };
+  for (const key of RUNTIME_INJECTED_ARG_KEYS) {
+    if (key in normalized && normalized[key] == null) delete normalized[key];
+  }
+  return normalized;
+}
+
+/**
  * Build per-execution ToolHooks that replay recorded events.
  *
  * Matching is per-tool FIFO: the next unconsumed event for the called tool is
@@ -306,7 +326,7 @@ export function buildReplayHooks(
       }
 
       state.replayedCount++;
-      if (!deepEqual(input, event.input)) {
+      if (!deepEqual(normalizeArgsForComparison(input), normalizeArgsForComparison(event.input))) {
         state.argMismatches.push({ toolName, sequence: event.sequence, spanId: event.spanId });
       }
 
