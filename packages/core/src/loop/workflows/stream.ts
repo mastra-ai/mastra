@@ -181,6 +181,13 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
         safeEnqueue(controller, chunk);
       };
 
+      // The agentic loop runs on the evented engine, whose factory is
+      // registered when the evented module loads. Load it dynamically — a
+      // static import would form an init-time cycle with the base `Workflow`
+      // class (see `createEventedWorkflow`). `import()` is cached, and this
+      // module is already loaded whenever a `Mastra` exists.
+      await import('../../workflows/evented/workflow');
+
       const agenticLoopWorkflow = createAgenticLoopWorkflow<Tools, OUTPUT>({
         resumeContext,
         messageId: messageId!,

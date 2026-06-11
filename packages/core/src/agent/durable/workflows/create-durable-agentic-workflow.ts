@@ -5,8 +5,8 @@ import type { PubSub } from '../../../events/pubsub';
 import type { Mastra } from '../../../mastra';
 import { createObservabilityContext, InternalSpans } from '../../../observability';
 import { RequestContext } from '../../../request-context';
-import { createWorkflow } from '../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
+import { createEventedWorkflow } from '../../../workflows/create';
 import { MessageList } from '../../message-list';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { globalRunRegistry } from '../run-registry';
@@ -88,6 +88,11 @@ type IterationState = z.infer<typeof iterationStateSchema>;
  * process restarts and execution engine replays.
  */
 export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOptions) {
+  // Ensure the evented workflow module is loaded so the factory is registered.
+  // This is synchronous because the evented module self-registers via
+  // __registerEventedCreateWorkflow at import time, but the dynamic import()
+  // must have been triggered before this function is called. The caller
+  // (DurableAgent.executeWorkflow) is responsible for awaiting the import.
   const maxSteps = options?.maxSteps ?? DurableAgentDefaults.MAX_STEPS;
 
   // Create the LLM execution step - tools and model are resolved from Mastra at runtime
@@ -106,14 +111,23 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
   // Note: foreach runs with concurrency: 1 (sequential) because tool approval
   // and suspension require sequential execution to properly handle suspend/resume.
   // The workflow is created once at startup and reused for all runs.
-  const singleIterationWorkflow = createWorkflow({
+  const singleIterationWorkflow = createEventedWorkflow({
     id: DurableStepIds.AGENTIC_EXECUTION,
     inputSchema: iterationStateSchema,
     outputSchema: iterationStateSchema,
     options: {
-      shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+      shouldPersistSnapshot: params => {
+        // We need a persisted snapshot record to support `resumeStream()`.
+        // - Create the initial record early ("pending")
+        // - Update it when execution is suspended ("paused"/"suspended")
+        // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+        return (
+          params.workflowStatus === 'pending' ||
+          params.workflowStatus === 'paused' ||
+          params.workflowStatus === 'suspended'
+        );
+      },
       validateInputs: false,
-      sharePubsub: true,
       // Internal durable-agent execution plumbing — hide workflow spans;
       // the agent/tool/model spans within still surface for users.
       tracingPolicy: {
@@ -201,12 +215,22 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
 
   // Create the main agentic loop workflow with dowhile
   return (
-    createWorkflow({
+    createEventedWorkflow({
       id: DurableStepIds.AGENTIC_LOOP,
       inputSchema: durableAgenticInputSchema,
       outputSchema: durableAgenticOutputSchema,
       options: {
-        shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'suspended',
+        shouldPersistSnapshot: params => {
+          // We need a persisted snapshot record to support `resumeStream()`.
+          // - Create the initial record early ("pending")
+          // - Update it when execution is suspended ("paused"/"suspended")
+          // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+          return (
+            params.workflowStatus === 'pending' ||
+            params.workflowStatus === 'paused' ||
+            params.workflowStatus === 'suspended'
+          );
+        },
         validateInputs: false,
         // Internal durable-agent execution plumbing — see singleIterationWorkflow.
         tracingPolicy: {
@@ -241,6 +265,8 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         const shouldContinue = state.lastStepResult?.isContinued === true;
         const runMaxSteps = state.options?.maxSteps ?? maxSteps;
         const underMaxSteps = state.iterationCount < runMaxSteps;
+
+        // condition: continue if last step produced tool calls and under max steps
 
         return shouldContinue && underMaxSteps;
       })

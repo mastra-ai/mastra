@@ -130,6 +130,8 @@ describe('DurableAgent background tasks via stream()', () => {
     await pubsub.close();
     const bgStore = await storage.getStore('backgroundTasks');
     await bgStore?.dangerouslyClearAll();
+    const wfStore = await storage.getStore('workflows');
+    await wfStore?.dangerouslyClearAll();
   });
 
   it('dispatches a bg task and returns placeholder in stream', async () => {
@@ -530,6 +532,8 @@ describe('DurableAgent.streamUntilIdle', () => {
     await mastra.backgroundTaskManager?.shutdown();
     const bgStore = await storage.getStore('backgroundTasks');
     await bgStore?.dangerouslyClearAll();
+    const wfStore = await storage.getStore('workflows');
+    await wfStore?.dangerouslyClearAll();
   });
 
   it('falls through to a plain stream when no bg manager or memory is configured', async () => {

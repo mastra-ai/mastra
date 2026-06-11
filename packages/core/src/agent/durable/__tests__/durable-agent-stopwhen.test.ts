@@ -207,13 +207,14 @@ describe('DurableAgent stopWhen callback', () => {
 
       const stopWhenCalled = vi.fn().mockReturnValue(false);
 
-      const { runId, cleanup } = await durableAgent.stream('What is the weather in Toronto?', {
+      const result = await durableAgent.stream('What is the weather in Toronto?', {
         stopWhen: stopWhenCalled,
       });
+      await drain(result.fullStream as ReadableStream<any>);
 
-      expect(runId).toBeDefined();
+      expect(result.runId).toBeDefined();
       // stopWhen is passed to the stream options
-      cleanup();
+      result.cleanup();
     });
 
     it('should handle prepare options with maxSteps', async () => {
@@ -261,13 +262,14 @@ describe('DurableAgent stopWhen callback', () => {
         return steps.some((step: any) => step.content?.some((item: any) => item.type === 'tool-result'));
       });
 
-      const { runId, cleanup } = await durableAgent.stream('Get the data', {
+      const result = await durableAgent.stream('Get the data', {
         stopWhen,
         maxSteps: 10,
       });
+      await drain(result.fullStream as ReadableStream<any>);
 
-      expect(runId).toBeDefined();
-      cleanup();
+      expect(result.runId).toBeDefined();
+      result.cleanup();
     });
 
     it('should handle stopWhen with text and tool calls', async () => {
@@ -291,13 +293,14 @@ describe('DurableAgent stopWhen callback', () => {
 
       const stopWhen = vi.fn().mockReturnValue(false);
 
-      const { runId, cleanup } = await durableAgent.stream('Search for test', {
+      const result = await durableAgent.stream('Search for test', {
         stopWhen,
         maxSteps: 5,
       });
+      await drain(result.fullStream as ReadableStream<any>);
 
-      expect(runId).toBeDefined();
-      cleanup();
+      expect(result.runId).toBeDefined();
+      result.cleanup();
     });
   });
 
@@ -315,13 +318,14 @@ describe('DurableAgent stopWhen callback', () => {
 
       const stopWhen = vi.fn().mockReturnValue(false);
 
-      const { runId, cleanup } = await durableAgent.stream('Hello', {
+      const result = await durableAgent.stream('Hello', {
         stopWhen,
         maxSteps: 3,
       });
+      await drain(result.fullStream as ReadableStream<any>);
 
-      expect(runId).toBeDefined();
-      cleanup();
+      expect(result.runId).toBeDefined();
+      result.cleanup();
     });
 
     it('should honor per-stream maxSteps above the durable agent default', async () => {
@@ -371,12 +375,13 @@ describe('DurableAgent stopWhen callback', () => {
       // Stop immediately
       const stopWhen = vi.fn().mockReturnValue(true);
 
-      const { runId, cleanup } = await durableAgent.stream('Hello', {
+      const result = await durableAgent.stream('Hello', {
         stopWhen,
       });
+      await drain(result.fullStream as ReadableStream<any>);
 
-      expect(runId).toBeDefined();
-      cleanup();
+      expect(result.runId).toBeDefined();
+      result.cleanup();
     });
   });
 
@@ -436,12 +441,13 @@ describe('DurableAgent stopWhen edge cases', () => {
       return false;
     });
 
-    const { runId, cleanup } = await durableAgent.stream('Hello', {
+    const result = await durableAgent.stream('Hello', {
       stopWhen,
     });
+    await drain(result.fullStream as ReadableStream<any>);
 
-    expect(runId).toBeDefined();
-    cleanup();
+    expect(result.runId).toBeDefined();
+    result.cleanup();
   });
 
   it('should accept stopWhen callback in stream options', async () => {
@@ -457,12 +463,13 @@ describe('DurableAgent stopWhen edge cases', () => {
 
     const stopWhen = vi.fn().mockReturnValue(false);
 
-    const { runId, cleanup } = await durableAgent.stream('Hello', {
+    const result = await durableAgent.stream('Hello', {
       stopWhen,
     });
+    await drain(result.fullStream as ReadableStream<any>);
 
-    expect(runId).toBeDefined();
-    cleanup();
+    expect(result.runId).toBeDefined();
+    result.cleanup();
   });
 
   it('should handle async stopWhen callback', async () => {
@@ -482,11 +489,12 @@ describe('DurableAgent stopWhen edge cases', () => {
       return steps.length > 0;
     });
 
-    const { runId, cleanup } = await durableAgent.stream('Hello', {
+    const result = await durableAgent.stream('Hello', {
       stopWhen,
     });
+    await drain(result.fullStream as ReadableStream<any>);
 
-    expect(runId).toBeDefined();
-    cleanup();
+    expect(result.runId).toBeDefined();
+    result.cleanup();
   });
 });

@@ -1247,7 +1247,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               runId: nestedRunId,
               status: 'pending',
               value: {},
-              context: {},
+              context: prevResult?.status === 'success' ? { input: prevResult.output } : {},
               activePaths: [],
               serializedStepGraph: nestedWorkflow.serializedStepGraph,
               activeStepsPath: {},

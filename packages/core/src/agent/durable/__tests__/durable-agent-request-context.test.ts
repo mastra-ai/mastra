@@ -102,11 +102,12 @@ describe('DurableAgent RequestContext reserved keys', () => {
       const requestContext = new RequestContext();
       requestContext.set('userInfo', { role: 'admin' });
 
-      const { runId, cleanup } = await durableAgent.stream('Hello', {
+      const { runId, output, cleanup } = await durableAgent.stream('Hello', {
         requestContext,
       });
 
       expect(runId).toBeDefined();
+      await output.consumeStream();
       cleanup();
     });
   });
@@ -241,12 +242,15 @@ describe('DurableAgent RequestContext reserved keys', () => {
       requestContext.set('userId', 'user-123');
 
       // Stream to actually execute the tool
-      const { cleanup } = await durableAgent.stream('Use the tool', {
+      const { output, cleanup } = await durableAgent.stream('Use the tool', {
         requestContext,
       });
 
-      // Wait for execution to complete
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Drain the stream to ensure tool execution completes
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      for await (const _chunk of output.fullStream) {
+        // drain
+      }
       cleanup();
 
       // Verify requestContext was passed through to tool.execute()

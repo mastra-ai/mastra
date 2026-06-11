@@ -6244,6 +6244,13 @@ export class Agent<
         this.#mastra?.getToolPayloadTransform?.() ?? (this.#mastra as any)?.getToolPayloadProjection?.(),
       );
 
+    // The prepare-stream workflow runs on the evented engine, whose factory is
+    // registered when the evented module loads. Load it dynamically — a static
+    // import would form an init-time cycle with the base `Workflow` class (see
+    // `createEventedWorkflow`). `import()` is cached, and this module is already
+    // loaded whenever a `Mastra` exists.
+    await import('../workflows/evented/workflow');
+
     // Create the workflow with all necessary context
     const executionWorkflow = createPrepareStreamWorkflow<OUTPUT>({
       capabilities: capabilities as AgentCapabilities,
