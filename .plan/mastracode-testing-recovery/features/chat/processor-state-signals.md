@@ -75,10 +75,11 @@
 - `mastracode/src/tui/handlers/__tests__/message.test.ts` — streamed reactive/state signal rendering and inline-boundary ordering.
 - `mastracode/src/headless-integration.test.ts` — `--output-format stream-json` keeps state-signal content parts visible in NDJSON message events and still emits the completion marker.
 - `mastracode/scripts/mc-e2e/scenarios/state-signal-rendering.ts` — checked-in PTY e2e coverage for a custom entrypoint that emits `agent.sendStateSignal()` into the active TUI thread, renders `State snapshot: browser` with the state preview, and verifies the captured AIMock request body includes the state contents.
+- `mastracode/scripts/mc-e2e/scenarios/state-signal-reload.ts` — checked-in PTY e2e coverage that seeds a persisted signal DB message, reloads it through `/threads`, and verifies loaded history reconstructs `State delta: browser` with the persisted preview.
 
 ## Missing tests
 
-- End-to-end Mastra Code run with a live browser processor producing snapshot/delta state and then reloading the same thread to prove loaded-history parity.
+- End-to-end Mastra Code run with a live browser processor producing snapshot/delta state from real browser context, beyond the public `sendStateSignal()`/seeded-history paths.
 - Snapshot/delta pruning regression for very long browser sessions where earlier snapshots fall out of the active message window.
 
 ## Known risks / regressions

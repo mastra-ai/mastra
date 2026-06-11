@@ -31,6 +31,7 @@ import { quietSettingsScenario } from './quiet-settings.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { startupScenario } from './startup.js';
 import { stateCommandsScenario } from './state-commands.js';
+import { stateSignalReloadScenario } from './state-signal-reload.js';
 import { stateSignalRenderingScenario } from './state-signal-rendering.js';
 import { storageSettingsScenario } from './storage-settings.js';
 import { streamErrorRetryScenario } from './stream-error-retry.js';
@@ -89,6 +90,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'quiet-settings': quietSettingsScenario,
   'report-issue-command': reportIssueCommandScenario,
   'state-commands': stateCommandsScenario,
+  'state-signal-reload': stateSignalReloadScenario,
   'state-signal-rendering': stateSignalRenderingScenario,
   'storage-settings': storageSettingsScenario,
   'stream-error-retry': streamErrorRetryScenario,

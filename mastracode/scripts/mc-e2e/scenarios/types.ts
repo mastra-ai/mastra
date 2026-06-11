@@ -33,6 +33,7 @@ export type ScenarioName =
   | 'quiet-settings'
   | 'report-issue-command'
   | 'state-commands'
+  | 'state-signal-reload'
   | 'state-signal-rendering'
   | 'storage-settings'
   | 'stream-error-retry'

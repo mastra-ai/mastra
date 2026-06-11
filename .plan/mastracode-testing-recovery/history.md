@@ -4558,3 +4558,13 @@ Break validations proved the scenario fails if the `Use as /goal` option label c
   - Disabling `notification_inbox` registration timed out after the model attempted to read the pending notification and no delivered detail card appeared.
 - Clean focused verification: `pnpm --filter ./mastracode run e2e:test notification-inbox-tool-flow`; `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
 - Tracker update: `Chat: Notification inbox signals` remains `needs-follow-up` but now covers both direct urgent delivery and summarized medium active delivery followed by `notification_inbox read`. Remaining notification gaps are CRUD actions (`list`, `markSeen`, `dismiss`, `archive`, `search`), coalesced records, and reload persistence across statuses.
+
+## 2026-06-11 — State signal reload remediation
+
+- Added `state-signal-reload` TUI e2e scenario. The scenario seeds a persisted `role='signal'` state DB message with state metadata (`id: browser`, `mode: delta`, `cacheKey`, `version`), reloads it via `/threads`, and verifies the real TUI reconstructs `State delta: browser` with the persisted browser-state preview.
+- Break validations proved the scenario catches regressions:
+  - Forcing persisted state-signal mode to `snapshot` timed out waiting for `State delta: browser`.
+  - Ignoring state metadata id rendered `State delta: state` and timed out waiting for `browser`.
+  - Renaming the visible state-signal title timed out waiting for the canonical `State delta: browser` label.
+- Clean focused verification: `pnpm build:core`; `pnpm --filter ./mastracode run e2e:test state-signal-reload`; `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
+- Tracker update: `Chat: Processor state signals` remains `needs-follow-up` but now covers both active `sendStateSignal()` rendering and persisted signal reload parity. Remaining gaps are live browser-processor context and long-session snapshot/delta pruning.
