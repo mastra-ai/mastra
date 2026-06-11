@@ -1,4 +1,4 @@
-import { MessageList } from '@mastra/core/agent';
+import { MessageList, attachFatal } from '@mastra/core/agent';
 import type { MessageInput } from '@mastra/core/agent/message-list';
 import { isProcessorWorkflow } from '@mastra/core/processors';
 import type { Processor, ProcessorWorkflow } from '@mastra/core/processors';
@@ -366,12 +366,12 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
       let tripwireReason: string | undefined;
       let tripwireMetadata: unknown;
 
-      const abort = (reason?: string, options?: { retry?: boolean; metadata?: unknown }) => {
+      const abort = attachFatal((reason?: string, options?: { retry?: boolean; metadata?: unknown }): never => {
         tripwireTriggered = true;
         tripwireReason = reason;
         tripwireMetadata = options?.metadata;
         throw new Error(`TRIPWIRE:${reason || 'Processor aborted'}`);
-      };
+      });
 
       // Build the context based on phase
       const baseContext = {
