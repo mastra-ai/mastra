@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '../../stream/aisdk/v5/file';
+import { DefaultStepResult } from '../../stream/aisdk/v5/output-helpers';
 import { encode, decode, registerClass, unregisterClass, CODEC_TAG } from './index';
 
 /**
@@ -329,6 +330,62 @@ describe('codec', () => {
       expect(out).toBeInstanceOf(DefaultGeneratedFileWithType);
       expect(out.mediaType).toBe('text/plain');
       expect(out.type).toBe('file');
+    });
+  });
+
+  describe('built-in DefaultStepResult registration', () => {
+    // `DefaultStepResult` instances flow through workflow output schemas
+    // typed as `z.any()`, so they cross the evented pubsub boundary as
+    // plain objects unless the codec round-trips the prototype. This
+    // guards the `instanceof DefaultStepResult` consumers (e.g. the agent
+    // loop result aggregation in `stream/base/output.ts`).
+    it('round-trips a DefaultStepResult', () => {
+      const original = new DefaultStepResult({
+        content: [{ type: 'text', text: 'hello' }],
+        finishReason: 'stop',
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+        warnings: [],
+        request: { body: { foo: 'bar' } },
+        response: {
+          id: 'resp-1',
+          modelId: 'test-model',
+          timestamp: new Date('2026-06-10T00:00:00.000Z'),
+          headers: { 'content-type': 'application/json' },
+          messages: [],
+        },
+        providerMetadata: { provider: { key: 'value' } },
+      });
+      const out = roundTrip(original) as DefaultStepResult<any>;
+      expect(out).toBeInstanceOf(DefaultStepResult);
+      expect(out.content).toEqual(original.content);
+      expect(out.finishReason).toBe('stop');
+      expect(out.usage).toEqual(original.usage);
+      expect(out.request).toEqual(original.request);
+      expect(out.response.id).toBe('resp-1');
+      // Date inside `response.timestamp` round-trips via the Date envelope.
+      expect(out.response.timestamp).toBeInstanceOf(Date);
+      expect(out.response.timestamp.toISOString()).toBe('2026-06-10T00:00:00.000Z');
+      expect(out.providerMetadata).toEqual(original.providerMetadata);
+      // Derived getters still work after reconstruction.
+      expect(out.text).toBe('hello');
+    });
+
+    it('preserves tripwire data on DefaultStepResult', () => {
+      const original = new DefaultStepResult({
+        content: [],
+        finishReason: 'other',
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 },
+        warnings: [],
+        request: { body: {} },
+        response: { id: 'r', modelId: 'm', timestamp: new Date(), headers: {}, messages: [] },
+        providerMetadata: undefined,
+        tripwire: { reason: 'input-blocked' },
+      });
+      const out = roundTrip(original) as DefaultStepResult<any>;
+      expect(out).toBeInstanceOf(DefaultStepResult);
+      expect(out.tripwire).toEqual({ reason: 'input-blocked' });
+      // Tripwire causes `text` getter to short-circuit to empty string.
+      expect(out.text).toBe('');
     });
   });
 

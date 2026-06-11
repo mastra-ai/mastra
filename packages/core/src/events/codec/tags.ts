@@ -4,6 +4,14 @@ import type { SerializedError } from '../../error/utils';
  * Discriminator key for codec-tagged envelopes. Long, namespaced, and unlikely
  * to collide with user data. Plain objects that happen to carry this key but
  * do not match an envelope shape are preserved as-is by the decoder.
+ *
+ * **Reservation contract:** `__m_codec__` is reserved on the wire. Do not use
+ * it as a property name on user objects that cross the pubsub boundary — if
+ * the surrounding shape also happens to match an envelope (e.g.
+ * `{ __m_codec__: 'Date', v: '...' }`), the decoder will reconstruct it as
+ * the tagged type. The conservative shape check in `isEnvelope` keeps the
+ * blast radius narrow, and `toJSON()` is skipped for objects already carrying
+ * this key, but the safest path is to avoid the namespace entirely.
  */
 export const CODEC_TAG = '__m_codec__';
 
@@ -13,7 +21,7 @@ export const CODEC_TAG = '__m_codec__';
  * for unusual patterns while bounding the input to `new RegExp(...)` on decode
  * so a hostile peer cannot push an unbounded pattern through the constructor.
  */
-const MAX_REGEXP_SOURCE_LENGTH = 1024;
+export const MAX_REGEXP_SOURCE_LENGTH = 1024;
 
 export type EnvelopeTag = 'Date' | 'Error' | 'Map' | 'Set' | 'RegExp' | 'URL' | 'BigInt' | 'Undefined' | 'Class';
 
