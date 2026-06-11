@@ -17417,6 +17417,165 @@ describe('filterObservedMessages — tool-call/result pair preservation', () => 
     expect(remainingIds).toContain('tool-call-msg');
   });
 
+  it('keeps the tool-call message when fallback cursor pruning would remove it', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-fallback-cursor-thread';
+    const resourceId = 'tool-pair-fallback-cursor-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+    const t2 = new Date('2025-01-01T10:00:02.000Z');
+
+    messageList.add(
+      {
+        id: 'tool-call-before-cursor',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-cursor-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'cursor-msg',
+        threadId,
+        resourceId,
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'cursor' }] },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'tool-result-after-cursor',
+        threadId,
+        resourceId,
+        role: 'tool',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-cursor-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t2,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: { observedMessageIds: ['cursor-msg'] } as any,
+      useMarkerBoundaryPruning: false,
+    });
+
+    const remainingIds = messageList.get.all.db().map((m: any) => m.id);
+
+    expect(remainingIds).toContain('tool-call-before-cursor');
+    expect(remainingIds).toContain('tool-result-after-cursor');
+    expect(remainingIds).not.toContain('cursor-msg');
+  });
+
+  it('keeps the tool-call message when fallback time pruning would remove it', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+
+    const threadId = 'tool-pair-fallback-time-thread';
+    const resourceId = 'tool-pair-fallback-time-resource';
+    const messageList = new MessageList({ threadId, resourceId });
+
+    const t0 = new Date('2025-01-01T10:00:00.000Z');
+    const t1 = new Date('2025-01-01T10:00:01.000Z');
+
+    messageList.add(
+      {
+        id: 'tool-call-before-last-observed',
+        threadId,
+        resourceId,
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'call',
+                toolCallId: 'tc-time-1',
+                toolName: 'test-tool',
+                args: {},
+              },
+            },
+          ],
+        },
+        createdAt: t0,
+      } as any,
+      'memory',
+    );
+
+    messageList.add(
+      {
+        id: 'tool-result-after-last-observed',
+        threadId,
+        resourceId,
+        role: 'tool',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'tc-time-1',
+                result: 'tool output',
+              },
+            },
+          ],
+        },
+        createdAt: t1,
+      } as any,
+      'memory',
+    );
+
+    filterObservedMessages({
+      messageList,
+      record: {
+        observedMessageIds: [],
+        lastObservedAt: t0,
+      } as any,
+      useMarkerBoundaryPruning: false,
+    });
+
+    const remainingIds = messageList.get.all.db().map((m: any) => m.id);
+
+    expect(remainingIds).toContain('tool-call-before-last-observed');
+    expect(remainingIds).toContain('tool-result-after-last-observed');
+  });
+
   it('removes the tool-call message when no result is pending', async () => {
     const { MessageList } = await import('@mastra/core/agent');
 

@@ -250,9 +250,10 @@ export function filterObservedMessages(opts: {
 
     for (const msg of allMessages) {
       if (!msg?.id || msg.id === 'om-continuation' || preserveMessageIds.has(msg.id)) continue;
+      const hasPendingPair = hasPendingToolResultPair(msg, pendingToolResultIds);
 
       if (observedIds.has(msg.id)) {
-        if (hasPendingToolResultPair(msg, pendingToolResultIds)) {
+        if (hasPendingPair) {
           continue;
         }
         messagesToRemove.push(msg.id);
@@ -260,6 +261,7 @@ export function filterObservedMessages(opts: {
       }
 
       if (derivedCursor && isMessageAtOrBeforeCursor(msg, derivedCursor)) {
+        if (hasPendingPair) continue;
         messagesToRemove.push(msg.id);
         continue;
       }
@@ -267,6 +269,7 @@ export function filterObservedMessages(opts: {
       if (lastObservedAt && msg.createdAt) {
         const msgDate = new Date(msg.createdAt);
         if (msgDate <= lastObservedAt) {
+          if (hasPendingPair) continue;
           messagesToRemove.push(msg.id);
         }
       }
