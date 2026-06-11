@@ -2567,6 +2567,67 @@ describe('Agent signals', () => {
     senderSubscription.unsubscribe();
   });
 
+  it('grants ownerStream to exactly one runtime when two race to wake an idle thread', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runtimeA = new AgentThreadStreamRuntime();
+    const runtimeB = new AgentThreadStreamRuntime();
+
+    // Track which agents had their .stream invoked. Only the lease winner
+    // should actually call .stream(); the loser must short-circuit.
+    const streamCallsA: number[] = [];
+    const streamCallsB: number[] = [];
+
+    const makeStubAgent = (id: string, calls: number[]) => {
+      let nextRunId = 0;
+      return {
+        id,
+        stream: async () => {
+          const runId = `${id}-run-${++nextRunId}`;
+          calls.push(nextRunId);
+          return {
+            runId,
+            status: 'running',
+            fullStream: (async function* () {})(),
+            _waitUntilFinished: () => new Promise<void>(() => {}),
+          } as any;
+        },
+      } as any;
+    };
+
+    const agentA = makeStubAgent('race-agent-a', streamCallsA);
+    const agentB = makeStubAgent('race-agent-b', streamCallsB);
+
+    const target = {
+      resourceId: 'race-resource',
+      threadId: 'race-thread',
+      ifIdle: {
+        behavior: 'wake' as const,
+        streamOptions: { memory: { resource: 'race-resource', thread: 'race-thread' } },
+      },
+    };
+
+    // Fire both signals in the same microtask burst so the lease race is real.
+    const resultA = runtimeA.sendSignal(agentA, { type: 'user-message', contents: 'from A' }, target, pubsub);
+    const resultB = runtimeB.sendSignal(agentB, { type: 'user-message', contents: 'from B' }, target, pubsub);
+
+    expect(resultA.accepted).toBe(true);
+    expect(resultB.accepted).toBe(true);
+    expect(resultA.ownerStream).toBeDefined();
+    expect(resultB.ownerStream).toBeDefined();
+
+    const [ownerA, ownerB] = await Promise.all([resultA.ownerStream!, resultB.ownerStream!]);
+
+    // Exactly one runtime gets a defined ownerStream (the winner).
+    const winners = [ownerA, ownerB].filter(s => s !== undefined);
+    const losers = [ownerA, ownerB].filter(s => s === undefined);
+    expect(winners).toHaveLength(1);
+    expect(losers).toHaveLength(1);
+
+    // Only the winner's agent.stream was invoked.
+    const totalStreamCalls = streamCallsA.length + streamCallsB.length;
+    expect(totalStreamCalls).toBe(1);
+  });
+
   it.runIf(process.platform !== 'win32')(
     'broadcasts subscribed thread stream parts across UnixSocketPubSub runtime instances',
     async () => {
