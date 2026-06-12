@@ -327,6 +327,7 @@ const sidebars = {
             { type: 'doc', id: 'agent-builder/workspace', label: 'Workspace' },
             { type: 'doc', id: 'agent-builder/browser', label: 'Browser' },
             { type: 'doc', id: 'agent-builder/channels', label: 'Channels' },
+            { type: 'doc', id: 'agent-builder/integrations', label: 'Tool providers' },
             { type: 'doc', id: 'agent-builder/skill-registries', label: 'Skill registries' },
             { type: 'doc', id: 'agent-builder/deploying', label: 'Deploying' },
           ],

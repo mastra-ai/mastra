@@ -1,4 +1,5 @@
 import type { ModelMessage, ToolChoice } from '@internal/ai-sdk-v5';
+import type { ActorSignal } from '../auth/ee';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
 import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
@@ -472,6 +473,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Request Context containing dynamic configuration and state */
   requestContext?: RequestContext<any>; // @TODO: Figure out how to type this without breaking all the inner types
+
+  /** Trusted server-side signal for this agent FGA check. */
+  actor?: ActorSignal;
 
   /**
    * Per-invocation version overrides for sub-agents (and future primitives).
