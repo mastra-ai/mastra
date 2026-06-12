@@ -1,3 +1,6 @@
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadMcpConfig } from '../config.js';
@@ -215,6 +218,66 @@ describe('createMcpManager', () => {
       expect(firstStoragePath).toEqual(expect.stringMatching(/mcp-oauth\/[a-f0-9]{16}\.json$/));
       expect(secondStoragePath).toEqual(expect.stringMatching(/mcp-oauth\/[a-f0-9]{16}\.json$/));
       expect(firstStoragePath).not.toBe(secondStoragePath);
+    });
+
+    it('persists OAuth tokens and refresh replacements across manager instances', async () => {
+      const previousAppDataDir = process.env.MASTRA_APP_DATA_DIR;
+      const appDataDir = mkdtempSync(join(tmpdir(), 'mastracode-mcp-oauth-'));
+      process.env.MASTRA_APP_DATA_DIR = appDataDir;
+
+      try {
+        const httpConfig: McpHttpServerConfig = {
+          url: 'https://mcp.example.com/mcp',
+          oauth: {
+            redirectUrl: 'http://localhost:3000/oauth/callback',
+            clientName: 'Remote MCP',
+            scopes: ['mcp:read'],
+            clientId: 'client-id',
+          },
+        };
+        setupConfig({ mcpServers: { remote: httpConfig } });
+
+        MockedMCPClient.mockImplementation(function (this: any) {
+          this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { remote: {} }, errors: {} });
+          this.disconnect = vi.fn().mockResolvedValue(undefined);
+        } as any);
+
+        await createMcpManager('/tmp/project').init();
+        const firstStorage = MockedMCPOAuthClientProvider.mock.calls[0]?.[0]?.storage as any;
+        firstStorage.set(
+          'tokens',
+          JSON.stringify({ access_token: 'initial-access', refresh_token: 'initial-refresh', token_type: 'Bearer' }),
+        );
+
+        await createMcpManager('/tmp/project').init();
+        const secondStorage = MockedMCPOAuthClientProvider.mock.calls[1]?.[0]?.storage as any;
+        expect(secondStorage.filePath).toBe(firstStorage.filePath);
+        expect(JSON.parse(secondStorage.get('tokens'))).toMatchObject({
+          access_token: 'initial-access',
+          refresh_token: 'initial-refresh',
+        });
+
+        secondStorage.set(
+          'tokens',
+          JSON.stringify({ access_token: 'refreshed-access', refresh_token: 'refreshed-refresh', token_type: 'Bearer' }),
+        );
+
+        await createMcpManager('/tmp/project').init();
+        const thirdStorage = MockedMCPOAuthClientProvider.mock.calls[2]?.[0]?.storage as any;
+        expect(thirdStorage.filePath).toBe(firstStorage.filePath);
+        expect(JSON.parse(thirdStorage.get('tokens'))).toMatchObject({
+          access_token: 'refreshed-access',
+          refresh_token: 'refreshed-refresh',
+        });
+        expect(readFileSync(firstStorage.filePath, 'utf-8')).toContain('refreshed-access');
+      } finally {
+        if (previousAppDataDir === undefined) {
+          delete process.env.MASTRA_APP_DATA_DIR;
+        } else {
+          process.env.MASTRA_APP_DATA_DIR = previousAppDataDir;
+        }
+        rmSync(appDataDir, { recursive: true, force: true });
+      }
     });
 
     it('creates one MCPClient with all servers', async () => {

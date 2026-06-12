@@ -1,6 +1,27 @@
 # Mastra Code testing recovery history
 
 
+### MCP OAuth storage persistence coverage (2026-06-12)
+
+Added focused `mastracode/src/mcp/__tests__/manager.test.ts` coverage for Mastra Code's file-backed MCP OAuth storage. The test uses isolated `MASTRA_APP_DATA_DIR`, configures an OAuth HTTP MCP server, writes initial tokens through the manager-provided storage, recreates managers with the same project/server config, and verifies the same storage file is reused and refreshed token replacements persist to disk.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode exec vitest run src/mcp/__tests__/manager.test.ts --reporter=dot --bail=1
+```
+
+Additional verification observed while attempting the package script filter: `pnpm --filter ./mastracode test -- --run src/mcp/__tests__/manager.test.ts --reporter=dot --bail 1` ran the full Mastra Code unit suite, which passed (129 files / 1315 tests).
+
+Break validations:
+
+- Skipping `FileOAuthStorage.set()` writes made the recreated manager lose the initial tokens.
+- Making the OAuth storage fingerprint unstable across manager instances changed the file path and lost persisted tokens.
+- Making `FileOAuthStorage.read()` ignore the persisted file made the recreated manager lose stored tokens.
+
+The MCP server configuration row remains `needs-follow-up`; durable Mastra Code OAuth token persistence/refresh replacement is now covered, while a full protected-server OAuth authorization/failure-display flow remains optional remaining breadth.
+
+
 ### Headless MCP tool availability coverage (2026-06-12)
 
 Added `headless-mcp-tool-availability` as the 85th checked-in e2e scenario. The scenario launches a delayed, header-protected Streamable HTTP MCP server through isolated global MCP config, runs `headlessMain` with AIMock, and verifies the namespaced MCP tool result (`MC_HEADLESS_MCP_RESULT:headless-e2e:ok`) reaches the follow-up model request. The product fix makes headless startup await MCP initialization before sending the first prompt so the first provider turn has the configured MCP tools available.

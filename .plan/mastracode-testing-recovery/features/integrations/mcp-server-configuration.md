@@ -72,7 +72,7 @@
 ## Existing tests
 
 - `mastracode/src/mcp/__tests__/config.test.ts` — stdio/http classification, URL validation, HTTP MCP OAuth validation (loopback/HTTPS redirect URLs, scopes, client credentials), skipped entries, and config validation.
-- `mastracode/src/mcp/__tests__/manager.test.ts` — HTTP server defs with URL/requestInit/OAuth provider, per-project/server OAuth storage fingerprinting, transport statuses, init/reload/reconnect, skipped servers, namespaced tools, failure paths, long MCP timeout handoff, and programmatic `extraServers` merge/override/reload behavior.
+- `mastracode/src/mcp/__tests__/manager.test.ts` — HTTP server defs with URL/requestInit/OAuth provider, per-project/server OAuth storage fingerprinting, durable token persistence and refresh-token replacement across manager instances, transport statuses, init/reload/reconnect, skipped servers, namespaced tools, failure paths, long MCP timeout handoff, and programmatic `extraServers` merge/override/reload behavior.
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — `/mcp` routing through slash command dispatch.
 - `mastracode/src/__tests__/index.test.ts` — `createMastraCode({ mcpServers })` startup wiring passes programmatic stdio/HTTP servers to `createMcpManager()` with the detected project root and configured `configDir`.
 - `mastracode/scripts/mc-e2e/scenarios/mcp-server-config.ts` — partial real PTY coverage for programmatic stdio `mcpServers`: launches the TUI with a configured failing stdio server, verifies background MCP initialization reports the configured server, and verifies `/mcp status` renders `e2e_stdio_config [stdio]`.
@@ -85,7 +85,7 @@
 
 ## Missing tests
 
-- OAuth flow test covering a real protected HTTP MCP server's token persistence/refresh callback behavior and failure display; current coverage verifies config/provider/storage construction through mocks.
+- Full protected HTTP MCP OAuth flow/failure-display test against a real authorization server remains uncovered; package-level OAuth tests cover provider token/refresh mechanics, and Mastra Code manager tests now cover durable file-backed token persistence/refresh replacement wiring.
 
 ## Known risks / regressions
 
@@ -93,7 +93,7 @@
 - Programmatic configs have highest priority; a typo or duplicate server name can intentionally shadow a working file-based server.
 - Invalid entries are skipped silently except via `/mcp` status/selector; users may not notice configuration typos until they inspect MCP status.
 - OAuth token storage is keyed by project/server/url/redirect/client/scopes; changing any field creates a new token file.
-- Most lower-level tests mock `@mastra/mcp`; real PTY coverage now covers Streamable HTTP tool calls, selector reconnect/reload status refresh, skipped validation display, a delayed long-running MCP result, and headless HTTP MCP tool availability. OAuth remains unproven.
+- Most lower-level tests mock `@mastra/mcp`; real PTY coverage now covers Streamable HTTP tool calls, selector reconnect/reload status refresh, skipped validation display, a delayed long-running MCP result, and headless HTTP MCP tool availability. Durable Mastra Code OAuth token storage is covered, but a full protected-server OAuth authorization/failure-display flow remains unproven.
 
 ## Verification checklist
 
