@@ -4,6 +4,7 @@ import { apiKeyPromptScenario } from './api-key-prompt.js';
 import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { automatedChatScenario } from './automated-chat.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
+import { browserSettingsPersistenceScenario } from './browser-settings-persistence.js';
 import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
 import { commitAttributionPromptScenario } from './commit-attribution-prompt.js';
 import { customConfigDirScenario } from './custom-config-dir.js';
@@ -77,6 +78,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'api-key-prompt': apiKeyPromptScenario,
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'automated-chat': automatedChatScenario,
+  'browser-settings-persistence': browserSettingsPersistenceScenario,
   'clipboard-image-paste': clipboardImagePasteScenario,
   'commit-attribution-prompt': commitAttributionPromptScenario,
   'custom-config-dir': customConfigDirScenario,

@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Browser settings persistence coverage (2026-06-12)
+
+Added `browser-settings-persistence` as the 68th checked-in TUI e2e scenario. The scenario uses `/browser set cdpUrl`, `/browser set profile`, `/browser set executablePath`, and `/browser clear profile` through the real PTY TUI, then uses shell passthrough to prove `settings.json` clears CDP when switching to a profile, enables Stagehand profile preservation, persists the executable path, and removes profile/preserve state when the profile is cleared.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test browser-settings-persistence
+```
+
+Break validations:
+
+- Skipping profile-driven `cdpUrl` clearing left `BROWSER_AFTER_PROFILE_CDP=ws://...` and failed the scenario.
+- Skipping `preserveUserDataDir` cleanup when clearing profile left `BROWSER_PRESERVE=true` and failed the scenario.
+- Skipping `executablePath` persistence left `BROWSER_EXEC=missing` and failed the scenario.
+
+The `Settings: Onboarding and global settings` row remains `needs-follow-up`; this chunk closes browser quick-setting persistence/mutual-exclusion, while browser wizard/startup restore, custom-pack completion/import/edit/share, model-selection cancellation/env-precedence, and reload breadth remain. The `Integrations: Browser automation` row also gains partial TUI coverage for quick settings; live `/browser on` attach remains follow-up.
+
+
 ### Model-selection API-key prompt coverage (2026-06-12)
 
 Added `model-selection-api-key-prompt` as the 67th checked-in TUI e2e scenario. The scenario seeds a saved custom model pack, opens `/models`, edits the plan-mode model, selects a synthetic `302ai` model with no configured key, verifies the `API Key Required` dialog shows the `302AI_API_KEY` hint and masks typed input, saves the edited pack, and uses shell passthrough to prove `auth.json`, `process.env`, and `settings.json` all reflect the selected model/key.

@@ -58,6 +58,7 @@
   - Completed: `api-key-delete-env` seeds a stored `302ai` API key alongside a real `302AI_API_KEY`, deletes the stored key through `/api-keys`, and proves the TUI falls back to env status while `auth.json` is cleared and the real env key remains intact.
   - Completed: `custom-provider-delete` seeds a custom OpenAI-compatible provider, deletes it through `/custom-providers`, confirms the destructive modal, and proves `settings.json` removes the provider while unrelated saved custom packs remain intact.
   - Completed: `model-selection-api-key-prompt` edits a saved custom pack through `/models`, selects a synthetic `302ai` model with no configured key, verifies the masked missing-key dialog/env hint, and proves stored auth/env projection plus saved pack settings update.
+  - Completed: `browser-settings-persistence` uses `/browser set`/`clear` quick commands to prove CDP/profile mutual exclusion, Stagehand profile preservation cleanup, and executable-path persistence in `settings.json` without launching a live browser.
   - `onboarding-full-wizard`: remaining breadth for login refresh and custom pack completion.
   - `update-startup-prompt`: use existing update env seams to assert passive startup prompt, then `Yes` path with a stub install command if a safe seam is added.
   - Completed: `quiet-tool-history-parity` enables Quiet mode in settings, drives AIMock-backed live `view` + `task_write`, asserts compact tool/task rendering, then reloads a seeded tool-history thread and asserts loaded quiet compact rendering.

@@ -6,6 +6,7 @@ export type ScenarioName =
   | 'api-key-prompt'
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
+  | 'browser-settings-persistence'
   | 'clipboard-image-paste'
   | 'commit-attribution-prompt'
   | 'custom-config-dir'

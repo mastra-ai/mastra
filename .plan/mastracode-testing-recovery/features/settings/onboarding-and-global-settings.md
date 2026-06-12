@@ -107,6 +107,7 @@
 - `mastracode/scripts/mc-e2e/scenarios/models-pack-activation-persistence.ts` — partial real PTY coverage for `/models`: seeds a custom OpenAI-compatible provider plus saved custom pack, activates the pack through the real switch/custom-pack action overlay, then verifies `settings.json` active pack ID, custom mode defaults, stale subagent override cleanup, and saved custom pack retention through shell passthrough.
 - `mastracode/scripts/mc-e2e/scenarios/custom-provider-delete.ts` — partial real PTY coverage for `/custom-providers`: seeds a custom OpenAI-compatible provider, deletes it through the manage-provider modal and destructive confirmation, then verifies `settings.json` no longer contains the provider while unrelated saved custom packs remain intact.
 - `mastracode/scripts/mc-e2e/scenarios/model-selection-api-key-prompt.ts` — partial real PTY coverage for model-selection-triggered API-key prompts: edits a saved custom pack through `/models`, selects a synthetic `302ai` model without a configured key, verifies the masked `API Key Required` dialog with env-var hint, then proves `auth.json`, `process.env`, and saved pack settings update after submit.
+- `mastracode/scripts/mc-e2e/scenarios/browser-settings-persistence.ts` — partial real PTY coverage for `/browser set`/`clear`: sets CDP URL, switches to a profile and proves CDP is cleared while profile preservation is enabled, sets a custom executable path, clears the profile, and proves `settings.json` retains the executable path while clearing profile/CDP/preserve state.
 
 ## Missing tests
 
@@ -117,7 +118,7 @@
 - Missing-key model selection cancellation/env-precedence breadth through real TUI overlay; storing a key, masking the typed value, and provider env-var projection from model selection are covered by `model-selection-api-key-prompt`, while direct `/api-keys` add/delete e2e covers explicit API-key management.
 - Direct MaskedInput regression for storage connection strings and login dialogs proving render output is masked while submitted value remains raw; `/api-keys` masked input is covered by real PTY e2e.
 - Headless startup with active model pack, custom pack settings, browser settings, and Memory Gateway base URL/env values.
-- Direct `/browser` settings regression for wizard save/clear/export flows, profile/executablePath/CDP mutual exclusion, and startup restore.
+- Direct `/browser` settings breadth for full wizard save/export/startup restore remains; quick-command profile/CDP mutual exclusion, custom executable persistence, and profile clear cleanup are covered by `browser-settings-persistence`.
 - Direct `/api-keys` settings submenu breadth for provider ordering and multi-provider delete flows; add/storage plus stored-key delete with real-env preservation are covered by real PTY e2e.
 
 ## Known risks / regressions
