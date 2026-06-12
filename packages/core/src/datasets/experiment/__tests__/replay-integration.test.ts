@@ -1084,4 +1084,52 @@ describe('tool replay integration', () => {
       ).rejects.toThrowError(/both normalize to tool name 'look_up'/);
     });
   });
+
+  describe('strict matching + mocks: the per-tool escape hatch', () => {
+    it('a suppressing mock on a recorded tool does not breach the strict contract', async () => {
+      // The documented recipe: strict everywhere, mock the one tool whose args
+      // drift. The mock answers every call, so the tool's recorded events can
+      // never be consumed — that must not fail the item.
+      await seedRecordedTrace('rec-trace-strict-mock', [
+        { input: { key: 'first' }, output: { value: 'recorded:first' } },
+        { input: { key: 'second' }, output: { value: 'recorded:second' } },
+      ]);
+
+      const summary = await runExperiment(mastra, {
+        data: [{ id: 'item-1', input: 'Look up first and second', replayTraceId: 'rec-trace-strict-mock' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        toolReplay: { matching: 'strict' },
+        toolMocks: { lookup: { output: { value: 'mocked' } } },
+      });
+
+      expect(summary.results[0]?.error).toBeNull();
+      expect(summary.succeededCount).toBe(1);
+      const report = summary.results[0]?.toolReplay;
+      // The evidence stays honest: the events are still reported unconsumed.
+      expect(report?.unconsumed).toEqual([{ toolName: 'lookup', count: 2 }]);
+      expect(report?.mocks).toEqual([{ toolName: 'lookup', calls: 2, kind: 'output' }]);
+    });
+
+    it('an expect-only mock stays inside the strict contract — leftovers still fail', async () => {
+      // Expect-only entries observe and fall through to the queue; a leftover
+      // recorded call is a genuine breach, not an exemption.
+      await seedRecordedTrace('rec-trace-strict-observe', [
+        { input: { key: 'first' }, output: { value: 'recorded:first' } },
+        { input: { key: 'second' }, output: { value: 'recorded:second' } },
+        { input: { key: 'third' }, output: { value: 'recorded:third' } },
+      ]);
+
+      const summary = await runExperiment(mastra, {
+        data: [{ id: 'item-1', input: 'Look up first and second', replayTraceId: 'rec-trace-strict-observe' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        toolReplay: { matching: 'strict' },
+        toolMocks: { lookup: { expect: { calledTimes: 2 } } },
+      });
+
+      expect(summary.failedCount).toBe(1);
+      expect(summary.results[0]?.error?.code).toBe('TOOL_REPLAY_UNCONSUMED');
+    });
+  });
 });

@@ -4,7 +4,7 @@ import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
 import { executeTarget } from './executor';
 import type { Target, ExecutionResult, ToolReplayExecutionOptions } from './executor';
-import { extractToolReplayEvents, validateToolMockNames } from './replay';
+import { extractToolReplayEvents, validateToolMockNames, isSuppressingMock } from './replay';
 import { resolveScorers, resolveStepScorers, runScorersForItem, runStepScorersForItem } from './scorer';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
@@ -486,7 +486,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   // entries observe live executions (tool spans stay complete), so they don't
   // stamp the run and it remains an eligible replay source.
   const suppressingMockNames = Object.entries(toolMocks ?? {})
-    .filter(([, mockConfig]) => typeof mockConfig === 'function' || Boolean(mockConfig.error) || 'output' in mockConfig)
+    .filter(([, mockConfig]) => isSuppressingMock(mockConfig))
     .map(([toolName]) => toolName);
   const replayMarker =
     toolReplay || suppressingMockNames.length > 0

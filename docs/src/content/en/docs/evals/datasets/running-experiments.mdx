@@ -214,11 +214,11 @@ const strict = await dataset.startExperiment({
 })
 ```
 
-The matching policy applies to the whole run. To be lenient about one tool whose arguments drift benignly (a generated SQL string, a free-text search query) while staying strict everywhere else, mock that tool — mocks take precedence over the replay queues per tool, so `toolMocks: { runSql: { output: recordedRows } }` answers every `runSql` call regardless of arguments while the remaining tools stay under the strict contract. The other direction needs no escape hatch: under `'fifo'` nothing fails on drift, and `argMismatches` tells you where it happened.
+The matching policy applies to the whole run. To be lenient about one tool whose arguments drift benignly (a generated SQL string, a free-text search query) while staying strict everywhere else, mock that tool — mocks take precedence over the replay queues per tool, so `toolMocks: { runSql: { output: recordedRows } }` answers every `runSql` call regardless of arguments while the remaining tools stay under the strict contract. A tool answered by a suppressing mock is exempt from the strict unconsumed-contract — its recorded calls can never be consumed, so they stay visible in the report's `unconsumed` as signal without failing the item. Expect-only entries observe live calls and stay inside the contract. The other direction needs no escape hatch: under `'fifo'` nothing fails on drift, and `argMismatches` tells you where it happened.
 
 ### Tool mocks
 
-`toolMocks` overrides individual tools without needing a recording — usable with or without `toolReplay`. Mocks take precedence over replay queues per tool; tools that are neither mocked nor covered by replay execute live.
+`toolMocks` overrides individual tools without needing a recording — usable with or without `toolReplay`. Mocks take precedence over replay queues per tool. In a mock-only run, unmocked tools execute live; when `toolReplay` is active, an unmocked tool with no recorded event left is a miss handled by `onMiss` — it never silently runs live.
 
 ```typescript
 const mocked = await dataset.startExperiment({

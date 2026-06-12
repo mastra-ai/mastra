@@ -389,6 +389,17 @@ function containsRedactionMarker(payload: unknown): boolean {
 }
 
 /**
+ * A mock that answers calls itself (output stub, error injection, or function
+ * replacement) — the live tool never executes. Expect-only entries observe and
+ * fall through. Suppressing mocks drive the metadata stamp AND the strict
+ * unconsumed-contract exemption: a tool the user explicitly took out of the
+ * contract cannot fail it.
+ */
+export function isSuppressingMock(config: ToolMockConfig): boolean {
+  return typeof config === 'function' || Boolean(config.error) || 'output' in config;
+}
+
+/**
  * Map each toolMocks key to its agent-formatted tool name, refusing keys that
  * collide after formatting. A silently dropped mock means a silently skipped
  * assertion — the exact failure class mocks exist to eliminate — so the
