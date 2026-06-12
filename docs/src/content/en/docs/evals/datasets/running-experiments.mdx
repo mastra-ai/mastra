@@ -323,6 +323,8 @@ while (experiment.status === 'pending' || experiment.status === 'running') {
 console.log(experiment.status) // 'completed' | 'failed'
 ```
 
+A `failed` status with zero items run means the experiment failed during setup (for example a `toolReplay.fromExperimentId` that doesn't exist). The reason is persisted on the experiment record as `metadata.failureReason` (`{ id, message }`), so async callers — including the HTTP API — can read why the run never started.
+
 ## Configuration options
 
 ### Concurrency
