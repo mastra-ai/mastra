@@ -22,6 +22,7 @@ import { githubSignalsUnsubscribeReloadScenario } from './github-signals-unsubsc
 import { harnessApiConfigScenario } from './harness-api-config.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { mcpHttpToolCallScenario } from './mcp-http-tool-call.js';
+import { mcpReloadConfigScenario } from './mcp-reload-config.js';
 import { mcpServerConfigScenario } from './mcp-server-config.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
 import { modelSelectionApiKeyPromptScenario } from './model-selection-api-key-prompt.js';
@@ -104,6 +105,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'integration-commands': integrationCommandsScenario,
   'modal-and-shell': modalAndShellScenario,
   'mcp-http-tool-call': mcpHttpToolCallScenario,
+  'mcp-reload-config': mcpReloadConfigScenario,
   'mcp-server-config': mcpServerConfigScenario,
   'model-selection-api-key-prompt': modelSelectionApiKeyPromptScenario,
   'models-pack-activation-persistence': modelsPackActivationPersistenceScenario,

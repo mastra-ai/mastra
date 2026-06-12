@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### MCP reload config coverage (2026-06-12)
+
+Added `mcp-reload-config` as the 75th checked-in TUI e2e scenario. The scenario starts from a hermetic project `.mastracode/mcp.json` containing a failing stdio MCP server, launches Mastra Code, verifies startup and `/mcp status` show the `reload_before [stdio]` failure, rewrites the project config via shell passthrough to a local header-protected Streamable HTTP MCP server, runs `/mcp reload`, and verifies `/mcp status` renders `reload_after [http]` plus the `reload_after_reload_probe` tool.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test mcp-reload-config
+```
+
+Break validations:
+
+- Skipping disk config reload in `McpManager.reload()` kept the old `reload_before` server and made `/mcp reload` report `0 server(s) connected, 0 tool(s)`.
+- Ignoring the project `.mastracode/mcp.json` during config load prevented the initial `reload_before` server from loading and failed the startup assertion.
+- Suppressing `/mcp status` tool-name display allowed the server to connect but hid `reload_after_reload_probe`, failing the post-reload status assertion.
+
+The MCP rows remain `needs-follow-up`; text `/mcp reload` and project file-config status transition are now covered, while selector-specific reload/reconnect UI, skipped HTTP validation reasons, OAuth token persistence/refresh, headless MCP tool availability, and long-running MCP timeout integration remain.
+
+
 ### MCP HTTP tool-call coverage (2026-06-12)
 
 Added `mcp-http-tool-call` as the 74th checked-in TUI e2e scenario. The scenario starts a local Streamable HTTP MCP server inside the custom entrypoint, requires the configured `x-mc-e2e` request header, passes the server through programmatic `createMastraCode({ mcpServers })`, verifies `/mcp status` renders `e2e_http_mcp [http]` with the namespaced tool, then uses AIMock to call `e2e_http_mcp_lookup_status` through the real model/tool loop and assert the MCP result reaches the follow-up model request.

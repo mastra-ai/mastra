@@ -77,6 +77,7 @@
 - `mastracode/src/__tests__/index.test.ts` — `createMastraCode({ mcpServers })` startup wiring passes programmatic stdio/HTTP servers to `createMcpManager()` with the detected project root and configured `configDir`.
 - `mastracode/scripts/mc-e2e/scenarios/mcp-server-config.ts` — partial real PTY coverage for programmatic stdio `mcpServers`: launches the TUI with a configured failing stdio server, verifies background MCP initialization reports the configured server, and verifies `/mcp status` renders `e2e_stdio_config [stdio]`.
 - `mastracode/scripts/mc-e2e/scenarios/mcp-http-tool-call.ts` — real PTY + AIMock coverage for programmatic HTTP MCP config: launches a local Streamable HTTP MCP server, requires configured request headers, verifies `/mcp status` renders `e2e_http_mcp [http]`, and invokes the namespaced `e2e_http_mcp_lookup_status` tool through the model/tool loop.
+- `mastracode/scripts/mc-e2e/scenarios/mcp-reload-config.ts` — real PTY coverage for file-based project MCP reload: starts with a failing stdio server from `.mastracode/mcp.json`, rewrites the config to a header-protected HTTP server, runs `/mcp reload`, and verifies `/mcp status` renders the new `reload_after [http]` server plus `reload_after_reload_probe` tool.
 
 ## Missing tests
 

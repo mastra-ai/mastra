@@ -41,7 +41,7 @@
 - Rows: `Integrations: MCP server configuration`, `MCP status and reload command`, `Browser automation`.
 - Proposed scenarios:
   - Completed: `mcp-http-tool-call` launches a local Streamable HTTP MCP server before the TUI, requires configured request headers, asserts `/mcp status` shows a connected `[http]` server/tool, and uses AIMock to invoke the namespaced MCP tool through the real runtime.
-  - `mcp-reload-config`: pre-launch config-file server, `/mcp reload`, status transition.
+  - Completed: `mcp-reload-config` starts from a project config-file stdio failure, rewrites `.mastracode/mcp.json` to a local header-protected HTTP server, runs `/mcp reload`, and asserts the new `[http]` server/tool status transition.
   - `browser-toggle-attach`: drive `/browser on` with a local/mock browser endpoint if available; otherwise keep as explicit manual/lab follow-up.
 - Fixture/data needs: local mock MCP server fixture, optional OAuth/token fixture if testing auth refresh; no live browser credentials.
 
