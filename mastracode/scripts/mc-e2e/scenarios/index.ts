@@ -44,6 +44,7 @@ import { notificationInboxToolFlowScenario } from './notification-inbox-tool-flo
 import { notificationSignalRenderingScenario } from './notification-signal-rendering.js';
 import { omGlobalSettingsPersistenceScenario } from './om-global-settings-persistence.js';
 import { omModelOverrideReloadScenario } from './om-model-override-reload.js';
+import { omPackStartupRestoreScenario } from './om-pack-startup-restore.js';
 import { omSettingsScenario } from './om-settings.js';
 import { omThresholdPersistenceScenario } from './om-threshold-persistence.js';
 import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
@@ -144,6 +145,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'notification-signal-rendering': notificationSignalRenderingScenario,
   'om-global-settings-persistence': omGlobalSettingsPersistenceScenario,
   'om-model-override-reload': omModelOverrideReloadScenario,
+  'om-pack-startup-restore': omPackStartupRestoreScenario,
   'om-settings': omSettingsScenario,
   'om-threshold-persistence': omThresholdPersistenceScenario,
   'openai-strict-schema': openaiStrictSchemaScenario,

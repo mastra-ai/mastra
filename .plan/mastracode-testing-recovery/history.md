@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### OM pack startup restore coverage (2026-06-12)
+
+Added `om-pack-startup-restore` as the 94th checked-in TUI e2e scenario. The scenario seeds `settings.models.activeOmPackId = "openai"` before launch with no role-specific OM overrides, creates an AIMock-backed thread, opens `/om`, verifies both Observer and Reflector model rows restore to the built-in OpenAI Mini model (`gpt-5.4-mini`), and proves `settings.json` remains pack-backed (`openai:null:null:null`) rather than converting to custom overrides.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test om-pack-startup-restore
+```
+
+Break validations:
+
+- Disabled built-in OM pack model resolution in `resolveOmRoleModel`; the scenario failed because `/om` restored fallback/default models instead of `gpt-5.4-mini`.
+- Skipped startup observer/reflector state seeding in `mastracode/src/index.ts`; the scenario failed because `/om` did not receive the resolved pack model state.
+- Changed the built-in OpenAI OM pack model ID; the scenario failed because `/om` showed `gpt-5.5` instead of `gpt-5.4-mini`.
+
+The Settings row remains `needs-follow-up`: built-in OM pack startup reload parity is now covered, while browser/settings wizard variants and deeper submenu/navigation breadth remain follow-up work.
+
+
 ### API key multi-provider delete coverage (2026-06-12)
 
 Added `api-key-multi-provider-delete` as the 93rd checked-in TUI e2e scenario. The scenario seeds stored `302ai` and Anthropic API keys, opens `/api-keys`, proves provider ordering shows `302ai` before `anthropic`, deletes the selected `302ai` key, then uses shell passthrough to prove the deleted provider is cleared from both `auth.json` and the current env projection while Anthropic remains stored and env-backed.
