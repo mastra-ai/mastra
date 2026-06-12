@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### OM model override reload coverage (2026-06-12)
+
+Added `om-model-override-reload` as the 91st checked-in TUI e2e scenario. The scenario seeds a custom provider plus saved role-specific OM observer/reflector overrides before launch, asserts `/om` restores those role values on startup, changes both roles through the real model selectors, then proves `settings.json` and active-thread metadata persist the updated observer/reflector model IDs.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test om-model-override-reload
+```
+
+Break validations:
+
+- Skipped startup OM role override seeding in `createMastraCode()`; `/om` restored built-in Gemini defaults instead of the seeded role overrides.
+- Skipped `saveSettings()` in `/om` role override persistence; visible runtime state updated, but `settings.json` kept the old seeded observer/reflector IDs.
+- Bypassed `switchReflectorModel()` thread-setting persistence; global settings updated, but the active thread metadata lacked the reflector role model ID.
+
+The Settings row remains `needs-follow-up`: OM role override reload is now covered, while browser/settings wizard breadth and deeper subagent/remaining model-pack reload parity remain follow-up work.
+
+
 ### Setup login refresh coverage (2026-06-12)
 
 Added `setup-login-refresh` as the 90th checked-in TUI e2e scenario. The scenario removes seeded settings/auth state, starts first-run onboarding, completes a deterministic Anthropic OAuth login through the real Authentication step, verifies the Model Packs and Observational Memory steps refresh to expose Anthropic choices without restarting, then proves `auth.json` and `settings.json` persist the OAuth credential and selected built-in mode/OM pack IDs.
