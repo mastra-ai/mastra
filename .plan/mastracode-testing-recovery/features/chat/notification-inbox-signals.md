@@ -75,10 +75,10 @@
 - `mastracode/src/tui/handlers/__tests__/message.test.ts` — streamed notification and summary rendering.
 - `mastracode/scripts/mc-e2e/scenarios/notification-signal-rendering.ts` — checked-in PTY e2e coverage for a custom entrypoint that emits urgent `agent.sendNotificationSignal()` into the active TUI thread, renders the `notification from github` card with priority/kind/status and alert body, and verifies the captured AIMock request body includes the notification contents.
 - `mastracode/scripts/mc-e2e/scenarios/notification-inbox-tool-flow.ts` — checked-in PTY e2e coverage for active medium-priority summary delivery followed by an AIMock-driven `notification_inbox read` tool call; asserts the summary prompt, delivered detail card, and read-result follow-up through the real TUI.
+- `mastracode/scripts/mc-e2e/scenarios/notification-inbox-crud-flow.ts` — checked-in PTY e2e coverage for deterministic seeded notification records managed through AIMock-driven `notification_inbox list`, `markSeen`, `dismiss`, `archive`, and `search`; asserts list-only visibility plus searchable `seen`, `dismissed`, and `archived` status transitions in the real TUI.
 
 ## Missing tests
 
-- End-to-end Mastra Code CRUD flow for `notification_inbox list`, `markSeen`, `dismiss`, `archive`, and `search` against multiple records.
 - Persistence/reload regression covering pending, delivered, seen, dismissed, archived, and coalesced notification records across a real storage backend.
 
 ## Known risks / regressions

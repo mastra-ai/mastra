@@ -4666,3 +4666,14 @@ Break validations:
 - Skipped stale subagent override cleanup; the scenario failed waiting for `MODELS_SUBAGENTS=0`.
 
 Verification: `pnpm run build:mastracode`; `pnpm --filter ./mastracode run e2e:test models-pack-activation-persistence`; `pnpm --filter ./mastracode run e2e:test --jobs 2` (62/62); `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
+
+### Notification inbox CRUD/search lifecycle
+
+Added `notification-inbox-crud-flow` TUI e2e coverage for the Chat: Notification inbox signals row. The scenario creates deterministic notification records in the isolated current thread, then uses AIMock tool-call fixtures to drive `notification_inbox list`, `markSeen`, `dismiss`, `archive`, and `search` through the real TUI. It asserts a list-only notification is visible and that `seen`, `dismissed`, and `archived` status transitions are searchable with their expected summaries.
+
+Break validations:
+- Forced `notification_inbox list` to filter `seen` records instead of the requested pending records; the scenario timed out waiting for the list-only notification.
+- Mapped `markSeen` back to `pending`; the scenario timed out waiting for the searchable `"status": "seen"` result.
+- Mapped `archive` back to `pending`; the scenario timed out waiting for the archived canary search result.
+
+Verification: `pnpm build:core`; `pnpm --filter ./mastracode run e2e:test notification-inbox-crud-flow`; `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.

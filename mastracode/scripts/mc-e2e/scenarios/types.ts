@@ -31,6 +31,7 @@ export type ScenarioName =
   | 'modal-and-shell'
   | 'mcp-server-config'
   | 'models-pack-activation-persistence'
+  | 'notification-inbox-crud-flow'
   | 'notification-inbox-tool-flow'
   | 'notification-signal-rendering'
   | 'om-settings'
