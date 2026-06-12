@@ -913,6 +913,11 @@ const sidebars = {
       items: [
         {
           type: 'doc',
+          id: 'build-with-ai/cli',
+          label: 'Mastra CLI',
+        },
+        {
+          type: 'doc',
           id: 'build-with-ai/skills',
           label: 'Skills',
         },
