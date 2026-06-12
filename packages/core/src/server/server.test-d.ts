@@ -6,6 +6,7 @@ import type { MastraAuthProvider } from './auth';
 import { CompositeAuth } from './composite-auth';
 import { SimpleAuth } from './simple-auth';
 import { registerApiRoute } from './index';
+import type { Methods, Middleware, ServerConfig } from './index';
 
 /**
  * Type tests for registerApiRoute
@@ -143,5 +144,56 @@ describe('CORS type tests', () => {
         credentials: true,
       },
     });
+  });
+});
+
+describe('server entrypoint type exports', () => {
+  it('allows annotating path-scoped middleware declared in a separate module', () => {
+    const authMiddleware: Middleware = {
+      path: '/*',
+      handler: async (c, next) => {
+        const authHeader = c.req.header('authorization');
+        expectTypeOf(authHeader).toEqualTypeOf<string | undefined>();
+
+        if (!authHeader) {
+          return new Response('Unauthorized', { status: 401 });
+        }
+
+        await next();
+      },
+    };
+
+    new Mastra({
+      server: {
+        middleware: [authMiddleware],
+      },
+    });
+  });
+
+  it('allows annotating a bare middleware handler', () => {
+    const requestLogger: Middleware = async (c, next) => {
+      expectTypeOf(c.req.path).toEqualTypeOf<string>();
+      await next();
+    };
+
+    new Mastra({
+      server: {
+        middleware: requestLogger,
+      },
+    });
+  });
+
+  it('allows declaring a full server config in a separate module', () => {
+    const protectedMethods: Methods[] = ['POST', 'PUT', 'DELETE'];
+    expectTypeOf(protectedMethods).items.toEqualTypeOf<Methods>();
+
+    const server: ServerConfig = {
+      port: 4111,
+      middleware: async (_c, next) => {
+        await next();
+      },
+    };
+
+    new Mastra({ server });
   });
 });
