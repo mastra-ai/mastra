@@ -5,6 +5,7 @@ import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { automatedChatScenario } from './automated-chat.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
 import { browserSettingsPersistenceScenario } from './browser-settings-persistence.js';
+import { browserToggleAttachScenario } from './browser-toggle-attach.js';
 import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
 import { commitAttributionPromptScenario } from './commit-attribution-prompt.js';
 import { customConfigDirScenario } from './custom-config-dir.js';
@@ -87,6 +88,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'automated-chat': automatedChatScenario,
   'browser-settings-persistence': browserSettingsPersistenceScenario,
+  'browser-toggle-attach': browserToggleAttachScenario,
   'clipboard-image-paste': clipboardImagePasteScenario,
   'commit-attribution-prompt': commitAttributionPromptScenario,
   'custom-config-dir': customConfigDirScenario,

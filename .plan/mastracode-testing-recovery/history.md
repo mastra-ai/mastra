@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Browser toggle attach coverage (2026-06-12)
+
+Added `browser-toggle-attach` as the 77th checked-in TUI e2e scenario. The scenario seeds AgentBrowser CDP settings, drives `/browser status` disabled, runs `/browser on`, verifies enabled `/browser status` renders the AgentBrowser provider and CDP endpoint, sends a normal AIMock-backed user turn, and proves persisted settings plus provider-visible browser tools (`browser_goto`, `browser_snapshot`) reached the model request.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test browser-toggle-attach
+```
+
+Break validations:
+
+- Skipping `applyBrowserToAgents()` made the scenario's AIMock request verification fail because browser tools were absent from the model request.
+- Skipping `saveSettings()` after `/browser on` made `/browser status` render active/pending drift instead of `Browser: enabled` and failed the status assertion.
+- Hiding the CDP URL from `/browser status` failed the endpoint assertion.
+
+The browser automation row remains `needs-follow-up`; this chunk closes manual `/browser on` attach/tool-injection breadth, while startup-restored browser recreation, provider mismatch/export/provider wizard breadth, and reload/history parity remain.
+
+
 ### Custom provider edit/share/import coverage (2026-06-12)
 
 Added `custom-provider-edit-share-import` as the 76th checked-in TUI e2e scenario. The scenario seeds a custom OpenAI-compatible provider plus a saved custom model pack, shares the pack through the real `/models` custom-pack action menu, decodes the clipboard `mastra-pack:` payload through shell passthrough, starts an import of the same shared pack and selects the collision `Cancel` action, then edits the provider name, base URL, and API key through `/custom-providers` default-valued modal prompts. Final shell assertions prove the shared import did not activate a pack while the provider edit persisted and preserved model IDs.

@@ -73,14 +73,14 @@
 - `mastracode/src/tui/commands/__tests__/browser.test.ts` — direct `/browser on` shield proving enabled settings create a browser, attach it to static and state-derived mode agents, record `activeBrowserSettings`, and persist profile provider metadata.
 - `mastracode/scripts/mc-e2e/scenarios/integration-commands.ts` — real PTY/TUI e2e partial coverage proving `/browser status` renders visible browser status feedback in the transcript.
 - `mastracode/scripts/mc-e2e/scenarios/browser-settings-persistence.ts` — real PTY/TUI e2e partial coverage for `/browser set cdpUrl`, `/browser set profile`, `/browser set executablePath`, and `/browser clear profile`, including persisted settings assertions for CDP/profile mutual exclusion and profile cleanup.
+- `mastracode/scripts/mc-e2e/scenarios/browser-toggle-attach.ts` — real PTY/TUI e2e coverage for `/browser on` with an AgentBrowser CDP configuration, `/browser status` enabled projection, saved settings persistence, and provider-visible browser tool injection in a subsequent AIMock turn.
 
 ## Missing tests
 
 - Additional direct `/browser` command/wizard tests for provider selection, Browserbase requirements, clear/export flows, profile provider mismatch warnings, and saved settings.
-- Startup regression proving saved browser settings create a browser and set `activeBrowserSettings`.
+- Startup regression proving saved browser settings create a browser and set `activeBrowserSettings` without requiring a manual `/browser on`.
 - Remaining e2e status/config-drift tests for profile provider mismatch warnings and active-vs-pending settings; baseline `/browser status` disabled/enabled transcript is covered by `integration-commands`.
-- End-to-end agent run proving browser tools/context are available from saved settings in Mastra Code.
-- Mastra Code TUI/browser integration proving live browser state signals render during streaming and reload from persisted history.
+- Mastra Code TUI/browser integration proving browser reload/history parity and optional live external-provider smoke beyond deterministic CDP attach/tool injection.
 
 ## Known risks / regressions
 
