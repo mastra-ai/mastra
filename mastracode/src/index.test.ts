@@ -40,6 +40,7 @@ vi.mock('./agents/memory.js', () => ({
 
 vi.mock('./agents/model.js', () => ({
   getDynamicModel: vi.fn(),
+  getGoalJudgeModel: vi.fn(),
   resolveModel: vi.fn(),
 }));
 
