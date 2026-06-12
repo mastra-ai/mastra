@@ -512,11 +512,7 @@ describe('UnixSocketPubSub', () => {
       pubsubs.push(pubsub);
 
       let deliveries = 0;
-      const cb = async (
-        _event: Event,
-        _ack?: () => Promise<void>,
-        nack?: () => Promise<void>,
-      ): Promise<void> => {
+      const cb = async (_event: Event, _ack?: () => Promise<void>, nack?: () => Promise<void>): Promise<void> => {
         deliveries++;
         await nack?.();
         await pubsub.unsubscribe('topic-a', cb);
