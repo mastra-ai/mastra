@@ -82277,7 +82277,7 @@ export type GetExperiments_Response = {
     targetId: string;
     name?: string | undefined;
     description?: string | undefined;
-    /** User metadata, plus runner-stamped keys: `toolReplay` marks replay/mock runs (onMiss, matching, mockedTools), and `failureReason` ({id, message}) records why an async experiment failed at setup */
+    /** User metadata, plus runner-stamped keys: `toolReplay` marks replay/mock runs (onMiss, matching, mockedTools, and mockConfigs carrying the mock configuration — data mocks verbatim, function mocks as `{function: true}`), and `failureReason` ({id, message}) records why an async experiment failed at setup */
     metadata?:
       | {
           [key: string]: unknown;
@@ -82371,7 +82371,7 @@ export type GetDatasetsDatasetIdExperiments_Response = {
     targetId: string;
     name?: string | undefined;
     description?: string | undefined;
-    /** User metadata, plus runner-stamped keys: `toolReplay` marks replay/mock runs (onMiss, matching, mockedTools), and `failureReason` ({id, message}) records why an async experiment failed at setup */
+    /** User metadata, plus runner-stamped keys: `toolReplay` marks replay/mock runs (onMiss, matching, mockedTools, and mockConfigs carrying the mock configuration — data mocks verbatim, function mocks as `{function: true}`), and `failureReason` ({id, message}) records why an async experiment failed at setup */
     metadata?:
       | {
           [key: string]: unknown;
@@ -82486,6 +82486,24 @@ export type PostDatasetsDatasetIdExperiments_Body = {
                 message: string;
               }
             | undefined;
+          /** Args-conditional answers: the first case whose args match the call's args serves its output or error. Mutually exclusive with the static output/error pair. */
+          cases?:
+            | {
+                /** Args this case answers (canonicalized deep equality) */
+                args: unknown;
+                /** Output served when the case matches */
+                output?: unknown | undefined;
+                /** Error thrown when the case matches (wins over output) */
+                error?:
+                  | {
+                      name?: string | undefined;
+                      message: string;
+                    }
+                  | undefined;
+              }[]
+            | undefined;
+          /** Behavior when no case matches the call's args (default: 'error'). 'error' fails the item deterministically (TOOL_MOCK_ARGS_MISMATCH, never retried); 'passthrough' lets the live tool execute. */
+          onNoMatch?: ('error' | 'passthrough') | undefined;
           /** Assertion on how the tool must be called (an unsatisfied expectation fails the item) */
           expect?:
             | {
@@ -82568,7 +82586,7 @@ export type GetDatasetsDatasetIdExperimentsExperimentId_Response = {
   targetId: string;
   name?: string | undefined;
   description?: string | undefined;
-  /** User metadata, plus runner-stamped keys: `toolReplay` marks replay/mock runs (onMiss, matching, mockedTools), and `failureReason` ({id, message}) records why an async experiment failed at setup */
+  /** User metadata, plus runner-stamped keys: `toolReplay` marks replay/mock runs (onMiss, matching, mockedTools, and mockConfigs carrying the mock configuration — data mocks verbatim, function mocks as `{function: true}`), and `failureReason` ({id, message}) records why an async experiment failed at setup */
   metadata?:
     | {
         [key: string]: unknown;
