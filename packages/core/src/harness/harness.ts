@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-import type { Agent } from '../agent';
+import { Agent } from '../agent';
 import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { createSignal, mastraDBMessageToSignal } from '../agent/signals';
 import type { AgentSignalAttributes, AgentSignalContents, AgentSignalInput } from '../agent/signals';
@@ -455,7 +455,7 @@ export class Harness<TState = {}> {
   private switchModeVersion: number = 0;
   private availableModelsCache: AvailableModel[] | null = null;
   private availableModelsCacheTime: number = 0;
-  readonly #agent: Agent<any, any, any, any>;
+  readonly #instructions?: string;
   #internalMastra: Mastra | undefined = undefined;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
 
@@ -464,7 +464,7 @@ export class Harness<TState = {}> {
     this.config = config;
     this.resourceId = config.resourceId ?? config.id;
     this.defaultResourceId = this.resourceId;
-    this.#agent = config.agent;
+    this.#instructions = config.instructions;
 
     // Convert PublicSchema to StandardSchemaWithJSON at the boundary
     this.stateSchema = config.stateSchema ? toStandardSchema(config.stateSchema) : undefined;
@@ -524,7 +524,10 @@ export class Harness<TState = {}> {
     this.browser = browser;
     this.browserFn = undefined;
 
-    this.#agent.setBrowser(browser);
+    for (const mode of this.config.modes) {
+      const agent = this.getAgentForMode(mode);
+      agent.setBrowser(browser);
+    }
   }
 
   // ===========================================================================
@@ -577,7 +580,11 @@ export class Harness<TState = {}> {
       }
     }
 
-    this.propagateRuntimeServicesToAgent(this.#agent);
+    // Propagate harness-level Mastra, memory, workspace, browser, and pubsub to mode agents (after workspace init)
+    for (const mode of this.config.modes) {
+      const agent = this.getAgentForMode(mode);
+      this.propagateRuntimeServicesToAgent(agent);
+    }
 
     this.startHeartbeats();
   }
@@ -811,6 +818,27 @@ export class Harness<TState = {}> {
     return agent;
   }
 
+  private getAgentForMode(mode: HarnessMode): Agent<any, any, any, any> {
+    if (!this.#legacyAgentMode[mode.id]) {
+      // TODO move to state signals in the future
+      const forkedAgent = new Agent({
+        id: `${this.id}-agent`,
+        name: `Harness ${this.id} agent`,
+        model: mode.defaultModelId,
+        instructions: [this.#instructions ?? '', mode.instructions].filter(Boolean).join('\n'),
+        //TOOD move to permissions and global tools
+        tools: {
+          ...mode.tools,
+          ...mode.additionalTools,
+        },
+      });
+
+      this.#legacyAgentMode[mode.id] = forkedAgent;
+    }
+
+    return this.#legacyAgentMode[mode.id]!;
+  }
+
   /**
    * Get the agent for the current mode.
    */
@@ -823,25 +851,8 @@ export class Harness<TState = {}> {
    */
   getCurrentAgent(): Agent {
     const mode = this.getCurrentMode();
-    if (!this.#legacyAgentMode[mode.id]) {
-      const forkedAgent = this.#agent.__fork();
-      forkedAgent.__updateInstructions(mode.instructions);
-      if (mode.tools) {
-        forkedAgent.__setTools(mode.tools);
-      }
-      if (mode.additionalTools) {
-        const tools = forkedAgent.listTools();
-        for (const toolName in mode.additionalTools) {
-          tools[toolName] = mode.additionalTools[toolName];
-        }
-        forkedAgent.__setTools(tools);
-      }
 
-      this.#legacyAgentMode[mode.id] = forkedAgent;
-    }
-
-    const agent = this.#legacyAgentMode[mode.id]!;
-    return this.propagateRuntimeServicesToAgent(agent);
+    return this.propagateRuntimeServicesToAgent(this.getAgentForMode(mode));
   }
 
   /**

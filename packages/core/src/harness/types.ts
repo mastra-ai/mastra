@@ -208,7 +208,7 @@ export interface HarnessConfig<TState = {}> {
   /** Available agent modes */
   modes: HarnessMode[];
 
-  agent: Agent<any, any, any, any>;
+  instructions?: string;
 
   /**
    * Tools available to all agents across all modes.
