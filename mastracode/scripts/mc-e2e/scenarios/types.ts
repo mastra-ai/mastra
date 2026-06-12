@@ -44,6 +44,7 @@ export type ScenarioName =
   | 'mcp-server-config'
   | 'mcp-skipped-validation'
   | 'model-selection-api-key-prompt'
+  | 'model-selection-cancel-env'
   | 'models-pack-activation-persistence'
   | 'notification-inbox-crud-flow'
   | 'notification-inbox-reload'

@@ -31,6 +31,7 @@ import { mcpServerConfigScenario } from './mcp-server-config.js';
 import { mcpSkippedValidationScenario } from './mcp-skipped-validation.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
 import { modelSelectionApiKeyPromptScenario } from './model-selection-api-key-prompt.js';
+import { modelSelectionCancelEnvScenario } from './model-selection-cancel-env.js';
 import { modelsPackActivationPersistenceScenario } from './models-pack-activation-persistence.js';
 import { notificationInboxCrudFlowScenario } from './notification-inbox-crud-flow.js';
 import { notificationInboxReloadScenario } from './notification-inbox-reload.js';
@@ -119,6 +120,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'mcp-server-config': mcpServerConfigScenario,
   'mcp-skipped-validation': mcpSkippedValidationScenario,
   'model-selection-api-key-prompt': modelSelectionApiKeyPromptScenario,
+  'model-selection-cancel-env': modelSelectionCancelEnvScenario,
   'models-pack-activation-persistence': modelsPackActivationPersistenceScenario,
   'notification-inbox-crud-flow': notificationInboxCrudFlowScenario,
   'notification-inbox-reload': notificationInboxReloadScenario,

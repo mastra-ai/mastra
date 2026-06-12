@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Model selection cancel/env precedence coverage (2026-06-12)
+
+Added `model-selection-cancel-env` as the 82nd checked-in TUI e2e scenario. The scenario seeds a saved custom model pack, launches with a real `302AI_API_KEY`, edits the pack through `/models`, selects a synthetic `302ai` plan model that should inherit env-backed provider availability without opening the missing-key dialog, then selects a second synthetic provider for build mode, cancels the `API Key Required` dialog, saves, and proves both selected model IDs persisted while no stored auth keys were written.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test model-selection-cancel-env
+```
+
+Break validations:
+
+- Forcing synthetic model items to ignore sibling provider `hasApiKey` metadata made the env-backed `302ai` selection open an unexpected API-key dialog.
+- Storing an API key from the missing-key dialog cancel path made shell proof show `MODEL_CANCEL_CANCEL_KEY=cancelled-key-should-not-store` instead of `missing`.
+- Skipping custom-pack edit settings persistence left both plan/build models at their original values.
+
+The settings row remains `needs-follow-up`; this chunk closes the model-selection cancellation/env-precedence gap, while custom-pack completion, browser wizard/startup restore, and broader reload parity remain.
+
+
 ### Startup update prompt coverage (2026-06-12)
 
 Added `update-startup-prompt` as the 81st checked-in TUI e2e scenario. The scenario boots the real TUI with hermetic `MASTRACODE_UPDATE_LATEST_VERSION` and `MASTRACODE_UPDATE_CHANGELOG` env overrides, waits for the automatic startup inline update prompt, verifies the changelog entry is rendered, selects `No`, and proves `settings.updateDismissedVersion` is persisted through shell passthrough.
