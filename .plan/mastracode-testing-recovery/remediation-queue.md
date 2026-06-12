@@ -59,11 +59,12 @@
   - Completed: `custom-provider-delete` seeds a custom OpenAI-compatible provider, deletes it through `/custom-providers`, confirms the destructive modal, and proves `settings.json` removes the provider while unrelated saved custom packs remain intact.
   - Completed: `model-selection-api-key-prompt` edits a saved custom pack through `/models`, selects a synthetic `302ai` model with no configured key, verifies the masked missing-key dialog/env hint, and proves stored auth/env projection plus saved pack settings update.
   - Completed: `browser-settings-persistence` uses `/browser set`/`clear` quick commands to prove CDP/profile mutual exclusion, Stagehand profile preservation cleanup, and executable-path persistence in `settings.json` without launching a live browser.
+  - Completed: `custom-pack-import-overwrite` imports a shared `mastra-pack:` string through `/models`, confirms overwrite on a colliding saved pack, and proves imported model defaults plus active pack persistence in `settings.json`.
   - `onboarding-full-wizard`: remaining breadth for login refresh and custom pack completion.
   - `update-startup-prompt`: use existing update env seams to assert passive startup prompt, then `Yes` path with a stub install command if a safe seam is added.
   - Completed: `quiet-tool-history-parity` enables Quiet mode in settings, drives AIMock-backed live `view` + `task_write`, asserts compact tool/task rendering, then reloads a seeded tool-history thread and asserts loaded quiet compact rendering.
   - `settings-reload-persistence`: combine storage/custom-provider changes, relaunch scenario, assert settings persist without relying on runtime state.
-  - `custom-provider-edit-share-import`: exercise targeted edit/import/share provider and custom-pack modals plus `/models` selection visibility; delete persistence is covered by `custom-provider-delete`.
+  - `custom-provider-edit-share-import`: exercise targeted edit/share provider and custom-pack modals plus `/models` selection visibility; delete persistence is covered by `custom-provider-delete`, and shared-pack import collision/overwrite is covered by `custom-pack-import-overwrite`.
   - `provider-history-rejection-retry`: custom provider that rejects reasoning once, then verifies `ProviderHistoryCompat` error-processor retry specifically handles the rejection.
 - Fixture/data needs: settings.json seeds, AIMock custom provider fixtures, one-shot local HTTP provider mock for rejection/retry cases.
 

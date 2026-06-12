@@ -8,6 +8,7 @@ import { browserSettingsPersistenceScenario } from './browser-settings-persisten
 import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
 import { commitAttributionPromptScenario } from './commit-attribution-prompt.js';
 import { customConfigDirScenario } from './custom-config-dir.js';
+import { customPackImportOverwriteScenario } from './custom-pack-import-overwrite.js';
 import { customProviderDeleteScenario } from './custom-provider-delete.js';
 import { customProviderManagementScenario } from './custom-provider-management.js';
 import { customSlashCommandScenario } from './custom-slash-command.js';
@@ -82,6 +83,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'clipboard-image-paste': clipboardImagePasteScenario,
   'commit-attribution-prompt': commitAttributionPromptScenario,
   'custom-config-dir': customConfigDirScenario,
+  'custom-pack-import-overwrite': customPackImportOverwriteScenario,
   'custom-provider-delete': customProviderDeleteScenario,
   'custom-provider-management': customProviderManagementScenario,
   'custom-slash-command': customSlashCommandScenario,

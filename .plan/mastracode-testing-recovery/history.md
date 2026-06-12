@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Custom pack import overwrite coverage (2026-06-12)
+
+Added `custom-pack-import-overwrite` as the 69th checked-in TUI e2e scenario. The scenario seeds a custom provider plus a saved custom pack, opens `/models`, selects `Import Pack`, pastes a deterministic `mastra-pack:` string with a colliding pack name, confirms `Overwrite`, and uses shell passthrough to prove the imported model defaults, active pack ID, and saved pack models persist in `settings.json`.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test custom-pack-import-overwrite
+```
+
+Break validations:
+
+- Skipping `applyPack()` after import rendered the success message but left `IMPORT_ACTIVE=null`, old pack models, and empty mode defaults.
+- Returning early from the overwrite collision branch prevented `Imported and activated Imported Pack E2E pack` from rendering.
+- Corrupting shared-pack deserialization by mapping the plan model from build persisted the wrong plan/default model and failed the scenario.
+
+The `Settings: Onboarding and global settings` row remains `needs-follow-up`; this chunk closes `/models` shared-pack import collision/overwrite persistence, while custom-pack completion/edit/share, model-selection cancellation/env-precedence, browser wizard/startup restore, and reload breadth remain.
+
+
 ### Browser settings persistence coverage (2026-06-12)
 
 Added `browser-settings-persistence` as the 68th checked-in TUI e2e scenario. The scenario uses `/browser set cdpUrl`, `/browser set profile`, `/browser set executablePath`, and `/browser clear profile` through the real PTY TUI, then uses shell passthrough to prove `settings.json` clears CDP when switching to a profile, enables Stagehand profile preservation, persists the executable path, and removes profile/preserve state when the profile is cleared.
