@@ -120,7 +120,11 @@ export class MastraRBACNeon implements IRBACProvider<NeonAuthUser> {
   constructor(options: MastraRBACNeonOptions) {
     this.options = options;
     const rawUrl = options.baseUrl ?? process.env.NEON_AUTH_BASE_URL ?? '';
-    this.baseUrl = rawUrl.endsWith('/') ? rawUrl.replace(/\/+$/, '') : rawUrl;
+    let end = rawUrl.length;
+    while (end > 0 && rawUrl[end - 1] === '/') {
+      end--;
+    }
+    this.baseUrl = rawUrl.slice(0, end);
     this.cacheTtlMs = options.cache?.ttlMs ?? DEFAULT_CACHE_TTL_MS;
     this.cacheMaxSize = options.cache?.maxSize ?? DEFAULT_CACHE_MAX_SIZE;
   }

@@ -30,6 +30,14 @@ function getRequestHeader(request: MastraAuthRequest, name: string): string | nu
   return request.raw?.headers.get(name) ?? request.headers?.get(name) ?? request.header(name) ?? null;
 }
 
+function stripTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === '/') {
+    end--;
+  }
+  return url.slice(0, end);
+}
+
 function parseCookies(response: Response): string[] {
   if (typeof response.headers.getSetCookie === 'function') {
     return response.headers.getSetCookie();
@@ -182,7 +190,7 @@ export class MastraAuthNeon
       );
     }
 
-    this.baseUrl = baseUrl.endsWith('/') ? baseUrl.replace(/\/+$/, '') : baseUrl;
+    this.baseUrl = stripTrailingSlashes(baseUrl);
     this.jwksUrl = options?.jwksUrl ?? process.env.NEON_AUTH_JWKS_URL ?? `${this.baseUrl}/auth/jwks`;
     this.sessionCookieName = options?.sessionCookieName ?? 'neonauth.session_token';
     this.signUpEnabledConfig = options?.signUpEnabled ?? true;
