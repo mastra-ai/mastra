@@ -5,13 +5,22 @@ import type { StorageDomains, CreateIndexOptions } from '@mastra/core/storage';
 import sql from 'mssql';
 import { AgentsMSSQL } from './domains/agents';
 import { BackgroundTasksMSSQL } from './domains/background-tasks';
+import { HarnessMSSQL } from './domains/harness';
 import { MemoryMSSQL } from './domains/memory';
 import { ObservabilityMSSQL } from './domains/observability';
 import { ScoresMSSQL } from './domains/scores';
 import { WorkflowsMSSQL } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
-export { AgentsMSSQL, BackgroundTasksMSSQL, MemoryMSSQL, ObservabilityMSSQL, ScoresMSSQL, WorkflowsMSSQL };
+export {
+  AgentsMSSQL,
+  BackgroundTasksMSSQL,
+  HarnessMSSQL,
+  MemoryMSSQL,
+  ObservabilityMSSQL,
+  ScoresMSSQL,
+  WorkflowsMSSQL,
+};
 export type { MssqlDomainConfig } from './db';
 
 /**
@@ -203,6 +212,7 @@ export class MSSQLStore extends MastraCompositeStore {
       const backgroundTasks = new BackgroundTasksMSSQL(domainConfig);
 
       const agents = new AgentsMSSQL(domainConfig);
+      const harness = new HarnessMSSQL(domainConfig);
 
       this.stores = {
         scores,
@@ -211,6 +221,7 @@ export class MSSQLStore extends MastraCompositeStore {
         observability,
         backgroundTasks,
         agents,
+        harness,
       };
     } catch (e) {
       throw new MastraError(

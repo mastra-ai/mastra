@@ -11,6 +11,7 @@ import { ChannelsMySQL } from './domains/channels';
 import { DatasetsMySQL } from './domains/datasets';
 import { ExperimentsMySQL } from './domains/experiments';
 import { FavoritesMySQL } from './domains/favorites';
+import { HarnessMySQL } from './domains/harness';
 import { MCPClientsMySQL } from './domains/mcp-clients';
 import { MCPServersMySQL } from './domains/mcp-servers';
 import { MemoryMySQL } from './domains/memory';
@@ -34,6 +35,7 @@ export {
   DatasetsMySQL,
   ExperimentsMySQL,
   FavoritesMySQL,
+  HarnessMySQL,
   MCPClientsMySQL,
   MCPServersMySQL,
   MemoryMySQL,
@@ -309,6 +311,12 @@ export class MySQLStore extends MastraCompositeStore {
       skipDefaultIndexes: config.skipDefaultIndexes,
       indexes: config.indexes,
     });
+    const harness = new HarnessMySQL({
+      pool: this.pool,
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
 
     this.stores = {
       memory,
@@ -330,6 +338,7 @@ export class MySQLStore extends MastraCompositeStore {
       favorites,
       schedules,
       toolProviderConnections,
+      harness,
     };
   }
 
@@ -372,6 +381,7 @@ const ALL_DOMAINS = [
   FavoritesMySQL,
   ChannelsMySQL,
   SchedulesMySQL,
+  HarnessMySQL,
 ] as const;
 
 /**

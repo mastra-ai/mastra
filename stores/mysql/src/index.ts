@@ -5,6 +5,7 @@ export {
   BlobsMySQL,
   DatasetsMySQL,
   ExperimentsMySQL,
+  HarnessMySQL,
   MCPClientsMySQL,
   MCPServersMySQL,
   MemoryMySQL,

@@ -8,6 +8,7 @@ import { BackgroundTasksStorageMongoDB } from './domains/background-tasks';
 import { MongoDBBlobStore } from './domains/blobs';
 import { MongoDBDatasetsStorage } from './domains/datasets';
 import { MongoDBExperimentsStorage } from './domains/experiments';
+import { HarnessMongoDB } from './domains/harness';
 import { MongoDBMCPClientsStorage } from './domains/mcp-clients';
 import { MongoDBMCPServersStorage } from './domains/mcp-servers';
 import { MemoryStorageMongoDB } from './domains/memory';
@@ -29,6 +30,7 @@ export {
   MongoDBBlobStore,
   MongoDBDatasetsStorage,
   MongoDBExperimentsStorage,
+  HarnessMongoDB,
   MongoDBMCPClientsStorage,
   MongoDBMCPServersStorage,
   MemoryStorageMongoDB,
@@ -112,6 +114,8 @@ export class MongoDBStore extends MastraCompositeStore {
 
     const schedules = new SchedulesMongoDB(domainConfig);
 
+    const harness = new HarnessMongoDB(domainConfig);
+
     this.stores = {
       memory,
       notifications,
@@ -130,6 +134,7 @@ export class MongoDBStore extends MastraCompositeStore {
       datasets,
       experiments,
       schedules,
+      harness,
     };
   }
 
