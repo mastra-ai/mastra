@@ -418,11 +418,7 @@ export function getDynamicModel({ requestContext }: { requestContext: RequestCon
  * Returns `undefined` when no judge model is configured, which keeps the goal
  * step a complete no-op (the goal mechanism requires a judge to do anything).
  */
-export function getGoalJudgeModel({
-  requestContext,
-}: {
-  requestContext: RequestContext;
-}): ResolvedModel | undefined {
+export function getGoalJudgeModel({ requestContext }: { requestContext: RequestContext }): ResolvedModel | undefined {
   const judgeModelId = loadSettings().models.goalJudgeModel;
   if (!judgeModelId) return undefined;
   return resolveModel(judgeModelId, { remapForCodexOAuth: true, requestContext });

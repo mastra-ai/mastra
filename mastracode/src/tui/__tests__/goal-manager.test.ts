@@ -68,7 +68,12 @@ describe('GoalManager adapter', () => {
 
     expect(agent.setObjective).toHaveBeenCalledWith(
       'finish the task',
-      expect.objectContaining({ threadId: 'parent-thread', resourceId: 'resource-1', judgeModelId: 'openai/gpt-5.5', maxRuns: 25 }),
+      expect.objectContaining({
+        threadId: 'parent-thread',
+        resourceId: 'resource-1',
+        judgeModelId: 'openai/gpt-5.5',
+        maxRuns: 25,
+      }),
     );
     expect(goal).toMatchObject({ objective: 'finish the task', status: 'active', turnsUsed: 0, maxTurns: 25 });
     expect(manager.isActive()).toBe(true);
@@ -219,7 +224,9 @@ describe('GoalManager adapter', () => {
 
     await manager.saveToThread(state);
 
-    expect(agent.updateObjectiveOptions).toHaveBeenCalledWith(expect.objectContaining({ threadId: 'parent-thread', status: 'paused' }));
+    expect(agent.updateObjectiveOptions).toHaveBeenCalledWith(
+      expect.objectContaining({ threadId: 'parent-thread', status: 'paused' }),
+    );
     expect(state.harness.setThreadSetting).toHaveBeenCalledWith({ key: 'goal', value: undefined });
   });
 });

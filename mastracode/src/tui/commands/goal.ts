@@ -303,7 +303,6 @@ async function promptForJudgeDefaults(ctx: SlashCommandContext, cancelMessage: s
   });
 }
 
-
 async function startGoal(
   ctx: SlashCommandContext,
   objective: string,

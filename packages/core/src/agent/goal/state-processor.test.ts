@@ -86,9 +86,7 @@ describe('GoalStateProcessor', () => {
 
   it('re-snapshots when the base was dropped from the window', async () => {
     const { processor } = await createProcessor(objective());
-    const result = await processor.computeStateSignal(
-      createArgs({ lastSnapshot: objective(), hasSnapshot: false }),
-    );
+    const result = await processor.computeStateSignal(createArgs({ lastSnapshot: objective(), hasSnapshot: false }));
     expect(result).toBeTruthy();
     expect(result!.mode).toBe('snapshot');
   });

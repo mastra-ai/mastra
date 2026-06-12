@@ -381,9 +381,7 @@ describe('handleGoalCommand', () => {
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
     expect(isActiveAtSave).toBe(true);
     expect(isActiveAtSendSignal).toBe(true);
-    expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(
-      sendSignal.mock.invocationCallOrder[0],
-    );
+    expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(sendSignal.mock.invocationCallOrder[0]);
     expect(sendSignal).toHaveBeenCalledTimes(1);
   });
 
