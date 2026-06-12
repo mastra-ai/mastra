@@ -41,13 +41,13 @@ importers:
         specifier: link:../../../memory
         version: link:../../../memory
       ai:
-        specifier: ^5.0.179
+        specifier: ^5.0.196
         version: 5.0.197(zod@4.4.3)
       mastra:
         specifier: link:../../../cli
         version: link:../../../cli
       msw:
-        specifier: ^2.13.6
+        specifier: ^2.14.6
         version: 2.14.6(@types/node@22.19.20)(typescript@5.9.3)
       zod:
         specifier: ^4.3.6

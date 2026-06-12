@@ -109,53 +109,14 @@ export class StagehandBrowser extends MastraBrowser {
    * Build Stagehand options from config.
    * Returns the configuration object expected by Stagehand constructor.
    */
-  private async buildStagehandOptions(): Promise<{
-    env: 'LOCAL' | 'BROWSERBASE';
-    model?: string;
-    selfHeal?: boolean;
-    domSettleTimeoutMs?: number;
-    verbose?: 0 | 1 | 2;
-    systemPrompt?: string;
-    logger?: StagehandBrowserConfig['logger'];
-    disablePino?: boolean;
-    apiKey?: string;
-    projectId?: string;
-    localBrowserLaunchOptions?: {
-      cdpUrl?: string;
-      headless?: boolean;
-      viewport?: { width: number; height: number };
-      userDataDir?: string;
-      executablePath?: string;
-      preserveUserDataDir?: boolean;
-    };
-  }> {
+  private async buildStagehandOptions(): Promise<ConstructorParameters<typeof Stagehand>[0]> {
     const config = this.stagehandConfig;
 
-    const stagehandOptions: {
-      env: 'LOCAL' | 'BROWSERBASE';
-      model?: string;
-      selfHeal?: boolean;
-      domSettleTimeoutMs?: number;
-      verbose?: 0 | 1 | 2;
-      systemPrompt?: string;
-      logger?: StagehandBrowserConfig['logger'];
-      disablePino?: boolean;
-      apiKey?: string;
-      projectId?: string;
-      localBrowserLaunchOptions?: {
-        cdpUrl?: string;
-        headless?: boolean;
-        viewport?: { width: number; height: number };
-        userDataDir?: string;
-        executablePath?: string;
-        preserveUserDataDir?: boolean;
-      };
-    } = {
+    const stagehandOptions: ConstructorParameters<typeof Stagehand>[0] = {
       env: config.env ?? 'LOCAL',
-      // v3 uses "provider/model" format
-      model: typeof config.model === 'string' ? config.model : config.model?.modelName,
+      model: config.model,
       selfHeal: config.selfHeal ?? true,
-      domSettleTimeoutMs: config.domSettleTimeout,
+      domSettleTimeout: config.domSettleTimeout,
       verbose: (config.verbose ?? 0) as 0 | 1 | 2,
       systemPrompt: config.systemPrompt,
       logger: config.logger ?? (() => {}),
