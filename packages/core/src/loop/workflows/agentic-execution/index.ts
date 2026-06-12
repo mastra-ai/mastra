@@ -13,6 +13,8 @@ import { resolveConfiguredToolCallConcurrency, resolveToolCallConcurrency } from
 import type { ToolCallForeachOptions } from './tool-call-concurrency';
 import { createToolCallStep } from './tool-call-step';
 
+export const AGENTIC_EXECUTION_WORKFLOW_ID = 'executionWorkflow';
+
 export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
   models,
   _internal,
@@ -73,7 +75,7 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
   const createWorkflow = process.env.MASTRA_EVENTED_EXECUTION === 'true' ? createEventedWorkflow : createDirectWorkflow;
 
   return createWorkflow({
-    id: 'executionWorkflow',
+    id: AGENTIC_EXECUTION_WORKFLOW_ID,
     inputSchema: llmIterationOutputSchema,
     outputSchema: llmIterationOutputSchema,
     options: {
