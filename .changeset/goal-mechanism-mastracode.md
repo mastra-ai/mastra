@@ -11,3 +11,5 @@ All user-facing behavior is preserved: `/goal <text>`, `/goal status|pause|resum
 The standalone `/judge` command is now the `/goal judge` subcommand, grouping judge configuration under the goal it belongs to (the judge model is only meaningful for evaluating a goal).
 
 The goal judge model is resolved through mastracode's model gateway (`goal.judge` is a resolver function), so provider credentials stored in auth storage are injected — previously the goal scorer received a bare model id and failed with "Could not find API key" for the configured judge. Because evaluation now happens during the run, an objective with no judge model configured anywhere is inert (no judging, no continuation).
+
+The raw `<current-objective>` goal state signal is suppressed in the transcript (both streamed and replayed), matching the existing behavior for the `<current-task-list>` task signal — the objective is surfaced by the goal/judge UI instead of echoed inline.
