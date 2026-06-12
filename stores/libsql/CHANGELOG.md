@@ -1,5 +1,40 @@
 # @mastra/libsql
 
+## 1.13.0-alpha.0
+
+### Minor Changes
+
+- Added LibSQL storage support for durable harness sessions. ([#17712](https://github.com/mastra-ai/mastra/pull/17712))
+
+  ```ts
+  const storage = new LibSQLStore({ id: 'mastra-storage', url: 'file:./mastra.db' });
+
+  const harness = new Harness({
+    ownerId: 'my-app',
+    agent,
+    memory,
+    storage,
+    modes: [{ id: 'default', defaultModelId: '__GATEWAY_OPENAI_MODEL__' }],
+    defaultModeId: 'default',
+  });
+  ```
+
+- Add `ThreadStateLibSQL`, the LibSQL implementation of the new `ThreadStateStorage` domain. It persists per-thread, per-type state (e.g. the agent task list under `type: "task"`) in the `mastra_thread_state` table, keyed by `(threadId, type)`. Composing a LibSQL store wires this domain automatically, so an agent's task list now survives a process restart. ([#17820](https://github.com/mastra-ai/mastra/pull/17820))
+
+### Patch Changes
+
+- dependencies updates: ([#17148](https://github.com/mastra-ai/mastra/pull/17148))
+  - Updated dependency [`@libsql/client@^0.17.3` ↗︎](https://www.npmjs.com/package/@libsql/client/v/0.17.3) (from `^0.15.15`, in `dependencies`)
+
+- Fixed concurrent writes silently disappearing when using LibSQL with a local (`file:`) database. ([#16796](https://github.com/mastra-ai/mastra/pull/16796))
+
+  LibSQL backs a local database with a single connection. When one operation held an interactive write transaction (for example, persisting workflow snapshots) and another operation wrote at the same time (for example, creating a dataset experiment), the second write could be swept into the open transaction and rolled back — so it appeared to succeed but never persisted. This surfaced as concurrent agent/workflow runs losing unrelated records.
+
+  Writes on a LibSQL client are now serialized, so a write issued during an in-flight transaction no longer interleaves with it.
+
+- Updated dependencies [[`575f815`](https://github.com/mastra-ai/mastra/commit/575f815c5c3567b71c0b83cbb7fa98c8253a9d9c), [`306909a`](https://github.com/mastra-ai/mastra/commit/306909a693de77d709b38706e2673c9547d24a28), [`5191af8`](https://github.com/mastra-ai/mastra/commit/5191af80c799eea25357c545fc05d91b3883531d), [`43bd3d4`](https://github.com/mastra-ai/mastra/commit/43bd3d421987463fdf35386a45199c49499ed069), [`e6fa79e`](https://github.com/mastra-ai/mastra/commit/e6fa79ec72a2ddffdd25e85270398951e9d552a4), [`904bcdf`](https://github.com/mastra-ai/mastra/commit/904bcdf7b8004aa7be823f9f70ca63580e47e470), [`7f5ee1d`](https://github.com/mastra-ai/mastra/commit/7f5ee1dca46daee8d2817f2ebe49e6335da81956), [`1e9aab5`](https://github.com/mastra-ai/mastra/commit/1e9aab50ff11e6e88fde4d7cbf512c44a9fe8d61), [`bf8eb6d`](https://github.com/mastra-ai/mastra/commit/bf8eb6d0ec213a403eb9265a594ad283c44ab3dc), [`493a328`](https://github.com/mastra-ai/mastra/commit/493a328f4346a1deeb9f1e2e44c8f2a3a4d7591b), [`029a414`](https://github.com/mastra-ai/mastra/commit/029a4141719793bd3e898a39eb5a0466a55f5f3a), [`b147b29`](https://github.com/mastra-ai/mastra/commit/b147b2907f0cd1aa812efe6d6e3f58d22e66fc88), [`d371ac1`](https://github.com/mastra-ai/mastra/commit/d371ac1d9820afaaf7cfdbc380a475946a994d8f), [`cf182b7`](https://github.com/mastra-ai/mastra/commit/cf182b7fb495767946d9840ef29f19cfa906f31f), [`a049c2a`](https://github.com/mastra-ai/mastra/commit/a049c2a9dfb41d0ee2e7a28874a88cd64fd5669f), [`b147b29`](https://github.com/mastra-ai/mastra/commit/b147b2907f0cd1aa812efe6d6e3f58d22e66fc88), [`2a96528`](https://github.com/mastra-ai/mastra/commit/2a9652848dfa3c5a2426f952e9d93554c26fd90f), [`2656d9c`](https://github.com/mastra-ai/mastra/commit/2656d9c2976d4f3354253bfbbbf9b88a1b2bbf34), [`63e3fe1`](https://github.com/mastra-ai/mastra/commit/63e3fe13cc1ea96f91d7c68aea92f400faf9e4da), [`1d4ce8d`](https://github.com/mastra-ai/mastra/commit/1d4ce8daaa54511f325c1b609d31b8e54009d677), [`8c68372`](https://github.com/mastra-ai/mastra/commit/8c68372e85fe0b066ec12c58bd29ffb93e54c552)]:
+  - @mastra/core@1.42.0-alpha.4
+
 ## 1.12.1
 
 ### Patch Changes
