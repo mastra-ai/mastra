@@ -19,6 +19,24 @@ import type { AgentInstructions, AgentModelManagerConfig, ToolsetsInput, ToolsIn
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
 
+type RequestContextSnapshot = Array<readonly [string, unknown]>;
+
+function snapshotRequestContext(requestContext: RequestContext): RequestContextSnapshot {
+  return Array.from(requestContext.entries()).map(([key, value]) => [String(key), value] as const);
+}
+
+function isRequestContextUnchanged(snapshot: RequestContextSnapshot, requestContext: RequestContext): boolean {
+  const currentEntries = Array.from(requestContext.entries());
+  if (currentEntries.length !== snapshot.length) {
+    return false;
+  }
+
+  return snapshot.every(([key, value], index) => {
+    const currentEntry = currentEntries[index];
+    return currentEntry !== undefined && String(currentEntry[0]) === key && Object.is(currentEntry[1], value);
+  });
+}
+
 /**
  * Interface for the Agent methods needed during durable preparation.
  * This provides proper typing for the public Agent methods we call.
@@ -127,6 +145,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 2. Get request context
   const requestContext = providedRequestContext ?? new RequestContext();
+  let memory: MastraMemory | undefined;
+  let hasResolvedMemory = false;
+  let memoryResolutionSnapshot: RequestContextSnapshot | undefined;
 
   // 3. Merge version overrides (Mastra defaults < requestContext < call-site)
   const requestVersions = requestContext.get(MASTRA_VERSIONS_KEY) as VersionOverrides | undefined;
@@ -211,7 +232,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   if (inputProcessors.length > 0) {
     try {
       // Set MastraMemory context so processors that need it (OM, message history) can access it
-      const memory = await typedAgent.getMemory({ requestContext });
+      memory = await typedAgent.getMemory({ requestContext });
+      hasResolvedMemory = true;
       const memoryConfig = execOptions?.memory?.options;
       if (memory && threadId && resourceId) {
         const existingThread = await memory.getThreadById({ threadId });
@@ -228,6 +250,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         threadExists = true;
         requestContext.set('MastraMemory', { thread: threadObject, resourceId, memoryConfig });
       }
+      memoryResolutionSnapshot = snapshotRequestContext(requestContext);
 
       const { ProcessorRunner } = await import('../../processors/runner');
       const runner = new ProcessorRunner({
@@ -288,7 +311,14 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   }
 
   // 9. Get memory and create SaveQueueManager
-  const memory = await typedAgent.getMemory({ requestContext });
+  if (
+    !hasResolvedMemory ||
+    !memoryResolutionSnapshot ||
+    !isRequestContextUnchanged(memoryResolutionSnapshot, requestContext)
+  ) {
+    memory = await typedAgent.getMemory({ requestContext });
+    hasResolvedMemory = true;
+  }
   const memoryConfig = execOptions?.memory?.options;
 
   const saveQueueManager = memory

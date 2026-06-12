@@ -15,6 +15,7 @@ import type { InputProcessor } from '../../../processors';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
+import { prepareForDurableExecution } from '../preparation';
 
 // ============================================================================
 // Helper Functions
@@ -207,6 +208,128 @@ describe('DurableAgent memory configuration', () => {
 
       expect(result.threadId).toBeUndefined();
       expect(result.resourceId).toBeUndefined();
+    });
+
+    it('should not re-resolve dynamic memory for save queue after processor memory setup', async () => {
+      const resolvedMemories: MockMemory[] = [];
+      let memoryUsedForThreadSetup: MockMemory | undefined;
+      let processorSawThreadId: string | undefined;
+      const inputProcessor: InputProcessor = {
+        id: 'memory-context-reader',
+        processInput: ({ messages, requestContext }) => {
+          const memoryContext = requestContext?.get('MastraMemory') as { thread?: { id?: string } } | undefined;
+          processorSawThreadId = memoryContext?.thread?.id;
+          return messages;
+        },
+      };
+
+      const baseAgent = new Agent({
+        id: 'dynamic-memory-reuse-agent',
+        name: 'Dynamic Memory Reuse Agent',
+        instructions: 'Test dynamic memory reuse',
+        model: createTextModel('Hello!') as LanguageModelV2,
+        memory: () => {
+          const memory = new MockMemory();
+          const createThread = memory.createThread.bind(memory);
+          memory.createThread = async args => {
+            memoryUsedForThreadSetup = memory;
+            return createThread(args);
+          };
+          resolvedMemories.push(memory);
+          return memory;
+        },
+        inputProcessors: [inputProcessor],
+      });
+
+      const result = await prepareForDurableExecution({
+        agent: baseAgent,
+        messages: 'Hello',
+        options: { memory: { thread: 'dynamic-thread', resource: 'dynamic-resource' } },
+      });
+
+      const thread = await result.registryEntry.memory?.getThreadById({ threadId: 'dynamic-thread' });
+      expect(thread?.resourceId).toBe('dynamic-resource');
+      expect(memoryUsedForThreadSetup).toBeDefined();
+      expect(result.registryEntry.memory).toBe(memoryUsedForThreadSetup);
+      expect(processorSawThreadId).toBe('dynamic-thread');
+    });
+
+    it('should preserve dynamic memory selected by processor-mutated request context', async () => {
+      const initialMemory = new MockMemory();
+      const mutatedMemory = new MockMemory();
+      const inputProcessor: InputProcessor = {
+        id: 'tenant-selector',
+        processInput: ({ messages, requestContext }) => {
+          requestContext?.set('tenant', 'mutated');
+          return messages;
+        },
+      };
+
+      const agent = new Agent({
+        id: 'dynamic-memory-mutation-agent',
+        name: 'Dynamic Memory Mutation Agent',
+        instructions: 'Test dynamic memory mutation',
+        model: createTextModel('Hello!') as LanguageModelV2,
+        memory: ({ requestContext }) => (requestContext.get('tenant') === 'mutated' ? mutatedMemory : initialMemory),
+        inputProcessors: [inputProcessor],
+      });
+
+      const result = await prepareForDurableExecution({
+        agent,
+        messages: 'Hello',
+        options: { memory: { thread: 'mutated-thread', resource: 'mutated-resource' } },
+      });
+
+      expect(result.registryEntry.memory).toBe(mutatedMemory);
+    });
+
+    it('benchmarks one avoided getMemory resolution in the duplicate durable-preparation path', async () => {
+      let getMemoryCalls = 0;
+      const memory = new MockMemory();
+      const getMemoryCallCountsBeforeFinalResolution: number[] = [];
+
+      const inputProcessor: InputProcessor = {
+        id: 'durable-memory-benchmark-processor',
+        processInput: ({ messages }) => messages,
+      };
+
+      const baseAgent = new Agent({
+        id: 'dynamic-memory-benchmark-agent',
+        name: 'Dynamic Memory Benchmark Agent',
+        instructions: 'Benchmark dynamic memory calls',
+        model: createTextModel('Hello!') as LanguageModelV2,
+        memory: () => {
+          return memory;
+        },
+        inputProcessors: [inputProcessor],
+      });
+
+      const originalGetMemory = baseAgent.getMemory.bind(baseAgent);
+      baseAgent.getMemory = async (args: Parameters<typeof baseAgent.getMemory>[0]) => {
+        getMemoryCalls++;
+        return originalGetMemory(args);
+      };
+      const originalGetModel = baseAgent.getModel.bind(baseAgent);
+      baseAgent.getModel = async args => {
+        getMemoryCallCountsBeforeFinalResolution.push(getMemoryCalls);
+        return originalGetModel(args);
+      };
+
+      const result = await prepareForDurableExecution({
+        agent: baseAgent,
+        messages: 'Hello',
+        options: {
+          memory: { thread: 'benchmark-thread', resource: 'benchmark-resource' },
+        },
+        logger: console as any,
+      });
+
+      const callsBeforeSaveQueue = getMemoryCallCountsBeforeFinalResolution.at(-1)!;
+      const simulatedBeforeTotal = callsBeforeSaveQueue + 1;
+
+      expect(result.registryEntry.memory).toBe(memory);
+      expect(getMemoryCalls).toBe(callsBeforeSaveQueue);
+      expect(simulatedBeforeTotal - getMemoryCalls).toBe(1);
     });
 
     it('should persist both user input and assistant response after a completed stream', async () => {
