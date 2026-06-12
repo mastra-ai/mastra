@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Browser startup restore coverage (2026-06-12)
+
+Added `browser-startup-restore` as the 89th checked-in TUI e2e scenario. The scenario seeds enabled AgentBrowser/CDP settings before launch, starts the normal `src/main.ts` path through a tiny AgentBrowser preload patch, verifies `/browser status` restores provider/headless/CDP projection without requiring `/browser on`, then sends an AIMock-backed prompt and proves the first model request includes the browser context processor output plus browser tools.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test browser-startup-restore
+```
+
+Break validations:
+
+- Disabled the startup browser restore block in `main.ts`; the request still reached AIMock but lacked the browser context marker and browser tools.
+- Made `createBrowserFromSettings()` return no AgentBrowser for the persisted AgentBrowser config; status still reflected settings, but the model request again lacked active browser context/tools.
+- Hid the CDP URL from `/browser status`; the visible status assertion failed before the model turn.
+
+The Settings row remains `needs-follow-up`: enabled TUI browser startup attach/status/tool injection is now covered, while browser wizard breadth, login refresh, and deeper settings reload parity remain follow-up work.
+
+
 ### OM threshold persistence coverage (2026-06-12)
 
 Added `om-threshold-persistence` as the 88th checked-in TUI e2e scenario. The scenario seeds persisted global OM thresholds before startup, creates an active AIMock-backed thread, opens `/om` to prove the overlay restores 12k/80k from settings, changes observation/reflection thresholds to 15k/60k through the real threshold submenus, then proves `settings.json`, the status footer, and active-thread metadata carry the updated values.

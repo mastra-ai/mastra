@@ -7,6 +7,7 @@ export type ScenarioName =
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
   | 'browser-settings-persistence'
+  | 'browser-startup-restore'
   | 'browser-toggle-attach'
   | 'clipboard-image-paste'
   | 'commit-attribution-prompt'

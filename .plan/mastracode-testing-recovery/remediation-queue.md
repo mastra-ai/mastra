@@ -48,6 +48,7 @@
   - Completed: `mcp-long-running-tool` launches a local Streamable HTTP MCP server with a delayed tool result, invokes it through AIMock, and proves the delayed payload reaches the model follow-up instead of timing out under a short result budget.
   - Completed: `headless-mcp-tool-availability` launches a delayed header-protected HTTP MCP server through global config, runs headless mode, and proves headless waits for MCP init so the namespaced tool result reaches the follow-up AIMock request.
   - Completed: focused `manager.test.ts` coverage proves MCP OAuth token storage uses a stable file-backed path across manager instances and preserves refreshed token replacements.
+  - Completed: `browser-startup-restore` seeds enabled AgentBrowser/CDP settings before launch, verifies `/browser status` restores provider/headless/CDP projection without `/browser on`, and proves the first AIMock turn receives browser context plus browser tools.
   - Completed: `browser-toggle-attach` seeds AgentBrowser CDP settings, drives `/browser on`, verifies enabled `/browser status` with the CDP endpoint, proves settings persisted, and uses AIMock request verification to confirm browser tools reached the next model turn.
 - Fixture/data needs: local mock MCP server fixture; remaining OAuth breadth would need a deterministic protected-server/authorization fixture for failure-display coverage; no live browser credentials.
 
