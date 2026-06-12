@@ -26,14 +26,18 @@ export async function convertReadableStreamToArray<T>(stream: ReadableStream<T>)
   const reader = stream.getReader();
   const result: T[] = [];
 
-  while (true) {
-    const { done, value } = await reader.read();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
 
-    if (done) {
-      break;
+      if (done) {
+        break;
+      }
+
+      result.push(value);
     }
-
-    result.push(value);
+  } finally {
+    reader.releaseLock();
   }
 
   return result;
