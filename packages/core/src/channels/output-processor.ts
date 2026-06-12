@@ -150,13 +150,14 @@ export class ChatChannelOutputProcessor {
 
     session.queue.push(part as AgentChunkType<any>);
 
-    // Agents emit a `finish` chunk per LLM step. When `stepResult.isContinued`
-    // is true the run will loop into another step on the same stream, so the
-    // render session must stay open to receive its chunks. Only terminal
-    // `finish` (run end) or `error` chunks should close the session.
-    const isTerminalFinish =
-      part.type === 'finish' && (part as any).payload?.stepResult?.isContinued !== true;
-    if (isTerminalFinish || part.type === 'error') {
+    // Agents emit a `finish` chunk per LLM step, plus a `step-finish` per step
+    // whose payload carries `isContinued`. Multi-step runs (e.g. tool calls or
+    // model-continuation) keep streaming after each per-step `finish`, so we
+    // must NOT close on `finish`. Close only on the terminal `step-finish`
+    // (`isContinued === false`) or on `error`.
+    const isTerminalStepFinish =
+      part.type === 'step-finish' && (part as any).payload?.stepResult?.isContinued !== true;
+    if (isTerminalStepFinish || part.type === 'error') {
       session.queue.close();
       try {
         await session.driverPromise;
