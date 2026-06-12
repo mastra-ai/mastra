@@ -59,6 +59,12 @@ packageExtensions:
   '@arcadeai/arcadejs@^2.3.0':
     dependencies:
       zod: ^3.0.0
+  # transformers.js imports onnxruntime-common without declaring it; with the
+  # global virtual store there is no fallback hoist, so the import fails at
+  # runtime (hit via @livekit/agents-plugin-livekit's turn detector).
+  '@huggingface/transformers@*':
+    dependencies:
+      onnxruntime-common: '*'
 
 blockExoticSubdeps: true
 trustPolicy: no-downgrade

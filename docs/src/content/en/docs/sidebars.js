@@ -903,6 +903,11 @@ const sidebars = {
           id: 'voice/speech-to-speech',
           label: 'Speech to Speech',
         },
+        {
+          type: 'doc',
+          id: 'voice/livekit',
+          label: 'LiveKit',
+        },
       ],
     },
     {

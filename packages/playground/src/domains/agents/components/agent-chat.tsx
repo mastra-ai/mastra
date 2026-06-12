@@ -82,6 +82,7 @@ export const AgentChat = ({
         threadId={threadId}
         hasModelList={Boolean(modelList)}
         hideModelSwitcher={hideModelSwitcher}
+        refreshThreadList={refreshThreadList}
       />
     </MastraRuntimeProvider>
   );
