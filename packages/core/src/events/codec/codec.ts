@@ -1,12 +1,12 @@
 import type { SerializedError } from '../../error/utils';
 import { rehydrateError, serializeError } from './error';
+import { BUILTIN_CODECS_REGISTERED } from './registrations';
 import { getClassCodec } from './registry';
 // Named import of built-in registrations. Importing for side-effects only
 // (`import './registrations'`) gets tree-shaken by bundlers honoring
 // `"sideEffects": false` in `packages/core/package.json`. We import a value
 // and *use it* (inside `encode`) so the bundler must keep the module and
 // run its IIFE.
-import { BUILTIN_CODECS_REGISTERED } from './registrations';
 import { CODEC_TAG, MAX_REGEXP_SOURCE_LENGTH, isEnvelope } from './tags';
 import type { Envelope } from './tags';
 

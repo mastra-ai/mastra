@@ -129,7 +129,6 @@ function makeHandleCallback(processor: WorkflowEventProcessor): EventCallback {
       // would silently drop the event. The WEP swallows internally so this
       // catch should never fire; surface it loudly if it ever does.
       .catch(err => {
-        // eslint-disable-next-line no-console
         console.error('unexpected handle() rejection in test wiring', err);
       });
   };
