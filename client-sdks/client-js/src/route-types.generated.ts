@@ -9119,6 +9119,34 @@ export interface GetAuthPermissionPatterns_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /auth/fga/resource-types
+// ============================================================================
+export type GetAuthFgaResourceTypes_Response = {
+  resourceTypes: {
+    slug: string;
+    relations: string[];
+    customRelations: string[];
+    parentResourceTypeSlugs: string[];
+    hasInstances: boolean;
+  }[];
+};
+
+export type GetAuthFgaResourceTypes_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAuthFgaResourceTypes_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetAuthFgaResourceTypes_Request;
+  response: GetAuthFgaResourceTypes_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /workflows
 // ============================================================================
 export type GetWorkflows_QueryParams = {
@@ -89511,6 +89539,7 @@ export interface RouteTypes {
   'POST /auth/credentials/sign-up': PostAuthCredentialsSignUp_RouteContract;
   'GET /auth/roles/:roleId/permissions': GetAuthRolesRoleIdPermissions_RouteContract;
   'GET /auth/permission-patterns': GetAuthPermissionPatterns_RouteContract;
+  'GET /auth/fga/resource-types': GetAuthFgaResourceTypes_RouteContract;
   'GET /workflows': GetWorkflows_RouteContract;
   'GET /workflows/:workflowId': GetWorkflowsWorkflowId_RouteContract;
   'GET /workflows/:workflowId/runs': GetWorkflowsWorkflowIdRuns_RouteContract;
@@ -90020,6 +90049,9 @@ export interface Client {
   };
   '/auth/credentials/sign-up': {
     POST: PostAuthCredentialsSignUp_RouteContract;
+  };
+  '/auth/fga/resource-types': {
+    GET: GetAuthFgaResourceTypes_RouteContract;
   };
   '/auth/logout': {
     POST: PostAuthLogout_RouteContract;

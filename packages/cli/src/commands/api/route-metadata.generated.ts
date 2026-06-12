@@ -492,6 +492,19 @@ export const API_ROUTE_METADATA = {
       "listProperty": "patterns"
     }
   },
+  "GET /auth/fga/resource-types": {
+    "method": "GET",
+    "path": "/auth/fga/resource-types",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "resourceTypes"
+    }
+  },
   "GET /workflows": {
     "method": "GET",
     "path": "/workflows",
