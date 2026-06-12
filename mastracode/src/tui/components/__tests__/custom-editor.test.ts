@@ -141,6 +141,32 @@ describe('CustomEditor image paste handling', () => {
     expect(followUp).not.toHaveBeenCalled();
   });
 
+  it('inserts a newline on Shift+Enter instead of submitting', () => {
+    mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'shift+enter');
+
+    const editor = new CustomEditor({} as any, {} as any);
+    const followUp = vi.fn(() => true);
+    editor.onAction('followUp', followUp);
+
+    editor.handleInput('\x1b[13;2u');
+
+    expect(mocks.superHandleInput).toHaveBeenCalledWith('\x1b[13;2u');
+    expect(followUp).not.toHaveBeenCalled();
+  });
+
+  it('inserts a newline for bare \\n in legacy terminals', () => {
+    mocks.matchesKey.mockImplementation(() => false);
+
+    const editor = new CustomEditor({} as any, {} as any);
+    const followUp = vi.fn(() => true);
+    editor.onAction('followUp', followUp);
+
+    editor.handleInput('\n');
+
+    expect(mocks.superHandleInput).toHaveBeenCalledWith('\n');
+    expect(followUp).not.toHaveBeenCalled();
+  });
+
   it('queues a follow-up on Ctrl+F', () => {
     mocks.matchesKey.mockImplementation((_data: string, key: string) => key === 'ctrl+f');
 
