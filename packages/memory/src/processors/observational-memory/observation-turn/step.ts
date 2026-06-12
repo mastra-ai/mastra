@@ -184,6 +184,15 @@ export class ObservationStep {
       buffered = true;
     }
 
+    if (this.stepNumber === 0 && statusSnapshot.shouldObserve && !hasIncompleteToolCalls) {
+      const observationResult = await this.handleThresholdObservation(statusSnapshot);
+      observerExchange = observationResult.observerExchange;
+      observed = observationResult.observed;
+      reflected = reflected || observationResult.reflected;
+      didThresholdCleanup = observationResult.didThresholdCleanup;
+      statusSnapshot = observationResult.statusSnapshot;
+    }
+
     // ── Step > 0: Save messages + threshold observation ──────
     if (this.stepNumber > 0) {
       // Save messages from previous step
@@ -199,42 +208,11 @@ export class ObservationStep {
 
       // Threshold observation (step > 0 only, skip if tool calls pending)
       if (statusSnapshot.shouldObserve && !hasIncompleteToolCalls) {
-        const preObsGeneration = this.turn.record.generationCount;
-        const obsResult = await this.runThresholdObservation();
-        observerExchange = obsResult.observerExchange;
-        if (obsResult.succeeded) {
-          observed = true;
-          didThresholdCleanup = true;
-
-          // Cleanup after observation
-          const observedIds = obsResult.activatedMessageIds ?? obsResult.record.observedMessageIds ?? [];
-          const minRemaining = resolveRetentionFloor(
-            om.getObservationConfig().bufferActivation ?? 1,
-            statusSnapshot.threshold,
-          );
-
-          await om.cleanupMessages({
-            threadId,
-            resourceId,
-            messages: messageList,
-            observedMessageIds: observedIds,
-            retentionFloor: minRemaining,
-          });
-
-          if (statusSnapshot.asyncObservationEnabled) {
-            await om.resetBufferingState({
-              threadId,
-              resourceId,
-              recordId: obsResult.record.id,
-              activatedMessageIds: obsResult.activatedMessageIds,
-            });
-          }
-
-          await this.turn.refreshRecord();
-          if (this.turn.record.generationCount > preObsGeneration) {
-            reflected = true;
-          }
-        }
+        const observationResult = await this.handleThresholdObservation(statusSnapshot);
+        observerExchange = observationResult.observerExchange;
+        observed = observationResult.observed;
+        reflected = reflected || observationResult.reflected;
+        didThresholdCleanup = observationResult.didThresholdCleanup;
       }
 
       // Re-fetch status after observation/cleanup for the snapshot
@@ -295,6 +273,67 @@ export class ObservationStep {
     };
     this._prepared = true;
     return this._context;
+  }
+
+  private async handleThresholdObservation(statusSnapshot: any): Promise<{
+    observed: boolean;
+    reflected: boolean;
+    didThresholdCleanup: boolean;
+    observerExchange?: StepContext['observerExchange'];
+    statusSnapshot: typeof statusSnapshot;
+  }> {
+    const { threadId, resourceId, messageList } = this.turn;
+    const om = this.turn.om;
+    const preObsGeneration = this.turn.record.generationCount;
+    const obsResult = await this.runThresholdObservation();
+    let observed = false;
+    let reflected = false;
+    let didThresholdCleanup = false;
+
+    if (obsResult.succeeded) {
+      observed = true;
+      didThresholdCleanup = true;
+
+      const observedIds = obsResult.activatedMessageIds ?? obsResult.record.observedMessageIds ?? [];
+      const minRemaining = resolveRetentionFloor(
+        om.getObservationConfig().bufferActivation ?? 1,
+        statusSnapshot.threshold,
+      );
+
+      await om.cleanupMessages({
+        threadId,
+        resourceId,
+        messages: messageList,
+        observedMessageIds: observedIds,
+        retentionFloor: minRemaining,
+      });
+
+      if (statusSnapshot.asyncObservationEnabled) {
+        await om.resetBufferingState({
+          threadId,
+          resourceId,
+          recordId: obsResult.record.id,
+          activatedMessageIds: obsResult.activatedMessageIds,
+        });
+      }
+
+      await this.turn.refreshRecord();
+      if (this.turn.record.generationCount > preObsGeneration) {
+        reflected = true;
+      }
+    }
+
+    return {
+      observed,
+      reflected,
+      didThresholdCleanup,
+      observerExchange: obsResult.observerExchange,
+      statusSnapshot: await om.getStatus({
+        threadId,
+        resourceId,
+        messages: messageList.get.all.db(),
+      }),
+    };
   }
 
   /**

@@ -318,28 +318,20 @@ describe('Mid-Loop Observation', () => {
       expect(sealedAtRotate).toEqual([true]);
     });
 
-    it('should NOT trigger observation on step 0', async () => {
+    it('should trigger observation on step 0 when a single large message already exceeds the threshold', async () => {
       const requestContext = createRequestContext(threadId, resourceId);
       const state: Record<string, unknown> = {};
 
-      // Create messageList with messages that exceed threshold
       const messageList = new MessageList({
         threadId,
         resourceId,
       });
 
-      // Add messages that will exceed 500 token threshold
-      for (let i = 0; i < 20; i++) {
-        const msg = createTestMessage(
-          `Step ${i}: `.padEnd(200, 'x'),
-          i % 2 === 0 ? 'user' : 'assistant',
-          `msg-${i}`,
-          new Date(Date.now() - (20 - i) * 1000),
-        );
-        messageList.add(msg, 'memory');
-      }
+      messageList.add(
+        createTestMessage(`Single oversized message: `.padEnd(2500, 'x'), 'user', 'oversized-msg', new Date()),
+        'memory',
+      );
 
-      // Step 0: Should NOT trigger observation (only initializes record)
       await processor.processInputStep({
         messageList,
         messages: messageList.get.all.db(),
@@ -353,10 +345,47 @@ describe('Mid-Loop Observation', () => {
         abort: createAbort(),
       });
 
-      // Check record was created but no observations yet
       const record = await storage.getObservationalMemory(threadId, resourceId);
 
-      // No observations should be saved on step 0
+      expect(record?.activeObservations).toBeTruthy();
+      expect(record?.activeObservations).toContain('*');
+      expect(record?.lastObservedAt).toBeDefined();
+    });
+
+    it('should NOT trigger observation on step 0 when messages stay below the threshold', async () => {
+      const requestContext = createRequestContext(threadId, resourceId);
+      const state: Record<string, unknown> = {};
+
+      const messageList = new MessageList({
+        threadId,
+        resourceId,
+      });
+
+      for (let i = 0; i < 4; i++) {
+        const msg = createTestMessage(
+          `Short step ${i}: `.padEnd(80, 'x'),
+          i % 2 === 0 ? 'user' : 'assistant',
+          `short-msg-${i}`,
+          new Date(Date.now() - (4 - i) * 1000),
+        );
+        messageList.add(msg, 'memory');
+      }
+
+      await processor.processInputStep({
+        messageList,
+        messages: messageList.get.all.db(),
+        requestContext,
+        stepNumber: 0,
+        state,
+        steps: [],
+        systemMessages: [],
+        model: createMockObserverModel() as any,
+        retryCount: 0,
+        abort: createAbort(),
+      });
+
+      const record = await storage.getObservationalMemory(threadId, resourceId);
+
       expect(record?.activeObservations).toBeFalsy();
     });
 
