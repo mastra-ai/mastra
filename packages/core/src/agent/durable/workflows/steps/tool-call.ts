@@ -664,6 +664,9 @@ export function createDurableToolCallStep() {
         return {
           ...typedInput,
           result,
+          ...(requiresApproval && resumeData && typeof resumeData === 'object' && (resumeData as any).approved === true
+            ? { approval: { id: toolCallId, approved: true as const } }
+            : {}),
         };
       } catch (error) {
         const toolError = serializeError(error);

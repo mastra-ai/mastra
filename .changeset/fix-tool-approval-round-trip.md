@@ -1,5 +1,6 @@
 ---
 "@mastra/core": patch
+"@mastra/memory": patch
 ---
 
 Fixed tool approval round-trip persistence for recalled messages.

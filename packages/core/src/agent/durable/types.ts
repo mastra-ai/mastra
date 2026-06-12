@@ -280,6 +280,12 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
     message: string;
     stack?: string;
   };
+  /** HITL approval decision, present when the tool required approval */
+  approval?: {
+    id: string;
+    approved: boolean;
+    reason?: string;
+  };
 }
 
 /**
