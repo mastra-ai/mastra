@@ -168,9 +168,13 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
              const part = item as Record<string, unknown>;
              // Normalize 'image-url' convenience type -> 'media' as AI SDK expects
              if (part.type === 'image-url' && typeof part.url === 'string') {
-               const mediaType = part.url.startsWith('data:')
-                 ? (part.url.slice(5, part.url.indexOf(';')) || 'image/jpeg')
-                 : 'image/jpeg';
+               // Prefer caller-supplied mediaType; fall back to parsing data: URI or defaulting to image/jpeg
+               const mediaType =
+                 typeof part.mediaType === 'string' && part.mediaType
+                   ? part.mediaType
+                   : part.url.startsWith('data:')
+                     ? (part.url.slice(5, part.url.indexOf(';')) || 'image/jpeg')
+                     : 'image/jpeg';
                return { type: 'media', data: part.url, mediaType };
              }
              // 'image-data'/'file-data' from old normalizeModelOutput — convert back to 'media'
