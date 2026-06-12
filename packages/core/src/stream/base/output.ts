@@ -1761,13 +1761,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   serializeState() {
+    const messageList = this.messageList.serialize();
+    const toolResultRefs = collectToolResultRefs(messageList.messages as unknown[]);
     return {
       status: this.#status,
-      bufferedSteps: this.#bufferedSteps,
+      bufferedSteps: serializeBufferedSteps(this.#bufferedSteps, toolResultRefs),
       bufferedReasoningDetails: this.#bufferedReasoningDetails,
-      bufferedByStep: this.#bufferedByStep,
+      bufferedByStep: slimStepToolResults(this.#bufferedByStep, toolResultRefs),
       bufferedText: this.#bufferedText,
-      bufferedTextChunks: this.#bufferedTextChunks,
       bufferedSources: this.#bufferedSources,
       bufferedReasoning: this.#bufferedReasoning,
       bufferedFiles: this.#bufferedFiles,
@@ -1775,23 +1776,24 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       toolCallDeltaIdNameMap: this.#toolCallDeltaIdNameMap,
       toolCallStreamingMeta: this.#toolCallStreamingMeta,
       toolCalls: this.#toolCalls,
-      toolResults: this.#toolResults,
+      toolResults: slimToolResultChunks(this.#toolResults, toolResultRefs),
       warnings: this.#warnings,
       finishReason: this.#finishReason,
       request: this.#request,
       usageCount: this.#usageCount,
       tripwire: this.#tripwire,
-      messageList: this.messageList.serialize(),
+      messageList,
     };
   }
 
   deserializeState(state: any) {
+    const toolResultRefs = collectToolResultRefs(state.messageList?.messages ?? []);
     this.#status = state.status;
-    this.#bufferedSteps = state.bufferedSteps;
+    this.#bufferedSteps = deserializeBufferedSteps(state.bufferedSteps ?? [], toolResultRefs);
     this.#bufferedReasoningDetails = state.bufferedReasoningDetails;
-    this.#bufferedByStep = state.bufferedByStep;
+    this.#bufferedByStep = restoreStepToolResults(state.bufferedByStep, toolResultRefs);
     this.#bufferedText = state.bufferedText;
-    this.#bufferedTextChunks = state.bufferedTextChunks;
+    this.#bufferedTextChunks = state.bufferedTextChunks ?? {};
     this.#bufferedSources = state.bufferedSources;
     this.#bufferedReasoning = state.bufferedReasoning;
     this.#bufferedFiles = state.bufferedFiles;
@@ -1799,7 +1801,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#toolCallDeltaIdNameMap = state.toolCallDeltaIdNameMap;
     this.#toolCallStreamingMeta = state.toolCallStreamingMeta ?? {};
     this.#toolCalls = state.toolCalls;
-    this.#toolResults = state.toolResults;
+    this.#toolResults = restoreToolResultChunks(state.toolResults, toolResultRefs);
     this.#warnings = state.warnings;
     this.#finishReason = state.finishReason;
     this.#request = state.request;
@@ -1807,4 +1809,182 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#tripwire = state.tripwire;
     this.messageList = this.messageList.deserialize(state.messageList);
   }
+}
+
+type BufferedStepMessages = NonNullable<LLMStepResult<any>['response']['messages']>;
+
+const TOOL_RESULT_REF_KEY = '__toolResultRef';
+
+type ToolResultRef = { json: string; value: unknown };
+type ToolResultRefs = Map<string, ToolResultRef>;
+
+/**
+ * Tool result payloads are duplicated across the serialized state: once inside the
+ * message list (the canonical copy) and again in the tool result chunks and step
+ * content. Large tool outputs make this duplication dominate snapshot size, so the
+ * extra copies are replaced with `{ __toolResultRef: toolCallId }` markers on
+ * serialize and rehydrated from the message list on deserialize. Payloads that do not
+ * match the message list copy (e.g. transformed by toModelOutput) are kept verbatim.
+ */
+export function collectToolResultRefs(messages: unknown[]): ToolResultRefs {
+  const refs: ToolResultRefs = new Map();
+  for (const message of messages ?? []) {
+    const parts = (message as any)?.content?.parts;
+    if (!Array.isArray(parts)) continue;
+    for (const part of parts) {
+      const invocation = part?.type === 'tool-invocation' ? part.toolInvocation : undefined;
+      if (invocation?.state === 'result' && typeof invocation.toolCallId === 'string' && 'result' in invocation) {
+        refs.set(invocation.toolCallId, { json: JSON.stringify(invocation.result), value: invocation.result });
+      }
+    }
+  }
+  return refs;
+}
+
+function toToolResultRefMarker(toolCallId: string) {
+  return { [TOOL_RESULT_REF_KEY]: toolCallId };
+}
+
+function getToolResultRefId(value: unknown): string | undefined {
+  if (value && typeof value === 'object' && TOOL_RESULT_REF_KEY in value) {
+    return (value as Record<string, string>)[TOOL_RESULT_REF_KEY];
+  }
+  return undefined;
+}
+
+function slimToolResultChunks<T extends { payload?: any }>(chunks: T[], refs: ToolResultRefs): T[] {
+  if (!refs.size || !Array.isArray(chunks)) return chunks;
+  return chunks.map(chunk => {
+    const toolCallId = chunk?.payload?.toolCallId;
+    const ref = typeof toolCallId === 'string' ? refs.get(toolCallId) : undefined;
+    if (!ref || chunk.payload.result === undefined) return chunk;
+    if (JSON.stringify(chunk.payload.result) !== ref.json) return chunk;
+    return { ...chunk, payload: { ...chunk.payload, result: toToolResultRefMarker(toolCallId) } };
+  });
+}
+
+function restoreToolResultChunks<T extends { payload?: any }>(chunks: T[], refs: ToolResultRefs): T[] {
+  if (!Array.isArray(chunks)) return chunks;
+  return chunks.map(chunk => {
+    const refId = getToolResultRefId(chunk?.payload?.result);
+    const ref = refId !== undefined ? refs.get(refId) : undefined;
+    if (!ref) return chunk;
+    return { ...chunk, payload: { ...chunk.payload, result: ref.value } };
+  });
+}
+
+function slimContentToolResults<T>(content: T[], refs: ToolResultRefs): T[] {
+  if (!refs.size || !Array.isArray(content)) return content;
+  return content.map(part => {
+    const candidate = part as any;
+    if (candidate?.type !== 'tool-result' || typeof candidate.toolCallId !== 'string') return part;
+    const ref = refs.get(candidate.toolCallId);
+    if (!ref) return part;
+    const output = candidate.output;
+    if (output && typeof output === 'object' && 'value' in output && JSON.stringify(output.value) === ref.json) {
+      return { ...candidate, output: { ...output, value: toToolResultRefMarker(candidate.toolCallId) } };
+    }
+    if (JSON.stringify(output) === ref.json) {
+      return { ...candidate, output: toToolResultRefMarker(candidate.toolCallId) };
+    }
+    return part;
+  });
+}
+
+function restoreContentToolResults<T>(content: T[], refs: ToolResultRefs): T[] {
+  if (!Array.isArray(content)) return content;
+  return content.map(part => {
+    const candidate = part as any;
+    if (candidate?.type !== 'tool-result') return part;
+    const outerRefId = getToolResultRefId(candidate.output);
+    const outerRef = outerRefId !== undefined ? refs.get(outerRefId) : undefined;
+    if (outerRef) {
+      return { ...candidate, output: outerRef.value };
+    }
+    const innerRefId = getToolResultRefId(candidate.output?.value);
+    const innerRef = innerRefId !== undefined ? refs.get(innerRefId) : undefined;
+    if (innerRef) {
+      return { ...candidate, output: { ...candidate.output, value: innerRef.value } };
+    }
+    return part;
+  });
+}
+
+type StepWithToolResults = {
+  toolResults?: any[];
+  dynamicToolResults?: any[];
+  staticToolResults?: any[];
+  content?: any[];
+};
+
+function slimStepToolResults<T extends StepWithToolResults>(step: T, refs: ToolResultRefs): T {
+  if (!step || !refs.size) return step;
+  return {
+    ...step,
+    toolResults: slimToolResultChunks(step.toolResults ?? [], refs),
+    dynamicToolResults: slimToolResultChunks(step.dynamicToolResults ?? [], refs),
+    staticToolResults: slimToolResultChunks(step.staticToolResults ?? [], refs),
+    content: slimContentToolResults(step.content ?? [], refs),
+  };
+}
+
+function restoreStepToolResults<T extends StepWithToolResults>(step: T, refs: ToolResultRefs): T {
+  if (!step) return step;
+  return {
+    ...step,
+    toolResults: restoreToolResultChunks(step.toolResults ?? [], refs),
+    dynamicToolResults: restoreToolResultChunks(step.dynamicToolResults ?? [], refs),
+    staticToolResults: restoreToolResultChunks(step.staticToolResults ?? [], refs),
+    content: restoreContentToolResults(step.content ?? [], refs),
+  };
+}
+
+/**
+ * Each buffered step's `response.messages` holds the cumulative response history at the
+ * time the step finished, which makes serialized stream state grow quadratically with
+ * step count. Persist only the messages each step added (`messagesDeltaFrom` marks the
+ * boundary) and rebuild the cumulative view on deserialize. Steps whose history is not
+ * an extension of the previous step (e.g. after a processor retry removed messages) are
+ * stored in full. Cumulative `request`, `dbMessages` and `uiMessages` are not persisted:
+ * the live loop recomputes them from the message list when the run finishes.
+ */
+export function serializeBufferedSteps<OUTPUT>(
+  steps: LLMStepResult<OUTPUT>[],
+  toolResultRefs: ToolResultRefs = new Map(),
+): LLMStepResult<OUTPUT>[] {
+  let prev: BufferedStepMessages = [];
+  return steps.map(step => {
+    const messages = step.response?.messages ?? [];
+    const boundary = prev.length;
+    const extendsPrev =
+      messages.length >= boundary &&
+      (boundary === 0 || JSON.stringify(messages[boundary - 1]) === JSON.stringify(prev[boundary - 1]));
+    const slimmed: LLMStepResult<OUTPUT> = {
+      ...slimStepToolResults(step, toolResultRefs),
+      request: {},
+      response: {
+        ...step.response,
+        dbMessages: undefined,
+        uiMessages: undefined,
+        messages: extendsPrev ? messages.slice(boundary) : messages,
+        ...(extendsPrev ? { messagesDeltaFrom: boundary } : {}),
+      },
+    };
+    prev = messages;
+    return slimmed;
+  });
+}
+
+export function deserializeBufferedSteps<OUTPUT>(
+  steps: LLMStepResult<OUTPUT>[],
+  toolResultRefs: ToolResultRefs = new Map(),
+): LLMStepResult<OUTPUT>[] {
+  let running: BufferedStepMessages = [];
+  return steps.map(step => {
+    const { messagesDeltaFrom, ...response } = step.response ?? {};
+    const stored = (response.messages ?? []) as BufferedStepMessages;
+    const messages = messagesDeltaFrom === undefined ? stored : [...running, ...stored];
+    running = messages;
+    return { ...restoreStepToolResults(step, toolResultRefs), response: { ...response, messages } };
+  });
 }
