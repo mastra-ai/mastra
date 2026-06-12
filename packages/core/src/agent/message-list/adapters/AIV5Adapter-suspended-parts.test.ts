@@ -225,6 +225,74 @@ describe('AIV5Adapter — suspended tool state rehydration', () => {
     expect(approvalParts).toHaveLength(1);
   });
 
+  it('should produce one data-tool-call-suspended part per toolCallId when the same tool suspends twice in parallel', () => {
+    // Regression test for mastra-ai/mastra#16468 — when an LLM emits two parallel tool_use
+    // blocks for the same tool, addToolMetadata used to key the metadata record by toolName
+    // and silently overwrote the first entry. Writes now key by toolCallId so both suspends
+    // remain discoverable. The adapter should render one suspended part per distinct call.
+    const dbMessage: MastraDBMessage = {
+      id: 'msg-parallel',
+      role: 'assistant',
+      createdAt: new Date('2024-01-01'),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              toolCallId: 'tc-parallel-A',
+              toolName: 'workflow-sendEmail',
+              args: { to: 'a@example.com' },
+              state: 'call',
+            },
+          },
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              toolCallId: 'tc-parallel-B',
+              toolName: 'workflow-sendEmail',
+              args: { to: 'b@example.com' },
+              state: 'call',
+            },
+          },
+        ],
+        metadata: {
+          suspendedTools: {
+            'tc-parallel-A': {
+              toolCallId: 'tc-parallel-A',
+              toolName: 'workflow-sendEmail',
+              args: { to: 'a@example.com' },
+              type: 'suspension',
+              runId: 'run-A',
+              suspendPayload: { reason: 'awaiting input A' },
+              resumeSchema: '{"type":"object"}',
+            },
+            'tc-parallel-B': {
+              toolCallId: 'tc-parallel-B',
+              toolName: 'workflow-sendEmail',
+              args: { to: 'b@example.com' },
+              type: 'suspension',
+              runId: 'run-B',
+              suspendPayload: { reason: 'awaiting input B' },
+              resumeSchema: '{"type":"object"}',
+            },
+          },
+        },
+      },
+    };
+
+    const uiMessage = AIV5Adapter.toUIMessage(dbMessage);
+
+    const suspendedParts = uiMessage.parts.filter((p: any) => p.type === 'data-tool-call-suspended');
+    expect(suspendedParts).toHaveLength(2);
+
+    const renderedCallIds = suspendedParts.map((p: any) => p.data.toolCallId).sort();
+    expect(renderedCallIds).toEqual(['tc-parallel-A', 'tc-parallel-B']);
+
+    const renderedRunIds = suspendedParts.map((p: any) => p.data.runId).sort();
+    expect(renderedRunIds).toEqual(['run-A', 'run-B']);
+  });
+
   it('should NOT produce data-tool-call-suspended parts for already-resumed tools', () => {
     // When a tool has been resumed/completed, metadata.suspendedTools is cleared,
     // so no data-tool-call-suspended parts should be synthesized

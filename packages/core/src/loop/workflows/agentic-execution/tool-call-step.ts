@@ -152,7 +152,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               ? (lastAssistantMessage.content.metadata as Record<string, any>)
               : {};
           metadata[metadataKey] = metadata[metadataKey] || {};
-          // Note: We key by toolName rather than toolCallId to track one suspension state per unique tool.
+          // Key by toolCallId rather than toolName so two parallel suspends of the same tool
+          // remain distinct entries. Earlier code keyed by toolName for autoResumeSuspendedTools
+          // lookup, which silently overwrote the first entry when a second call to the same
+          // tool suspended. Consumers iterate Object.values(), so the change is read-compatible.
           const inputTransform = getTransformedToolPayload(
             toolStateTransformMetadata,
             'transcript',
@@ -173,7 +176,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               ? (approvalTransform ?? inputTransform ?? args)
               : (inputTransform ?? suspendTransform ?? args);
           const transformedSuspendPayload = type === 'suspension' ? (suspendTransform ?? suspendPayload) : undefined;
-          metadata[metadataKey][toolName] = {
+          metadata[metadataKey][toolCallId] = {
             toolCallId,
             toolName,
             args: transformedArgs,
@@ -187,7 +190,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
       };
 
-      const removeToolMetadata = async (toolName: string, type: 'suspension' | 'approval') => {
+      const removeToolMetadata = async ({ toolCallId }: { toolCallId: string }, type: 'suspension' | 'approval') => {
         const { saveQueueManager, memoryConfig, threadId } = _internal || {};
 
         if (!saveQueueManager || !threadId) {
@@ -206,21 +209,37 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
 
+        // Locate the entry's key in the suspendedTools/pendingToolApprovals record.
+        // New writes key by toolCallId; runs persisted before that change keyed by toolName,
+        // so fall back to scanning values when the direct lookup misses.
+        const findEntryKey = (record: Record<string, any> | undefined): string | undefined => {
+          if (!record || typeof record !== 'object') return undefined;
+          const direct = record[toolCallId];
+          if (direct && typeof direct === 'object' && direct.toolCallId === toolCallId) {
+            return toolCallId;
+          }
+          for (const [key, value] of Object.entries(record)) {
+            if (value && typeof value === 'object' && (value as any).toolCallId === toolCallId) {
+              return key;
+            }
+          }
+          return undefined;
+        };
+
         // Find and update the assistant message to remove approval metadata
         // At this point, messages have been persisted, so we look in all messages
         const allMessages = messageList.get.all.db();
         const lastAssistantMessage = [...allMessages].reverse().find(msg => {
           const metadata = getMetadata(msg);
           const suspendedTools = metadata?.[metadataKey] as Record<string, any> | undefined;
-          const foundTool = !!suspendedTools?.[toolName];
-          if (foundTool) {
+          if (findEntryKey(suspendedTools)) {
             return true;
           }
           const dataToolSuspendedParts = msg.content.parts?.filter(
             part => part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval',
           );
           if (dataToolSuspendedParts && dataToolSuspendedParts.length > 0) {
-            const foundTool = dataToolSuspendedParts.find((part: any) => part.data.toolName === toolName);
+            const foundTool = dataToolSuspendedParts.find((part: any) => part.data.toolCallId === toolCallId);
             if (foundTool) {
               return true;
             }
@@ -237,7 +256,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               ?.reduce(
                 (acc, part) => {
                   if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
-                    acc[(part.data as any).toolName] = part.data;
+                    acc[(part.data as any).toolCallId] = part.data;
                   }
                   return acc;
                 },
@@ -247,23 +266,29 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
           if (suspendedTools && typeof suspendedTools === 'object') {
             if (metadata) {
-              delete suspendedTools[toolName];
-            } else {
-              lastAssistantMessage.content.parts = lastAssistantMessage.content.parts?.map(part => {
-                if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
-                  if ((part.data as any).toolName === toolName) {
-                    return {
-                      ...part,
-                      data: {
-                        ...(part.data as any),
-                        resumed: true,
-                      },
-                    };
-                  }
-                }
-                return part;
-              });
+              const keyToDelete = findEntryKey(suspendedTools);
+              if (keyToDelete) {
+                delete suspendedTools[keyToDelete];
+              }
             }
+
+            // Mark only the matching toolCallId part as resumed so other parallel suspends
+            // of the same tool (with different toolCallIds) keep their `resumed: false` flag
+            // and remain discoverable by the autoResumeSuspendedTools loop and resume scans.
+            lastAssistantMessage.content.parts = lastAssistantMessage.content.parts?.map(part => {
+              if (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') {
+                if ((part.data as any).toolCallId === toolCallId) {
+                  return {
+                    ...part,
+                    data: {
+                      ...(part.data as any),
+                      resumed: true,
+                    },
+                  };
+                }
+              }
+              return part;
+            });
 
             // If no more pending suspensions, remove the whole object
             if (metadata && Object.keys(suspendedTools).length === 0) {
@@ -488,7 +513,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             );
           } else {
             // Remove approval metadata since we're resuming (either approved or declined)
-            await removeToolMetadata(inputData.toolName, 'approval');
+            await removeToolMetadata({ toolCallId: inputData.toolCallId }, 'approval');
 
             if (!resumeData.approved) {
               return {
@@ -662,10 +687,22 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
           for (const message of assistantMessages) {
             const pendingOrSuspendedTools = (message.content.metadata?.suspendedTools ||
-              message.content.metadata?.pendingToolApprovals) as Record<string, any>;
-            if (pendingOrSuspendedTools && pendingOrSuspendedTools[inputData.toolName]) {
-              suspendedToolRunId = pendingOrSuspendedTools[inputData.toolName].runId;
-              break;
+              message.content.metadata?.pendingToolApprovals) as Record<string, any> | undefined;
+            if (pendingOrSuspendedTools) {
+              // New writes key by toolCallId; older persisted runs may key by toolName.
+              // Try the direct toolName slot first for backward compatibility, then iterate
+              // values to find an entry whose toolName matches.
+              const directByToolName = pendingOrSuspendedTools[inputData.toolName];
+              const matchedEntry =
+                directByToolName && (directByToolName as any).toolName === inputData.toolName
+                  ? directByToolName
+                  : Object.values(pendingOrSuspendedTools).find(
+                      (entry: any) => entry && typeof entry === 'object' && entry.toolName === inputData.toolName,
+                    );
+              if (matchedEntry) {
+                suspendedToolRunId = (matchedEntry as any).runId;
+                break;
+              }
             }
 
             if (shouldUsePartsFallback) {
@@ -690,7 +727,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
 
         if (!toolRequiresApproval && isResumeToolCall) {
-          await removeToolMetadata(inputData.toolName, 'suspension');
+          await removeToolMetadata({ toolCallId: inputData.toolCallId }, 'suspension');
         }
 
         if (args === null || args === undefined) {

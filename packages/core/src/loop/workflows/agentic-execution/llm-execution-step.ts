@@ -1174,7 +1174,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                         (part.type === 'data-tool-call-suspended' || part.type === 'data-tool-call-approval') &&
                         !(part.data as any).resumed
                       ) {
-                        acc[(part.data as any).toolName] = part.data;
+                        // Key by toolCallId so parallel suspends of the same tool stay distinct
+                        // when this fallback runs against legacy parts-only persisted state.
+                        acc[(part.data as any).toolCallId] = part.data;
                       }
                       return acc;
                     },

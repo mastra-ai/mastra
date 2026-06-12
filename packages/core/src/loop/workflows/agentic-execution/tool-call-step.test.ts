@@ -1032,3 +1032,98 @@ describe('createToolCallStep malformed JSON args (issue #9815)', () => {
     expect(result.error.message).toMatch(/invalid|malformed|json|args|arguments/i);
   });
 });
+
+describe('createToolCallStep parallel same-tool suspensions (issue #16468)', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('keys suspendedTools by toolCallId so a second parallel suspend does not overwrite the first', async () => {
+    // Regression: addToolMetadata used to write metadata.suspendedTools[toolName],
+    // so two parallel tool_use blocks targeting the same workflow tool overwrote
+    // each other's bookkeeping. The second resume then failed because the metadata
+    // lookup returned the wrong entry. New writes key by toolCallId, keeping both
+    // entries distinct. See mastra-ai/mastra#16468.
+    const assistantMessage: any = {
+      id: 'm1',
+      role: 'assistant',
+      content: { format: 2, parts: [], metadata: {} },
+      createdAt: new Date(),
+    };
+    const messageList = {
+      get: {
+        input: { aiV5: { model: () => [] } },
+        response: { db: () => [assistantMessage] },
+        all: { db: () => [assistantMessage] },
+      },
+    } as unknown as MessageList;
+
+    const controller = { enqueue: vi.fn() };
+    const streamState = { serialize: vi.fn().mockReturnValue('s') };
+    const flushMessages = vi.fn().mockResolvedValue(undefined);
+    const neverResolve: Promise<never> = new Promise(() => {});
+    const suspend = vi.fn().mockReturnValue(neverResolve);
+
+    const suspendingTool = {
+      execute: vi.fn(async (_args: unknown, opts: MastraToolInvocationOptions) => {
+        await opts.suspend!({ reason: 'awaiting' }, { resumeSchema: '{}' } as any);
+        return 'unreachable';
+      }),
+    };
+    const tools = { 'workflow-sendEmail': suspendingTool } as unknown as ToolSet;
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'outer-run',
+      streamState,
+      _internal: {
+        saveQueueManager: { flushMessages } as any,
+        memoryConfig: {} as any,
+        threadId: 't1',
+      },
+    } as any);
+
+    const makeParams = (toolCallId: string) => ({
+      runId: 'outer-run',
+      workflowId: 'wf',
+      mastra: {} as any,
+      requestContext: new RequestContext(),
+      state: {},
+      setState: vi.fn(),
+      retryCount: 0,
+      tracingContext: {} as any,
+      getInitData: vi.fn(),
+      getStepResult: vi.fn(),
+      suspend,
+      bail: vi.fn(),
+      abort: vi.fn(),
+      engine: 'default' as any,
+      abortSignal: new AbortController().signal,
+      writer: new ToolStream({ prefix: 'tool', callId: toolCallId, name: 'workflow-sendEmail', runId: 'outer-run' }),
+      validateSchemas: false,
+      inputData: { toolCallId, toolName: 'workflow-sendEmail', args: { to: toolCallId } },
+    });
+
+    // Both calls suspend forever; we only care about the addToolMetadata side-effect.
+    // Use vi.waitFor instead of fixed setImmediate ticks so the assertion fires as soon
+    // as both writes have landed, even if the underlying tool.execute path grows more
+    // awaits later.
+    void toolCallStep.execute(makeParams('call-A'));
+    void toolCallStep.execute(makeParams('call-B'));
+
+    await vi.waitFor(() => {
+      const suspended = assistantMessage.content.metadata.suspendedTools as Record<string, any> | undefined;
+      expect(suspended).toBeDefined();
+      expect(Object.keys(suspended!).sort()).toEqual(['call-A', 'call-B']);
+    });
+
+    const suspended = assistantMessage.content.metadata.suspendedTools as Record<string, any>;
+    expect(suspended['call-A']).toMatchObject({ toolCallId: 'call-A', toolName: 'workflow-sendEmail' });
+    expect(suspended['call-B']).toMatchObject({ toolCallId: 'call-B', toolName: 'workflow-sendEmail' });
+    expect(suspended['call-A'].suspendPayload).toMatchObject({ reason: 'awaiting' });
+    expect(suspended['call-B'].suspendPayload).toMatchObject({ reason: 'awaiting' });
+  });
+});
