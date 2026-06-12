@@ -76,6 +76,7 @@ export type ScenarioName =
   | 'stream-error-retry'
   | 'streaming-tool-args'
   | 'subagent-delegation'
+  | 'subagent-model-startup-restore'
   | 'task-inline-transitions'
   | 'task-patch-tools'
   | 'task-progress-events'

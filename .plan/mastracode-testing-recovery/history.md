@@ -1,6 +1,24 @@
 # Mastra Code testing recovery history
 
 
+### Subagent model startup restore coverage (2026-06-12)
+
+Added `subagent-model-startup-restore` as the 92nd checked-in TUI e2e scenario. The scenario seeds an active custom model pack before launch, creates a thread through the real TUI, delegates to the Explore subagent, verifies the completed subagent footer uses the restored fast model (`openai/gpt-5.5`) instead of the parent/build default, and proves the persisted settings still carry the active custom pack/defaults.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test subagent-model-startup-restore
+```
+
+Break validations:
+
+- Remapped Explore startup defaults from `fast` to `plan`; the delegated subagent used `openai/gpt-5.4-mini` instead of the restored fast model.
+- Ignored restored custom-pack defaults in settings resolution; the delegated subagent fell back to built-in defaults instead of the seeded custom pack.
+- Stopped applying restored defaults to subagent definitions; Explore again used the parent/build model rather than the restored fast model.
+
+The Settings row remains `needs-follow-up`: model-pack-backed subagent startup defaults are now covered, while remaining browser/settings wizard breadth and deeper `/subagents` override reload cases remain follow-up work.
+
 ### OM model override reload coverage (2026-06-12)
 
 Added `om-model-override-reload` as the 91st checked-in TUI e2e scenario. The scenario seeds a custom provider plus saved role-specific OM observer/reflector overrides before launch, asserts `/om` restores those role values on startup, changes both roles through the real model selectors, then proves `settings.json` and active-thread metadata persist the updated observer/reflector model IDs.
