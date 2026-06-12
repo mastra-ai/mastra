@@ -1,7 +1,7 @@
-import type { InputProcessorOrWorkflow } from '../processors';
-import { GoalStateProcessor } from '../tools/builtin/goal-state-processor';
+import type { InputProcessorOrWorkflow } from '../../processors';
+import { SignalProvider } from '../../signals/signal-provider';
 
-import { SignalProvider } from './signal-provider';
+import { GoalStateProcessor } from './state-processor';
 
 /**
  * Bundles the {@link GoalStateProcessor} behind a single agent registration so

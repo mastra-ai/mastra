@@ -6,14 +6,14 @@ import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { GoalObjectiveRecord } from '../../../storage/domains/thread-state/base';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
-import { createGoalScorer } from '../../../tools/builtin/goal-scorer';
 import {
+  createGoalScorer,
   readObjective,
   resolveEffectiveGoalSettings,
   resolveGoalStore,
   writeObjective,
   type ResolvedGoalStore,
-} from '../../../tools/builtin/goal-tools';
+} from '../../../agent/goal';
 import { createStep } from '../../../workflows/workflow';
 import { runStreamCompletionScorers, formatStreamCompletionFeedback } from '../../network/validation';
 import type { StreamCompletionContext } from '../../network/validation';

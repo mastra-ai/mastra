@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { createScorer } from '../../evals';
 import type { MastraModelConfig } from '../../llm';
-import { DEFAULT_GOAL_JUDGE_PROMPT } from './goal-tools';
+import { DEFAULT_GOAL_JUDGE_PROMPT } from './objective';
 
 // The goal scorer is an LLM-as-judge that grades the agent's latest output
 // against the objective and returns a **binary** score: 1 when the goal is

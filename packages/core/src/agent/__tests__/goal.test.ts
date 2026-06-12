@@ -4,11 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { InMemoryStore } from '../../storage/mock';
-import {
-  DEFAULT_GOAL_JUDGE_PROMPT,
-  DEFAULT_GOAL_MAX_RUNS,
-  resolveEffectiveGoalSettings,
-} from '../../tools/builtin/goal-tools';
+import { DEFAULT_GOAL_JUDGE_PROMPT, DEFAULT_GOAL_MAX_RUNS, resolveEffectiveGoalSettings } from '../goal';
 import { Agent } from '../index';
 import type { GoalConfig } from '../types';
 

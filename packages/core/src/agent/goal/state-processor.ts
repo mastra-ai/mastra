@@ -1,7 +1,7 @@
 import type { Mastra } from '../../mastra';
 import type { ComputeStateSignalArgs, ComputeStateSignalResult } from '../../processors/index';
 import type { GoalObjectiveRecord } from '../../storage/domains/thread-state/base';
-import { getObjectiveFromRequestContext, GOAL_STATE_ID, GOAL_STATE_TYPE, resolveGoalStore } from './goal-tools';
+import { getObjectiveFromRequestContext, GOAL_STATE_ID, GOAL_STATE_TYPE, resolveGoalStore } from './objective';
 
 // =============================================================================
 // Goal state processor

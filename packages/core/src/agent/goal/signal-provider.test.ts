@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { GoalStateProcessor } from '../tools/builtin/goal-state-processor';
+import { GoalStateProcessor } from './state-processor';
 
 // Import via the `@mastra/core/signals` barrel so this also exercises that the
 // signals barrel can pull GoalSignalProvider without an initialization cycle.

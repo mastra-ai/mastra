@@ -14,4 +14,5 @@ export { TaskSignalProvider } from './task-signal-provider';
 
 // `GoalSignalProvider` projects the agent's current objective onto the
 // state-signal lane. Auto-registered when an agent is configured with `goal`.
-export { GoalSignalProvider } from './goal-signal-provider';
+// The implementation lives with the goal built-in under `agent/goal`.
+export { GoalSignalProvider } from '../agent/goal';
