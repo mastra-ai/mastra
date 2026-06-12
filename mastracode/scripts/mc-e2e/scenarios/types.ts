@@ -32,6 +32,7 @@ export type ScenarioName =
   | 'integration-commands'
   | 'modal-and-shell'
   | 'mcp-server-config'
+  | 'model-selection-api-key-prompt'
   | 'models-pack-activation-persistence'
   | 'notification-inbox-crud-flow'
   | 'notification-inbox-reload'

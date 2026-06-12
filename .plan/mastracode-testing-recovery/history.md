@@ -1,6 +1,24 @@
 # Mastra Code testing recovery history
 
 
+### Model-selection API-key prompt coverage (2026-06-12)
+
+Added `model-selection-api-key-prompt` as the 67th checked-in TUI e2e scenario. The scenario seeds a saved custom model pack, opens `/models`, edits the plan-mode model, selects a synthetic `302ai` model with no configured key, verifies the `API Key Required` dialog shows the `302AI_API_KEY` hint and masks typed input, saves the edited pack, and uses shell passthrough to prove `auth.json`, `process.env`, and `settings.json` all reflect the selected model/key.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test model-selection-api-key-prompt
+```
+
+Break validations:
+
+- Bypassing `promptForApiKeyIfNeeded()` skipped the API-key dialog and failed the scenario.
+- Skipping `authStorage.setStoredApiKey()` left no stored key/env projection and failed the shell verification.
+- Dropping `apiKeyEnvVar` propagation for synthetic model items removed the `302AI_API_KEY` hint/projection and failed the scenario.
+
+The `Settings: Onboarding and global settings` row remains `needs-follow-up`; this chunk closes the model-selection-triggered key storage/masking path, while cancellation/env-precedence breadth, browser/global settings, custom-pack completion/import/edit/share, and reload behavior remain.
+
 ### Custom provider delete coverage (2026-06-12)
 
 Added `custom-provider-delete` as the 66th checked-in TUI e2e scenario. The scenario seeds a custom OpenAI-compatible provider and unrelated saved custom pack, opens `/custom-providers`, selects the provider, chooses `Delete provider`, confirms the destructive modal, and uses shell passthrough to prove `settings.json` no longer contains the provider while unrelated custom packs remain intact.

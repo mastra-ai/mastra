@@ -19,6 +19,7 @@ import { harnessApiConfigScenario } from './harness-api-config.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { mcpServerConfigScenario } from './mcp-server-config.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
+import { modelSelectionApiKeyPromptScenario } from './model-selection-api-key-prompt.js';
 import { modelsPackActivationPersistenceScenario } from './models-pack-activation-persistence.js';
 import { notificationInboxCrudFlowScenario } from './notification-inbox-crud-flow.js';
 import { notificationInboxReloadScenario } from './notification-inbox-reload.js';
@@ -92,6 +93,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'integration-commands': integrationCommandsScenario,
   'modal-and-shell': modalAndShellScenario,
   'mcp-server-config': mcpServerConfigScenario,
+  'model-selection-api-key-prompt': modelSelectionApiKeyPromptScenario,
   'models-pack-activation-persistence': modelsPackActivationPersistenceScenario,
   'notification-inbox-crud-flow': notificationInboxCrudFlowScenario,
   'notification-inbox-reload': notificationInboxReloadScenario,
