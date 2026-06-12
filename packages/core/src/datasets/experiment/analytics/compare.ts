@@ -7,8 +7,8 @@
 
 import type { ScoreRowData } from '../../../evals/types';
 import type { Mastra } from '../../../mastra';
-import { computeScorerStats, isRegression } from './aggregate';
 import { getToolReplayMarker } from '../replay';
+import { computeScorerStats, isRegression } from './aggregate';
 import type {
   CompareExperimentsConfig,
   ComparisonResult,
