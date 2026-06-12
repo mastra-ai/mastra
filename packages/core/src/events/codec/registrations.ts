@@ -5,21 +5,6 @@ import { registerClass } from './registry';
 
 type GeneratedFileData = { data: string; mediaType: string };
 
-registerClass<DefaultGeneratedFile, GeneratedFileData>('DefaultGeneratedFile', {
-  toData: f => ({ data: f.base64, mediaType: f.mediaType }),
-  fromData: d => new DefaultGeneratedFile({ data: d.data, mediaType: d.mediaType }),
-});
-
-registerClass<DefaultGeneratedFileWithType, GeneratedFileData>('DefaultGeneratedFileWithType', {
-  toData: f => ({ data: f.base64, mediaType: f.mediaType }),
-  fromData: d => new DefaultGeneratedFileWithType({ data: d.data, mediaType: d.mediaType }),
-});
-
-// `DefaultStepResult` flows through workflow output schemas typed as `z.any()`,
-// so it crosses the unix-socket pubsub on the evented engine. Without a class
-// registration, consumers that rely on `instanceof DefaultStepResult` (e.g. the
-// in-memory storage path) would receive plain data. The generic `TOOLS` type
-// parameter is erased at runtime, so we register the constructor name once.
 type DefaultStepResultData = {
   content: DefaultStepResult<ToolSet>['content'];
   finishReason: DefaultStepResult<ToolSet>['finishReason'];
@@ -31,16 +16,47 @@ type DefaultStepResultData = {
   tripwire?: DefaultStepResult<ToolSet>['tripwire'];
 };
 
-registerClass<DefaultStepResult<ToolSet>, DefaultStepResultData>('DefaultStepResult', {
-  toData: s => ({
-    content: s.content,
-    finishReason: s.finishReason,
-    usage: s.usage,
-    warnings: s.warnings,
-    request: s.request,
-    response: s.response,
-    providerMetadata: s.providerMetadata,
-    tripwire: s.tripwire,
-  }),
-  fromData: d => new DefaultStepResult(d),
-});
+/**
+ * Built-in class codecs.
+ *
+ * IMPORTANT: This module must be loaded for `instanceof` to survive
+ * serialization across the unix-socket pubsub. The `BUILTIN_CODECS_REGISTERED`
+ * constant exists solely so consumers can import it as a *named* import (see
+ * `codec.ts`). A `import './registrations'` side-effect import would be
+ * tree-shaken out of dist consumers because `packages/core/package.json` has
+ * `"sideEffects": false`. Named imports are kept by every bundler.
+ *
+ * `DefaultStepResult` flows through workflow output schemas typed as
+ * `z.any()`, so it crosses the unix-socket pubsub on the evented engine.
+ * Without a class registration, consumers that rely on
+ * `instanceof DefaultStepResult` (e.g. the in-memory storage path) would
+ * receive plain data. The generic `TOOLS` type parameter is erased at
+ * runtime, so we register the constructor name once.
+ */
+export const BUILTIN_CODECS_REGISTERED = (() => {
+  registerClass<DefaultGeneratedFile, GeneratedFileData>('DefaultGeneratedFile', {
+    toData: f => ({ data: f.base64, mediaType: f.mediaType }),
+    fromData: d => new DefaultGeneratedFile({ data: d.data, mediaType: d.mediaType }),
+  });
+
+  registerClass<DefaultGeneratedFileWithType, GeneratedFileData>('DefaultGeneratedFileWithType', {
+    toData: f => ({ data: f.base64, mediaType: f.mediaType }),
+    fromData: d => new DefaultGeneratedFileWithType({ data: d.data, mediaType: d.mediaType }),
+  });
+
+  registerClass<DefaultStepResult<ToolSet>, DefaultStepResultData>('DefaultStepResult', {
+    toData: s => ({
+      content: s.content,
+      finishReason: s.finishReason,
+      usage: s.usage,
+      warnings: s.warnings,
+      request: s.request,
+      response: s.response,
+      providerMetadata: s.providerMetadata,
+      tripwire: s.tripwire,
+    }),
+    fromData: d => new DefaultStepResult(d),
+  });
+
+  return true as const;
+})();

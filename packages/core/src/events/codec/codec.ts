@@ -1,6 +1,12 @@
 import type { SerializedError } from '../../error/utils';
 import { rehydrateError, serializeError } from './error';
 import { getClassCodec } from './registry';
+// Named import of built-in registrations. Importing for side-effects only
+// (`import './registrations'`) gets tree-shaken by bundlers honoring
+// `"sideEffects": false` in `packages/core/package.json`. We import a value
+// and *use it* (inside `encode`) so the bundler must keep the module and
+// run its IIFE.
+import { BUILTIN_CODECS_REGISTERED } from './registrations';
 import { CODEC_TAG, MAX_REGEXP_SOURCE_LENGTH, isEnvelope } from './tags';
 import type { Envelope } from './tags';
 
@@ -14,6 +20,15 @@ import type { Envelope } from './tags';
  * user `toJSON()` methods on plain objects.
  */
 export function encode(value: unknown): unknown {
+  // Reference `BUILTIN_CODECS_REGISTERED` so bundlers (which honor
+  // `"sideEffects": false` in package.json) cannot drop the registrations
+  // module. The IIFE there runs at module evaluation, registering built-in
+  // class codecs (DefaultGeneratedFile, DefaultStepResult, etc.). Without
+  // this reference, those `registerClass` calls get tree-shaken from dist
+  // and `instanceof` checks fail after a roundtrip across UnixSocketPubSub.
+  if (!BUILTIN_CODECS_REGISTERED) {
+    throw new Error('Built-in codec registrations failed to load');
+  }
   return walk(value, new WeakSet());
 }
 

@@ -88,11 +88,18 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   skipBgTaskWait,
   drainPendingSignals,
 }: CreatePrepareStreamWorkflowOptions<OUTPUT>) {
-  // Per-run scope shared between steps. Class instances (MessageList, Tools),
-  // Maps, and closures live here instead of step outputs — see ./run-scope.ts.
-  // The agent.ts caller wires the same scope into `Mastra.__createRunScope` for
-  // the evented path; the closure reference here keeps the direct path working
-  // without touching the registry.
+  // Per-run scope shared between prepare-stream steps. Class instances
+  // (MessageList, Tools), Maps, and closures live here instead of step
+  // outputs — see ./run-scope.ts.
+  //
+  // This scope is a closure local to this workflow factory and is NOT
+  // registered with `Mastra.__createRunScope`. The agentic-loop workflow uses
+  // a separate runId-keyed scope on the Mastra instance (created via
+  // `__registerInternalWorkflow`); the bridge between them is
+  // `hydrateRunScopeFromInternal` in `loop/workflows/stream.ts`, which copies
+  // bootstrap state from `_internal` into the Mastra scope after the loop
+  // workflow registers. Prepare-stream and the agentic loop deliberately do
+  // not share runtime state — each owns its own per-run scratch space.
   const runScope = createRunScope();
 
   const prepareToolsStep = createPrepareToolsStep({

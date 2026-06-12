@@ -13,12 +13,14 @@
  * ones that go through codec envelope encode/decode at the wire boundary
  * and are most likely to regress.
  *
- * Note: registered-class payloads (DefaultGeneratedFile, DefaultStepResult)
- * are intentionally not covered cross-process here. The bundled dist drops
- * the side-effect `import './registrations'` because the package declares
- * `sideEffects: false`, so worker processes loading dist would silently
- * lose the class registry. The single-process codec test exercises those
- * classes against src directly where registrations are present.
+ * Registered-class payloads (DefaultGeneratedFile) are also covered here as
+ * a regression test: `packages/core/package.json` declares
+ * `sideEffects: false`, which previously tree-shook the codec registrations
+ * out of dist consumers, silently losing `instanceof DefaultGeneratedFile`
+ * across the wire. `codec.ts` now imports `BUILTIN_CODECS_REGISTERED` as a
+ * named value and references it inside `encode()`, so bundlers must keep
+ * the registrations module. This suite running against the dist bundle
+ * pins that contract.
  *
  * Notes:
  * - Uses `UnixSocketPubSub` directly (no Mastra / Agent / Workflow) so the
@@ -130,6 +132,13 @@ process.on('message', async (msg) => {
           pattern: /hello/i,
           tags: new Set(['a', 'b']),
         };
+      } else if (kind === 'GeneratedFile') {
+        // Pull DefaultGeneratedFile from the same dist tree the client uses.
+        // The codec registry must already contain 'DefaultGeneratedFile'
+        // because UnixSocketPubSub's import of codec.ts triggers the
+        // registrations IIFE — pin this here, no inline registerClass.
+        const { DefaultGeneratedFile } = await import('${coreDist}/stream/index.js');
+        value = new DefaultGeneratedFile({ data: 'aGVsbG8=', mediaType: 'text/plain' });
       } else {
         throw new Error('unknown kind: ' + kind);
       }
@@ -158,6 +167,8 @@ const socketPath = process.argv[2];
 const expectedKind = process.argv[3];
 
 const pubsub = new UnixSocketPubSub(socketPath);
+
+const { DefaultGeneratedFile: ClientDefaultGeneratedFile } = await import('${coreDist}/stream/index.js');
 
 await pubsub.subscribe('codec-test', e => {
   const v = e.data.value;
@@ -195,6 +206,11 @@ await pubsub.subscribe('codec-test', e => {
     checks.hasHeadersKey = v && 'headers' in v;
     checks.headersUndefined = v?.headers === undefined;
     checks.valueIs7 = v?.value === 7;
+  } else if (expectedKind === 'GeneratedFile') {
+    checks.isFile = v instanceof ClientDefaultGeneratedFile;
+    checks.base64 = v?.base64 === 'aGVsbG8=';
+    checks.mediaType = v?.mediaType === 'text/plain';
+    checks.uint8ArrayLen = v?.uint8Array?.length === 5;
   } else if (expectedKind === 'nested') {
     checks.whenIsDate = v?.when instanceof Date;
     checks.whyIsError = v?.why instanceof Error;
@@ -320,6 +336,21 @@ process.on('message', async (msg) => {
       patternIsRegExp: true,
       tagsIsSet: true,
       tagsHasA: true,
+    });
+  }, 60_000);
+
+  // Regression test for the `sideEffects: false` tree-shaking bug: previously
+  // the dist bundle dropped the codec class registrations and `instanceof
+  // DefaultGeneratedFile` failed across the wire. The named-import reference
+  // in `codec.ts` keeps the registrations module alive.
+  it('preserves DefaultGeneratedFile (registered class) across the real socket', async () => {
+    const { checks, ctorName } = await roundTrip('GeneratedFile');
+    expect(ctorName).toBe('DefaultGeneratedFile');
+    expect(checks).toEqual({
+      isFile: true,
+      base64: true,
+      mediaType: true,
+      uint8ArrayLen: true,
     });
   }, 60_000);
 });
