@@ -10,7 +10,7 @@ import { RequestContext } from '../../request-context';
 import type { TargetType } from '../../storage/types';
 import type { ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
-import { buildReplayHooks, createReplayState, finalizeReplayReport } from './replay';
+import { buildReplayHooks, createReplayState, finalizeReplayReport, isSuppressingMock } from './replay';
 import type {
   ToolMockConfig,
   ToolReplayEvent,
@@ -387,19 +387,30 @@ async function executeAgent(
   // Strict matching treats the recording as a contract: every recorded call
   // must be consumed. Unconsumed events under 'fifo' are signal (often the
   // intended fix); under 'strict' they are a broken contract and fail the
-  // item — deterministic, so never retried.
+  // item — deterministic, so never retried. Tools answered by a suppressing
+  // mock are exempt: the user explicitly took them out of the contract, so
+  // their recorded calls can never be consumed — they stay visible in the
+  // report's `unconsumed` as signal, they just don't fail the item.
   if (toolReplay?.matching === 'strict' && replayReport && replayReport.unconsumed.length > 0) {
-    return {
-      output: null,
-      error: {
-        message: `Strict replay left recorded calls unconsumed: ${replayReport.unconsumed
-          .map(entry => `${entry.toolName} (${entry.count})`)
-          .join('; ')}`,
-        code: 'TOOL_REPLAY_UNCONSUMED',
-      },
-      traceId,
-      toolReplay: replayReport,
-    };
+    const mockExemptTools = new Set(
+      [...(replayState?.mocks.entries() ?? [])]
+        .filter(([, mock]) => isSuppressingMock(mock.config))
+        .map(([formattedName]) => formattedName),
+    );
+    const contractBreaches = replayReport.unconsumed.filter(entry => !mockExemptTools.has(entry.toolName));
+    if (contractBreaches.length > 0) {
+      return {
+        output: null,
+        error: {
+          message: `Strict replay left recorded calls unconsumed: ${contractBreaches
+            .map(entry => `${entry.toolName} (${entry.count})`)
+            .join('; ')}`,
+          code: 'TOOL_REPLAY_UNCONSUMED',
+        },
+        traceId,
+        toolReplay: replayReport,
+      };
+    }
   }
 
   // Only persist fields relevant to experiment evaluation — drop provider metadata,
