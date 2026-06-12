@@ -181,8 +181,9 @@ function safeChar(c: string): string {
 
 /** Pixel width of a string at the given scale. */
 function measureText(text: string, scale: number): number {
-  if (text.length === 0) return 0;
-  return text.length * FONT_WIDTH * scale + (text.length - 1) * FONT_GAP * scale;
+  const codePoints = Array.from(text);
+  if (codePoints.length === 0) return 0;
+  return codePoints.length * FONT_WIDTH * scale + (codePoints.length - 1) * FONT_GAP * scale;
 }
 
 interface DrawTextOpts {
@@ -277,10 +278,11 @@ export function drawCaptionOnFrame(frame: RgbaFrame, caption: string, options: C
   let text = caption;
   if (measureText(text, scale) > maxTextWidth) {
     const ellipsis = '...';
-    while (text.length > 0 && measureText(text + ellipsis, scale) > maxTextWidth) {
-      text = text.slice(0, -1);
+    const codePoints = Array.from(text);
+    while (codePoints.length > 0 && measureText(codePoints.join('') + ellipsis, scale) > maxTextWidth) {
+      codePoints.pop();
     }
-    text = text + ellipsis;
+    text = codePoints.join('') + ellipsis;
   }
 
   // Composite the semi-transparent background over the existing pixels.

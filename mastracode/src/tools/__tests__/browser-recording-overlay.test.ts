@@ -103,6 +103,12 @@ describe('drawCaptionOnFrame', () => {
 
     expect(frame.data).toEqual(snapshot);
   });
+
+  it('truncates captions by code point without splitting emoji surrogate pairs', () => {
+    const frame = makeRgbaFrame(36, 30);
+
+    expect(() => drawCaptionOnFrame(frame, 'loading 🚀🚀🚀')).not.toThrow();
+  });
 });
 
 describe('encodeJpeg', () => {

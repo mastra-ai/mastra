@@ -51,6 +51,8 @@ const STRH_SIZE = 56;
 const STRF_SIZE = 40; // BITMAPINFOHEADER, no extra data
 const LIST_TYPE_SIZE = 4; // 4 bytes for the LIST type ("hdrl", "movi", etc.)
 const CHUNK_HEADER_SIZE = 8; // fourcc (4) + size (4)
+const MAX_U32 = 0xffffffff;
+const MAX_I16 = 0x7fff;
 
 function fourcc(s: string): Buffer {
   if (s.length !== 4) {
@@ -69,8 +71,14 @@ export function writeMjpegAviFile(filePath: string, frames: readonly MjpegFrame[
   if (frames.length === 0) {
     throw new Error('writeMjpegAviFile: at least one frame is required');
   }
-  if (opts.width <= 0 || opts.height <= 0) {
+  if (opts.width <= 0 || opts.height <= 0 || !Number.isInteger(opts.width) || !Number.isInteger(opts.height)) {
     throw new Error(`writeMjpegAviFile: invalid dimensions ${opts.width}x${opts.height}`);
+  }
+  if (opts.width > MAX_I16 || opts.height > MAX_I16) {
+    throw new Error(`writeMjpegAviFile: dimensions exceed AVI header bounds: ${opts.width}x${opts.height}`);
+  }
+  for (let i = 0; i < frames.length; i++) {
+    assertJpegFrame(frames[i]!.bytes, i);
   }
 
   mkdirSync(dirname(filePath), { recursive: true });
@@ -84,10 +92,12 @@ export function writeMjpegAviFile(filePath: string, frames: readonly MjpegFrame[
   const microSecPerFrame = Math.round(1_000_000 / fps);
 
   const maxFrameLen = frames.reduce((m, f) => Math.max(m, f.bytes.length), 0);
+  assertU32(maxFrameLen, 'max frame length');
   const totalFrameBytes = frames.reduce(
     (sum, f) => sum + CHUNK_HEADER_SIZE + paddedLength(f.bytes.length),
     0,
   );
+  assertU32(totalFrameBytes, 'total frame bytes');
 
   // -------------------------------------------------------------------------
   // Pre-compute header bytes
@@ -103,8 +113,10 @@ export function writeMjpegAviFile(filePath: string, frames: readonly MjpegFrame[
 
   // movi list size: 4 bytes for the "movi" type fourcc + all frame chunks.
   const moviPayloadSize = LIST_TYPE_SIZE + totalFrameBytes;
+  assertU32(moviPayloadSize, 'movi list size');
   // idx1 chunk size: 16 bytes per entry.
   const idx1PayloadSize = frames.length * 16;
+  assertU32(idx1PayloadSize, 'idx1 chunk size');
 
   // RIFF payload size = 4 ("AVI ") + hdrl LIST (header+size+payload) +
   //                     movi LIST (header+size+payload) + idx1 chunk (header+payload)
@@ -113,6 +125,7 @@ export function writeMjpegAviFile(filePath: string, frames: readonly MjpegFrame[
     CHUNK_HEADER_SIZE + hdrl.length +
     CHUNK_HEADER_SIZE + moviPayloadSize +
     CHUNK_HEADER_SIZE + idx1PayloadSize;
+  assertU32(riffPayloadSize, 'RIFF payload size');
 
   // -------------------------------------------------------------------------
   // Write the file
@@ -179,6 +192,13 @@ function buildHdrl(args: {
   maxFrameLen: number;
 }): Buffer {
   const { width, height, microSecPerFrame, totalFrames, maxFrameLen } = args;
+  assertU32(microSecPerFrame, 'microseconds per frame');
+  assertU32(totalFrames, 'total frames');
+  assertU32(maxFrameLen, 'max frame length');
+  const maxBytesPerSec = Math.round((maxFrameLen * 1_000_000) / microSecPerFrame);
+  assertU32(maxBytesPerSec, 'max bytes per second');
+  const sizeImage = width * height * 3;
+  assertU32(sizeImage, 'bitmap image size');
 
   // Inner size:
   //   "hdrl" (4) + avih chunk header (8) + avih payload (56)
@@ -201,7 +221,7 @@ function buildHdrl(args: {
   // dwMicroSecPerFrame
   buf.writeUInt32LE(microSecPerFrame, p); p += 4;
   // dwMaxBytesPerSec
-  buf.writeUInt32LE(Math.round((maxFrameLen * 1_000_000) / microSecPerFrame), p); p += 4;
+  buf.writeUInt32LE(maxBytesPerSec, p); p += 4;
   // dwPaddingGranularity
   buf.writeUInt32LE(0, p); p += 4;
   // dwFlags
@@ -268,7 +288,7 @@ function buildHdrl(args: {
   // biCompression = "MJPG"
   FOURCC_MJPG.copy(buf, p); p += 4;
   // biSizeImage
-  buf.writeUInt32LE(width * height * 3, p); p += 4;
+  buf.writeUInt32LE(sizeImage, p); p += 4;
   // biXPelsPerMeter, biYPelsPerMeter, biClrUsed, biClrImportant
   buf.writeInt32LE(0, p); p += 4;
   buf.writeInt32LE(0, p); p += 4;
@@ -285,6 +305,18 @@ function paddedLength(n: number): number {
   return n + (n & 1);
 }
 
+function assertJpegFrame(bytes: Uint8Array, index: number): void {
+  if (bytes.length < 2 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+    throw new Error(`writeMjpegAviFile: frame ${index} is not a JPEG frame (missing SOI marker)`);
+  }
+}
+
+function assertU32(value: number, field: string): void {
+  if (!Number.isSafeInteger(value) || value < 0 || value > MAX_U32) {
+    throw new Error(`writeMjpegAviFile: ${field} exceeds 32-bit AVI limit (${value})`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // File I/O helpers
 // ---------------------------------------------------------------------------
@@ -296,7 +328,8 @@ function writeFourCC(fd: number, fc: Buffer): void {
 }
 
 function writeU32(fd: number, value: number): void {
-  u32buf.writeUInt32LE(value >>> 0, 0);
+  assertU32(value, 'uint32 field');
+  u32buf.writeUInt32LE(value, 0);
   writeSync(fd, u32buf, 0, 4);
 }
 

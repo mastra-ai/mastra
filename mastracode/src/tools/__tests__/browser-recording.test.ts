@@ -6,6 +6,12 @@ import type { MastraBrowser } from '@mastra/core/browser';
 import { encode as encodeJpeg } from 'jpeg-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+const mockAppData = vi.hoisted(() => ({ dir: '' }));
+
+vi.mock('../../utils/project.js', () => ({
+  getAppDataDir: () => mockAppData.dir,
+}));
+
 import {
   __isRecordingActive,
   __resetRecordingStateForTests,
@@ -47,10 +53,16 @@ class FakeStream extends EventEmitter {
 
 interface FakeBrowserOpts {
   failStart?: string;
+  failReconnect?: string;
 }
 
 function makeFakeBrowser(opts: FakeBrowserOpts = {}): { browser: MastraBrowser; stream: FakeStream } {
   const stream = new FakeStream();
+  if (opts.failReconnect) {
+    stream.reconnect = vi.fn(async () => {
+      throw new Error(opts.failReconnect);
+    });
+  }
   const browser = {
     startScreencast: vi.fn(async () => {
       if (opts.failStart) throw new Error(opts.failStart);
@@ -67,6 +79,10 @@ async function runTool(tool: any, input: any = {}) {
   return tool.execute(input, { requestContext: { get: () => undefined } });
 }
 
+function recordingPath(fileName: string): string {
+  return join(mockAppData.dir, 'browser-recordings', fileName);
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -76,6 +92,7 @@ describe('createBrowserRecordingTools', () => {
 
   beforeEach(() => {
     tmpDir = mkdtempSync(join(tmpdir(), 'mastracode-rec-'));
+    mockAppData.dir = join(tmpDir, 'app-data');
   });
 
   afterEach(() => {
@@ -104,14 +121,23 @@ describe('createBrowserRecordingTools', () => {
     const { browser } = makeFakeBrowser();
     const tools = createBrowserRecordingTools(browser);
 
-    const first = await runTool(tools.browser_record, { action: 'start', outputPath: join(tmpDir, 'one.avi') });
+    const first = await runTool(tools.browser_record, { action: 'start', outputPath: recordingPath('one.avi') });
     expect(first.isError).toBe(false);
     expect(first.recordingId).toMatch(/^rec_/);
     expect(__isRecordingActive()).toBe(true);
 
-    const second = await runTool(tools.browser_record, { action: 'start', outputPath: join(tmpDir, 'two.avi') });
+    const second = await runTool(tools.browser_record, { action: 'start', outputPath: recordingPath('two.avi') });
     expect(second.isError).toBe(true);
     expect(second.content).toMatch(/already active/i);
+  });
+
+  it('rejects outputPath outside the app-data browser-recordings directory', async () => {
+    const { browser } = makeFakeBrowser();
+    const tools = createBrowserRecordingTools(browser);
+    const result = await runTool(tools.browser_record, { action: 'start', outputPath: join(tmpDir, 'outside.avi') });
+    expect(result.isError).toBe(true);
+    expect(result.content).toMatch(/outputPath must be inside/i);
+    expect(__isRecordingActive()).toBe(false);
   });
 
   it('caption rejects when no recording is active', async () => {
@@ -125,7 +151,7 @@ describe('createBrowserRecordingTools', () => {
   it('caption accepts text during an active recording and increments counter', async () => {
     const { browser } = makeFakeBrowser();
     const tools = createBrowserRecordingTools(browser);
-    await runTool(tools.browser_record, { action: 'start', outputPath: join(tmpDir, 'c.avi') });
+    await runTool(tools.browser_record, { action: 'start', outputPath: recordingPath('c.avi') });
 
     const a = await runTool(tools.browser_record_caption, { text: 'opened login' });
     expect(a.isError).toBe(false);
@@ -135,7 +161,7 @@ describe('createBrowserRecordingTools', () => {
   it('stop without any frames returns a clean error', async () => {
     const { browser } = makeFakeBrowser();
     const tools = createBrowserRecordingTools(browser);
-    await runTool(tools.browser_record, { action: 'start', outputPath: join(tmpDir, 'no-frames.avi') });
+    await runTool(tools.browser_record, { action: 'start', outputPath: recordingPath('no-frames.avi') });
 
     const result = await runTool(tools.browser_record, { action: 'stop' });
     expect(result.isError).toBe(true);
@@ -146,7 +172,7 @@ describe('createBrowserRecordingTools', () => {
   it('stop writes a non-empty AVI to disk and returns the file path', async () => {
     const { browser, stream } = makeFakeBrowser();
     const tools = createBrowserRecordingTools(browser);
-    const outputPath = join(tmpDir, 'movie.avi');
+    const outputPath = recordingPath('movie.avi');
 
     await runTool(tools.browser_record, { action: 'start', outputPath });
     stream.pushFrame(32, 24);
@@ -172,13 +198,44 @@ describe('createBrowserRecordingTools', () => {
     expect(__isRecordingActive()).toBe(false);
   });
 
+  it('rejects mixed-dimension frames instead of writing a malformed AVI', async () => {
+    const { browser, stream } = makeFakeBrowser();
+    const tools = createBrowserRecordingTools(browser);
+    const outputPath = recordingPath('mixed.avi');
+
+    await runTool(tools.browser_record, { action: 'start', outputPath });
+    stream.pushFrame(32, 24);
+    stream.pushFrame(64, 24);
+
+    const result = await runTool(tools.browser_record, { action: 'stop' });
+    expect(result.isError).toBe(true);
+    expect(result.content).toMatch(/Frame dimensions changed/i);
+    expect(__isRecordingActive()).toBe(false);
+  });
+
   it('surfaces a clean error when startScreencast throws "not supported"', async () => {
     const { browser } = makeFakeBrowser({ failStart: 'Screencast not supported by this provider' });
     const tools = createBrowserRecordingTools(browser);
-    const result = await runTool(tools.browser_record, { action: 'start', outputPath: join(tmpDir, 'x.avi') });
+    const result = await runTool(tools.browser_record, { action: 'start', outputPath: recordingPath('x.avi') });
     expect(result.isError).toBe(true);
     expect(result.content).toMatch(/not supported/i);
     expect(__isRecordingActive()).toBe(false);
+  });
+
+  it('surfaces reconnect failures when stopping', async () => {
+    vi.useFakeTimers();
+    const { browser, stream } = makeFakeBrowser({ failReconnect: 'reconnect exploded' });
+    const tools = createBrowserRecordingTools(browser);
+    await runTool(tools.browser_record, { action: 'start', outputPath: recordingPath('reconnect.avi') });
+    stream.pushFrame(32, 24);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    const result = await runTool(tools.browser_record, { action: 'stop' });
+    expect(result.isError).toBe(true);
+    expect(result.content).toMatch(/reconnect exploded/i);
+    expect(__isRecordingActive()).toBe(false);
+    vi.useRealTimers();
   });
 
   it('auto-stops at maxDurationMs and cleans up state', async () => {
@@ -187,7 +244,7 @@ describe('createBrowserRecordingTools', () => {
     const tools = createBrowserRecordingTools(browser);
     await runTool(tools.browser_record, {
       action: 'start',
-      outputPath: join(tmpDir, 'auto.avi'),
+      outputPath: recordingPath('auto.avi'),
       maxDurationMs: 1_000,
     });
     expect(__isRecordingActive()).toBe(true);
@@ -201,7 +258,7 @@ describe('createBrowserRecordingTools', () => {
   it('status reflects active state during a session', async () => {
     const { browser, stream } = makeFakeBrowser();
     const tools = createBrowserRecordingTools(browser);
-    await runTool(tools.browser_record, { action: 'start', outputPath: join(tmpDir, 'status.avi') });
+    await runTool(tools.browser_record, { action: 'start', outputPath: recordingPath('status.avi') });
     stream.pushFrame(16, 16);
     stream.pushFrame(16, 16);
 

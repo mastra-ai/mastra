@@ -516,21 +516,21 @@ describe('createBrowserFromSettings — recording tools gating', () => {
     expect(result).toBeUndefined();
   });
 
-  it('exposes the browser_record and browser_record_caption tools on a Mastra Code-constructed stagehand browser', async () => {
-    const browser = await createBrowserFromSettings(makeBrowserSettings({ provider: 'stagehand' }));
-    expect(browser).toBeDefined();
-    const tools = browser!.getTools();
-    for (const name of RECORDING_TOOL_NAMES) {
-      expect(tools[name], `expected tool ${name} to be present`).toBeDefined();
-    }
-  });
-
-  it('keeps the underlying provider tools intact when wrapping', async () => {
-    const browser = await createBrowserFromSettings(makeBrowserSettings({ provider: 'stagehand' }));
-    const tools = browser!.getTools();
-    // The stagehand provider's own navigate tool should still be present alongside recording tools.
-    expect(tools['stagehand_navigate']).toBeDefined();
-  });
+  it.each([
+    ['stagehand', 'stagehand_navigate'],
+    ['agent-browser', 'browser_goto'],
+  ] as const)(
+    'exposes recording tools on a Mastra Code-constructed %s browser while keeping provider tools intact',
+    async (provider, providerToolName) => {
+      const browser = await createBrowserFromSettings(makeBrowserSettings({ provider }));
+      expect(browser).toBeDefined();
+      const tools = browser!.getTools();
+      for (const name of RECORDING_TOOL_NAMES) {
+        expect(tools[name], `expected tool ${name} to be present`).toBeDefined();
+      }
+      expect(tools[providerToolName], `expected provider tool ${providerToolName} to be present`).toBeDefined();
+    },
+  );
 
   it('does NOT expose recording tools when StagehandBrowser is constructed directly', async () => {
     const { StagehandBrowser } = await import('@mastra/stagehand');
@@ -538,6 +538,15 @@ describe('createBrowserFromSettings — recording tools gating', () => {
     const tools = browser.getTools();
     for (const name of RECORDING_TOOL_NAMES) {
       expect(tools[name], `expected tool ${name} to be absent on direct StagehandBrowser`).toBeUndefined();
+    }
+  });
+
+  it('does NOT expose recording tools when AgentBrowser is constructed directly', async () => {
+    const { AgentBrowser } = await import('@mastra/agent-browser');
+    const browser = new AgentBrowser({ headless: true });
+    const tools = browser.getTools();
+    for (const name of RECORDING_TOOL_NAMES) {
+      expect(tools[name], `expected tool ${name} to be absent on direct AgentBrowser`).toBeUndefined();
     }
   });
 });

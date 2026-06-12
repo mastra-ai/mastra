@@ -12,7 +12,7 @@
  * itself constructs (see `createBrowserFromSettings`).
  */
 
-import { join } from 'node:path';
+import { relative, resolve, sep, join } from 'node:path';
 import type { MastraBrowser, ScreencastStream } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
@@ -93,8 +93,22 @@ function generateRecordingId(): string {
   return `rec_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+function recordingsDir(): string {
+  return resolve(getAppDataDir(), 'browser-recordings');
+}
+
 function defaultOutputPath(id: string): string {
-  return join(getAppDataDir(), 'browser-recordings', `${id}.avi`);
+  return join(recordingsDir(), `${id}.avi`);
+}
+
+function resolveOutputPath(id: string, requestedPath?: string): string {
+  const baseDir = recordingsDir();
+  const outputPath = requestedPath ? resolve(requestedPath) : defaultOutputPath(id);
+  const rel = relative(baseDir, outputPath);
+  if (rel.startsWith('..') || rel === '..' || rel.includes(`..${sep}`) || resolve(outputPath) === baseDir) {
+    throw new Error(`Recording outputPath must be inside ${baseDir}`);
+  }
+  return outputPath;
 }
 
 function clearState(): void {
@@ -141,9 +155,8 @@ function buildCaptionedFrame(state: RecordingState, frame: BufferedFrame): Mjpeg
  * Encode all buffered frames as an MJPEG AVI file written directly to disk.
  *
  * Returns the dimensions of the first frame (used to populate the AVI header).
- * Frames whose dimensions differ from the first frame are skipped — CDP
- * screencast normally delivers consistent dimensions for a session, so this is
- * defensive against viewport changes mid-recording.
+ * The AVI stream has one fixed frame size, so fail fast if the browser changes
+ * screencast dimensions mid-recording.
  */
 function encodeFramesAsAvi(state: RecordingState, outputPath: string): { width: number; height: number; written: number } {
   if (state.frames.length === 0) {
@@ -157,6 +170,10 @@ function encodeFramesAsAvi(state: RecordingState, outputPath: string): { width: 
 
   const muxFrames: MjpegFrame[] = [];
   for (const frame of state.frames) {
+    const rgba = decodeJpeg(frame.bytes);
+    if (rgba.width !== width || rgba.height !== height) {
+      throw new Error(`Frame dimensions changed during recording: expected ${width}x${height}, got ${rgba.width}x${rgba.height}`);
+    }
     const out = buildCaptionedFrame(state, frame);
     muxFrames.push(out);
   }
@@ -195,7 +212,7 @@ async function startRecording(
   const maxHeight = Math.max(120, Math.floor(opts.maxHeight ?? DEFAULT_MAX_HEIGHT));
 
   const id = generateRecordingId();
-  const outputPath = opts.outputPath ?? defaultOutputPath(id);
+  const outputPath = resolveOutputPath(id, opts.outputPath);
 
   let stream: ScreencastStream;
   try {
@@ -294,9 +311,10 @@ async function startRecording(
           if (active && active.id === id) {
             active.lastFrameAt = Date.now();
           }
-        } catch {
-          // Swallow — next tick will retry; final stop() will surface any
-          // persistent failure via pendingError.
+        } catch (err) {
+          if (active && active.id === id) {
+            active.pendingError = err instanceof Error ? err : new Error(String(err));
+          }
         } finally {
           if (active && active.id === id) {
             active.reconnecting = false;
@@ -332,7 +350,7 @@ async function stopRecording(): Promise<{
 
   await safeStop(state.stream);
 
-  if (state.pendingError && state.frames.length === 0) {
+  if (state.pendingError) {
     const err = state.pendingError;
     clearState();
     throw new Error(`Browser recording failed: ${err.message}`);
@@ -427,6 +445,9 @@ export function __resetRecordingStateForTests(): void {
   if (active?.autoStopTimer) {
     clearTimeout(active.autoStopTimer);
   }
+  if (active?.watchdogTimer) {
+    clearInterval(active.watchdogTimer);
+  }
   if (active?.stream) {
     // Best-effort cleanup so a leaked stream doesn't break subsequent tests.
     void safeStop(active.stream);
@@ -478,7 +499,7 @@ const recordSchema = z.object({
     .min(1)
     .optional()
     .describe(
-      'Only used with action="start". Absolute path to write the .avi video to. Defaults to a file under the Mastra Code app data directory.',
+      'Only used with action="start". Absolute path inside the Mastra Code browser-recordings app-data directory. Defaults to a generated file there.',
     ),
 });
 
