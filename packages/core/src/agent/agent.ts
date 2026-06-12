@@ -7802,6 +7802,57 @@ export class Agent<
     return this.resumeStream({ approved: true }, options);
   }
 
+  /**
+   * Applies toModelOutput transforms to tool-result parts in incoming messages.
+   *
+   * Client tools execute on the client and send results back via sendToolApproval.
+   * Unlike server tools (which go through llm-mapping-step where toModelOutput runs),
+   * client tool results arrive pre-formed with output: { type: 'json', value: result }.
+   * This method intercepts those messages and applies each tool's toModelOutput
+   * transform so multimodal output (images, files) reaches the LLM correctly.
+   */
+  async #applyToModelOutputToMessages(
+    messages: MessageListInput,
+    requestContext?: RequestContext,
+    extraTools?: Record<string, { toModelOutput?: (output: unknown) => unknown }>,
+  ): Promise<MessageListInput> {
+    const registryTools = await this.listTools({ requestContext: requestContext ?? new RequestContext() });
+    const tools = { ...registryTools, ...extraTools };
+    const transformed = await Promise.all(
+      (messages as any[]).map(async (message: any) => {
+        if (!message || typeof message !== 'object') return message;
+        if (!Array.isArray(message.content)) return message;
+
+        const newContent = await Promise.all(
+          message.content.map(async (part: any) => {
+            if (!part || part.type !== 'tool-result') return part;
+
+            const tool = tools?.[part.toolName] as { toModelOutput?: (output: unknown) => unknown } | undefined;
+            if (!tool?.toModelOutput) return part;
+
+            const rawValue =
+              part.output && typeof part.output === 'object' && part.output.type === 'json'
+                ? part.output.value
+                : part.output;
+
+            if (rawValue == null) return part;
+
+            try {
+              const modelOutput = await tool.toModelOutput(rawValue);
+              if (modelOutput == null) return part;
+              return { ...part, output: modelOutput };
+            } catch {
+              return part;
+            }
+          }),
+        );
+
+        return { ...message, content: newContent };
+      }),
+    );
+    return transformed as MessageListInput;
+  }
+
   async sendToolApproval<OUTPUT = undefined>(
     options: AgentExecutionOptions<OUTPUT> & {
       threadId: string;
@@ -7815,9 +7866,14 @@ export class Agent<
     const { threadId, resourceId, approved, messages, streamOptions, ...executionOptions } = options;
 
     if (messages && approved) {
+      const transformedMessages = await this.#applyToModelOutputToMessages(
+        messages,
+        executionOptions.requestContext,
+        streamOptions?.clientTools as Record<string, { toModelOutput?: (output: unknown) => unknown }> | undefined,
+      );
       const continuation = agentThreadStreamRuntime.continueWithMessages(
         this as Agent<any, any, any, any>,
-        messages,
+        transformedMessages,
         {
           resourceId,
           threadId,
