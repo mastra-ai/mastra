@@ -4318,7 +4318,7 @@ export class Mastra<
       const modes = this.#pubsub.supportedModes ?? ['pull'];
       const pushOnly = modes.includes('push') && !modes.includes('pull');
       if (pushOnly && !this.#pushSubscription) {
-        const cb: EventCallback = (event, ack) => {
+        const cb: EventCallback = (event, ack, nack) => {
           // In cross-process push environments (e.g. UnixSocketPubSub),
           // every subscriber receives every event — including events for
           // internal workflows registered on a different process. Skip
@@ -4339,13 +4339,41 @@ export class Mastra<
 
           void this.handleWorkflowEvent(event)
             .then(result => {
-              if (result.ok && ack) {
+              if (result.ok) {
+                if (ack) {
+                  return ack().catch(err =>
+                    this.#logger?.error?.('Error acking workflow event in push subscription', err),
+                  );
+                }
+                return;
+              }
+              // Non-ok result: ask the transport to redeliver (nack) when the
+              // handle layer says retry. The WEP tracks per-event delivery
+              // attempts and eventually returns `retry: false` to break the
+              // loop and surface a terminal workflow.fail. For terminal
+              // failures we ack so the event is dropped from the transport.
+              if (result.retry) {
+                if (nack) {
+                  return nack().catch(err =>
+                    this.#logger?.error?.('Error nacking workflow event in push subscription', err),
+                  );
+                }
+                // Transport does not support nack. Do NOT ack — acking a
+                // retryable failure would drop the event and silently lose
+                // the workflow run. Log and let the transport's own delivery
+                // semantics decide (most non-ack transports redeliver until
+                // explicitly acked).
+                this.#logger?.error?.('Retryable workflow event cannot be requeued because nack is unavailable', {
+                  type: event.type,
+                  runId: event.runId,
+                });
+                return;
+              }
+              if (ack) {
                 return ack().catch(err =>
-                  this.#logger?.error?.('Error acking workflow event in push subscription', err),
+                  this.#logger?.error?.('Error acking terminal workflow event in push subscription', err),
                 );
               }
-              // Push transports without nack semantics (EventEmitter) treat
-              // a non-ack as a failure signal; we already logged inside handle().
             })
             .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
         };

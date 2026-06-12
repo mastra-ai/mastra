@@ -819,7 +819,14 @@ export class Harness<TState = {}> {
   /**
    * Get the agent for the current mode.
    */
-  private getCurrentAgent(): Agent {
+  /**
+   * Resolve the Agent backing the current mode, with runtime services (storage,
+   * pubsub, telemetry) propagated. Public so consumers like MastraCode's
+   * GoalManager can drive the agent's native objective methods
+   * (`setObjective`/`getObjective`/`clearObjective`/`updateObjectiveOptions`),
+   * which read/write the durable `threadState` `'goal'` slot.
+   */
+  getCurrentAgent(): Agent {
     const mode = this.getCurrentMode();
     const agent = typeof mode.agent === 'function' ? mode.agent(this.state) : mode.agent;
     return this.propagateRuntimeServicesToAgent(agent);
@@ -2963,6 +2970,13 @@ export class Harness<TState = {}> {
             state.currentMessage.stopReason = 'complete';
           }
         }
+        break;
+      }
+
+      case 'goal': {
+        // In-loop goal evaluation. Forward the payload so consumers (the TUI's
+        // judge display) can render judge progress and the decision.
+        this.emit({ type: 'goal_evaluation', payload: chunk.payload });
         break;
       }
 

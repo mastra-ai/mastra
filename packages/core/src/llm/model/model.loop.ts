@@ -137,6 +137,7 @@ export class MastraLLMVNext extends MastraBase {
     processorStates,
     activeTools,
     isTaskComplete,
+    goal,
     onIterationComplete,
     workspace,
     ...rest
@@ -229,6 +230,7 @@ export class MastraLLMVNext extends MastraBase {
         processorStates,
         activeTools,
         isTaskComplete,
+        goal,
         onIterationComplete,
         workspace,
         ...observabilityContext,
