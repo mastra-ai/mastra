@@ -481,6 +481,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   args: inputData.args,
                 },
                 __streamState: streamState.serialize(),
+                __agentId: agentId,
               },
               {
                 resumeLabel: inputData.toolCallId,
@@ -596,6 +597,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     args: inputData.args,
                   },
                   __streamState: streamState.serialize(),
+                  __agentId: agentId,
                 },
                 {
                   resumeLabel: inputData.toolCallId,
@@ -639,6 +641,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 {
                   toolCallSuspended: suspendPayload,
                   __streamState: streamState.serialize(),
+                  __agentId: agentId,
                   toolName: inputData.toolName,
                   resumeLabel: options?.resumeLabel,
                 },

@@ -5916,6 +5916,17 @@ export class Agent<
     return undefined;
   }
 
+  #getSnapshotAgentId(existingSnapshot: WorkflowRunState | null | undefined): string | undefined {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step && step.status === 'suspended' && step.suspendPayload?.__agentId) {
+        return step.suspendPayload.__agentId;
+      }
+    }
+
+    return undefined;
+  }
+
   #getSuspendedToolCalls(existingSnapshot: WorkflowRunState | null | undefined): AgentRunToolCall[] {
     const toolCalls: AgentRunToolCall[] = [];
     for (const key in existingSnapshot?.context) {
@@ -7032,9 +7043,9 @@ export class Agent<
    * across multiple server instances. Pass the returned `runId` to `resumeStream()`,
    * `approveToolCall()`, or `declineToolCall()`.
    *
-   * Note: runs are discovered from shared `agentic-loop` snapshot storage, so runs
-   * started by other agents on the same Mastra instance (e.g. subagents) are also
-   * visible. Filter by `threadId`/`resourceId` to scope results to a conversation.
+   * Results are scoped to runs started by this agent: snapshots persist the owning
+   * agent's id, and runs whose snapshots carry a different id are skipped. Filter by
+   * `threadId`/`resourceId` to scope results to a conversation.
    *
    * @example
    * ```typescript
@@ -7046,6 +7057,26 @@ export class Agent<
    */
   async listSuspendedRuns(options: AgentListSuspendedRunsOptions = {}): Promise<AgentListSuspendedRunsResult> {
     const { threadId, resourceId, fromDate, toDate, perPage, page } = options;
+
+    if (perPage !== undefined && (!Number.isInteger(perPage) || perPage <= 0)) {
+      throw new MastraError({
+        id: 'AGENT_LIST_SUSPENDED_RUNS_INVALID_PER_PAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" listSuspendedRuns() requires perPage to be a positive integer.`,
+        details: { agentName: this.name, perPage },
+      });
+    }
+    if (page !== undefined && (!Number.isInteger(page) || page < 0)) {
+      throw new MastraError({
+        id: 'AGENT_LIST_SUSPENDED_RUNS_INVALID_PAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" listSuspendedRuns() requires page to be a non-negative integer.`,
+        details: { agentName: this.name, page },
+      });
+    }
+
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
 
@@ -7082,6 +7113,12 @@ export class Agent<
         }
       }
       if (snapshot?.status !== 'suspended') continue;
+
+      // Snapshots persist the owning agent's id, so runs started by other
+      // agents sharing the same agentic-loop snapshot storage are skipped.
+      // Snapshots created before the id was persisted stay visible.
+      const runAgentId = this.#getSnapshotAgentId(snapshot);
+      if (runAgentId && runAgentId !== this.id) continue;
 
       // thread/resource info travels in the suspended stream state; the run row's
       // resourceId column is used as the primary source when present.
@@ -8031,8 +8068,13 @@ export class Agent<
       let suspendedRuns: AgentRun[] = [];
       try {
         ({ runs: suspendedRuns } = await this.listSuspendedRuns({ threadId, resourceId }));
-      } catch {
-        // No storage configured — nothing to fall back to.
+      } catch (error) {
+        // Only swallow the expected no-storage case — storage outages and
+        // store-driver errors must surface instead of masquerading as
+        // "no suspended run exists".
+        if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
+          throw error;
+        }
       }
 
       const matchingRuns = options.toolCallId

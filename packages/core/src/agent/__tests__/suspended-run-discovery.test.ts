@@ -203,6 +203,55 @@ describe.each([
       expect((await agent.listSuspendedRuns({ resourceId: 'resource-1', perPage: 2 })).runs).toHaveLength(3);
     }, 30000);
 
+    it('only returns runs owned by the listing agent', async () => {
+      const storage = new InMemoryStore();
+      const agentA = new Agent({
+        id: 'agent-a',
+        name: 'Agent A',
+        instructions: 'You find users.',
+        model: createMockModel(),
+        tools: { findUserTool: createFindUserTool() },
+      });
+      const agentB = new Agent({
+        id: 'agent-b',
+        name: 'Agent B',
+        instructions: 'You find users.',
+        model: createMockModel(),
+        tools: { findUserTool: createFindUserTool() },
+      });
+      new Mastra({ agents: { agentA, agentB }, logger: false, storage });
+
+      // Both agents suspend for the same resource (distinct threads — a thread
+      // only allows one active run at a time).
+      const { runId: runA } = await suspendRun(agentA, 'thread-a', 'shared-resource');
+      const { runId: runB } = await suspendRun(agentB, 'thread-b', 'shared-resource');
+
+      const listedByA = await agentA.listSuspendedRuns({ resourceId: 'shared-resource' });
+      expect(listedByA.runs.map(run => run.runId)).toEqual([runA]);
+      expect(listedByA.total).toBe(1);
+
+      const listedByB = await agentB.listSuspendedRuns({ resourceId: 'shared-resource' });
+      expect(listedByB.runs.map(run => run.runId)).toEqual([runB]);
+      expect(listedByB.total).toBe(1);
+    }, 30000);
+
+    it('rejects invalid pagination inputs', async () => {
+      const { agent } = createSuspendedSetup();
+
+      await expect(agent.listSuspendedRuns({ perPage: 0 })).rejects.toMatchObject({
+        id: 'AGENT_LIST_SUSPENDED_RUNS_INVALID_PER_PAGE',
+      });
+      await expect(agent.listSuspendedRuns({ perPage: 1.5 })).rejects.toMatchObject({
+        id: 'AGENT_LIST_SUSPENDED_RUNS_INVALID_PER_PAGE',
+      });
+      await expect(agent.listSuspendedRuns({ page: -1 })).rejects.toMatchObject({
+        id: 'AGENT_LIST_SUSPENDED_RUNS_INVALID_PAGE',
+      });
+      await expect(agent.listSuspendedRuns({ page: 0.5 })).rejects.toMatchObject({
+        id: 'AGENT_LIST_SUSPENDED_RUNS_INVALID_PAGE',
+      });
+    }, 30000);
+
     it('filters by fromDate and toDate', async () => {
       const { agent } = createSuspendedSetup();
       await suspendRun(agent, 'thread-1', 'resource-1');
@@ -313,13 +362,16 @@ describe.each([
       }
 
       // Both the supervisor's outer run and the subagent's inner run persist
-      // suspended agentic-loop rows...
+      // suspended agentic-loop rows, but snapshots carry the owning agent's id:
+      // the supervisor only sees its own resumable outer run...
       const allRuns = await supervisor.listSuspendedRuns();
-      expect(allRuns.runs).toHaveLength(2);
+      expect(allRuns.runs.map(run => run.runId)).toEqual([stream.runId]);
 
-      // ...but the inner run carries its own generated thread/resource IDs, so
-      // filtering by the conversation's threadId yields exactly the outer run —
-      // the one whose runId resumeStream()/approveToolCall() accept.
+      // ...while the subagent sees its inner run.
+      const subAgentRuns = await subAgent.listSuspendedRuns();
+      expect(subAgentRuns.runs).toHaveLength(1);
+      expect(subAgentRuns.runs[0]!.runId).not.toBe(stream.runId);
+
       const scoped = await supervisor.listSuspendedRuns({ threadId: 'thread-1', resourceId: 'resource-1' });
       expect(scoped.runs.map(run => run.runId)).toEqual([stream.runId]);
       expect(scoped.runs[0]!.toolCalls).toEqual([
@@ -448,6 +500,22 @@ describe.each([
       ).rejects.toMatchObject({
         id: 'AGENT_SEND_TOOL_APPROVAL_NO_ACTIVE_THREAD_RUN',
       });
+    }, 30000);
+
+    it('surfaces storage failures instead of reporting "no suspended run"', async () => {
+      const storage = new InMemoryStore();
+      const { agent } = createSuspendedSetup({ storage });
+
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      vi.spyOn(workflowsStore, 'listWorkflowRuns').mockRejectedValue(new Error('storage outage'));
+
+      await expect(
+        agent.sendToolApproval({
+          threadId: 'thread-1',
+          resourceId: 'resource-1',
+          approved: true,
+        }),
+      ).rejects.toThrow('storage outage');
     }, 30000);
   });
 });
