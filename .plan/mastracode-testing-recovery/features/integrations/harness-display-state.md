@@ -66,16 +66,15 @@
 ## Existing tests
 
 - `packages/core/src/harness/display-state.test.ts` — defaults, lifecycle, tool/tool-input, prompts/plans, subagents, OM, tasks, modified files, `display_state_changed`, coalesced subscriptions, and a non-TUI subscriber rendering contract.
-- `mastracode/src/tui/event-dispatch.test.ts` — task update and display-state event routing.
+- `mastracode/src/tui/event-dispatch.test.ts` — task update routing plus display-state status-line routing: `display_state_changed` refreshes the status line while raw streamed `tool_input_delta` events do not bypass display-state coalescing.
 - `mastracode/src/tui/render-messages.test.ts` — task display-state restoration during history rendering.
 - `mastracode/scripts/mc-e2e/scenarios/streaming-tool-args.ts` — drives a real AIMock-streamed `view` tool call through the PTY TUI and verifies live partial argument projection before final tool result replacement.
 - `mastracode/scripts/mc-e2e/scenarios/task-progress-events.ts` — drives a real AIMock `task_write` tool call through the PTY TUI and verifies pinned task progress plus follow-up tool-result request handling.
+- `mastracode/scripts/mc-e2e/scenarios/tool-history-reload.ts` — reloads persisted completed tool/task history through `/threads` and proves completed transcript state does not resurrect as active display-state work.
 
 ## Missing tests
 
-- Partial e2e coverage exists: `streaming-tool-args` covers a live AIMock-streamed tool-input projection through the real TUI, and `task-progress-events` covers live task progress projection through a real `task_write` tool call.
-- Covered by `tool-history-reload`: loaded history reconstructs completed tool/task boxes from persisted messages after `/threads` reload, proving completed transcript state does not resurrect as active display-state work.
-- Still missing: regression test for status-line update count/coalescing under long tool-input streams in the real TUI path.
+- None known for the mapped Harness display-state recovery scope. Future UI consumers can add product-specific display-state subscriber tests as they adopt `subscribeDisplayState()`.
 
 ## Known risks / regressions
 

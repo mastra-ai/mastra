@@ -20,6 +20,7 @@ function createMockHarness(initialState: Record<string, unknown> = {}, previousT
       tasks: [],
       previousTasks,
       omProgress: { status: 'idle', pendingTokens: 0 },
+      toolInputBuffers: new Map(),
       modifiedFiles: new Map(),
     }),
   };
@@ -56,6 +57,7 @@ function createMockEctx(): EventHandlerContext {
     refreshModelAuthStatus: vi.fn().mockResolvedValue(undefined),
     renderCompletedTasksInline: vi.fn(),
     renderClearedTasksInline: vi.fn(),
+    updateStatusLine: vi.fn(),
   } as unknown as EventHandlerContext;
 }
 
@@ -209,5 +211,37 @@ describe('dispatchEvent task updates', () => {
     await dispatchEvent({ type: 'task_updated', tasks }, ectx, state);
 
     expect(ectx.renderCompletedTasksInline).not.toHaveBeenCalled();
+  });
+});
+
+describe('dispatchEvent display state updates', () => {
+  it('refreshes the status line from display_state_changed events', async () => {
+    const harness = createMockHarness();
+    const state = createMockTUIState(harness);
+    const ectx = createMockEctx();
+    const displayState = harness.getDisplayState();
+
+    await dispatchEvent({ type: 'display_state_changed', displayState } as any, ectx, state);
+
+    expect(ectx.updateStatusLine).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not refresh the status line directly for streamed tool input deltas', async () => {
+    const state = createMockTUIState(createMockHarness());
+    const ectx = createMockEctx();
+    (ectx as any).state = state;
+
+    await dispatchEvent(
+      {
+        type: 'tool_input_delta',
+        toolCallId: 'tool-1',
+        toolName: 'view',
+        argsTextDelta: '{"path":"src/file.ts"}',
+      } as any,
+      ectx,
+      state,
+    );
+
+    expect(ectx.updateStatusLine).not.toHaveBeenCalled();
   });
 });

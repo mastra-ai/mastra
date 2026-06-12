@@ -1,6 +1,27 @@
 # Mastra Code testing recovery history
 
 
+### Harness display-state status-line coverage (2026-06-12)
+
+Validated the `Integrations: Harness display state` row by adding focused Mastra Code TUI routing coverage to the already checked-in streamed-tool/task e2e evidence. `mastracode/src/tui/event-dispatch.test.ts` now proves that `display_state_changed` is the status-line refresh trigger and that raw streamed `tool_input_delta` events do not directly refresh the status line, preserving display-state coalescing for long tool-input streams.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode exec vitest run src/tui/event-dispatch.test.ts --reporter=dot --bail=1
+pnpm --filter ./packages/core exec vitest run src/harness/display-state.test.ts --reporter=dot --bail=1
+pnpm --filter ./mastracode run e2e:test streaming-tool-args
+```
+
+Break validations:
+
+- Removed the `display_state_changed` status-line refresh; the focused TUI test failed with zero `updateStatusLine()` calls.
+- Added a direct `tool_input_delta` status-line refresh; the focused TUI test failed because streamed deltas bypassed the display-state event path.
+- Removed scheduler coalescing in `DisplayStateScheduler.notify()`; the focused core test failed after 101 immediate callbacks before the coalescing window.
+
+The row is now `validated`: core covers the scheduler/coalesced subscriber contract, the focused TUI test covers status-line routing, and existing checked-in e2e scenarios cover live streamed tool args, live task progress, and loaded-history tool/task reconstruction.
+
+
 ### Provider history rejection retry coverage (2026-06-12)
 
 Added `provider-history-rejection-retry` as the 86th checked-in TUI e2e scenario. The scenario seeds a loaded-history thread with an invalid stored tool-call ID, routes a custom OpenAI-compatible provider through AIMock, injects a one-shot HTTP 400 matching Anthropic's `tool_use.id` validation error, and proves the recovered request reaches AIMock only after `ProviderHistoryCompat` retries with the sanitized `call_provider_history_retry` ID.
