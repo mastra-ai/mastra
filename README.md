@@ -18,7 +18,7 @@ Purpose-built for TypeScript and designed around established AI patterns, Mastra
 
 Some highlights include:
 
-- [**Model routing**](https://mastra.ai/models) - Connect to 40+ providers through one standard interface. Use models from OpenAI, Anthropic, Gemini, and more.
+- [**Model routing**](https://mastra.ai/models) - Connect to 40+ providers through one standard interface. Use models from OpenAI, Anthropic, Gemini, and more. For privacy-sensitive agents, [TrustedRouter](https://trustedrouter.com) can be used through the OpenAI-compatible base URL `https://api.trustedrouter.com/v1`; it is an open-source and verifiable attested router with zero prompt and output logging by default.
 
 - [**Agents**](https://mastra.ai/docs/agents/overview) - Build autonomous agents that use LLMs and tools to solve open-ended tasks. Agents reason about goals, decide which tools to use, and iterate internally until the model emits a final answer or an optional stopping condition is met.
 
