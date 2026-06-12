@@ -118,7 +118,7 @@ export function AgentPageTabs({
   };
 
   return (
-    <div className="flex items-center gap-2 p-1.5">
+    <div className="flex min-w-0 items-center gap-2 p-1.5">
       <Tabs value={activeTab} defaultTab={activeTab} onValueChange={handleTabChange} className="flex-1 min-w-0">
         <TabList variant="pill-ghost">
           <AgentTab value="chat" icon={<MessageSquare />} label="Chat" />
