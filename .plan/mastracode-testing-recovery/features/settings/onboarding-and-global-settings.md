@@ -101,6 +101,7 @@
 - `packages/core/src/agent/__tests__/browser.test.ts` and `packages/core/src/browser/browser.test.ts` — core browser context/session and profile cleanup behavior.
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — mocks `/api-keys` slash-command routing.
 - `mastracode/scripts/mc-e2e/scenarios/api-key-prompt.ts` — partial real PTY coverage for `/api-keys`: provider status list, masked add-key dialog, stored-key persistence, and refreshed stored status.
+- `mastracode/scripts/mc-e2e/scenarios/api-key-delete-env.ts` — partial real PTY coverage for `/api-keys` delete/env precedence: starts with both a stored `302ai` key and a real `302AI_API_KEY`, removes the stored key via Delete, verifies the UI falls back to env status/detail copy, and proves `auth.json` is cleared while the shell env key remains intact.
 - `mastracode/scripts/mc-e2e/scenarios/om-global-settings-persistence.ts` — partial real PTY coverage for `/om`: creates an AIMock-backed active thread, toggles caveman observations and attachment forwarding through the OM settings overlay, then verifies `settings.json` global defaults and active-thread metadata keys through shell passthrough.
 - `mastracode/scripts/mc-e2e/scenarios/setup-completion-persistence.ts` — partial real PTY coverage for `/setup`: seeds deterministic Memory Gateway provider access, walks Welcome → auth skip → OpenAI mode pack → OpenAI Mini OM pack → Disable YOLO, then verifies onboarding completion, mode/OM pack IDs, YOLO preference, skipped-state cleanup, and built-in-pack defaults in `settings.json` through shell passthrough.
 - `mastracode/scripts/mc-e2e/scenarios/models-pack-activation-persistence.ts` — partial real PTY coverage for `/models`: seeds a custom OpenAI-compatible provider plus saved custom pack, activates the pack through the real switch/custom-pack action overlay, then verifies `settings.json` active pack ID, custom mode defaults, stale subagent override cleanup, and saved custom pack retention through shell passthrough.
@@ -115,7 +116,7 @@
 - Direct MaskedInput regression for storage connection strings and login dialogs proving render output is masked while submitted value remains raw; `/api-keys` masked input is covered by real PTY e2e.
 - Headless startup with active model pack, custom pack settings, browser settings, and Memory Gateway base URL/env values.
 - Direct `/browser` settings regression for wizard save/clear/export flows, profile/executablePath/CDP mutual exclusion, and startup restore.
-- Direct `/api-keys` settings submenu regression for delete and env cleanup; provider status/add/storage is covered by real PTY e2e.
+- Direct `/api-keys` settings submenu breadth for provider ordering and multi-provider delete flows; add/storage plus stored-key delete with real-env preservation are covered by real PTY e2e.
 
 ## Known risks / regressions
 

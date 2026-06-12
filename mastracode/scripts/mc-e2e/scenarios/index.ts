@@ -1,4 +1,5 @@
 import { activeSignalFollowupScenario } from './active-signal-followup.js';
+import { apiKeyDeleteEnvScenario } from './api-key-delete-env.js';
 import { apiKeyPromptScenario } from './api-key-prompt.js';
 import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { automatedChatScenario } from './automated-chat.js';
@@ -70,6 +71,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   startup: startupScenario,
   'branch-context-long-name': branchContextLongNameScenario,
   'active-signal-followup': activeSignalFollowupScenario,
+  'api-key-delete-env': apiKeyDeleteEnvScenario,
   'api-key-prompt': apiKeyPromptScenario,
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'automated-chat': automatedChatScenario,

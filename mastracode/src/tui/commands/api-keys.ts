@@ -68,7 +68,7 @@ function buildItems(providers: ProviderInfo[]): SelectItem[] {
 }
 
 export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<void> {
-  const models = await ctx.state.harness.listAvailableModels();
+  let models = await ctx.state.harness.listAvailableModels();
   let providers = getProviderList(ctx, models);
 
   if (providers.length === 0) {
@@ -134,15 +134,18 @@ export async function handleApiKeysCommand(ctx: SlashCommandContext): Promise<vo
 
       // Handle Delete key to remove stored keys
       const originalHandleInput = list.handleInput.bind(list);
-      list.handleInput = (data: string) => {
+      list.handleInput = async (data: string) => {
         // Delete or Backspace
         if (data === '\x7f' || data === '\x1b[3~') {
           const info = providers.find(p => p.provider === currentSelection);
           if (info?.source === 'stored' && ctx.authStorage) {
+            const storedKey = ctx.authStorage.getStoredApiKey(info.provider);
             ctx.authStorage.remove(`apikey:${info.provider}`);
-            if (info.envVar) {
+            if (info.envVar && process.env[info.envVar] === storedKey) {
               delete process.env[info.envVar];
             }
+            ctx.state.harness.invalidateAvailableModelsCache();
+            models = await ctx.state.harness.listAvailableModels();
             providers = getProviderList(ctx, models);
             ctx.showInfo(`API key removed for ${info.provider}`);
             rebuildList();

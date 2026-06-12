@@ -1,6 +1,30 @@
 # Mastra Code testing recovery history
 
 
+### API key delete/env preservation coverage (2026-06-12)
+
+Added `api-key-delete-env` as the 65th checked-in TUI e2e scenario. The scenario seeds a stored `302ai` API key and a real `302AI_API_KEY`, opens `/api-keys`, deletes the stored key with Delete, verifies the list falls back to `✓ (env)` with the environment-variable detail copy, then uses shell passthrough to prove `auth.json` no longer contains `apikey:302ai` while `302AI_API_KEY` still has the original shell value.
+
+Product fix: `/api-keys` deletion now only clears `process.env[envVar]` when that env value matches the stored key being removed, then invalidates and reloads the model list before rebuilding the provider table. This preserves real shell credentials while still cleaning env projections that came from stored keys.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test api-key-delete-env
+pnpm run build:mastracode
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+TOOL_EXECUTION_TIMEOUT=600000 pnpm --filter ./mastracode run e2e:test -- --jobs 2
+```
+
+Break validations:
+
+- Deleting `process.env[envVar]` unconditionally made `302ai` fall back to `not set` and failed the scenario.
+- Skipping `authStorage.remove()` left the UI on `✓ (stored)` and failed the scenario.
+- Changing the env-key detail copy away from `Key set via environment variable` failed the scenario.
+
+The `Settings: Onboarding and global settings` row remains `needs-follow-up`; this chunk closes the `/api-keys` delete/env precedence gap, but missing-key model selection, browser/global-settings, custom-pack completion/edit/share/delete, and reload breadth remain.
+
 ### Notification inbox reload coverage (2026-06-12)
 
 Added `notification-inbox-reload` as the 64th checked-in TUI e2e scenario. The scenario seeds a persisted thread with `role=signal` notification and notification-summary DB messages, switches to it through `/threads`, and asserts loaded-history reconstruction for the notification summary count/source/hint plus dismissed, archived, and coalesced pending notification cards.
