@@ -12,6 +12,8 @@ export type {
   ContextWithMastra,
   CorsOptions,
   ApiRoute,
+  Methods,
+  ServerConfig,
   HttpLoggingConfig,
   ValidationErrorContext,
   ValidationErrorResponse,
