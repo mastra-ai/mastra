@@ -81,6 +81,160 @@ export const Right: Story = {
   ),
 };
 
+type RepositoryPanelProps = {
+  idPrefix: string;
+  title?: string;
+  description?: string;
+};
+
+function RepositoryPanel({
+  idPrefix,
+  title = 'Repository setup',
+  description = 'Select the repository and branch to attach to this project.',
+}: RepositoryPanelProps) {
+  return (
+    <DrawerContent>
+      <DrawerHeader>
+        <DrawerTitle>{title}</DrawerTitle>
+        <DrawerDescription>{description}</DrawerDescription>
+      </DrawerHeader>
+      <DrawerBody className="grid content-start gap-4">
+        <div className="grid gap-1.5">
+          <Label htmlFor={`${idPrefix}-repository`}>Repository</Label>
+          <Input id={`${idPrefix}-repository`} defaultValue="mastra-ai/mastra" />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor={`${idPrefix}-branch`}>Branch</Label>
+          <Input id={`${idPrefix}-branch`} defaultValue="main" />
+        </div>
+      </DrawerBody>
+      <DrawerFooter>
+        <DrawerClose asChild>
+          <Button variant="outline">Cancel</Button>
+        </DrawerClose>
+        <DrawerClose asChild>
+          <Button>Save</Button>
+        </DrawerClose>
+      </DrawerFooter>
+    </DrawerContent>
+  );
+}
+
+function WorkspaceSurface({ children }: { children: React.ReactNode }) {
+  const [deployments, setDeployments] = React.useState(12);
+
+  return (
+    <div className="min-h-[560px] bg-surface1 p-4 sm:p-6">
+      <div className="mx-auto grid max-w-6xl gap-4">
+        <div className="flex flex-col gap-4 rounded-lg border border-border1 bg-surface2 p-4 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="grid gap-1">
+            <h2 className="text-ui-lg font-medium text-neutral6">Deployments</h2>
+            <p className="text-ui-sm text-neutral3">{deployments} active preview environments</p>
+          </div>
+          <div className="flex flex-wrap gap-2">{children}</div>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-[1.4fr_0.8fr]">
+          <div className="rounded-lg border border-border1 bg-surface2 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-ui-md font-medium text-neutral6">Recent runs</h3>
+                <p className="text-ui-sm text-neutral3">Production checks across connected branches</p>
+              </div>
+              <Button variant="outline" onClick={() => setDeployments(count => count + 1)}>
+                Queue run
+              </Button>
+            </div>
+            <div className="grid gap-2">
+              {['main', 'release/canary', 'codex/drawer-floating-variant'].map((branch, index) => (
+                <div
+                  key={branch}
+                  className="flex items-center justify-between rounded-md border border-border1 bg-surface3 px-3 py-2"
+                >
+                  <span className="text-ui-sm font-medium text-neutral5">{branch}</span>
+                  <span className="text-ui-xs text-neutral3">{index === 0 ? 'Ready' : 'Building'}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border1 bg-surface2 p-4">
+            <h3 className="text-ui-md font-medium text-neutral6">Environment</h3>
+            <div className="mt-3 grid gap-3">
+              <div className="rounded-md bg-surface3 p-3">
+                <p className="text-ui-xs text-neutral3">Region</p>
+                <p className="text-ui-sm text-neutral5">eu-west-1</p>
+              </div>
+              <div className="rounded-md bg-surface3 p-3">
+                <p className="text-ui-xs text-neutral3">Runtime</p>
+                <p className="text-ui-sm text-neutral5">Node.js 22</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export const FloatingRight: Story = {
+  render: () => (
+    <WorkspaceSurface>
+      <Drawer side="right" variant="floating">
+        <DrawerTrigger asChild>
+          <Button>Open floating drawer</Button>
+        </DrawerTrigger>
+        <RepositoryPanel idPrefix="floating-right" />
+      </Drawer>
+    </WorkspaceSurface>
+  ),
+  parameters: {
+    layout: 'fullscreen',
+  },
+};
+
+export const FloatingOverlayModes: Story = {
+  render: () => (
+    <WorkspaceSurface>
+      <Drawer side="right" variant="floating">
+        <DrawerTrigger asChild>
+          <Button variant="outline">No overlay</Button>
+        </DrawerTrigger>
+        <RepositoryPanel
+          idPrefix="floating-none"
+          title="No overlay"
+          description="The workspace remains available while the panel is open."
+        />
+      </Drawer>
+
+      <Drawer side="right" variant="floating" overlay="transparent">
+        <DrawerTrigger asChild>
+          <Button variant="outline">Transparent overlay</Button>
+        </DrawerTrigger>
+        <RepositoryPanel
+          idPrefix="floating-transparent"
+          title="Transparent overlay"
+          description="Outside clicks dismiss the panel without drawing a dimmed backdrop."
+        />
+      </Drawer>
+
+      <Drawer side="right" variant="floating" overlay="visible">
+        <DrawerTrigger asChild>
+          <Button>Visible overlay</Button>
+        </DrawerTrigger>
+        <RepositoryPanel
+          idPrefix="floating-visible"
+          title="Visible overlay"
+          description="The floating panel uses the standard modal backdrop treatment."
+        />
+      </Drawer>
+    </WorkspaceSurface>
+  ),
+  parameters: {
+    layout: 'fullscreen',
+  },
+};
+
 export const Left: Story = {
   render: () => (
     <Drawer side="left">
