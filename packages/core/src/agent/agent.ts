@@ -5277,9 +5277,34 @@ export class Agent<
     hooks?: ToolHooks;
   }): Promise<Record<string, CoreTool>> {
     const requestContext = options.requestContext ?? new RequestContext();
+    const defaultOptions = await this.getDefaultOptions({ requestContext });
+    const mergedOptions = deepMerge(
+      defaultOptions as Record<string, unknown>,
+      { ...options, requestContext } as Record<string, unknown>,
+    ) as AgentExecutionOptions & typeof options;
+    const optionMemory = (options as { memory?: AgentExecutionOptionsBase<any>['memory'] }).memory;
+    const mergedMemory = mergedOptions.memory;
+    const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+    const explicitThreadFromArgs = resolveThreadIdFromArgs({
+      memory: optionMemory,
+      threadId: options.threadId,
+      overrideId: threadIdFromContext,
+    });
+    const defaultThreadFromArgs = resolveThreadIdFromArgs({
+      memory: mergedMemory,
+      overrideId: threadIdFromContext,
+    });
+    const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
+
     return this.convertTools({
-      ...options,
+      toolsets: mergedOptions.toolsets,
+      clientTools: mergedOptions.clientTools,
+      threadId: explicitThreadFromArgs?.id ?? defaultThreadFromArgs?.id,
+      resourceId: resourceIdFromContext || options.resourceId || optionMemory?.resource || mergedMemory?.resource,
+      runId: mergedOptions.runId,
       requestContext,
+      memoryConfig: options.memoryConfig ?? mergedMemory?.options,
+      autoResumeSuspendedTools: mergedOptions.autoResumeSuspendedTools,
       methodType: 'stream',
     });
   }
