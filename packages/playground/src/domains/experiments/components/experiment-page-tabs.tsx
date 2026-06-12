@@ -425,6 +425,7 @@ export function ExperimentPageTabs({
                 collapsed={resultCollapsed}
                 onCollapsedChange={setResultCollapsed}
                 isReplayExperiment={isReplay}
+                replayMatching={replayMarker?.matching}
                 onShowSourceTrace={showSourceTrace}
                 sourceTraceSpans={sourceTraceData?.spans}
                 originalResult={originalResult}

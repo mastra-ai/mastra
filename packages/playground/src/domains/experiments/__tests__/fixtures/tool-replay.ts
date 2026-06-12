@@ -1,15 +1,6 @@
 import type { DatasetExperiment, DatasetExperimentResult, ToolReplayReport } from '@mastra/client-js';
 import type { ToolReplayReportExtended } from '../../utils/tool-replay';
 
-/**
- * Result row with the dedicated top-level `toolReplay` report column. The
- * column is not on the client result type yet — client types catch up in the
- * stacked PR — so fixtures extend the client type locally.
- */
-export type DatasetExperimentResultWithReplayColumn = DatasetExperimentResult & {
-  toolReplay?: ToolReplayReportExtended;
-};
-
 const experimentBase = {
   datasetId: 'dataset-1',
   datasetVersion: 1,
@@ -197,7 +188,7 @@ const resultBase = {
 };
 
 /** Successful replayed item — new row shape: the report sits in the dedicated top-level column. */
-export const replayResult: DatasetExperimentResultWithReplayColumn = {
+export const replayResult: DatasetExperimentResult = {
   ...resultBase,
   id: 'result-replay-1',
   itemId: 'item-1',
@@ -209,7 +200,7 @@ export const replayResult: DatasetExperimentResultWithReplayColumn = {
 };
 
 /** Successful replayed item whose report carries the run's call flow. */
-export const callFlowResult: DatasetExperimentResultWithReplayColumn = {
+export const callFlowResult: DatasetExperimentResult = {
   ...resultBase,
   id: 'result-replay-3',
   itemId: 'item-5',
@@ -235,7 +226,7 @@ export const failedReplayResult: DatasetExperimentResult = {
 };
 
 /** Mock-run item whose expectation failed: top-level report + TOOL_MOCK_EXPECTATION_FAILED error. */
-export const expectationFailedResult: DatasetExperimentResultWithReplayColumn = {
+export const expectationFailedResult: DatasetExperimentResult = {
   ...resultBase,
   id: 'result-mock-1',
   itemId: 'item-4',

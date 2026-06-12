@@ -133,9 +133,13 @@ describe('getToolReplayErrorLabel', () => {
     expect(getToolReplayErrorLabel('TOOL_REPLAY_MISS')).toMatch(/no remaining recorded event/);
     expect(getToolReplayErrorLabel('TOOL_REPLAY_NO_RECORDING')).toMatch(/No recording/);
     expect(getToolReplayErrorLabel('TOOL_REPLAY_LOAD_FAILED')).toMatch(/could not be loaded/);
+    expect(getToolReplayErrorLabel('TOOL_REPLAY_UNCONSUMED')).toMatch(
+      /Strict replay: recorded calls were never consumed/,
+    );
     expect(getToolReplayErrorLabel('TOOL_MOCK_EXPECTATION_FAILED')).toMatch(
       /mock expectation was not satisfied — the agent did not call the tool as asserted/,
     );
+    expect(getToolReplayErrorLabel('TOOL_MOCK_NAME_COLLISION')).toMatch(/Tool mock names collide after formatting/);
   });
 
   it('returns null for other codes', () => {
@@ -202,6 +206,87 @@ describe('buildReplayTape', () => {
       argMismatches: [],
     });
     expect(tape[0].events.map(e => e.spanId)).toEqual(['a', 'b']);
+  });
+
+  it('derives consumption from the call flow — strict can consume a LATER event and leave an earlier one', () => {
+    // Two recorded get-weather events. Strict matching consumed event #1 (the
+    // exact-args match) and left event #0 — the FIFO tail heuristic would mark
+    // exactly the wrong one unconsumed.
+    const spans: ReplayTapeSpan[] = [
+      span({ spanId: 's0', startedAt: '2026-06-01T10:00:00.000Z' }),
+      span({ spanId: 's1', startedAt: '2026-06-01T10:00:01.000Z' }),
+    ];
+    const tape = buildReplayTape(spans, {
+      sourceTraceId: 'trace-src-strict',
+      totalRecorded: 2,
+      replayedCount: 1,
+      misses: [],
+      unconsumed: [{ toolName: 'get-weather', count: 1 }],
+      argMismatches: [],
+      calls: [{ order: 0, toolName: 'get-weather', outcome: 'replayed', sequence: 1 }],
+    });
+
+    expect(tape).toEqual([
+      {
+        toolName: 'get-weather',
+        events: [
+          { sequence: 0, spanId: 's0', status: 'unconsumed' },
+          { sequence: 1, spanId: 's1', status: 'replayed' },
+        ],
+        misses: [],
+      },
+    ]);
+  });
+
+  it('counts replayed-error calls as consumed and keeps arg-mismatch on consumed events', () => {
+    const spans: ReplayTapeSpan[] = [
+      span({ spanId: 's0', startedAt: '2026-06-01T10:00:00.000Z' }),
+      span({ spanId: 's1', startedAt: '2026-06-01T10:00:01.000Z', entityName: 'create-ticket' }),
+      span({ spanId: 's2', startedAt: '2026-06-01T10:00:02.000Z' }),
+    ];
+    const tape = buildReplayTape(spans, {
+      sourceTraceId: 'trace-src-flow',
+      totalRecorded: 3,
+      replayedCount: 2,
+      misses: [],
+      unconsumed: [{ toolName: 'create-ticket', count: 1 }],
+      argMismatches: [{ toolName: 'get-weather', sequence: 0, spanId: 's0' }],
+      calls: [
+        // FIFO drift: event #0 consumed with differing args; recorded error #2 re-thrown.
+        { order: 0, toolName: 'get-weather', outcome: 'replayed', sequence: 0, argsDiffered: true },
+        { order: 1, toolName: 'get-weather', outcome: 'replayed-error', sequence: 2 },
+      ],
+    });
+
+    expect(tape).toEqual([
+      {
+        toolName: 'get-weather',
+        events: [
+          { sequence: 0, spanId: 's0', status: 'arg-mismatch' },
+          { sequence: 2, spanId: 's2', status: 'replayed' },
+        ],
+        misses: [],
+      },
+      {
+        toolName: 'create-ticket',
+        events: [{ sequence: 1, spanId: 's1', status: 'unconsumed' }],
+        misses: [],
+      },
+    ]);
+  });
+
+  it('marks every event unconsumed when the call flow shows the run never called a tool', () => {
+    const spans: ReplayTapeSpan[] = [span({ spanId: 's0' })];
+    const tape = buildReplayTape(spans, {
+      sourceTraceId: 'trace-src-none',
+      totalRecorded: 1,
+      replayedCount: 0,
+      misses: [],
+      unconsumed: [{ toolName: 'get-weather', count: 1 }],
+      argMismatches: [],
+      calls: [],
+    });
+    expect(tape[0].events).toEqual([{ sequence: 0, spanId: 's0', status: 'unconsumed' }]);
   });
 });
 

@@ -14,7 +14,7 @@ import {
   TargetIcon,
 } from 'lucide-react';
 import { useState } from 'react';
-import type { ReplayTapeSpan } from '../utils/tool-replay';
+import type { ReplayTapeSpan, ToolReplayMatching } from '../utils/tool-replay';
 import { getToolReplayErrorLabel, getToolReplayReport, stripToolReplayFromOutput } from '../utils/tool-replay';
 import { ExperimentResultReplaySection } from './experiment-result-replay-section';
 
@@ -36,6 +36,8 @@ export type ExperimentResultPanelProps = {
   onCollapsedChange?: (collapsed: boolean) => void;
   /** Gates the replay report section — only replay experiments read output.toolReplay. */
   isReplayExperiment?: boolean;
+  /** The run's matching policy (from the experiment marker) — labels the replay section. */
+  replayMatching?: ToolReplayMatching;
   onShowSourceTrace?: (traceId: string, spanId?: string) => void;
   /** Light spans of the source trace — enables the FIFO tape view. */
   sourceTraceSpans?: ReplayTapeSpan[];
@@ -57,6 +59,7 @@ export function ExperimentResultPanel({
   collapsed: controlledCollapsed,
   onCollapsedChange,
   isReplayExperiment,
+  replayMatching,
   onShowSourceTrace,
   sourceTraceSpans,
   originalResult,
@@ -141,6 +144,7 @@ export function ExperimentResultPanel({
                 report={replayReport}
                 onShowSourceTrace={onShowSourceTrace}
                 sourceTraceSpans={sourceTraceSpans}
+                matching={replayMatching}
               />
             )}
 

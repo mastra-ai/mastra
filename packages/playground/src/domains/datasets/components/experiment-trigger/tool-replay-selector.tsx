@@ -33,23 +33,20 @@ export const ITEM_RECORDINGS_SOURCE = '__item-recordings__';
 /**
  * Builds the `toolReplay` trigger payload shared by every run entry point.
  * `matching: 'strict'` is included only when selected — fifo is the server
- * default, so payloads stay minimal — and rides through a wider local shape
- * because the field is not on the client param type yet (client types catch
- * up in the stacked PR).
+ * default, so payloads stay minimal.
  */
 export function buildToolReplayPayload(options: {
   fromExperimentId: string;
   onMiss: ToolReplayOnMiss;
   matching: ToolReplayMatching;
-}): TriggerDatasetExperimentParams['toolReplay'] {
-  const payload: { fromExperimentId?: string; onMiss: ToolReplayOnMiss; matching?: ToolReplayMatching } = {
+}): NonNullable<TriggerDatasetExperimentParams['toolReplay']> {
+  return {
     // The item-recordings source omits fromExperimentId: each item resolves
     // its own metadata.replayTraceId in the runner.
     ...(options.fromExperimentId !== ITEM_RECORDINGS_SOURCE ? { fromExperimentId: options.fromExperimentId } : {}),
     onMiss: options.onMiss,
     ...(options.matching === 'strict' ? { matching: options.matching } : {}),
   };
-  return payload;
 }
 
 /**

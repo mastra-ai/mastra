@@ -1,44 +1,26 @@
-import type { DatasetExperiment, DatasetExperimentResult, ToolReplayOnMiss, ToolReplayReport } from '@mastra/client-js';
+import type {
+  DatasetExperiment,
+  DatasetExperimentResult,
+  ToolReplayMatching,
+  ToolReplayOnMiss,
+  ToolReplayReport,
+} from '@mastra/client-js';
 
 /** How recorded answers are matched to calls: FIFO per tool, or exact-args only. */
-export type ToolReplayMatching = 'fifo' | 'strict';
+export type { ToolReplayMatching };
 
-/** Kind of mock answer configured for a tool (mirrors the core mock config). */
-export type ToolReplayMockKind = 'output' | 'error' | 'function' | 'observe';
+/** Kind of mock answer configured for a tool (sourced from the client report type). */
+export type ToolReplayMockKind = NonNullable<ToolReplayReport['mocks']>[number]['kind'];
 
-/** One actual tool call of the run, in hook-arrival order (mirrors the core call-flow entry). */
-export interface ToolReplayCall {
-  /** 0-based arrival order across all tools. Parallel calls in one step keep hook-arrival order. */
-  order: number;
-  toolName: string;
-  outcome:
-    | 'replayed' // recorded output served
-    | 'replayed-error' // recorded error re-thrown
-    | 'mocked' // mock output / function result served
-    | 'mock-error' // mock error injected
-    | 'miss-error' // no event left, item stopped
-    | 'miss-passthrough' // no event left, live tool executed
-    | 'live'; // mock-only run, unmocked tool executed live
-  /** Recorded event consumed (replayed outcomes only). */
-  sequence?: number;
-  /** FIFO mode only: args differed from the consumed recorded event. */
-  argsDiffered?: boolean;
-}
+/** One actual tool call of the run, in hook-arrival order (sourced from the client report type). */
+export type ToolReplayCall = NonNullable<ToolReplayReport['calls']>[number];
 
 /**
- * Local extension of the client report type: `calls`, `mocks` and
- * `expectations` landed in core but @mastra/client-js has not picked them up
- * yet (client types catch up in the stacked PR). All optional, so plain
- * reports remain assignable.
+ * Alias kept for compatibility: @mastra/client-js now carries `calls`,
+ * `mocks` and `expectations` on `ToolReplayReport` directly, so the former
+ * local extension is just the client type.
  */
-export interface ToolReplayReportExtended extends ToolReplayReport {
-  /** The run's actual tool-call flow, in hook-arrival order. */
-  calls?: ToolReplayCall[];
-  /** Tools answered by configured mocks instead of recordings or live calls. */
-  mocks?: { toolName: string; calls: number; kind: ToolReplayMockKind }[];
-  /** Per-tool call assertions evaluated after the run. */
-  expectations?: { toolName: string; satisfied: boolean; calledTimes: number; reason?: string }[];
-}
+export type ToolReplayReportExtended = ToolReplayReport;
 
 /** One-line verdict model over the run's call flow — every call lands in exactly one bucket. */
 export interface ToolReplayCallsSummary {
@@ -155,9 +137,9 @@ function parseReportShape(candidate: unknown): ToolReplayReportExtended | null {
 
 /**
  * Extracts the divergence report of a replay/mock run. New rows carry it in
- * the dedicated top-level `toolReplay` column (not yet on the client result
- * type — client types catch up in the stacked PR); older rows merged it into
- * the output. Top-level wins when both are present.
+ * the dedicated top-level `toolReplay` column; older rows merged it into the
+ * output. Top-level wins when both are present. Both locations stay
+ * shape-checked — a user-owned `toolReplay` value is never read as a report.
  */
 export function getToolReplayReport(
   result: Pick<DatasetExperimentResult, 'output'> & { toolReplay?: unknown },
@@ -185,8 +167,10 @@ const TOOL_REPLAY_ERROR_LABELS: Record<string, string> = {
   TOOL_REPLAY_MISS: 'A tool call had no remaining recorded event — the item stopped instead of running live.',
   TOOL_REPLAY_NO_RECORDING: 'No recording was found for this item — it never ran (live execution is never silent).',
   TOOL_REPLAY_LOAD_FAILED: 'The recording could not be loaded from storage for this item.',
+  TOOL_REPLAY_UNCONSUMED: 'Strict replay: recorded calls were never consumed — the item failed instead of passing.',
   TOOL_MOCK_EXPECTATION_FAILED:
     'A tool mock expectation was not satisfied — the agent did not call the tool as asserted.',
+  TOOL_MOCK_NAME_COLLISION: 'Tool mock names collide after formatting — rename the mocks so each maps to one tool.',
 };
 
 export function getToolReplayErrorLabel(code: string | undefined): string | null {
@@ -241,8 +225,13 @@ const TAPE_TOOL_SPAN_TYPES = new Set(['tool_call', 'mcp_tool_call']);
  * Rebuilds the per-tool FIFO tape from the source trace's spans and overlays
  * the divergence report on it — mirroring the runner's extraction exactly
  * (top-level completed tool spans, startedAt order with spanId tie-break).
- * Unconsumed events are the tail of each tool's queue: FIFO consumption means
- * whatever was never requested is whatever was left at the end.
+ *
+ * Consumption is derived from the report's call flow when present: each
+ * replayed call carries the `sequence` of the event it consumed, which is
+ * exact for both FIFO and strict matching (strict consumes by exact args
+ * anywhere in the queue, not at the head). Legacy rows without `calls` fall
+ * back to the FIFO tail heuristic — whatever was never requested is whatever
+ * was left at the end of each queue.
  */
 export function buildReplayTape(spans: ReplayTapeSpan[], report: ToolReplayReport): ReplayTapeTool[] {
   const spansById = new Map(spans.map(span => [span.spanId, span]));
@@ -287,11 +276,34 @@ export function buildReplayTape(spans: ReplayTapeSpan[], report: ToolReplayRepor
     });
   });
 
-  // FIFO: the unconsumed entries are the tail of each tool's queue.
-  for (const tool of tools.values()) {
-    const unconsumedCount = unconsumedByTool.get(tool.toolName) ?? 0;
-    for (let i = 0; i < unconsumedCount && i < tool.events.length; i++) {
-      tool.events[tool.events.length - 1 - i].status = 'unconsumed';
+  // Exact consumption: replayed calls carry the sequence of the event they
+  // consumed — valid for FIFO and strict alike. Arg-mismatch stays on
+  // consumed events (a FIFO mismatch IS a consumption with differing args).
+  const consumedSequences = Array.isArray(report.calls)
+    ? new Set(
+        report.calls
+          .filter(
+            call =>
+              (call.outcome === 'replayed' || call.outcome === 'replayed-error') && typeof call.sequence === 'number',
+          )
+          .map(call => call.sequence!),
+      )
+    : null;
+
+  if (consumedSequences) {
+    for (const tool of tools.values()) {
+      for (const event of tool.events) {
+        if (!consumedSequences.has(event.sequence)) event.status = 'unconsumed';
+      }
+    }
+  } else {
+    // Legacy rows without a call flow — FIFO only: the unconsumed entries are
+    // the tail of each tool's queue.
+    for (const tool of tools.values()) {
+      const unconsumedCount = unconsumedByTool.get(tool.toolName) ?? 0;
+      for (let i = 0; i < unconsumedCount && i < tool.events.length; i++) {
+        tool.events[tool.events.length - 1 - i].status = 'unconsumed';
+      }
     }
   }
 

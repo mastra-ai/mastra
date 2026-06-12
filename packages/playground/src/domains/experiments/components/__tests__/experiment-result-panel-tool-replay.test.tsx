@@ -254,4 +254,40 @@ describe('ExperimentResultPanel run flow', () => {
     expect(screen.queryByText('Run flow')).toBeNull();
     expect(screen.queryByText(/\d+ tool call/)).toBeNull();
   });
+
+  it('labels the verdict and the tape with the strict matching policy', () => {
+    const sourceTraceSpans: ReplayTapeSpan[] = [
+      {
+        spanId: 's0',
+        spanType: 'tool_call',
+        entityName: 'get-weather',
+        startedAt: '2026-06-01T10:00:00.000Z',
+        endedAt: '2026-06-01T10:00:01.000Z',
+      },
+    ];
+    render(
+      <ExperimentResultPanel
+        result={callFlowResult}
+        onClose={vi.fn()}
+        isReplayExperiment
+        replayMatching="strict"
+        sourceTraceSpans={sourceTraceSpans}
+      />,
+    );
+
+    expect(
+      screen.getByText(
+        '4 tool calls — 2 replayed (1 with different args) · 1 mocked · 1 ran live · strict args matching',
+      ),
+    ).toBeDefined();
+    expect(screen.getByText('Recording (tape) · strict args matching')).toBeDefined();
+    expect(screen.queryByText('Recording (tape) · FIFO per tool')).toBeNull();
+  });
+
+  it('keeps the FIFO tape label and an unsuffixed verdict without the strict marker', () => {
+    render(<ExperimentResultPanel result={callFlowResult} onClose={vi.fn()} isReplayExperiment />);
+
+    expect(screen.getByText('4 tool calls — 2 replayed (1 with different args) · 1 mocked · 1 ran live')).toBeDefined();
+    expect(screen.queryByText(/strict args matching/)).toBeNull();
+  });
 });

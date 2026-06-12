@@ -15,6 +15,7 @@ import { useMemo } from 'react';
 import type {
   ReplayTapeSpan,
   ToolReplayCallsSummary,
+  ToolReplayMatching,
   ToolReplayMockKind,
   ToolReplayReportExtended,
 } from '../utils/tool-replay';
@@ -31,6 +32,8 @@ export type ExperimentResultReplaySectionProps = {
   onShowSourceTrace?: (traceId: string, spanId?: string) => void;
   /** Source-trace spans (light) — enables the per-tool tape view when provided. */
   sourceTraceSpans?: ReplayTapeSpan[];
+  /** The run's matching policy (from the experiment marker) — labels the verdict and the tape. */
+  matching?: ToolReplayMatching;
 };
 
 const MOCK_KIND_LABELS: Record<ToolReplayMockKind, string> = {
@@ -63,6 +66,7 @@ export function ExperimentResultReplaySection({
   report,
   onShowSourceTrace,
   sourceTraceSpans,
+  matching,
 }: ExperimentResultReplaySectionProps) {
   const isEmptyRecording = report.totalRecorded === 0;
   const isClean =
@@ -81,7 +85,12 @@ export function ExperimentResultReplaySection({
         Tool Replay
       </DataPanel.SectionHeading>
 
-      {callsSummary && <p className="text-ui-sm text-neutral3">{formatReplayCallsVerdict(callsSummary)}</p>}
+      {callsSummary && (
+        <p className="text-ui-sm text-neutral3">
+          {formatReplayCallsVerdict(callsSummary)}
+          {matching === 'strict' ? ' · strict args matching' : ''}
+        </p>
+      )}
 
       <div className="flex flex-wrap items-center gap-1.5">
         {isEmptyRecording ? (
@@ -197,7 +206,9 @@ export function ExperimentResultReplaySection({
         <div className="grid gap-1.5 rounded-lg border border-border1 bg-surface3/50 p-3">
           <div className="flex items-center justify-between gap-2">
             {/* The RECORDING's perspective: what was on the tape and what became of it. */}
-            <span className="text-ui-xs uppercase tracking-widest text-neutral2">Recording (tape) · FIFO per tool</span>
+            <span className="text-ui-xs uppercase tracking-widest text-neutral2">
+              {`Recording (tape) · ${matching === 'strict' ? 'strict args matching' : 'FIFO per tool'}`}
+            </span>
             <span className="text-ui-xs text-neutral2">
               ✓ replayed · ≈ args differed · ○ never requested · + new call
             </span>
@@ -213,7 +224,9 @@ export function ExperimentResultReplaySection({
                       ? 'Replayed — the recorded answer was served'
                       : event.status === 'arg-mismatch'
                         ? 'Replayed, but the call asked with different args — click to inspect the recorded call'
-                        : 'Never requested by the new run (left in the queue)';
+                        : matching === 'strict'
+                          ? 'Never consumed — no call matched these args exactly (left in the queue)'
+                          : 'Never requested by the new run (left in the queue)';
                   return (
                     <Tooltip key={event.spanId}>
                       <TooltipTrigger asChild>
