@@ -1,4 +1,5 @@
 import type { HarnessRequestContext } from '@mastra/core/harness';
+import type { LanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
@@ -8,9 +9,6 @@ import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } fro
 import type { MastraCodeState } from '../schema';
 import { getOmScope } from '../utils/project';
 import { resolveModel } from './model';
-
-let cachedMemory: Memory | null = null;
-let cachedMemoryKey: string | null = null;
 
 /**
  * Read harness state from requestContext.
@@ -75,8 +73,19 @@ Drop caveman for: security warnings, irreversible action confirmations, multi-st
  * Dynamic memory factory function.
  * Reads OM thresholds from harness state via requestContext.
  * Model functions also read from requestContext (no mutable bridge needed).
+ *
+ * When `observationalModel` is provided, it is used for both the observer and reflector
+ * roles instead of resolving the model from `observerModelId` / `reflectorModelId` state.
+ * This lets callers pass a provider-configured model instance (e.g. Vertex AI) that a
+ * string model ID can't represent.
  */
-export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraVector) {
+export function getDynamicMemory(
+  storage: MastraCompositeStore,
+  vector?: MastraVector,
+  observationalModel?: LanguageModel,
+) {
+  let cachedMemory: Memory | null = null;
+  let cachedMemoryKey: string | null = null;
   return ({ requestContext }: { requestContext: RequestContext }) => {
     const state = getHarnessState(requestContext);
     const omScope = state?.omScope ?? getOmScope(state?.projectPath);
@@ -115,7 +124,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
           observation: {
             bufferTokens: isResourceScope ? false : 1 / 5,
             bufferActivation: isResourceScope ? undefined : 2000,
-            model: getObserverModel,
+            model: observationalModel ?? getObserverModel,
             messageTokens: obsThreshold,
             blockAfter: 2,
             previousObserverTokens: observerPreviousObservationTokens,
@@ -126,7 +135,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
           reflection: {
             bufferActivation: isResourceScope ? undefined : 1 / 2,
             blockAfter: 1.1,
-            model: getReflectorModel,
+            model: observationalModel ?? getReflectorModel,
             observationTokens: refThreshold,
             instruction: reflectionInstruction,
           },

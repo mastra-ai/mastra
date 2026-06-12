@@ -55,6 +55,7 @@ const {
 | `subagents` | `HarnessSubagent[]` | Explore, Plan, Execute | Custom subagent definitions |
 | `storage` | `StorageConfig` | Local LibSQL | Database configuration |
 | `initialState` | `Partial<MastraCodeState>` | Default state | Initial harness state values |
+| `observationalModel` | `LanguageModel` | Resolved from state | Model instance for observational memory (observer and reflector). Overrides `observerModelId` and `reflectorModelId`. Ignored when `memory` is set |
 | `heartbeatHandlers` | `HeartbeatHandler[]` | Default handlers | Background task definitions |
 | `resolveModel` | `(modelId: string, options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean; requestContext?: RequestContext }) => ResolvedModel` | Default resolver | Custom model resolution function |
 
@@ -83,7 +84,8 @@ Subagent definitions for spawning focused child agents.
 | `instructions` | `string` | Yes | System prompt for the subagent |
 | `tools` | `ToolsInput` | No | Tools available to this subagent |
 | `allowedHarnessTools` | `string[]` | No | Tool IDs from harness tools this subagent can use |
-| `defaultModelId` | `string` | No | Default model for this subagent type |
+| `defaultModelId` | `string` | No | Default model ID for this subagent type |
+| `defaultModel` | `MastraLanguageModel` | No | Default model instance for this subagent type. Takes precedence over `defaultModelId`; a runtime model override still wins |
 | `maxSteps` | `number` | No | Optional maximum number of steps for the spawned subagent; defaults to `50` |
 | `stopWhen` | `LoopOptions['stopWhen']` | No | Optional stop condition for the spawned subagent loop |
 
