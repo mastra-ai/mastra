@@ -2,6 +2,7 @@ import Dagre from '@dagrejs/dagre';
 import type { Workflow, SerializedStepFlowEntry } from '@mastra/core/workflows';
 import type { Node, Edge } from '@xyflow/react';
 import { MarkerType } from '@xyflow/react';
+import { resolveWorkflowGraphStep, WORKFLOW_STEP_NODE_TYPE } from './workflow-step-node-utils';
 
 export type ConditionConditionType = 'if' | 'else' | 'when' | 'until' | 'while' | 'dountil' | 'dowhile';
 
@@ -105,6 +106,13 @@ const defaultEdgeOptions = {
   },
 };
 
+const conditionWorkflowStep = (condition: { id: string; fn: string }) =>
+  resolveWorkflowGraphStep({
+    type: 'conditional',
+    steps: [],
+    serializedConditions: [condition],
+  });
+
 export type WStep = {
   [key: string]: {
     id: string;
@@ -171,9 +179,11 @@ const getStepNodeAndEdge = ({
             {
               id: condition.id,
               position: { x: xIndex * 300, y: yIndex * 100 },
-              type: 'condition-node',
+              type: WORKFLOW_STEP_NODE_TYPE,
               data: {
                 label: condition.id,
+                workflowStep: conditionWorkflowStep(condition),
+                nodeRole: 'condition',
                 previousStepId: prevStepIds[prevStepIds.length - 1],
                 nextStepId: stepFlow.step.id,
                 withoutTopHandle: !prevNodeIds.length,
@@ -187,9 +197,10 @@ const getStepNodeAndEdge = ({
       {
         id: nodeId,
         position: { x: xIndex * 300, y: (yIndex + (condition ? 1 : 0)) * 100 },
-        type: hasGraph ? 'nested-node' : 'default-node',
+        type: WORKFLOW_STEP_NODE_TYPE,
         data: {
           label: formatMappingLabel(stepFlow.step.id, prevStepIds, nextStepIds),
+          workflowStep: resolveWorkflowGraphStep(stepFlow),
           stepId: stepFlow.step.id,
           description: stepFlow.step.description,
           withoutTopHandle: condition ? false : !prevNodeIds.length,
@@ -250,9 +261,11 @@ const getStepNodeAndEdge = ({
             {
               id: condition.id,
               position: { x: xIndex * 300, y: yIndex * 100 },
-              type: 'condition-node',
+              type: WORKFLOW_STEP_NODE_TYPE,
               data: {
                 label: condition.id,
+                workflowStep: conditionWorkflowStep(condition),
+                nodeRole: 'condition',
                 previousStepId: prevStepIds[prevStepIds.length - 1],
                 nextStepId: stepFlow.id,
                 withoutTopHandle: false,
@@ -266,9 +279,10 @@ const getStepNodeAndEdge = ({
       {
         id: nodeId,
         position: { x: xIndex * 300, y: (yIndex + (condition ? 1 : 0)) * 100 },
-        type: 'default-node',
+        type: WORKFLOW_STEP_NODE_TYPE,
         data: {
           label: stepFlow.id,
+          workflowStep: resolveWorkflowGraphStep(stepFlow),
           withoutTopHandle: condition ? false : !prevNodeIds.length,
           withoutBottomHandle: !nextNodeIds.length,
           ...(stepFlow.type === 'sleepUntil' ? { date: stepFlow.date } : { duration: stepFlow.duration }),
@@ -317,18 +331,18 @@ const getStepNodeAndEdge = ({
 
   if (stepFlow.type === 'loop') {
     const { step: _step, serializedCondition, loopType } = stepFlow;
-    const hasGraph = _step.component === 'WORKFLOW';
     const nodes = [
       {
         id: _step.id,
         position: { x: xIndex * 300, y: yIndex * 100 },
-        type: hasGraph ? 'nested-node' : 'default-node',
+        type: WORKFLOW_STEP_NODE_TYPE,
         data: {
           label: _step.id,
+          workflowStep: resolveWorkflowGraphStep(stepFlow),
           description: _step.description,
           withoutTopHandle: !prevNodeIds.length,
           withoutBottomHandle: false,
-          stepGraph: hasGraph ? _step.serializedStepFlow : undefined,
+          stepGraph: _step.component === 'WORKFLOW' ? _step.serializedStepFlow : undefined,
           canSuspend: _step.canSuspend,
           metadata: _step.metadata,
         },
@@ -336,9 +350,11 @@ const getStepNodeAndEdge = ({
       {
         id: serializedCondition.id,
         position: { x: xIndex * 300, y: (yIndex + 1) * 100 },
-        type: 'condition-node',
+        type: WORKFLOW_STEP_NODE_TYPE,
         data: {
           label: serializedCondition.id,
+          workflowStep: conditionWorkflowStep(serializedCondition),
+          nodeRole: 'condition',
           // conditionStepId: _step.id,
           previousStepId: _step.id,
           nextStepId: nextStepIds[0],
@@ -442,7 +458,7 @@ const getStepNodeAndEdge = ({
     return {
       nodes,
       edges,
-      nextPrevNodeIds: nodes.filter(({ type }) => type !== 'condition-node').map(node => node.id),
+      nextPrevNodeIds: nodes.filter(({ data }) => data.nodeRole !== 'condition').map(node => node.id),
       nextPrevStepIds,
     };
   }
