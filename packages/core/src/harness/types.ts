@@ -1,3 +1,4 @@
+import type { Agent } from '../agent';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import type { PubSub } from '../events/pubsub';
@@ -45,20 +46,26 @@ export interface HarnessMode {
   /** Unique within `HarnessConfig.modes`. Validated at construction. */
   id: string;
 
-  name: string;
+  name?: string;
 
   /** bootstrap model default when a session enters this mode. */
-  defaultModelId: string;
+  defaultModelId?: string;
 
   /** Surfaced in mode pickers / Studio UI. Free text. */
-  description: string;
+  description?: string;
 
   /**
    * Layered above the backing agent's own instructions for the duration
    * of this mode. Plain text by design — modes carve operating profile,
    * not full system-message overrides.
    */
-  instructions: string;
+  instructions?: string;
+
+  /** @deprecated Use HarnessConfig.agent as the shared backing agent. */
+  agent?: Agent<any, any, any, any>;
+
+  /** @deprecated Prefer metadata.default. */
+  default?: boolean;
 
   /**
    * The tool set this mode runs with. **Replaces** the backing agent's
@@ -206,6 +213,12 @@ export interface HarnessConfig<TState = {}> {
 
   /** Available agent modes */
   modes: HarnessMode[];
+
+  /** Shared backing agent that each mode forks and decorates. */
+  agent?: Agent<any, any, any, any>;
+
+  /** Default mode to enter when a thread has no persisted mode. */
+  defaultModeId?: string;
 
   instructions?: string;
 

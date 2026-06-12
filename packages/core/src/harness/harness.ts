@@ -475,11 +475,13 @@ export class Harness<TState = {}> {
       ...config.initialState,
     } as TState;
 
-    // Find default mode
-    // TODO: get defaultModeId as config
-    const defaultMode = config.modes[0];
+    const defaultMode = config.defaultModeId
+      ? config.modes.find(mode => mode.id === config.defaultModeId)
+      : (config.modes.find(mode => mode.default || mode.metadata?.default === true) ?? config.modes[0]);
     if (!defaultMode) {
-      throw new Error('Harness requires at least one agent mode');
+      throw new Error(
+        config.defaultModeId ? `Default mode not found: ${config.defaultModeId}` : 'Harness requires at least one agent mode',
+      );
     }
     this.currentModeId = defaultMode.id;
 
@@ -820,20 +822,40 @@ export class Harness<TState = {}> {
 
   private getAgentForMode(mode: HarnessMode): Agent<any, any, any, any> {
     if (!this.#legacyAgentMode[mode.id]) {
-      // TODO move to state signals in the future
-      const forkedAgent = new Agent({
-        id: `${this.id}-agent`,
-        name: `Harness ${this.id} agent`,
-        model: mode.defaultModelId,
-        instructions: [this.#instructions ?? '', mode.instructions].filter(Boolean).join('\n'),
-        //TOOD move to permissions and global tools
-        tools: {
-          ...mode.tools,
-          ...mode.additionalTools,
-        },
-      });
+      const instructions = [this.#instructions ?? '', mode.instructions].filter(Boolean).join('\n');
+      const modeTools = {
+        ...mode.tools,
+        ...mode.additionalTools,
+      };
 
-      this.#legacyAgentMode[mode.id] = forkedAgent;
+      if (mode.agent) {
+        this.#legacyAgentMode[mode.id] = mode.agent;
+      } else if (this.config.agent) {
+        const forkedAgent = this.config.agent.__fork();
+        if (instructions) {
+          forkedAgent.__updateInstructions(instructions);
+        }
+        if (mode.tools || mode.additionalTools) {
+          forkedAgent.__setTools(modeTools as any);
+        }
+        this.#legacyAgentMode[mode.id] = forkedAgent;
+      } else {
+        if (!mode.defaultModelId) {
+          throw new Error(`Mode ${mode.id} requires a defaultModelId when no backing agent is configured`);
+        }
+
+        const model = this.config.resolveModel ? this.config.resolveModel(mode.defaultModelId) : mode.defaultModelId;
+        const forkedAgent = new Agent({
+          id: `${this.id}-agent`,
+          name: `Harness ${this.id} agent`,
+          model,
+          instructions,
+          // TODO move to permissions and global tools
+          tools: modeTools,
+        });
+
+        this.#legacyAgentMode[mode.id] = forkedAgent;
+      }
     }
 
     return this.#legacyAgentMode[mode.id]!;
@@ -3583,8 +3605,13 @@ export class Harness<TState = {}> {
     this.pendingSuspensions.delete(toolCallId);
 
     const currentMode = this.getCurrentMode();
+    const transitionModeId =
+      currentMode.transitionsTo ??
+      this.config.defaultModeId ??
+      this.config.modes.find(mode => mode.default || mode.metadata?.default === true)?.id ??
+      this.config.modes[0]?.id;
 
-    const transitionMode = this.listModes().find(mode => mode.id === currentMode.transitionsTo);
+    const transitionMode = this.listModes().find(mode => mode.id === transitionModeId);
     if (transitionMode && transitionMode.id !== this.currentModeId) {
       await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
       await this.switchMode({ modeId: transitionMode.id });
