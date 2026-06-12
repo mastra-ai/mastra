@@ -3,7 +3,9 @@ import { fileToBase64, getFileContentType } from '@mastra/playground-ui';
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
-export type ComposerAttachmentKind = 'image' | 'pdf' | 'text';
+import { getAcceptedAttachmentTypes, isAcceptedAttachmentType } from './accepted-types';
+
+export type ComposerAttachmentKind = 'image' | 'pdf' | 'text' | 'file';
 
 export interface ComposerAttachment {
   id: string;
@@ -18,8 +20,10 @@ export interface ComposerAttachment {
 
 interface ComposerAttachmentsContextValue {
   attachments: ComposerAttachment[];
-  addFiles: (files: File[] | FileList) => void;
-  addUrl: (url: string) => Promise<void>;
+  /** Adds allowed files; returns the names of files rejected by the configured type allowlist. */
+  addFiles: (files: File[] | FileList) => string[];
+  /** Adds a URL attachment; resolves to false when its content type is not allowed. */
+  addUrl: (url: string) => Promise<boolean>;
   remove: (id: string) => void;
   clear: () => void;
   toCoreUserMessages: () => Promise<CoreUserMessage[]>;
@@ -27,10 +31,21 @@ interface ComposerAttachmentsContextValue {
 
 const ComposerAttachmentsContext = createContext<ComposerAttachmentsContextValue | null>(null);
 
+/** Non-`text/*` content types that are still safe to read and send as plain text. */
+const TEXTUAL_APPLICATION_TYPES = new Set([
+  'application/json',
+  'application/xml',
+  'application/x-ndjson',
+  'application/x-yaml',
+  'application/yaml',
+]);
+
 const kindForContentType = (contentType: string): ComposerAttachmentKind => {
   if (contentType.startsWith('image/')) return 'image';
   if (contentType === 'application/pdf') return 'pdf';
-  return 'text';
+  if (contentType.startsWith('text/') || TEXTUAL_APPLICATION_TYPES.has(contentType)) return 'text';
+  // Other binary types (spreadsheets, docs, ...) are sent as file parts.
+  return 'file';
 };
 
 let attachmentCounter = 0;
@@ -44,9 +59,11 @@ const fileToText = (file: File): Promise<string> =>
     reader.readAsText(file);
   });
 
+const contentTypeForFile = (file: File): string => file.type || 'text/plain';
+
 const toAttachment = (file: File): ComposerAttachment => {
   const isUrl = file.name.startsWith('https://');
-  const contentType = file.type || 'text/plain';
+  const contentType = contentTypeForFile(file);
   return {
     id: nextId(),
     file,
@@ -71,8 +88,8 @@ const attachmentToCoreUserMessage = async (att: ComposerAttachment): Promise<Cor
     };
   }
 
-  if (att.kind === 'pdf') {
-    const data = att.isUrl ? att.name : `data:application/pdf;base64,${await fileToBase64(att.file)}`;
+  if (att.kind === 'pdf' || att.kind === 'file') {
+    const data = att.isUrl ? att.name : `data:${att.contentType};base64,${await fileToBase64(att.file)}`;
     return {
       role: 'user' as const,
       content: [
@@ -96,17 +113,26 @@ const attachmentToCoreUserMessage = async (att: ComposerAttachment): Promise<Cor
 export const ComposerAttachmentsProvider = ({ children }: { children: ReactNode }) => {
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
 
-  const addFiles = useCallback((files: File[] | FileList) => {
+  const addFiles = useCallback((files: File[] | FileList): string[] => {
+    const accepted = getAcceptedAttachmentTypes();
     const list = Array.from(files);
-    if (list.length === 0) return;
-    setAttachments(prev => [...prev, ...list.map(toAttachment)]);
+    const allowed = list.filter(f => isAcceptedAttachmentType(contentTypeForFile(f), accepted));
+    const rejected = list.filter(f => !allowed.includes(f)).map(f => f.name);
+    if (allowed.length > 0) {
+      setAttachments(prev => [...prev, ...allowed.map(toAttachment)]);
+    }
+    return rejected;
   }, []);
 
-  const addUrl = useCallback(async (url: string) => {
+  const addUrl = useCallback(async (url: string): Promise<boolean> => {
     const contentType = (await getFileContentType(url)) ?? 'application/octet-stream';
+    if (!isAcceptedAttachmentType(contentType, getAcceptedAttachmentTypes())) {
+      return false;
+    }
     // URL attachments are represented by an empty File named with the URL.
     const file = new File([], url, { type: contentType });
     setAttachments(prev => [...prev, toAttachment(file)]);
+    return true;
   }, []);
 
   const remove = useCallback((id: string) => {

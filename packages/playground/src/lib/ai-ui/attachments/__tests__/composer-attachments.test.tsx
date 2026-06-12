@@ -43,6 +43,12 @@ const renderProvider = () => {
 const imageFile = () => new File(['fake-bytes'], 'photo.png', { type: 'image/png' });
 const textFile = () => new File(['hello world'], 'notes.txt', { type: 'text/plain' });
 const pdfFile = () => new File(['pdf-bytes'], 'doc.pdf', { type: 'application/pdf' });
+const xlsxFile = () =>
+  new File(['xlsx-bytes'], 'questionnaire.xlsx', {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+
+const flagWindow = window as unknown as { MASTRA_STUDIO_ATTACHMENT_TYPES?: string };
 
 describe('composer attachments', () => {
   it('adds files and classifies them by kind', () => {
@@ -122,5 +128,87 @@ describe('composer attachments', () => {
     const messages = await ref.current!.toCoreUserMessages();
     const imagePart = (messages[0]!.content as Array<{ type: string; image?: string }>)[0];
     expect(imagePart!.image).toBe('https://example.com/pic.png');
+  });
+
+  it('converts binary non-pdf attachments to file parts with their own mime type', async () => {
+    const { ref } = renderProvider();
+
+    act(() => {
+      ref.current!.addFiles([xlsxFile()]);
+    });
+
+    expect(ref.current!.attachments[0]!.kind).toBe('file');
+
+    const messages = await ref.current!.toCoreUserMessages();
+    const filePart = (messages[0]!.content as Array<{ type: string; data?: string; filename?: string }>)[0];
+    expect(filePart!.type).toBe('file');
+    expect(filePart!.filename).toBe('questionnaire.xlsx');
+    expect(filePart!.data).toMatch(
+      /^data:application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet;base64,/,
+    );
+  });
+});
+
+describe('configured attachment type allowlist', () => {
+  afterEach(() => {
+    delete flagWindow.MASTRA_STUDIO_ATTACHMENT_TYPES;
+  });
+
+  it('accepts all file types when unconfigured', () => {
+    const { ref } = renderProvider();
+
+    let rejected: string[] = [];
+    act(() => {
+      rejected = ref.current!.addFiles([imageFile(), xlsxFile()]);
+    });
+
+    expect(rejected).toEqual([]);
+    expect(ref.current!.attachments).toHaveLength(2);
+  });
+
+  it('filters disallowed files and reports their names', () => {
+    flagWindow.MASTRA_STUDIO_ATTACHMENT_TYPES = 'image/*,application/pdf';
+    const { ref } = renderProvider();
+
+    let rejected: string[] = [];
+    act(() => {
+      rejected = ref.current!.addFiles([imageFile(), xlsxFile(), pdfFile()]);
+    });
+
+    expect(rejected).toEqual(['questionnaire.xlsx']);
+    expect(ref.current!.attachments.map(a => a.name)).toEqual(['photo.png', 'doc.pdf']);
+  });
+
+  it('allows additional types when configured', () => {
+    flagWindow.MASTRA_STUDIO_ATTACHMENT_TYPES =
+      'image/*,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    const { ref } = renderProvider();
+
+    let rejected: string[] = [];
+    act(() => {
+      rejected = ref.current!.addFiles([xlsxFile(), textFile()]);
+    });
+
+    expect(rejected).toEqual(['notes.txt']);
+    expect(ref.current!.attachments.map(a => a.kind)).toEqual(['file']);
+  });
+
+  it('rejects URL attachments whose content type is not allowed', async () => {
+    flagWindow.MASTRA_STUDIO_ATTACHMENT_TYPES = 'image/*';
+    server.use(
+      http.head(
+        'https://example.com/report.pdf',
+        () => new HttpResponse(null, { status: 200, headers: { 'content-type': 'application/pdf' } }),
+      ),
+    );
+    const { ref } = renderProvider();
+
+    let added = true;
+    await act(async () => {
+      added = await ref.current!.addUrl('https://example.com/report.pdf');
+    });
+
+    expect(added).toBe(false);
+    expect(ref.current!.attachments).toHaveLength(0);
   });
 });

@@ -14,6 +14,8 @@ import {
 
 import { CloudUpload, Link } from 'lucide-react';
 import type { FormEvent } from 'react';
+import { useState } from 'react';
+import { acceptAttributeValue, getAcceptedAttachmentTypes } from './accepted-types';
 import { useComposerAttachments } from './composer-attachments';
 
 export interface AttachFileDialogProps {
@@ -23,19 +25,28 @@ export interface AttachFileDialogProps {
 
 export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) => {
   const { addFiles, addUrl } = useComposerAttachments();
+  const [rejectedNames, setRejectedNames] = useState<string[]>([]);
+  const acceptedTypes = getAcceptedAttachmentTypes();
 
   const openFilePicker = () => {
     const input = document.createElement('input');
     input.type = 'file';
     input.multiple = true;
     input.hidden = true;
+    const accept = acceptAttributeValue(acceptedTypes);
+    if (accept) {
+      input.accept = accept;
+    }
     document.body.appendChild(input);
 
     input.onchange = e => {
       const fileList = (e.target as HTMLInputElement).files;
       if (fileList && fileList.length > 0) {
-        addFiles(fileList);
-        onOpenChange(false);
+        const rejected = addFiles(fileList);
+        setRejectedNames(rejected);
+        if (rejected.length === 0) {
+          onOpenChange(false);
+        }
       }
       document.body.removeChild(input);
     };
@@ -56,8 +67,11 @@ export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) 
     const url = formData.get('url-attachment')?.toString();
 
     if (url) {
-      await addUrl(url);
-      onOpenChange(false);
+      const added = await addUrl(url);
+      setRejectedNames(added ? [] : [url]);
+      if (added) {
+        onOpenChange(false);
+      }
     }
   };
 
@@ -105,6 +119,12 @@ export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) 
               <CloudUpload className="size-12" />
               <Txt variant="header-md">Add a local file</Txt>
             </button>
+            {rejectedNames.length > 0 && (
+              <Txt variant="ui-md" className="text-accent2" role="alert">
+                {`Not an allowed file type: ${rejectedNames.join(', ')}.`}
+                {acceptedTypes ? ` Allowed types: ${acceptedTypes.join(', ')}.` : ''}
+              </Txt>
+            )}
           </div>
         </DialogBody>
       </DialogContent>
