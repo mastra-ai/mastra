@@ -337,6 +337,32 @@ export const triggerExperimentBodySchema = z
               .object({ name: z.string().optional(), message: z.string() })
               .optional()
               .describe('Error thrown for every call (failure injection) — the tool never executes'),
+            cases: z
+              .array(
+                z
+                  .object({
+                    args: z.unknown().describe('Args this case answers (canonicalized deep equality)'),
+                    output: z.unknown().optional().describe('Output served when the case matches'),
+                    error: z
+                      .object({ name: z.string().optional(), message: z.string() })
+                      .optional()
+                      .describe('Error thrown when the case matches (wins over output)'),
+                  })
+                  .refine(c => c.output !== undefined || c.error !== undefined, {
+                    message: 'a case needs an output or error to answer matching calls',
+                  }),
+              )
+              .min(1)
+              .optional()
+              .describe(
+                "Args-conditional answers: the first case whose args match the call's args serves its output or error. Mutually exclusive with the static output/error pair.",
+              ),
+            onNoMatch: z
+              .enum(['error', 'passthrough'])
+              .optional()
+              .describe(
+                "Behavior when no case matches the call's args (default: 'error'). 'error' fails the item deterministically (TOOL_MOCK_ARGS_MISMATCH, never retried); 'passthrough' lets the live tool execute.",
+              ),
             expect: z
               .object({
                 args: z.unknown().optional().describe('Expected args — calls with different args do not count'),
@@ -345,11 +371,18 @@ export const triggerExperimentBodySchema = z
               .optional()
               .describe('Assertion on how the tool must be called (an unsatisfied expectation fails the item)'),
           })
-          .refine(m => m.output !== undefined || m.error !== undefined || m.expect !== undefined, {
-            message: 'a tool mock needs at least one of output, error, or expect',
-          })
+          .refine(
+            m => m.output !== undefined || m.error !== undefined || m.cases !== undefined || m.expect !== undefined,
+            {
+              message: 'a tool mock needs at least one of output, error, cases, or expect',
+            },
+          )
           .refine(m => !(m.output !== undefined && m.error !== undefined), {
             message: 'a tool mock cannot set both output and error',
+          })
+          .refine(m => !(m.cases !== undefined && (m.output !== undefined || m.error !== undefined)), {
+            message:
+              'a tool mock cannot set cases together with a static output/error — move the static answer into a case',
           }),
       )
       .optional()
@@ -431,7 +464,7 @@ export const experimentResponseSchema = z.object({
     .record(z.string(), z.unknown())
     .optional()
     .describe(
-      'User metadata, plus runner-stamped keys: `toolReplay` marks replay/mock runs (onMiss, matching, mockedTools), and `failureReason` ({id, message}) records why an async experiment failed at setup',
+      'User metadata, plus runner-stamped keys: `toolReplay` marks replay/mock runs (onMiss, matching, mockedTools, and mockConfigs carrying the mock configuration — data mocks verbatim, function mocks as `{function: true}`), and `failureReason` ({id, message}) records why an async experiment failed at setup',
     ),
   status: z.enum(['pending', 'running', 'completed', 'failed']),
   totalItems: z.number(),

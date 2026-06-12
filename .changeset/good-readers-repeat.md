@@ -52,4 +52,25 @@ await dataset.startExperiment({
 
 An unsatisfied `expect` fails the item with `TOOL_MOCK_EXPECTATION_FAILED`. Mock usage and expectation outcomes appear in the divergence report (`mocks`, `expectations`), and the report itself now persists in a dedicated `toolReplay` column on experiment results instead of riding inside the stored output. The report also includes `calls` — the run's tool-call flow in order, each entry telling whether the call was replayed, mocked, missed, or ran live.
 
-Runs whose mocks suppress live execution (`output`/`error`/function mocks) are stamped with `metadata.toolReplay.mockedTools` and refused as replay sources; expect-only runs execute tools live and stay eligible. Mock keys that normalize to the same tool name are rejected at setup (`TOOL_MOCK_NAME_COLLISION`) instead of silently dropping one mock and its assertions.
+Runs whose mocks suppress live execution (`output`/`error`/`cases`/function mocks) are stamped with `metadata.toolReplay.mockedTools` and refused as replay sources; expect-only runs execute tools live and stay eligible. Mock keys that normalize to the same tool name are rejected at setup (`TOOL_MOCK_NAME_COLLISION`) instead of silently dropping one mock and its assertions.
+
+**Conditional mocks.** A data mock can answer per arguments instead of statically: `cases` is a first-match args → answer table, compared with the same canonicalized deep equality as strict matching. `onNoMatch` decides unmatched calls — `'error'` (default) fails the item with `TOOL_MOCK_ARGS_MISMATCH` (deterministic, never retried, like a replay miss), `'passthrough'` runs the live tool. `cases` cannot combine with a static `output`/`error`; `expect` combines and counts every call, matched or not. Case-served calls carry their `caseIndex` in the report's `calls`.
+
+```typescript
+await dataset.startExperiment({
+  targetType: 'agent',
+  targetId: 'support-agent',
+  toolMocks: {
+    weatherInfo: {
+      cases: [
+        { args: { city: 'Paris' }, output: { temp: 18 } },
+        { args: { city: 'Tokyo' }, output: { temp: 26 } },
+        { args: { city: 'Atlantis' }, error: { message: 'unknown city' } },
+      ],
+      onNoMatch: 'passthrough',
+    },
+  },
+})
+```
+
+**Persisted mock configs.** Stamped mock runs now persist the mock configuration itself on the experiment record (`metadata.toolReplay.mockConfigs`): data mocks verbatim, function mocks as `{ function: true }` placeholders. Mock runs become auditable and re-runnable from the stored record alone — `mockedTools` stays the cheap display field. Persisted data mocks include their outputs, so sensitive values in them land in the experiments table with the same trust level as item inputs.

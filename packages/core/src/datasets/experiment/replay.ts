@@ -67,17 +67,45 @@ export interface ToolMockExpectation {
   calledTimes?: number;
 }
 
+/** One args-conditional answer in a data mock's `cases` table. */
+export interface ToolMockCase {
+  /**
+   * Args this case answers — canonicalized deep equality, like strict
+   * matching (runtime-injected nullish keys are ignored).
+   */
+  args: unknown;
+  /** Output served when the case matches. */
+  output?: unknown;
+  /** Error thrown when the case matches (wins over `output`, like the top-level pair). */
+  error?: { name?: string; message: string };
+}
+
 /**
  * Data-shaped tool mock: a static stub (`output`), an injected failure
- * (`error`), an assertion (`expect`), or combinations. An entry with only
- * `expect` doesn't stub anything — the call executes normally (replayed or
- * live) and only the assertion is recorded.
+ * (`error`), an args-conditional answer table (`cases`), an assertion
+ * (`expect`), or combinations. An entry with only `expect` doesn't stub
+ * anything — the call executes normally (replayed or live) and only the
+ * assertion is recorded.
  */
 export interface ToolMockDataConfig {
   /** Static output returned for every call — the tool never executes. */
   output?: unknown;
   /** Error thrown for every call (failure injection) — the tool never executes. */
   error?: { name?: string; message: string };
+  /**
+   * Args-conditional answers: the first case whose `args` match the call's
+   * args serves its output (or throws its error). Mutually exclusive with the
+   * static `output`/`error` pair — a mock is either static or conditional.
+   * `expect` combines freely and counts every call, matched or not.
+   */
+  cases?: ToolMockCase[];
+  /**
+   * Behavior when no case matches the call's args (default: 'error').
+   * 'error' aborts the attempt deterministically (TOOL_MOCK_ARGS_MISMATCH,
+   * never retried — same semantics as a replay miss under onMiss: 'error');
+   * 'passthrough' lets the live tool execute.
+   */
+  onNoMatch?: 'error' | 'passthrough';
   expect?: ToolMockExpectation;
 }
 
@@ -103,8 +131,9 @@ export interface ToolMockUsage {
    * Static classification of the mock config, not a per-call record.
    * 'observe' = expect-only entry (calls executed normally). When a data mock
    * sets both `output` and `error`, the error wins on every call ('error').
+   * 'cases' = args-conditional table (per-call answers are in `calls[]`).
    */
-  kind: 'output' | 'error' | 'function' | 'observe';
+  kind: 'output' | 'error' | 'cases' | 'function' | 'observe';
 }
 
 /** Outcome of one ToolMockExpectation, included in the report. */
@@ -129,15 +158,19 @@ export interface ToolReplayCall {
   outcome:
     | 'replayed' // recorded output served
     | 'replayed-error' // recorded error re-thrown
-    | 'mocked' // mock output / function result served
-    | 'mock-error' // mock error injected
+    | 'mocked' // mock output / function result / matched case served
+    | 'mock-error' // mock error injected (static or matched case)
     | 'miss-error' // no event left, item stopped
     | 'miss-passthrough' // no event left, live tool executed
+    | 'case-miss-error' // cases mock matched nothing, item stopped (onNoMatch: 'error')
+    | 'case-miss-passthrough' // cases mock matched nothing, live tool executed
     | 'live'; // mock-only run, unmocked tool executed live
   /** Recorded event consumed (replayed outcomes only). */
   sequence?: number;
   /** FIFO mode only: args differed from the consumed recorded event. */
   argsDiffered?: boolean;
+  /** Cases mocks only: index of the case that answered the call. */
+  caseIndex?: number;
 }
 
 export interface ToolReplayMiss {
@@ -408,15 +441,34 @@ function containsRedactionMarker(payload: unknown): boolean {
 }
 
 /**
+ * Persisted stand-in for a function mock in the stamped marker — code cannot
+ * be serialized, so the record shows that the tool was function-mocked and
+ * nothing more.
+ */
+export interface ToolMockFunctionMarker {
+  function: true;
+}
+
+/**
  * The marker the experiment runner stamps into `experiment.metadata.toolReplay`
  * on replay/mock runs. `onMiss` is present on replay runs; `mockedTools` lists
  * suppressing mocks on mock runs; either may appear alone or combined.
+ * `mockConfigs` carries the mock configuration itself whenever the run is
+ * stamped and mocks were configured.
  */
 export interface ToolReplayExperimentMarker {
   fromExperimentId?: string;
   onMiss?: ToolReplayOnMiss;
   matching?: ToolReplayMatching;
   mockedTools?: string[];
+  /**
+   * Mock configs as configured, keyed by the user's tool name: data mocks
+   * verbatim (output/error/cases/onNoMatch/expect), function mocks as
+   * `{ function: true }` placeholders. Makes mock runs auditable and
+   * re-runnable from the stored record alone — `mockedTools` stays the cheap
+   * display field.
+   */
+  mockConfigs?: Record<string, ToolMockDataConfig | ToolMockFunctionMarker>;
 }
 
 /**
@@ -426,7 +478,9 @@ export interface ToolReplayExperimentMarker {
  * so live runs can never be misclassified. The single source of truth for the
  * duck-typing the runner's source-guard and every UI/SDK consumer need.
  */
-export function getToolReplayMarker(metadata: Record<string, unknown> | null | undefined): ToolReplayExperimentMarker | null {
+export function getToolReplayMarker(
+  metadata: Record<string, unknown> | null | undefined,
+): ToolReplayExperimentMarker | null {
   const candidate = metadata?.toolReplay;
   if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) return null;
   if (!('onMiss' in candidate) && !('mockedTools' in candidate)) return null;
@@ -436,30 +490,84 @@ export function getToolReplayMarker(metadata: Record<string, unknown> | null | u
     ...(raw.onMiss === 'error' || raw.onMiss === 'passthrough' ? { onMiss: raw.onMiss } : {}),
     ...(raw.matching === 'fifo' || raw.matching === 'strict' ? { matching: raw.matching } : {}),
     ...(Array.isArray(raw.mockedTools) ? { mockedTools: raw.mockedTools.filter(t => typeof t === 'string') } : {}),
+    // Per-tool configs must be plain objects; anything else under a user-owned
+    // metadata key is junk and is dropped, never surfaced as a config.
+    ...(isPlainObject(raw.mockConfigs)
+      ? {
+          mockConfigs: Object.fromEntries(
+            Object.entries(raw.mockConfigs).filter(([, value]) => isPlainObject(value)),
+          ) as Record<string, ToolMockDataConfig | ToolMockFunctionMarker>,
+        }
+      : {}),
   };
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /**
- * A mock that answers calls itself (output stub, error injection, or function
- * replacement) — the live tool never executes. Expect-only entries observe and
- * fall through. Suppressing mocks drive the metadata stamp AND the strict
- * unconsumed-contract exemption: a tool the user explicitly took out of the
- * contract cannot fail it.
+ * A mock that answers calls itself (output stub, error injection, case table,
+ * or function replacement) — the live tool never executes for answered calls.
+ * Expect-only entries observe and fall through. Suppressing mocks drive the
+ * metadata stamp AND the strict unconsumed-contract exemption: a tool the
+ * user explicitly took out of the contract cannot fail it. Cases mocks count
+ * even with onNoMatch: 'passthrough' — matched calls are still answered.
  */
 export function isSuppressingMock(config: ToolMockConfig): boolean {
-  return typeof config === 'function' || Boolean(config.error) || 'output' in config;
+  return typeof config === 'function' || Boolean(config.error) || 'output' in config || config.cases !== undefined;
+}
+
+/**
+ * Refuse misconfigured case tables. A case table that silently never matches
+ * (or half-answers) would corrupt the run instead of failing it, so the same
+ * setup gate that catches name collisions catches these. Data mocks can cross
+ * the HTTP API as JSON, so the shape is checked at runtime, not trusted.
+ */
+function validateToolMockCases(toolName: string, config: ToolMockConfig): void {
+  if (typeof config === 'function' || config.cases === undefined) return;
+  if (!Array.isArray(config.cases) || config.cases.length === 0) {
+    throw new MastraError({
+      id: 'TOOL_MOCK_INVALID_CASES',
+      text: `toolMocks entry '${toolName}' needs a non-empty cases array`,
+      domain: 'STORAGE',
+      category: 'USER',
+    });
+  }
+  if ('output' in config || config.error) {
+    throw new MastraError({
+      id: 'TOOL_MOCK_INVALID_CASES',
+      text: `toolMocks entry '${toolName}' sets cases together with a static output/error — a mock is either static or conditional; move the static answer into a case`,
+      domain: 'STORAGE',
+      category: 'USER',
+    });
+  }
+  config.cases.forEach((caseConfig, index) => {
+    // Same at-least-one rule as a static mock, per case: a matched case must
+    // answer with an output or an error.
+    if (caseConfig === null || typeof caseConfig !== 'object' || (!('output' in caseConfig) && !caseConfig.error)) {
+      throw new MastraError({
+        id: 'TOOL_MOCK_INVALID_CASES',
+        text: `toolMocks entry '${toolName}' cases[${index}] needs an output or error to answer matching calls`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
+  });
 }
 
 /**
  * Map each toolMocks key to its agent-formatted tool name, refusing keys that
- * collide after formatting. A silently dropped mock means a silently skipped
- * assertion — the exact failure class mocks exist to eliminate — so the
- * runner calls this at setup to fail the experiment before any item runs.
+ * collide after formatting and case tables that are misconfigured. A silently
+ * dropped mock means a silently skipped assertion — the exact failure class
+ * mocks exist to eliminate — so the runner calls this at setup to fail the
+ * experiment before any item runs.
  */
 export function validateToolMockNames(mocks: Record<string, ToolMockConfig>): Map<string, string> {
   const keysBySource = new Map<string, string>();
   const sourcesByKey = new Map<string, string>();
   for (const toolName of Object.keys(mocks)) {
+    validateToolMockCases(toolName, mocks[toolName]!);
     const key = formatToolName(toolName);
     const existing = sourcesByKey.get(key);
     if (existing !== undefined) {
@@ -558,10 +666,16 @@ function normalizeArgsForComparison(args: unknown): unknown {
  * A thrown error from `beforeToolCall` surfaces to the model as a tool-error
  * result (the agent keeps running), so `onMiss: 'error'` alone cannot fail the
  * item — `onFatalMiss` lets the caller abort the run (e.g. via AbortController).
+ * `onFatalCaseMiss` is the same mechanism for a cases mock whose table matched
+ * nothing under `onNoMatch: 'error'`.
  */
 export function buildReplayHooks(
   state: ToolReplayState,
-  options: { onMiss: ToolReplayOnMiss; onFatalMiss?: (error: Error) => void },
+  options: {
+    onMiss: ToolReplayOnMiss;
+    onFatalMiss?: (error: Error) => void;
+    onFatalCaseMiss?: (error: Error) => void;
+  },
 ): ToolHooks {
   return {
     beforeToolCall: async ({ toolName, input }) => {
@@ -584,6 +698,41 @@ export function buildReplayHooks(
             call.outcome = 'mock-error';
             throw error;
           }
+        }
+        if (mock.config.cases) {
+          // First case whose args match answers the call — duplicate-args
+          // cases never reach the later entries. Same canonicalized
+          // comparison as strict matching.
+          const normalizedInput = normalizeArgsForComparison(input);
+          const caseIndex = mock.config.cases.findIndex(candidate =>
+            deepEqual(normalizedInput, normalizeArgsForComparison(candidate.args)),
+          );
+          if (caseIndex >= 0) {
+            const matched = mock.config.cases[caseIndex]!;
+            if (matched.error) {
+              const error = new Error(matched.error.message);
+              // Same guard as static mock errors below.
+              if (matched.error.name && !RETHROWN_TOOL_ERROR_NAMES.has(matched.error.name)) {
+                error.name = matched.error.name;
+              }
+              state.calls.push({ order: state.calls.length, toolName, outcome: 'mock-error', caseIndex });
+              throw error;
+            }
+            state.calls.push({ order: state.calls.length, toolName, outcome: 'mocked', caseIndex });
+            return { proceed: false, output: matched.output, spanMetadata: { outcome: 'mocked', caseIndex } };
+          }
+          if ((mock.config.onNoMatch ?? 'error') === 'passthrough') {
+            state.calls.push({ order: state.calls.length, toolName, outcome: 'case-miss-passthrough' });
+            return; // proceed with live execution
+          }
+          // Like a replay miss under onMiss: 'error' — deterministic, so the
+          // attempt is aborted ("aborted" also suppresses the retry loop).
+          state.calls.push({ order: state.calls.length, toolName, outcome: 'case-miss-error' });
+          const error = new Error(
+            `Tool mock case miss for '${toolName}': no case matches the call's args — execution aborted (onNoMatch: 'error')`,
+          );
+          options.onFatalCaseMiss?.(error);
+          throw error;
         }
         if (mock.config.error) {
           const error = new Error(mock.config.error.message);
@@ -678,6 +827,7 @@ export function buildReplayHooks(
 
 function mockKind(config: ToolMockConfig): ToolMockUsage['kind'] {
   if (typeof config === 'function') return 'function';
+  if (config.cases) return 'cases';
   if (config.error) return 'error';
   if ('output' in config) return 'output';
   return 'observe';

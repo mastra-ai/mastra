@@ -362,8 +362,12 @@ describe('tool replay over the experiment trigger API (e2e)', () => {
     expect(modelCounter.modelCalls).toBe(3);
 
     // GET experiment carries the runner-stamped marker in metadata — parsed
-    // here exactly the way SDK/UI consumers do.
-    expect(getToolReplayMarker(run!.metadata)).toEqual({ mockedTools: ['lookup'] });
+    // here exactly the way SDK/UI consumers do. The stamp persists the mock
+    // configuration itself (data mocks verbatim) alongside the display list.
+    expect(getToolReplayMarker(run!.metadata)).toEqual({
+      mockedTools: ['lookup'],
+      mockConfigs: { lookup: { output: { value: 'mocked-lookup' } } },
+    });
 
     // Mock usage accounting persists in the dedicated report column.
     const results = await fetchResults(triggered.experimentId);
@@ -371,5 +375,52 @@ describe('tool replay over the experiment trigger API (e2e)', () => {
     expect(results[0]!.error).toBeNull();
     const report = results[0]!.toolReplay as { mocks?: { toolName: string; calls: number; kind: string }[] } | null;
     expect(report?.mocks).toEqual([{ toolName: 'lookup', calls: 2, kind: 'output' }]);
+  });
+
+  it('answers each call from its matching case in a cases-mock experiment', async () => {
+    // No recording, no static stub — the agent's two lookups carry different
+    // args ({recordId:'first'} then {recordId:'second'}) and each must be
+    // answered by ITS case, proving args-conditional dispatch works across
+    // the full route → background-run → results lifecycle.
+    const toolMocks = {
+      lookup: {
+        cases: [
+          { args: { recordId: 'first' }, output: { value: 'case:first' } },
+          { args: { recordId: 'second' }, output: { value: 'case:second' } },
+        ],
+      },
+    };
+    const triggered = await TRIGGER_EXPERIMENT_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      datasetId,
+      targetType: 'agent',
+      targetId: 'replay-api-agent',
+      toolMocks,
+    });
+    expect(triggered.status).toBe('pending');
+
+    const run = await waitForExperiment(triggered.experimentId);
+    expect(run!.status).toBe('completed');
+    expect(run!.succeededCount).toBe(1);
+    // Both calls matched a case — nothing fell through to the live tool.
+    expect(liveCalls).toBe(0);
+    expect(modelCounter.modelCalls).toBe(3);
+
+    // The marker persists the cases table verbatim under mockConfigs.
+    expect(getToolReplayMarker(run!.metadata)).toEqual({ mockedTools: ['lookup'], mockConfigs: toolMocks });
+
+    const results = await fetchResults(triggered.experimentId);
+    expect(results).toHaveLength(1);
+    expect(results[0]!.error).toBeNull();
+    const report = results[0]!.toolReplay as {
+      mocks?: { toolName: string; calls: number; kind: string }[];
+      calls?: { toolName: string; outcome: string; caseIndex?: number }[];
+    } | null;
+    expect(report?.mocks).toEqual([{ toolName: 'lookup', calls: 2, kind: 'cases' }]);
+    // Per-call accounting shows WHICH case answered each call, in order.
+    expect(report?.calls).toEqual([
+      expect.objectContaining({ toolName: 'lookup', outcome: 'mocked', caseIndex: 0 }),
+      expect.objectContaining({ toolName: 'lookup', outcome: 'mocked', caseIndex: 1 }),
+    ]);
   });
 });

@@ -207,6 +207,27 @@ describe('Datasets Handlers', () => {
       expect(startSpy).not.toHaveBeenCalled();
     });
 
+    it('rejects a misconfigured cases mock with a 400 before starting the experiment', async () => {
+      // The pre-validation path (validateToolMockNames) also runs the cases
+      // checks (TOOL_MOCK_INVALID_CASES) — direct handler invocation models a
+      // payload that bypassed the body-schema refinement (query-param merge).
+      const startSpy = vi.spyOn(Dataset.prototype, 'startExperimentAsync');
+      const dataset = await mastra.datasets.create({ name: 'Invalid Cases Dataset' });
+
+      await expect(
+        TRIGGER_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          targetType: 'agent',
+          targetId: 'my-agent',
+          toolMocks: {
+            weatherTool: { output: { ok: true }, cases: [{ args: { city: 'Paris' }, output: { ok: false } }] },
+          },
+        }),
+      ).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/cases/) });
+      expect(startSpy).not.toHaveBeenCalled();
+    });
+
     it('rejects malformed replay fields merged in past the body schema (query-param shapes)', async () => {
       // Adapters merge raw query params into handler params after zod runs on
       // the body, so `?toolReplay=x` or `?itemIds=abc` arrive as strings.
@@ -370,11 +391,11 @@ describe('Datasets Handlers', () => {
         expect(triggerExperimentBodySchema.parse({ ...base, toolMocks }).toolMocks).toEqual(toolMocks);
       });
 
-      it('rejects a tool mock with none of output, error, or expect', () => {
+      it('rejects a tool mock with none of output, error, cases, or expect', () => {
         const result = triggerExperimentBodySchema.safeParse({ ...base, toolMocks: { weatherTool: {} } });
         expect(result.success).toBe(false);
         if (!result.success) {
-          expect(result.error.issues[0]?.message).toContain('at least one of output, error, or expect');
+          expect(result.error.issues[0]?.message).toContain('at least one of output, error, cases, or expect');
         }
       });
 
@@ -387,6 +408,65 @@ describe('Datasets Handlers', () => {
         if (!result.success) {
           expect(result.error.issues[0]?.message).toContain('cannot set both output and error');
         }
+      });
+
+      it('accepts a cases mock, including one combined with expect', () => {
+        const toolMocks = {
+          weatherTool: {
+            cases: [
+              { args: { city: 'Paris' }, output: { temperature: 18 } },
+              { args: { city: 'Tokyo' }, error: { name: 'WeatherError', message: 'sensor offline' } },
+            ],
+            onNoMatch: 'passthrough',
+            expect: { calledTimes: 2 },
+          },
+        };
+        expect(triggerExperimentBodySchema.parse({ ...base, toolMocks }).toolMocks).toEqual(toolMocks);
+      });
+
+      it('rejects an empty cases array', () => {
+        const result = triggerExperimentBodySchema.safeParse({
+          ...base,
+          toolMocks: { weatherTool: { cases: [] } },
+        });
+        expect(result.success).toBe(false);
+      });
+
+      it('rejects a case without an output or error to answer with', () => {
+        const result = triggerExperimentBodySchema.safeParse({
+          ...base,
+          toolMocks: { weatherTool: { cases: [{ args: { city: 'Paris' } }] } },
+        });
+        expect(result.success).toBe(false);
+        if (!result.success) {
+          expect(result.error.issues[0]?.message).toContain('a case needs an output or error');
+        }
+      });
+
+      it('rejects cases combined with a static output or error', () => {
+        const withOutput = triggerExperimentBodySchema.safeParse({
+          ...base,
+          toolMocks: { weatherTool: { output: { ok: true }, cases: [{ args: {}, output: { ok: false } }] } },
+        });
+        expect(withOutput.success).toBe(false);
+        if (!withOutput.success) {
+          expect(withOutput.error.issues.map(i => i.message).join('\n')).toContain(
+            'cannot set cases together with a static output/error',
+          );
+        }
+        const withError = triggerExperimentBodySchema.safeParse({
+          ...base,
+          toolMocks: { weatherTool: { error: { message: 'boom' }, cases: [{ args: {}, output: { ok: false } }] } },
+        });
+        expect(withError.success).toBe(false);
+      });
+
+      it('rejects invalid onNoMatch values', () => {
+        const result = triggerExperimentBodySchema.safeParse({
+          ...base,
+          toolMocks: { weatherTool: { cases: [{ args: {}, output: { ok: true } }], onNoMatch: 'retry' } },
+        });
+        expect(result.success).toBe(false);
       });
 
       it('rejects toolMocks for non-agent targets at the boundary', () => {
@@ -429,6 +509,10 @@ describe('Datasets Handlers', () => {
         expect(jsonSchema.properties?.toolReplay).toBeDefined();
         expect(jsonSchema.properties?.toolMocks).toBeDefined();
         expect(jsonSchema.properties?.itemIds).toBeDefined();
+        // The conditional-mock fields must survive into the published contract.
+        const toolMocksSchema = JSON.stringify(jsonSchema.properties?.toolMocks);
+        expect(toolMocksSchema).toContain('cases');
+        expect(toolMocksSchema).toContain('onNoMatch');
       });
     });
   });
@@ -438,9 +522,10 @@ describe('comparisonResponseSchema', () => {
     const parsed = comparisonResponseSchema.parse({
       baselineId: 'exp-live',
       items: [],
-      warnings: ['Experiment exp-replay ran with tool replay/mocks while the other ran live — compare scores with care.'],
+      warnings: [
+        'Experiment exp-replay ran with tool replay/mocks while the other ran live — compare scores with care.',
+      ],
     });
     expect(parsed.warnings).toHaveLength(1);
   });
 });
-
