@@ -230,6 +230,10 @@ export class DatasetsManager {
     return {
       baselineId: resolvedBaseline,
       items,
+      // Comparability caveats from the pairwise comparison — version drift,
+      // replay-vs-live mixing, differing matching policies. Dropping them
+      // here would silence exactly what the replay marker exists to surface.
+      warnings: internal.warnings,
     };
   }
 }

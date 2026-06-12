@@ -2,7 +2,7 @@ import { Dataset } from '@mastra/core/datasets';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { triggerExperimentBodySchema } from '../schemas/datasets';
+import { comparisonResponseSchema, triggerExperimentBodySchema } from '../schemas/datasets';
 import { schemaToJsonSchema } from '../server-adapter/openapi-utils';
 import { LIST_DATASETS_ROUTE, TRIGGER_EXPERIMENT_ROUTE } from './datasets';
 import { createTestServerContext } from './test-utils';
@@ -433,3 +433,14 @@ describe('Datasets Handlers', () => {
     });
   });
 });
+describe('comparisonResponseSchema', () => {
+  it('carries comparability warnings through the wire contract', () => {
+    const parsed = comparisonResponseSchema.parse({
+      baselineId: 'exp-live',
+      items: [],
+      warnings: ['Experiment exp-replay ran with tool replay/mocks while the other ran live — compare scores with care.'],
+    });
+    expect(parsed.warnings).toHaveLength(1);
+  });
+});
+

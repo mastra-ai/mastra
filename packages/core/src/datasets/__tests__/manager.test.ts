@@ -229,6 +229,33 @@ describe('DatasetsManager', () => {
     expect(item).toHaveProperty('results');
     expect(item.results[exp1.experimentId]).toBeDefined();
     expect(item.results[exp2.experimentId]).toBeDefined();
+    // Comparability caveats ride along — two live same-version runs have none.
+    expect(comparison.warnings).toEqual([]);
+  });
+
+  it('compareExperiments warns when a replay run is compared against a live run', async () => {
+    const record = await datasetsStorage.createDataset({ name: 'Compare replay DS' });
+    await datasetsStorage.addItem({ datasetId: record.id, input: { prompt: 'Hello' } });
+
+    const live = await runExperiment(mastra, {
+      datasetId: record.id,
+      task: async () => 'live-response',
+    });
+    const marked = await runExperiment(mastra, {
+      datasetId: record.id,
+      task: async () => 'replayed-response',
+    });
+    // Stamp the second run with the exact replay marker shape the runner writes.
+    await experimentsStorage.updateExperiment({
+      id: marked.experimentId,
+      metadata: { toolReplay: { fromExperimentId: live.experimentId, onMiss: 'error', matching: 'fifo' } },
+    });
+
+    const comparison = await mgr.compareExperiments({
+      experimentIds: [live.experimentId, marked.experimentId],
+    });
+
+    expect(comparison.warnings.some(w => w.includes('tool replay/mocks'))).toBe(true);
   });
 
   // 14. compareExperiments — explicit baselineId

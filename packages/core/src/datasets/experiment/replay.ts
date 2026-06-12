@@ -376,6 +376,25 @@ export function extractToolReplayEvents(spans: SpanRecord[]): ToolReplayEvent[] 
   return events;
 }
 
+/**
+ * Misses persist their args for diagnostics — the one unbounded payload in the
+ * stored report (realistic under onMiss: 'passthrough' with many misses).
+ * Document-capped stores break first (MongoDB 16MB/doc), so oversized inputs
+ * persist as a marked preview instead of the full value.
+ */
+const MAX_MISS_INPUT_CHARS = 4096;
+
+function capMissInput(input: unknown): unknown {
+  if (input === undefined) return undefined;
+  try {
+    const serialized = JSON.stringify(input) ?? '';
+    if (serialized.length <= MAX_MISS_INPUT_CHARS) return input;
+    return { __truncated: true, originalChars: serialized.length, preview: serialized.slice(0, MAX_MISS_INPUT_CHARS) };
+  } catch {
+    return '[unserializable input]';
+  }
+}
+
 /** Marker the SensitiveDataFilter span processor writes over redacted fields. */
 const REDACTION_MARKER = '[REDACTED]';
 
@@ -603,7 +622,7 @@ export function buildReplayHooks(
       }
 
       if (!event) {
-        state.misses.push({ toolName, action: options.onMiss, input });
+        state.misses.push({ toolName, action: options.onMiss, input: capMissInput(input) });
         state.calls.push({
           order: state.calls.length,
           toolName,

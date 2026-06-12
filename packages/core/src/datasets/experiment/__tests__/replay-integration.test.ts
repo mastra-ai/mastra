@@ -1165,4 +1165,34 @@ describe('tool replay integration', () => {
       );
     });
   });
+
+  describe('report survival under outer aborts', () => {
+    it('keeps the divergence report when the item timeout wins the race', async () => {
+      // One recorded event; the second call misses into a slow live
+      // passthrough, so the item timeout deterministically wins mid-run.
+      await seedRecordedTrace('rec-trace-timeout', [{ input: { key: 'first' }, output: { value: 'recorded:first' } }]);
+      liveExecute.mockImplementation(
+        () => new Promise(resolve => setTimeout(() => resolve({ value: 'slow' }), 300)),
+      );
+
+      const summary = await runExperiment(mastra, {
+        data: [{ id: 'item-1', input: 'Look up first and second', replayTraceId: 'rec-trace-timeout' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        itemTimeout: 50,
+        toolReplay: { onMiss: 'passthrough' },
+      });
+
+      expect(summary.failedCount).toBe(1);
+      const result = summary.results[0]!;
+      expect(result.error?.message).toMatch(/timeout|abort/i);
+      // The evidence survives the loss: the report reflects what happened
+      // before the abort instead of disappearing with it.
+      expect(result.toolReplay).toBeDefined();
+      expect(result.toolReplay?.replayedCount).toBe(1);
+      expect(result.toolReplay?.misses).toEqual([
+        { toolName: 'lookup', action: 'passthrough', input: { key: 'second' } },
+      ]);
+    });
+  });
 });

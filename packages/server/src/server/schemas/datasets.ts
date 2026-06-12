@@ -508,6 +508,11 @@ const comparisonItemSchema = z.object({
 export const comparisonResponseSchema = z.object({
   baselineId: z.string(),
   items: z.array(comparisonItemSchema),
+  warnings: z
+    .array(z.string())
+    .describe(
+      'Comparability caveats: dataset-version drift, a replay/mock run compared against a live run, or differing replay matching policies/sources',
+    ),
 });
 
 // Experiment summary schema (returned by trigger experiment)
