@@ -155,8 +155,7 @@ export class ChatChannelOutputProcessor {
     // model-continuation) keep streaming after each per-step `finish`, so we
     // must NOT close on `finish`. Close only on the terminal `step-finish`
     // (`isContinued === false`) or on `error`.
-    const isTerminalStepFinish =
-      part.type === 'step-finish' && (part as any).payload?.stepResult?.isContinued !== true;
+    const isTerminalStepFinish = part.type === 'step-finish' && (part as any).payload?.stepResult?.isContinued !== true;
     if (isTerminalStepFinish || part.type === 'error') {
       session.queue.close();
       try {
