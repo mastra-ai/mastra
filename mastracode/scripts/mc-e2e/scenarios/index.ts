@@ -44,6 +44,7 @@ import { quietSettingsScenario } from './quiet-settings.js';
 import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
+import { settingsStartupModelRestoreScenario } from './settings-startup-model-restore.js';
 import { setupCompletionPersistenceScenario } from './setup-completion-persistence.js';
 import { setupNestedModelSelectorScenario } from './setup-nested-model-selector.js';
 import { startupScenario } from './startup.js';
@@ -126,6 +127,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'state-signal-rendering': stateSignalRenderingScenario,
   'setup-completion-persistence': setupCompletionPersistenceScenario,
   'setup-nested-model-selector': setupNestedModelSelectorScenario,
+  'settings-startup-model-restore': settingsStartupModelRestoreScenario,
   'storage-settings': storageSettingsScenario,
   'stream-error-retry': streamErrorRetryScenario,
   'streaming-tool-args': streamingToolArgsScenario,

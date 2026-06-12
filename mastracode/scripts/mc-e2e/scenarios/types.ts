@@ -52,6 +52,7 @@ export type ScenarioName =
   | 'state-signal-rendering'
   | 'setup-completion-persistence'
   | 'setup-nested-model-selector'
+  | 'settings-startup-model-restore'
   | 'storage-settings'
   | 'stream-error-retry'
   | 'streaming-tool-args'

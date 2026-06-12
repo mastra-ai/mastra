@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Settings startup model restore coverage (2026-06-12)
+
+Added `settings-startup-model-restore` as the 71st checked-in TUI e2e scenario. The scenario seeds `settings.json` with an active custom model pack before the TUI launches, verifies the initial status footer boots with the persisted build model instead of stale/default model values, opens `/models` to prove the saved pack is restored into the switcher with the persisted model details, and uses shell passthrough to confirm the seeded settings remain intact.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test settings-startup-model-restore
+```
+
+Break validations:
+
+- Returning stale `modeDefaults` from `resolveModelDefaults()` for a valid active custom pack booted the footer with `stale-mode-defaults/build` and failed the scenario.
+- Ignoring effective defaults in `applyEffectiveDefaultsToV1Modes()` booted the footer with the built-in Anthropic default instead of the persisted custom build model.
+- Omitting saved custom packs from `getAvailableModePacks()` left `/models` showing only New Custom/Import and failed the saved-pack visibility assertion.
+
+The `Settings: Onboarding and global settings` row remains `needs-follow-up`; this chunk closes active custom model-pack startup/footer restoration plus saved-pack switcher visibility, while thread/subagent/OM reload parity, browser wizard/startup restore, custom-pack share/import-cancel/completion, and model-selection cancellation/env-precedence breadth remain.
+
+
 ### Custom pack rename active coverage (2026-06-12)
 
 Added `custom-pack-rename-active` as the 70th checked-in TUI e2e scenario. The scenario seeds an active saved custom model pack, opens `/models`, chooses `Edit`, renames the pack through the real modal input, saves, and uses shell passthrough to prove `settings.json` migrates the active pack ID and onboarding mode pack ID to the new custom pack, removes the old pack entry, and preserves the plan/build/fast model defaults.
