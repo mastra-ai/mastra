@@ -29,9 +29,9 @@ import type { HarnessMode } from './mode';
 import type {
   PermissionCheckResult,
   PermissionPolicy,
+  PermissionRule,
   PermissionRequestedCallback,
-  PermissionRules,
-  SessionGrant,
+  PermissionGrant,
   ToolCategory,
   ToolCategoryResolver,
 } from './permissions.types';
@@ -51,6 +51,9 @@ import { HarnessSkillNotFoundError } from './skills.types';
 import type { HarnessSkill, SkillSource } from './skills.types';
 import type { SubagentDefinition, SubagentRegistryConfig } from './subagents.types';
 import { buildHarnessBuiltInTools, buildSessionToolsets } from './tools';
+
+type JsonPrimitive = string | number | boolean | null;
+type JsonSerializable = JsonPrimitive | JsonSerializable[] | { [key: string]: JsonSerializable };
 
 export class Session<TState = {}> {
   /** Stable identity. Frozen at construction. */
@@ -90,8 +93,8 @@ export class Session<TState = {}> {
   readonly #subagents?: SubagentRegistryConfig;
   readonly #gateways: Array<MastraModelGatewayInterface>;
   readonly #defaultPermissionPolicy: PermissionPolicy;
-  readonly #permissionRules?: PermissionRules;
-  #sessionGrants: SessionGrant[];
+  readonly #permissionRules?: readonly PermissionRule[];
+  #sessionGrants: PermissionGrant[];
   readonly #onPermissionRequested?: PermissionRequestedCallback;
   readonly #toolCategoryResolver?: ToolCategoryResolver;
   // readonly parentSessionId?: string;
@@ -217,20 +220,20 @@ export class Session<TState = {}> {
     return this.#pending.map(item => ({ ...item }));
   }
 
-  addSessionGrant(grant: SessionGrant): SessionGrant {
-    const record: SessionGrant = { ...grant, id: grant.id ?? randomUUID() };
+  addPermissionGrant(grant: PermissionGrant): PermissionGrant {
+    const record: PermissionGrant = { ...grant, id: grant.id ?? randomUUID() };
     this.#sessionGrants = [...this.#sessionGrants, record];
     return { ...record };
   }
 
-  removeSessionGrant(grantId: string): boolean {
+  removePermissionGrant(grantId: string): boolean {
     const before = this.#sessionGrants.length;
     this.#sessionGrants = this.#sessionGrants.filter(grant => grant.id !== grantId);
     return this.#sessionGrants.length !== before;
   }
 
-  listSessionGrants(): SessionGrant[] {
-    return this.#sessionGrants.filter(grant => this.#isSessionGrantActive(grant)).map(grant => ({ ...grant }));
+  listPermissionGrants(): PermissionGrant[] {
+    return this.#sessionGrants.filter(grant => this.#isPermissionGrantActive(grant)).map(grant => ({ ...grant }));
   }
 
   async approveToolCall(approvalId: string, decision: 'allow' | 'deny'): Promise<HarnessPendingItemRecord> {
@@ -668,7 +671,7 @@ export class Session<TState = {}> {
       builtInTools: buildHarnessBuiltInTools(this),
       permissionRules: this.#permissionRules,
       permissions: {
-        sessionGrants: this.listSessionGrants(),
+        sessionGrants: this.listPermissionGrants(),
         defaultPermissionPolicy: this.#defaultPermissionPolicy,
         toolCategoryResolver: this.#toolCategoryResolver,
         yolo: this.#isYoloEnabled(),
@@ -703,17 +706,20 @@ export class Session<TState = {}> {
       pendingItemId: pending.id,
       toolName: input.toolName,
       category: input.category,
+      args: input.args,
       result: input.result,
     };
     const metadata = Object.fromEntries(
       Object.entries(input.result.metadata).filter(([, value]) => value !== undefined),
     );
+    const args = this.#isJsonSerializable(input.args) ? input.args : undefined;
     this.#events.emit({
       type: 'permission.requested',
       payload: {
         pendingItemId: pending.id,
         toolName: input.toolName,
         category: input.category,
+        ...(args === undefined ? {} : { args }),
         decision: input.result.decision,
         policy: input.result.policy,
         reasons: input.result.reasons,
@@ -954,7 +960,7 @@ export class Session<TState = {}> {
     );
   }
 
-  #isJsonSerializable(value: unknown): boolean {
+  #isJsonSerializable(value: unknown): value is JsonSerializable {
     if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
     if (typeof value === 'number') return Number.isFinite(value);
     if (Array.isArray(value)) return value.every(item => this.#isJsonSerializable(item));
@@ -1026,7 +1032,7 @@ export class Session<TState = {}> {
     });
   }
 
-  #isSessionGrantActive(grant: SessionGrant): boolean {
+  #isPermissionGrantActive(grant: PermissionGrant): boolean {
     if (!grant.expiresAt) return true;
     const expiresAt = grant.expiresAt instanceof Date ? grant.expiresAt.getTime() : new Date(grant.expiresAt).getTime();
     return Number.isFinite(expiresAt) && expiresAt > Date.now();

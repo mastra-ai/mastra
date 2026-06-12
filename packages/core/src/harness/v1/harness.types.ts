@@ -10,9 +10,9 @@ import type { Workspace, WorkspaceConfig } from '../../workspace';
 import type { HarnessMode } from './mode';
 import type {
   PermissionPolicy,
+  PermissionRule,
   PermissionRequestedCallback,
-  PermissionRules,
-  SessionGrant,
+  PermissionGrant,
   ToolCategory,
   ToolCategoryResolver,
 } from './permissions.types';
@@ -80,10 +80,10 @@ export interface HarnessConfigCommon<TState, MODES extends HarnessMode[]> {
   defaultPermissionPolicy?: PermissionPolicy;
 
   /** Session permission rules layered above the default policy. */
-  permissionRules?: PermissionRules;
+  permissionRules?: readonly PermissionRule[];
 
   /** Initial grants for every session created by this harness. */
-  sessionGrants?: readonly SessionGrant[];
+  sessionGrants?: readonly PermissionGrant[];
 
   /** Called whenever a session creates a pending permission approval. */
   onPermissionRequested?: PermissionRequestedCallback;

@@ -16,9 +16,9 @@ import type { HarnessConfig } from './harness.types';
 import type { HarnessMode } from './mode';
 import type {
   PermissionPolicy,
+  PermissionRule,
   PermissionRequestedCallback,
-  PermissionRules,
-  SessionGrant,
+  PermissionGrant,
   ToolCategoryResolver,
 } from './permissions.types';
 import { Session } from './session';
@@ -61,8 +61,8 @@ export class Harness<MODES extends HarnessMode[], TState = {}> {
   readonly #subagents?: SubagentRegistryConfig;
   readonly #runtimeCompatibilityGeneration?: string | null;
   readonly #defaultPermissionPolicy: PermissionPolicy;
-  readonly #permissionRules?: PermissionRules;
-  readonly #sessionGrants: readonly SessionGrant[];
+  readonly #permissionRules?: readonly PermissionRule[];
+  readonly #sessionGrants: readonly PermissionGrant[];
   readonly #onPermissionRequested?: PermissionRequestedCallback;
   readonly #toolCategoryResolver?: ToolCategoryResolver;
   readonly #gateways: Array<MastraModelGatewayInterface>;

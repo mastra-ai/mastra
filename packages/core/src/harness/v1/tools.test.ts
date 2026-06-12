@@ -42,14 +42,17 @@ describe('buildSessionToolsets', () => {
     expect((result as Record<string, unknown>).ask_user).toBe(ask);
   });
 
-  it('removes tools listed in disabledTools and permissionRules.deny', () => {
+  it('removes tools listed in disabledTools and denied permission rules', () => {
     const a = stub('a');
     const b = stub('b');
     const c = stub('c');
     const result = buildSessionToolsets({
       agentTools: { a, b, c },
       disabledTools: ['a'],
-      permissionRules: { tools: { b: 'deny', c: 'allow' } },
+      permissionRules: [
+        { toolName: 'b', policy: 'deny' },
+        { toolName: 'c', policy: 'allow' },
+      ],
     });
     expect(result).toEqual({ c });
   });

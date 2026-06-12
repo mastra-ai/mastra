@@ -4,6 +4,7 @@ import type { HarnessMode as HarnessModeV1, SubagentRegistryConfig } from '@mast
 import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import { Memory } from '@mastra/memory';
+import type { PermissionPolicy, PermissionRule, ToolCategory } from '../../../packages/core/src/harness/v1/index.js';
 import { HarnessCompat } from '../HarnessCompat.js';
 import { getHarnessTestControls, recordHarnessConfig } from './harness-test-captures.js';
 
@@ -120,6 +121,35 @@ function toSubagentRegistry(subagents: LegacySubagent[] | undefined): SubagentRe
   } as SubagentRegistryConfig;
 }
 
+type LegacyPermissionRuleValue = PermissionPolicy | { policy: PermissionPolicy; args?: Record<string, string> };
+
+type LegacyPermissionRules = {
+  categories?: Record<string, LegacyPermissionRuleValue>;
+  tools?: Record<string, LegacyPermissionRuleValue>;
+  defaultPolicy?: PermissionPolicy;
+};
+
+function toPermissionRuleValue(value: LegacyPermissionRuleValue): Pick<PermissionRule, 'policy' | 'args'> {
+  return typeof value === 'string' ? { policy: value } : { policy: value.policy, args: value.args };
+}
+
+function toV1PermissionRules(rules: unknown): readonly PermissionRule[] | undefined {
+  if (Array.isArray(rules)) return rules as readonly PermissionRule[];
+  if (!rules || typeof rules !== 'object') return undefined;
+
+  const legacyRules = rules as LegacyPermissionRules;
+  const nextRules: PermissionRule[] = [];
+  for (const [category, rule] of Object.entries(legacyRules.categories ?? {})) {
+    nextRules.push({ category: category as ToolCategory, ...toPermissionRuleValue(rule) });
+  }
+  for (const [toolName, rule] of Object.entries(legacyRules.tools ?? {})) {
+    nextRules.push({ toolName, ...toPermissionRuleValue(rule) });
+  }
+  if (legacyRules.defaultPolicy) nextRules.push({ policy: legacyRules.defaultPolicy });
+
+  return nextRules;
+}
+
 function createLegacyModelGateway<TState>(config: LegacyHarnessConfig<TState>): MastraModelGatewayInterface | undefined {
   if (!config.customModelCatalogProvider && !config.modelAuthChecker) return undefined;
 
@@ -191,7 +221,7 @@ export class Harness<TState = {}> extends HarnessCompat<TState> {
       workspace: (typeof config.workspace === 'function' ? config.workspace : undefined) as never,
       subagents: toSubagentRegistry(config.subagents),
       toolCategoryResolver: config.toolCategoryResolver as never,
-      permissionRules: config.permissionRules as never,
+      permissionRules: toV1PermissionRules(config.permissionRules) as never,
       defaultPermissionPolicy: config.defaultPermissionPolicy as never,
       sessionGrants: config.sessionGrants as never,
       onPermissionRequested: config.onPermissionRequested as never,

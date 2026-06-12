@@ -21,9 +21,9 @@ import type { EventEmitter } from './events';
 import type { HarnessMode } from './mode';
 import type {
   PermissionPolicy,
+  PermissionRule,
   PermissionRequestedCallback,
-  PermissionRules,
-  SessionGrant,
+  PermissionGrant,
   ToolCategoryResolver,
 } from './permissions.types';
 import type { SubagentRegistryConfig } from './subagents.types';
@@ -98,9 +98,9 @@ export interface SessionConfig<TState = {}> {
   /** Default permission policy applied when no category rule matches. */
   defaultPermissionPolicy?: PermissionPolicy;
   /** Session permission rules layered above the default policy. */
-  permissionRules?: PermissionRules;
-  /** Initial session grants that suppress policy-driven approval prompts. */
-  sessionGrants?: readonly SessionGrant[];
+  permissionRules?: readonly PermissionRule[];
+  /** Initial permission grants that suppress policy-driven approval prompts. */
+  sessionGrants?: readonly PermissionGrant[];
   /** Called whenever a permission gate creates a pending approval. */
   onPermissionRequested?: PermissionRequestedCallback;
   /** Resolves a tool name to its category for permission-gate evaluation. */

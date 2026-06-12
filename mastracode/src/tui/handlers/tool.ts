@@ -145,6 +145,8 @@ export function handleToolApprovalRequired(
       state.pendingApprovalDismiss = null;
       if (action.type === 'approve') {
         state.harness.respondToToolApproval({ decision: 'approve' });
+      } else if (action.type === 'always_allow_args') {
+        state.harness.respondToToolApproval({ decision: 'always_allow_args' });
       } else if (action.type === 'always_allow_category') {
         state.harness.respondToToolApproval({ decision: 'always_allow_category' });
       } else if (action.type === 'yolo') {

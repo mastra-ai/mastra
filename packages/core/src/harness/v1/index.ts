@@ -9,6 +9,7 @@ export { composeReason, evaluatePermission, resolveEffectivePolicy } from './per
 export type { ModelResolver, SubagentDefinition, SubagentRegistryConfig } from './subagents.types';
 export type {
   PermissionCheckInput,
+  PermissionArgPatterns,
   PermissionCheckResult,
   PermissionDecision,
   PermissionGate,
@@ -17,8 +18,7 @@ export type {
   PermissionRequestedCallback,
   PermissionRequestedEvent,
   PermissionRule,
-  PermissionRules,
-  SessionGrant,
+  PermissionGrant,
   ToolCategory,
   ToolCategoryResolver,
 } from './permissions.types';

@@ -67,11 +67,11 @@ function createSession(
       activeRunId = 'run-queued';
       return { accepted: true, queued: true };
     }),
-    listSessionGrants: vi.fn(() => [
+    listPermissionGrants: vi.fn(() => [
       { id: 'grant-category', category: 'read' },
       { id: 'grant-tool', toolName: 'write_file' },
     ]),
-    addSessionGrant: vi.fn(),
+    addPermissionGrant: vi.fn(),
     approveToolCall: vi.fn(async () => {}),
   };
 }
@@ -263,8 +263,9 @@ describe('HarnessCompat standalone V1 adapter', () => {
     expect(harness.getReflectorModelId()).toBe('new-reflector');
   });
 
-  it('sets and returns permission rules and session grants', async () => {
-    const { harness } = createHarness();
+  it('sets and returns permission rules and permission grants', async () => {
+    const session = createSession();
+    const { harness } = createHarness(session);
     await harness.switchThread({ threadId: 'thread-id' });
 
     await harness.setPermissionForCategory('read', 'allow');
@@ -273,6 +274,12 @@ describe('HarnessCompat standalone V1 adapter', () => {
     expect(harness.getPermissionRules()).toEqual({
       categories: { read: 'allow' },
       tools: { write_file: 'deny' },
+    });
+    expect(session.setState).toHaveBeenLastCalledWith({
+      permissionRules: [
+        { category: 'read', policy: 'allow' },
+        { toolName: 'write_file', policy: 'deny' },
+      ],
     });
     expect(harness.getSessionGrants()).toEqual({ categories: ['read'], tools: ['write_file'] });
   });
@@ -291,6 +298,7 @@ describe('HarnessCompat standalone V1 adapter', () => {
         pendingItemId: 'pending-1',
         toolName: 'execute_command',
         category: 'execute',
+        args: { command: 'ls -la' },
       },
     });
 
@@ -299,12 +307,14 @@ describe('HarnessCompat standalone V1 adapter', () => {
         type: 'tool_approval_required',
         toolCallId: 'pending-1',
         toolName: 'execute_command',
+        args: { command: 'ls -la' },
         category: 'execute',
       }),
     );
     expect(harness.getDisplayState().pendingApproval).toMatchObject({
       toolCallId: 'pending-1',
       toolName: 'execute_command',
+      args: { command: 'ls -la' },
     });
   });
 
@@ -324,7 +334,31 @@ describe('HarnessCompat standalone V1 adapter', () => {
 
     await harness.respondToToolApproval({ decision: 'always_allow_category' });
 
-    expect(session.addSessionGrant).toHaveBeenCalledWith({ category: 'execute' });
+    expect(session.addPermissionGrant).toHaveBeenCalledWith({ category: 'execute' });
+    expect(session.approveToolCall).toHaveBeenCalledWith('pending-1', 'allow');
+  });
+
+  it('grants matching args for the pending tool when approval allows same args', async () => {
+    const session = createSession();
+    const { harness, harnessV1 } = createHarness(session);
+    await harness.switchThread({ threadId: 'thread-id' });
+    const onHarnessEvent = harnessV1.subscribe.mock.calls[0]?.[0] as (event: unknown) => void;
+    onHarnessEvent({
+      type: 'permission.requested',
+      payload: {
+        pendingItemId: 'pending-1',
+        toolName: 'execute_command',
+        category: 'execute',
+        args: { command: 'ls -la', cwd: '/tmp', recursive: false },
+      },
+    });
+
+    await harness.respondToToolApproval({ decision: 'always_allow_args' });
+
+    expect(session.addPermissionGrant).toHaveBeenCalledWith({
+      toolName: 'execute_command',
+      args: { command: '^ls(?:\\s|$)', cwd: '^/tmp$', recursive: '^false$' },
+    });
     expect(session.approveToolCall).toHaveBeenCalledWith('pending-1', 'allow');
   });
 

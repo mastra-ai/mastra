@@ -4,8 +4,7 @@ import type {
   PermissionPolicy,
   PermissionReason,
   PermissionRule,
-  PermissionRules,
-  SessionGrant,
+  PermissionGrant,
   ToolCategory,
 } from './permissions.types';
 
@@ -14,12 +13,27 @@ interface ResolvedPolicy {
   matchedRule: PermissionCheckResult['metadata']['matchedRule'];
 }
 
-function normalizeRule(rule: PermissionPolicy | PermissionRule | undefined): PermissionPolicy | undefined {
-  if (!rule) return undefined;
-  return typeof rule === 'string' ? rule : rule.policy;
+function matchesArgPatterns(args: unknown, patterns?: Record<string, string>): boolean {
+  if (!patterns) return true;
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return false;
+
+  const argRecord = args as Record<string, unknown>;
+  return Object.entries(patterns).every(([key, pattern]) => {
+    if (!Object.hasOwn(argRecord, key)) return false;
+
+    try {
+      return new RegExp(pattern).test(String(argRecord[key]));
+    } catch {
+      return false;
+    }
+  });
 }
 
-function isGrantActive(grant: SessionGrant, now = Date.now()): boolean {
+function matchesRuleArgs(rule: PermissionRule, args?: unknown): boolean {
+  return matchesArgPatterns(args, rule.args);
+}
+
+function isGrantActive(grant: PermissionGrant, now = Date.now()): boolean {
   if (!grant.expiresAt) return true;
   const expiresAt = grant.expiresAt instanceof Date ? grant.expiresAt.getTime() : new Date(grant.expiresAt).getTime();
   return Number.isFinite(expiresAt) && expiresAt > now;
@@ -28,29 +42,35 @@ function isGrantActive(grant: SessionGrant, now = Date.now()): boolean {
 function findMatchingGrant(
   toolName: string,
   category: ToolCategory | null | undefined,
-  grants: readonly SessionGrant[] | undefined,
-): SessionGrant | undefined {
+  grants: readonly PermissionGrant[] | undefined,
+  args?: unknown,
+): PermissionGrant | undefined {
   return grants?.find(grant => {
     if (!isGrantActive(grant)) return false;
-    if (grant.toolName && grant.toolName === toolName) return true;
-    if (grant.category && grant.category === category) return true;
-    return false;
+    const matchesTarget = Boolean(
+      (grant.toolName && grant.toolName === toolName) || (grant.category && grant.category === category),
+    );
+    return matchesTarget && matchesArgPatterns(args, grant.args);
   });
 }
 
 export function resolveEffectivePolicy(
   toolName: string,
   category: ToolCategory | null | undefined,
-  rules?: PermissionRules,
+  rules?: readonly PermissionRule[],
   defaultPermissionPolicy?: PermissionPolicy,
+  args?: unknown,
 ): ResolvedPolicy {
-  const toolRule = normalizeRule(rules?.tools?.[toolName]);
-  if (toolRule) return { policy: toolRule, matchedRule: 'tool' };
+  const toolRule = rules?.find(rule => rule.toolName === toolName && matchesRuleArgs(rule, args));
+  if (toolRule) return { policy: toolRule.policy, matchedRule: 'tool' };
 
-  const categoryRule = category ? normalizeRule(rules?.categories?.[category]) : undefined;
-  if (categoryRule) return { policy: categoryRule, matchedRule: 'category' };
+  const categoryRule = category
+    ? rules?.find(rule => rule.category === category && matchesRuleArgs(rule, args))
+    : undefined;
+  if (categoryRule) return { policy: categoryRule.policy, matchedRule: 'category' };
 
-  if (rules?.defaultPolicy) return { policy: rules.defaultPolicy, matchedRule: 'default' };
+  const defaultRule = rules?.find(rule => !rule.toolName && !rule.category && matchesRuleArgs(rule, args));
+  if (defaultRule) return { policy: defaultRule.policy, matchedRule: 'default' };
   if (defaultPermissionPolicy) return { policy: defaultPermissionPolicy, matchedRule: 'default' };
 
   return { policy: 'ask', matchedRule: 'fallback' };
@@ -59,12 +79,10 @@ export function resolveEffectivePolicy(
 export function composeReason(input: {
   policy: PermissionPolicy;
   toolConfigRequiresApproval?: boolean;
-  toolFnRequiresApproval?: boolean;
   policySuppressed?: boolean;
 }): PermissionReason[] {
   const reasons: PermissionReason[] = [];
   if (input.toolConfigRequiresApproval) reasons.push('tool-config');
-  if (input.toolFnRequiresApproval) reasons.push('tool-fn');
   if (input.policy === 'ask' && !input.policySuppressed) reasons.push('policy');
   return reasons;
 }
@@ -76,13 +94,13 @@ export function evaluatePermission(input: PermissionCheckInput): PermissionCheck
     category,
     input.permissionRules,
     input.defaultPermissionPolicy,
+    input.args,
   );
-  const grant = policy === 'deny' ? undefined : findMatchingGrant(input.toolName, category, input.sessionGrants);
+  const grant = policy === 'deny' ? undefined : findMatchingGrant(input.toolName, category, input.sessionGrants, input.args);
   const policySuppressed = policy !== 'deny' && (Boolean(grant) || Boolean(input.yolo));
   const reasons = composeReason({
     policy,
     toolConfigRequiresApproval: input.toolConfigRequiresApproval,
-    toolFnRequiresApproval: input.toolFnRequiresApproval,
     policySuppressed,
   });
 

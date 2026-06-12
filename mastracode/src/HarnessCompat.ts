@@ -18,8 +18,9 @@ import type {
   HarnessMode,
   Harness,
   PermissionPolicy,
-  PermissionRules,
   ToolCategory,
+  PermissionGrant,
+  PermissionRule,
 } from '@mastra/core/harness/v1';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/llm';
@@ -88,13 +89,112 @@ async function loadSignalConverters(): Promise<SignalConverters> {
   return signalConvertersPromise;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function deriveArgPatterns(toolName: string, args: unknown): Record<string, string> | undefined {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return undefined;
+
+  const patterns: Record<string, string> = {};
+  for (const [key, value] of Object.entries(args)) {
+    const valueType = typeof value;
+    if (!['string', 'number', 'boolean', 'bigint'].includes(valueType)) continue;
+
+    if (toolName === 'execute_command' && key === 'command' && typeof value === 'string') {
+      const firstToken = value.trim().match(/^([A-Za-z0-9_./-]+)(?:\s|$)/)?.[1];
+      if (firstToken === 'ls') {
+        patterns[key] = `^${escapeRegExp(firstToken)}(?:\\s|$)`;
+        continue;
+      }
+    }
+
+    patterns[key] = `^${escapeRegExp(String(value))}$`;
+  }
+
+  return Object.keys(patterns).length > 0 ? patterns : undefined;
+}
+
+type HarnessCompatPermissionRules = {
+  categories: Record<string, PermissionPolicy>;
+  tools: Record<string, PermissionPolicy>;
+};
+
+type LegacyPermissionRuleValue = PermissionPolicy | { policy: PermissionPolicy; args?: Record<string, string> };
+type LegacyPermissionRules = {
+  categories?: Record<string, LegacyPermissionRuleValue>;
+  tools?: Record<string, LegacyPermissionRuleValue>;
+  defaultPolicy?: PermissionPolicy;
+};
+
 type HarnessCompatRuntimeState = SessionStateFields & {
   observerModelId?: string;
   reflectorModelId?: string;
   observationThreshold?: number;
   reflectionThreshold?: number;
-  permissionRules?: PermissionRules;
+  permissionRules?: readonly PermissionRule[] | LegacyPermissionRules;
 };
+
+function toPermissionRuleValue(value: LegacyPermissionRuleValue): { policy: PermissionPolicy; args?: Record<string, string> } {
+  if (typeof value === 'string') return { policy: value };
+  return value.args ? { policy: value.policy, args: value.args } : { policy: value.policy };
+}
+
+function toPermissionRuleArray(rules: readonly PermissionRule[] | LegacyPermissionRules | undefined): PermissionRule[] {
+  if (Array.isArray(rules)) return [...rules];
+  if (!rules) return [];
+
+  const legacyRules = rules as LegacyPermissionRules;
+  const nextRules: PermissionRule[] = [];
+  for (const [category, rule] of Object.entries(legacyRules.categories ?? {})) {
+    nextRules.push({ category: category as ToolCategory, ...toPermissionRuleValue(rule) });
+  }
+  for (const [toolName, rule] of Object.entries(legacyRules.tools ?? {})) {
+    nextRules.push({ toolName, ...toPermissionRuleValue(rule) });
+  }
+  if (legacyRules.defaultPolicy) nextRules.push({ policy: legacyRules.defaultPolicy });
+  return nextRules;
+}
+
+function toHarnessCompatPermissionRules(
+  rules: readonly PermissionRule[] | LegacyPermissionRules | undefined,
+): HarnessCompatPermissionRules {
+  const nextRules: HarnessCompatPermissionRules = { categories: {}, tools: {} };
+  for (const rule of toPermissionRuleArray(rules)) {
+    if (rule.args) continue;
+    if (typeof rule.category === 'string') nextRules.categories[rule.category] = rule.policy;
+    if (typeof rule.toolName === 'string') nextRules.tools[rule.toolName] = rule.policy;
+  }
+  return nextRules;
+}
+
+function setCategoryPermissionRule(
+  rules: readonly PermissionRule[] | LegacyPermissionRules | undefined,
+  category: ToolCategory,
+  policy: PermissionPolicy,
+): PermissionRule[] {
+  const current = toPermissionRuleArray(rules);
+  const existingIndex = current.findIndex(rule => rule.category === category && !rule.args);
+  if (existingIndex >= 0) {
+    current[existingIndex] = { category, policy };
+    return current;
+  }
+  return [...current, { category, policy }];
+}
+
+function setToolPermissionRule(
+  rules: readonly PermissionRule[] | LegacyPermissionRules | undefined,
+  toolName: string,
+  policy: PermissionPolicy,
+): PermissionRule[] {
+  const current = toPermissionRuleArray(rules);
+  const existingIndex = current.findIndex(rule => rule.toolName === toolName && !rule.args);
+  if (existingIndex >= 0) {
+    current[existingIndex] = { toolName, policy };
+    return current;
+  }
+  return [...current, { toolName, policy }];
+}
 
 type WorkspaceResolver = (args?: { requestContext?: unknown; mastra?: Mastra }) => unknown | Promise<unknown>;
 type MemoryResolver = (args: any) => MastraMemory | Promise<MastraMemory>;
@@ -576,26 +676,25 @@ export class HarnessCompat<TState = {}> {
       }
       // Bridge V1 session `permission.requested` events to the legacy
       // `tool_approval_required` event that the TUI (and headless harness)
-      // consume. This also stores toolName on pendingApproval so the
-      // compat respondToToolApproval can create a SessionGrant when the user
-      // chooses `always_allow_category`. V1 permission events don't carry
-      // tool args, so the bridged event has `args: undefined`.
+      // consume. This also stores toolName and args on pendingApproval so the
+      // compat respondToToolApproval can create scoped permission grants.
       if (event.type === 'permission.requested') {
         const payload = (event as { payload?: Record<string, unknown> }).payload ?? {};
         const toolCallId = String(payload.pendingItemId ?? '');
         const toolName = String(payload.toolName ?? '');
         const category = (payload.category as ToolCategory | null | undefined) ?? null;
+        const args = payload.args;
         if (toolCallId && toolName) {
           this.#displayState.pendingApproval = {
             toolCallId,
             toolName,
-            args: undefined,
+            args,
           } as NonNullable<HarnessDisplayState['pendingApproval']>;
           this.#emit({
             type: 'tool_approval_required',
             toolCallId,
             toolName,
-            args: undefined,
+            args,
             category,
           } as unknown as HarnessEvent);
           this.#emitDisplayState();
@@ -1265,45 +1364,30 @@ export class HarnessCompat<TState = {}> {
   }
 
   getSessionGrants(): { categories: ToolCategory[]; tools: string[] } {
-    const grants = this.#session?.listSessionGrants() ?? [];
+    const grants =
+      (this.#session as (Session<TState> & { listPermissionGrants(): PermissionGrant[] }) | undefined)?.listPermissionGrants() ?? [];
     return {
       categories: grants.map(grant => grant.category).filter((category): category is ToolCategory => Boolean(category)),
       tools: grants.map(grant => grant.toolName).filter((toolName): toolName is string => Boolean(toolName)),
     };
   }
 
-  getPermissionRules(): { categories: Record<string, PermissionPolicy>; tools: Record<string, PermissionPolicy> } {
+  getPermissionRules(): HarnessCompatPermissionRules {
     const rules = (this.getState() as HarnessCompatRuntimeState).permissionRules;
-    return {
-      categories: Object.fromEntries(
-        Object.entries(rules?.categories ?? {}).map(([key, rule]) => [
-          key,
-          typeof rule === 'string' ? rule : rule.policy,
-        ]),
-      ),
-      tools: Object.fromEntries(
-        Object.entries(rules?.tools ?? {}).map(([key, rule]) => [key, typeof rule === 'string' ? rule : rule.policy]),
-      ),
-    };
+    return toHarnessCompatPermissionRules(rules);
   }
 
   async setPermissionForCategory(category: ToolCategory, policy: PermissionPolicy): Promise<void> {
-    const current = this.getPermissionRules();
+    const current = (this.getState() as HarnessCompatRuntimeState).permissionRules;
     await this.setState({
-      permissionRules: {
-        categories: { ...current.categories, [category]: policy },
-        tools: current.tools,
-      },
+      permissionRules: setCategoryPermissionRule(current, category, policy),
     } as unknown as Partial<TState>);
   }
 
   async setPermissionForTool(toolName: string, policy: PermissionPolicy): Promise<void> {
-    const current = this.getPermissionRules();
+    const current = (this.getState() as HarnessCompatRuntimeState).permissionRules;
     await this.setState({
-      permissionRules: {
-        categories: current.categories,
-        tools: { ...current.tools, [toolName]: policy },
-      },
+      permissionRules: setToolPermissionRule(current, toolName, policy),
     } as unknown as Partial<TState>);
   }
 
@@ -1959,6 +2043,24 @@ export class HarnessCompat<TState = {}> {
       await this.#session.respondToToolApproval(toolCallId, decision);
       return;
     }
+    if (decision === 'always_allow_args') {
+      const pending = this.#displayState.pendingApproval;
+      const toolName = pending?.toolName;
+      const args = pending?.args;
+      if (toolName) {
+        const argPatterns = deriveArgPatterns(toolName, args);
+        if (argPatterns) {
+          try {
+            const session = this.#session as Session<TState> & { addPermissionGrant(grant: PermissionGrant): PermissionGrant };
+            session.addPermissionGrant({ toolName, args: argPatterns });
+          } catch {
+            // Swallow grant creation errors so approval still proceeds.
+          }
+        }
+      }
+      await this.#session.approveToolCall(toolCallId, 'allow');
+      return;
+    }
     if (decision === 'always_allow_category') {
       const pending = this.#displayState.pendingApproval;
       const toolName = pending?.toolName;
@@ -1966,7 +2068,8 @@ export class HarnessCompat<TState = {}> {
         const category = getToolCategory(toolName);
         if (category) {
           try {
-            this.#session.addSessionGrant({ category });
+            const session = this.#session as Session<TState> & { addPermissionGrant(grant: PermissionGrant): PermissionGrant };
+            session.addPermissionGrant({ category });
           } catch {
             // Swallow grant creation errors so approval still proceeds.
           }

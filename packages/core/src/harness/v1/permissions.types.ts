@@ -11,28 +11,32 @@ export type ToolCategory = 'read' | 'edit' | 'execute' | 'mcp' | 'other' | (stri
 
 export type ToolCategoryResolver = (toolName: string) => ToolCategory | null;
 
-export interface PermissionRule {
-  policy: PermissionPolicy;
-}
+export type PermissionArgPatterns = Record<string, string>;
 
-export interface PermissionRules {
-  /** Per-tool override map. */
-  tools?: Record<string, PermissionPolicy | PermissionRule>;
-  /** Per-category override map. */
-  categories?: Record<string, PermissionPolicy | PermissionRule>;
-  /** Rule-level default used before Harness defaultPermissionPolicy. */
-  defaultPolicy?: PermissionPolicy;
-}
+export type PermissionRule =
+  | {
+      policy: PermissionPolicy;
+      toolName: string;
+      category?: never;
+      args?: PermissionArgPatterns;
+    }
+  | {
+      policy: PermissionPolicy;
+      category: ToolCategory;
+      toolName?: never;
+      args?: never;
+    };
 
-export interface SessionGrant {
+export interface PermissionGrant {
   id?: string;
   toolName?: string;
   category?: ToolCategory;
+  args?: PermissionArgPatterns;
   expiresAt?: number | string | Date | null;
 }
 
 export type PermissionDecision = 'allow' | 'deny' | 'pendingApproval';
-export type PermissionReason = 'tool-config' | 'tool-fn' | 'policy';
+export type PermissionReason = 'tool-config' | 'policy';
 export type PermissionGate = 'pre-exposure' | 'pre-action';
 
 export interface PermissionCheckInput {
@@ -40,12 +44,11 @@ export interface PermissionCheckInput {
   category?: ToolCategory | null;
   args?: unknown;
   gate: PermissionGate;
-  permissionRules?: PermissionRules;
-  sessionGrants?: readonly SessionGrant[];
+  permissionRules?: readonly PermissionRule[];
+  sessionGrants?: readonly PermissionGrant[];
   defaultPermissionPolicy?: PermissionPolicy;
   yolo?: boolean;
   toolConfigRequiresApproval?: boolean;
-  toolFnRequiresApproval?: boolean;
 }
 
 export interface PermissionCheckResult {
@@ -66,6 +69,7 @@ export interface PermissionRequestedEvent {
   pendingItemId: string;
   toolName: string;
   category: ToolCategory | null;
+  args?: unknown;
   result: PermissionCheckResult;
 }
 
