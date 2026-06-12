@@ -18,15 +18,15 @@ import { GoalStateProcessor } from './state-processor';
  * @example
  * ```ts
  * import { Agent } from '@mastra/core/agent';
- * import { GoalSignalProvider } from '@mastra/core/signals';
  *
+ * // `goal` auto-registers the GoalSignalProvider — no need to add it to
+ * // `signals` yourself.
  * const agent = new Agent({
  *   name: 'worker',
  *   instructions: '...',
  *   model,
  *   memory,
  *   goal: { judge: judgeModel },
- *   signals: [new GoalSignalProvider()],
  * });
  * ```
  *

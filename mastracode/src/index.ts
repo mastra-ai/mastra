@@ -476,8 +476,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     goal: {
       // Resolve the judge model through mastracode's gateway (a model-resolver
       // function) so provider credentials are injected; returns undefined when no
-      // judge model is configured, keeping the goal step a no-op.
-      judge: getGoalJudgeModel,
+      // judge model is configured, keeping the goal step a no-op. Bind the same
+      // `settingsPath` used above so the judge model and `maxRuns` come from one
+      // config (a custom settings file would otherwise diverge).
+      judge: ctx => getGoalJudgeModel(ctx, config?.settingsPath),
       maxRuns: globalSettings.models.goalMaxTurns ?? 50,
       prompt: DEFAULT_GOAL_JUDGE_PROMPT,
     },

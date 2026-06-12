@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { GoalStateProcessor } from './state-processor';
+// Import via the `@mastra/core/signals` barrel (not the local goal barrel) so
+// this also exercises that the public signals barrel can pull
+// GoalSignalProvider without a broken export or initialization cycle.
+import { GoalSignalProvider } from '../../signals/index';
 
-// Import via the `@mastra/core/signals` barrel so this also exercises that the
-// signals barrel can pull GoalSignalProvider without an initialization cycle.
-import { GoalSignalProvider } from './index';
+import { GoalStateProcessor } from './state-processor';
 
 describe('GoalSignalProvider', () => {
   it('has a stable id', () => {

@@ -110,4 +110,33 @@ describe('GoalStateProcessor', () => {
     const result = await processor.computeStateSignal(createArgs({ carried: null, hasSnapshot: false }));
     expect(result).toBeUndefined();
   });
+
+  it('retracts a stale snapshot when the objective is no longer active but a base is in window', async () => {
+    const { processor } = await createProcessor(objective({ status: 'done' }));
+    const result = await processor.computeStateSignal(createArgs({ lastSnapshot: objective(), hasSnapshot: true }));
+
+    expect(result).toBeTruthy();
+    expect(result!.mode).toBe('snapshot');
+    expect(result!.tagName).toBe('current-objective');
+    expect(result!.contents).not.toContain('Ship the feature');
+    expect(result!.attributes).toMatchObject({ status: 'none' });
+    expect((result!.metadata as any).value.objective).toBeUndefined();
+  });
+
+  it('retracts a stale snapshot when the objective was cleared this turn but a base is in window', async () => {
+    const { processor } = await createProcessor(objective());
+    const result = await processor.computeStateSignal(
+      createArgs({ carried: null, lastSnapshot: objective(), hasSnapshot: true }),
+    );
+
+    expect(result).toBeTruthy();
+    expect(result!.attributes).toMatchObject({ status: 'none' });
+  });
+
+  it('does not re-emit the retraction once the base snapshot is already empty', async () => {
+    const { processor } = await createProcessor(objective({ status: 'done' }));
+    // No prior objective in the last snapshot (already retracted) — nothing to do.
+    const result = await processor.computeStateSignal(createArgs({ hasSnapshot: true }));
+    expect(result).toBeUndefined();
+  });
 });

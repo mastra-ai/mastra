@@ -613,7 +613,13 @@ export class Agent<
 
     // Auto-wire the goal state-signal projection when a goal is configured but no
     // goal provider was supplied, so configuring `goal` alone keeps the model
-    // aware of its current objective (mirrors the task-signal-provider footgun note).
+    // aware of its current objective (mirrors the task-signal-provider footgun
+    // note). Callers who activate goals purely through the persisted objective
+    // APIs (`setObjective`/`updateObjectiveOptions`) without static `goal` config
+    // should register `GoalSignalProvider` explicitly — we can't auto-wire on
+    // `memory` alone because the goal state processor requires an active
+    // memory-backed thread and would throw for memory agents that never use
+    // goals.
     const configuredSignals = config.signals ?? [];
     const hasGoalProvider = configuredSignals.some(p => p.id === 'goal-signals');
     const effectiveSignals: SignalProvider[] =
@@ -749,7 +755,7 @@ export class Agent<
       runsUsed: 0,
       startedAt: now,
       updatedAt: now,
-      ...(options.maxRuns !== undefined ? { maxRuns: options.maxRuns } : {}),
+      ...(options.maxRuns !== undefined && options.maxRuns > 0 ? { maxRuns: options.maxRuns } : {}),
       ...(options.judgeModelId !== undefined ? { judgeModelId: options.judgeModelId } : {}),
       ...(options.prompt !== undefined ? { prompt: options.prompt } : {}),
     };
@@ -794,7 +800,7 @@ export class Agent<
       ...existing,
       updatedAt: Date.now(),
       ...(options.judgeModelId !== undefined ? { judgeModelId: options.judgeModelId } : {}),
-      ...(options.maxRuns !== undefined ? { maxRuns: options.maxRuns } : {}),
+      ...(options.maxRuns !== undefined && options.maxRuns > 0 ? { maxRuns: options.maxRuns } : {}),
       ...(options.prompt !== undefined ? { prompt: options.prompt } : {}),
       ...(options.status !== undefined ? { status: options.status } : {}),
     };

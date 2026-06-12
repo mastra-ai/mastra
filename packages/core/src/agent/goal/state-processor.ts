@@ -86,12 +86,29 @@ export class GoalStateProcessor {
         : undefined;
     }
 
-    // Only project an active objective. A done/paused objective is not surfaced
-    // to the model (the loop will not act on it either).
-    if (!current || current.status !== 'active') return;
-
     const prior = this.getPriorObjective(args);
     const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;
+
+    // Only project an active objective. A done/paused/cleared objective is not
+    // surfaced to the model (the loop will not act on it either). But if a prior
+    // `<current-objective>` snapshot is still in the window, emit an empty
+    // snapshot to retract it — otherwise the model keeps seeing a stale goal
+    // until observational memory drops the base.
+    if (!current || current.status !== 'active') {
+      // Nothing in-window to retract, or the prior snapshot was already the
+      // empty retraction — emit nothing so the cached prefix stays stable.
+      if (!hasBase || !prior) return;
+      return {
+        id: GOAL_STATE_ID,
+        cacheKey: 'goal:none',
+        mode: 'snapshot',
+        tagName: 'current-objective',
+        contents: '\n',
+        value: { objective: undefined },
+        attributes: { status: 'none' },
+        metadata: { value: { objective: undefined } },
+      };
+    }
     const maxRuns = current.maxRuns ?? prior?.maxRuns ?? 0;
     const cacheKey = stableObjectiveCacheKey(current, maxRuns);
     const priorCacheKey = prior ? stableObjectiveCacheKey(prior, prior.maxRuns ?? 0) : undefined;

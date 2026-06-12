@@ -36,6 +36,9 @@ export function handleAgentStart(ctx: EventHandlerContext): void {
 
 export function handleAgentEnd(ctx: EventHandlerContext): void {
   const { state } = ctx;
+  // Stop the goal active-timer on normal completion too (not just abort/error),
+  // otherwise the elapsed-time display keeps counting while idle between turns.
+  state.goalManager.stopActiveTimer();
   if (state.gradientAnimator) {
     state.gradientAnimator.fadeOut();
   }
@@ -201,11 +204,10 @@ export function handleAgentError(ctx: EventHandlerContext): void {
 
 /** Remove the judge display component from the chat container if present. */
 function removeJudgeComponent(state: EventHandlerContext['state'], component: JudgeDisplayComponent): void {
-  const children = state.chatContainer.children;
-  const index = children.indexOf(component);
-  if (index >= 0) {
-    children.splice(index, 1);
-    state.chatContainer.invalidate?.();
+  // Use the container's removal API so parent/layout bookkeeping stays
+  // consistent, rather than splicing `children` directly.
+  if (state.chatContainer.children.includes(component)) {
+    state.chatContainer.removeChild(component);
   }
 }
 

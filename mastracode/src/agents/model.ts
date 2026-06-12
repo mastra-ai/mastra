@@ -417,9 +417,17 @@ export function getDynamicModel({ requestContext }: { requestContext: RequestCon
  *
  * Returns `undefined` when no judge model is configured, which keeps the goal
  * step a complete no-op (the goal mechanism requires a judge to do anything).
+ *
+ * `settingsPath` must be the same source `createMastraCode()` reads from so the
+ * judge model and the goal budget (`goalMaxTurns`) come from one config — with a
+ * custom `settingsPath` a bare `loadSettings()` here could read a different file
+ * and silently turn the goal step into a no-op.
  */
-export function getGoalJudgeModel({ requestContext }: { requestContext: RequestContext }): ResolvedModel | undefined {
-  const judgeModelId = loadSettings().models.goalJudgeModel;
+export function getGoalJudgeModel(
+  { requestContext }: { requestContext: RequestContext },
+  settingsPath?: string,
+): ResolvedModel | undefined {
+  const judgeModelId = loadSettings(settingsPath).models.goalJudgeModel;
   if (!judgeModelId) return undefined;
   return resolveModel(judgeModelId, { remapForCodexOAuth: true, requestContext });
 }

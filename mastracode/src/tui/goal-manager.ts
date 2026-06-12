@@ -244,12 +244,20 @@ export class GoalManager {
             ...(this.record.maxRuns !== undefined ? { maxRuns: this.record.maxRuns } : {}),
           });
           if (!updated) {
+            // No persisted record yet: create one. `setObjective` always writes
+            // `status: 'active'`, so re-apply the in-memory status afterwards if
+            // the local goal was already paused/done — otherwise the resumed
+            // thread state would no longer match the in-memory state.
+            const desiredStatus = this.record.status;
             await agent.setObjective(this.record.objective, {
               threadId,
               resourceId: state.harness.getResourceId(),
               ...(this.record.judgeModelId ? { judgeModelId: this.record.judgeModelId } : {}),
               ...(this.record.maxRuns !== undefined ? { maxRuns: this.record.maxRuns } : {}),
             });
+            if (desiredStatus !== 'active') {
+              await agent.updateObjectiveOptions({ threadId, status: desiredStatus });
+            }
           }
         } else {
           await agent.clearObjective({ threadId });

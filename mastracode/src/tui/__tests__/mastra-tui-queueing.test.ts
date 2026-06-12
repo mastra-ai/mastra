@@ -39,6 +39,7 @@ function createQueueState(overrides: Partial<TUIState> = {}): TUIState {
     harness: {
       getFollowUpCount: vi.fn(() => 0),
     },
+    goalManager: { stopActiveTimer: vi.fn() },
     gradientAnimator: undefined,
     projectInfo: { rootPath: '.', gitBranch: 'main' } as TUIState['projectInfo'],
     streamingComponent: undefined,
@@ -815,7 +816,7 @@ describe('MastraTUI queueing', () => {
 });
 
 describe('syncInitialThreadState', () => {
-  it('reconnects active goal metadata for the initially selected thread without prompting the agent', async () => {
+  it('falls back to legacy goal metadata only when the durable objective load returns nothing', async () => {
     const persistedGoal = {
       id: 'goal-1',
       objective: 'finish pr triage',
@@ -834,6 +835,8 @@ describe('syncInitialThreadState', () => {
         sendMessage: vi.fn(),
       },
       goalManager: {
+        // Durable ThreadState load produced no objective, so the legacy
+        // metadata fallback should run.
         loadFromThread: vi.fn().mockResolvedValue(undefined),
         getGoal: vi.fn(() => null),
         loadFromThreadMetadata: vi.fn(),
@@ -847,6 +850,46 @@ describe('syncInitialThreadState', () => {
     expect(state.goalManager.loadFromThread).toHaveBeenCalledWith(state);
     expect(state.goalManager.loadFromThreadMetadata).toHaveBeenCalledWith({ goal: persistedGoal });
     expect(state.harness.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it('does not re-hydrate from legacy metadata when the durable objective load succeeds', async () => {
+    const persistedGoal = {
+      id: 'goal-1',
+      objective: 'stale legacy goal',
+      status: 'active' as const,
+      turnsUsed: 1,
+      maxTurns: 50,
+      judgeModelId: 'openai/gpt-5.5',
+    };
+    const durableGoal = {
+      id: 'goal-2',
+      objective: 'fresh durable goal',
+      status: 'active' as const,
+      turnsUsed: 0,
+      maxTurns: 50,
+    };
+    const state = {
+      harness: {
+        getCurrentThreadId: vi.fn(() => 'thread-1'),
+        listThreads: vi
+          .fn()
+          .mockResolvedValue([{ id: 'thread-1', title: 'PR triage', metadata: { goal: persistedGoal } }]),
+        sendMessage: vi.fn(),
+      },
+      goalManager: {
+        // Durable ThreadState load produced an objective, so the stale legacy
+        // metadata blob must NOT clobber it.
+        loadFromThread: vi.fn().mockResolvedValue(undefined),
+        getGoal: vi.fn(() => durableGoal),
+        loadFromThreadMetadata: vi.fn(),
+      },
+      currentThreadTitle: undefined,
+    } as unknown as TUIState;
+
+    await syncInitialThreadState(state);
+
+    expect(state.goalManager.loadFromThread).toHaveBeenCalledWith(state);
+    expect(state.goalManager.loadFromThreadMetadata).not.toHaveBeenCalled();
   });
 });
 

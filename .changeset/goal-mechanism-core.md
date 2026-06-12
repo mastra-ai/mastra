@@ -17,7 +17,7 @@ const agent = new Agent({
   instructions,
   model,
   memory,
-  goal: { judge: 'openai/gpt-5.5', maxRuns: 50 /* prompt? */ },
+  goal: { judge: '__GATEWAY_OPENAI_MODEL__', maxRuns: 50 /* prompt? */ },
 });
 ```
 
