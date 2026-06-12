@@ -459,9 +459,18 @@ export class StoreMemoryUpstash extends MemoryStorage {
           // Check if this message id exists in another thread (index lookup, no scan)
           const existingThreadId = batchExistingThreadIds[batchIndex];
           if (existingThreadId && existingThreadId !== message.threadId) {
+            const existingMessage = await this.client.get<MastraDBMessage>(getMessageKey(existingThreadId, message.id));
             pipeline.del(getMessageKey(existingThreadId, message.id));
             pipeline.zrem(getThreadMessagesKey(existingThreadId), message.id);
+            if (existingMessage?.resourceId && existingMessage.resourceId !== message.resourceId) {
+              pipeline.zrem(getResourceMessagesKey(existingMessage.resourceId), message.id);
+            }
             batchTouchedThreadIds.add(existingThreadId);
+          } else if (existingThreadId) {
+            const existingMessage = await this.client.get<MastraDBMessage>(getMessageKey(existingThreadId, message.id));
+            if (existingMessage?.resourceId && existingMessage.resourceId !== message.resourceId) {
+              pipeline.zrem(getResourceMessagesKey(existingMessage.resourceId), message.id);
+            }
           }
 
           // Store the message data
@@ -1154,6 +1163,9 @@ export class StoreMemoryUpstash extends MemoryStorage {
             // Remove from old thread's sorted set
             const oldThreadMessagesKey = getThreadMessagesKey(existingMessage.threadId!);
             pipeline.zrem(oldThreadMessagesKey, id);
+            if (existingMessage.resourceId && existingMessage.resourceId !== updatedMessage.resourceId) {
+              pipeline.zrem(getResourceMessagesKey(existingMessage.resourceId), id);
+            }
 
             // Delete the old message key
             pipeline.del(key);
@@ -1180,6 +1192,9 @@ export class StoreMemoryUpstash extends MemoryStorage {
           } else {
             // No thread change, just update the existing key
             pipeline.set(key, updatedMessage);
+            if (existingMessage.resourceId && existingMessage.resourceId !== updatedMessage.resourceId) {
+              pipeline.zrem(getResourceMessagesKey(existingMessage.resourceId), id);
+            }
             if (updatedMessage.resourceId) {
               pipeline.zadd(getResourceMessagesKey(updatedMessage.resourceId), {
                 score: new Date(updatedMessage.createdAt).getTime(),
@@ -1363,35 +1378,20 @@ export class StoreMemoryUpstash extends MemoryStorage {
     const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
 
     try {
-      const indexedIds = await this.client.zrange(getResourceMessagesKey(resourceId), 0, -1);
-      let messages: MastraDBMessage[] = [];
+      const messagesById = new Map<string, MastraDBMessage>();
+      const indexedMessages = await this.getMessagesFromResourceIndex(resourceId);
+      const scannedMessages = await this.scanMessagesByResourceId(resourceId);
 
-      if (indexedIds.length > 0) {
-        const indexPipeline = this.client.pipeline();
-        indexedIds.forEach(id => indexPipeline.get(getMessageIndexKey(id as string)));
-        const threadIds = (await indexPipeline.exec()) as (string | null)[];
-
-        const messagePipeline = this.client.pipeline();
-        indexedIds.forEach((id, index) => {
-          const threadId = threadIds[index];
-          if (threadId) {
-            messagePipeline.get(getMessageKey(threadId, id as string));
-          }
-        });
-        messages = ((await messagePipeline.exec()) as (MastraDBMessage | null)[]).filter(
-          (message): message is MastraDBMessage => !!message && message.resourceId === resourceId,
-        );
-      } else {
-        const keys = await this.#db.scanKeys(`${TABLE_MESSAGES}:*`);
-        if (keys.length > 0) {
-          const pipeline = this.client.pipeline();
-          keys.forEach(key => pipeline.get(key));
-          messages = ((await pipeline.exec()) as (MastraDBMessage | null)[]).filter(
-            (message): message is MastraDBMessage => !!message && message.resourceId === resourceId,
-          );
-        }
+      for (const message of indexedMessages) {
+        messagesById.set(message.id, message);
+      }
+      for (const message of scannedMessages) {
+        messagesById.set(message.id, message);
       }
 
+      await this.backfillResourceMessageIndex(resourceId, scannedMessages);
+
+      let messages = Array.from(messagesById.values());
       messages = filterByDateRange(messages, message => new Date(message.createdAt), filter?.dateRange);
       messages = this._sortMessages(messages, field, direction);
 
@@ -1417,6 +1417,56 @@ export class StoreMemoryUpstash extends MemoryStorage {
         error,
       );
     }
+  }
+
+  private async getMessagesFromResourceIndex(resourceId: string): Promise<MastraDBMessage[]> {
+    const indexedIds = await this.client.zrange(getResourceMessagesKey(resourceId), 0, -1);
+    if (indexedIds.length === 0) return [];
+
+    const indexPipeline = this.client.pipeline();
+    indexedIds.forEach(id => indexPipeline.get(getMessageIndexKey(id as string)));
+    const threadIds = (await indexPipeline.exec()) as (string | null)[];
+    const lookups = indexedIds.flatMap((id, index) => {
+      const threadId = threadIds[index];
+      return threadId ? [{ messageId: id as string, threadId }] : [];
+    });
+    if (lookups.length === 0) return [];
+
+    const messagePipeline = this.client.pipeline();
+    lookups.forEach(({ messageId, threadId }) => {
+      messagePipeline.get(getMessageKey(threadId, messageId));
+    });
+
+    return ((await messagePipeline.exec()) as (MastraDBMessage | null)[]).filter(
+      (message): message is MastraDBMessage => !!message && message.resourceId === resourceId,
+    );
+  }
+
+  private async scanMessagesByResourceId(resourceId: string): Promise<MastraDBMessage[]> {
+    const keys = await this.#db.scanKeys(`${TABLE_MESSAGES}:*`);
+    if (keys.length === 0) return [];
+
+    const pipeline = this.client.pipeline();
+    keys.forEach(key => pipeline.get(key));
+
+    return ((await pipeline.exec()) as (MastraDBMessage | null)[]).filter(
+      (message): message is MastraDBMessage => !!message && message.resourceId === resourceId,
+    );
+  }
+
+  private async backfillResourceMessageIndex(resourceId: string, messages: MastraDBMessage[]): Promise<void> {
+    if (messages.length === 0) return;
+
+    const pipeline = this.client.pipeline();
+    for (const message of messages) {
+      if (!message.threadId) continue;
+      pipeline.set(getMessageIndexKey(message.id), message.threadId);
+      pipeline.zadd(getResourceMessagesKey(resourceId), {
+        score: new Date(message.createdAt).getTime(),
+        member: message.id,
+      });
+    }
+    await pipeline.exec();
   }
 
   private async getObservationalMemoryRecords(
@@ -1895,6 +1945,10 @@ export class StoreMemoryUpstash extends MemoryStorage {
         // Add to sorted set for this thread (use index for ordering)
         writePipeline.zadd(newThreadMessagesKey, {
           score: i,
+          member: newMessageId,
+        });
+        writePipeline.zadd(getResourceMessagesKey(targetResourceId), {
+          score: new Date(newMessage.createdAt).getTime(),
           member: newMessageId,
         });
 

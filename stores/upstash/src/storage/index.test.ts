@@ -6,11 +6,13 @@ import {
   createDomainDirectTests,
 } from '@internal/storage-test-utils';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
+import { TABLE_MESSAGES } from '@mastra/core/storage';
 import { Redis } from '@upstash/redis';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { StoreMemoryUpstash } from './domains/memory';
 import { ScoresUpstash } from './domains/scores';
+import { getKey } from './domains/utils';
 import { WorkflowsUpstash } from './domains/workflows';
 import { UpstashStore } from './index';
 
@@ -336,6 +338,36 @@ describe('pg parity storage domains', () => {
 });
 
 describe('observational memory support', () => {
+  it('returns resource messages from both indexed and unindexed storage rows', async () => {
+    const memoryDomain = new StoreMemoryUpstash({ client: createTestClient() });
+    await memoryDomain.init();
+
+    const resourceId = `resource-${randomUUID()}`;
+    const thread = createThread(resourceId);
+    await memoryDomain.saveThread({ thread });
+
+    const unindexedMessage = createMessage(thread, {
+      id: `legacy-msg-${randomUUID()}`,
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    });
+    const indexedMessage = createMessage(thread, {
+      id: `indexed-msg-${randomUUID()}`,
+      createdAt: new Date('2024-01-02T00:00:00.000Z'),
+    });
+
+    const client = (memoryDomain as any).client as Redis;
+    await client.set(getKey(TABLE_MESSAGES, { threadId: thread.id, id: unindexedMessage.id }), unindexedMessage);
+
+    await memoryDomain.saveMessages({ messages: [indexedMessage] });
+
+    const listed = await memoryDomain.listMessagesByResourceId({
+      resourceId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+
+    expect(listed.messages.map(message => message.id)).toEqual([unindexedMessage.id, indexedMessage.id]);
+  });
+
   it('lists messages by resource id and persists observational memory history', async () => {
     const memoryDomain = new StoreMemoryUpstash({ client: createTestClient() });
     await memoryDomain.init();
