@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### MCP skipped validation coverage (2026-06-12)
+
+Added `mcp-skipped-validation` as the 79th checked-in TUI e2e scenario. The scenario seeds project `.mastracode/mcp.json` with invalid MCP server entries covering command+URL ambiguity, malformed URL parsing, invalid OAuth redirect validation, and missing command/url fields. It launches a real MCP-enabled TUI entrypoint, asserts `/mcp status` renders all skipped validation reasons, then opens the interactive `/mcp` selector and asserts the same skipped rows are visible there.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test mcp-skipped-validation
+```
+
+Break validations:
+
+- Misclassifying command+URL entries as stdio made `ambiguous_entry` appear as a connecting configured server instead of a skipped validation reason.
+- Allowing invalid OAuth configs through validation made `bad_oauth_redirect` become a failed HTTP server instead of a skipped reason.
+- Hiding skipped rows in `McpSelectorComponent` left `/mcp status` intact but made the interactive selector omit the skipped server reasons.
+
+The MCP rows remain `needs-follow-up`; this chunk closes skipped validation display breadth, while OAuth token persistence/refresh, headless MCP tool availability, long-running MCP timeout integration, and focused selector detail/polling tests remain.
+
+
 ### MCP selector reconnect coverage (2026-06-12)
 
 Added `mcp-selector-reconnect` as the 78th checked-in TUI e2e scenario. The scenario starts with a failed header-protected Streamable HTTP MCP server from project config, marks the same local server ready via shell passthrough, opens the interactive `/mcp` selector, reconnects the failed server through the submenu, rewrites `.mastracode/mcp.json` to add a second HTTP server, and presses selector `r` to prove reload-all refreshes the visible overlay with two connected server/tool rows.

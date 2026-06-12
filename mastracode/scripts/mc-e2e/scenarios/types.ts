@@ -41,6 +41,7 @@ export type ScenarioName =
   | 'mcp-reload-config'
   | 'mcp-selector-reconnect'
   | 'mcp-server-config'
+  | 'mcp-skipped-validation'
   | 'model-selection-api-key-prompt'
   | 'models-pack-activation-persistence'
   | 'notification-inbox-crud-flow'

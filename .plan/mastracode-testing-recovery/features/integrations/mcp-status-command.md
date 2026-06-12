@@ -71,6 +71,7 @@
 - `mastracode/scripts/mc-e2e/scenarios/mcp-http-tool-call.ts` — real PTY/TUI e2e coverage for a configured HTTP manager status row (`e2e_http_mcp [http]`) plus the same manager's tool availability in the model runtime.
 - `mastracode/scripts/mc-e2e/scenarios/mcp-reload-config.ts` — real PTY/TUI e2e coverage for `/mcp reload` replacing an initial failing project-config stdio server with a newly loaded HTTP server and showing the reloaded status/tool row.
 - `mastracode/scripts/mc-e2e/scenarios/mcp-selector-reconnect.ts` — real PTY/TUI e2e coverage for the interactive `/mcp` selector reconnect submenu and `r` reload-all shortcut updating visible server/tool rows from the live manager.
+- `mastracode/scripts/mc-e2e/scenarios/mcp-skipped-validation.ts` — real PTY/TUI e2e coverage proving `/mcp status` and the interactive selector both display skipped MCP validation reasons for invalid config entries.
 
 ## Missing tests
 
