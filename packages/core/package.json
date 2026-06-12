@@ -817,6 +817,7 @@
     "fastq": "^1.19.1",
     "gray-matter": "^4.0.3",
     "ignore": "^7.0.5",
+    "jpeg-js": "^0.4.4",
     "json-schema": "^0.4.0",
     "lru-cache": "^11.2.7",
     "p-map": "^7.0.4",
