@@ -17,7 +17,7 @@ The filter contract mirrors the workflow run listing APIs (`listWorkflowRuns`), 
 
 ## Usage example
 
-Discover the pending run for a conversation and approve it:
+Discover the pending run for a conversation and continue it. Check `requiresApproval` to pick the right continuation — `approveToolCall()` / `declineToolCall()` for approval suspensions, `resumeStream()` with resume data for `suspend()`-based suspensions:
 
 ```typescript
 const { runs } = await agent.listSuspendedRuns({
@@ -25,8 +25,13 @@ const { runs } = await agent.listSuspendedRuns({
   resourceId: 'user-456',
 })
 
-if (runs[0]) {
-  const stream = await agent.approveToolCall({ runId: runs[0].runId })
+const run = runs[0]
+const toolCall = run?.toolCalls[0]
+
+if (run && toolCall) {
+  const stream = toolCall.requiresApproval
+    ? await agent.approveToolCall({ runId: run.runId, toolCallId: toolCall.toolCallId })
+    : await agent.resumeStream({ name: 'San Francisco' }, { runId: run.runId })
 }
 ```
 
@@ -133,7 +138,7 @@ interface AgentRunToolCall {
 
 ## Discovery scope
 
-Runs are discovered from snapshot storage shared by all agents on the Mastra instance, so suspended runs started by other agents — including subagent runs in [supervisor setups](/docs/agents/agent-approval#tool-approval-supervisor-agents) — are also visible when no filters are passed. Filter by `threadId` and `resourceId` to scope results to one conversation; in supervisor setups this returns the outer run, which is the one to resume.
+Results are scoped to runs started by the agent you call `listSuspendedRuns()` on: snapshots persist the owning agent's id, so runs started by other agents on the same Mastra instance are not returned. In [supervisor setups](/docs/agents/agent-approval#tool-approval-supervisor-agents) the supervisor sees its outer run — the one to resume — while a subagent's inner run is only visible from the subagent itself. Filter by `threadId` and `resourceId` to scope results to one conversation.
 
 Run snapshots are only persisted while a run is waiting on input and are deleted when it finishes, so suspended runs are the only runs discoverable from storage. Suspended runs only survive restarts when the Mastra instance has a persistent [storage provider](/docs/memory/storage) configured. With the default in-memory store, snapshots are lost on restart.
 
