@@ -551,4 +551,114 @@ describe('PrefillErrorHandler Recovery', () => {
       expect(callCount).toBe(2);
     });
   });
+
+  describe('default error processors', () => {
+    it('should include PrefillErrorHandler by default without explicit errorProcessors config', async () => {
+      const agent = new Agent({
+        id: 'prefill-default-test',
+        name: 'Prefill Default Test Agent',
+        instructions: 'You are a test agent',
+        model: [
+          {
+            model: new MockLanguageModelV2({
+              doGenerate: async () => ({
+                text: 'ok',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                rawCall: { rawPrompt: '', rawSettings: {} },
+              }),
+            }),
+            maxRetries: 0,
+          },
+        ],
+      });
+
+      const errorProcessors = await agent.listErrorProcessors();
+      expect(errorProcessors.some(p => p.id === 'prefill-error-handler')).toBe(true);
+    });
+
+    it('should not duplicate PrefillErrorHandler when already configured', async () => {
+      const agent = new Agent({
+        id: 'prefill-dedup-test',
+        name: 'Prefill Dedup Test Agent',
+        instructions: 'You are a test agent',
+        model: [
+          {
+            model: new MockLanguageModelV2({
+              doGenerate: async () => ({
+                text: 'ok',
+                finishReason: 'stop',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                rawCall: { rawPrompt: '', rawSettings: {} },
+              }),
+            }),
+            maxRetries: 0,
+          },
+        ],
+        errorProcessors: [new PrefillErrorHandler()],
+      });
+
+      const errorProcessors = await agent.listErrorProcessors();
+      const prefillHandlers = errorProcessors.filter(p => p.id === 'prefill-error-handler');
+      expect(prefillHandlers).toHaveLength(1);
+    });
+
+    it('should recover from prefill error without explicit errorProcessors config', async () => {
+      const mockMemory = new MockMemory();
+      const threadId = randomUUID();
+      const resourceId = randomUUID();
+      const now = new Date();
+
+      await mockMemory.createThread({ threadId, resourceId });
+      await mockMemory.saveMessages({
+        messages: [
+          {
+            id: randomUUID(),
+            role: 'user' as const,
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: 'Hello' }],
+            },
+            threadId,
+            resourceId,
+            createdAt: new Date(now.getTime() - 2000),
+            type: 'text' as const,
+          },
+          {
+            id: randomUUID(),
+            role: 'assistant' as const,
+            content: {
+              format: 2 as const,
+              parts: [{ type: 'text' as const, text: 'Hi there' }],
+            },
+            threadId,
+            resourceId,
+            createdAt: new Date(now.getTime() - 1000),
+            type: 'text' as const,
+          },
+        ],
+      });
+
+      const { model, getCallCount } = createPrefillErrorModel('Recovery worked!');
+
+      // No explicit errorProcessors - PrefillErrorHandler should be included by default
+      const agent = new Agent({
+        id: 'prefill-default-recovery',
+        name: 'Prefill Default Recovery Agent',
+        instructions: 'You are a test agent',
+        model: [{ model, maxRetries: 0 }],
+        memory: mockMemory,
+      });
+
+      const result = await agent.generate('Continue', {
+        memory: {
+          thread: threadId,
+          resource: resourceId,
+        },
+      });
+
+      expect(result.text).toBe('Recovery worked!');
+      expect(getCallCount()).toBe(2);
+    });
+  });
 });
