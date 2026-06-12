@@ -104,6 +104,28 @@ describe('addUserMessage', () => {
     expect(state.messageComponentsById.has('tasks-state-signal-1')).toBe(false);
   });
 
+  it('does not render the goal state signal inline (the goal/judge UI shows it)', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'goal-state-signal-1',
+      role: 'user',
+      content: [
+        {
+          type: 'state_signal',
+          stateId: 'goal',
+          mode: 'snapshot',
+          version: 1,
+          message: '<current-objective>\n  Ship the goal feature\n</current-objective>',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
+    expect(state.messageComponentsById.has('goal-state-signal-1')).toBe(false);
+  });
+
   it('renders generic reactive signals as inline signal components', () => {
     const state = createState();
 

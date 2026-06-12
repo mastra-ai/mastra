@@ -454,4 +454,86 @@ describe('UnixSocketPubSub', () => {
     expect(pubsub.isBroker).toBe(true);
     expect(cb).toHaveBeenCalledTimes(1);
   });
+
+  describe('local nack redelivery', () => {
+    it('redelivers nacked events to the same subscriber with bumped deliveryAttempt', async () => {
+      const path = await socketPath();
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+
+      const attempts: number[] = [];
+      let nacksRemaining = 2;
+      await pubsub.subscribe('topic-a', async (event, _ack, nack) => {
+        attempts.push(event.deliveryAttempt ?? 1);
+        if (nacksRemaining > 0) {
+          nacksRemaining--;
+          await nack?.();
+        }
+      });
+
+      await pubsub.publish('topic-a', makeEvent({ type: 'redelivered' }));
+
+      await waitFor(() => {
+        expect(attempts.length).toBe(3);
+      });
+      // Contract from Event type: deliveryAttempt starts at 1 and increments
+      // on each redelivery so consumers can see how many times they've seen
+      // the same logical event.
+      expect(attempts).toEqual([1, 2, 3]);
+    });
+
+    it('caps local redeliveries so a permanently-nacking subscriber does not loop forever', async () => {
+      const path = await socketPath();
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+
+      let deliveries = 0;
+      await pubsub.subscribe('topic-a', async (_event, _ack, nack) => {
+        deliveries++;
+        await nack?.();
+      });
+
+      await pubsub.publish('topic-a', makeEvent({ type: 'poison' }));
+
+      // The redelivery schedule is bounded: with the current internal
+      // constants the entire chain finishes in well under 3s. We don't
+      // pin to a specific count because that's an internal tuning knob,
+      // but we do prove the cap holds:
+      //   1. wait past any plausible redelivery window,
+      //   2. sample the count,
+      //   3. wait again,
+      //   4. assert the count did not move.
+      // This catches the "retries are unbounded" regression that a single
+      // short timeout would silently let through.
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      const settled = deliveries;
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      expect(deliveries).toBe(settled);
+      // Sanity: there was at least one nack-driven redelivery, and the
+      // total is small (current cap is 1 initial + 6 redeliveries = 7;
+      // leave headroom so light tuning doesn't break the test).
+      expect(deliveries).toBeGreaterThanOrEqual(2);
+      expect(deliveries).toBeLessThanOrEqual(10);
+    }, 10_000);
+
+    it('does not redeliver after the subscription is removed', async () => {
+      const path = await socketPath();
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+
+      let deliveries = 0;
+      const cb = async (_event: Event, _ack?: () => Promise<void>, nack?: () => Promise<void>): Promise<void> => {
+        deliveries++;
+        await nack?.();
+        await pubsub.unsubscribe('topic-a', cb);
+      };
+      await pubsub.subscribe('topic-a', cb);
+
+      await pubsub.publish('topic-a', makeEvent({ type: 'unsubscribed' }));
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect(deliveries).toBe(1);
+    });
+  });
 });
