@@ -113,6 +113,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'agents/goals',
+          label: 'Goals',
+          customProps: {
+            tags: ['new'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'agents/background-tasks',
           label: 'Background Tasks',
           customProps: {
@@ -445,6 +453,11 @@ const sidebars = {
           type: 'doc',
           id: 'browser/stagehand',
           label: 'Stagehand',
+        },
+        {
+          type: 'doc',
+          id: 'browser/recording',
+          label: 'Recording',
         },
         {
           type: 'doc',
