@@ -82764,6 +82764,8 @@ export type PostDatasetsDatasetIdCompare_Response = {
       } | null;
     };
   }[];
+  /** Comparability caveats: dataset-version drift, a replay/mock run compared against a live run, or differing replay matching policies/sources */
+  warnings: string[];
 };
 
 export type PostDatasetsDatasetIdCompare_Request = Simplify<

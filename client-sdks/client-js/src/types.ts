@@ -3007,6 +3007,12 @@ export interface CompareExperimentsResponse {
       } | null
     >;
   }>;
+  /**
+   * Comparability caveats — read these before trusting score deltas:
+   * dataset-version drift, a replay/mock run compared against a live run,
+   * or runs using different replay matching policies / recording sources.
+   */
+  warnings: string[];
 }
 
 // ============================================================================
