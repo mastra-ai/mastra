@@ -42,6 +42,7 @@
 - Proposed scenarios:
   - Completed: `mcp-http-tool-call` launches a local Streamable HTTP MCP server before the TUI, requires configured request headers, asserts `/mcp status` shows a connected `[http]` server/tool, and uses AIMock to invoke the namespaced MCP tool through the real runtime.
   - Completed: `mcp-reload-config` starts from a project config-file stdio failure, rewrites `.mastracode/mcp.json` to a local header-protected HTTP server, runs `/mcp reload`, and asserts the new `[http]` server/tool status transition.
+  - Completed: `mcp-selector-reconnect` starts with a failed HTTP MCP server, drives the interactive `/mcp` selector reconnect submenu until the server/tool row is connected, then rewrites project config and uses selector `r` reload-all to surface a second connected HTTP server/tool.
   - Completed: `browser-toggle-attach` seeds AgentBrowser CDP settings, drives `/browser on`, verifies enabled `/browser status` with the CDP endpoint, proves settings persisted, and uses AIMock request verification to confirm browser tools reached the next model turn.
 - Fixture/data needs: local mock MCP server fixture, optional OAuth/token fixture if testing auth refresh; no live browser credentials.
 

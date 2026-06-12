@@ -70,18 +70,18 @@
 - `mastracode/scripts/mc-e2e/scenarios/integration-commands.ts` — real PTY/TUI e2e partial coverage proving `/mcp status` reaches the visible MCP status/fallback command surface in the transcript.
 - `mastracode/scripts/mc-e2e/scenarios/mcp-http-tool-call.ts` — real PTY/TUI e2e coverage for a configured HTTP manager status row (`e2e_http_mcp [http]`) plus the same manager's tool availability in the model runtime.
 - `mastracode/scripts/mc-e2e/scenarios/mcp-reload-config.ts` — real PTY/TUI e2e coverage for `/mcp reload` replacing an initial failing project-config stdio server with a newly loaded HTTP server and showing the reloaded status/tool row.
+- `mastracode/scripts/mc-e2e/scenarios/mcp-selector-reconnect.ts` — real PTY/TUI e2e coverage for the interactive `/mcp` selector reconnect submenu and `r` reload-all shortcut updating visible server/tool rows from the live manager.
 
 ## Missing tests
 
-- Focused `McpSelectorComponent` tests for navigation, detail views, reload-all, reconnect-one, polling, and stale reconnect results during reload.
-- Remaining selector-driven TUI integration test for reload-all/reconnect-one actions updating status from the live manager; text `/mcp reload` is covered by `mcp-reload-config`.
+- Focused `McpSelectorComponent` tests for detail views, polling, and stale reconnect results during reload.
 - Real long-running MCP tool integration test proving the timeout handoff allows completion beyond the upstream short default.
 
 ## Known risks / regressions
 
 - Command status can drift from actual tool availability if TUI context and `createDynamicTools()` receive different manager instances.
 - Closure-state refactors must preserve background init, reload/reconnect lifecycle, config, tools, statuses, skipped servers, stderr logs, and the long MCP client timeout.
-- Selector state is mostly untested at component level, so keyboard navigation and stale async reconnect/reload races are regression-prone.
+- Selector state now has PTY coverage for reconnect and reload-all, but focused component coverage for detail/polling/stale async races is still thin.
 
 ## Verification checklist
 

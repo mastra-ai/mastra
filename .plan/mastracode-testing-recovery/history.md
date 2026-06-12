@@ -1,6 +1,27 @@
 # Mastra Code testing recovery history
 
 
+### MCP selector reconnect coverage (2026-06-12)
+
+Added `mcp-selector-reconnect` as the 78th checked-in TUI e2e scenario. The scenario starts with a failed header-protected Streamable HTTP MCP server from project config, marks the same local server ready via shell passthrough, opens the interactive `/mcp` selector, reconnects the failed server through the submenu, rewrites `.mastracode/mcp.json` to add a second HTTP server, and presses selector `r` to prove reload-all refreshes the visible overlay with two connected server/tool rows.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test mcp-selector-reconnect
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+```
+
+Break validations:
+
+- Disabling the selector `Reconnect` action left `selector_retry` failed and timed out waiting for the connected tool row.
+- Disabling the selector `r` reload shortcut kept the overlay at one server after the project config rewrite and timed out waiting for `selector_reload`.
+- Dropping reload-result status replacement let reload run but kept the overlay stale at one server, again failing the `selector_reload` assertion.
+
+The MCP rows remain `needs-follow-up`; this chunk closes selector reconnect/reload-all user-perspective breadth, while skipped HTTP validation reason snapshots, headless MCP tool availability, OAuth token persistence/refresh, long-running MCP timeout integration, and focused selector detail/polling tests remain.
+
+
 ### Browser toggle attach coverage (2026-06-12)
 
 Added `browser-toggle-attach` as the 77th checked-in TUI e2e scenario. The scenario seeds AgentBrowser CDP settings, drives `/browser status` disabled, runs `/browser on`, verifies enabled `/browser status` renders the AgentBrowser provider and CDP endpoint, sends a normal AIMock-backed user turn, and proves persisted settings plus provider-visible browser tools (`browser_goto`, `browser_snapshot`) reached the model request.

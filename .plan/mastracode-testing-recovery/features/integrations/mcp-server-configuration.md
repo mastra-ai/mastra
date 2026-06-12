@@ -78,6 +78,7 @@
 - `mastracode/scripts/mc-e2e/scenarios/mcp-server-config.ts` — partial real PTY coverage for programmatic stdio `mcpServers`: launches the TUI with a configured failing stdio server, verifies background MCP initialization reports the configured server, and verifies `/mcp status` renders `e2e_stdio_config [stdio]`.
 - `mastracode/scripts/mc-e2e/scenarios/mcp-http-tool-call.ts` — real PTY + AIMock coverage for programmatic HTTP MCP config: launches a local Streamable HTTP MCP server, requires configured request headers, verifies `/mcp status` renders `e2e_http_mcp [http]`, and invokes the namespaced `e2e_http_mcp_lookup_status` tool through the model/tool loop.
 - `mastracode/scripts/mc-e2e/scenarios/mcp-reload-config.ts` — real PTY coverage for file-based project MCP reload: starts with a failing stdio server from `.mastracode/mcp.json`, rewrites the config to a header-protected HTTP server, runs `/mcp reload`, and verifies `/mcp status` renders the new `reload_after [http]` server plus `reload_after_reload_probe` tool.
+- `mastracode/scripts/mc-e2e/scenarios/mcp-selector-reconnect.ts` — real PTY coverage for interactive `/mcp` selector actions: starts with a failed HTTP server, makes it available, reconnects it through the selector submenu, rewrites project config, and uses selector `r` reload-all to refresh the overlay with a second HTTP server/tool.
 
 ## Missing tests
 
@@ -91,7 +92,7 @@
 - Programmatic configs have highest priority; a typo or duplicate server name can intentionally shadow a working file-based server.
 - Invalid entries are skipped silently except via `/mcp` status/selector; users may not notice configuration typos until they inspect MCP status.
 - OAuth token storage is keyed by project/server/url/redirect/client/scopes; changing any field creates a new token file.
-- Most lower-level tests mock `@mastra/mcp`; `mcp-http-tool-call` now covers one real Streamable HTTP tool call, but OAuth, headless, skipped-validation, and long-running real MCP calls remain unproven.
+- Most lower-level tests mock `@mastra/mcp`; `mcp-http-tool-call` now covers one real Streamable HTTP tool call and `mcp-selector-reconnect` covers selector reconnect/reload status refresh, but OAuth, headless, skipped-validation, and long-running real MCP calls remain unproven.
 
 ## Verification checklist
 

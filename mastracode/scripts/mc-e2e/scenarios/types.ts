@@ -39,6 +39,7 @@ export type ScenarioName =
   | 'modal-and-shell'
   | 'mcp-http-tool-call'
   | 'mcp-reload-config'
+  | 'mcp-selector-reconnect'
   | 'mcp-server-config'
   | 'model-selection-api-key-prompt'
   | 'models-pack-activation-persistence'
