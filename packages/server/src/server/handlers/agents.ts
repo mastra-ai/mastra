@@ -2441,6 +2441,25 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
       const effectiveResourceId = getEffectiveResourceId(requestContext, query.resourceId);
       const effectiveThreadId = getEffectiveThreadId(requestContext, query.threadId);
 
+      // Validate ownership/FGA before honoring a thread filter — without this a
+      // caller could probe another user's suspended approvals (including
+      // tool-call args) by guessing a threadId.
+      if (effectiveThreadId) {
+        const memory = await agent.getMemory({ requestContext });
+        if (memory) {
+          const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+          if (thread) {
+            await enforceThreadAccess({
+              mastra,
+              requestContext,
+              threadId: effectiveThreadId,
+              thread,
+              effectiveResourceId,
+            });
+          }
+        }
+      }
+
       return await agent.listSuspendedRuns({
         threadId: effectiveThreadId,
         resourceId: effectiveResourceId,

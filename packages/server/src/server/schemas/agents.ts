@@ -479,14 +479,20 @@ export const sendToolApprovalResponseSchema = z.object({
 /**
  * Query schema for listing suspended agent runs
  */
-export const listSuspendedRunsQuerySchema = z.object({
-  threadId: z.string().optional(),
-  resourceId: z.string().optional(),
-  fromDate: z.coerce.date().optional(),
-  toDate: z.coerce.date().optional(),
-  perPage: z.coerce.number().optional(),
-  page: z.coerce.number().optional(),
-});
+export const listSuspendedRunsQuerySchema = z
+  .object({
+    threadId: z.string().optional(),
+    resourceId: z.string().optional(),
+    fromDate: z.coerce.date().optional(),
+    toDate: z.coerce.date().optional(),
+    perPage: z.coerce.number().int().positive().optional(),
+    // page is zero-indexed, so 0 is valid
+    page: z.coerce.number().int().nonnegative().optional(),
+  })
+  .refine(data => !data.fromDate || !data.toDate || data.fromDate <= data.toDate, {
+    message: 'fromDate must be less than or equal to toDate',
+    path: ['fromDate'],
+  });
 
 /**
  * Response schema for listing suspended agent runs
@@ -510,7 +516,7 @@ export const listSuspendedRunsResponseSchema = z.object({
       ),
     }),
   ),
-  total: z.number(),
+  total: z.number().int().nonnegative(),
 });
 
 // ============================================================================

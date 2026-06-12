@@ -1548,6 +1548,26 @@ describe('Agent Routes Authorization', () => {
       );
     });
 
+    it('should return 403 when listing suspended runs for a thread owned by a different resource', async () => {
+      (mockAgent as any).listSuspendedRuns = vi.fn(async () => ({ runs: [], total: 0 }));
+      await mockMemory.createThread({
+        threadId: 'suspended-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Thread B',
+      });
+
+      await expect(
+        LIST_SUSPENDED_RUNS_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          threadId: 'suspended-thread-owned-by-b',
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+
+      expect((mockAgent as any).listSuspendedRuns).not.toHaveBeenCalled();
+    });
+
     it('should send a signal using context resource and thread values', async () => {
       await mockMemory.createThread({
         threadId: 'signal-thread-from-context',
