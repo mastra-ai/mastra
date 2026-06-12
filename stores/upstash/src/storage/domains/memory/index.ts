@@ -1398,9 +1398,10 @@ export class StoreMemoryUpstash extends MemoryStorage {
       const total = messages.length;
       const paginated = perPageInput === false ? messages : messages.slice(offset, offset + perPage);
       const list = new MessageList().add(paginated, 'memory');
+      const finalMessages = this._sortMessages(list.get.all.db(), field, direction);
 
       return {
-        messages: list.get.all.db(),
+        messages: finalMessages,
         total,
         page,
         perPage: perPageForResponse,

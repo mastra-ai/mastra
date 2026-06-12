@@ -368,6 +368,32 @@ describe('observational memory support', () => {
     expect(listed.messages.map(message => message.id)).toEqual([unindexedMessage.id, indexedMessage.id]);
   });
 
+  it('preserves DESC ordering after MessageList processing when listing messages by resource id', async () => {
+    const memoryDomain = new StoreMemoryUpstash({ client: createTestClient() });
+    await memoryDomain.init();
+
+    const resourceId = `resource-${randomUUID()}`;
+    const thread = createThread(resourceId);
+    await memoryDomain.saveThread({ thread });
+
+    const olderMessage = createMessage(thread, {
+      id: `older-msg-${randomUUID()}`,
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    });
+    const newerMessage = createMessage(thread, {
+      id: `newer-msg-${randomUUID()}`,
+      createdAt: new Date('2024-01-02T00:00:00.000Z'),
+    });
+    await memoryDomain.saveMessages({ messages: [olderMessage, newerMessage] });
+
+    const listed = await memoryDomain.listMessagesByResourceId({
+      resourceId,
+      orderBy: { field: 'createdAt', direction: 'DESC' },
+    });
+
+    expect(listed.messages.map(message => message.id)).toEqual([newerMessage.id, olderMessage.id]);
+  });
+
   it('lists messages by resource id and persists observational memory history', async () => {
     const memoryDomain = new StoreMemoryUpstash({ client: createTestClient() });
     await memoryDomain.init();
