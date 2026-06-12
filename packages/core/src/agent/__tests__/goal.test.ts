@@ -271,6 +271,53 @@ describe('in-loop goal scoring', () => {
     expect(record?.runsUsed).toBe(2);
   });
 
+  it('does not re-score a budget-exhausted (still active) objective on a later run', async () => {
+    // An objective that stopped at the run budget stays `active` (so raising
+    // maxRuns can resume it). A subsequent run on the same thread must not burn
+    // another judge call or push runsUsed past the budget — it stops the loop and
+    // emits a terminal goal chunk without scoring.
+    const scorer = passingScorer(0, 'Not yet');
+    const agent = makeAgent({ judge: 'mock-model-id', scorer: scorer as any, maxRuns: 2 });
+    await agent.setObjective('Unreachable goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    // First run exhausts the budget (runsUsed → 2, status stays active).
+    const firstStream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 10,
+    });
+    for await (const _ of firstStream.fullStream) {
+      void _;
+    }
+    expect(scorer.run).toHaveBeenCalledTimes(2);
+    expect((await agent.getObjective({ threadId: THREAD }))?.runsUsed).toBe(2);
+
+    // Second run on the same thread: the budget guard fires before any scoring.
+    const goalChunks: any[] = [];
+    const secondStream = await agent.stream('again', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 10,
+    });
+    for await (const chunk of secondStream.fullStream) {
+      if (chunk.type === 'goal') goalChunks.push(chunk);
+    }
+
+    // No additional scorer calls beyond the two from the first run.
+    expect(scorer.run).toHaveBeenCalledTimes(2);
+    // A terminal goal chunk is still emitted so consumers can render the state.
+    expect(goalChunks.length).toBeGreaterThan(0);
+    expect(goalChunks[0].payload).toMatchObject({
+      iteration: 2,
+      maxRuns: 2,
+      passed: false,
+      maxRunsReached: true,
+      results: [],
+    });
+
+    const record = await agent.getObjective({ threadId: THREAD });
+    expect(record?.runsUsed).toBe(2);
+    expect(record?.status).toBe('active');
+  });
+
   it('invokes a model-resolver function for goal.judge and scores when it resolves a model', async () => {
     const scorer = passingScorer(1, 'done');
     const judge = vi.fn(() => 'mock-model-id');

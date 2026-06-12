@@ -1,19 +1,19 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
 import type { MastraDBMessage } from '../../../agent';
-import type { MastraScorer } from '../../../evals';
-import { resolveModelConfig } from '../../../llm';
-import type { MastraLanguageModel } from '../../../llm/model/shared.types';
-import type { GoalObjectiveRecord } from '../../../storage/domains/thread-state/base';
-import type { ChunkType } from '../../../stream/types';
-import { ChunkFrom } from '../../../stream/types';
 import {
   createGoalScorer,
   readObjective,
   resolveEffectiveGoalSettings,
   resolveGoalStore,
   writeObjective,
-  type ResolvedGoalStore,
 } from '../../../agent/goal';
+import type { ResolvedGoalStore } from '../../../agent/goal';
+import type { MastraScorer } from '../../../evals';
+import { resolveModelConfig } from '../../../llm';
+import type { MastraLanguageModel } from '../../../llm/model/shared.types';
+import type { GoalObjectiveRecord } from '../../../storage/domains/thread-state/base';
+import type { ChunkType } from '../../../stream/types';
+import { ChunkFrom } from '../../../stream/types';
 import { createStep } from '../../../workflows/workflow';
 import { runStreamCompletionScorers, formatStreamCompletionFeedback } from '../../network/validation';
 import type { StreamCompletionContext } from '../../network/validation';
@@ -68,6 +68,36 @@ export function createGoalStep<Tools extends ToolSet = ToolSet, OUTPUT = undefin
         maxRuns: goal.maxRuns,
         prompt: goal.prompt,
       });
+
+      // Budget already exhausted on a prior run: an objective stays `active` when
+      // it stops at the run budget (so raising `maxRuns` can resume it), but it
+      // must not re-evaluate. Without this guard a subsequent run on the same
+      // thread would burn another judge call and push `runsUsed` past the budget
+      // every time. Stop the loop and emit a terminal goal chunk without scoring.
+      if (record.runsUsed >= effective.maxRuns) {
+        if (inputData.stepResult) {
+          inputData.stepResult.isContinued = false;
+        }
+        controller.enqueue({
+          type: 'goal',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {
+            objective: record.objective,
+            iteration: record.runsUsed,
+            maxRuns: effective.maxRuns,
+            passed: false,
+            status: record.status,
+            results: [],
+            reason: undefined,
+            duration: 0,
+            timedOut: false,
+            maxRunsReached: true,
+            suppressFeedback: false,
+          },
+        } as ChunkType<OUTPUT>);
+        return inputData;
+      }
 
       // Determine the judge model config. A non-string agent `goal.judge` (a
       // resolved model or a model-resolver function) is the consumer's own

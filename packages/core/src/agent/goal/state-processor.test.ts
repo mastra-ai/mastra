@@ -5,8 +5,8 @@ import { RequestContext } from '../../request-context';
 import type { GoalObjectiveRecord } from '../../storage/domains/thread-state/base';
 import { InMemoryStore } from '../../storage/mock';
 
-import { GoalStateProcessor } from './state-processor';
 import { GOAL_REQUEST_CONTEXT_KEY, GOAL_STATE_TYPE } from './objective';
+import { GoalStateProcessor } from './state-processor';
 
 const THREAD_ID = 'thread-1';
 

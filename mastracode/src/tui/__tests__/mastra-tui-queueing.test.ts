@@ -1,4 +1,5 @@
 import { Container } from '@mariozechner/pi-tui';
+import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -25,7 +26,6 @@ vi.mock('../display.js', () => ({
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
 import { handleAgentAborted, handleAgentEnd, handleGoalEvaluation } from '../handlers/agent-lifecycle.js';
 import type { EventHandlerContext } from '../handlers/types.js';
-import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { MastraTUI, consumePendingImages, syncInitialThreadState } from '../mastra-tui.js';
 import type { TUIState } from '../state.js';
 
