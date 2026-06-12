@@ -1,3 +1,4 @@
+import type { IncomingMessage } from 'node:http';
 import type { Handler, MiddlewareHandler, Context } from 'hono';
 import type { cors } from 'hono/cors';
 import type { DescribeRouteOptions } from 'hono-openapi';
@@ -45,6 +46,81 @@ export type ApiRoute =
     };
 
 export type Middleware = MiddlewareHandler | { path: string; handler: MiddlewareHandler };
+
+/**
+ * Shape of the auth payload that the MCP SDK reads from `req.auth` and emits as
+ * `extra.authInfo` to tool handlers. Mirrors `@modelcontextprotocol/sdk`'s AuthInfo
+ * (kept local so `@mastra/core` does not depend on the SDK types).
+ */
+export interface MCPRequestAuthInfo {
+  token?: string;
+  clientId?: string;
+  scopes?: string[];
+  extra?: Record<string, unknown>;
+}
+
+/**
+ * MCP-specific server configuration. Bridges auth resolved at the HTTP/Hono layer
+ * into the MCP request's `req.auth`, so `extra.authInfo` flows to MCP tools under
+ * Hono/deployer deployments (where the request is regenerated via `toReqRes`).
+ */
+export interface MCPServerOptions {
+  /**
+   * Style B: manual auth bridge for custom middleware gates.
+   *
+   * Invoked once per MCP HTTP request, before the request reaches the MCP SDK
+   * transport. The server adapter binds the live request context for you, so you
+   * can read values your own middleware stored (e.g. `requestContext.get('auth.payload')`)
+   * and assign `req.auth`.
+   *
+   * When set, this takes precedence over the provider auto-bridge below.
+   *
+   * Note: the underlying `@mastra/mcp` `startHTTP` hook is a framework-agnostic
+   * `(req) => void`; this convenience hook additionally surfaces the resolved
+   * `requestContext` and bearer `token` without exposing framework types.
+   */
+  setRequestAuth?: (args: {
+    req: IncomingMessage;
+    requestContext: RequestContext;
+    token?: string;
+  }) => void | Promise<void>;
+  /**
+   * Style A: whether to auto-bridge the authenticated principal resolved by a
+   * configured `server.auth` provider into `req.auth`. Enabled by default; set
+   * `false` to opt out. No-op when no `user` was resolved into the request context.
+   * @default true
+   */
+  autoBridgeAuth?: boolean;
+  /**
+   * Style A: override the default `user -> AuthInfo` mapping used by the auto-bridge.
+   * Provider payloads differ widely, so the default is best-effort; supply this for
+   * exact control. Receives the resolved `user`, the bearer `token` (if available),
+   * and the request context.
+   */
+  mapUserToAuthInfo?: (args: { user: unknown; token?: string; requestContext: RequestContext }) => MCPRequestAuthInfo;
+}
+
+/**
+ * Default best-effort `user -> AuthInfo` mapping for the Style A auto-bridge.
+ *
+ * Provider payloads differ widely, so this only reads commonly-present fields and
+ * never guesses aggressively. For exact control supply `server.mcp.mapUserToAuthInfo`.
+ */
+export function defaultMapUserToAuthInfo({ user, token }: { user: unknown; token?: string }): MCPRequestAuthInfo {
+  const u = (user ?? {}) as Record<string, unknown>;
+  const clientId = u.clientId ?? u.client_id ?? u.azp ?? u.sub ?? u.id;
+  const scopes = Array.isArray(u.scopes)
+    ? u.scopes.filter((s): s is string => typeof s === 'string')
+    : typeof u.scope === 'string'
+      ? u.scope.split(' ')
+      : [];
+  return {
+    token,
+    clientId: typeof clientId === 'string' ? clientId : undefined,
+    scopes,
+    extra: { user },
+  };
+}
 
 export type CorsOptions = Parameters<typeof cors>[0];
 
@@ -326,6 +402,18 @@ export type ServerConfig = {
      */
     sessionIdGenerator?: () => string;
   };
+
+  /**
+   * MCP auth-bridging configuration. Lets HTTP/Hono-layer authentication reach MCP
+   * tools by populating the MCP request's `req.auth` (so `extra.authInfo` is emitted).
+   *
+   * - Style A: when a `server.auth` provider is configured, the resolved principal is
+   *   auto-bridged into `req.auth` by default (toggle with `autoBridgeAuth`, customize
+   *   with `mapUserToAuthInfo`).
+   * - Style B: for custom middleware gates, provide `setRequestAuth` to read the request
+   *   context and assign `req.auth` yourself (takes precedence over the auto-bridge).
+   */
+  mcp?: MCPServerOptions;
 
   /**
    * A2A-specific server configuration.

@@ -1442,6 +1442,71 @@ app.all('/mcp', async (req, res) => {
 })
 ```
 
+### Bridging auth on Hono / the Mastra deployer
+
+The Express pattern above mutates the Node `req` directly. When you deploy with `mastra dev`/`mastra build` (or otherwise mount MCP on Hono via `mastra.server`), the request is regenerated from the Hono context before it reaches the MCP SDK, so middleware that sets `req.auth` does not carry over. Configure `mastra.server.mcp` to bridge auth instead.
+
+#### Provider auto-bridge
+
+When a `mastra.server.auth` provider is configured, the authenticated principal is bridged into `req.auth` automatically. Any `MastraAuthProvider` (Clerk, Auth0, Supabase, Firebase, WorkOS, `MastraJwtAuth`, or a custom provider) works without extra wiring.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraJwtAuth } from '@mastra/auth'
+
+export const mastra = new Mastra({
+  server: {
+    auth: new MastraJwtAuth({ secret: process.env.JWT_SECRET! }),
+    // Auto-bridge is on by default. Customize the user -> AuthInfo mapping when
+    // your provider payload doesn't match the default best-effort fields.
+    mcp: {
+      mapUserToAuthInfo: ({ user, token }) => ({
+        token,
+        clientId: (user as { sub?: string }).sub,
+        scopes: (user as { scope?: string }).scope?.split(' ') ?? [],
+        extra: { user },
+      }),
+    },
+  },
+})
+```
+
+The default mapping is best-effort across providers; supply `mapUserToAuthInfo` for exact control. The auto-bridge only runs when the auth middleware actually resolved a user (MCP HTTP routes require auth by default), and never fabricates `authInfo` otherwise. Set `mcp.autoBridgeAuth: false` to opt out.
+
+#### Manual hook for custom middleware
+
+If you authenticate in your own Hono middleware (rather than through `mastra.server.auth`), store the result on the request context and assign `req.auth` in `mcp.setRequestAuth`. The hook receives the live `requestContext` plus the bearer `token`, and takes precedence over the auto-bridge.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  server: {
+    // Your Hono middleware verifies the token and stores the payload, e.g.
+    //   c.get('requestContext')?.set('auth.payload', payload)
+    middleware: [mcpAuthGate],
+    mcp: {
+      setRequestAuth: ({ req, requestContext, token }) => {
+        const payload = requestContext.get('auth.payload') as
+          | { azp?: string; scope?: string }
+          | undefined
+        if (payload) {
+          // @ts-ignore - req.auth is read by the MCP SDK
+          req.auth = {
+            token,
+            clientId: payload.azp,
+            scopes: payload.scope?.split(' ') ?? [],
+            extra: payload,
+          }
+        }
+      },
+    },
+  },
+})
+```
+
+Once `req.auth` is populated by either style, it flows to tools as `context.mcp.extra.authInfo` exactly as with the Express path. If the `MCPServer` also configures [`mapAuthInfoToUser`](#map-auth-data-for-fga), that `authInfo` is additionally mapped into `requestContext.get('user')` for FGA checks.
+
 ### Accessing Auth Data in Tools
 
 The `req.auth` object is available as `context.mcp.extra.authInfo` in your tool's execute function:

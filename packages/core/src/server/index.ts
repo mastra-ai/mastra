@@ -14,11 +14,14 @@ export type {
   ApiRoute,
   ApiRouteHandler,
   HttpLoggingConfig,
+  MCPServerOptions,
+  MCPRequestAuthInfo,
   ValidationErrorContext,
   ValidationErrorResponse,
   ValidationErrorHook,
   StudioConfig,
 } from './types';
+export { defaultMapUserToAuthInfo } from './types';
 export { MastraAuthProvider } from './auth';
 export type { MastraAuthProviderOptions } from './auth';
 export type { HonoRequestLike, MastraAuthRequest } from './request-types';

@@ -703,14 +703,21 @@ export class MCPServer extends MCPServerBase {
             elicitation: sessionElicitation,
             extra,
           },
-          // @ts-expect-error this is to let people know that the elicitation and extra keys are now nested under mcp.elicitation and mcp.extra in tool arguments
-          get elicitation() {
-            throw new Error(`The "elicitation" key is now nested under "mcp.elicitation" in tool arguments`);
-          },
-          get extra() {
-            throw new Error(`The "extra" key is now nested under "mcp.extra" in tool arguments`);
-          },
         };
+        Object.defineProperties(mcpOptions, {
+          elicitation: {
+            enumerable: false,
+            get() {
+              throw new Error(`The "elicitation" key is now nested under "mcp.elicitation" in tool arguments`);
+            },
+          },
+          extra: {
+            enumerable: false,
+            get() {
+              throw new Error(`The "extra" key is now nested under "mcp.extra" in tool arguments`);
+            },
+          },
+        });
 
         await this.enforceToolExecutionFGA(request.params.name, proxiedContext);
 
@@ -1547,12 +1554,28 @@ export class MCPServer extends MCPServerBase {
     req,
     res,
     options,
+    setRequestAuth,
   }: {
     url: URL;
     httpPath: string;
     req: http.IncomingMessage;
     res: http.ServerResponse<http.IncomingMessage>;
     options?: Partial<StreamableHTTPServerTransportOptions> & { serverless?: boolean };
+    /**
+     * Optional framework-agnostic hook invoked immediately before the request is
+     * handed to the underlying StreamableHTTPServerTransport. Use it to populate
+     * `req.auth` so the MCP SDK can emit `extra.authInfo` to tool handlers.
+     *
+     * The hook receives only the Node `IncomingMessage` (no framework types). The
+     * surrounding server adapter (e.g. Hono) is responsible for closing over its
+     * own request context and producing this callback.
+     *
+     * It runs once per request, ahead of every transport path (existing session,
+     * new session initialize, and stateless/serverless). If it throws, the request
+     * does not reach the transport and the error propagates to the existing error
+     * handling (which responds 500).
+     */
+    setRequestAuth?: (req: http.IncomingMessage) => void | Promise<void>;
   }) {
     this.logger.debug('Received HTTP request', { method: req.method, path: url.pathname });
 
@@ -1569,7 +1592,7 @@ export class MCPServer extends MCPServerBase {
 
     if (isStatelessMode) {
       this.logger.debug('Running in stateless mode');
-      await this.handleServerlessRequest(req, res);
+      await this.handleServerlessRequest(req, res, setRequestAuth);
       return;
     }
 
@@ -1600,6 +1623,7 @@ export class MCPServer extends MCPServerBase {
         // Need to parse body for POST requests before passing to handleRequest
         const body = req.method === 'POST' ? await this.readJsonBody(req) : undefined;
 
+        await this.applyRequestAuth(req, setRequestAuth);
         await transport.handleRequest(req, res, body);
       } else if (sessionId) {
         // Session ID provided but not found (e.g. server restarted, session expired).
@@ -1669,6 +1693,7 @@ export class MCPServer extends MCPServerBase {
             }
 
             // Handle the initialize request
+            await this.applyRequestAuth(req, setRequestAuth);
             return await transport.handleRequest(req, res, body);
           } else {
             // POST request but not initialize, and no session ID
@@ -1731,6 +1756,28 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
+   * Invokes the optional `setRequestAuth` hook exactly once, immediately before a
+   * request is handed to the transport's `handleRequest`. Centralizing the call
+   * here (rather than at the `startHTTP` entry) guarantees it runs on every path
+   * - existing session, new session initialize, and stateless/serverless - without
+   * double-invoking or missing a branch.
+   *
+   * The hook is awaited (token verification is typically async). If it throws, the
+   * error propagates so the request never reaches `handleRequest`.
+   *
+   * @private
+   */
+  private async applyRequestAuth(
+    req: http.IncomingMessage,
+    setRequestAuth?: (req: http.IncomingMessage) => void | Promise<void>,
+  ): Promise<void> {
+    if (!setRequestAuth) {
+      return;
+    }
+    await setRequestAuth(req);
+  }
+
+  /**
    * Handles a stateless, serverless HTTP request without session management.
    *
    * This method bypasses all session/transport state and handles each request independently.
@@ -1743,7 +1790,11 @@ export class MCPServer extends MCPServerBase {
    * @param res - HTTP response object
    * @private
    */
-  private async handleServerlessRequest(req: http.IncomingMessage, res: http.ServerResponse<http.IncomingMessage>) {
+  private async handleServerlessRequest(
+    req: http.IncomingMessage,
+    res: http.ServerResponse<http.IncomingMessage>,
+    setRequestAuth?: (req: http.IncomingMessage) => void | Promise<void>,
+  ) {
     try {
       this.logger.debug('Received serverless request', { method: req.method });
 
@@ -1773,6 +1824,7 @@ export class MCPServer extends MCPServerBase {
 
       // Handle the request through the transport
       // The transport will send the response and this instance will be garbage collected
+      await this.applyRequestAuth(req, setRequestAuth);
       await tempTransport.handleRequest(req, res, body);
 
       this.logger.debug('Completed serverless request', { method: body?.method, id: body?.id });

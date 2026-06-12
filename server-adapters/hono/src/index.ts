@@ -1,6 +1,10 @@
+import type { IncomingMessage } from 'node:http';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_AUTH_TOKEN_KEY } from '@mastra/core/request-context';
+import { defaultMapUserToAuthInfo } from '@mastra/core/server';
+import type { MCPServerOptions } from '@mastra/core/server';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
 
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
@@ -297,6 +301,58 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     return result;
   }
 
+  /**
+   * Builds the framework-agnostic `setRequestAuth` callback passed to
+   * `MCPServer.startHTTP`, closing over the live Hono context `c`.
+   *
+   * Two modes (Style B takes precedence over Style A):
+   * - Style B: `server.mcp.setRequestAuth` is configured: surface the request
+   *   context + bearer token to the user hook so it can assign `req.auth`.
+   * - Style A: a `server.auth` provider is configured and `autoBridgeAuth !== false`
+   *   map the principal resolved into the request context to `req.auth`.
+   *
+   * Returns `undefined` when neither applies, so behavior is unchanged by default.
+   * The "read from Hono context" logic lives entirely here; `@mastra/mcp` only ever
+   * sees a plain `(req) => void` callback.
+   */
+  protected buildMcpRequestAuthBridge(c: Context): ((req: IncomingMessage) => void | Promise<void>) | undefined {
+    const serverConfig = this.mastra.getServer();
+    const mcpConfig: MCPServerOptions | undefined = serverConfig?.mcp;
+
+    // Style B: explicit manual hook wins.
+    if (mcpConfig?.setRequestAuth) {
+      const userHook = mcpConfig.setRequestAuth;
+      return async (req: IncomingMessage) => {
+        const requestContext = c.get('requestContext') as RequestContext;
+        const ctxToken = requestContext?.get(MASTRA_AUTH_TOKEN_KEY);
+        // Only extract a Bearer token; other schemes (e.g. Basic) are not bearer tokens.
+        const headerToken = c.req.header('Authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
+        const token = typeof ctxToken === 'string' ? ctxToken : headerToken;
+        await userHook({ req, requestContext, token });
+      };
+    }
+
+    // Style A: provider auto-bridge (default on). Detect a provider via capability,
+    // not instanceof (robust across monorepo / multi-version packages).
+    const auth = serverConfig?.auth as { authenticateToken?: unknown } | undefined;
+    const hasAuthProvider = typeof auth?.authenticateToken === 'function';
+    if (hasAuthProvider && mcpConfig?.autoBridgeAuth !== false) {
+      const mapUserToAuthInfo = mcpConfig?.mapUserToAuthInfo ?? defaultMapUserToAuthInfo;
+      return (req: IncomingMessage) => {
+        const requestContext = c.get('requestContext') as RequestContext;
+        // coreAuthMiddleware writes the resolved principal under 'user'.
+        // No user => no-op, never fabricate authInfo.
+        const user = requestContext?.get('user');
+        if (!user) return;
+        const rawToken = requestContext?.get(MASTRA_AUTH_TOKEN_KEY);
+        const token = typeof rawToken === 'string' ? rawToken : undefined;
+        (req as IncomingMessage & { auth?: unknown }).auth = mapUserToAuthInfo({ user, token, requestContext });
+      };
+    }
+
+    return undefined;
+  }
+
   async sendResponse(route: ServerRoute, response: Context, result: unknown, prefix?: string): Promise<any> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
@@ -321,10 +377,17 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       const { server, httpPath, mcpOptions: routeMcpOptions } = result as MCPHttpTransportResult;
       const { req, res } = toReqRes(response.req.raw);
 
-      // Merge class-level mcpOptions with route-specific options (route takes precedence)
+      // Merge class-level mcpOptions with route-specific options (route takes precedence).
+      // NOTE: `options` carries ONLY StreamableHTTP transport options. The auth-bridge
+      // config (server.mcp) is intentionally kept separate so it never leaks into the SDK.
       const options = { ...this.mcpOptions, ...routeMcpOptions };
 
-      // Do NOT await startHTTP — let it run in the background so SSE
+      // Build the framework-agnostic req.auth bridge (Style B manual hook or Style A
+      // provider auto-bridge), closing over the live Hono context. Returns undefined
+      // when neither applies, so default behavior is byte-for-byte unchanged.
+      const setRequestAuth = this.buildMcpRequestAuthBridge(response);
+
+      // Do NOT await startHTTP; let it run in the background so SSE
       // notifications stream to the client as they are written.
       // toFetchResponse resolves when headers are sent, not when the body finishes.
       server
@@ -334,6 +397,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           req,
           res,
           options: Object.keys(options).length > 0 ? options : undefined,
+          setRequestAuth,
         })
         .catch((e: unknown) => {
           this.mastra.getLogger()?.error('[MCP HTTP] Error in background startHTTP:', {
