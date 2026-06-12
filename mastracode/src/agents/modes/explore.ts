@@ -5,15 +5,16 @@
  * "understand how module Y works") and uses read-only tools to explore
  * the codebase, then returns a concise summary of its findings.
  */
-import type { HarnessSubagent } from '@mastra/core/harness';
+import type { HarnessMode } from '@mastra/core/harness';
 
 import { MC_TOOLS } from '../../tool-names.js';
 
-export const exploreSubagent: HarnessSubagent = {
-  id: 'explore',
+export const fastMode: HarnessMode = {
+  id: 'fast',
   name: 'Explore',
   description:
     "Read-only codebase exploration. Use for questions like 'find all usages of X', 'how does module Y work'.",
+  defaultModelId: 'openai/gpt-5.4-mini',
   instructions: `You are an expert code explorer. Your job is to investigate a codebase and answer a specific question or gather specific information.
 
 ## Rules

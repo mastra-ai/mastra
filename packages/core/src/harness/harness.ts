@@ -455,13 +455,16 @@ export class Harness<TState = {}> {
   private switchModeVersion: number = 0;
   private availableModelsCache: AvailableModel[] | null = null;
   private availableModelsCacheTime: number = 0;
+  readonly #agent: Agent<any, any, any, any>;
   #internalMastra: Mastra | undefined = undefined;
+  #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
 
   constructor(config: HarnessConfig<TState>) {
     this.id = config.id;
     this.config = config;
     this.resourceId = config.resourceId ?? config.id;
     this.defaultResourceId = this.resourceId;
+    this.#agent = config.agent;
 
     // Convert PublicSchema to StandardSchemaWithJSON at the boundary
     this.stateSchema = config.stateSchema ? toStandardSchema(config.stateSchema) : undefined;
@@ -473,7 +476,8 @@ export class Harness<TState = {}> {
     } as TState;
 
     // Find default mode
-    const defaultMode = config.modes.find(m => m.default) ?? config.modes[0];
+    // TODO: get defaultModeId as config
+    const defaultMode = config.modes[0];
     if (!defaultMode) {
       throw new Error('Harness requires at least one agent mode');
     }
@@ -520,11 +524,7 @@ export class Harness<TState = {}> {
     this.browser = browser;
     this.browserFn = undefined;
 
-    for (const mode of this.config.modes) {
-      const agent = typeof mode.agent === 'function' ? null : mode.agent;
-      if (!agent || agent.hasOwnBrowser()) continue;
-      agent.setBrowser(browser);
-    }
+    this.#agent.setBrowser(browser);
   }
 
   // ===========================================================================
@@ -577,12 +577,7 @@ export class Harness<TState = {}> {
       }
     }
 
-    // Propagate harness-level Mastra, memory, workspace, browser, and pubsub to mode agents (after workspace init)
-    for (const mode of this.config.modes) {
-      const agent = typeof mode.agent === 'function' ? null : mode.agent;
-      if (!agent) continue;
-      this.propagateRuntimeServicesToAgent(agent);
-    }
+    this.propagateRuntimeServicesToAgent(this.#agent);
 
     this.startHeartbeats();
   }
@@ -713,7 +708,7 @@ export class Harness<TState = {}> {
   // Mode Management
   // ===========================================================================
 
-  listModes(): HarnessMode<TState>[] {
+  listModes(): HarnessMode[] {
     return this.config.modes;
   }
 
@@ -721,7 +716,7 @@ export class Harness<TState = {}> {
     return this.currentModeId;
   }
 
-  getCurrentMode(): HarnessMode<TState> {
+  getCurrentMode(): HarnessMode {
     const mode = this.config.modes.find(m => m.id === this.currentModeId);
     if (!mode) {
       throw new Error(`Mode not found: ${this.currentModeId}`);
@@ -828,7 +823,24 @@ export class Harness<TState = {}> {
    */
   getCurrentAgent(): Agent {
     const mode = this.getCurrentMode();
-    const agent = typeof mode.agent === 'function' ? mode.agent(this.state) : mode.agent;
+    if (!this.#legacyAgentMode[mode.id]) {
+      const forkedAgent = this.#agent.__fork();
+      forkedAgent.__updateInstructions(mode.instructions);
+      if (mode.tools) {
+        forkedAgent.__setTools(mode.tools);
+      }
+      if (mode.additionalTools) {
+        const tools = forkedAgent.listTools();
+        for (const toolName in mode.additionalTools) {
+          tools[toolName] = mode.additionalTools[toolName];
+        }
+        forkedAgent.__setTools(tools);
+      }
+
+      this.#legacyAgentMode[mode.id] = forkedAgent;
+    }
+
+    const agent = this.#legacyAgentMode[mode.id]!;
     return this.propagateRuntimeServicesToAgent(agent);
   }
 
@@ -3559,10 +3571,12 @@ export class Harness<TState = {}> {
     // switch) and move to the default execution mode.
     this.pendingSuspensions.delete(toolCallId);
 
-    const defaultMode = this.config.modes.find(m => m.default) ?? this.config.modes[0];
-    if (defaultMode && defaultMode.id !== this.currentModeId) {
+    const currentMode = this.getCurrentMode();
+
+    const transitionMode = this.listModes().find(mode => mode.id === currentMode.transitionsTo);
+    if (transitionMode && transitionMode.id !== this.currentModeId) {
       await new Promise(resolveTimeout => setTimeout(resolveTimeout, 0));
-      await this.switchMode({ modeId: defaultMode.id });
+      await this.switchMode({ modeId: transitionMode.id });
       // switchMode aborts the in-flight run but does not wait for it to
       // finalize. If the caller (e.g. mastracode's plan-approval handler)
       // immediately fires a system-reminder signal, that signal can land in
