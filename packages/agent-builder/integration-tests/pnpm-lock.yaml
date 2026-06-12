@@ -29,10 +29,10 @@ importers:
         specifier: link:..
         version: link:..
       dotenv:
-        specifier: ^17.2.3
+        specifier: ^17.4.2
         version: 17.4.2
       vite:
-        specifier: ^8.0.0
+        specifier: ^8.0.16
         version: 8.0.16
       zod:
         specifier: ^3.25.76
