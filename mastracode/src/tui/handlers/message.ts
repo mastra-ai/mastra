@@ -5,6 +5,7 @@
  * Also includes pure helper functions for content partitioning.
  */
 import type { HarnessMessage, HarnessMessageContent } from '@mastra/core/harness';
+import { TASKS_STATE_ID } from '@mastra/core/tools';
 
 import {
   insertChatComponentWithBoundarySpacing,
@@ -373,6 +374,11 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
     .filter((part): part is StreamedNotificationPart => part !== undefined);
 
   for (const stateSignal of stateSignalParts) {
+    // The `tasks` state signal is already rendered by the pinned task list UI
+    // (driven by the `task_updated` display event), so don't also echo its raw
+    // <current-task-list> snapshot into the transcript. Other state-signal
+    // categories still render inline.
+    if (stateSignal.stateId === TASKS_STATE_ID) continue;
     const stateSignalKey = `state:${message.id}:${stateSignal.cacheKey ?? ''}:${stateSignal.stateId}:${stateSignal.mode}:${stateSignal.version ?? ''}:${stateSignal.message ?? ''}`;
     if (!state.currentRunSystemReminderKeys.has(stateSignalKey)) {
       state.currentRunSystemReminderKeys.add(stateSignalKey);
