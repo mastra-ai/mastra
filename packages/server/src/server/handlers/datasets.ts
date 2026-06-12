@@ -1,5 +1,5 @@
 import { Agent } from '@mastra/core/agent';
-import { validateToolMockNames } from '@mastra/core/datasets';
+import type { validateToolMockNames as ValidateToolMockNames } from '@mastra/core/datasets';
 import { MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { resolveModelConfig } from '@mastra/core/llm';
@@ -664,10 +664,21 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         // otherwise detected at experiment setup — in the background, after
         // this route has already answered 200/pending, leaving only a failed
         // experiment record. Pre-validate so the caller gets the 400 directly.
+        // Imported dynamically because the export is newer than the
+        // @mastra/core peer floor; on an older core the pre-check degrades
+        // away and setup-time validation still rejects the collision.
+        let validateToolMockNames: typeof ValidateToolMockNames | undefined;
         try {
-          validateToolMockNames(toolMocks);
-        } catch (err) {
-          throw new HTTPException(400, { message: err instanceof Error ? err.message : String(err) });
+          ({ validateToolMockNames } = await import('@mastra/core/datasets'));
+        } catch {
+          // Core build without the datasets subpath — nothing to pre-validate with.
+        }
+        if (validateToolMockNames) {
+          try {
+            validateToolMockNames(toolMocks);
+          } catch (err) {
+            throw new HTTPException(400, { message: err instanceof Error ? err.message : String(err) });
+          }
         }
       }
       // The adapter middleware merges body + query requestContext into a RequestContext instance.
