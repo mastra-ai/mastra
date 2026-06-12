@@ -46,6 +46,8 @@ import {
   toolCallResponseSchema,
   sendToolApprovalBodySchema,
   sendToolApprovalResponseSchema,
+  listSuspendedRunsQuerySchema,
+  listSuspendedRunsResponseSchema,
   updateAgentModelBodySchema,
   reorderAgentModelListBodySchema,
   updateAgentModelInModelListBodySchema,
@@ -2410,6 +2412,45 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
       });
     } catch (error) {
       return handleError(error, 'error sending tool approval');
+    }
+  },
+});
+
+export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/agents/:agentId/suspended-runs',
+  responseType: 'json' as const,
+  pathParamSchema: agentIdPathParams,
+  queryParamSchema: listSuspendedRunsQuerySchema,
+  responseSchema: listSuspendedRunsResponseSchema,
+  summary: 'List suspended runs',
+  description:
+    'Lists suspended agent runs from storage — runs waiting on a tool-call approval or on a tool that suspended. Works after a server restart and across instances.',
+  tags: ['Agents', 'Tools'],
+  requiresAuth: true,
+  handler: async ({ mastra, agentId, requestContext, ...query }) => {
+    try {
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        versionOptions: extractVersionOptions(requestContext),
+      });
+
+      // Honor server-enforced thread/resource scoping from the request context
+      // so clients cannot list suspended runs outside their own scope.
+      const effectiveResourceId = getEffectiveResourceId(requestContext, query.resourceId);
+      const effectiveThreadId = getEffectiveThreadId(requestContext, query.threadId);
+
+      return await agent.listSuspendedRuns({
+        threadId: effectiveThreadId,
+        resourceId: effectiveResourceId,
+        fromDate: query.fromDate,
+        toDate: query.toDate,
+        perPage: query.perPage,
+        page: query.page,
+      });
+    } catch (error) {
+      return handleError(error, 'error listing suspended runs');
     }
   },
 });

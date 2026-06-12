@@ -30,6 +30,7 @@ import {
   STREAM_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
   SEND_TOOL_APPROVAL_ROUTE,
+  LIST_SUSPENDED_RUNS_ROUTE,
   QUEUE_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_SIGNAL_ROUTE,
@@ -1492,6 +1493,58 @@ describe('Agent Routes Authorization', () => {
           threadId: 'approval-thread-from-context',
           toolCallId: 'tool-call-123',
         }),
+      );
+    });
+
+    it('should list suspended runs with filters passed through', async () => {
+      const run = {
+        runId: 'run-123',
+        status: 'suspended',
+        threadId: 'thread-123',
+        resourceId: 'resource-123',
+        suspendedAt: new Date(),
+        toolCalls: [
+          { toolCallId: 'tool-call-123', toolName: 'findUserTool', args: { name: 'Dero' }, requiresApproval: true },
+        ],
+      };
+      (mockAgent as any).listSuspendedRuns = vi.fn(async () => ({ runs: [run], total: 1 }));
+
+      const fromDate = new Date('2026-01-01');
+      const result = await LIST_SUSPENDED_RUNS_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        threadId: 'thread-123',
+        resourceId: 'resource-123',
+        fromDate,
+        perPage: 10,
+        page: 0,
+      } as any);
+
+      expect(result).toEqual({ runs: [run], total: 1 });
+      expect((mockAgent as any).listSuspendedRuns).toHaveBeenCalledWith({
+        threadId: 'thread-123',
+        resourceId: 'resource-123',
+        fromDate,
+        toDate: undefined,
+        perPage: 10,
+        page: 0,
+      });
+    });
+
+    it('should scope suspended-run listing to context resource and thread values', async () => {
+      (mockAgent as any).listSuspendedRuns = vi.fn(async () => ({ runs: [], total: 0 }));
+
+      await LIST_SUSPENDED_RUNS_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a', threadId: 'thread-a' }),
+        threadId: 'client-thread-ignored',
+        resourceId: 'user-b',
+      } as any);
+
+      expect((mockAgent as any).listSuspendedRuns).toHaveBeenCalledWith(
+        expect.objectContaining({ threadId: 'thread-a', resourceId: 'user-a' }),
       );
     });
 

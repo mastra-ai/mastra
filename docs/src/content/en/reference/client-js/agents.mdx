@@ -429,6 +429,27 @@ response.processDataStream({
 })
 ```
 
+### `listSuspendedRuns()`
+
+List suspended runs for the agent from storage — runs waiting on a tool-call approval or on a tool that suspended. Discovery is backed by storage, so it works after a server restart and across server instances. Pass the returned `runId` to `approveToolCall()`, `declineToolCall()`, or `resumeStream()`.
+
+```typescript
+const { runs, total } = await agent.listSuspendedRuns({
+  threadId: 'thread-456',
+  resourceId: 'user-123',
+})
+
+if (runs[0]) {
+  console.log(runs[0].toolCalls) // [{ toolCallId, toolName, args, requiresApproval }]
+  await agent.approveToolCall({
+    runId: runs[0].runId,
+    toolCallId: runs[0].toolCalls[0].toolCallId,
+  })
+}
+```
+
+Accepts optional filters (`threadId`, `resourceId`, `fromDate`, `toDate`) and pagination (`perPage`, `page`). Returns `{ runs, total }`, where `total` is the number of matching runs before pagination. See [`Agent.listSuspendedRuns()`](/reference/agents/listSuspendedRuns) for details on the returned run shape.
+
 ### `approveToolCall()`
 
 Approve a pending tool call and return a continuation stream. Use this when you are rendering the resumed chunks from the approval response.

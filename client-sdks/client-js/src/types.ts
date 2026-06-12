@@ -144,6 +144,18 @@ export interface SubscribeAgentThreadParams {
   threadId: string;
 }
 
+export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /agents/:agentId/suspended-runs'>>;
+
+/**
+ * Listed suspended runs as returned by `agent.listSuspendedRuns()`.
+ * Unlike the raw wire response, `suspendedAt` is revived into a `Date`.
+ */
+export type ListAgentSuspendedRunsResponse = RouteResponse<'GET /agents/:agentId/suspended-runs'>;
+
+export type AgentSuspendedRun = ListAgentSuspendedRunsResponse['runs'][number];
+
+export type AgentSuspendedRunToolCall = AgentSuspendedRun['toolCalls'][number];
+
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */

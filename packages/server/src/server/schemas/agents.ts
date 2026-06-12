@@ -476,6 +476,43 @@ export const sendToolApprovalResponseSchema = z.object({
   toolCallId: z.string().optional(),
 });
 
+/**
+ * Query schema for listing suspended agent runs
+ */
+export const listSuspendedRunsQuerySchema = z.object({
+  threadId: z.string().optional(),
+  resourceId: z.string().optional(),
+  fromDate: z.coerce.date().optional(),
+  toDate: z.coerce.date().optional(),
+  perPage: z.coerce.number().optional(),
+  page: z.coerce.number().optional(),
+});
+
+/**
+ * Response schema for listing suspended agent runs
+ */
+export const listSuspendedRunsResponseSchema = z.object({
+  runs: z.array(
+    z.object({
+      runId: z.string(),
+      status: z.literal('suspended'),
+      threadId: z.string().optional(),
+      resourceId: z.string().optional(),
+      suspendedAt: z.date(),
+      toolCalls: z.array(
+        z.object({
+          toolCallId: z.string().optional(),
+          toolName: z.string().optional(),
+          args: z.unknown().optional(),
+          requiresApproval: z.boolean(),
+          suspendPayload: z.unknown().optional(),
+        }),
+      ),
+    }),
+  ),
+  total: z.number(),
+});
+
 // ============================================================================
 // Resume Stream Schema
 // ============================================================================
