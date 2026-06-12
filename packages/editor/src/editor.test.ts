@@ -4,7 +4,7 @@ import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { createScorer } from '@mastra/core/evals';
 import { RequestContext } from '@mastra/core/request-context';
-import { InMemoryStore } from '@mastra/core/storage';
+import { InMemoryStore, type SourceControlProvider } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import { MastraEditor } from './index';
@@ -36,6 +36,108 @@ const sampleStoredAgent2 = {
   instructions: 'You are another test assistant',
   model: { provider: 'anthropic', name: 'claude-3' },
 };
+
+function createMockSourceProvider(): SourceControlProvider & { writes: Array<{ path: string; content: string }> } {
+  const writes: Array<{ path: string; content: string }> = [];
+  const files = new Map<string, string>();
+
+  return {
+    id: 'mock-source',
+    displayName: 'Mock Source',
+    writes,
+    async getCapabilities() {
+      return { canRead: true, canWrite: true, canListHistory: false, canOpenChangeRequest: false };
+    },
+    async readFile({ path }) {
+      const content = files.get(path);
+      return content === undefined ? null : { path, content };
+    },
+    async writeFile({ path, content }) {
+      files.set(path, content);
+      writes.push({ path, content });
+      return { path, commitSha: `commit-${writes.length}` };
+    },
+    async listFileHistory() {
+      return [];
+    },
+  };
+}
+
+describe('code source control', () => {
+  it('routes code-source agent storage through the configured source provider', async () => {
+    const provider = createMockSourceProvider();
+    const editor = new MastraEditor({ source: 'code', sourceControlProvider: provider });
+    const codeAgent = new Agent({
+      id: 'source-backed-agent',
+      name: 'Source Backed Agent',
+      instructions: 'Code instructions',
+      model: 'openai/gpt-4o',
+    });
+
+    const mastra = new Mastra({ storage: new InMemoryStore(), editor, agents: { codeAgent } });
+    const agentsStore = await mastra.getStorage()?.getStore('agents');
+
+    await agentsStore?.createVersion({
+      agentId: 'source-backed-agent',
+      versionNumber: 1,
+      instructions: 'Stored instructions',
+      model: { provider: 'openai', name: 'gpt-4' },
+      changeMessage: 'Update instructions',
+    });
+
+    expect(editor.getSourceControlProvider()).toBe(provider);
+    expect(provider.writes).toEqual([
+      {
+        path: 'agents/source-backed-agent.json',
+        content: `${JSON.stringify({ instructions: 'Stored instructions' })}\n`,
+      },
+    ]);
+  });
+
+  it('keeps filesystem-backed editor domains when agents use a source provider', async () => {
+    const provider = createMockSourceProvider();
+    const editor = new MastraEditor({ source: 'code', sourceControlProvider: provider });
+    const defaultStorage = new InMemoryStore();
+
+    const mastra = new Mastra({ storage: defaultStorage, editor, agents: {} });
+    const storage = mastra.getStorage();
+
+    await expect(storage?.getStore('agents')).resolves.not.toBe(defaultStorage.stores.agents);
+    await expect(storage?.getStore('promptBlocks')).resolves.not.toBe(defaultStorage.stores.promptBlocks);
+    await expect(storage?.getStore('workflows')).resolves.toBe(defaultStorage.stores.workflows);
+  });
+
+  it('returns the existing code-defined agent when creating a stored override', async () => {
+    const provider = createMockSourceProvider();
+    const editor = new MastraEditor({ source: 'code', sourceControlProvider: provider });
+    const codeAgent = new Agent({
+      id: 'descriptions-only-agent',
+      name: 'Descriptions Only Agent',
+      instructions: 'Code-owned instructions',
+      model: 'openai/gpt-4o',
+      tools: { weatherTool: mockTool },
+      editor: { tools: { description: true } },
+    });
+
+    const mastra = new Mastra({ storage: new InMemoryStore(), editor, agents: { codeAgent } });
+
+    // Creating a partial override (descriptions-only) must not try to hydrate it
+    // as a standalone agent — Agent requires a model. It should persist the
+    // override and return the existing code-defined runtime agent.
+    const created = await editor.agent.create({
+      id: 'descriptions-only-agent',
+      tools: { weatherTool: { description: 'Editable description' } },
+    } as any);
+
+    expect(created).toBe(mastra.getAgentById('descriptions-only-agent'));
+    expect(provider.writes).toEqual([
+      {
+        path: 'agents/descriptions-only-agent.json',
+        content: `${JSON.stringify({ tools: { weatherTool: { description: 'Editable description' } } })}\n`,
+      },
+    ]);
+  });
+});
 
 describe('agent.clearCache', () => {
   it('should clear agent from Editor cache and Mastra registry when agentId is provided', async () => {
