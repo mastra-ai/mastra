@@ -6,6 +6,8 @@ Added tool replay and tool mocking support to the experiment trigger API. `POST 
 
 The trigger API also accepts an `itemIds` option to run an experiment over a subset of dataset items (for example, re-running a single diverging item) instead of the whole dataset.
 
+`toolMocks` entries can also answer conditionally on the call's arguments via a `cases` table: the first case whose `args` match serves its `output` or throws its `error`, and `onNoMatch` decides unmatched calls — `'error'` (default) fails the item deterministically with `TOOL_MOCK_ARGS_MISMATCH`, `'passthrough'` runs the live tool. The API rejects `cases` combined with a static `output`/`error`, empty `cases` arrays, and cases that answer with neither an output nor an error.
+
 Experiment result responses now include the dedicated `toolReplay` field carrying the replay divergence report (previously merged into `output`), so the report is no longer stripped from results returned over HTTP.
 
 The trigger route also validates more before answering: `toolMocks` entries whose keys normalize to the same tool name (for example `my.tool` and `my_tool`) and malformed `toolReplay`, `toolMocks`, or `itemIds` values are rejected with a 400 up front instead of the experiment failing later in the background. When an async experiment still fails during setup (for example a `toolReplay.fromExperimentId` that does not exist), the reason is now readable over HTTP: the experiment record carries `metadata.failureReason` (`{id, message}`) alongside its `failed` status.
