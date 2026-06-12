@@ -92,11 +92,7 @@ class FlakyProcessor extends WorkflowEventProcessor {
   }
   override async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
     this.dispatchCalls++;
-    if (
-      event.type === this.failOnType &&
-      event.runId === this.failOnRunId &&
-      this.failuresLeft > 0
-    ) {
+    if (event.type === this.failOnType && event.runId === this.failOnRunId && this.failuresLeft > 0) {
       this.failuresLeft--;
       return this.runOnceWithFailure(event);
     }

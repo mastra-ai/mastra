@@ -15,7 +15,8 @@ import { describe, expect, it } from 'vitest';
 import { Mastra } from '../mastra';
 import { createRunScopeKey } from '../mastra/run-scope';
 import { hydrateRunScopeFromInternal } from './hydrate-run-scope';
-import { getRunScope, readScoped, writeScoped, type RunScopeContext } from './run-scope-access';
+import { getRunScope, readScoped, writeScoped } from './run-scope-access';
+import type { RunScopeContext } from './run-scope-access';
 import {
   AGENT_BACKGROUND_CONFIG_KEY,
   BACKGROUND_TASK_MANAGER_CONFIG_KEY,

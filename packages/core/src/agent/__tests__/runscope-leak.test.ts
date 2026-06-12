@@ -67,9 +67,7 @@ describe.each([
     });
 
     const N = 8;
-    const streams = await Promise.all(
-      Array.from({ length: N }, (_, i) => agent.stream(`req-${i}`)),
-    );
+    const streams = await Promise.all(Array.from({ length: N }, (_, i) => agent.stream(`req-${i}`)));
 
     // Every run must have a distinct runId — sanity check the harness.
     const runIds = streams.map(s => s.runId);

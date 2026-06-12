@@ -29,8 +29,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
-import { createStep } from '../workflow';
 import { createWorkflow } from '../create';
+import { createStep } from '../workflow';
 
 type Engine = { name: 'default' | 'evented'; evented: boolean };
 
