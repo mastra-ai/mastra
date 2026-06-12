@@ -1,4 +1,3 @@
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import type {
   LanguageModelV2CallOptions,
   LanguageModelV2FunctionTool,
@@ -21,6 +20,7 @@ import {
   createMessageListWithUserMessage,
   stripMastraCreatedAt,
 } from './utils';
+import { convertAsyncIterableToArray } from './stream-helpers';
 
 export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: string }) {
   describe('options.abortSignal', () => {
