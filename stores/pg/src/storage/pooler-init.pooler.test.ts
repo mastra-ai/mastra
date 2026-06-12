@@ -125,18 +125,23 @@ describe('PostgresStore.init() under pgBouncer transaction pooling (issue #17679
       schemaName,
     });
 
-    // The critical assertion: init() completes without throwing the
-    // user-reported "canceling statement due to statement timeout" error.
-    await expect(store.init()).resolves.toBeUndefined();
+    try {
+      // The critical assertion: init() completes without throwing the
+      // user-reported "canceling statement due to statement timeout"
+      // error.
+      await expect(store.init()).resolves.toBeUndefined();
 
-    // The fix guarantees init holds exactly one backend connection for
-    // the entire DDL chain. Without the fix this number explodes (Node-
-    // side pool would queue ~200 checkout requests, and the pooler would
-    // queue the same on its 3-slot budget — the dominant cause of the
-    // reported failure).
-    expect(peakClientsCheckedOut).toBe(1);
-
-    await store.close();
-    await pool.end();
+      // The fix guarantees init holds exactly one backend connection
+      // for the entire DDL chain. Without the fix this number explodes
+      // (Node-side pool would queue ~200 checkout requests, and the
+      // pooler would queue the same on its 3-slot budget — the dominant
+      // cause of the reported failure).
+      expect(peakClientsCheckedOut).toBe(1);
+    } finally {
+      // Always release pool and store handles so a failed assertion
+      // doesn't leak connections into the next test.
+      await store.close().catch(() => {});
+      await pool.end();
+    }
   });
 });

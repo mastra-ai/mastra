@@ -5,12 +5,15 @@
  * so we can control round-trip latency. For each latency profile it runs
  * N iterations of init() in each of two modes:
  *
- *   1. "pinned"    — current behavior: all DDL routes through one
- *                    PoolClient acquired before super.init() runs.
- *   2. "parallel"  — original behavior: RoutingDbClient.pin is monkey-
- *                    patched to a no-op so MastraCompositeStore.#runInit
- *                    fires every domain's init() through Promise.all
- *                    against the pool directly.
+ *   1. "pinned"    — current behavior: PostgresStore.init() reserves
+ *                    one PoolClient and routes every domain's DDL
+ *                    through it before super.init() runs.
+ *   2. "parallel"  — original (pre-#17679) behavior: invoke
+ *                    MastraCompositeStore.prototype.init directly on
+ *                    the PostgresStore instance, skipping the pin path
+ *                    entirely. Every domain's init() fans out via
+ *                    Promise.all against the full pool, exactly as it
+ *                    did before this PR.
  *
  * Each iteration uses a fresh schema, so init() always does the full
  * createTable/alterTable/createIndex chain (no fast-path).
@@ -18,8 +21,8 @@
  * Run via: `pnpm bench:init`
  */
 
+import { MastraCompositeStore } from '@mastra/core/storage';
 import { Pool } from 'pg';
-import { RoutingDbClient } from '../src/storage/client';
 import { PostgresStore } from '../src/storage/index';
 
 const TOXIPROXY_API = process.env.TOXIPROXY_API ?? 'http://localhost:8476';
@@ -82,18 +85,16 @@ async function dropSchema(schema: string): Promise<void> {
 }
 
 /**
- * Disable the single-backend pin so init() falls back to the original
- * Promise.all-over-domains behavior. We do this by patching the prototype
- * for the duration of one iteration only.
+ * Run the original (pre-#17679) parallel init path: call
+ * MastraCompositeStore.prototype.init directly on the PostgresStore
+ * instance, skipping PostgresStore.init() entirely. This bypasses both
+ * the routing.pin() call AND the pool.connect()/reserved-client cost
+ * that the pin path adds, so the resulting wall-clock is a faithful
+ * baseline of the pre-fix behavior (full pool budget available,
+ * domain init() fanned out via Promise.all against the pool).
  */
-function withoutPin<T>(fn: () => Promise<T>): Promise<T> {
-  const original = RoutingDbClient.prototype.pin;
-  RoutingDbClient.prototype.pin = function () {
-    // intentionally no-op so super.init() runs against the pool
-  };
-  return fn().finally(() => {
-    RoutingDbClient.prototype.pin = original;
-  });
+function runParallelInit(store: PostgresStore): Promise<void> {
+  return MastraCompositeStore.prototype.init.call(store);
 }
 
 async function timeOnce(mode: 'pinned' | 'parallel'): Promise<number> {
@@ -118,7 +119,7 @@ async function timeOnce(mode: 'pinned' | 'parallel'): Promise<number> {
     if (mode === 'pinned') {
       await store.init();
     } else {
-      await withoutPin(() => store.init());
+      await runParallelInit(store);
     }
   } finally {
     const elapsed = performance.now() - start;

@@ -45,7 +45,7 @@ services:
       - '8475:8474' # admin API for the test setup hook
 
   pgbouncer:
-    image: edoburu/pgbouncer:latest
+    image: edoburu/pgbouncer:v1.25.2-p0
     container_name: 'pg-pooler-test-bouncer'
     depends_on:
       - toxiproxy
