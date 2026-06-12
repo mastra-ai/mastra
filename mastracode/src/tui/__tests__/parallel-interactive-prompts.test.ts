@@ -36,7 +36,6 @@ function createMockState(): TUIState {
     options: { inlineQuestions: true, harness: {} as any },
     harness: {
       respondToToolSuspension: vi.fn(),
-      respondToPlanApproval: vi.fn(),
     },
     chatContainer,
     ui: {
@@ -65,7 +64,6 @@ function createMockContext(state: TUIState): EventHandlerContext {
     fireMessage: vi.fn(),
     queueFollowUpMessage: vi.fn(),
     renderExistingMessages: vi.fn(),
-    renderCompletedTasksInline: vi.fn(),
     renderClearedTasksInline: vi.fn(),
     refreshModelAuthStatus: vi.fn(),
   };

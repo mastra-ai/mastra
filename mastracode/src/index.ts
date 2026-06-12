@@ -27,6 +27,7 @@ import {
 } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
+import { TaskSignalProvider } from '@mastra/core/signals';
 import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
 
@@ -429,7 +430,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
             resourceId,
             modeId: harness.getCurrentModeId(),
             workspace: harness.getWorkspace(),
-            registerPlanApproval: params => harness.registerPlanApproval(params),
             getSubagentModelId: params => harness.getSubagentModelId(params),
           };
           requestContext.set('harness', harnessContext);
@@ -462,7 +462,10 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         sampling: { type: 'ratio', rate: 0.3 },
       },
     },
-    signals: githubSignals ? [githubSignals] : [],
+    // TaskSignalProvider bundles the task tools + TaskStateProcessor: it merges
+    // the tools into the toolset and registers the task state-signal processor,
+    // so the task list persists across turns and survives OM truncation.
+    signals: [new TaskSignalProvider(), ...(githubSignals ? [githubSignals] : [])],
     inputProcessors: [
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {

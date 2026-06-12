@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.42.0-alpha.3",
+  "version": "1.42.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -631,6 +631,16 @@
         "default": "./dist/base.cjs"
       }
     },
+    "./telemetry": {
+      "import": {
+        "types": "./dist/telemetry/index.d.ts",
+        "default": "./dist/telemetry/index.js"
+      },
+      "require": {
+        "types": "./dist/telemetry/index.d.ts",
+        "default": "./dist/telemetry/index.cjs"
+      }
+    },
     "./telemetry/otel-vendor": {
       "import": {
         "types": "./dist/telemetry/otel-vendor.d.ts",
@@ -860,7 +870,7 @@
     "hono": "^4.12.8",
     "hono-openapi": "^1.3.0",
     "rollup": "^4.59.0",
-    "tinyglobby": "^0.2.16",
+    "tinyglobby": "^0.2.17",
     "ts-morph": "^27.0.2",
     "tsup": "^8.5.1",
     "tsx": "catalog:",
