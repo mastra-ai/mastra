@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
@@ -78,6 +78,68 @@ describe('MastraStateAdapter', () => {
 
       // Subscription should still be there since it's in storage
       expect(await newAdapter.isSubscribed(externalThreadId)).toBe(true);
+    });
+
+    it('skips the updateThread write when already subscribed', async () => {
+      await adapter.subscribe(externalThreadId);
+
+      const updateSpy = vi.spyOn(memoryStore, 'updateThread');
+      await adapter.subscribe(externalThreadId);
+
+      expect(updateSpy).not.toHaveBeenCalled();
+      expect(await adapter.isSubscribed(externalThreadId)).toBe(true);
+    });
+
+    it('caches isSubscribed: true and skips the metadata scan on subsequent reads', async () => {
+      await adapter.subscribe(externalThreadId);
+
+      const listSpy = vi.spyOn(memoryStore, 'listThreads');
+      const first = await adapter.isSubscribed(externalThreadId);
+      const second = await adapter.isSubscribed(externalThreadId);
+
+      expect(first).toBe(true);
+      expect(second).toBe(true);
+      expect(listSpy).not.toHaveBeenCalled();
+    });
+
+    it('does not cache isSubscribed: false answers', async () => {
+      const listSpy = vi.spyOn(memoryStore, 'listThreads');
+      const first = await adapter.isSubscribed(externalThreadId);
+      const second = await adapter.isSubscribed(externalThreadId);
+
+      expect(first).toBe(false);
+      expect(second).toBe(false);
+      // Both calls hit storage — caching `false` would miss a parallel subscribe.
+      expect(listSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('clears the in-process subscribed cache on unsubscribe', async () => {
+      await adapter.subscribe(externalThreadId);
+      expect(await adapter.isSubscribed(externalThreadId)).toBe(true);
+
+      await adapter.unsubscribe(externalThreadId);
+
+      const listSpy = vi.spyOn(memoryStore, 'listThreads');
+      expect(await adapter.isSubscribed(externalThreadId)).toBe(false);
+      // After unsubscribe we must consult storage again, not the cache.
+      expect(listSpy).toHaveBeenCalled();
+    });
+
+    it('hydrates the cache from persisted subscriptions on first read', async () => {
+      // Simulate a different process having marked this thread subscribed
+      // previously — fresh adapter starts with an empty cache.
+      const freshAdapter = new MastraStateAdapter(memoryStore);
+      await freshAdapter.connect();
+
+      // First, persist the subscription via the original adapter.
+      await adapter.subscribe(externalThreadId);
+
+      const listSpy = vi.spyOn(memoryStore, 'listThreads');
+      expect(await freshAdapter.isSubscribed(externalThreadId)).toBe(true);
+      // Subsequent reads should now hit the in-process cache.
+      listSpy.mockClear();
+      expect(await freshAdapter.isSubscribed(externalThreadId)).toBe(true);
+      expect(listSpy).not.toHaveBeenCalled();
     });
   });
 

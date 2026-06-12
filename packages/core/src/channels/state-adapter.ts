@@ -27,6 +27,19 @@ export class MastraStateAdapter implements StateAdapter {
   private readonly lists = new Map<string, { values: unknown[]; expiresAt: number | null }>();
   private readonly queues = new Map<string, QueueEntry[]>();
 
+  /**
+   * In-process cache of external thread ids confirmed to be subscribed. Once
+   * a thread is subscribed it stays subscribed for the lifetime of the bot,
+   * so caching `true` answers is always safe and lets us skip the storage
+   * round-trip in `isSubscribed`. We never cache `false` — a parallel request
+   * could subscribe between calls.
+   *
+   * The chat SDK calls `state.isSubscribed(threadId)` on every inbound message
+   * to decide between `onNewMention` vs `onSubscribedMessage`, so this cache
+   * eliminates one storage read per delivered message on warm instances.
+   */
+  private readonly subscribedThreads = new Set<string>();
+
   constructor(memoryStore: MemoryStorage) {
     this.memoryStore = memoryStore;
   }
@@ -48,6 +61,7 @@ export class MastraStateAdapter implements StateAdapter {
     this.locks.clear();
     this.lists.clear();
     this.queues.clear();
+    this.subscribedThreads.clear();
   }
 
   // ---------------------------------------------------------------------------
@@ -55,30 +69,50 @@ export class MastraStateAdapter implements StateAdapter {
   // ---------------------------------------------------------------------------
 
   async subscribe(threadId: string): Promise<void> {
-    // Find the Mastra thread mapped to this external thread ID and mark it
+    // Short-circuit when we've already confirmed this thread is subscribed
+    // in this process — skips both the listThreads scan and the updateThread
+    // write. Persisted state is unchanged so other instances are unaffected.
+    if (this.subscribedThreads.has(threadId)) return;
+
     const thread = await this.findThreadByExternalId(threadId);
     if (!thread) return; // Thread not yet mapped — subscribe will be a no-op
+
+    if ((thread.metadata as Record<string, unknown>)?.channel_subscribed === 'true') {
+      // Already persisted as subscribed by a previous run/instance — cache it
+      // so future calls skip the metadata scan too.
+      this.subscribedThreads.add(threadId);
+      return;
+    }
+
     await this.memoryStore.updateThread({
       id: thread.id,
       title: thread.title ?? '',
       metadata: { ...thread.metadata, channel_subscribed: 'true' },
     });
+    this.subscribedThreads.add(threadId);
   }
 
   async unsubscribe(threadId: string): Promise<void> {
     const thread = await this.findThreadByExternalId(threadId);
-    if (!thread) return;
+    if (!thread) {
+      this.subscribedThreads.delete(threadId);
+      return;
+    }
     await this.memoryStore.updateThread({
       id: thread.id,
       title: thread.title ?? '',
       metadata: { ...((thread.metadata ?? {}) as Record<string, unknown>), channel_subscribed: 'false' },
     });
+    this.subscribedThreads.delete(threadId);
   }
 
   async isSubscribed(threadId: string): Promise<boolean> {
+    if (this.subscribedThreads.has(threadId)) return true;
     const thread = await this.findThreadByExternalId(threadId);
     if (!thread) return false;
-    return (thread.metadata as Record<string, unknown>)?.channel_subscribed === 'true';
+    const subscribed = (thread.metadata as Record<string, unknown>)?.channel_subscribed === 'true';
+    if (subscribed) this.subscribedThreads.add(threadId);
+    return subscribed;
   }
 
   // ---------------------------------------------------------------------------
