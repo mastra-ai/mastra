@@ -153,8 +153,11 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
   processToAISDKSchema(zodSchema: ZodTypeV3 | ZodTypeV4): Schema {
     const compat = this.processToCompatSchema(zodSchema);
 
-    // Apply the same JSON Schema fixes as processToJSONSchema
-    const transformedJsonSchema = standardSchemaToJSONSchema(compat);
+    // Apply the same JSON Schema fixes as processToJSONSchema.
+    // Use the 'input' projection so fields with `.default()` are treated as
+    // optional (and marked `x-optional`) instead of required — matching what
+    // the model is expected to produce. See `#traverse` for the null handling.
+    const transformedJsonSchema = standardSchemaToJSONSchema(compat, { io: 'input' });
 
     // Post-process the raw LLM value: strip falsy optional fields and convert
     // date strings back to Date objects, then validate against the original Zod schema.

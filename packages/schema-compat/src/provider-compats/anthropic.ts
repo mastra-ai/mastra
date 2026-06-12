@@ -13,6 +13,7 @@ import {
   isStringSchema,
   isUnionSchema,
 } from '../json-schema/utils';
+import { convertOptionalNullsToUndefined } from '../null-to-undefined';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { PublicSchema, ZodType } from '../schema.types';
 import { standardSchemaToJSONSchema, toStandardSchema } from '../standard-schema/standard-schema';
@@ -67,11 +68,18 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
 
   processToAISDKSchema(zodSchema: ZodTypeV3 | ZodTypeV4) {
     const compat = this.processToCompatSchema(zodSchema);
-    const transformedJsonSchema = standardSchemaToJSONSchema(compat);
+    // Use the 'input' projection so fields with `.default()` are optional.
+    const transformedJsonSchema = standardSchemaToJSONSchema(compat, { io: 'input' });
 
     return jsonSchema(transformedJsonSchema, {
       validate: (value: unknown) => {
-        const transformed = this.#traverse(value, transformedJsonSchema as Record<string, unknown>);
+        const dateNormalized = this.#traverse(value, transformedJsonSchema as Record<string, unknown>);
+        // Strict-mode schemas return `null` for absent optional/defaulted fields;
+        // convert those back to `undefined` so Zod can apply optional/default semantics.
+        const transformed = convertOptionalNullsToUndefined(
+          dateNormalized,
+          transformedJsonSchema as Record<string, unknown>,
+        );
         const result = zodSchema.safeParse(transformed);
         return result.success ? { success: true, value: result.data } : { success: false, error: result.error };
       },

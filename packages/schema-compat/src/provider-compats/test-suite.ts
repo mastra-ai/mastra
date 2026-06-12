@@ -264,6 +264,67 @@ export function createSuite(layer: SchemaCompatLayer) {
       expect(layer.processToJSONSchema(schema)).toMatchSnapshot();
     });
   });
+
+  // Models return `null` for non-required fields in strict structured-output /
+  // tool-calling mode. The AI SDK schema produced by `processToAISDKSchema` must
+  // round-trip those nulls so the underlying Zod schema can apply `.optional()` /
+  // `.default()` semantics. This block runs for every provider — previously only
+  // OpenAI exercised null handling, which let the bug hide for the others.
+  describe('AI SDK schema null handling for optional/default fields', () => {
+    const validate = (schema: z.ZodTypeAny, value: unknown) => {
+      const aiSchema = layer.processToAISDKSchema(schema as any);
+      return aiSchema.validate!(value) as { success: boolean; value?: unknown };
+    };
+
+    it('treats null as undefined for an optional field', () => {
+      const schema = z.object({ keep: z.string(), maybe: z.string().optional() });
+      const result = validate(schema, { keep: 'k', maybe: null });
+      expect(result.success).toBe(true);
+      expect(result.value).toEqual({ keep: 'k' });
+    });
+
+    it('applies a string default when the model returns null', () => {
+      const schema = z.object({ keep: z.string(), label: z.string().default('fallback') });
+      const result = validate(schema, { keep: 'k', label: null });
+      expect(result.success).toBe(true);
+      expect(result.value).toEqual({ keep: 'k', label: 'fallback' });
+    });
+
+    it('applies a numeric default when the model returns null', () => {
+      const schema = z.object({ keep: z.string(), confidence: z.number().default(1) });
+      const result = validate(schema, { keep: 'k', confidence: null });
+      expect(result.success).toBe(true);
+      expect(result.value).toEqual({ keep: 'k', confidence: 1 });
+    });
+
+    it('applies a default for a nested defaulted field', () => {
+      const schema = z.object({ inner: z.object({ theme: z.string().default('light') }) });
+      const result = validate(schema, { inner: { theme: null } });
+      expect(result.success).toBe(true);
+      expect(result.value).toEqual({ inner: { theme: 'light' } });
+    });
+
+    it('applies a default for a defaulted field inside an array element', () => {
+      const schema = z.object({ items: z.array(z.object({ tag: z.string().default('x') })) });
+      const result = validate(schema, { items: [{ tag: null }, { tag: 'set' }] });
+      expect(result.success).toBe(true);
+      expect(result.value).toEqual({ items: [{ tag: 'x' }, { tag: 'set' }] });
+    });
+
+    it('preserves an explicit null for a required nullable field', () => {
+      const schema = z.object({ deletedAt: z.string().nullable() });
+      const result = validate(schema, { deletedAt: null });
+      expect(result.success).toBe(true);
+      expect(result.value).toEqual({ deletedAt: null });
+    });
+
+    it('preserves provided values for default fields', () => {
+      const schema = z.object({ label: z.string().default('fallback') });
+      const result = validate(schema, { label: 'real' });
+      expect(result.success).toBe(true);
+      expect(result.value).toEqual({ label: 'real' });
+    });
+  });
 }
 
 /**

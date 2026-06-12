@@ -30,7 +30,7 @@ export { SchemaCompatLayer } from './schema-compatibility';
 
 // Utility functions
 export { convertZodSchemaToAISDKSchema, applyCompatLayer, convertSchemaToZod, isZodType } from './utils';
-export { wrapSchemaWithNullTransform } from './null-to-undefined';
+export { wrapSchemaWithNullTransform, convertOptionalNullsToUndefined } from './null-to-undefined';
 export { ensureAllPropertiesRequired, prepareJsonSchemaForOpenAIStrictMode } from './zod-to-json';
 
 // Standard Schema compatibility utilities

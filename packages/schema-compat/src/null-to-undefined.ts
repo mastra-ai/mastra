@@ -46,6 +46,87 @@ export function transformNullToUndefined(value: unknown, jsonSchema: Record<stri
 }
 
 /**
+ * Resolve a nullable wrapper (`anyOf: [<schema>, { type: 'null' }]`) down to its
+ * non-null variant, matching the resolution the provider `#traverse` helpers do.
+ */
+function resolveNullableVariant(schema: Record<string, unknown>): Record<string, unknown> {
+  if (Array.isArray(schema.anyOf)) {
+    const nonNull = (schema.anyOf as unknown[]).find(
+      (s): s is Record<string, unknown> =>
+        !!s && typeof s === 'object' && (s as Record<string, unknown>).type !== 'null',
+    );
+    if (nonNull) {
+      return nonNull;
+    }
+  }
+  return schema;
+}
+
+/**
+ * Recursively convert `null` → `undefined` for the optional fields of a
+ * processed schema.
+ *
+ * Providers return `null` for an "absent" optional/defaulted field, but the
+ * different compat layers express optionality two ways:
+ *
+ * - **Standard JSON Schema** (Anthropic, Google, DeepSeek, Meta): the field is
+ *   simply omitted from the object's `required` array.
+ * - **OpenAI strict mode**: every property must appear in `required`, so the
+ *   originally optional / defaulted fields are instead tracked in `x-optional`.
+ *
+ * A field is therefore treated as optional when it is listed in `x-optional`
+ * **or** not present in `required`. Genuinely required fields — including
+ * `.nullable()` ones, which stay in `required` — keep their `null` so explicit
+ * null values survive. Converting optional nulls back to `undefined` lets the
+ * original Zod schema apply `.optional()` / `.default()` semantics when the
+ * tool-call / structured-output result is validated; without it the result
+ * fails with "expected <type>, received null".
+ *
+ * Mutates and returns `value` (matching the provider `#traverse` convention).
+ */
+export function convertOptionalNullsToUndefined(value: unknown, jsonSchema: Record<string, unknown>): unknown {
+  if (value === null || value === undefined || typeof jsonSchema !== 'object' || jsonSchema === null) {
+    return value;
+  }
+
+  const resolved = resolveNullableVariant(jsonSchema);
+
+  const isArrayType =
+    resolved.type === 'array' || (Array.isArray(resolved.type) && (resolved.type as string[]).includes('array'));
+  if (isArrayType) {
+    const items = resolved.items;
+    if (Array.isArray(value) && items && typeof items === 'object') {
+      const itemSchema = items as Record<string, unknown>;
+      for (let i = 0; i < value.length; i++) {
+        value[i] = convertOptionalNullsToUndefined(value[i], itemSchema);
+      }
+    }
+    return value;
+  }
+
+  const isObjectType =
+    resolved.type === 'object' || (Array.isArray(resolved.type) && (resolved.type as string[]).includes('object'));
+  if (!isObjectType || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+
+  const properties = resolved.properties as Record<string, Record<string, unknown>> | undefined;
+  const requiredKeys = new Set((resolved.required as string[] | undefined) ?? []);
+  const optionalKeys = new Set((resolved['x-optional'] as string[] | undefined) ?? []);
+  const isOptional = (key: string) => optionalKeys.has(key) || !requiredKeys.has(key);
+  const obj = value as Record<string, unknown>;
+  for (const key of Object.keys(obj)) {
+    if (obj[key] === null && isOptional(key)) {
+      obj[key] = undefined;
+    } else if (properties?.[key]) {
+      obj[key] = convertOptionalNullsToUndefined(obj[key], properties[key]);
+    }
+  }
+
+  return obj;
+}
+
+/**
  * Wraps a StandardSchemaWithJSON to transform null values to undefined for
  * optional fields before validation. This is a schema-agnostic solution for
  * OpenAI strict mode, which sends null for optional fields.
