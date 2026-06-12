@@ -44,6 +44,25 @@ export const mastra = new Mastra({
 })
 ```
 
+To declare middleware in a separate file, annotate it with the `Middleware`
+type from `@mastra/core/server`:
+
+```typescript title="src/mastra/middleware.ts"
+import type { Middleware } from '@mastra/core/server'
+
+export const authMiddleware: Middleware = {
+  path: '/api/*',
+  handler: async (c, next) => {
+    const authHeader = c.req.header('Authorization')
+    if (!authHeader) {
+      return new Response('Unauthorized', { status: 401 })
+    }
+
+    await next()
+  },
+}
+```
+
 To attach middleware to a single route pass the `middleware` option to
 `registerApiRoute`:
 
