@@ -8129,7 +8129,7 @@ export interface PostAgentsAgentIdVoiceSpeak_RouteContract {
   body: PostAgentsAgentIdVoiceSpeak_Body;
   request: PostAgentsAgentIdVoiceSpeak_Request;
   response: PostAgentsAgentIdVoiceSpeak_Response;
-  responseType: 'stream';
+  responseType: 'datastream-response';
 }
 
 // ============================================================================
@@ -8168,7 +8168,7 @@ export interface PostAgentsAgentIdSpeak_RouteContract {
   body: PostAgentsAgentIdSpeak_Body;
   request: PostAgentsAgentIdSpeak_Request;
   response: PostAgentsAgentIdSpeak_Response;
-  responseType: 'stream';
+  responseType: 'datastream-response';
 }
 
 // ============================================================================
