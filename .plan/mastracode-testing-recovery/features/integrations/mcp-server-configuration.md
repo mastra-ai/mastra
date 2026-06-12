@@ -76,11 +76,11 @@
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — `/mcp` routing through slash command dispatch.
 - `mastracode/src/__tests__/index.test.ts` — `createMastraCode({ mcpServers })` startup wiring passes programmatic stdio/HTTP servers to `createMcpManager()` with the detected project root and configured `configDir`.
 - `mastracode/scripts/mc-e2e/scenarios/mcp-server-config.ts` — partial real PTY coverage for programmatic stdio `mcpServers`: launches the TUI with a configured failing stdio server, verifies background MCP initialization reports the configured server, and verifies `/mcp status` renders `e2e_stdio_config [stdio]`.
+- `mastracode/scripts/mc-e2e/scenarios/mcp-http-tool-call.ts` — real PTY + AIMock coverage for programmatic HTTP MCP config: launches a local Streamable HTTP MCP server, requires configured request headers, verifies `/mcp status` renders `e2e_http_mcp [http]`, and invokes the namespaced `e2e_http_mcp_lookup_status` tool through the model/tool loop.
 
 ## Missing tests
 
-- Integration test with a real HTTP/Streamable/SSE MCP test server proving tool calls work end-to-end, not only mocked `MCPClient` definitions.
-- TUI `/mcp status` snapshot/assertion showing `[http]` transport and skipped HTTP validation reasons.
+- TUI `/mcp status` snapshot/assertion for skipped HTTP validation reasons.
 - Headless test proving HTTP MCP tools are initialized and available for a headless run.
 - OAuth flow test covering a real protected HTTP MCP server's token persistence/refresh callback behavior and failure display; current coverage verifies config/provider/storage construction through mocks.
 
@@ -90,7 +90,7 @@
 - Programmatic configs have highest priority; a typo or duplicate server name can intentionally shadow a working file-based server.
 - Invalid entries are skipped silently except via `/mcp` status/selector; users may not notice configuration typos until they inspect MCP status.
 - OAuth token storage is keyed by project/server/url/redirect/client/scopes; changing any field creates a new token file.
-- Current tests mock `@mastra/mcp`, so protocol-level HTTP/SSE compatibility and long-running real tool calls are not proven here.
+- Most lower-level tests mock `@mastra/mcp`; `mcp-http-tool-call` now covers one real Streamable HTTP tool call, but OAuth, headless, skipped-validation, and long-running real MCP calls remain unproven.
 
 ## Verification checklist
 

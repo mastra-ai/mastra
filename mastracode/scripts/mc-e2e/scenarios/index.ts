@@ -21,6 +21,7 @@ import { githubSignalsIncrementalScenario } from './github-signals-incremental.j
 import { githubSignalsUnsubscribeReloadScenario } from './github-signals-unsubscribe-reload.js';
 import { harnessApiConfigScenario } from './harness-api-config.js';
 import { integrationCommandsScenario } from './integration-commands.js';
+import { mcpHttpToolCallScenario } from './mcp-http-tool-call.js';
 import { mcpServerConfigScenario } from './mcp-server-config.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
 import { modelSelectionApiKeyPromptScenario } from './model-selection-api-key-prompt.js';
@@ -102,6 +103,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,
   'modal-and-shell': modalAndShellScenario,
+  'mcp-http-tool-call': mcpHttpToolCallScenario,
   'mcp-server-config': mcpServerConfigScenario,
   'model-selection-api-key-prompt': modelSelectionApiKeyPromptScenario,
   'models-pack-activation-persistence': modelsPackActivationPersistenceScenario,

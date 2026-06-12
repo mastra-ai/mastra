@@ -68,11 +68,12 @@
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — routes `/mcp` to `handleMcpCommand` with the slash-command context that owns the manager.
 - `mastracode/src/tui/commands/__tests__/mcp.test.ts` — direct `/mcp` command shield proving a configured manager opens the selector with live status/reload/reconnect/log callbacks instead of falling back to `MCP system not initialized.`
 - `mastracode/scripts/mc-e2e/scenarios/integration-commands.ts` — real PTY/TUI e2e partial coverage proving `/mcp status` reaches the visible MCP status/fallback command surface in the transcript.
+- `mastracode/scripts/mc-e2e/scenarios/mcp-http-tool-call.ts` — real PTY/TUI e2e coverage for a configured HTTP manager status row (`e2e_http_mcp [http]`) plus the same manager's tool availability in the model runtime.
 
 ## Missing tests
 
 - Focused `McpSelectorComponent` tests for navigation, detail views, reload-all, reconnect-one, polling, and stale reconnect results during reload.
-- Remaining TUI integration test for configured-manager `/mcp reload` and selector actions updating status from the live manager; baseline `/mcp status` fallback/route surface is covered by `integration-commands`.
+- Remaining TUI integration test for configured-manager `/mcp reload` and selector actions updating status from the live manager; baseline `/mcp status` fallback/route surface and one connected HTTP manager status row are covered by `integration-commands` and `mcp-http-tool-call`.
 - Real long-running MCP tool integration test proving the timeout handoff allows completion beyond the upstream short default.
 
 ## Known risks / regressions

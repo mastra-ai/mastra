@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### MCP HTTP tool-call coverage (2026-06-12)
+
+Added `mcp-http-tool-call` as the 74th checked-in TUI e2e scenario. The scenario starts a local Streamable HTTP MCP server inside the custom entrypoint, requires the configured `x-mc-e2e` request header, passes the server through programmatic `createMastraCode({ mcpServers })`, verifies `/mcp status` renders `e2e_http_mcp [http]` with the namespaced tool, then uses AIMock to call `e2e_http_mcp_lookup_status` through the real model/tool loop and assert the MCP result reaches the follow-up model request.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test mcp-http-tool-call
+```
+
+Break validations:
+
+- Misclassifying HTTP server transport as `stdio` made `/mcp status` render `[stdio]` and failed the status assertion.
+- Dropping HTTP `requestInit.headers` made the local MCP server reject connection with `missing x-mc-e2e header` and failed startup/status.
+- Removing MCP tools from `createDynamicTools()` left the model without a real MCP tool result; the scenario's AIMock request verification failed because `MC_MCP_HTTP_TOOL_RESULT:mcp-http-e2e:ok` never reached a model request.
+
+The MCP rows remain `needs-follow-up`; this chunk closes real HTTP transport/header/tool-call coverage, while `/mcp reload`/selector actions, skipped HTTP validation reasons, OAuth token persistence/refresh, headless MCP tool availability, and long-running MCP result timeout coverage remain.
+
+
 ### GitHub unsubscribe reload coverage (2026-06-12)
 
 Added `github-signals-unsubscribe-reload` as the 73rd checked-in TUI e2e scenario. The scenario seeds an isolated thread with GitHub Signals metadata for `mastra-ai/mastra#17639`, enables experimental GitHub Signals in `settings.json`, points `MASTRACODE_GITCRAWL_BIN` and `GITCRAWL_DB_PATH` at deterministic local fixtures, opens the persisted thread through `/threads`, verifies `/github debug` sees the active subscription, runs `/github unsubscribe mastra-ai/mastra#17639`, verifies `/github debug` reports no subscribed PRs, then switches away and reopens the thread to prove the empty subscription state reloads.
