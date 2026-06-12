@@ -7,6 +7,7 @@ import jsonSchemaToZodOriginal, {
   parseOneOf,
   parseSchema,
 } from 'json-schema-to-zod';
+import { z } from 'zod';
 
 function parseObject(objectSchema: JsonSchemaObject & { type: 'object' }, refs: Refs): string {
   let properties: string | undefined = undefined;
@@ -342,3 +343,129 @@ export function jsonSchemaToZod(schema: JsonSchema, options: Options = {}): stri
 
 // Re-export all named exports from json-schema-to-zod (excluding the default export)
 export * from 'json-schema-to-zod';
+
+export function jsonSchemaToZodRuntime(schema: JsonSchema): z.ZodType {
+  return parseSchemaRuntime(schema, {});
+}
+
+function parseSchemaRuntime(schema: JsonSchema, defs: Record<string, z.ZodType>): z.ZodType {
+  if (typeof schema === 'boolean') {
+    return schema ? z.any() : z.never();
+  }
+
+  if ('$ref' in schema && typeof schema.$ref === 'string') {
+    const refName = schema.$ref.replace('#/$defs/', '').replace('#/definitions/', '');
+    if (defs[refName]) return defs[refName]!;
+    return z.any();
+  }
+
+  const localDefs = { ...defs };
+  const rawDefs = (schema as any).$defs ?? (schema as any).definitions;
+  if (rawDefs) {
+    for (const [key, defSchema] of Object.entries(rawDefs)) {
+      localDefs[key] = parseSchemaRuntime(defSchema as JsonSchema, localDefs);
+    }
+  }
+
+  if ('oneOf' in schema && Array.isArray(schema.oneOf)) {
+    const options = schema.oneOf.map(s => parseSchemaRuntime(s as JsonSchema, localDefs));
+    return z.union(options as [z.ZodType, z.ZodType, ...z.ZodType[]]);
+  }
+  if ('anyOf' in schema && Array.isArray(schema.anyOf)) {
+    const options = schema.anyOf.map(s => parseSchemaRuntime(s as JsonSchema, localDefs));
+    return z.union(options as [z.ZodType, z.ZodType, ...z.ZodType[]]);
+  }
+  if ('allOf' in schema && Array.isArray(schema.allOf)) {
+    const [first, ...rest] = schema.allOf.map(s => parseSchemaRuntime(s as JsonSchema, localDefs));
+    return rest.reduce((acc, s) => acc.and(s), first as z.ZodType);
+  }
+
+  if ('enum' in schema && Array.isArray(schema.enum)) {
+    const values = schema.enum as [unknown, ...unknown[]];
+    return z.enum(values.map(String) as [string, ...string[]]);
+  }
+
+  if ('const' in schema) {
+    return z.literal(schema.const as any);
+  }
+
+  const type = (schema as any).type;
+
+  if (Array.isArray(type)) {
+    const options = type.map(t => parseSchemaRuntime({ type: t } as JsonSchema, localDefs));
+    return z.union(options as [z.ZodType, z.ZodType, ...z.ZodType[]]);
+  }
+
+  switch (type) {
+    case 'string': {
+      let s = z.string();
+      if ((schema as any).minLength !== undefined) s = s.min((schema as any).minLength);
+      if ((schema as any).maxLength !== undefined) s = s.max((schema as any).maxLength);
+      return applyMeta(schema, s);
+    }
+    case 'number':
+    case 'integer': {
+      let n = z.number();
+      if ((schema as any).minimum !== undefined) n = n.min((schema as any).minimum);
+      if ((schema as any).maximum !== undefined) n = n.max((schema as any).maximum);
+      return applyMeta(schema, n);
+    }
+    case 'boolean':
+      return applyMeta(schema, z.boolean());
+    case 'null':
+      return z.null();
+    case 'array': {
+      const items = (schema as any).items;
+      const itemType = items ? parseSchemaRuntime(items as JsonSchema, localDefs) : z.any();
+      let arr = z.array(itemType);
+      if ((schema as any).minItems !== undefined) arr = arr.min((schema as any).minItems);
+      if ((schema as any).maxItems !== undefined) arr = arr.max((schema as any).maxItems);
+      return applyMeta(schema, arr);
+    }
+    case 'object': {
+      const properties = (schema as any).properties as Record<string, JsonSchema> | undefined;
+      const required: string[] = (schema as any).required ?? [];
+      const additionalProperties = (schema as any).additionalProperties;
+
+      if (!properties || Object.keys(properties).length === 0) {
+        if (additionalProperties !== undefined && additionalProperties !== false) {
+          const valueType =
+            typeof additionalProperties === 'boolean'
+              ? z.any()
+              : parseSchemaRuntime(additionalProperties as JsonSchema, localDefs);
+          return applyMeta(schema, z.record(z.string(), valueType));
+        }
+        return applyMeta(schema, z.record(z.string(), z.any()));
+      }
+
+      const shape: Record<string, z.ZodType> = {};
+      for (const [key, propSchema] of Object.entries(properties)) {
+        const isRequired = required.includes(key);
+        const parsed = parseSchemaRuntime(propSchema, localDefs);
+        shape[key] = isRequired ? parsed : parsed.optional();
+      }
+
+      let obj: z.ZodType = z.object(shape);
+
+      if (additionalProperties !== undefined && additionalProperties !== false) {
+        const valueType =
+          typeof additionalProperties === 'boolean'
+            ? z.any()
+            : parseSchemaRuntime(additionalProperties as JsonSchema, localDefs);
+        obj = (obj as z.ZodObject<any>).catchall(valueType);
+      }
+
+      return applyMeta(schema, obj);
+    }
+    default:
+      return z.any();
+  }
+}
+
+function applyMeta(schema: JsonSchema, zodType: z.ZodType): z.ZodType {
+  if (typeof schema === 'boolean') return zodType;
+  let t = zodType;
+  if ((schema as any).description) t = t.describe((schema as any).description);
+  if ((schema as any).default !== undefined) t = t.default((schema as any).default);
+  return t;
+}
