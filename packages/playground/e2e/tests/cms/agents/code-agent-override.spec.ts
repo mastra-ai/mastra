@@ -28,6 +28,15 @@ test.describe('code-mode agent override', () => {
     await expect(page.getByRole('button', { name: /^Save New Version$/i })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /^Publish$/i })).toHaveCount(0);
 
+    const getVersionCount = async () => {
+      const versions = await request
+        .get('/api/stored/agents/code-override-editable/versions')
+        .then(r => r.json() as Promise<{ versions: unknown[] }>);
+      return versions.versions.length;
+    };
+
+    const initialVersionCount = await getVersionCount();
+
     await page.getByRole('button', { name: /System Prompt/i }).click();
     await page.locator('.cm-content').first().click();
     await page.keyboard.type('\nLocal filesystem save from e2e.');
@@ -36,27 +45,13 @@ test.describe('code-mode agent override', () => {
 
     // Code mode treats local saves as commit-less drafts: each save should
     // overwrite the rolling snapshot rather than grow version history.
-    await expect
-      .poll(async () => {
-        const versions = await request
-          .get('/api/stored/agents/code-override-editable/versions')
-          .then(r => r.json() as Promise<{ versions: unknown[] }>);
-        return versions.versions.length;
-      })
-      .toBe(1);
+    await expect.poll(getVersionCount).toBe(initialVersionCount);
 
     await page.locator('.cm-content').first().click();
     await page.keyboard.type(' Another tweak.');
     await saveToFilesystemButton.click();
 
-    await expect
-      .poll(async () => {
-        const versions = await request
-          .get('/api/stored/agents/code-override-editable/versions')
-          .then(r => r.json() as Promise<{ versions: unknown[] }>);
-        return versions.versions.length;
-      })
-      .toBe(1);
+    await expect.poll(getVersionCount).toBe(initialVersionCount);
 
     const downloadPromise = page.waitForEvent('download');
     await downloadButton.click();
