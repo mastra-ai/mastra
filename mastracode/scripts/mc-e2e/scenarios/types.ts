@@ -48,6 +48,7 @@ export type ScenarioName =
   | 'report-issue-command'
   | 'request-access-modal'
   | 'state-commands'
+  | 'state-signal-browser-processor'
   | 'state-signal-reload'
   | 'state-signal-rendering'
   | 'setup-completion-persistence'

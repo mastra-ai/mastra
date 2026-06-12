@@ -76,11 +76,12 @@
 - `mastracode/src/headless-integration.test.ts` — `--output-format stream-json` keeps state-signal content parts visible in NDJSON message events and still emits the completion marker.
 - `mastracode/scripts/mc-e2e/scenarios/state-signal-rendering.ts` — checked-in PTY e2e coverage for a custom entrypoint that emits `agent.sendStateSignal()` into the active TUI thread, renders `State snapshot: browser` with the state preview, and verifies the captured AIMock request body includes the state contents.
 - `mastracode/scripts/mc-e2e/scenarios/state-signal-reload.ts` — checked-in PTY e2e coverage that seeds a persisted signal DB message, reloads it through `/threads`, and verifies loaded history reconstructs `State delta: browser` with the persisted preview.
+- `mastracode/scripts/mc-e2e/scenarios/state-signal-browser-processor.ts` — checked-in PTY e2e coverage that attaches a deterministic browser provider, lets `BrowserContextProcessor` emit live `State snapshot: browser` and `State delta: browser` cards during normal model turns, and verifies the AIMock request body includes the processor-generated browser state.
+- `packages/core/src/browser/processor.test.ts` — focused processor coverage for evicted snapshot refresh when the previous snapshot fell out of the active context window.
 
 ## Missing tests
 
-- End-to-end Mastra Code run with a live browser processor producing snapshot/delta state from real browser context, beyond the public `sendStateSignal()`/seeded-history paths.
-- Snapshot/delta pruning regression for very long browser sessions where earlier snapshots fall out of the active message window.
+- No remaining TUI-required gaps. Broader real external-browser provider smoke can remain optional integration/lab coverage because the deterministic TUI e2e now covers browser-processor snapshot/delta projection and the core processor test covers snapshot refresh after pruning.
 
 ## Known risks / regressions
 

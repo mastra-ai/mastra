@@ -26,8 +26,7 @@
 - Completed: `notification-inbox-crud-flow` seeds deterministic notification records, uses AIMock to call `notification_inbox list`, `markSeen`, `dismiss`, `archive`, and `search`, and asserts list-only visibility plus searchable `seen`, `dismissed`, and `archived` status transitions in the real TUI.
 - Completed: `notification-inbox-reload` seeds persisted notification and notification-summary signal DB messages, reloads them through `/threads`, and asserts loaded-history summary counts/hint plus dismissed, archived, and coalesced pending notification cards.
 - Completed: `state-signal-reload` seeds a persisted state signal DB message, reloads it through `/threads`, and asserts loaded-history `State delta: browser` rendering with the persisted preview.
-- Proposed scenarios:
-  - `state-signal-browser-pruning`: drive a browser-processor-backed state source or sanitized long-session fixture to verify live browser snapshot/delta projection and pruning behavior.
+- Completed: `state-signal-browser-processor` attaches a deterministic browser provider to Mastra Code, lets `BrowserContextProcessor` emit live snapshot/delta signals during normal TUI turns, and proves browser state reaches AIMock request bodies; existing core processor tests cover evicted-snapshot refresh after pruning.
 - Fixture/data needs: sanitized notification/state-signal DB rows; AIMock `notification_inbox` tool-call fixtures.
 
 ### 3. GitHub signals incremental flow

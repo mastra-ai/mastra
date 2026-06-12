@@ -49,6 +49,7 @@ import { setupCompletionPersistenceScenario } from './setup-completion-persisten
 import { setupNestedModelSelectorScenario } from './setup-nested-model-selector.js';
 import { startupScenario } from './startup.js';
 import { stateCommandsScenario } from './state-commands.js';
+import { stateSignalBrowserProcessorScenario } from './state-signal-browser-processor.js';
 import { stateSignalReloadScenario } from './state-signal-reload.js';
 import { stateSignalRenderingScenario } from './state-signal-rendering.js';
 import { storageSettingsScenario } from './storage-settings.js';
@@ -123,6 +124,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'report-issue-command': reportIssueCommandScenario,
   'request-access-modal': requestAccessModalScenario,
   'state-commands': stateCommandsScenario,
+  'state-signal-browser-processor': stateSignalBrowserProcessorScenario,
   'state-signal-reload': stateSignalReloadScenario,
   'state-signal-rendering': stateSignalRenderingScenario,
   'setup-completion-persistence': setupCompletionPersistenceScenario,

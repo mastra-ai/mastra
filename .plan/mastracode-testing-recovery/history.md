@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### State signal browser processor coverage (2026-06-12)
+
+Added `state-signal-browser-processor` as the 72nd checked-in TUI e2e scenario. The scenario starts Mastra Code with a deterministic browser provider, lets `BrowserContextProcessor` emit a live `State snapshot: browser` during the first AIMock-backed model turn, mutates the browser state through shell passthrough, and verifies the second normal model turn emits a `State delta: browser` with user-driven active URL change classification. AIMock request verification proves the processor-generated browser state is included in model request bodies.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test state-signal-browser-processor
+```
+
+Break validations:
+
+- Skipping browser processor state computation removed the live `State snapshot: browser` card and failed the scenario.
+- Ignoring active state history caused the second browser update to render another snapshot instead of a delta and failed the scenario.
+- Disabling user-driven active URL change classification rendered `active tab URL changed` instead of `user changed active tab URL`, failed the visible assertion, and prevented the AIMock fixture from matching.
+
+The `Chat: Processor state signals` row is now `validated`: public active `sendStateSignal()`, loaded-history state-signal reconstruction, live browser processor snapshot/delta projection, and evicted-snapshot refresh after pruning are covered.
+
+
 ### Settings startup model restore coverage (2026-06-12)
 
 Added `settings-startup-model-restore` as the 71st checked-in TUI e2e scenario. The scenario seeds `settings.json` with an active custom model pack before the TUI launches, verifies the initial status footer boots with the persisted build model instead of stale/default model values, opens `/models` to prove the saved pack is restored into the switcher with the persisted model details, and uses shell passthrough to confirm the seeded settings remain intact.
