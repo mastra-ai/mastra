@@ -134,7 +134,11 @@ export class OrchestrationWorker extends MastraWorker {
     // of the queue instead of looping forever.
     if (result.retry) {
       if (nack) {
-        await nack();
+        try {
+          await nack();
+        } catch (e) {
+          this.deps?.logger?.error('OrchestrationWorker: error nacking event', { error: e });
+        }
       }
       return;
     }

@@ -12,6 +12,7 @@ function makeStartEvent(workflowId: string, runId: string, id?: string): Event {
     id,
     type: 'workflow.start',
     runId,
+    createdAt: new Date(),
     data: {
       workflowId,
       runId,

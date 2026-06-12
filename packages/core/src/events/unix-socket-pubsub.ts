@@ -708,14 +708,19 @@ export class UnixSocketPubSub extends PubSub {
         const code = (error as NodeJS.ErrnoException)?.code;
         // EPIPE/ECONNRESET/ENOTCONN: broker died mid-write — retry against a
         // fresh broker. Anything else (e.g. closed pubsub, validation error)
-        // is not safe to retry blindly. The string-message checks cover two
-        // internal errors thrown from within this file (#handleClientDisconnect
-        // and #sendToActiveBroker) that don't carry an ErrnoException-style
-        // `code`; keep them in lockstep with those throw sites.
+        // is not safe to retry blindly. The string-message checks cover three
+        // internal errors thrown from within this file that don't carry an
+        // ErrnoException-style `code` — keep them in lockstep with those
+        // throw sites:
+        //   - "socket closed before write completed" (writeSerializedFrame,
+        //     when the broker dies mid-write before the drain settles)
+        //   - "broker connection closed" (#handleClientDisconnect)
+        //   - "not connected to a broker" (#sendToActiveBroker)
         const transient =
           code === 'EPIPE' ||
           code === 'ECONNRESET' ||
           code === 'ENOTCONN' ||
+          (error as Error)?.message?.includes('socket closed before write completed') ||
           (error as Error)?.message?.includes('broker connection closed') ||
           (error as Error)?.message?.includes('not connected to a broker');
         if (!transient || attempt === maxRetries) throw error;

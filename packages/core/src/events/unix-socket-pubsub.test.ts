@@ -495,16 +495,27 @@ describe('UnixSocketPubSub', () => {
 
       await pubsub.publish('topic-a', makeEvent({ type: 'poison' }));
 
-      // Wait long enough for any plausible redelivery schedule
-      // (MAX_LOCAL_REDELIVERIES * REDELIVERY_DELAY_MS * (n+1) ≈ a few hundred ms).
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      // The redelivery schedule is bounded: with the current internal
+      // constants the entire chain finishes in well under 3s. We don't
+      // pin to a specific count because that's an internal tuning knob,
+      // but we do prove the cap holds:
+      //   1. wait past any plausible redelivery window,
+      //   2. sample the count,
+      //   3. wait again,
+      //   4. assert the count did not move.
+      // This catches the "retries are unbounded" regression that a single
+      // short timeout would silently let through.
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      const settled = deliveries;
+      await new Promise(resolve => setTimeout(resolve, 1000));
 
-      // 1 initial + at most MAX_LOCAL_REDELIVERIES (currently 6) follow-ups.
-      // The exact cap is an internal constant — assert "bounded and small"
-      // so the test stays robust against tuning.
+      expect(deliveries).toBe(settled);
+      // Sanity: there was at least one nack-driven redelivery, and the
+      // total is small (current cap is 1 initial + 6 redeliveries = 7;
+      // leave headroom so light tuning doesn't break the test).
       expect(deliveries).toBeGreaterThanOrEqual(2);
-      expect(deliveries).toBeLessThanOrEqual(8);
-    });
+      expect(deliveries).toBeLessThanOrEqual(10);
+    }, 10_000);
 
     it('does not redeliver after the subscription is removed', async () => {
       const path = await socketPath();
