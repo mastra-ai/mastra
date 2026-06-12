@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### GitHub polling inbox coverage (2026-06-12)
+
+Added `github-signals-polling-inbox` as the 87th checked-in TUI e2e scenario. The scenario seeds a persisted subscribed thread whose cursor last observed failing CI, points `MASTRACODE_GITCRAWL_BIN` at a deterministic recovered-CI sqlite fixture, triggers polling, renders the delivered `pull-request-ci-recovered` GitHub notification card, asks the model to call `notification_inbox read`, proves the notification status becomes `seen`, and verifies the subscribed thread appears after `/new` → `/threads` reload.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test github-signals-polling-inbox
+```
+
+Break validations:
+
+- Removed GitHub signal registration from Mastra Code agent wiring; polling failed before notification delivery.
+- Suppressed GitHub activity notification sending in the runtime package artifact; the scenario timed out before inbox read.
+- Disabled `notification_inbox` dynamic-tool registration; the model saw `ToolNotFoundError`, the DB proof stayed `delivered:pull-request-ci-recovered`, and the `seen` assertion failed.
+
+The GitHub signal subscriptions row remains `needs-follow-up`: polling delivery and inbox read transitions are now covered, while branch auto-subscribe lifecycle, multi-process polling handoff, and GitHub notification history reload parity remain follow-up breadth.
+
+
 ### Harness display-state status-line coverage (2026-06-12)
 
 Validated the `Integrations: Harness display state` row by adding focused Mastra Code TUI routing coverage to the already checked-in streamed-tool/task e2e evidence. `mastracode/src/tui/event-dispatch.test.ts` now proves that `display_state_changed` is the status-line refresh trigger and that raw streamed `tool_input_delta` events do not directly refresh the status line, preserving display-state coalescing for long tool-input streams.

@@ -73,13 +73,14 @@
 - `mastracode/scripts/mc-e2e/scenarios/github-signals-command.ts` — TUI e2e coverage for `/new` + a real model turn + `/github subscribe mastra-ai/mastra#17637` + baseline notification + `/github debug`, using `MASTRACODE_GITCRAWL_BIN` to point at a temp mock gitcrawl binary and a sanitized sqlite fixture derived from the local `~/.config/gitcrawl/gitcrawl.db` schema/data shape.
 - `mastracode/scripts/mc-e2e/scenarios/github-signals-incremental.ts` — TUI e2e coverage for a persisted subscribed thread whose cursor last observed failing CI, `/github sync` against a recovered sanitized gitcrawl snapshot, the `pull-request-ci-recovered` notification card, and `/github debug` showing the persisted `ci=success` cursor.
 - `mastracode/scripts/mc-e2e/scenarios/github-signals-unsubscribe-reload.ts` — TUI e2e coverage for a persisted subscribed thread, `/github unsubscribe mastra-ai/mastra#17639`, `/github debug` showing no subscribed PRs, and reopening the thread through `/threads` to prove the empty subscription state reloads.
+- `mastracode/scripts/mc-e2e/scenarios/github-signals-polling-inbox.ts` — TUI e2e coverage for startup polling on a persisted subscribed thread, deterministic gitcrawl recovered-CI data, notification-card delivery, model-driven `notification_inbox read` from `delivered` to `seen`, and `/threads` reload listing of the subscribed thread.
 
 ## Missing tests
 
 - Full local integration with the real gitcrawl binary, real GitHub CLI/git remote configuration, and non-sanitized live GitHub state remains outside CI.
-- End-to-end TUI run from polling-delivered changes through `notification_inbox read` and thread reload. The checked-in scenarios cover command subscribe, baseline notification, manual sync incremental notification classification, unsubscribe/reload, and debug metadata projection, but not later interval polling, inbox read transitions, branch auto-subscribe, or notification history reload parity.
 - Multi-thread/process polling handoff regression for more than one open Mastra Code process.
-- Direct `handleAgentEnd()` lifecycle test proving auto-subscribe runs once per thread and does not run on abort/error cleanup paths unless intentionally added.
+- Direct branch auto-subscribe lifecycle coverage proving auto-subscribe runs once per thread and does not run on abort/error cleanup paths unless intentionally added.
+- Notification history reload parity for previously delivered/read GitHub notification records remains broader reload coverage; polling delivery and inbox read status transitions are now covered.
 
 ## Known risks / regressions
 
