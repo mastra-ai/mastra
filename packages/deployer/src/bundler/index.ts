@@ -80,6 +80,18 @@ export abstract class Bundler extends MastraBundler {
           },
           dependencies: Object.fromEntries(dependenciesMap.entries()),
           ...(Object.keys(resolutions ?? {}).length > 0 && { resolutions }),
+          // Note: previously this wrote `pnpm: { neverBuiltDependencies: [] }`
+          // to bypass pnpm's build allow/deny list so postinstall scripts in
+          // dependencies like better-sqlite3 would run. That had two problems:
+          // (1) it silently overrode any allow/deny list the user had
+          // configured for security reasons; (2) the `neverBuiltDependencies`
+          // key inside `package.json > pnpm` is no longer respected by pnpm
+          // v11 (it was merged into `allowBuilds` in pnpm-workspace.yaml),
+          // so the workaround already stopped working there. See #16613.
+          // The install path now writes a local `pnpm-workspace.yaml` to
+          // stop pnpm from traversing up into the user's workspace; users
+          // who need to explicitly allow build scripts should configure them
+          // via their normal pnpm config.
         },
         null,
         2,
