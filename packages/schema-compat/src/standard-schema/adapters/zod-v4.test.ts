@@ -295,7 +295,7 @@ describe('zod-v4 standard-schema adapter', () => {
       warnSpy.mockRestore();
     });
 
-    it('should not produce console warnings when using draft-07 target', () => {
+    it('should set $schema when using a valid draft-07 target', () => {
       const zodSchema = z.object({ name: z.string() });
       const standardSchema = toStandardSchema(zodSchema);
 
@@ -310,6 +310,40 @@ describe('zod-v4 standard-schema adapter', () => {
       expect(jsonSchema.$schema).toBeDefined(); // $schema should be set when target is valid
 
       warnSpy.mockRestore();
+    });
+  });
+
+  describe('z.record() patch parity with zodToJsonSchema', () => {
+    // Zod v4 has a known bug where `z.record(valueSchema)` puts the value in
+    // `def.keyType` instead of `def.valueType`, crashing `toJSONSchema`'s
+    // `recordProcessor` with "Cannot read properties of undefined (reading '_zod')".
+    // `zodToJsonSchema` works around this with `patchRecordSchemas`; the adapter
+    // now applies the same patch so both entry points behave consistently.
+
+    it('does not crash on z.record(z.boolean())', () => {
+      const schema = z.object({ flags: z.record(z.boolean()) });
+      const standardSchema = toStandardSchema(schema);
+
+      expect(() => standardSchema['~standard'].jsonSchema.input({ target: 'draft-07' })).not.toThrow();
+    });
+
+    it('produces a usable JSON Schema for z.record(z.boolean())', () => {
+      const schema = z.object({ flags: z.record(z.boolean()) });
+      const standardSchema = toStandardSchema(schema);
+
+      const result = standardSchema['~standard'].jsonSchema.input({ target: 'draft-07' }) as Record<string, any>;
+
+      expect(result.properties.flags.type).toBe('object');
+      expect(result.properties.flags.additionalProperties).toEqual({ type: 'boolean' });
+      expect(result.properties.flags.propertyNames).toEqual({ type: 'string' });
+      expect(result.properties.flags.required).toBeUndefined();
+    });
+
+    it('handles z.record() nested inside z.object().nullable()', () => {
+      const schema = z.object({ tags: z.record(z.string()).nullable() });
+      const standardSchema = toStandardSchema(schema);
+
+      expect(() => standardSchema['~standard'].jsonSchema.input({ target: 'draft-07' })).not.toThrow();
     });
   });
 });
