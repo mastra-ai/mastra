@@ -106,9 +106,7 @@ export function describeNonSuccessFinishReason(reason: string, providerMetadata:
         stopDetails && typeof stopDetails.explanation === 'string' ? stopDetails.explanation : undefined;
       const category = stopDetails && typeof stopDetails.category === 'string' ? stopDetails.category : undefined;
       const detail = explanation ?? (category ? `category: ${category}` : undefined);
-      return detail
-        ? `The model stopped on a content filter (${detail}).`
-        : 'The model stopped on a content filter.';
+      return detail ? `The model stopped on a content filter (${detail}).` : 'The model stopped on a content filter.';
     }
     case 'error':
       return 'The model stream ended with an error before producing a final response.';
@@ -140,7 +138,9 @@ const FABLE_FALLBACK_MODEL = 'claude-opus-4-8';
  * The match is suffix-based so it covers `anthropic/claude-fable-5`, a bare
  * `claude-fable-5`, and any pack/provider-prefixed form.
  */
-export function buildFableFallbackProviderOptions(modelId: string): { anthropic: { fallbacks: { model: string }[] } } | undefined {
+export function buildFableFallbackProviderOptions(
+  modelId: string,
+): { anthropic: { fallbacks: { model: string }[] } } | undefined {
   if (!/(^|\/)claude-fable-5$/.test(modelId)) {
     return undefined;
   }

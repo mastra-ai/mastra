@@ -20,10 +20,7 @@ import { Harness, describeNonSuccessFinishReason } from '../harness';
 
 vi.setConfig({ testTimeout: 30_000 });
 
-function createFinishReasonStream(
-  finishReason: string,
-  providerMetadata?: Record<string, unknown>,
-) {
+function createFinishReasonStream(finishReason: string, providerMetadata?: Record<string, unknown>) {
   return new ReadableStream({
     start(controller) {
       controller.enqueue({ type: 'stream-start', warnings: [] });
@@ -90,9 +87,7 @@ describe('describeNonSuccessFinishReason', () => {
   });
 
   it('returns a generic content-filter message when details are absent', () => {
-    expect(describeNonSuccessFinishReason('content-filter', undefined)).toBe(
-      'The model stopped on a content filter.',
-    );
+    expect(describeNonSuccessFinishReason('content-filter', undefined)).toBe('The model stopped on a content filter.');
   });
 
   it('returns undefined for success reasons', () => {
@@ -116,7 +111,9 @@ describe('Harness: non-success finish reasons', () => {
     );
 
     const events: any[] = [];
-    harness.subscribe(event => { events.push(event); });
+    harness.subscribe(event => {
+      events.push(event);
+    });
 
     await harness.sendMessage({ content: 'do something blocked' });
 
@@ -136,12 +133,12 @@ describe('Harness: non-success finish reasons', () => {
   });
 
   it('surfaces a content-filter refusal even without provider stop details', async () => {
-    const harness = await buildHarness('content-filter-no-details', () =>
-      createFinishReasonStream('content-filter'),
-    );
+    const harness = await buildHarness('content-filter-no-details', () => createFinishReasonStream('content-filter'));
 
     const events: any[] = [];
-    harness.subscribe(event => { events.push(event); });
+    harness.subscribe(event => {
+      events.push(event);
+    });
 
     await harness.sendMessage({ content: 'do something blocked' });
 
@@ -155,7 +152,9 @@ describe('Harness: non-success finish reasons', () => {
     const harness = await buildHarness('length', () => createFinishReasonStream('length'));
 
     const events: any[] = [];
-    harness.subscribe(event => { events.push(event); });
+    harness.subscribe(event => {
+      events.push(event);
+    });
 
     await harness.sendMessage({ content: 'write a very long answer' });
 
@@ -169,7 +168,9 @@ describe('Harness: non-success finish reasons', () => {
     const harness = await buildHarness('stop', () => createFinishReasonStream('stop'));
 
     const events: any[] = [];
-    harness.subscribe(event => { events.push(event); });
+    harness.subscribe(event => {
+      events.push(event);
+    });
 
     await harness.sendMessage({ content: 'say hi' });
 
