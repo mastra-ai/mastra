@@ -1,6 +1,6 @@
 import { jwtVerify, createRemoteJWKSet } from 'jose';
 import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest';
-import { MastraAuthNeon } from './index';
+import { MastraAuthNeon, MastraRBACNeon } from './index';
 import type { NeonAuthUser } from './index';
 
 vi.mock('jose', () => ({
@@ -11,8 +11,7 @@ vi.mock('jose', () => ({
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
-const mockRawRequest = (headers: Record<string, string> = {}) =>
-  new Request('http://localhost/test', { headers });
+const mockRawRequest = (headers: Record<string, string> = {}) => new Request('http://localhost/test', { headers });
 
 describe('MastraAuthNeon', () => {
   beforeEach(() => {
@@ -112,9 +111,7 @@ describe('MastraAuthNeon', () => {
       const auth = new MastraAuthNeon();
       const result = await auth.authenticateToken('jwt-token', mockRawRequest());
 
-      expect(createRemoteJWKSet).toHaveBeenCalledWith(
-        new URL('https://test-project.neon.tech/auth/jwks'),
-      );
+      expect(createRemoteJWKSet).toHaveBeenCalledWith(new URL('https://test-project.neon.tech/auth/jwks'));
       expect(jwtVerify).toHaveBeenCalledWith('jwt-token', mockJWKS);
       expect(result).toMatchObject({
         user: { id: 'user-123', email: 'test@example.com', name: 'Test User' },
@@ -329,9 +326,7 @@ describe('MastraAuthNeon', () => {
       });
 
       const auth = new MastraAuthNeon();
-      await expect(auth.signIn('bad@example.com', 'wrong', mockRawRequest())).rejects.toThrow(
-        'Invalid credentials',
-      );
+      await expect(auth.signIn('bad@example.com', 'wrong', mockRawRequest())).rejects.toThrow('Invalid credentials');
     });
   });
 
@@ -424,9 +419,7 @@ describe('MastraAuthNeon', () => {
       });
 
       const auth = new MastraAuthNeon();
-      const result = await auth.getCurrentUser(
-        mockRawRequest({ Cookie: 'neonauth.session_token=abc' }),
-      );
+      const result = await auth.getCurrentUser(mockRawRequest({ Cookie: 'neonauth.session_token=abc' }));
 
       expect(result).toMatchObject({
         id: 'u1',
@@ -463,6 +456,315 @@ describe('MastraAuthNeon', () => {
       const headers = auth.getClearSessionHeaders();
       expect(headers['Set-Cookie']).toContain('neonauth.session_token=;');
       expect(headers['Set-Cookie']).toContain('Max-Age=0');
+    });
+  });
+
+  // ── ISessionProvider tests ──
+
+  describe('ISessionProvider', () => {
+    test('createSession returns a session object', async () => {
+      const auth = new MastraAuthNeon();
+      const session = await auth.createSession('user-1', { key: 'value' });
+      expect(session.userId).toBe('user-1');
+      expect(session.id).toBeTruthy();
+      expect(session.expiresAt).toBeInstanceOf(Date);
+      expect(session.createdAt).toBeInstanceOf(Date);
+      expect(session.metadata).toEqual({ key: 'value' });
+    });
+
+    test('validateSession returns session on success', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            session: {
+              id: 'sess-abc',
+              token: 'token-abc',
+              userId: 'user-1',
+              expiresAt: '2026-06-01T00:00:00Z',
+              createdAt: '2025-06-01T00:00:00Z',
+              updatedAt: '2025-06-01T00:00:00Z',
+            },
+            user: { id: 'user-1', email: 'a@b.com', name: 'A', emailVerified: true, createdAt: '', updatedAt: '' },
+          }),
+      });
+
+      const auth = new MastraAuthNeon();
+      const session = await auth.validateSession('token-abc');
+
+      expect(session).not.toBeNull();
+      expect(session!.id).toBe('sess-abc');
+      expect(session!.userId).toBe('user-1');
+    });
+
+    test('validateSession returns null on failure', async () => {
+      mockFetch.mockResolvedValue({ ok: false });
+
+      const auth = new MastraAuthNeon();
+      const session = await auth.validateSession('bad-token');
+      expect(session).toBeNull();
+    });
+
+    test('refreshSession delegates to validateSession', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            session: {
+              id: 'sess-abc',
+              token: 'token-abc',
+              userId: 'user-1',
+              expiresAt: '2026-06-01T00:00:00Z',
+              createdAt: '2025-06-01T00:00:00Z',
+              updatedAt: '2025-06-01T00:00:00Z',
+            },
+            user: { id: 'user-1', email: 'a@b.com', name: 'A', emailVerified: true, createdAt: '', updatedAt: '' },
+          }),
+      });
+
+      const auth = new MastraAuthNeon();
+      const session = await auth.refreshSession('token-abc');
+      expect(session).not.toBeNull();
+      expect(session!.id).toBe('sess-abc');
+    });
+
+    test('destroySession does not throw', async () => {
+      const auth = new MastraAuthNeon();
+      await expect(auth.destroySession('sess-abc')).resolves.not.toThrow();
+    });
+
+    test('getSessionIdFromRequest extracts cookie', () => {
+      const auth = new MastraAuthNeon();
+      const req = mockRawRequest({ Cookie: 'other=x; neonauth.session_token=tok123; foo=bar' });
+      expect(auth.getSessionIdFromRequest(req)).toBe('tok123');
+    });
+
+    test('getSessionIdFromRequest returns null when no cookie', () => {
+      const auth = new MastraAuthNeon();
+      const req = mockRawRequest();
+      expect(auth.getSessionIdFromRequest(req)).toBeNull();
+    });
+
+    test('getSessionHeaders returns empty by default', () => {
+      const auth = new MastraAuthNeon();
+      const session = { id: 's1', userId: 'u1', expiresAt: new Date(), createdAt: new Date() };
+      expect(auth.getSessionHeaders(session)).toEqual({});
+    });
+
+    test('getBaseUrl returns the configured base URL', () => {
+      const auth = new MastraAuthNeon();
+      expect(auth.getBaseUrl()).toBe('https://test-project.neon.tech');
+    });
+  });
+});
+
+// ── MastraRBACNeon tests ──
+
+describe('MastraRBACNeon', () => {
+  beforeEach(() => {
+    process.env.NEON_AUTH_BASE_URL = 'https://test-project.neon.tech';
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    delete process.env.NEON_AUTH_BASE_URL;
+  });
+
+  const makeUser = (overrides: Partial<NeonAuthUser> = {}): NeonAuthUser => ({
+    user: { id: 'user-1', email: 'a@b.com', name: 'A', emailVerified: true, createdAt: '', updatedAt: '' },
+    ...overrides,
+  });
+
+  const roleMapping = {
+    owner: ['*' as const],
+    admin: ['*' as const],
+    member: ['agents:read' as const, 'workflows:*' as const],
+    _default: [] as const,
+  };
+
+  describe('constructor', () => {
+    test('uses NEON_AUTH_BASE_URL env var', () => {
+      const rbac = new MastraRBACNeon({ roleMapping });
+      expect(rbac.roleMapping).toBe(roleMapping);
+    });
+
+    test('uses explicit baseUrl', () => {
+      const rbac = new MastraRBACNeon({ baseUrl: 'https://custom.neon.tech', roleMapping });
+      expect(rbac.roleMapping).toBe(roleMapping);
+    });
+  });
+
+  describe('getRoles with custom getUserRoles', () => {
+    test('uses custom getUserRoles when provided', async () => {
+      const rbac = new MastraRBACNeon({
+        roleMapping,
+        getUserRoles: (user: NeonAuthUser) => {
+          const role = user.jwt?.role as string;
+          return role ? [role] : [];
+        },
+      });
+
+      const user = makeUser({ jwt: { sub: 'user-1', role: 'admin' } });
+      const roles = await rbac.getRoles(user);
+      expect(roles).toEqual(['admin']);
+    });
+  });
+
+  describe('getRoles from JWT claims', () => {
+    test('extracts role from JWT', async () => {
+      const rbac = new MastraRBACNeon({ roleMapping });
+      const user = makeUser({ jwt: { sub: 'user-1', role: 'member' } });
+      const roles = await rbac.getRoles(user);
+      expect(roles).toEqual(['member']);
+    });
+
+    test('returns empty when no JWT role and no baseUrl', async () => {
+      delete process.env.NEON_AUTH_BASE_URL;
+      const rbac = new MastraRBACNeon({ baseUrl: '', roleMapping });
+      const user = makeUser();
+      const roles = await rbac.getRoles(user);
+      expect(roles).toEqual([]);
+    });
+  });
+
+  describe('getRoles from organization memberships', () => {
+    test('fetches roles from Neon Auth API', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve([{ id: 'm1', organizationId: 'org-1', userId: 'user-1', role: 'admin', createdAt: '' }]),
+      });
+
+      const rbac = new MastraRBACNeon({ roleMapping });
+      const user = makeUser();
+      const roles = await rbac.getRoles(user);
+      expect(roles).toEqual(['admin']);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://test-project.neon.tech/auth/api/organization/list-memberships',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ userId: 'user-1' }),
+        }),
+      );
+    });
+
+    test('filters by organizationId when specified', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve([
+            { id: 'm1', organizationId: 'org-1', userId: 'user-1', role: 'admin', createdAt: '' },
+            { id: 'm2', organizationId: 'org-2', userId: 'user-1', role: 'member', createdAt: '' },
+          ]),
+      });
+
+      const rbac = new MastraRBACNeon({ roleMapping, organizationId: 'org-2' });
+      const user = makeUser();
+      const roles = await rbac.getRoles(user);
+      expect(roles).toEqual(['member']);
+    });
+
+    test('caches roles', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve([{ id: 'm1', organizationId: 'org-1', userId: 'user-1', role: 'owner', createdAt: '' }]),
+      });
+
+      const rbac = new MastraRBACNeon({ roleMapping });
+      const user = makeUser();
+
+      await rbac.getRoles(user);
+      await rbac.getRoles(user);
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    test('returns empty roles on API error', async () => {
+      mockFetch.mockResolvedValue({ ok: false });
+
+      const rbac = new MastraRBACNeon({ roleMapping });
+      const roles = await rbac.getRoles(makeUser());
+      expect(roles).toEqual([]);
+    });
+  });
+
+  describe('permission checks', () => {
+    test('hasRole checks user roles', async () => {
+      const rbac = new MastraRBACNeon({
+        roleMapping,
+        getUserRoles: () => ['member'],
+      });
+      expect(await rbac.hasRole(makeUser(), 'member')).toBe(true);
+      expect(await rbac.hasRole(makeUser(), 'admin')).toBe(false);
+    });
+
+    test('getPermissions resolves permissions from mapping', async () => {
+      const rbac = new MastraRBACNeon({
+        roleMapping,
+        getUserRoles: () => ['member'],
+      });
+      const perms = await rbac.getPermissions(makeUser());
+      expect(perms).toContain('agents:read');
+      expect(perms).toContain('workflows:*');
+    });
+
+    test('hasPermission with wildcard role', async () => {
+      const rbac = new MastraRBACNeon({
+        roleMapping,
+        getUserRoles: () => ['owner'],
+      });
+      expect(await rbac.hasPermission(makeUser(), 'agents:read')).toBe(true);
+      expect(await rbac.hasPermission(makeUser(), 'anything:else')).toBe(true);
+    });
+
+    test('hasAllPermissions checks all permissions', async () => {
+      const rbac = new MastraRBACNeon({
+        roleMapping,
+        getUserRoles: () => ['member'],
+      });
+      expect(await rbac.hasAllPermissions(makeUser(), ['agents:read', 'workflows:read'])).toBe(true);
+      expect(await rbac.hasAllPermissions(makeUser(), ['agents:read', 'agents:write'])).toBe(false);
+    });
+
+    test('hasAnyPermission checks any permission', async () => {
+      const rbac = new MastraRBACNeon({
+        roleMapping,
+        getUserRoles: () => ['member'],
+      });
+      expect(await rbac.hasAnyPermission(makeUser(), ['agents:write', 'workflows:read'])).toBe(true);
+      expect(await rbac.hasAnyPermission(makeUser(), ['agents:write', 'agents:delete'])).toBe(false);
+    });
+
+    test('_default mapping used for unmapped roles', async () => {
+      const rbac = new MastraRBACNeon({
+        roleMapping,
+        getUserRoles: () => ['custom-role'],
+      });
+      const perms = await rbac.getPermissions(makeUser());
+      expect(perms).toEqual([]);
+    });
+  });
+
+  describe('getAvailableRoles', () => {
+    test('returns roles from mapping excluding _default', async () => {
+      const rbac = new MastraRBACNeon({ roleMapping });
+      const roles = await rbac.getAvailableRoles();
+      expect(roles).toEqual([
+        { id: 'owner', name: 'Owner' },
+        { id: 'admin', name: 'Admin' },
+        { id: 'member', name: 'Member' },
+      ]);
+    });
+  });
+
+  describe('getRolePermissions', () => {
+    test('resolves permissions for a specific role', async () => {
+      const rbac = new MastraRBACNeon({ roleMapping });
+      const perms = await rbac.getRolePermissions('member');
+      expect(perms).toContain('agents:read');
+      expect(perms).toContain('workflows:*');
     });
   });
 });

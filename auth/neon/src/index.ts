@@ -1,10 +1,19 @@
-import type { IUserProvider, ICredentialsProvider, CredentialsResult } from '@mastra/core/auth';
+import type {
+  IUserProvider,
+  ICredentialsProvider,
+  ISessionProvider,
+  Session,
+  CredentialsResult,
+} from '@mastra/core/auth';
 import type { EEUser } from '@mastra/core/auth/ee';
 import type { MastraAuthProviderOptions } from '@mastra/core/server';
 import { MastraAuthProvider } from '@mastra/core/server';
 
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { JWTPayload } from 'jose';
+
+export { MastraRBACNeon } from './rbac-provider';
+export type { MastraRBACNeonOptions, NeonRoleMappingOptions } from './rbac-provider';
 
 type HonoRequestLike = {
   raw?: Request;
@@ -24,7 +33,7 @@ function getRequestHeader(request: MastraAuthRequest, name: string): string | nu
 /**
  * Response shape from Neon Auth session endpoint.
  */
-interface NeonSessionResponse {
+export interface NeonSessionResponse {
   session: {
     id: string;
     token: string;
@@ -55,7 +64,7 @@ export interface NeonAuthUser {
   jwt?: JWTPayload;
 }
 
-function mapToEEUser(user: NeonSessionResponse['user']): EEUser {
+export function mapNeonUserToEEUser(user: NeonSessionResponse['user']): EEUser {
   return {
     id: user.id,
     email: user.email,
@@ -69,7 +78,7 @@ function mapToEEUser(user: NeonSessionResponse['user']): EEUser {
   };
 }
 
-interface MastraAuthNeonOptions extends MastraAuthProviderOptions<NeonAuthUser> {
+export interface MastraAuthNeonOptions extends MastraAuthProviderOptions<NeonAuthUser> {
   /**
    * The Neon Auth base URL (e.g., `https://your-project.neon.tech`).
    * Falls back to the `NEON_AUTH_BASE_URL` environment variable.
@@ -104,6 +113,7 @@ interface MastraAuthNeonOptions extends MastraAuthProviderOptions<NeonAuthUser> 
  * - JWT bearer token verification via JWKS (for API clients)
  * - Session cookie verification via Neon Auth REST API (for Studio)
  * - Email/password sign-in and sign-up (for Studio credentials flow)
+ * - Session management (validate, refresh, destroy)
  *
  * @example
  * ```typescript
@@ -120,11 +130,32 @@ interface MastraAuthNeonOptions extends MastraAuthProviderOptions<NeonAuthUser> 
  * });
  * ```
  *
+ * @example With RBAC
+ * ```typescript
+ * import { MastraAuthNeon, MastraRBACNeon } from '@mastra/auth-neon';
+ *
+ * const mastra = new Mastra({
+ *   server: {
+ *     auth: new MastraAuthNeon({
+ *       baseUrl: process.env.NEON_AUTH_BASE_URL,
+ *     }),
+ *     rbac: new MastraRBACNeon({
+ *       roleMapping: {
+ *         owner: ['*'],
+ *         admin: ['*'],
+ *         member: ['agents:read', 'workflows:*'],
+ *         _default: [],
+ *       },
+ *     }),
+ *   },
+ * });
+ * ```
+ *
  * @see https://neon.com/docs/auth/overview
  */
 export class MastraAuthNeon
   extends MastraAuthProvider<NeonAuthUser>
-  implements IUserProvider<EEUser>, ICredentialsProvider<EEUser>
+  implements IUserProvider<EEUser>, ICredentialsProvider<EEUser>, ISessionProvider<Session>
 {
   protected baseUrl: string;
   protected jwksUrl: string;
@@ -150,6 +181,11 @@ export class MastraAuthNeon
     this.registerOptions(options);
   }
 
+  /** Expose the base URL for RBAC or other consumers. */
+  getBaseUrl(): string {
+    return this.baseUrl;
+  }
+
   isSignUpEnabled(): boolean {
     return this.signUpEnabledConfig;
   }
@@ -158,9 +194,9 @@ export class MastraAuthNeon
 
   async getCurrentUser(request: Request): Promise<EEUser | null> {
     try {
-      const result = await this.verifySession(request.headers);
+      const result = await this.fetchSession(request.headers);
       if (!result?.user) return null;
-      return mapToEEUser(result.user);
+      return mapNeonUserToEEUser(result.user);
     } catch {
       return null;
     }
@@ -216,7 +252,7 @@ export class MastraAuthNeon
         headers.set('Cookie', `${existingCookies}${this.sessionCookieName}=${token}`);
       }
 
-      const result = await this.verifySession(headers);
+      const result = await this.fetchSession(headers);
       if (!result?.session || !result?.user) {
         return null;
       }
@@ -270,7 +306,7 @@ export class MastraAuthNeon
     }
 
     return {
-      user: mapToEEUser(result.user),
+      user: mapNeonUserToEEUser(result.user),
       token: result.token ?? undefined,
       cookies,
     };
@@ -311,15 +347,77 @@ export class MastraAuthNeon
     }
 
     return {
-      user: mapToEEUser(result.user),
+      user: mapNeonUserToEEUser(result.user),
       token: result.token ?? undefined,
       cookies,
     };
   }
 
-  /**
-   * Get headers to clear the session cookies on logout.
-   */
+  // ── ISessionProvider ──
+
+  async createSession(_userId: string, metadata?: Record<string, unknown>): Promise<Session> {
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    return {
+      id: crypto.randomUUID(),
+      userId: _userId,
+      createdAt: now,
+      expiresAt,
+      metadata,
+    };
+  }
+
+  async validateSession(sessionId: string): Promise<Session | null> {
+    try {
+      const headers = new Headers();
+      headers.set('Cookie', `${this.sessionCookieName}=${sessionId}`);
+      const result = await this.fetchSession(headers);
+      if (!result?.session) return null;
+
+      return {
+        id: result.session.id,
+        userId: result.session.userId,
+        expiresAt: new Date(result.session.expiresAt),
+        createdAt: new Date(result.session.createdAt),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async destroySession(_sessionId: string): Promise<void> {
+    // Neon Auth (Better Auth) manages session destruction via the sign-out endpoint.
+    // Cookie clearing happens via getClearSessionHeaders.
+  }
+
+  async refreshSession(sessionId: string): Promise<Session | null> {
+    // Neon Auth (Better Auth) refreshes sessions automatically when
+    // get-session is called and the updateAge threshold is reached.
+    return this.validateSession(sessionId);
+  }
+
+  getSessionIdFromRequest(request: Request): string | null {
+    const cookieHeader = request.headers.get('Cookie');
+    if (!cookieHeader) return null;
+
+    for (const pair of cookieHeader.split(';')) {
+      const [key, ...rest] = pair.trim().split('=');
+      if (key?.trim() === this.sessionCookieName) {
+        return rest.join('=') || null;
+      }
+    }
+
+    return null;
+  }
+
+  getSessionHeaders(session: Session): Record<string, string> {
+    const cookie = (session as unknown as Record<string, unknown>)._sessionCookie;
+    if (typeof cookie === 'string') {
+      return { 'Set-Cookie': cookie };
+    }
+    return {};
+  }
+
   getClearSessionHeaders(): Record<string, string> {
     const cookies = [
       `${this.sessionCookieName}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
@@ -342,7 +440,8 @@ export class MastraAuthNeon
     }
   }
 
-  private async verifySession(headers: Headers): Promise<NeonSessionResponse | null> {
+  /** Fetch and validate a session from the Neon Auth REST API. */
+  public async fetchSession(headers: Headers): Promise<NeonSessionResponse | null> {
     const response = await fetch(`${this.baseUrl}/auth/get-session`, {
       method: 'GET',
       headers,
