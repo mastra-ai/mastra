@@ -327,7 +327,10 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
   // from task tool history), so skip its raw <current-task-list> snapshot here.
   // The `goal` state signal is surfaced by the goal/judge UI, so likewise skip
   // its raw <current-objective> snapshot.
-  if (stateSignalPart && (stateSignalPart.stateId === TASKS_STATE_ID || stateSignalPart.stateId === GOAL_STATE_SIGNAL_ID)) {
+  if (
+    stateSignalPart &&
+    (stateSignalPart.stateId === TASKS_STATE_ID || stateSignalPart.stateId === GOAL_STATE_SIGNAL_ID)
+  ) {
     return;
   }
 
