@@ -8,6 +8,7 @@
 import type { ScoreRowData } from '../../../evals/types';
 import type { Mastra } from '../../../mastra';
 import { computeScorerStats, isRegression } from './aggregate';
+import { getToolReplayMarker } from '../replay';
 import type {
   CompareExperimentsConfig,
   ComparisonResult,
@@ -91,6 +92,26 @@ export async function compareExperiments(mastra: Mastra, config: CompareExperime
     warnings.push(
       `Experiments have different dataset versions: ${experimentA.datasetVersion} vs ${experimentB.datasetVersion}`,
     );
+  }
+
+  // 3b. Check execution-condition mismatch — the runner stamps replay/mock
+  // runs precisely so score comparisons never silently mix them with live runs.
+  const markerA = getToolReplayMarker(experimentA.metadata as Record<string, unknown> | null | undefined);
+  const markerB = getToolReplayMarker(experimentB.metadata as Record<string, unknown> | null | undefined);
+  if (Boolean(markerA) !== Boolean(markerB)) {
+    const replaySide = markerA ? experimentIdA : experimentIdB;
+    warnings.push(
+      `Experiment ${replaySide} ran with tool replay/mocks while the other ran live — tool observations differ in kind, compare scores with care.`,
+    );
+  } else if (markerA && markerB) {
+    if (markerA.matching !== markerB.matching) {
+      warnings.push(
+        `Experiments used different replay matching policies (${markerA.matching ?? 'fifo'} vs ${markerB.matching ?? 'fifo'}).`,
+      );
+    }
+    if (markerA.fromExperimentId !== markerB.fromExperimentId) {
+      warnings.push('Experiments replayed from different recording sources.');
+    }
   }
 
   // 4. Load results for both experiments
