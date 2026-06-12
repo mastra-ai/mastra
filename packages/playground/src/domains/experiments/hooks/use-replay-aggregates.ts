@@ -1,6 +1,6 @@
 import type { ExperimentStatus } from '@mastra/core/storage';
 import { useMastraClient } from '@mastra/react';
-import { useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import type { ToolReplayCall, ToolReplayCallsSummary } from '../utils/tool-replay';
 import { getToolReplayReport, summarizeReplayCalls } from '../utils/tool-replay';
 
@@ -31,14 +31,30 @@ export interface ReplayAggregates {
   callTotals: ToolReplayCallsSummary;
   /** Per-item run flows in result order (only items whose report carries calls). */
   itemFlows: ReplayItemFlow[];
+  /**
+   * Set when the walk was capped mid-run: while the experiment is still
+   * running only the first {@link REPLAY_AGGREGATES_ITEM_CAP} items are
+   * folded. Completed experiments always walk every page (never partial).
+   */
+  partial?: true;
 }
 
 const PER_PAGE = 100;
 
+/** Pages folded per poll while the experiment is still running. */
+const RUNNING_PAGE_CAP = 5;
+
+/** Items covered by the capped walk while the experiment is still running. */
+export const REPLAY_AGGREGATES_ITEM_CAP = RUNNING_PAGE_CAP * PER_PAGE;
+
 /**
  * Folds every result of a replay experiment into groundedness aggregates.
- * Paginates through all pages (mirrors useScoresByExperimentId) so the
- * summary is never silently computed on a partial window.
+ * Once completed, it paginates through all pages (mirrors
+ * useScoresByExperimentId) so the summary is never silently computed on a
+ * partial window. While the experiment is still running (2s polling), the
+ * walk is capped at {@link RUNNING_PAGE_CAP} pages and the result is flagged
+ * `partial` — re-walking an unbounded result list on every poll would storm
+ * the API for large experiments.
  */
 export const useReplayAggregates = ({
   datasetId,
@@ -52,8 +68,13 @@ export const useReplayAggregates = ({
   experimentStatus?: ExperimentStatus;
 }) => {
   const client = useMastraClient();
+  const isRunning = experimentStatus === 'running' || experimentStatus === 'pending';
   return useQuery({
-    queryKey: ['experiment-replay-aggregates', datasetId, experimentId, experimentStatus],
+    // The raw status stays OUT of the key (it only drives polling) so the
+    // pending→running flip never discards the cache. Only the capped-vs-full
+    // walk mode is keyed: completion changes the key once, triggering the
+    // full walk, while keepPreviousData keeps the card rendered meanwhile.
+    queryKey: ['experiment-replay-aggregates', datasetId, experimentId, isRunning ? 'capped' : 'full'],
     queryFn: async (): Promise<ReplayAggregates> => {
       const aggregates: ReplayAggregates = {
         total: 0,
@@ -121,12 +142,20 @@ export const useReplayAggregates = ({
         }
         const total = response.pagination?.total ?? 0;
         if (!response.results.length || (page + 1) * PER_PAGE >= total) break;
+        if (isRunning && page + 1 >= RUNNING_PAGE_CAP) {
+          // More pages exist but the run is still going — stop here and say so.
+          aggregates.partial = true;
+          break;
+        }
         page++;
       }
 
       return aggregates;
     },
     enabled: enabled && Boolean(datasetId) && Boolean(experimentId),
-    refetchInterval: experimentStatus === 'running' || experimentStatus === 'pending' ? 2000 : false,
+    // Keeps the last aggregates rendered across refetches AND across the
+    // capped→full key change at completion — no spinner flicker mid-run.
+    placeholderData: keepPreviousData,
+    refetchInterval: isRunning ? 2000 : false,
   });
 };

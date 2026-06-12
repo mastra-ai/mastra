@@ -76,6 +76,7 @@ describe('useReplayAggregates', () => {
       // None of these fixtures carry a call-flow report.
       callTotals: { total: 0, replayed: 0, replayedWithDrift: 0, mocked: 0, missed: 0, live: 0 },
       itemFlows: [],
+      // No `partial` flag: completed experiments always walk every page.
       // liveResultWithJunkToolReplay contributes to total only — junk key is not a report.
     });
   });
@@ -135,5 +136,89 @@ describe('useReplayAggregates', () => {
     );
 
     expect(result.current.fetchStatus).toBe('idle');
+  });
+
+  it('caps the walk at 5 pages mid-run and flags the result partial; completed walks everything', async () => {
+    // 7 pages of 100 — a running experiment must stop after page 4 (500 items).
+    const total = 700;
+    const pageRequests: number[] = [];
+    server.use(
+      http.get(`${BASE_URL}/api/datasets/dataset-1/experiments/exp-replay-1/results`, ({ request }) => {
+        const page = Number(new URL(request.url).searchParams.get('page') ?? 0);
+        pageRequests.push(page);
+        const results = Array.from({ length: 100 }, (_, i) => ({
+          ...replayResult,
+          id: `result-${page}-${i}`,
+          itemId: `item-${page}-${i}`,
+        }));
+        return HttpResponse.json(listResultsResponse(results, total, page));
+      }),
+    );
+
+    const { result, rerender } = renderHook(
+      ({ experimentStatus }: { experimentStatus: 'running' | 'completed' }) =>
+        useReplayAggregates({
+          datasetId: 'dataset-1',
+          experimentId: 'exp-replay-1',
+          enabled: true,
+          experimentStatus,
+        }),
+      { wrapper, initialProps: { experimentStatus: 'running' as 'running' | 'completed' } },
+    );
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.data?.partial).toBe(true);
+    expect(result.current.data?.total).toBe(500);
+    expect(Math.max(...pageRequests)).toBe(4);
+
+    rerender({ experimentStatus: 'completed' });
+
+    await waitFor(() => expect(result.current.data?.total).toBe(700));
+    expect(result.current.data?.partial).toBeUndefined();
+    expect(Math.max(...pageRequests)).toBe(6);
+  });
+
+  it('keeps the previous aggregates rendered across the running→completed transition', async () => {
+    const gate = (() => {
+      let resolve: () => void = () => {};
+      const promise = new Promise<void>(r => {
+        resolve = r;
+      });
+      return { promise, resolve };
+    })();
+    let calls = 0;
+    server.use(
+      http.get(`${BASE_URL}/api/datasets/dataset-1/experiments/exp-replay-1/results`, async () => {
+        calls += 1;
+        // The second (full) walk hangs until released — the previous data must
+        // stay visible meanwhile instead of flipping back to the spinner.
+        if (calls > 1) await gate.promise;
+        return HttpResponse.json(listResultsResponse([callFlowResult]));
+      }),
+    );
+
+    const { result, rerender } = renderHook(
+      ({ experimentStatus }: { experimentStatus: 'running' | 'completed' }) =>
+        useReplayAggregates({
+          datasetId: 'dataset-1',
+          experimentId: 'exp-replay-1',
+          enabled: true,
+          experimentStatus,
+        }),
+      { wrapper, initialProps: { experimentStatus: 'running' as 'running' | 'completed' } },
+    );
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    const runningData = result.current.data;
+
+    rerender({ experimentStatus: 'completed' });
+
+    // Key changed (capped → full) but keepPreviousData keeps the card fed.
+    expect(result.current.data).toEqual(runningData);
+    expect(result.current.isLoading).toBe(false);
+
+    gate.resolve();
+    await waitFor(() => expect(result.current.isFetching).toBe(false));
+    expect(result.current.data?.total).toBe(1);
   });
 });
