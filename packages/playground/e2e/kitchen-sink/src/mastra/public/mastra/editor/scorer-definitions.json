@@ -1,0 +1,191 @@
+{
+  "update-redirect-mq5l7qh0": {
+    "defaultSampling": {
+      "type": "none"
+    },
+    "description": "Default test description",
+    "instructions": "Default test instructions",
+    "model": {
+      "name": "gpt-4o-mini",
+      "provider": "openai"
+    },
+    "name": "Updated mq5l7ssl",
+    "scoreRange": {
+      "max": 1,
+      "min": 0
+    },
+    "type": "llm-judge"
+  },
+  "full-edit-mq5l7tjb": {
+    "defaultSampling": {
+      "rate": 0.3,
+      "type": "ratio"
+    },
+    "description": "Updated description for full edit test",
+    "instructions": "Updated instructions with new scoring criteria.",
+    "model": {
+      "name": "gpt-4o-mini",
+      "provider": "openai"
+    },
+    "name": "Fully Updated mq5l7vs5",
+    "scoreRange": {
+      "max": 8,
+      "min": 2
+    },
+    "type": "llm-judge"
+  },
+  "partial-edit-mq5l7xpr": {
+    "defaultSampling": {
+      "type": "none"
+    },
+    "description": "Partially updated description",
+    "instructions": "Default test instructions",
+    "model": {
+      "name": "gpt-4o-mini",
+      "provider": "openai"
+    },
+    "name": "Partial Edit mq5l7xpr",
+    "scoreRange": {
+      "max": 20,
+      "min": 0
+    },
+    "type": "llm-judge"
+  },
+  "reload-edit-mq5l819o": {
+    "defaultSampling": {
+      "type": "none"
+    },
+    "description": "Default test description",
+    "instructions": "Instructions that should survive reload.",
+    "model": {
+      "name": "gpt-4o-mini",
+      "provider": "openai"
+    },
+    "name": "After Reload mq5l819o",
+    "scoreRange": {
+      "max": 1,
+      "min": 0
+    },
+    "type": "llm-judge"
+  },
+  "name-field-mq5l85b0": {
+    "defaultSampling": {
+      "type": "none"
+    },
+    "description": "Default test description",
+    "instructions": "Default test instructions",
+    "model": {
+      "name": "gpt-4o-mini",
+      "provider": "openai"
+    },
+    "name": "Name Updated mq5l87yz",
+    "scoreRange": {
+      "max": 1,
+      "min": 0
+    },
+    "type": "llm-judge"
+  },
+  "desc-field-mq5l89bm": {
+    "defaultSampling": {
+      "type": "none"
+    },
+    "description": "A newly added description",
+    "instructions": "Default test instructions",
+    "model": {
+      "name": "gpt-4o-mini",
+      "provider": "openai"
+    },
+    "name": "Desc Field mq5l89bm",
+    "scoreRange": {
+      "max": 1,
+      "min": 0
+    },
+    "type": "llm-judge"
+  },
+  "range-field-mq5l8cgs": {
+    "defaultSampling": {
+      "type": "none"
+    },
+    "description": "Default test description",
+    "instructions": "Default test instructions",
+    "model": {
+      "name": "gpt-4o-mini",
+      "provider": "openai"
+    },
+    "name": "Range Field mq5l8cgs",
+    "scoreRange": {
+      "max": 100,
+      "min": 5
+    },
+    "type": "llm-judge"
+  },
+  "sampling-none-ratio-mq5l8h9x": {
+    "defaultSampling": {
+      "rate": 0.6,
+      "type": "ratio"
+    },
+    "description": "Default test description",
+    "instructions": "Default test instructions",
+    "model": {
+      "name": "gpt-4o-mini",
+      "provider": "openai"
+    },
+    "name": "Sampling None-Ratio mq5l8h9x",
+    "scoreRange": {
+      "max": 1,
+      "min": 0
+    },
+    "type": "llm-judge"
+  },
+  "sampling-ratio-none-mq5l8ks1": {
+    "defaultSampling": {
+      "type": "none"
+    },
+    "description": "Default test description",
+    "instructions": "Default test instructions",
+    "model": {
+      "name": "gpt-4o-mini",
+      "provider": "openai"
+    },
+    "name": "Sampling Ratio-None mq5l8ks1",
+    "scoreRange": {
+      "max": 1,
+      "min": 0
+    },
+    "type": "llm-judge"
+  },
+  "instructions-field-mq5l8pel": {
+    "defaultSampling": {
+      "type": "none"
+    },
+    "description": "Default test description",
+    "instructions": "Brand new scoring instructions for this test.",
+    "model": {
+      "name": "gpt-4o-mini",
+      "provider": "openai"
+    },
+    "name": "Instructions Field mq5l8pel",
+    "scoreRange": {
+      "max": 1,
+      "min": 0
+    },
+    "type": "llm-judge"
+  },
+  "latest-data-mq5l98b3": {
+    "defaultSampling": {
+      "type": "none"
+    },
+    "description": "Default test description",
+    "instructions": "Default test instructions",
+    "model": {
+      "name": "gpt-4o-mini",
+      "provider": "openai"
+    },
+    "name": "Second Update mq5l9e3n",
+    "scoreRange": {
+      "max": 1,
+      "min": 0
+    },
+    "type": "llm-judge"
+  }
+}

@@ -1,5 +1,5 @@
 export * from './context/workflow-run-context';
-export * from './context/workflow-step-detail-context';
+export * from './context/workflow-run-provider';
 export * from './workflow/workflow-graph';
 export * from './workflow/workflow-trigger';
 export * from './context/use-current-run';

@@ -1,29 +1,16 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import {
-  Button,
-  CodeEditor,
-  ScrollArea,
-  Skeleton,
-  Txt,
-  Icon,
-  isObjectEmpty,
-  toast,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogHeader,
-  DialogDescription,
-  DialogBody,
-} from '@mastra/playground-ui';
-import { Braces, Loader2 } from 'lucide-react';
-import { useState, useEffect, useContext } from 'react';
+import type { WorkflowRunStatus } from '@mastra/core/workflows';
+import { ScrollArea, Skeleton, Txt, Icon, Badge, WorkflowIcon, toast, Switch, CopyButton } from '@mastra/playground-ui';
+import { Loader2 } from 'lucide-react';
+import { useState, useEffect, useContext, useRef } from 'react';
+import { WorkflowRequestContextDialog } from '../components/workflow-request-context-dialog';
+import { WorkflowRunOptionsDialog } from '../components/workflow-run-options-dialog';
+import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useSuspendedSteps, useWorkflowSchemas } from './use-workflow-trigger';
 import { WorkflowCancelButton } from './workflow-cancel-button';
-import { WorkflowStepsStatus } from './workflow-steps-status';
-import { WorkflowSuspendedSteps } from './workflow-suspended-steps';
-import type { ResumeStepParams } from './workflow-suspended-steps';
+import { WorkflowJsonDialog } from './workflow-json-dialog';
 import { WorkflowTriggerForm } from './workflow-trigger-form';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
@@ -31,6 +18,7 @@ import { useMergedRequestContext } from '@/domains/request-context/context/schem
 export interface WorkflowTriggerProps {
   workflowId: string;
   paramsRunId?: string;
+  paramsRunStatus?: WorkflowRunStatus;
   setRunId?: (runId: string) => void;
   workflow?: GetWorkflowResponse;
   isLoading?: boolean;
@@ -76,14 +64,85 @@ export interface WorkflowTriggerProps {
   }>;
 }
 
+function DebugModeSwitch() {
+  const { debugMode, setDebugMode } = useContext(WorkflowRunContext);
+  return (
+    <label className="flex shrink-0 items-center gap-2 cursor-pointer">
+      <Switch checked={debugMode} onCheckedChange={setDebugMode} aria-label="Debug" />
+      <Txt variant="ui-xs" className="text-neutral3 whitespace-nowrap">
+        Debug
+      </Txt>
+    </label>
+  );
+}
+
+function useSyncStreamResultToWorkflowRunContext(streamResult: WorkflowRunStreamResult | null) {
+  const { setResult } = useContext(WorkflowRunContext);
+
+  useEffect(() => {
+    if (streamResult) {
+      setResult(streamResult);
+    }
+  }, [setResult, streamResult]);
+}
+
+function formatRunStatus(status?: WorkflowRunStatus) {
+  if (!status) return 'Run';
+  return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function formatRunDuration(durationMs?: number) {
+  if (durationMs === undefined) return '—';
+  if (durationMs < 1000) return `${durationMs}ms`;
+
+  const seconds = durationMs / 1000;
+  if (seconds < 60) return `${Number(seconds.toPrecision(3))}s`;
+
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
+  return remainingSeconds ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
+}
+
+function formatRelativeTime(ms?: number) {
+  if (!ms || ms <= 0) return '—';
+  const diff = ms - Date.now();
+  const abs = Math.abs(diff);
+  const seconds = Math.floor(abs / 1000);
+  if (seconds < 60) return diff >= 0 ? `in ${seconds}s` : `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return diff >= 0 ? `in ${minutes}m` : `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return diff >= 0 ? `in ${hours}h` : `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return diff >= 0 ? `in ${days}d` : `${days}d ago`;
+}
+
+function getRunDuration(result: WorkflowRunStreamResult | null, status?: WorkflowRunStatus) {
+  const stepTimes: Array<{ startedAt: number; endedAt?: number }> = Object.values(result?.steps ?? {}).flatMap(step => {
+    const startedAt = 'startedAt' in step ? step.startedAt : undefined;
+    if (typeof startedAt !== 'number') return [];
+    const endedAt = 'endedAt' in step ? step.endedAt : undefined;
+    return [{ startedAt, ...(typeof endedAt === 'number' ? { endedAt } : {}) }];
+  });
+
+  if (stepTimes.length === 0) return undefined;
+
+  const startedAt = Math.min(...stepTimes.map(step => step.startedAt));
+  const endedTimes = stepTimes.flatMap(step => (step.endedAt ? [step.endedAt] : []));
+  const endedAt = endedTimes.length > 0 ? Math.max(...endedTimes) : undefined;
+  const isActive = status === 'running' || status === 'suspended' || status === 'waiting';
+  const effectiveEndedAt = endedAt ?? (isActive ? Date.now() : undefined);
+  return effectiveEndedAt === undefined ? undefined : effectiveEndedAt - startedAt;
+}
+
 export function WorkflowTrigger({
   workflowId,
   paramsRunId,
+  paramsRunStatus,
   setRunId,
   workflow,
   isLoading,
   createWorkflowRun,
-  resumeWorkflow,
   streamWorkflow,
   observeWorkflowStream,
   isStreamingWorkflow,
@@ -93,7 +152,16 @@ export function WorkflowTrigger({
 }: WorkflowTriggerProps) {
   const requestContext = useMergedRequestContext();
 
-  const { result, setResult, payload, setPayload, setRunId: setContextRunId } = useContext(WorkflowRunContext);
+  const {
+    result,
+    setResult,
+    payload,
+    setPayload,
+    setRunId: setContextRunId,
+    runId: contextRunId,
+    runSnapshot,
+  } = useContext(WorkflowRunContext);
+  useSyncStreamResultToWorkflowRunContext(streamResult);
   const { canExecute } = usePermissions();
 
   // Check if user can execute workflows
@@ -101,10 +169,13 @@ export function WorkflowTrigger({
 
   const [innerRunId, setInnerRunId] = useState<string>('');
   const [cancelResponse, setCancelResponse] = useState<{ message: string } | null>(null);
+  const observedParamRunRef = useRef<string | null>(null);
 
   const streamResultToUse = result ?? streamResult;
   const suspendedSteps = useSuspendedSteps(streamResultToUse, innerRunId);
   const { zodSchemaToUse, hasStateSchema } = useWorkflowSchemas(workflow);
+
+  const hasFinished = ['success', 'failed', 'canceled', 'bailed'].includes(streamResultToUse?.status ?? '');
 
   const handleExecuteWorkflow = async (data: any) => {
     try {
@@ -128,41 +199,29 @@ export function WorkflowTrigger({
     }
   };
 
-  const handleResumeWorkflow = async (step: ResumeStepParams) => {
-    if (!workflow) return;
-
-    setCancelResponse(null);
-    const { stepId, runId: prevRunId, resumeData } = step;
-
-    const run = await createWorkflowRun({ workflowId, prevRunId });
-
-    await resumeWorkflow({
-      step: stepId,
-      runId: run.runId,
-      resumeData,
-      workflowId,
-      requestContext,
-    });
-  };
-
   const handleCancelWorkflowRun = async () => {
     const response = await cancelWorkflowRun({ workflowId, runId: innerRunId });
     setCancelResponse(response);
   };
 
   useEffect(() => {
-    if (paramsRunId && observeWorkflowStream) {
+    if (!paramsRunId || !observeWorkflowStream) return;
+
+    const observedParamRunKey = `${workflowId}:${paramsRunId}`;
+    if (observedParamRunRef.current !== observedParamRunKey) {
       observeWorkflowStream({ workflowId, runId: paramsRunId });
-      setInnerRunId(paramsRunId);
-      setContextRunId(paramsRunId);
+      observedParamRunRef.current = observedParamRunKey;
     }
-  }, [paramsRunId]);
+
+    setInnerRunId(paramsRunId);
+    setContextRunId(paramsRunId);
+  }, [paramsRunId, observeWorkflowStream, setContextRunId, workflowId]);
 
   useEffect(() => {
-    if (streamResult) {
-      setResult(streamResult);
+    if (!paramsRunId && !contextRunId && !streamResultToUse) {
+      setInnerRunId('');
     }
-  }, [streamResult]);
+  }, [contextRunId, paramsRunId, streamResultToUse]);
 
   if (isLoading) {
     return (
@@ -178,14 +237,61 @@ export function WorkflowTrigger({
   if (!workflow) return null;
 
   const isSuspendedSteps = suspendedSteps.length > 0;
-  const workflowActivePaths = streamResultToUse?.steps ?? {};
-  const hasWorkflowActivePaths = Object.values(workflowActivePaths).length > 0;
+
+  const activeRunId = paramsRunId || innerRunId;
+  const isViewingRun = !!activeRunId;
+  const stepsCount = Object.keys(workflow?.steps ?? {}).length;
+  const runStatus = streamResultToUse?.status ?? paramsRunStatus;
+
+  const triggerHeadingSlot = (
+    <div className="flex w-full items-center gap-2 px-5">
+      <Icon className="shrink-0 text-neutral4">
+        <WorkflowIcon />
+      </Icon>
+      <Txt as="span" variant="ui-md" className="text-neutral5 font-semibold truncate">
+        {workflow?.name ?? workflowId}
+      </Txt>
+      <CopyButton content={workflow?.name ?? workflowId} variant="ghost" className="shrink-0" />
+      <Badge className="ml-auto shrink-0">
+        {stepsCount} step{stepsCount > 1 ? 's' : ''}
+      </Badge>
+    </div>
+  );
+
+  const runDuration = getRunDuration(streamResultToUse, runStatus);
+  const runTimestamp = runSnapshot?.timestamp;
+
+  const runHeadingSlot = (
+    <div className="flex w-full items-start gap-3 px-5">
+      {runStatus && (
+        <span className="shrink-0 pt-1">
+          <WorkflowRunStatusIcon status={runStatus} />
+        </span>
+      )}
+      <div className="min-w-0 flex-1">
+        <Txt as="span" variant="ui-md" className="block truncate font-semibold text-neutral5">
+          {formatRunStatus(runStatus)}
+        </Txt>
+        <Txt as="span" variant="ui-xs" className="block truncate text-neutral3" title={activeRunId}>
+          {activeRunId}
+        </Txt>
+      </div>
+      <div className="shrink-0 text-right">
+        <Txt as="span" variant="ui-xs" className="block font-medium text-neutral5">
+          {formatRunDuration(runDuration)}
+        </Txt>
+        <Txt as="span" variant="ui-xs" className="block text-neutral3">
+          {formatRelativeTime(runTimestamp)}
+        </Txt>
+      </div>
+    </div>
+  );
 
   return (
     <div className="h-full pt-3 overflow-y-auto">
-      <div className="space-y-4 px-5 pb-5 border-b border-border1">
+      <div className={`border-b border-border1/50`}>
         {isSuspendedSteps && isStreamingWorkflow && (
-          <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mx-5 -mt-5 border-b border-border1">
+          <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mt-5 border-b border-border1">
             <Icon>
               <Loader2 className="animate-spin text-neutral6" />
             </Icon>
@@ -193,77 +299,76 @@ export function WorkflowTrigger({
           </div>
         )}
 
-        {!isSuspendedSteps && canExecuteWorkflow && (
+        {canExecuteWorkflow && (
           <WorkflowTriggerForm
             zodSchema={zodSchemaToUse}
             defaultValues={payload}
-            isStreaming={isStreamingWorkflow}
+            isStreaming={isStreamingWorkflow || isSuspendedSteps}
             onExecute={data => {
               setPayload(data);
               void handleExecuteWorkflow(data);
             }}
-            isViewingRun={!!paramsRunId}
+            isViewingRun={!!paramsRunId || hasFinished}
+            isReadOnly={!!paramsRunId || hasFinished || isSuspendedSteps}
+            disableSubmit={isSuspendedSteps}
             isProcessorWorkflow={workflow?.isProcessorWorkflow}
+            collapsible={false}
+            headingSlot={isViewingRun ? runHeadingSlot : triggerHeadingSlot}
+            leftActions={!paramsRunId ? <DebugModeSwitch /> : undefined}
+            submitActions={
+              <>
+                {workflow?.requestContextSchema && (
+                  <WorkflowRequestContextDialog requestContextSchema={workflow.requestContextSchema} />
+                )}
+                <WorkflowRunOptionsDialog />
+              </>
+            }
           />
         )}
 
-        {!isSuspendedSteps && !canExecuteWorkflow && (
-          <Txt variant="ui-sm" className="text-neutral3 py-2">
+        {!canExecuteWorkflow && (
+          <Txt variant="ui-sm" className="text-neutral3 py-2 px-5">
             You don't have permission to execute workflows.
           </Txt>
         )}
 
-        <WorkflowSuspendedSteps
-          suspendedSteps={suspendedSteps}
-          workflow={workflow}
-          isStreaming={isStreamingWorkflow}
-          onResume={handleResumeWorkflow}
-        />
+        {hasFinished && result && (
+          <div className="px-5 pb-4">
+            <div className="flex flex-col gap-1">
+              <WorkflowJsonDialog
+                className="w-full justify-start"
+                variant="ghost"
+                size="sm"
+                data={result}
+                triggerLabel="Entire workflow execution (JSON)"
+                title="Entire workflow execution (JSON)"
+              />
+              {'result' in result && result.result !== undefined && (
+                <WorkflowJsonDialog
+                  className="w-full justify-start"
+                  variant="ghost"
+                  size="sm"
+                  data={{ result: result.result }}
+                  triggerLabel="Run output"
+                  title="Run output (JSON)"
+                />
+              )}
+            </div>
+          </div>
+        )}
 
-        <WorkflowCancelButton
-          status={result?.status}
-          cancelMessage={cancelResponse?.message ?? null}
-          isCancelling={isCancellingWorkflowRun}
-          onCancel={handleCancelWorkflowRun}
-        />
-
-        {hasWorkflowActivePaths && (
-          <WorkflowStepsStatus steps={workflowActivePaths} workflowResult={streamResultToUse} />
+        {(result?.status === 'running' || isSuspendedSteps) && (
+          <div data-testid="workflow-cancel-action" className="px-5 pb-4 pt-3">
+            <WorkflowCancelButton
+              status={isSuspendedSteps ? 'suspended' : result?.status}
+              cancelMessage={cancelResponse?.message ?? null}
+              isCancelling={isCancellingWorkflowRun}
+              onCancel={handleCancelWorkflowRun}
+              disabled={isSuspendedSteps}
+            />
+          </div>
         )}
       </div>
-
-      {result && !isObjectEmpty(result) && (
-        <div className="p-5 border-b border-border1">
-          <WorkflowJsonDialog result={result} />
-        </div>
-      )}
     </div>
   );
 }
-
-const WorkflowJsonDialog = ({ result }: { result: Record<string, unknown> }) => {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <>
-      <Button variant="default" onClick={() => setOpen(true)} className="w-full truncate">
-        <Icon>
-          <Braces className="text-neutral3" />
-        </Icon>
-        Open Workflow Execution (JSON)
-      </Button>
-
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-6xl">
-          <DialogHeader>
-            <DialogTitle>Workflow Execution (JSON)</DialogTitle>
-            <DialogDescription>JSON view of the workflow execution result</DialogDescription>
-          </DialogHeader>
-          <DialogBody className="max-h-[90vh]">
-            <CodeEditor data={result} className="p-4" />
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-};

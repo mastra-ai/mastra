@@ -33,8 +33,31 @@ export const WorkflowRunDetail = ({
 
   if (isLoadingRunExecutionResult) {
     return (
-      <div className="p-4">
-        <Skeleton className="h-[600px]" />
+      <div className="p-4 space-y-4">
+        <div className="flex items-start gap-3">
+          <Skeleton className="h-5 w-5 shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <Skeleton className="h-4 w-24" />
+            <Skeleton className="h-3 w-40" />
+          </div>
+          <div className="shrink-0 space-y-2">
+            <Skeleton className="ml-auto h-3 w-12" />
+            <Skeleton className="ml-auto h-3 w-16" />
+          </div>
+        </div>
+
+        {/* "Run input" label + Form/JSON toggle */}
+        <div className="flex items-center justify-between">
+          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-7 w-28 rounded-md" />
+        </div>
+
+        {/* Form fields */}
+        <div className="space-y-3">
+          <Skeleton className="h-9 w-full rounded-md" />
+          <Skeleton className="h-9 w-full rounded-md" />
+          <Skeleton className="h-9 w-3/4 rounded-md" />
+        </div>
       </div>
     );
   }
@@ -58,6 +81,7 @@ export const WorkflowRunDetail = ({
         <WorkflowTrigger
           {...triggerProps}
           paramsRunId={runId}
+          paramsRunStatus={runStatus}
           workflowId={workflowId}
           observeWorkflowStream={() => {
             if (runStatus !== 'success' && runStatus !== 'failed' && runStatus !== 'canceled') {
