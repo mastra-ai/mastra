@@ -480,7 +480,9 @@ export class Harness<TState = {}> {
       : (config.modes.find(mode => mode.default || mode.metadata?.default === true) ?? config.modes[0]);
     if (!defaultMode) {
       throw new Error(
-        config.defaultModeId ? `Default mode not found: ${config.defaultModeId}` : 'Harness requires at least one agent mode',
+        config.defaultModeId
+          ? `Default mode not found: ${config.defaultModeId}`
+          : 'Harness requires at least one agent mode',
       );
     }
     this.currentModeId = defaultMode.id;
