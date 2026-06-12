@@ -15,7 +15,7 @@ const itemClass = cn(
 );
 
 const popupClass = cn(
-  'bg-surface3 text-neutral4 z-50 min-w-44 max-h-[min(20rem,var(--available-height))] overflow-x-hidden overflow-y-auto rounded-xl border border-border1 p-1 shadow-dialog origin-[var(--transform-origin)] outline-none',
+  'bg-surface3 text-neutral4 z-1000 min-w-44 max-h-[min(20rem,var(--available-height))] overflow-x-hidden overflow-y-auto rounded-xl border border-border1 p-1 shadow-dialog origin-[var(--transform-origin)] outline-none',
   'data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95',
   'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
 );
@@ -35,7 +35,7 @@ const ContextMenuContent = React.forwardRef<HTMLDivElement, ContextMenuContentPr
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
-        className="z-50 outline-none"
+        className="isolate z-1000 outline-none"
       >
         <ContextMenuPrimitive.Popup
           ref={ref}
@@ -181,7 +181,7 @@ const ContextMenuSubContent = React.forwardRef<HTMLDivElement, ContextMenuSubCon
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
-        className="z-50 outline-none"
+        className="isolate z-1000 outline-none"
       >
         <ContextMenuPrimitive.Popup
           ref={ref}

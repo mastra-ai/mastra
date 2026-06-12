@@ -78,6 +78,15 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
 - Use \`${MC_TOOLS.SEARCH_CONTENT}\` or \`${MC_TOOLS.FIND_FILES}\` first if you do not yet know where the symbol is.`);
   }
 
+  if (!denied.has(MC_TOOLS.NOTIFICATION_INBOX)) {
+    readTools.push(`
+**${MC_TOOLS.NOTIFICATION_INBOX}** — Inspect and manage notification inbox records
+- Use this when a \`<notification-summary>\` says pending notifications exist.
+- Use \`{ "action": "list", "status": "pending" }\` or \`{ "action": "search", "query": "..." }\` to find notification records for the current thread.
+- Use \`read\` to deliver unread notification signals into the chat and mark them seen; the tool result summarizes the count instead of exposing notification contents.
+- Use \`dismiss\` or \`archive\` only when the user asks or the notification is no longer relevant.`);
+  }
+
   if (readTools.length > 0) {
     sections.push(readTools.join('\n'));
   }

@@ -2,19 +2,14 @@
  * Stagehand Browser Types
  */
 
+import type { ModelConfiguration as StagehandModelConfiguration } from '@browserbasehq/stagehand';
 import type { BrowserConfig as BaseBrowserConfig, BrowserRecordingOptions } from '@mastra/core/browser';
 import type { StagehandToolName } from './tools/constants';
 
 /**
- * Model configuration for Stagehand AI operations
+ * Model configuration for Stagehand AI operations.
  */
-export type ModelConfiguration =
-  | string // Format: "provider/model" (e.g., "openai/gpt-4o", "anthropic/claude-3-5-sonnet-20241022")
-  | {
-      modelName: string;
-      apiKey?: string;
-      baseURL?: string;
-    };
+export type ModelConfiguration = StagehandModelConfiguration;
 
 /**
  * Stagehand-specific configuration fields.

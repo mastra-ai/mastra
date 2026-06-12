@@ -11,15 +11,21 @@ import type { Event, EventCallback, SubscribeOptions } from './types';
 type ClientFrame =
   | { type: 'subscribe'; topic: string }
   | { type: 'unsubscribe'; topic: string }
-  | { type: 'publish'; topic: string; event: Omit<Event, 'id' | 'createdAt'> }
+  | { type: 'publish'; topic: string; event: Omit<Event, 'id' | 'createdAt'>; localOnly?: boolean }
   | { type: 'ack'; id?: string }
   | { type: 'nack'; id?: string };
 
 type ServerFrame = { type: 'event'; topic: string; event: Event } | { type: 'subscribed'; topic: string };
 
+type UnixSocketPubSubOptions = {
+  maxRemoteClientQueuedBytes?: number;
+};
+
 type BrokerClient = {
   socket: net.Socket;
   subscriptions: Set<string>;
+  writeChain: Promise<void>;
+  queuedBytes: number;
 };
 
 type SubscribeWaiter = {
@@ -27,28 +33,70 @@ type SubscribeWaiter = {
   reject: (error: Error) => void;
 };
 
-function writeFrame(socket: net.Socket, frame: ClientFrame | ServerFrame): Promise<void> {
+const DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES = 64 * 1024 * 1024;
+
+function serializeFrame(frame: ClientFrame | ServerFrame): string {
+  return `${JSON.stringify(frame)}\n`;
+}
+
+function writeSerializedFrame(socket: net.Socket, serializedFrame: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const onError = (error: Error) => {
-      socket.off('drain', onDrain);
-      reject(error);
-    };
-    const onDrain = () => {
+    let writeCompleted = false;
+    let drainCompleted = true;
+    let settled = false;
+
+    const cleanup = () => {
       socket.off('error', onError);
+      socket.off('close', onClose);
+      socket.off('drain', onDrain);
+    };
+    const settle = (error?: Error) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (error) {
+        reject(error);
+        return;
+      }
       resolve();
+    };
+    const maybeResolve = () => {
+      if (writeCompleted && drainCompleted) {
+        settle();
+      }
+    };
+    const onError = (error: Error) => settle(error);
+    const onClose = () => settle(new Error('UnixSocketPubSub socket closed before write completed'));
+    const onDrain = () => {
+      drainCompleted = true;
+      maybeResolve();
     };
 
     socket.once('error', onError);
-    const drained = socket.write(`${JSON.stringify(frame)}\n`, () => {
-      if (drained) {
-        socket.off('error', onError);
-        resolve();
-      }
-    });
+    socket.once('close', onClose);
+    let drained: boolean;
+    try {
+      drained = socket.write(serializedFrame, error => {
+        if (error) {
+          settle(error);
+          return;
+        }
+        writeCompleted = true;
+        maybeResolve();
+      });
+    } catch (error) {
+      settle(error as Error);
+      return;
+    }
     if (!drained) {
+      drainCompleted = false;
       socket.once('drain', onDrain);
     }
   });
+}
+
+function writeFrame(socket: net.Socket, frame: ClientFrame | ServerFrame): Promise<void> {
+  return writeSerializedFrame(socket, serializeFrame(frame));
 }
 
 function nextTick(): Promise<void> {
@@ -85,12 +133,14 @@ export class UnixSocketPubSub extends PubSub {
   #callbacks = new Map<string, Set<EventCallback>>();
   #subscribeWaiters = new Map<string, SubscribeWaiter[]>();
   #brokerClients = new Map<net.Socket, BrokerClient>();
-  #pendingWrites: Promise<void>[] = [];
+  #pendingWrites = new Set<Promise<void>>();
   #recovering?: Promise<void>;
+  #maxRemoteClientQueuedBytes: number;
 
-  constructor(socketPath: string) {
+  constructor(socketPath: string, options: UnixSocketPubSubOptions = {}) {
     super();
     this.socketPath = socketPath;
+    this.#maxRemoteClientQueuedBytes = options.maxRemoteClientQueuedBytes ?? DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES;
   }
 
   override get supportedModes(): ReadonlyArray<PubSubDeliveryMode> {
@@ -106,10 +156,33 @@ export class UnixSocketPubSub extends PubSub {
     return this.#isBroker ? this.#brokerClients.size : 0;
   }
 
-  async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+  async publish(
+    topic: string,
+    event: Omit<Event, 'id' | 'createdAt'>,
+    options?: { localOnly?: boolean },
+  ): Promise<void> {
     await this.#ensureStarted();
+
+    // `localOnly` events stay entirely within the publishing process. They are
+    // never serialized over a unix socket, so live methods on payload values
+    // (e.g. `MastraModelOutput.getFullOutput`, `step.condition` functions on
+    // serialized step graphs) survive intact. This is the semantic the agent's
+    // execution-workflow relies on: the run result is delivered via
+    // `workflows-finish` and includes the `MastraModelOutput` instance —
+    // round-tripping it through the broker would strip its methods.
+    if (options?.localOnly) {
+      const localEvent: Event = {
+        ...event,
+        id: randomUUID(),
+        createdAt: new Date(),
+        deliveryAttempt: 1,
+      };
+      this.#deliverLocal(topic, localEvent);
+      return;
+    }
+
     if (this.#isBroker) {
-      await this.#publishFromBroker(topic, event);
+      await this.#publishFromBroker(topic, event, undefined, options?.localOnly);
       return;
     }
 
@@ -117,7 +190,7 @@ export class UnixSocketPubSub extends PubSub {
     if (!socket || socket.destroyed) {
       await this.#ensureStarted(true);
     }
-    await this.#sendToBroker({ type: 'publish', topic, event });
+    await this.#sendToBroker({ type: 'publish', topic, event, localOnly: options?.localOnly });
   }
 
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
@@ -160,8 +233,7 @@ export class UnixSocketPubSub extends PubSub {
   }
 
   async flush(): Promise<void> {
-    await Promise.allSettled(this.#pendingWrites);
-    this.#pendingWrites = [];
+    await Promise.allSettled([...this.#pendingWrites]);
   }
 
   async close(): Promise<void> {
@@ -172,10 +244,9 @@ export class UnixSocketPubSub extends PubSub {
     this.#clientSocket = undefined;
     this.#rejectSubscribeWaiters(new Error('UnixSocketPubSub is closed'));
 
-    for (const client of this.#brokerClients.values()) {
-      client.socket.destroy();
+    for (const client of [...this.#brokerClients.values()]) {
+      this.#removeBrokerClient(client);
     }
-    this.#brokerClients.clear();
 
     if (this.#server) {
       await new Promise<void>(resolve => this.#server?.close(() => resolve()));
@@ -436,21 +507,67 @@ export class UnixSocketPubSub extends PubSub {
   }
 
   #handleBrokerClient(socket: net.Socket) {
-    const client: BrokerClient = { socket, subscriptions: new Set() };
+    const client: BrokerClient = {
+      socket,
+      subscriptions: new Set(),
+      writeChain: Promise.resolve(),
+      queuedBytes: 0,
+    };
     this.#brokerClients.set(socket, client);
     readFrames(socket, frame => {
       const clientFrame = frame as ClientFrame;
       if (clientFrame.type === 'subscribe') {
         client.subscriptions.add(clientFrame.topic);
-        void writeFrame(socket, { type: 'subscribed', topic: clientFrame.topic }).catch(() => {});
+        this.#enqueueBrokerClientWrite(client, { type: 'subscribed', topic: clientFrame.topic });
       } else if (clientFrame.type === 'unsubscribe') {
         client.subscriptions.delete(clientFrame.topic);
       } else if (clientFrame.type === 'publish') {
-        void this.#publishFromBroker(clientFrame.topic, clientFrame.event);
+        void this.#publishFromBroker(clientFrame.topic, clientFrame.event, client, clientFrame.localOnly);
       }
     });
-    socket.on('close', () => this.#brokerClients.delete(socket));
-    socket.on('error', () => this.#brokerClients.delete(socket));
+    socket.on('close', () => this.#removeBrokerClient(client));
+    socket.on('error', () => this.#removeBrokerClient(client));
+  }
+
+  #enqueueBrokerClientWrite(client: BrokerClient, frame: ServerFrame) {
+    if (this.#brokerClients.get(client.socket) !== client || client.socket.destroyed) return;
+
+    const serializedFrame = serializeFrame(frame);
+    const queuedBytes = Buffer.byteLength(serializedFrame);
+    if (client.queuedBytes + queuedBytes > this.#maxRemoteClientQueuedBytes) {
+      this.#removeBrokerClient(client);
+      return;
+    }
+
+    client.queuedBytes += queuedBytes;
+
+    const write = client.writeChain
+      .catch(() => {})
+      .then(async () => {
+        if (this.#brokerClients.get(client.socket) !== client || client.socket.destroyed) return;
+        await writeSerializedFrame(client.socket, serializedFrame);
+      })
+      .catch(() => {
+        this.#removeBrokerClient(client);
+      })
+      .finally(() => {
+        client.queuedBytes = Math.max(0, client.queuedBytes - queuedBytes);
+      });
+
+    client.writeChain = write;
+    this.#pendingWrites.add(write);
+    void write.finally(() => this.#pendingWrites.delete(write));
+  }
+
+  #removeBrokerClient(client: BrokerClient) {
+    if (this.#brokerClients.get(client.socket) !== client) return;
+    this.#brokerClients.delete(client.socket);
+    client.subscriptions.clear();
+    client.queuedBytes = 0;
+    client.writeChain = Promise.resolve();
+    if (!client.socket.destroyed) {
+      client.socket.destroy();
+    }
   }
 
   #handleServerFrame(frame: ServerFrame) {
@@ -466,7 +583,12 @@ export class UnixSocketPubSub extends PubSub {
     this.#deliverLocal(frame.topic, event);
   }
 
-  async #publishFromBroker(topic: string, event: Omit<Event, 'id' | 'createdAt'>) {
+  async #publishFromBroker(
+    topic: string,
+    event: Omit<Event, 'id' | 'createdAt'>,
+    sourceClient?: BrokerClient,
+    localOnly?: boolean,
+  ) {
     const brokerEvent: Event = {
       ...event,
       id: randomUUID(),
@@ -479,15 +601,26 @@ export class UnixSocketPubSub extends PubSub {
     // Skip serialization entirely when no remote clients could receive the event.
     if (this.#brokerClients.size === 0) return;
 
+    // `localOnly` events are scoped to the publishing instance.
+    // When the publisher is the broker, the `#deliverLocal` above is enough.
+    // When the publisher is a remote client, relay the event back ONLY to
+    // that client so its subscription callback fires, but do NOT fan out to
+    // other clients — their WEP would just drop the event via `#ownsWorkflow`
+    // and the multi-MB payload would waste socket/kernel buffer for nothing.
+    if (localOnly) {
+      if (sourceClient && sourceClient.subscriptions.has(topic) && !sourceClient.socket.destroyed) {
+        this.#enqueueBrokerClientWrite(sourceClient, { type: 'event', topic, event: brokerEvent });
+      }
+      return;
+    }
+
     let frame: ServerFrame | undefined;
     for (const client of this.#brokerClients.values()) {
       if (!client.subscriptions.has(topic) || client.socket.destroyed) continue;
       // Lazily build the frame only when we know at least one client needs it.
       frame ??= { type: 'event', topic, event: brokerEvent };
-      const write = writeFrame(client.socket, frame).catch(() => {});
-      this.#pendingWrites.push(write);
+      this.#enqueueBrokerClientWrite(client, frame);
     }
-    if (frame) await this.flush();
   }
 
   #deliverLocal(topic: string, event: Event) {
@@ -510,14 +643,39 @@ export class UnixSocketPubSub extends PubSub {
   }
 
   async #sendToBroker(frame: ClientFrame) {
+    try {
+      await this.#sendToActiveBroker(frame);
+    } catch (error) {
+      if (this.#closed) throw error;
+      const failedSocket = this.#clientSocket;
+      this.#clientSocket = undefined;
+      failedSocket?.destroy();
+      await this.#ensureStarted(true);
+      await this.#sendToActiveBroker(frame);
+    }
+  }
+
+  async #sendToActiveBroker(frame: ClientFrame) {
     const socket = this.#clientSocket;
     if (!socket || socket.destroyed) {
       await this.#ensureStarted(true);
+    }
+    if (this.#isBroker) {
+      await this.#handlePromotedBrokerFrame(frame);
+      return;
     }
     const activeSocket = this.#clientSocket;
     if (!activeSocket || activeSocket.destroyed) {
       throw new Error('UnixSocketPubSub is not connected to a broker');
     }
     await writeFrame(activeSocket, frame);
+  }
+
+  async #handlePromotedBrokerFrame(frame: ClientFrame) {
+    if (frame.type === 'subscribe') {
+      this.#settleSubscribeWaiters(frame.topic);
+    } else if (frame.type === 'publish') {
+      await this.#publishFromBroker(frame.topic, frame.event);
+    }
   }
 }

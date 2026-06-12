@@ -9,6 +9,8 @@ export interface HelpTextOptions {
   modes: number;
   /** User-defined custom slash commands */
   customSlashCommands: SlashCommandMetadata[];
+  /** Active direct shell passthrough mode label */
+  shellModeLabel?: string;
 }
 
 interface HelpEntry {
@@ -47,9 +49,11 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/logout', description: 'Logout from OAuth provider' },
     { key: '/setup', description: 'Run the setup wizard' },
     { key: '/browser', description: 'Configure browser automation' },
+    { key: '/api-keys', description: 'Manage provider API keys' },
     { key: '/theme', description: 'Switch color theme (auto/dark/light)' },
     { key: '/update', description: 'Check for and install updates' },
     { key: '/observability', description: 'Configure cloud observability' },
+    { key: '/github', description: 'Subscribe/sync GitHub PR signals' },
     { key: '/goal', description: 'Set/manage persistent goal (Ralph loop)' },
     { key: '/judge', description: 'Set goal judge defaults' },
   ];
@@ -112,7 +116,14 @@ export function buildHelpText(options: HelpTextOptions): string {
     sections.push(renderSection('Custom Commands', customEntries));
   }
 
-  sections.push(renderSection('Shell', [{ key: '!<cmd>', description: 'Run a shell command' }]));
+  sections.push(
+    renderSection('Shell', [
+      {
+        key: '!<cmd>',
+        description: `Run a direct shell command (${options.shellModeLabel ?? 'default shell'})`,
+      },
+    ]),
+  );
 
   sections.push(renderSection('Keyboard Shortcuts', getShortcuts(options.modes)));
 

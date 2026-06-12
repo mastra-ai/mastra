@@ -223,6 +223,23 @@ describe('StagehandBrowser', () => {
       );
     });
 
+    it('passes model configuration objects through to Stagehand', async () => {
+      const model = {
+        modelName: '__GATEWAY_OPENAI_MODEL__',
+        apiKey: 'test-openai-compatible-key',
+        baseURL: 'https://openai-compatible.example.com/v1',
+      };
+      const customBrowser = new StagehandBrowser({ scope: 'shared', model });
+      await customBrowser.launch();
+      await customBrowser.close();
+
+      expect(mockStagehandConstructor).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          model,
+        }),
+      );
+    });
+
     it('should close successfully', async () => {
       await browser.launch();
       await browser.close();

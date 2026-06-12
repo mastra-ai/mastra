@@ -1,5 +1,169 @@
 # @mastra/voice-google-gemini-live
 
+## 0.12.1
+
+### Patch Changes
+
+- dependencies updates: ([#17144](https://github.com/mastra-ai/mastra/pull/17144))
+  - Updated dependency [`@google/genai@^1.52.0` ↗︎](https://www.npmjs.com/package/@google/genai/v/1.52.0) (from `^1.45.0`, in `dependencies`)
+
+- dependencies updates: ([#17518](https://github.com/mastra-ai/mastra/pull/17518))
+  - Updated dependency [`google-auth-library@^10.6.2` ↗︎](https://www.npmjs.com/package/google-auth-library/v/10.6.2) (from `^10.6.1`, in `dependencies`)
+
+- Update ai-sdk deps ([#17144](https://github.com/mastra-ai/mastra/pull/17144))
+
+## 0.12.1-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#17144](https://github.com/mastra-ai/mastra/pull/17144))
+  - Updated dependency [`@google/genai@^1.52.0` ↗︎](https://www.npmjs.com/package/@google/genai/v/1.52.0) (from `^1.45.0`, in `dependencies`)
+
+- Update ai-sdk deps ([#17144](https://github.com/mastra-ai/mastra/pull/17144))
+
+## 0.12.1-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#17518](https://github.com/mastra-ai/mastra/pull/17518))
+  - Updated dependency [`google-auth-library@^10.6.2` ↗︎](https://www.npmjs.com/package/google-auth-library/v/10.6.2) (from `^10.6.1`, in `dependencies`)
+
+## 0.12.0
+
+### Minor Changes
+
+- Surface native-audio behavioral signals on Gemini Live realtime sessions (#17021). ([#17434](https://github.com/mastra-ai/mastra/pull/17434))
+
+  The `@mastra/voice-google-gemini-live` provider now enables transcription and barge-in detection in the setup payload and exposes them through Mastra's standard realtime event contract. This makes native-audio models such as `gemini-2.5-flash-native-audio-preview-12-2025` and `gemini-3.1-flash-live-preview` behaviorally usable end-to-end. Until now, the spoken response was silently dropped on native-audio because it arrives on a different wire channel from the model's internal reasoning.
+
+  **What changed**
+  - Setup payload unconditionally includes `input_audio_transcription`, `output_audio_transcription`, and `realtime_input_config.activity_handling = 'START_OF_ACTIVITY_INTERRUPTS'`, matching how the OpenAI, xAI, Inworld, and AWS Nova Sonic providers enable transcription by default.
+  - User-side transcripts emit as `writing` with `role: 'user'`. Model-side transcripts emit as `writing` with `role: 'assistant'`. This matches the cross-provider `writing` contract.
+  - Barge-in (the server cancelling its in-flight response when the user starts speaking) emits an `interrupt` event with `{ type: 'user', timestamp }`, matching `@mastra/voice-aws-nova-sonic`.
+  - On native-audio models, `modelTurn.parts.text` is the model's internal chain-of-thought, not the spoken response. It now emits as a Gemini-specific `thinking` event so consumers can render reasoning separately. On non-native-audio models, `modelTurn.parts.text` continues to emit as `writing` (it is the spoken response there).
+
+  **Example**
+
+  ```ts
+  import { GeminiLiveVoice } from '@mastra/voice-google-gemini-live';
+
+  const voice = new GeminiLiveVoice({
+    apiKey: process.env.GOOGLE_API_KEY,
+    model: 'gemini-2.5-flash-native-audio-preview-12-2025',
+  });
+
+  voice.on('writing', ({ text, role }) => {
+    // role: 'user'      → speech-to-text of the caller
+    // role: 'assistant' → speech-to-text of the model's spoken reply
+  });
+
+  voice.on('thinking', ({ text }) => {
+    // Gemini's internal reasoning on native-audio models
+  });
+
+  voice.on('interrupt', ({ type, timestamp }) => {
+    // Drop queued TTS audio — the user just barged in
+  });
+
+  await voice.connect();
+  ```
+
+### Patch Changes
+
+- Moved shared voice primitives and route metadata into the new `@internal/voice` package so voice providers no longer depend on `@mastra/core` and server voice routes share the same route definitions. ([#16725](https://github.com/mastra-ai/mastra/pull/16725))
+
+  `@mastra/core/voice` continues to re-export the voice APIs for backwards compatibility.
+
+- Fixed Gemini Live tool registration failing with `1007 Unknown name` errors for tools using discriminated unions, literals, and nullable types. The `sanitizeToolParameters` method now rewrites `oneOf` → `anyOf`, `const` → `enum`, and collapses nullable `anyOf` patterns into OpenAPI 3.0-compatible `type` + `nullable: true` form. Fixes #17020. ([#17179](https://github.com/mastra-ai/mastra/pull/17179))
+
+- **Fixed** Gemini Live sessions now connect successfully when using native-audio models. Previously the connection failed during session setup. ([#17019](https://github.com/mastra-ai/mastra/pull/17019))
+
+  **Fixed** tools are now invoked correctly. Previously tool calls were silently ignored even when tools were registered during setup.
+
+  **Fixed** tool results of any shape (arrays, primitives, objects) are now accepted. Previously, non-object tool return values caused sessions to close unexpectedly.
+
+  **Fixed** the `speaker` option is now honored when passed at the `VoiceConfig` root alongside `realtimeConfig`, not only when passed in the flat config shape.
+
+  **Changed** default model from `gemini-2.0-flash-exp` (shut down 2025-12-09) to `gemini-3.1-flash-live-preview` (Google's current Live API quickstart model). If you weren't explicitly setting `model`, your sessions will start connecting again.
+
+  Fixes #17018.
+
+- Updated dependencies [[`00eca42`](https://github.com/mastra-ai/mastra/commit/00eca4252393aa114dc8c9a5e1da68df91fa06cf), [`ff9d743`](https://github.com/mastra-ai/mastra/commit/ff9d743f71d7e072927725c0d700632aca0c1fee)]:
+  - @mastra/schema-compat@1.2.11
+
+## 0.12.0-alpha.3
+
+### Minor Changes
+
+- Surface native-audio behavioral signals on Gemini Live realtime sessions (#17021). ([#17434](https://github.com/mastra-ai/mastra/pull/17434))
+
+  The `@mastra/voice-google-gemini-live` provider now enables transcription and barge-in detection in the setup payload and exposes them through Mastra's standard realtime event contract. This makes native-audio models such as `gemini-2.5-flash-native-audio-preview-12-2025` and `gemini-3.1-flash-live-preview` behaviorally usable end-to-end. Until now, the spoken response was silently dropped on native-audio because it arrives on a different wire channel from the model's internal reasoning.
+
+  **What changed**
+  - Setup payload unconditionally includes `input_audio_transcription`, `output_audio_transcription`, and `realtime_input_config.activity_handling = 'START_OF_ACTIVITY_INTERRUPTS'`, matching how the OpenAI, xAI, Inworld, and AWS Nova Sonic providers enable transcription by default.
+  - User-side transcripts emit as `writing` with `role: 'user'`. Model-side transcripts emit as `writing` with `role: 'assistant'`. This matches the cross-provider `writing` contract.
+  - Barge-in (the server cancelling its in-flight response when the user starts speaking) emits an `interrupt` event with `{ type: 'user', timestamp }`, matching `@mastra/voice-aws-nova-sonic`.
+  - On native-audio models, `modelTurn.parts.text` is the model's internal chain-of-thought, not the spoken response. It now emits as a Gemini-specific `thinking` event so consumers can render reasoning separately. On non-native-audio models, `modelTurn.parts.text` continues to emit as `writing` (it is the spoken response there).
+
+  **Example**
+
+  ```ts
+  import { GeminiLiveVoice } from '@mastra/voice-google-gemini-live';
+
+  const voice = new GeminiLiveVoice({
+    apiKey: process.env.GOOGLE_API_KEY,
+    model: 'gemini-2.5-flash-native-audio-preview-12-2025',
+  });
+
+  voice.on('writing', ({ text, role }) => {
+    // role: 'user'      → speech-to-text of the caller
+    // role: 'assistant' → speech-to-text of the model's spoken reply
+  });
+
+  voice.on('thinking', ({ text }) => {
+    // Gemini's internal reasoning on native-audio models
+  });
+
+  voice.on('interrupt', ({ type, timestamp }) => {
+    // Drop queued TTS audio — the user just barged in
+  });
+
+  await voice.connect();
+  ```
+
+## 0.11.5-alpha.2
+
+### Patch Changes
+
+- Fixed Gemini Live tool registration failing with `1007 Unknown name` errors for tools using discriminated unions, literals, and nullable types. The `sanitizeToolParameters` method now rewrites `oneOf` → `anyOf`, `const` → `enum`, and collapses nullable `anyOf` patterns into OpenAPI 3.0-compatible `type` + `nullable: true` form. Fixes #17020. ([#17179](https://github.com/mastra-ai/mastra/pull/17179))
+
+- Updated dependencies [[`00eca42`](https://github.com/mastra-ai/mastra/commit/00eca4252393aa114dc8c9a5e1da68df91fa06cf), [`ff9d743`](https://github.com/mastra-ai/mastra/commit/ff9d743f71d7e072927725c0d700632aca0c1fee)]:
+  - @mastra/schema-compat@1.2.11-alpha.0
+
+## 0.11.5-alpha.1
+
+### Patch Changes
+
+- **Fixed** Gemini Live sessions now connect successfully when using native-audio models. Previously the connection failed during session setup. ([#17019](https://github.com/mastra-ai/mastra/pull/17019))
+
+  **Fixed** tools are now invoked correctly. Previously tool calls were silently ignored even when tools were registered during setup.
+
+  **Fixed** tool results of any shape (arrays, primitives, objects) are now accepted. Previously, non-object tool return values caused sessions to close unexpectedly.
+
+  **Fixed** the `speaker` option is now honored when passed at the `VoiceConfig` root alongside `realtimeConfig`, not only when passed in the flat config shape.
+
+  **Changed** default model from `gemini-2.0-flash-exp` (shut down 2025-12-09) to `gemini-3.1-flash-live-preview` (Google's current Live API quickstart model). If you weren't explicitly setting `model`, your sessions will start connecting again.
+
+  Fixes #17018.
+
+## 0.11.5-alpha.0
+
+### Patch Changes
+
+- Moved shared voice primitives and route metadata into the new `@internal/voice` package so voice providers no longer depend on `@mastra/core` and server voice routes share the same route definitions. ([#16725](https://github.com/mastra-ai/mastra/pull/16725))
+
+  `@mastra/core/voice` continues to re-export the voice APIs for backwards compatibility.
+
 ## 0.11.4
 
 ### Patch Changes

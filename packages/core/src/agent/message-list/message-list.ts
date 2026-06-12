@@ -42,6 +42,41 @@ import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageList
 import { ensureGeminiCompatibleMessages } from './utils/provider-compat';
 import { stampPart } from './utils/stamp-part';
 
+function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
+  return message.role === 'system' && message.parts.length > 0 && message.parts.every(p => p.type.startsWith('data-'));
+}
+
+/**
+ * Post-processes converted UI messages to merge non-user signal data parts into an
+ * immediate neighbor assistant message, matching active-streaming behavior.
+ *
+ * Only checks immediate neighbors: append to preceding assistant, or prepend to
+ * following assistant. If neither neighbor is assistant, convert the signal in-place
+ * to an assistant message with just its data parts.
+ */
+function mergeSignalDataParts<T extends { role: string; parts: Array<{ type: string }> }>(messages: T[]): T[] {
+  const result: T[] = [];
+  for (let idx = 0; idx < messages.length; idx++) {
+    const message = messages[idx]!;
+    if (!isSignalDataMessage(message)) {
+      result.push(message);
+      continue;
+    }
+
+    const prev = result[result.length - 1];
+    const next = messages[idx + 1];
+
+    if (prev && prev.role === 'assistant') {
+      result[result.length - 1] = { ...prev, parts: [...prev.parts, ...message.parts] };
+    } else if (next && next.role === 'assistant') {
+      messages[idx + 1] = { ...next, parts: [...message.parts, ...next.parts] } as T;
+    } else {
+      result.push({ ...message, role: 'assistant' } as T);
+    }
+  }
+  return result;
+}
+
 export class MessageList {
   private messages: MastraDBMessage[] = [];
 
@@ -87,11 +122,15 @@ export class MessageList {
   private logger?: IMastraLogger;
 
   private toAIV5UIMessages(messages: MastraDBMessage[], options?: { transformToolPayloads?: boolean }) {
-    return messages.map(message => AIV5Adapter.toUIMessage(message, options));
+    return mergeSignalDataParts(messages.map(message => AIV5Adapter.toUIMessage(message, options)));
   }
 
   private toAIV4UIMessages(messages: MastraDBMessage[], options?: { transformToolPayloads?: boolean }) {
-    return messages.map(message => AIV4Adapter.toUIMessage(message, options));
+    return mergeSignalDataParts(messages.map(message => AIV4Adapter.toUIMessage(message, options)));
+  }
+
+  private toAIV6UIMessages(messages: MastraDBMessage[]) {
+    return mergeSignalDataParts(messages.map(AIV6Adapter.toUIMessage));
   }
 
   // Event recording for observability
@@ -180,6 +219,7 @@ export class MessageList {
     const signalForTranscript = createSignal({
       id: signal.id,
       type: signal.type,
+      tagName: signal.tagName,
       contents: signal.contents,
       attributes: signal.attributes,
       metadata: signal.metadata,
@@ -614,7 +654,7 @@ export class MessageList {
       },
     },
     aiV6: {
-      ui: () => this.all.db().map(AIV6Adapter.toUIMessage),
+      ui: () => this.toAIV6UIMessages(this.all.db()),
     },
 
     /* @deprecated use list.get.all.aiV4.prompt() instead */
@@ -666,7 +706,7 @@ export class MessageList {
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.remembered.db()),
     },
     aiV6: {
-      ui: () => this.remembered.db().map(AIV6Adapter.toUIMessage),
+      ui: () => this.toAIV6UIMessages(this.remembered.db()),
     },
 
     /* @deprecated use list.get.remembered.aiV4.ui() */
@@ -693,7 +733,7 @@ export class MessageList {
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.rememberedPersisted.db()),
     },
     aiV6: {
-      ui: () => this.rememberedPersisted.db().map(AIV6Adapter.toUIMessage),
+      ui: () => this.toAIV6UIMessages(this.rememberedPersisted.db()),
     },
 
     /* @deprecated use list.getPersisted.remembered.aiV4.ui() */
@@ -725,7 +765,7 @@ export class MessageList {
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.input.db()),
     },
     aiV6: {
-      ui: () => this.input.db().map(AIV6Adapter.toUIMessage),
+      ui: () => this.toAIV6UIMessages(this.input.db()),
     },
 
     /* @deprecated use list.get.input.aiV4.ui() instead */
@@ -752,7 +792,7 @@ export class MessageList {
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.inputPersisted.db()),
     },
     aiV6: {
-      ui: () => this.inputPersisted.db().map(AIV6Adapter.toUIMessage),
+      ui: () => this.toAIV6UIMessages(this.inputPersisted.db()),
     },
 
     /* @deprecated use list.getPersisted.input.aiV4.ui() */
@@ -802,7 +842,7 @@ export class MessageList {
       },
     },
     aiV6: {
-      ui: () => this.response.db().map(AIV6Adapter.toUIMessage),
+      ui: () => this.toAIV6UIMessages(this.response.db()),
     },
 
     aiV4: {
@@ -823,7 +863,7 @@ export class MessageList {
       ui: (): AIV5Type.UIMessage[] => this.toAIV5UIMessages(this.responsePersisted.db()),
     },
     aiV6: {
-      ui: () => this.responsePersisted.db().map(AIV6Adapter.toUIMessage),
+      ui: () => this.toAIV6UIMessages(this.responsePersisted.db()),
     },
 
     /* @deprecated use list.getPersisted.response.aiV4.ui() */
@@ -1230,20 +1270,16 @@ export class MessageList {
   }
 
   /**
-   * Replace all system messages with new ones
-   * This clears both tagged and untagged system messages and replaces them with the provided array
-   * @param messages - Array of system messages to set
+   * Replace the untagged system message bucket with the provided array while
+   * leaving tagged system message buckets (owned by other processors) intact.
+   * @param messages - Array of system messages to set as untagged
    */
   public replaceAllSystemMessages(messages: CoreMessageV4[]): this {
-    // Clear existing system messages
     this.systemMessages = [];
-    this.taggedSystemMessages = {};
 
-    // Add all new messages as untagged (processors don't need to preserve tags)
     for (const message of messages) {
-      if (message.role === 'system') {
-        this.systemMessages.push(message);
-      }
+      if (message.role !== 'system') continue;
+      this.systemMessages.push(message);
     }
 
     return this;
@@ -1392,11 +1428,6 @@ export class MessageList {
     }
 
     const messageV2 = convertInputToMastraDBMessage(message, messageSource, this.createAdapterContext());
-
-    if (messageSource === 'response') {
-      messageV2.createdAt = this.generateCreatedAt(messageSource, messageV2.createdAt);
-    }
-
     const signalMetadata =
       messageV2.role === 'signal'
         ? (messageV2.content.metadata?.signal as { acceptedAt?: string; createdAt?: string } | undefined)
@@ -1565,17 +1596,10 @@ export class MessageList {
   private lastCreatedAt?: number;
 
   private updateLastCreatedAt(message: MastraDBMessage): void {
-    const latestMessageTime = message.createdAt.getTime();
-    const latestPartTime = Array.isArray(message.content.parts)
-      ? message.content.parts.reduce((latest, part) => {
-          if (typeof part.createdAt === 'number' && part.createdAt > latest) {
-            return part.createdAt;
-          }
-          return latest;
-        }, latestMessageTime)
-      : latestMessageTime;
-
-    this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, latestPartTime);
+    // Message-level createdAt controls transcript ordering and OM observation boundaries.
+    // Part timestamps are event metadata within a message and must not advance the
+    // ordering watermark used to timestamp later messages/signals.
+    this.lastCreatedAt = Math.max(this.lastCreatedAt || 0, message.createdAt.getTime());
   }
 
   // this makes sure messages added in order will always have a date atleast 1ms apart.
@@ -1601,10 +1625,9 @@ export class MessageList {
 
     const now = new Date();
     const nowTime = startDate?.getTime() || now.getTime();
-    // find the latest createdAt in stored messages and parts
     const lastTime = this.lastCreatedAt || 0;
 
-    // make sure our new message is created later than the latest known message time
+    // make sure our new message is created later than the latest known ordering timestamp
     // it's expected that messages are added to the list in order if they don't have a createdAt date on them
     if (nowTime <= lastTime) {
       const newDate = new Date(lastTime + 1);

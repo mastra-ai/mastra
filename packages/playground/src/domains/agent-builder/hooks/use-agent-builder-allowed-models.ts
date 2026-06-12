@@ -1,17 +1,18 @@
 import type { Provider } from '@mastra/client-js';
+import { useMastraClient } from '@mastra/react';
+import { useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { toProviders } from '../services/to-providers';
-import type { ListProvider } from '@/domains/agent-builder/services/to-providers';
-import { useBuilderFilteredModels, useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/builder';
-import { useAllModels, useLLMProviders } from '@/domains/llm';
+import { useAllModels } from '@/domains/llm';
 import type { ModelInfo } from '@/domains/llm/hooks/use-filtered-models';
 
 /**
  * Single source of truth for "what providers/models is the agent builder
- * allowed to use right now?". Mirrors the configure panel's pipeline
- * (`useLLMProviders` -> `useBuilderFilteredProviders` for providers and
- * `useAllModels` -> `useBuilderFilteredModels` for the flat model list)
- * so the starter and chat surfaces never disagree with the picker.
+ * allowed to use right now?".
+ *
+ * The server is the authority for the allowlist: `GET /editor/builder/models/available`
+ * applies the active builder model policy and returns the already-filtered
+ * provider/model list, so the starter, picker, and chat surfaces all render the
+ * same set without any EE matcher running in the browser.
  */
 export interface AgentBuilderAllowedModels {
   providers: Provider[];
@@ -19,12 +20,19 @@ export interface AgentBuilderAllowedModels {
   isLoading: boolean;
 }
 
-export const useAgentBuilderAllowedModels = (): AgentBuilderAllowedModels => {
-  const policy = useBuilderModelPolicy();
-  const { data, isLoading } = useLLMProviders();
-  const allProviders = useMemo(() => toProviders((data?.providers as ListProvider[]) ?? []), [data]);
-  const providers = useBuilderFilteredProviders(allProviders, policy);
-  const allModels = useAllModels(allProviders);
-  const models = useBuilderFilteredModels(allModels, policy);
+export const useAgentBuilderAllowedModels = ({
+  enabled = true,
+}: { enabled?: boolean } = {}): AgentBuilderAllowedModels => {
+  const client = useMastraClient();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['builder-available-models'],
+    queryFn: () => client.getBuilderAvailableModels(),
+    enabled,
+  });
+
+  const providers = useMemo<Provider[]>(() => (data?.providers as Provider[]) ?? [], [data]);
+  const models = useAllModels(providers);
+
   return { providers, models, isLoading };
 };

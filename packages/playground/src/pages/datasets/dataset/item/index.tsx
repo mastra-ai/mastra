@@ -54,13 +54,15 @@ function DatasetItemPage() {
 
   // Derive form defaults from latest version (recomputes when version changes)
   const formDefaults = useMemo(() => {
-    if (!latestVersion || isDeleted) return { input: '', groundTruth: '', metadata: '', trajectory: '' };
+    if (!latestVersion || isDeleted)
+      return { input: '', groundTruth: '', metadata: '', trajectory: '', requestContext: '' };
     return {
       input: JSON.stringify(latestVersion.input, null, 2),
       groundTruth: latestVersion.groundTruth ? JSON.stringify(latestVersion.groundTruth, null, 2) : '',
       metadata: latestVersion.metadata ? JSON.stringify(latestVersion.metadata, null, 2) : '',
       trajectory:
         latestVersion.expectedTrajectory != null ? JSON.stringify(latestVersion.expectedTrajectory, null, 2) : '',
+      requestContext: latestVersion.requestContext ? JSON.stringify(latestVersion.requestContext, null, 2) : '',
     };
   }, [latestVersion, isDeleted]);
 
@@ -73,6 +75,7 @@ function DatasetItemPage() {
   const [groundTruthValue, setGroundTruthValue] = useState(formDefaults.groundTruth);
   const [metadataValue, setMetadataValue] = useState(formDefaults.metadata);
   const [trajectoryValue, setTrajectoryValue] = useState(formDefaults.trajectory);
+  const [requestContextValue, setRequestContextValue] = useState(formDefaults.requestContext);
 
   // Reset form values when version changes (key-based reset pattern)
   const [prevVersionKey, setPrevVersionKey] = useState(versionKey);
@@ -82,6 +85,7 @@ function DatasetItemPage() {
     setGroundTruthValue(formDefaults.groundTruth);
     setMetadataValue(formDefaults.metadata);
     setTrajectoryValue(formDefaults.trajectory);
+    setRequestContextValue(formDefaults.requestContext);
   }
 
   // Delete dialog state
@@ -161,6 +165,17 @@ function DatasetItemPage() {
       }
     }
 
+    let parsedRequestContext: Record<string, unknown> | undefined;
+    const requestContextChanged = requestContextValue !== formDefaults.requestContext;
+    if (requestContextChanged && requestContextValue.trim()) {
+      try {
+        parsedRequestContext = JSON.parse(requestContextValue);
+      } catch {
+        toast.error('Request Context must be valid JSON');
+        return;
+      }
+    }
+
     try {
       await updateItem.mutateAsync({
         datasetId,
@@ -169,6 +184,7 @@ function DatasetItemPage() {
         groundTruth: parsedGroundTruth,
         metadata: parsedMetadata,
         ...(trajectoryChanged ? { expectedTrajectory: parsedTrajectory ?? null } : {}),
+        ...(requestContextChanged ? { requestContext: parsedRequestContext } : {}),
       });
       toast.success('Item updated successfully');
       setIsEditing(false);
@@ -186,6 +202,7 @@ function DatasetItemPage() {
       setTrajectoryValue(
         latestVersion.expectedTrajectory != null ? JSON.stringify(latestVersion.expectedTrajectory, null, 2) : '',
       );
+      setRequestContextValue(latestVersion.requestContext ? JSON.stringify(latestVersion.requestContext, null, 2) : '');
     }
     setIsEditing(false);
   };
@@ -336,6 +353,8 @@ function DatasetItemPage() {
                     setMetadataValue={setMetadataValue}
                     trajectoryValue={trajectoryValue}
                     setTrajectoryValue={setTrajectoryValue}
+                    requestContextValue={requestContextValue}
+                    setRequestContextValue={setRequestContextValue}
                     validationErrors={null}
                     onSave={handleSave}
                     onCancel={handleCancel}

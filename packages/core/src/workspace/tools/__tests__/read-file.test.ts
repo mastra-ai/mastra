@@ -71,6 +71,45 @@ describe('workspace_read_file', () => {
     expect(result).toContain('Line 2\nLine 3');
   });
 
+  it('should report an empty range when offset is past the end of the file', async () => {
+    await fs.writeFile(path.join(tempDir, 'test.txt'), 'Line 1\nLine 2\nLine 3');
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      {
+        path: 'test.txt',
+        offset: 10,
+        limit: 5,
+      },
+      { workspace },
+    );
+
+    expect(typeof result).toBe('string');
+    expect(result).toContain('lines 0-0 of 3');
+    expect(result).not.toContain('lines 10-3 of 3');
+    expect(result).not.toContain('10→');
+  });
+
+  it('should preserve line numbers for real blank lines', async () => {
+    await fs.writeFile(path.join(tempDir, 'test.txt'), 'Line 1\n\nLine 3');
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      {
+        path: 'test.txt',
+        offset: 2,
+        limit: 1,
+      },
+      { workspace },
+    );
+
+    expect(typeof result).toBe('string');
+    expect(result).toContain('lines 2-2 of 3');
+    expect(result).toContain('2→');
+  });
+
   it('should handle binary content', async () => {
     const buffer = Buffer.from([0x89, 0x50, 0x4e, 0x47]); // PNG header bytes
     await fs.writeFile(path.join(tempDir, 'binary.bin'), buffer);

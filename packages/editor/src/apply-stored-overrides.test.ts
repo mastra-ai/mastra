@@ -5,6 +5,8 @@ import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import type { ResolveToolsOpts, ToolProvider } from '@mastra/core/tool-provider';
+import type { ToolAction } from '@mastra/core/tools';
 import { MastraEditor } from './index';
 
 describe('applyStoredOverrides', () => {
@@ -52,6 +54,108 @@ describe('applyStoredOverrides', () => {
 
     const instructions = await result.getInstructions();
     expect(instructions).toBe('You are a stored-config agent with updated instructions.');
+  });
+
+  it('does not override anything when code agent disables editor overrides', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const codeTool = createTool({
+      id: 'code-tool',
+      description: 'Code description',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+    const storedTool = createTool({
+      id: 'stored-tool',
+      description: 'Stored description',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+    const codeAgent = new Agent({
+      id: 'my-agent',
+      name: 'Code Agent',
+      instructions: 'Code instructions',
+      model: 'openai/gpt-4o',
+      tools: { 'code-tool': codeTool },
+      editor: false,
+    });
+    new Mastra({
+      storage,
+      editor,
+      agents: { 'my-agent': codeAgent },
+      tools: { 'stored-tool': storedTool },
+    });
+
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'my-agent',
+        name: 'Stored Agent',
+        instructions: 'Stored instructions',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        tools: { 'stored-tool': {} },
+      },
+    });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+
+    expect(await result.getInstructions()).toBe('Code instructions');
+    const tools = await result.listTools();
+    expect(tools['code-tool']).toBeDefined();
+    expect(tools['stored-tool']).toBeUndefined();
+  });
+
+  it('only applies stored tool description overrides when code owns tool implementations', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const codeTool = createTool({
+      id: 'code-tool',
+      description: 'Code description',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+    const storedTool = createTool({
+      id: 'stored-tool',
+      description: 'Stored description',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+    const codeAgent = new Agent({
+      id: 'my-agent',
+      name: 'Code Agent',
+      instructions: 'Code instructions',
+      model: 'openai/gpt-4o',
+      tools: { 'code-tool': codeTool },
+      editor: { tools: { description: true } },
+    });
+    new Mastra({
+      storage,
+      editor,
+      agents: { 'my-agent': codeAgent },
+      tools: { 'stored-tool': storedTool },
+    });
+
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'my-agent',
+        name: 'Stored Agent',
+        instructions: 'Stored instructions',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        tools: { 'code-tool': { description: 'Stored code-tool description' }, 'stored-tool': {} },
+      },
+    });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+
+    expect(await result.getInstructions()).toBe('Code instructions');
+    const tools = await result.listTools();
+    expect(tools['code-tool']?.description).toBe('Stored code-tool description');
+    expect(tools['stored-tool']).toBeUndefined();
   });
 
   it('does not override model from stored config (model is code-only)', async () => {
@@ -308,5 +412,90 @@ describe('applyStoredOverrides', () => {
     expect(result).toBe(codeAgent);
     const instructions = await result.getInstructions();
     expect(instructions).toBe('You are a code-defined agent.');
+  });
+
+  it('merges v1 toolProviders into the code agent tool list', async () => {
+    const storage = new InMemoryStore();
+    const codeTool = createTool({
+      id: 'code-tool',
+      description: 'Code tool',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+    const codeAgent = new Agent({
+      id: 'my-agent',
+      name: 'Code Agent',
+      instructions: 'You are a code-defined agent.',
+      model: 'openai/gpt-4o',
+      tools: { 'code-tool': codeTool },
+    });
+
+    const stubProvider: ToolProvider = {
+      info: { id: 'composio', name: 'Composio', description: 'stub' },
+      listToolkits: vi.fn(async () => ({ data: [] })),
+      listTools: vi.fn(async () => ({ data: [] })),
+      getToolSchema: vi.fn(async () => ({ type: 'object', properties: {} })),
+      resolveTools: vi.fn(async () => ({})),
+      resolveToolsVNext: vi.fn(async (opts: ResolveToolsOpts): Promise<Record<string, ToolAction<any, any, any>>> => {
+        const result: Record<string, ToolAction<any, any, any>> = {};
+        for (const slug of opts.toolSlugs) {
+          result[slug] = {
+            id: slug,
+            description: opts.toolMeta?.[slug]?.description ?? 'provider tool',
+            execute: vi.fn(async () => ({ ok: true, connectionId: opts.connectionId })),
+          } as any;
+        }
+        return result;
+      }),
+    };
+
+    const editor = new MastraEditor({ toolProviders: { composio: stubProvider } });
+    new Mastra({ storage, editor, agents: { 'my-agent': codeAgent } });
+
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'my-agent',
+        name: 'Stored Override',
+        authorId: 'author-1',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        toolProviders: {
+          composio: {
+            tools: {
+              GITHUB_LIST_REPOSITORY_ISSUES: {
+                toolkit: 'github',
+                description: 'Lists issues (override)',
+              },
+            },
+            connections: {
+              github: [
+                {
+                  kind: 'author',
+                  toolkit: 'github',
+                  connectionId: 'stub-connection-id',
+                  scope: 'per-author',
+                },
+              ],
+            },
+          },
+        },
+      },
+    });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+    const tools = await result.listTools({ requestContext: new RequestContext() });
+
+    expect(tools['code-tool']).toBeDefined();
+    expect(tools['GITHUB_LIST_REPOSITORY_ISSUES']).toBeDefined();
+    expect(tools['GITHUB_LIST_REPOSITORY_ISSUES'].description).toBe('Lists issues (override)');
+
+    expect(stubProvider.resolveToolsVNext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolSlugs: ['GITHUB_LIST_REPOSITORY_ISSUES'],
+        connectionId: 'stub-connection-id',
+        authorId: 'author-1',
+      }),
+    );
   });
 });

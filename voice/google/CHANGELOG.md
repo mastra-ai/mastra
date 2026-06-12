@@ -1,5 +1,35 @@
 # @mastra/voice-google
 
+## 0.12.2
+
+### Patch Changes
+
+- dependencies updates: ([#17518](https://github.com/mastra-ai/mastra/pull/17518))
+  - Updated dependency [`@google-cloud/text-to-speech@^6.4.1` ↗︎](https://www.npmjs.com/package/@google-cloud/text-to-speech/v/6.4.1) (from `^6.4.0`, in `dependencies`)
+
+## 0.12.2-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#17518](https://github.com/mastra-ai/mastra/pull/17518))
+  - Updated dependency [`@google-cloud/text-to-speech@^6.4.1` ↗︎](https://www.npmjs.com/package/@google-cloud/text-to-speech/v/6.4.1) (from `^6.4.0`, in `dependencies`)
+
+## 0.12.1
+
+### Patch Changes
+
+- Moved shared voice primitives and route metadata into the new `@internal/voice` package so voice providers no longer depend on `@mastra/core` and server voice routes share the same route definitions. ([#16725](https://github.com/mastra-ai/mastra/pull/16725))
+
+  `@mastra/core/voice` continues to re-export the voice APIs for backwards compatibility.
+
+## 0.12.1-alpha.0
+
+### Patch Changes
+
+- Moved shared voice primitives and route metadata into the new `@internal/voice` package so voice providers no longer depend on `@mastra/core` and server voice routes share the same route definitions. ([#16725](https://github.com/mastra-ai/mastra/pull/16725))
+
+  `@mastra/core/voice` continues to re-export the voice APIs for backwards compatibility.
+
 ## 0.12.0
 
 ### Minor Changes

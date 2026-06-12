@@ -7,6 +7,7 @@ import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
+import { TASKS_STATE_ID } from '@mastra/core/tools';
 import chalk from 'chalk';
 import {
   insertChatComponentWithBoundarySpacing,
@@ -15,10 +16,14 @@ import {
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { AssistantMessageComponent } from './components/assistant-message.js';
 import type { ChatSpacingKind } from './components/chat-spacing.js';
+import { NotificationSummaryComponent } from './components/notification-summary.js';
+import { NotificationComponent } from './components/notification.js';
 import { OMMarkerComponent } from './components/om-marker.js';
 import { OMOutputComponent } from './components/om-output.js';
 import { PlanResultComponent } from './components/plan-approval-inline.js';
+import { ReactiveSignalComponent } from './components/reactive-signal.js';
 import { SlashCommandComponent } from './components/slash-command.js';
+import { StateSignalComponent } from './components/state-signal.js';
 import { SubagentExecutionComponent } from './components/subagent-execution.js';
 import { SystemReminderComponent } from './components/system-reminder.js';
 import { TemporalGapComponent } from './components/temporal-gap.js';
@@ -32,6 +37,13 @@ import { BOX_INDENT, getMarkdownTheme, theme, mastra } from './theme.js';
 export { formatToolResult };
 
 const WHILE_ACTIVE_USER_MESSAGE_LABEL = 'steer';
+// These are internal control-plane signals handled by GithubSignals. The user-visible
+// result is rendered by github-sync-status, so showing these would duplicate the UI.
+const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
+
+function shouldRenderReactiveSignal(tagName: string): boolean {
+  return !HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName);
+}
 
 type MessageWithAttributes = HarnessMessage & {
   attributes?: Record<string, string | number | boolean | null | undefined>;
@@ -51,7 +63,7 @@ function getCurrentModeColor(state: TUIState): string | undefined {
 }
 
 // =============================================================================
-// renderCompletedTasksInline / renderClearedTasksInline
+// renderClearedTasksInline
 // =============================================================================
 
 class TaskHistoryComponent extends Container {
@@ -66,44 +78,6 @@ function insertTaskHistoryComponent(state: TUIState, component: Component, inser
     component,
     insertIndex >= 0 ? insertIndex : state.chatContainer.children.length,
   );
-}
-
-/**
- * Render a completed task list inline in the chat history.
- */
-export function renderCompletedTasksInline(
-  state: TUIState,
-  tasks: TaskItemSnapshot[],
-  insertIndex = -1,
-  collapsed = false,
-): void {
-  const headerText =
-    theme.bold(theme.fg('accent', 'Tasks')) + theme.fg('dim', ` [${tasks.length}/${tasks.length} completed]`);
-
-  const container = new TaskHistoryComponent();
-  container.addChild(new Text(headerText, BOX_INDENT, 0));
-  const MAX_VISIBLE = 4;
-  const shouldCollapse = collapsed && tasks.length > MAX_VISIBLE + 1;
-  const visible = shouldCollapse ? tasks.slice(0, MAX_VISIBLE) : tasks;
-  const remaining = shouldCollapse ? tasks.length - MAX_VISIBLE : 0;
-
-  for (const task of visible) {
-    const icon = chalk.hex(mastra.green)('✓');
-    const text = chalk.hex(mastra.green)(task.content);
-    container.addChild(new Text(`  ${icon} ${text}`, BOX_INDENT, 0));
-  }
-  if (remaining > 0) {
-    container.addChild(
-      new Text(
-        theme.fg('dim', `  ... ${remaining} more completed task${remaining > 1 ? 's' : ''} (ctrl+e to expand)`),
-        BOX_INDENT,
-        0,
-      ),
-    );
-  }
-  container.addChild(new Spacer(1));
-
-  insertTaskHistoryComponent(state, container, insertIndex);
 }
 
 /**
@@ -128,12 +102,9 @@ function renderTaskTransitionFromHistory(
   previousTasks: TaskItemSnapshot[],
   nextTasks: TaskItemSnapshot[],
 ): { tasks: TaskItemSnapshot[]; replacedWithInline: boolean } {
-  const wasAllCompleted = previousTasks.length > 0 && previousTasks.every(t => t.status === 'completed');
-
   if (nextTasks.length > 0 && nextTasks.every(t => t.status === 'completed')) {
-    if (!wasAllCompleted) {
-      renderCompletedTasksInline(state, nextTasks, -1, state.quietMode);
-    }
+    // A fully-completed list hides its pinned view and leaves no inline receipt
+    // (matches the live path); the transcript already narrates completion.
     return { tasks: nextTasks, replacedWithInline: true };
   }
 
@@ -347,6 +318,93 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     return;
   }
 
+  const stateSignalPart = message.content.find(content => (content as { type?: string }).type === 'state_signal') as
+    | { type: 'state_signal'; stateId: string; mode: 'snapshot' | 'delta'; version?: number; message?: string }
+    | undefined;
+
+  // The `tasks` state signal is rendered by the pinned task list UI (replayed
+  // from task tool history), so skip its raw <current-task-list> snapshot here.
+  if (stateSignalPart && stateSignalPart.stateId === TASKS_STATE_ID) {
+    return;
+  }
+
+  if (stateSignalPart) {
+    const component = new StateSignalComponent({
+      stateId: stateSignalPart.stateId,
+      mode: stateSignalPart.mode,
+      version: stateSignalPart.version,
+      message: stateSignalPart.message,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
+    state.ui.requestRender();
+    return;
+  }
+
+  const reactiveSignalPart = message.content.find(
+    content => (content as { type?: string }).type === 'reactive_signal',
+  ) as { type: 'reactive_signal'; tagName: string; message?: string } | undefined;
+
+  if (reactiveSignalPart) {
+    if (!shouldRenderReactiveSignal(reactiveSignalPart.tagName)) return;
+    const component = new ReactiveSignalComponent({
+      tagName: reactiveSignalPart.tagName,
+      message: reactiveSignalPart.message,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
+    state.ui.requestRender();
+    return;
+  }
+
+  const notificationPart = message.content.find(content => (content as { type?: string }).type === 'notification') as
+    | {
+        type: 'notification';
+        message: string;
+        source?: string;
+        kind?: string;
+        priority?: string;
+        status?: string;
+      }
+    | undefined;
+
+  if (notificationPart) {
+    const component = new NotificationComponent({
+      message: notificationPart.message,
+      source: notificationPart.source,
+      kind: notificationPart.kind,
+      priority: notificationPart.priority,
+      status: notificationPart.status,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
+    state.ui.requestRender();
+    return;
+  }
+
+  const notificationSummaryPart = message.content.find(
+    content => (content as { type?: string }).type === 'notification_summary',
+  ) as
+    | {
+        type: 'notification_summary';
+        message: string;
+        pending: number;
+        bySource: Record<string, number>;
+      }
+    | undefined;
+
+  if (notificationSummaryPart) {
+    const component = new NotificationSummaryComponent({
+      message: notificationSummaryPart.message,
+      pending: notificationSummaryPart.pending,
+      bySource: notificationSummaryPart.bySource,
+    });
+    addChildBeforeFollowUps(state, component);
+    state.messageComponentsById.set(message.id, component);
+    state.ui.requestRender();
+    return;
+  }
+
   const textContent = message.content
     .filter(c => c.type === 'text')
     .map(c => (c as { type: 'text'; text: string }).text)
@@ -418,6 +476,18 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
   }
 
   if (confirmMatchingPendingUserMessage(state, message.id, displayText)) {
+    return;
+  }
+
+  // Suppress subscription echo of locally-rendered queued messages (Ctrl+F queue).
+  // drainQueuedAction already rendered the message with a local ID; the subscription
+  // echoes it back with a different signal ID which would otherwise create a duplicate.
+  const dedupKey = displayText.trim();
+  const pendingEchoCounts = state.firedQueuedMessageTexts;
+  const dedupCount = pendingEchoCounts?.get(dedupKey) ?? 0;
+  if (dedupCount > 0) {
+    if (dedupCount === 1) pendingEchoCounts!.delete(dedupKey);
+    else pendingEchoCounts!.set(dedupKey, dedupCount - 1);
     return;
   }
 

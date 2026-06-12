@@ -8,7 +8,7 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage, MastraMessageContentV2 } from '@mastra/core/agent';
 import { InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 
 import { BufferingCoordinator } from '../buffering-coordinator';
 import { ObservationalMemory } from '../observational-memory';
@@ -297,11 +297,6 @@ describe('Long session: observation and reflection lifecycle', () => {
     BufferingCoordinator.lastBufferedBoundary.clear();
     BufferingCoordinator.lastBufferedAtTime.clear();
     BufferingCoordinator.reflectionBufferCycleIds.clear();
-    vi.useFakeTimers({ toFake: ['Date'] });
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
   });
 
   it('should exercise full lifecycle across 35 turns with buffering, observation, and reflection', async () => {
@@ -427,7 +422,6 @@ describe('Long session: observation and reflection lifecycle', () => {
       );
 
       // ── Add user message ──
-      vi.setSystemTime(new Date(baseTime + timeOffset));
       const userMsgId = `user-${turnNum}`;
       const userText = generateFiller(spec.tokensPerMessage, `Turn ${turnNum} user question`);
       messageList.add(
@@ -462,7 +456,6 @@ describe('Long session: observation and reflection lifecycle', () => {
       // ── Tool steps (if any) ──
       for (let step = 1; step <= spec.toolSteps; step++) {
         // Add tool-call response from assistant
-        vi.setSystemTime(new Date(baseTime + timeOffset));
         const toolResultText = generateFiller(spec.tokensPerToolResult, `Turn ${turnNum} tool-${step} result`);
         const toolMsgId = `tool-${turnNum}-${step}`;
         messageList.add(
@@ -510,7 +503,6 @@ describe('Long session: observation and reflection lifecycle', () => {
       }
 
       // ── Add final assistant response ──
-      vi.setSystemTime(new Date(baseTime + timeOffset));
       const assistantMsgId = `assistant-${turnNum}`;
       const assistantText = generateFiller(spec.tokensPerMessage, `Turn ${turnNum} assistant response`);
       messageList.add(

@@ -8,12 +8,10 @@ export const DEFAULT_DISPLAY_STATE_SUBSCRIPTION_OPTIONS = {
 export const CRITICAL_DISPLAY_STATE_EVENT_TYPES: ReadonlySet<HarnessEvent['type']> = new Set([
   'agent_start',
   'agent_end',
+  'follow_up_queued',
   'error',
   'tool_approval_required',
   'tool_suspended',
-  'ask_question',
-  'plan_approval_required',
-  'plan_approved',
   'thread_changed',
   'thread_created',
   'thread_deleted',
@@ -103,20 +101,16 @@ function cloneDisplayState(state: HarnessDisplayState): HarnessDisplayState {
     pendingApproval: state.pendingApproval
       ? { ...state.pendingApproval, args: cloneUnknown(state.pendingApproval.args) }
       : null,
-    pendingSuspension: state.pendingSuspension
-      ? {
-          ...state.pendingSuspension,
-          args: cloneUnknown(state.pendingSuspension.args),
-          suspendPayload: cloneUnknown(state.pendingSuspension.suspendPayload),
-        }
-      : null,
-    pendingQuestion: state.pendingQuestion
-      ? {
-          ...state.pendingQuestion,
-          options: state.pendingQuestion.options?.map(option => cloneUnknown(option)),
-        }
-      : null,
-    pendingPlanApproval: state.pendingPlanApproval ? { ...state.pendingPlanApproval } : null,
+    pendingSuspensions: new Map(
+      Array.from(state.pendingSuspensions, ([id, suspension]) => [
+        id,
+        {
+          ...suspension,
+          args: cloneUnknown(suspension.args),
+          suspendPayload: cloneUnknown(suspension.suspendPayload),
+        },
+      ]),
+    ),
     activeSubagents: new Map(
       Array.from(state.activeSubagents, ([id, subagent]) => [
         id,

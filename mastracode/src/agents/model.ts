@@ -1,7 +1,14 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { HarnessRequestContext } from '@mastra/core/harness';
 import { GATEWAY_AUTH_HEADER, MastraGateway, ModelRouterLanguageModel } from '@mastra/core/llm';
+import type {
+  GatewayAuthRequest,
+  GatewayAuthResult,
+  GatewayLanguageModel,
+  MastraModelGatewayInterface,
+} from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { wrapLanguageModel } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
@@ -25,8 +32,8 @@ import type { ThinkingLevel } from '../providers/openai-codex.js';
 const authStorage = new AuthStorage();
 
 const OPENAI_PREFIX = 'openai/';
-const GITHUB_COPILOT_PREFIX = 'github-copilot/';
 const MASTRA_GATEWAY_PREFIX = 'mastra/';
+const MASTRACODE_GATEWAY_ID = 'mastracode';
 
 const CODEX_OPENAI_MODEL_REMAPS: Record<string, string> = {
   'gpt-5.3': 'gpt-5.3-codex',
@@ -45,6 +52,14 @@ type ResolvedModel =
   | ReturnType<ReturnType<typeof createOpenAI>>;
 
 type ModelRequestHeaders = Record<string, string>;
+type GatewayResolveLanguageModelArgs = {
+  modelId: string;
+  providerId: string;
+  apiKey: string;
+  headers?: Record<string, string>;
+  transport?: any;
+  responsesWebSocket?: any;
+};
 
 function getHarnessHeaders(requestContext?: RequestContext): ModelRequestHeaders | undefined {
   const harnessContext = requestContext?.get('harness') as HarnessRequestContext<any> | undefined;
@@ -131,11 +146,213 @@ function anthropicApiKeyProvider(modelId: string, apiKey: string, headers?: Mode
  * Create an OpenAI model using a direct API key from AuthStorage.
  */
 function openaiApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRequestHeaders) {
-  const openai = createOpenAI({ apiKey, headers });
+  const openai = createOpenAI({ apiKey, baseURL: process.env.OPENAI_BASE_URL, headers });
   return wrapLanguageModel({
     model: openai.responses(modelId),
     middleware: [],
   });
+}
+
+function getProviderAuthKey(providerId: string): string | undefined {
+  const authProviderId = providerId === 'openai' ? 'openai-codex' : providerId;
+  const storedCred = authStorage.get(authProviderId);
+  if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
+    return storedCred.key.trim();
+  }
+  return authStorage.getStoredApiKey(authProviderId)?.trim() || undefined;
+}
+
+export function resolveAuth(request: GatewayAuthRequest, memoryGatewayApiKey?: string): GatewayAuthResult | undefined {
+  if (request.gatewayId === 'mastra' && memoryGatewayApiKey) {
+    return { apiKey: memoryGatewayApiKey, source: 'gateway' };
+  }
+
+  const apiKey = getProviderAuthKey(request.providerId);
+  return apiKey ? { apiKey, source: 'gateway' } : undefined;
+}
+
+function createMastraCodeGateway({
+  mastraGatewayBaseUrl,
+  mastraGatewayApiKey,
+  routeThroughMastraGateway,
+  thinkingLevel,
+  customProviders,
+}: {
+  mastraGatewayBaseUrl: string;
+  mastraGatewayApiKey?: string;
+  routeThroughMastraGateway: boolean;
+  thinkingLevel?: ThinkingLevel;
+  customProviders: Array<{ name: string; url: string; apiKey?: string }>;
+}): MastraModelGatewayInterface {
+  const mastraGateway = new MastraGateway({ baseUrl: mastraGatewayBaseUrl });
+
+  return {
+    id: MASTRACODE_GATEWAY_ID,
+    name: 'MastraCode Gateway',
+    async fetchProviders() {
+      return {};
+    },
+    buildUrl(modelId: string) {
+      return routeThroughMastraGateway ? mastraGateway.buildUrl(modelId) : modelId;
+    },
+    async getApiKey(modelId: string) {
+      const providerId = stripMastraGatewayPrefix(modelId).split('/', 1)[0];
+      if (routeThroughMastraGateway) return mastraGatewayApiKey ?? '';
+      return providerId ? (getProviderAuthKey(providerId) ?? '') : '';
+    },
+    resolveAuth(request: GatewayAuthRequest) {
+      if (routeThroughMastraGateway && mastraGatewayApiKey) {
+        return { apiKey: mastraGatewayApiKey, source: 'gateway' };
+      }
+
+      const customProvider = customProviders.find(
+        provider => request.providerId === getCustomProviderId(provider.name),
+      );
+      if (customProvider?.apiKey) {
+        return { apiKey: customProvider.apiKey, source: 'gateway' };
+      }
+
+      return resolveAuth(request);
+    },
+    resolveLanguageModel(args: GatewayResolveLanguageModelArgs) {
+      const customProvider = customProviders.find(provider => args.providerId === getCustomProviderId(provider.name));
+      if (customProvider) {
+        const provider = createOpenAICompatible({
+          name: args.providerId,
+          baseURL: customProvider.url,
+          apiKey: args.apiKey,
+          headers: args.headers,
+        });
+        return provider.chatModel(args.modelId) as unknown as GatewayLanguageModel;
+      }
+
+      if (args.providerId === 'github-copilot') {
+        return githubCopilotProvider(args.modelId, { headers: args.headers }) as unknown as GatewayLanguageModel;
+      }
+
+      if (args.providerId === 'moonshotai') {
+        if (!process.env.MOONSHOT_AI_API_KEY) {
+          throw new Error(`Need MOONSHOT_AI_API_KEY`);
+        }
+        return createAnthropic({
+          apiKey: process.env.MOONSHOT_AI_API_KEY,
+          baseURL: 'https://api.moonshot.ai/anthropic/v1',
+          name: 'moonshotai.anthropicv1',
+          headers: args.headers,
+        })(args.modelId) as unknown as GatewayLanguageModel;
+      }
+
+      if (args.providerId === 'anthropic') {
+        const bareModelId = normalizeAnthropicModelId(args.modelId);
+        const storedCred = authStorage.get('anthropic');
+
+        if (routeThroughMastraGateway) {
+          if (storedCred?.type === 'oauth') {
+            const anthropic = createAnthropic({
+              apiKey: 'oauth-gateway-placeholder',
+              baseURL: `${mastraGatewayBaseUrl}/v1`,
+              headers: {
+                [GATEWAY_AUTH_HEADER]: `Bearer ${args.apiKey}`,
+                ...args.headers,
+              },
+              fetch: buildAnthropicOAuthFetch({ authStorage }) as any,
+            });
+
+            return wrapLanguageModel({
+              model: anthropic(bareModelId),
+              middleware: [claudeCodeMiddleware, promptCacheMiddleware],
+            }) as unknown as GatewayLanguageModel;
+          }
+
+          return mastraGateway.resolveLanguageModel({ ...args, modelId: bareModelId });
+        }
+
+        if (storedCred?.type === 'oauth') {
+          return opencodeClaudeMaxProvider(bareModelId, { headers: args.headers }) as unknown as GatewayLanguageModel;
+        }
+
+        if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
+          return anthropicApiKeyProvider(
+            bareModelId,
+            storedCred.key.trim(),
+            args.headers,
+          ) as unknown as GatewayLanguageModel;
+        }
+
+        const apiKey = getAnthropicApiKey();
+        if (apiKey) {
+          return anthropicApiKeyProvider(bareModelId, apiKey, args.headers) as unknown as GatewayLanguageModel;
+        }
+
+        return opencodeClaudeMaxProvider(bareModelId, { headers: args.headers }) as unknown as GatewayLanguageModel;
+      }
+
+      if (args.providerId === 'openai') {
+        const storedCred = authStorage.get('openai-codex');
+
+        if (routeThroughMastraGateway) {
+          if (storedCred?.type === 'oauth') {
+            const resolvedModelId = remapOpenAIModelForCodexOAuth(`openai/${args.modelId}`);
+            const resolvedBareModelId = resolvedModelId.substring(OPENAI_PREFIX.length);
+            const requestedLevel: ThinkingLevel = thinkingLevel ?? 'medium';
+            const effectiveLevel = getEffectiveThinkingLevel(resolvedBareModelId, requestedLevel);
+            const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
+            const middleware = createCodexMiddleware(reasoningEffort);
+            const openai = createOpenAI({
+              apiKey: 'oauth-gateway-placeholder',
+              baseURL: `${mastraGatewayBaseUrl}/v1`,
+              headers: {
+                [GATEWAY_AUTH_HEADER]: `Bearer ${args.apiKey}`,
+                ...args.headers,
+              },
+              fetch: buildOpenAICodexOAuthFetch({ authStorage, rewriteUrl: false }) as any,
+            });
+
+            return wrapLanguageModel({
+              model: openai.responses(resolvedBareModelId),
+              middleware: [middleware],
+            }) as unknown as GatewayLanguageModel;
+          }
+
+          return mastraGateway.resolveLanguageModel(args);
+        }
+
+        if (storedCred?.type === 'oauth') {
+          const resolvedModelId = remapOpenAIModelForCodexOAuth(`openai/${args.modelId}`);
+          return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
+            thinkingLevel,
+            headers: args.headers,
+          }) as unknown as GatewayLanguageModel;
+        }
+
+        const apiKey = getOpenAIApiKey();
+        if (apiKey) {
+          return openaiApiKeyProvider(args.modelId, apiKey, args.headers) as unknown as GatewayLanguageModel;
+        }
+      }
+
+      if (routeThroughMastraGateway) {
+        return mastraGateway.resolveLanguageModel(args);
+      }
+
+      return new ModelRouterLanguageModel({
+        id: `${args.providerId}/${args.modelId}` as `${string}/${string}`,
+        headers: args.headers,
+      }) as unknown as GatewayLanguageModel;
+    },
+    serializeForSpan() {
+      return { id: MASTRACODE_GATEWAY_ID, name: 'MastraCode Gateway' };
+    },
+  };
+}
+
+/**
+ * Placeholder for future model ID normalization.
+ * Currently returns the input unchanged, but exists as a seam
+ * for aliasing, casing fixes, or validation in the future.
+ */
+export function resolveModelId(modelId: string): string {
+  return modelId;
 }
 
 /**
@@ -153,154 +370,26 @@ export function resolveModel(
 ): ResolvedModel {
   authStorage.reload();
   const headers = getHarnessHeaders(options?.requestContext);
-  const isMastraGatewayModel = modelId.startsWith(MASTRA_GATEWAY_PREFIX);
-  const normalizedModelId = stripMastraGatewayPrefix(modelId);
-  const [providerId, modelName] = normalizedModelId.split('/', 2);
   const settings = loadSettings();
-  const customProvider =
-    !isMastraGatewayModel && providerId && modelName
-      ? settings.customProviders.find(provider => {
-          return providerId === getCustomProviderId(provider.name);
-        })
-      : undefined;
+  const resolvedRouterModelId = resolveModelId(modelId);
+  const isMastraGatewayModel = resolvedRouterModelId.startsWith(MASTRA_GATEWAY_PREFIX);
+  const normalizedModelId = stripMastraGatewayPrefix(resolvedRouterModelId);
 
-  if (customProvider) {
-    return new ModelRouterLanguageModel({
-      id: normalizedModelId as `${string}/${string}`,
-      url: customProvider.url,
-      apiKey: customProvider.apiKey,
-      headers,
-    });
-  }
-
-  // --- Memory Gateway path ---
   const mgApiKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
-  if (mgApiKey && isMastraGatewayModel) {
-    // Normalize gateway base URL: strip trailing slashes and "/v1", then append "/v1"
-    const rawBase =
-      settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
-    const gatewayBaseURL = rawBase.replace(/\/+$/, '').replace(/\/v1$/, '') + '/v1';
+  const rawGatewayBase =
+    settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
+  const gateway = createMastraCodeGateway({
+    mastraGatewayBaseUrl: rawGatewayBase.replace(/\/+$/, '').replace(/\/v1$/, ''),
+    mastraGatewayApiKey: mgApiKey,
+    routeThroughMastraGateway: Boolean(mgApiKey && isMastraGatewayModel),
+    thinkingLevel: options?.thinkingLevel,
+    customProviders: settings.customProviders,
+  });
 
-    const anthropicCred = authStorage.get('anthropic');
-    const openaiCred = authStorage.get('openai-codex');
-
-    // Anthropic OAuth: build model directly with middleware (bypasses ModelRouterLanguageModel)
-    // Required because claudeCodeMiddleware must inject the Claude Code identity system message
-    if (normalizedModelId.startsWith('anthropic/') && anthropicCred?.type === 'oauth') {
-      const bareModelId = normalizeAnthropicModelId(normalizedModelId.substring('anthropic/'.length));
-      const anthropic = createAnthropic({
-        apiKey: 'oauth-gateway-placeholder',
-        baseURL: gatewayBaseURL,
-        headers: {
-          [GATEWAY_AUTH_HEADER]: `Bearer ${mgApiKey}`,
-          ...headers,
-        },
-        fetch: buildAnthropicOAuthFetch({ authStorage }) as any,
-      });
-      return wrapLanguageModel({
-        model: anthropic(bareModelId),
-        middleware: [claudeCodeMiddleware, promptCacheMiddleware],
-      });
-    }
-
-    // OpenAI Codex OAuth: build model directly with middleware (bypasses ModelRouterLanguageModel)
-    // Required because createCodexMiddleware injects instructions, store:false, and reasoningEffort
-    if (normalizedModelId.startsWith('openai/') && openaiCred?.type === 'oauth') {
-      const resolvedModelId = remapOpenAIModelForCodexOAuth(normalizedModelId);
-      const resolvedBareModelId = resolvedModelId.substring('openai/'.length);
-      const requestedLevel: ThinkingLevel = options?.thinkingLevel ?? 'medium';
-      const effectiveLevel = getEffectiveThinkingLevel(resolvedBareModelId, requestedLevel);
-      const reasoningEffort = THINKING_LEVEL_TO_REASONING_EFFORT[effectiveLevel];
-      const middleware = createCodexMiddleware(reasoningEffort);
-
-      const openai = createOpenAI({
-        apiKey: 'oauth-gateway-placeholder',
-        baseURL: gatewayBaseURL,
-        headers: {
-          [GATEWAY_AUTH_HEADER]: `Bearer ${mgApiKey}`,
-          ...headers,
-        },
-        fetch: buildOpenAICodexOAuthFetch({ authStorage, rewriteUrl: false }) as any,
-      });
-      return wrapLanguageModel({
-        model: openai.responses(resolvedBareModelId),
-        middleware: [middleware],
-      });
-    }
-
-    // All other models: route through MastraGateway + ModelRouterLanguageModel
-    const gateway = new MastraGateway({
-      apiKey: mgApiKey,
-      baseUrl: gatewayBaseURL.replace(/\/v1$/, ''),
-    });
-
-    return new ModelRouterLanguageModel({ id: `mastra/${normalizedModelId}` as `${string}/${string}`, headers }, [
-      gateway,
-    ]);
-  }
-
-  const isAnthropicModel = normalizedModelId.startsWith('anthropic/');
-  const isOpenAIModel = normalizedModelId.startsWith(OPENAI_PREFIX);
-  const isMoonshotModel = normalizedModelId.startsWith('moonshotai/');
-  const isGitHubCopilotModel = normalizedModelId.startsWith(GITHUB_COPILOT_PREFIX);
-
-  if (isGitHubCopilotModel) {
-    const bareModelId = normalizedModelId.substring(GITHUB_COPILOT_PREFIX.length);
-    return githubCopilotProvider(bareModelId, { headers });
-  }
-
-  if (isMoonshotModel) {
-    if (!process.env.MOONSHOT_AI_API_KEY) {
-      throw new Error(`Need MOONSHOT_AI_API_KEY`);
-    }
-    return createAnthropic({
-      apiKey: process.env.MOONSHOT_AI_API_KEY!,
-      baseURL: 'https://api.moonshot.ai/anthropic/v1',
-      name: 'moonshotai.anthropicv1',
-      headers,
-    })(normalizedModelId.substring('moonshotai/'.length));
-  } else if (isAnthropicModel) {
-    const bareModelId = normalizeAnthropicModelId(normalizedModelId.substring('anthropic/'.length));
-    const storedCred = authStorage.get('anthropic');
-
-    // Primary path: explicit OAuth credential
-    if (storedCred?.type === 'oauth') {
-      return opencodeClaudeMaxProvider(bareModelId, { headers });
-    }
-
-    // Secondary path: explicit stored API key credential
-    if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
-      return anthropicApiKeyProvider(bareModelId, storedCred.key.trim(), headers);
-    }
-
-    // Fallback: direct API key from AuthStorage
-    const apiKey = getAnthropicApiKey();
-    if (apiKey) {
-      return anthropicApiKeyProvider(bareModelId, apiKey, headers);
-    }
-    // No auth configured — attempt OAuth provider which will prompt login
-    return opencodeClaudeMaxProvider(bareModelId, { headers });
-  } else if (isOpenAIModel) {
-    const bareModelId = normalizedModelId.substring(OPENAI_PREFIX.length);
-    const storedCred = authStorage.get('openai-codex');
-
-    if (storedCred?.type === 'oauth') {
-      const resolvedModelId = remapOpenAIModelForCodexOAuth(normalizedModelId);
-      return openaiCodexProvider(resolvedModelId.substring(OPENAI_PREFIX.length), {
-        thinkingLevel: options?.thinkingLevel,
-        headers,
-      });
-    }
-
-    const apiKey = getOpenAIApiKey();
-    if (apiKey) {
-      return openaiApiKeyProvider(bareModelId, apiKey, headers);
-    }
-
-    return new ModelRouterLanguageModel({ id: normalizedModelId as `${string}/${string}`, headers });
-  } else {
-    return new ModelRouterLanguageModel({ id: normalizedModelId as `${string}/${string}`, headers });
-  }
+  return new ModelRouterLanguageModel(
+    { id: `${MASTRACODE_GATEWAY_ID}/${normalizedModelId}` as `${string}/${string}`, headers },
+    [gateway],
+  );
 }
 
 /**

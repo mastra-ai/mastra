@@ -5,15 +5,16 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { AttachmentCapabilities, MastraModelGateway, ProviderConfig } from './gateways/base.js';
+import type { AttachmentCapabilities, MastraModelGatewayInterface, ProviderConfig } from './gateways/base.js';
+import { getGatewayId, shouldEnableGateway } from './gateways/index.js';
 
 interface GatewayWithAttachmentCapabilities {
   getAttachmentCapabilities(): AttachmentCapabilities;
 }
 
 function hasAttachmentCapabilities(
-  gateway: MastraModelGateway,
-): gateway is MastraModelGateway & GatewayWithAttachmentCapabilities {
+  gateway: MastraModelGatewayInterface,
+): gateway is MastraModelGatewayInterface & GatewayWithAttachmentCapabilities {
   return (
     'getAttachmentCapabilities' in gateway &&
     typeof (gateway as { getAttachmentCapabilities?: unknown }).getAttachmentCapabilities === 'function'
@@ -59,19 +60,22 @@ export async function atomicWriteFile(
 }
 
 /**
- * Fetch providers from all gateways with retry logic
+ * Fetch providers from all enabled gateways with silent retry logic.
+ * Retries up to 3 times per gateway with exponential backoff. If all
+ * retries are exhausted the gateway is silently skipped (no error logging)
+ * since the bundled registry already contains all model data.
  * @param gateways - Array of gateway instances to fetch from
  * @returns Object containing providers and models records
  */
-export async function fetchProvidersFromGateways(gateways: MastraModelGateway[]): Promise<{
+export async function fetchProvidersFromGateways(gateways: MastraModelGatewayInterface[]): Promise<{
   providers: Record<string, ProviderConfig>;
   models: Record<string, string[]>;
   attachmentCapabilities: AttachmentCapabilities;
 }> {
-  const enabledGateways: MastraModelGateway[] = [];
+  const enabledGateways: MastraModelGatewayInterface[] = [];
 
   for (const gateway of gateways) {
-    if (await gateway.shouldEnable()) {
+    if (shouldEnableGateway(gateway)) {
       enabledGateways.push(gateway);
     }
   }
@@ -83,56 +87,49 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGateway[])
   const maxRetries = 3;
 
   for (const gateway of enabledGateways) {
-    let lastError: Error | null = null;
+    let providers: Record<string, ProviderConfig> | null = null;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const providers = await gateway.fetchProviders();
-
-        // models.dev is a provider registry, not a true gateway - don't prefix its providers
-        const isProviderRegistry = gateway.id === 'models.dev';
-
-        // Collect attachment capabilities if the gateway exposes them
-        const gatewayAttachmentCaps = hasAttachmentCapabilities(gateway)
-          ? gateway.getAttachmentCapabilities()
-          : undefined;
-
-        for (const [providerId, config] of Object.entries(providers)) {
-          // For true gateways, use gateway.id as prefix (e.g., "netlify/anthropic")
-          // Special case: if providerId matches gateway.id, it's a unified gateway (e.g., azure-openai returning {azure-openai: {...}})
-          // In this case, use just the gateway ID to avoid duplication (azure-openai, not azure-openai/azure-openai)
-          const typeProviderId = isProviderRegistry
-            ? providerId
-            : providerId === gateway.id
-              ? gateway.id
-              : `${gateway.id}/${providerId}`;
-
-          allProviders[typeProviderId] = config;
-          // Sort models alphabetically for consistent ordering
-          allModels[typeProviderId] = config.models.sort();
-
-          // Merge attachment capabilities for this provider if available
-          if (gatewayAttachmentCaps?.[providerId]) {
-            allAttachmentCapabilities[typeProviderId] = gatewayAttachmentCaps[providerId];
-          }
-        }
-
-        lastError = null;
-        break; // Success, exit retry loop
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-
+        providers = await gateway.fetchProviders();
+        break;
+      } catch {
         if (attempt < maxRetries) {
-          // Wait before retrying (exponential backoff)
           const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
           await new Promise(resolve => setTimeout(resolve, delayMs));
         }
       }
     }
 
-    // If all retries failed, throw the last error
-    if (lastError) {
-      throw lastError;
+    // If all retries failed, silently skip this gateway — the bundled
+    // registry already contains all model data.
+    if (!providers) continue;
+
+    const gatewayId = getGatewayId(gateway);
+    // models.dev is a provider registry, not a true gateway - don't prefix its providers
+    const isProviderRegistry = gatewayId === 'models.dev';
+
+    // Collect attachment capabilities if the gateway exposes them
+    const gatewayAttachmentCaps = hasAttachmentCapabilities(gateway) ? gateway.getAttachmentCapabilities() : undefined;
+
+    for (const [providerId, config] of Object.entries(providers)) {
+      // For true gateways, use gateway id as prefix (e.g., "netlify/anthropic")
+      // Special case: if providerId matches gateway id, it's a unified gateway (e.g., azure-openai returning {azure-openai: {...}})
+      // In this case, use just the gateway ID to avoid duplication (azure-openai, not azure-openai/azure-openai)
+      const typeProviderId = isProviderRegistry
+        ? providerId
+        : providerId === gatewayId
+          ? gatewayId
+          : `${gatewayId}/${providerId}`;
+
+      allProviders[typeProviderId] = config;
+      // Sort models alphabetically for consistent ordering
+      allModels[typeProviderId] = config.models.sort();
+
+      // Merge attachment capabilities for this provider if available
+      if (gatewayAttachmentCaps?.[providerId]) {
+        allAttachmentCapabilities[typeProviderId] = gatewayAttachmentCaps[providerId];
+      }
     }
   }
 

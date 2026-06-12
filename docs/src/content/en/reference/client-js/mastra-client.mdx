@@ -151,6 +151,18 @@ You can also pass `requestContext` as a `Record<string, any>`.
     description: 'Retrieves a specific workflow instance by ID.',
   },
   {
+    name: 'getAgentBuilderActions()',
+    type: 'Promise<Record<string, WorkflowInfo>>',
+    description:
+      'Returns all available Agent Builder actions. See [Agent Builder API](/reference/client-js/agent-builder).',
+  },
+  {
+    name: 'getAgentBuilderAction(actionId)',
+    type: 'AgentBuilder',
+    description:
+      'Retrieves an Agent Builder action by ID. See [Agent Builder API](/reference/client-js/agent-builder).',
+  },
+  {
     name: 'responses',
     type: 'Responses',
     description:

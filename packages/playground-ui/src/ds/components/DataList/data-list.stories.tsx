@@ -3,6 +3,8 @@ import { Pencil, Trash2 } from 'lucide-react';
 import { forwardRef, useState } from 'react';
 import { DataList } from './data-list';
 import { DataListSkeleton } from './data-list-skeleton';
+import { Badge } from '@/ds/components/Badge';
+import { Button } from '@/ds/components/Button';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 const meta: Meta = {
@@ -44,7 +46,12 @@ const SAMPLE_RUNS = [
 ];
 
 const COMPACT_COLUMNS = 'auto minmax(0,1fr) auto auto auto';
-const DEFAULT_COLUMNS = 'auto minmax(0,1fr) auto';
+const DEFAULT_COLUMNS = 'minmax(0,1fr) minmax(0,2fr) auto';
+const WIDE_COLUMNS =
+  'minmax(12rem,14rem) minmax(18rem,24rem) minmax(16rem,20rem) minmax(10rem,12rem) minmax(12rem,14rem) minmax(9rem,11rem) minmax(12rem,14rem) minmax(11rem,13rem) minmax(10rem,12rem) minmax(12rem,14rem)';
+const VERY_LONG_BADGE =
+  'production-critical-evaluation-run-with-an-extraordinarily-long-status-label-that-must-truncate-inside-the-cell';
+const MODEL_TOKEN_PLACEHOLDERS = ['__GATEWAY_OPENAI_MODEL_BASE__', '__GATEWAY_ANTHROPIC_MODEL_SONNET__'];
 
 /** The standard condensed look used by Traces, Logs, Scores, Dataset Items, and Skills. */
 export const Compact: Story = {
@@ -81,12 +88,19 @@ export const Default: Story = {
       </DataList.Top>
       {[
         { name: 'Research Agent', description: 'Reads articles and produces summaries.', status: 'active' },
-        { name: 'Writing Agent', description: 'Drafts long-form content from outlines.', status: 'active' },
+        { name: 'Writing Agent', description: '', status: 'active' },
+        {
+          name: 'Answer Relevancy Scorer With A Very Long Display Name That Must Truncate',
+          description: 'Evaluates whether generated answers stay aligned with the retrieved evidence.',
+          status: 'active',
+        },
         { name: 'Translation Agent', description: 'Translates text between supported languages.', status: 'idle' },
       ].map(item => (
         <DataList.RowButton key={item.name} onClick={() => {}}>
-          <DataList.Cell className="text-neutral6 font-medium">{item.name}</DataList.Cell>
-          <DataList.Cell>{item.description}</DataList.Cell>
+          <DataList.NameCell className="font-medium">
+            <span className="flex items-center">{item.name}</span>
+          </DataList.NameCell>
+          <DataList.DescriptionCell>{item.description}</DataList.DescriptionCell>
           <DataList.Cell>{item.status}</DataList.Cell>
         </DataList.RowButton>
       ))}
@@ -174,7 +188,7 @@ export const WithSelection: Story = {
           </DataList.TopCells>
         </DataList.Top>
         {SAMPLE_RUNS.map(run => (
-          <DataList.Row key={run.id}>
+          <DataList.RowWrapper key={run.id}>
             <DataList.SelectCell
               checked={selected.has(run.id)}
               onToggle={() => toggle(run.id)}
@@ -187,7 +201,7 @@ export const WithSelection: Story = {
               <DataList.DateCell timestamp={run.createdAt} />
               <DataList.TimeCell timestamp={run.createdAt} />
             </DataList.RowButton>
-          </DataList.Row>
+          </DataList.RowWrapper>
         ))}
       </DataList>
     );
@@ -209,7 +223,7 @@ export const WithTrailingCell: Story = {
         { name: 'file-system', path: '/skills/file-system', description: 'Read and write files in the workspace.' },
         { name: 'database', path: '/skills/database', description: 'Query the connected SQL database.' },
       ].map(item => (
-        <DataList.Row key={item.path}>
+        <DataList.RowWrapper key={item.path}>
           <DataList.RowButton flushLeft flushRight colEnd={-2} onClick={() => {}}>
             <DataList.Cell className="text-neutral6 font-medium">{item.name}</DataList.Cell>
             <DataList.MonoCell height="default">{item.path}</DataList.MonoCell>
@@ -219,25 +233,29 @@ export const WithTrailingCell: Story = {
           </DataList.RowButton>
           <DataList.Cell className="py-0">
             <div className="flex items-center justify-end gap-1 pr-3 w-full">
-              <button
+              <Button
                 type="button"
-                className="p-1 text-neutral3 hover:text-neutral5"
+                variant="ghost"
+                size="icon-xs"
+                tooltip={`Edit ${item.name}`}
                 aria-label={`Edit ${item.name}`}
                 onClick={e => e.stopPropagation()}
               >
                 <Pencil className="h-4 w-4" />
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="p-1 text-neutral3 hover:text-red-400"
+                variant="ghost"
+                size="icon-xs"
+                tooltip={`Delete ${item.name}`}
                 aria-label={`Delete ${item.name}`}
                 onClick={e => e.stopPropagation()}
               >
                 <Trash2 className="h-4 w-4" />
-              </button>
+              </Button>
             </div>
           </DataList.Cell>
-        </DataList.Row>
+        </DataList.RowWrapper>
       ))}
     </DataList>
   ),
@@ -304,6 +322,51 @@ export const Empty: Story = {
       </DataList.Top>
       <DataList.NoMatch message="No runs match your search" />
     </DataList>
+  ),
+};
+
+/** Wide grid with constrained columns, horizontal scrolling, and a long badge that must stay inside its cell. */
+export const WideColumnsOverflow: Story = {
+  render: () => (
+    <div className="max-w-[760px]">
+      <DataList columns={WIDE_COLUMNS} className="max-h-[360px]">
+        <DataList.Top>
+          <DataList.TopCell>Run</DataList.TopCell>
+          <DataList.TopCell>Input</DataList.TopCell>
+          <DataList.TopCell>Status badge</DataList.TopCell>
+          <DataList.TopCell>Model</DataList.TopCell>
+          <DataList.TopCell>Workflow</DataList.TopCell>
+          <DataList.TopCell>Owner</DataList.TopCell>
+          <DataList.TopCell>Environment</DataList.TopCell>
+          <DataList.TopCell>Duration</DataList.TopCell>
+          <DataList.TopCell>Date</DataList.TopCell>
+          <DataList.TopCell>Trace</DataList.TopCell>
+        </DataList.Top>
+        {Array.from({ length: 14 }, (_, index) => {
+          const run = SAMPLE_RUNS[index % SAMPLE_RUNS.length];
+          return (
+            <DataList.RowButton key={`${run.id}-${index}`} onClick={() => {}}>
+              <DataList.IdCell id={`${run.id}_${index}`} />
+              <DataList.MonoCell>
+                {run.input} with enough extra context to verify truncation in a narrow scrolling grid
+              </DataList.MonoCell>
+              <DataList.Cell height="compact" className="min-w-0">
+                <Badge variant={index % 3 === 0 ? 'warning' : 'success'} className="max-w-full min-w-0 overflow-hidden">
+                  <span className="min-w-0 truncate">{index === 2 ? VERY_LONG_BADGE : run.status}</span>
+                </Badge>
+              </DataList.Cell>
+              <DataList.MonoCell>{MODEL_TOKEN_PLACEHOLDERS[index % MODEL_TOKEN_PLACEHOLDERS.length]}</DataList.MonoCell>
+              <DataList.MonoCell>daily-evaluation-pipeline-{index + 1}</DataList.MonoCell>
+              <DataList.Cell height="compact">Team {index % 5}</DataList.Cell>
+              <DataList.Cell height="compact">{index % 2 === 0 ? 'production' : 'staging'}</DataList.Cell>
+              <DataList.Cell height="compact">{120 + index * 37}ms</DataList.Cell>
+              <DataList.DateCell timestamp={run.createdAt} />
+              <DataList.MonoCell>trace_{String(index + 1).padStart(4, '0')}</DataList.MonoCell>
+            </DataList.RowButton>
+          );
+        })}
+      </DataList>
+    </div>
   ),
 };
 

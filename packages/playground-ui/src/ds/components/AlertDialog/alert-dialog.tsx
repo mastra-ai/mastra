@@ -2,6 +2,7 @@ import { AlertDialog as AlertDialogPrimitive } from '@base-ui/react/alert-dialog
 import * as React from 'react';
 
 import { buttonVariants } from '@/ds/components/Button/Button';
+import { asChildRenderProps } from '@/lib/as-child';
 import { cn } from '@/lib/utils';
 
 import '@/ds/components/Dialog/dialog.css';
@@ -25,15 +26,14 @@ function AlertDialog({
 }
 
 type AlertDialogTriggerProps = AlertDialogPrimitive.Trigger.Props & {
+  /** @deprecated Use Base UI's `render` prop instead, e.g. `render={<Button />}`. */
   asChild?: boolean;
 };
 
 const AlertDialogTrigger = React.forwardRef<HTMLButtonElement, AlertDialogTriggerProps>(
   ({ asChild, children, ...props }, ref) => {
-    const renderProps = asChild && React.isValidElement(children) ? { render: children as React.ReactElement } : {};
-
     return (
-      <AlertDialogPrimitive.Trigger ref={ref} {...renderProps} {...props}>
+      <AlertDialogPrimitive.Trigger ref={ref} {...asChildRenderProps(asChild, children)} {...props}>
         {asChild ? undefined : children}
       </AlertDialogPrimitive.Trigger>
     );
@@ -122,7 +122,7 @@ const AlertDialogAction = React.forwardRef<HTMLButtonElement, AlertDialogActionP
   ({ className, ...props }, ref) => (
     <AlertDialogPrimitive.Close
       ref={ref}
-      className={cn(buttonVariants({ variant: 'primary', size: 'default' }), className)}
+      className={cn(buttonVariants({ variant: 'primary', size: 'lg' }), className)}
       {...props}
     />
   ),
@@ -133,7 +133,7 @@ const AlertDialogCancel = React.forwardRef<HTMLButtonElement, AlertDialogActionP
   ({ className, ...props }, ref) => (
     <AlertDialogPrimitive.Close
       ref={ref}
-      className={cn(buttonVariants({ variant: 'default', size: 'default' }), className)}
+      className={cn(buttonVariants({ variant: 'default', size: 'lg' }), className)}
       {...props}
     />
   ),

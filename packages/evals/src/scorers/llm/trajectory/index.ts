@@ -1,7 +1,8 @@
+import { compileSchema } from '@internal/types-builder/compile-zod';
 import type { ExpectedStep, Trajectory, TrajectoryExpectation, TrajectoryStep } from '@mastra/core/evals';
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 import { getUserMessageFromRunInput, getAssistantMessageFromRunOutput, roundToTwoDecimals } from '../../utils';
 import { TRAJECTORY_EVALUATION_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt } from './prompts';
 
@@ -12,19 +13,21 @@ export interface TrajectoryAccuracyLLMOptions {
   expectedTrajectory?: Trajectory | ExpectedStep[];
 }
 
-const analyzeOutputSchema = z.object({
-  stepEvaluations: z.array(
-    z.object({
-      stepName: z.string().describe('Name of the step (tool name or action)'),
-      wasNecessary: z.boolean().describe('Whether this step was necessary for the task'),
-      wasInOrder: z.boolean().describe('Whether this step was in a logical position in the sequence'),
-      reasoning: z.string().describe('Brief explanation of the evaluation'),
-    }),
-  ),
-  missingSteps: z.array(z.string()).optional().describe('Steps that should have been taken but were not'),
-  extraSteps: z.array(z.string()).optional().describe('Steps that were unnecessary or redundant'),
-  overallAssessment: z.string().describe('Brief overall assessment of the trajectory quality'),
-});
+const analyzeOutputSchema = compileSchema(
+  z.object({
+    stepEvaluations: z.array(
+      z.object({
+        stepName: z.string().describe('Name of the step (tool name or action)'),
+        wasNecessary: z.boolean().describe('Whether this step was necessary for the task'),
+        wasInOrder: z.boolean().describe('Whether this step was in a logical position in the sequence'),
+        reasoning: z.string().describe('Brief explanation of the evaluation'),
+      }),
+    ),
+    missingSteps: z.array(z.string()).optional().describe('Steps that should have been taken but were not'),
+    extraSteps: z.array(z.string()).optional().describe('Steps that were unnecessary or redundant'),
+    overallAssessment: z.string().describe('Brief overall assessment of the trajectory quality'),
+  }),
+);
 
 function formatStepDetails(step: TrajectoryStep): string {
   switch (step.stepType) {

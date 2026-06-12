@@ -2,8 +2,8 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
-import { formElementSizes } from '@/ds/primitives/form-element';
-import type { FormElementSize } from '@/ds/primitives/form-element';
+import { controlSizeClasses } from '@/ds/primitives/control-size';
+import type { ControlSize } from '@/ds/primitives/control-size';
 import { cn } from '@/lib/utils';
 
 type Orientation = 'horizontal' | 'vertical';
@@ -11,8 +11,18 @@ type Orientation = 'horizontal' | 'vertical';
 const ButtonsGroupOrientationContext = React.createContext<Orientation>('horizontal');
 
 const buttonsGroupVariants = cva(
-  // Elevate the focused child's border above its siblings so it isn't clipped in close-spacing.
-  cn('flex', '[&>*:focus-visible]:relative [&>*:focus-visible]:z-10'),
+  // Lift the hovered/focused segment so its full border paints over the collapsed seam (else a
+  // neighbour clips a side / the seam ignores the active colour). Use `:focus-visible`, NOT
+  // `:focus-within`: a mouse click leaves a plain `:focus` on a button, which would otherwise
+  // keep its seam border highlighted until blur. `:has(:focus-visible)` covers a nested
+  // focusable (the <input> inside an InputGroup); text inputs match :focus-visible on click too,
+  // which is the wanted behaviour for a field.
+  cn(
+    'flex',
+    '[&>*:hover]:relative [&>*:hover]:z-10',
+    '[&>*:focus-visible]:relative [&>*:focus-visible]:z-10',
+    '[&>*:has(:focus-visible)]:relative [&>*:has(:focus-visible)]:z-10',
+  ),
   {
     variants: {
       orientation: {
@@ -28,24 +38,50 @@ const buttonsGroupVariants = cva(
       {
         orientation: 'horizontal',
         spacing: 'close',
-        // Skip separators when collapsing borders so they stay visible.
+        // Flatten inner corners. A segment rounds its right edge off having a *real* segment
+        // somewhere after it (general sibling `~`, not `:not(:last-child)` and not adjacent
+        // `+`). This survives non-segment children that frameworks inject between/around the
+        // real ones: Base UI's trailing `<input aria-hidden>` (Select), and the visually
+        // -hidden focus guards (`[data-base-ui-focus-guard]`) + positioner anchor (`[aria-owns]`)
+        // a Menu/Popover inserts while OPEN — without this a DropdownMenu split-button seam
+        // breaks the moment the menu opens. The same ignore-list is applied to every seam rule.
         className: cn(
-          '[&>*:not(:last-child)]:rounded-r-none',
-          '[&>*:not(:first-child)]:rounded-l-none',
-          '[&>*:not([data-slot=buttons-group-separator]):not(:first-child)]:-ml-px',
+          '[&>*:has(~_*:not([aria-hidden=true]):not([data-base-ui-focus-guard]):not([aria-owns]))]:rounded-r-none',
+          '[&>*:not(:first-child):not([aria-hidden=true]):not([data-base-ui-focus-guard]):not([aria-owns])]:rounded-l-none',
+          // One-line seam: `-ml-px` overlaps adjacent borders onto the same pixel. Filled
+          // segments (opaque bg: default/primary buttons, the text chip) keep their own
+          // border — the bg hides the neighbour's. Transparent/outline segments null their
+          // left border at rest (so the neighbour's shows without doubling) and reveal it on
+          // hover / keyboard-focus, where the z-10 lift paints the complete border on top.
+          '[&>*:not([data-slot=buttons-group-separator]):not([aria-hidden=true]):not([data-base-ui-focus-guard]):not([aria-owns]):not(:first-child)]:-ml-px',
+          '[&>*:not([data-slot=buttons-group-separator]):not([data-slot=buttons-group-text]):not([data-variant=default]):not([data-variant=primary]):not([aria-hidden=true]):not([data-base-ui-focus-guard]):not([aria-owns]):not(:first-child):not(:hover):not(:focus-visible):not(:has(:focus-visible))]:border-l-transparent',
+          // `primary` is filled but borderless — give it (only) an inset-shadow divider.
+          '[&>[data-variant=primary]:not([aria-hidden=true]):not(:first-child)]:shadow-[inset_1px_0_0_0_var(--color-border1)]',
+          // Animate only colour/bg so the seam + ring snap (no fade desynced from the z-10 drop).
+          '[&>*:not([data-slot=buttons-group-separator]):not([aria-hidden=true])]:transition-[color,background-color]',
+          // Group owns sizing (no consumer width classes): fill on flex/InputGroup/input,
+          // content-width on a Select trigger (descendant rule beats the trigger's `w-full`).
+          '[&>[data-slot=select-trigger]]:w-fit [&>[data-slot=select-trigger]]:flex-none',
+          '[&>input]:flex-1',
         ),
       },
       {
         orientation: 'vertical',
         spacing: 'close',
-        // Children carry `rounded-full` (capsule) which looks awkward when stacked vertically.
-        // Replace the outer corners with a regular `rounded-xl` and flatten the inner ones.
+        // Children are capsules (rounded-full); re-round the outer ends to rounded-xl and
+        // flatten the touching ones. Unlike the horizontal block, these use plain structural
+        // selectors (no aria-hidden / data-base-ui-focus-guard / aria-owns ignore-list): vertical
+        // close-spacing is only used with plain buttons, so it never hosts a Select/DropdownMenu
+        // that injects guard siblings. Mirror the horizontal ignore-list here if one ever does.
         className: cn(
           '[&>*:not(:last-child)]:rounded-b-none',
           '[&>*:not(:first-child)]:rounded-t-none',
           '[&>:first-child]:rounded-t-xl',
           '[&>:last-child]:rounded-b-xl',
           '[&>*:not([data-slot=buttons-group-separator]):not(:first-child)]:-mt-px',
+          '[&>*:not([data-slot=buttons-group-separator]):not([data-slot=buttons-group-text]):not([data-variant=default]):not([data-variant=primary]):not(:first-child):not(:hover):not(:focus-visible):not(:has(:focus-visible))]:border-t-transparent',
+          '[&>[data-variant=primary]:not(:first-child)]:shadow-[inset_0_1px_0_0_var(--color-border1)]',
+          '[&>*:not([data-slot=buttons-group-separator])]:transition-[color,background-color]',
         ),
       },
     ],
@@ -117,10 +153,11 @@ const buttonsGroupTextVariants = cva(
   {
     variants: {
       size: {
-        sm: `${formElementSizes.sm} text-ui-sm`,
-        md: `${formElementSizes.md} text-ui-md`,
-        default: `${formElementSizes.default} text-ui-md`,
-        lg: `${formElementSizes.lg} text-ui-lg`,
+        xs: controlSizeClasses.xs,
+        sm: controlSizeClasses.sm,
+        md: controlSizeClasses.md,
+        default: controlSizeClasses.default,
+        lg: controlSizeClasses.lg,
       },
     },
     defaultVariants: {
@@ -130,7 +167,7 @@ const buttonsGroupTextVariants = cva(
 );
 
 export type ButtonsGroupTextProps = React.ComponentPropsWithoutRef<'div'> & {
-  size?: FormElementSize;
+  size?: ControlSize;
 };
 
 export const ButtonsGroupText = React.forwardRef<HTMLDivElement, ButtonsGroupTextProps>(

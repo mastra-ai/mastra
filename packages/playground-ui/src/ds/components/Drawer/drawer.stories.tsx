@@ -289,29 +289,35 @@ export const SnapPoints: Story = {
   ),
 };
 
+// Escape hatch: no backdrop + viewport opts out of pointer events.
 export const NonModal: Story = {
   render: () => (
     <Drawer side="right" modal={false} disablePointerDismissal>
       <DrawerTrigger asChild>
         <Button>Open non-modal drawer</Button>
       </DrawerTrigger>
-      <DrawerContent hideBackdrop>
-        <DrawerHeader>
-          <DrawerTitle>Non-modal drawer</DrawerTitle>
-          <DrawerDescription>
-            Does not trap focus or dim the page. Outside clicks are ignored — use the close button.
-          </DrawerDescription>
-        </DrawerHeader>
-        <DrawerFooter>
-          <DrawerClose asChild>
-            <Button variant="outline">Close</Button>
-          </DrawerClose>
-        </DrawerFooter>
-      </DrawerContent>
+      <DrawerPortal>
+        <DrawerViewport className="pointer-events-none">
+          <DrawerPopup className="pointer-events-auto">
+            <DrawerHeader>
+              <DrawerTitle>Non-modal drawer</DrawerTitle>
+              <DrawerDescription>
+                Does not trap focus or dim the page. Outside clicks are ignored — use the close button.
+              </DrawerDescription>
+            </DrawerHeader>
+            <DrawerFooter>
+              <DrawerClose asChild>
+                <Button variant="outline">Close</Button>
+              </DrawerClose>
+            </DrawerFooter>
+          </DrawerPopup>
+        </DrawerViewport>
+      </DrawerPortal>
     </Drawer>
   ),
 };
 
+// Escape hatch: portal scoped to a parent box instead of `document.body`.
 function SwipeToOpenExample() {
   const [container, setContainer] = React.useState<HTMLDivElement | null>(null);
 
@@ -357,7 +363,7 @@ function ActionSheetExample() {
       <DrawerTrigger asChild>
         <Button>Open action sheet</Button>
       </DrawerTrigger>
-      <DrawerContent hideCloseButton hideHandle>
+      <DrawerContent>
         <DrawerHeader className="sr-only">
           <DrawerTitle>Profile actions</DrawerTitle>
           <DrawerDescription>Choose an action for this user.</DrawerDescription>

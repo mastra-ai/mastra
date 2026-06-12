@@ -1,10 +1,10 @@
 {
   "meta": {
     "name": "test-59bf9309",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Direct generate() method - Gemini basic functionality > should handle messages starting with assistant-with-tool-call",
     "createdAt": "2026-05-18T10:50:52.797Z",
-    "updatedAt": "2026-05-20T14:04:39.998Z"
+    "updatedAt": "2026-05-28T17:33:42.853Z"
   },
   "recordings": [
     {
@@ -91,7 +91,7 @@
             }
           }
         },
-        "timestamp": 1779285879463
+        "timestamp": 1779989622309
       },
       "response": {
         "status": 200,
@@ -99,9 +99,9 @@
         "headers": {
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-type": "application/json; charset=UTF-8",
-          "date": "Wed, 20 May 2026 14:04:40 GMT",
+          "date": "Thu, 28 May 2026 17:33:42 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=507",
+          "server-timing": "gfet4t7; dur=429",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
@@ -134,7 +134,7 @@
             "serviceTier": "standard"
           },
           "modelVersion": "gemini-2.0-flash",
-          "responseId": "d78Nap-uI7mqkdUPnvvguAQ"
+          "responseId": "dnwYavifJvy3_uMP0tWnoQo"
         },
         "isStreaming": false
       }

@@ -1,7 +1,5 @@
 import { PassThrough } from 'node:stream';
-
-import { MastraVoice } from '@mastra/core/voice';
-
+import { MastraVoice } from '@internal/voice';
 import { MURF_VOICES } from './voices';
 import type { MurfVoiceId } from './voices';
 

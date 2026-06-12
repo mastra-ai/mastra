@@ -11,7 +11,14 @@ import type {
 import type { IMastraLogger as Logger } from '@mastra/core/logger';
 import { BUILT_IN_PROCESSOR_PROVIDERS } from '@mastra/core/processor-provider';
 import type { ProcessorProvider } from '@mastra/core/processor-provider';
-import type { BlobStore } from '@mastra/core/storage';
+import {
+  createGitHubSourceControlProviderFromEnv,
+  FilesystemStore,
+  MastraCompositeStore,
+  SourceAgentsSourceControl,
+} from '@mastra/core/storage';
+import type { BlobStore, SourceControlProvider } from '@mastra/core/storage';
+import { UnknownToolProviderError } from '@mastra/core/tool-provider';
 import type { ToolProvider } from '@mastra/core/tool-provider';
 
 import {
@@ -56,6 +63,9 @@ export class MastraEditor implements IMastraEditor {
 
   private __toolProviders: Record<string, ToolProvider>;
   private __processorProviders: Record<string, ProcessorProvider>;
+  private __source?: 'code' | 'db';
+  private __codePath: string;
+  private __sourceControlProvider?: SourceControlProvider;
   private readonly __builderConfig?: AgentBuilderOptions;
   private __builderInstance?: IAgentBuilder;
   private __builderResolved = false;
@@ -102,6 +112,11 @@ export class MastraEditor implements IMastraEditor {
     this.__logger = config?.logger;
     this.__toolProviders = config?.toolProviders ?? {};
     this.__processorProviders = { ...BUILT_IN_PROCESSOR_PROVIDERS, ...config?.processorProviders };
+    this.__source = config?.source;
+    this.__codePath = config?.codePath ?? './mastra/editor';
+    this.__sourceControlProvider =
+      config?.sourceControlProvider ??
+      createGitHubSourceControlProviderFromEnv(process.env, { pathPrefix: this.__codePath });
 
     // Built-in providers are always registered first, then merged with user-provided ones
     this.__filesystems = new Map<string, FilesystemProvider>();
@@ -150,6 +165,44 @@ export class MastraEditor implements IMastraEditor {
     this.__mastra = mastra;
     if (!this.__logger) {
       this.__logger = mastra.getLogger();
+    }
+
+    // Code source routes editor-owned domains away from the app's primary storage.
+    // Local development uses a FilesystemStore at `codePath`; hosted/self-hosted
+    // environments can provide a source provider so agent overrides are persisted
+    // through source-control operations instead of a local container filesystem.
+    if (this.__source === 'code') {
+      const existingStorage = mastra.getStorage();
+
+      if (this.__sourceControlProvider) {
+        const sourceAgentsStore = new SourceAgentsSourceControl({
+          provider: this.__sourceControlProvider,
+        });
+        const filesystemStore = new FilesystemStore({ dir: this.__codePath });
+
+        mastra.setStorage(
+          new MastraCompositeStore({
+            id: `${existingStorage?.id ?? 'mastra'}-with-editor-source-control`,
+            ...(existingStorage ? { default: existingStorage } : {}),
+            editor: filesystemStore,
+            domains: { agents: sourceAgentsStore },
+          }),
+        );
+      } else {
+        const filesystemStore = new FilesystemStore({ dir: this.__codePath });
+
+        if (existingStorage) {
+          mastra.setStorage(
+            new MastraCompositeStore({
+              id: `${existingStorage.id}-with-editor-filesystem`,
+              default: existingStorage,
+              editor: filesystemStore,
+            }),
+          );
+        } else {
+          mastra.setStorage(filesystemStore);
+        }
+      }
     }
 
     // Fire-and-forget: persist builder default workspace to DB if configured,
@@ -350,6 +403,16 @@ export class MastraEditor implements IMastraEditor {
     }
   }
 
+  /** Returns the editor's configured source, or undefined if unset. */
+  getSource(): 'code' | 'db' | undefined {
+    return this.__source;
+  }
+
+  /** Returns the configured source control provider, if any. */
+  getSourceControlProvider(): SourceControlProvider | undefined {
+    return this.__sourceControlProvider;
+  }
+
   /** Registered tool providers */
   getToolProvider(id: string): ToolProvider | undefined {
     return this.__toolProviders[id];
@@ -362,9 +425,7 @@ export class MastraEditor implements IMastraEditor {
   getToolProviderOrThrow(id: string): ToolProvider {
     const provider = this.__toolProviders[id];
     if (!provider) {
-      throw new Error(
-        `Unknown tool provider "${id}". Available: ${Object.keys(this.__toolProviders).join(', ') || '(none)'}`,
-      );
+      throw new UnknownToolProviderError(id, Object.keys(this.__toolProviders));
     }
     return provider;
   }

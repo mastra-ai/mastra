@@ -1,14 +1,14 @@
 {
   "meta": {
     "name": "test-7088b7e4",
-    "testFile": "packages/core/src/agent/agent-gemini.e2e.test.ts",
+    "testFile": "src/agent/agent-gemini.e2e.test.ts",
     "testName": "Gemini Model Compatibility Tests > Tool suspension and resumption > should call findUserWorkflow with suspend and resume via stream when autoResumeSuspendedTools is true",
     "createdAt": "2026-05-18T10:51:37.801Z",
-    "updatedAt": "2026-05-20T14:06:04.638Z"
+    "updatedAt": "2026-05-28T17:34:43.980Z"
   },
   "recordings": [
     {
-      "hash": "43612a7bbfee1281",
+      "hash": "719bc8b913ec56b7",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
         "method": "POST",
@@ -52,12 +52,7 @@
                       },
                       "suspendedToolRunId": {
                         "description": "The runId of the suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "nullable": true
+                        "type": "string"
                       },
                       "resumeData": {
                         "description": "The resumeData object created from the resumeSchema of suspended tool",
@@ -92,7 +87,7 @@
             }
           }
         },
-        "timestamp": 1779285962274
+        "timestamp": 1779989681267
       },
       "response": {
         "status": 200,
@@ -101,23 +96,23 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Wed, 20 May 2026 14:06:03 GMT",
+          "date": "Thu, 28 May 2026 17:34:42 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=675",
+          "server-timing": "gfet4t7; dur=679",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"workflow-findUserWorkflow\",\"args\": {\"inputData\": {\"name\": \"Dero Israel\"}}}}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 83,\"candidatesTokenCount\": 11,\"totalTokenCount\": 94,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 83}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 11}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"yr8NapGCGufl1PIP6vDegAk\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"workflow-findUserWorkflow\",\"args\": {\"inputData\": {\"name\": \"Dero Israel\"}}}}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 82,\"candidatesTokenCount\": 11,\"totalTokenCount\": 93,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 82}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 11}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"sXwYarLGJKq6gLUPs8GAqAU\"}\r\n\r\n"
         ],
-        "chunkTimings": [0],
+        "chunkTimings": [4],
         "isStreaming": true
       }
     },
     {
-      "hash": "a34ab7a68e2c780c",
+      "hash": "21abfed6156bb745",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
         "method": "POST",
@@ -144,7 +139,7 @@
           "systemInstruction": {
             "parts": [
               {
-                "text": "You are an agent that can get list of users using findUserWorkflow.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"IcFV2eO22FmW2P8b\",\"toolName\":\"workflow-findUserWorkflow\",\"args\":{\"inputData\":{\"name\":\"Dero Israel\"}},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-00000000004e\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"noOfYears\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"noOfYears\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
+                "text": "You are an agent that can get list of users using findUserWorkflow.\n\nAnalyse the suspended tools: [{\"toolCallId\":\"Pb5L8nAikwTas5zK\",\"toolName\":\"workflow-findUserWorkflow\",\"args\":{\"inputData\":{\"name\":\"Dero Israel\"}},\"type\":\"suspension\",\"runId\":\"00000000-0000-4000-8000-000000000055\",\"suspendPayload\":{\"message\":\"Please provide the age of the user\"},\"resumeSchema\":\"{\\\"$schema\\\":\\\"http://json-schema.org/draft-07/schema#\\\",\\\"type\\\":\\\"object\\\",\\\"properties\\\":{\\\"noOfYears\\\":{\\\"type\\\":\\\"number\\\"}},\\\"required\\\":[\\\"noOfYears\\\"],\\\"additionalProperties\\\":false}\"}], using the messages available to you and the resumeSchema of each suspended tool, find the tool whose resumeData you can construct properly.\n                      resumeData can not be an empty object nor null/undefined.\n                      When you find that and call that tool, add the resumeData to the tool call arguments/input.\n                      Also, add the runId of the suspended tool as suspendedToolRunId to the tool call arguments/input.\n                      If the suspendedTool.type is 'approval', resumeData will be an object that contains 'approved' which can either be true or false depending on the user's message. If you can't construct resumeData from the message for approval type, set approved to true and add resumeData: { approved: true } to the tool call arguments/input.\n\n                      IMPORTANT: If you're able to construct resumeData and get suspendedToolRunId, get the previous arguments/input of the tool call from args in the suspended tool, and spread it in the new arguments/input created, do not add duplicate data. \n                      "
               }
             ]
           },
@@ -169,12 +164,7 @@
                       },
                       "suspendedToolRunId": {
                         "description": "The runId of the suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "nullable": true
+                        "type": "string"
                       },
                       "resumeData": {
                         "description": "The resumeData object created from the resumeSchema of suspended tool",
@@ -209,7 +199,7 @@
             }
           }
         },
-        "timestamp": 1779285963004
+        "timestamp": 1779989682092
       },
       "response": {
         "status": 200,
@@ -218,23 +208,23 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Wed, 20 May 2026 14:06:04 GMT",
+          "date": "Thu, 28 May 2026 17:34:43 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=1092",
+          "server-timing": "gfet4t7; dur=1025",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"workflow-findUserWorkflow\",\"args\": {\"resumeData\": {\"noOfYears\": 25},\"suspendedToolRunId\": \"00000000-0000-4000-8000-00000000004e\",\"inputData\": {\"name\": \"Dero Israel\"}}}}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 476,\"candidatesTokenCount\": 57,\"totalTokenCount\": 533,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 476}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 57}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"y78NasayCbnh_NUPwPiQ2Qc\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"workflow-findUserWorkflow\",\"args\": {\"inputData\": {\"name\": \"Dero Israel\"},\"resumeData\": {\"noOfYears\": 25},\"suspendedToolRunId\": \"00000000-0000-4000-8000-000000000055\"}}}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 473,\"candidatesTokenCount\": 57,\"totalTokenCount\": 530,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 473}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 57}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"snwYaouzGYqbheMP9cPwqAY\"}\r\n\r\n"
         ],
         "chunkTimings": [0],
         "isStreaming": true
       }
     },
     {
-      "hash": "07ca829103c1e658",
+      "hash": "cc720da750790694",
       "request": {
         "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse",
         "method": "POST",
@@ -264,13 +254,13 @@
                   "functionCall": {
                     "name": "workflow-findUserWorkflow",
                     "args": {
+                      "inputData": {
+                        "name": "Dero Israel"
+                      },
                       "resumeData": {
                         "noOfYears": 25
                       },
-                      "suspendedToolRunId": "00000000-0000-4000-8000-00000000004e",
-                      "inputData": {
-                        "name": "Dero Israel"
-                      }
+                      "suspendedToolRunId": "00000000-0000-4000-8000-000000000055"
                     }
                   }
                 }
@@ -290,7 +280,7 @@
                           "email": "test@test.com",
                           "age": 25
                         },
-                        "runId": "00000000-0000-4000-8000-00000000004e"
+                        "runId": "00000000-0000-4000-8000-000000000055"
                       }
                     }
                   }
@@ -326,12 +316,7 @@
                       },
                       "suspendedToolRunId": {
                         "description": "The runId of the suspended tool",
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          }
-                        ],
-                        "nullable": true
+                        "type": "string"
                       },
                       "resumeData": {
                         "description": "The resumeData object created from the resumeSchema of suspended tool",
@@ -366,7 +351,7 @@
             }
           }
         },
-        "timestamp": 1779285964148
+        "timestamp": 1779989683243
       },
       "response": {
         "status": 200,
@@ -375,19 +360,19 @@
           "alt-svc": "h3=\":443\"; ma=2592000,h3-29=\":443\"; ma=2592000",
           "content-disposition": "attachment",
           "content-type": "text/event-stream",
-          "date": "Wed, 20 May 2026 14:06:04 GMT",
+          "date": "Thu, 28 May 2026 17:34:43 GMT",
           "server": "scaffolding on HTTPServer2",
-          "server-timing": "gfet4t7; dur=427",
+          "server-timing": "gfet4t7; dur=393",
           "vary": "Origin, X-Origin, Referer",
           "x-content-type-options": "nosniff",
           "x-frame-options": "SAMEORIGIN",
           "x-xss-protection": "0"
         },
         "chunks": [
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"The\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 366,\"totalTokenCount\": 366,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 366}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"zL8NavTfEvXgx_AP9LTSwAI\"}\r\n\r\n",
-          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" name of the user is Dero Israel and the age is 25.\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 210,\"candidatesTokenCount\": 17,\"totalTokenCount\": 227,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 210}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 17}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"zL8NavTfEvXgx_AP9LTSwAI\"}\r\n\r\n"
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"The name of\"}],\"role\": \"model\"}}],\"usageMetadata\": {\"promptTokenCount\": 366,\"totalTokenCount\": 366,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 366}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"s3wYauvBIPvh1dkPwMaM4Q0\"}\r\n\r\n",
+          "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" the user is Dero Israel and the age is 25.\"}],\"role\": \"model\"},\"finishReason\": \"STOP\"}],\"usageMetadata\": {\"promptTokenCount\": 209,\"candidatesTokenCount\": 17,\"totalTokenCount\": 226,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 209}],\"candidatesTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 17}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.0-flash\",\"responseId\": \"s3wYauvBIPvh1dkPwMaM4Q0\"}\r\n\r\n"
         ],
-        "chunkTimings": [0, 2],
+        "chunkTimings": [0, 73],
         "isStreaming": true
       }
     }

@@ -76,18 +76,20 @@ export function SkillFolder({
   return (
     <div className="grid grid-cols-[300px_1fr] h-full">
       <div className="overflow-y-auto h-full border-r border-border1 p-4">
-        <div className="flex flex-col gap-1.5 pb-4">
-          <Txt as="label" variant="ui-sm" className="text-neutral3">
-            Workspace
-          </Txt>
-          <Combobox
-            options={workspaceOptions}
-            value={workspaceId}
-            onValueChange={setWorkspaceId}
-            placeholder="Select a workspace..."
-            disabled={readOnly}
-          />
-        </div>
+        {workspaceOptions.length > 0 && (
+          <div className="flex flex-col gap-1.5 pb-4">
+            <Txt as="label" variant="ui-sm" className="text-neutral3">
+              Workspace
+            </Txt>
+            <Combobox
+              options={workspaceOptions}
+              value={workspaceId}
+              onValueChange={setWorkspaceId}
+              placeholder="Select a workspace..."
+              disabled={readOnly}
+            />
+          </div>
+        )}
 
         <SkillFileTree
           files={files}

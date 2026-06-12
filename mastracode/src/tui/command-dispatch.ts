@@ -40,6 +40,7 @@ import {
   handleApiKeysCommand,
   handleFeedbackCommand,
   handleObservabilityCommand,
+  handleGithubCommand,
   handleGoalCommand,
   handleJudgeCommand,
 } from './commands/index.js';
@@ -245,6 +246,9 @@ export async function dispatchSlashCommand(
     case 'observability':
       await handleObservabilityCommand(buildCtx(), args);
       return true;
+    case 'github':
+      await handleGithubCommand(buildCtx(), args);
+      return true;
     case 'goal':
       await handleGoalCommand(buildCtx(), args);
       return true;
@@ -300,7 +304,10 @@ async function handleGoalSourceCommand(
   const goalSkill = state.goalSkillCommands.find(skill => skill.name === sourceName);
   if (goalSkill) {
     try {
-      const workspace = ctx.getResolvedWorkspace();
+      let workspace = ctx.getResolvedWorkspace();
+      if (!workspace && ctx.harness?.hasWorkspace?.()) {
+        workspace = await ctx.harness.resolveWorkspace();
+      }
       const skill = await workspace?.skills?.get(goalSkill.path || goalSkill.name);
       if (!skill || skill.metadata?.goal !== true) {
         showError(state, `Unknown goal command: ${sourceName}`);

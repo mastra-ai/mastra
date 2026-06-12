@@ -69,6 +69,19 @@ export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
 /** Browser provider type. */
 export type BrowserProvider = 'stagehand' | 'agent-browser';
 
+/** Direct TUI `!` shell passthrough mode. */
+export type ShellPassthroughSettingsMode = 'default' | 'path' | 'login';
+
+/** Direct TUI `!` shell command language. */
+export type ShellPassthroughSettingsFamily = 'posix' | 'cmd' | 'powershell';
+
+/** Direct TUI `!` shell passthrough configuration. */
+export interface ShellPassthroughSettings {
+  mode?: ShellPassthroughSettingsMode | string;
+  executable?: string;
+  family?: ShellPassthroughSettingsFamily | string;
+}
+
 /** Stagehand environment type. */
 export type StagehandEnv = 'LOCAL' | 'BROWSERBASE';
 
@@ -207,6 +220,8 @@ export interface GlobalSettings {
   lsp?: LSPConfig;
   // Browser automation configuration
   browser: BrowserSettings;
+  // Direct TUI `!` shell passthrough configuration
+  shellPassthrough: ShellPassthroughSettings;
   // Signal routing configuration
   signals: SignalSettings;
   // Cloud observability configuration (per-resource project IDs; tokens stored in auth.json)
@@ -216,6 +231,8 @@ export interface GlobalSettings {
 export interface SignalSettings {
   /** Opt into local Unix socket PubSub for cross-process signal routing. */
   unixSocketPubSub: boolean;
+  /** Experimental: enable GitHub PR subscription signals backed by gitcrawl. */
+  experimentalGithubSignals: boolean;
 }
 
 export interface ObservabilityResourceConfig {
@@ -286,12 +303,30 @@ const DEFAULTS: GlobalSettings = {
     viewport: { width: 1280, height: 720 },
     stagehand: { env: 'LOCAL' },
   },
-  signals: { unixSocketPubSub: false },
+  shellPassthrough: { mode: 'default' },
+  signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
   observability: { resources: {}, localTracing: false },
 };
 
 const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
 const QUIET_MODE_MAX_TOOL_PREVIEW_LINES_MAX = 8;
+const loadedSignalSettings = new WeakMap<GlobalSettings, SignalSettings>();
+
+function cloneSignalSettings(signals: SignalSettings): SignalSettings {
+  return { ...signals };
+}
+
+function rememberLoadedSettings(settings: GlobalSettings): GlobalSettings {
+  loadedSignalSettings.set(settings, cloneSignalSettings(settings.signals));
+  return settings;
+}
+
+function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boolean {
+  return (
+    left.unixSocketPubSub === right.unixSocketPubSub &&
+    left.experimentalGithubSignals === right.experimentalGithubSignals
+  );
+}
 
 function parseThinkingLevel(value: unknown): ThinkingLevelSetting {
   return typeof value === 'string' && THINKING_LEVEL_VALUES.includes(value as ThinkingLevelSetting)
@@ -313,6 +348,18 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
     ...raw,
     thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
     quietModeMaxToolPreviewLines: parseQuietModeMaxToolPreviewLines(raw.quietModeMaxToolPreviewLines),
+  };
+}
+
+function parseSignalSettings(rawSignals: unknown): SignalSettings {
+  const raw = rawSignals && typeof rawSignals === 'object' ? (rawSignals as Record<string, unknown>) : {};
+  return {
+    unixSocketPubSub:
+      typeof raw.unixSocketPubSub === 'boolean' ? raw.unixSocketPubSub : DEFAULTS.signals.unixSocketPubSub,
+    experimentalGithubSignals:
+      typeof raw.experimentalGithubSignals === 'boolean'
+        ? raw.experimentalGithubSignals
+        : DEFAULTS.signals.experimentalGithubSignals,
   };
 }
 
@@ -456,6 +503,23 @@ function parseBrowserSettings(rawBrowser: unknown): BrowserSettings {
   };
 }
 
+function parseShellPassthroughSettings(rawShellPassthrough: unknown): ShellPassthroughSettings {
+  const raw =
+    rawShellPassthrough && typeof rawShellPassthrough === 'object'
+      ? (rawShellPassthrough as Record<string, unknown>)
+      : {};
+  const executable = typeof raw.executable === 'string' && raw.executable.trim() ? raw.executable.trim() : undefined;
+  const family = typeof raw.family === 'string' && raw.family.trim() ? raw.family.trim() : undefined;
+  const mode = typeof raw.mode === 'string' && raw.mode.trim() ? raw.mode.trim() : undefined;
+  const defaultMode = executable ? undefined : DEFAULTS.shellPassthrough.mode;
+
+  return {
+    ...((mode ?? defaultMode) ? { mode: mode ?? defaultMode } : {}),
+    ...(executable ? { executable } : {}),
+    ...(family ? { family } : {}),
+  };
+}
+
 const VALID_PROJECT_ID = /^[a-zA-Z0-9_-]+$/;
 
 function parseObservabilitySettings(raw: unknown): ObservabilitySettings {
@@ -521,12 +585,8 @@ function migrateFromAuth(settingsPath: string): boolean {
         memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
         browser: parseBrowserSettings(raw.browser),
-        signals: {
-          unixSocketPubSub:
-            raw.signals && typeof raw.signals === 'object' && typeof raw.signals.unixSocketPubSub === 'boolean'
-              ? raw.signals.unixSocketPubSub
-              : DEFAULTS.signals.unixSocketPubSub,
-        },
+        shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
+        signals: parseSignalSettings(raw.signals),
         observability: parseObservabilitySettings(raw.observability),
       };
       applyQuietModePreferenceRollout(settings, raw.onboarding);
@@ -624,7 +684,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
   // One-time migration: move model data from auth.json into settings.json
   migrateFromAuth(filePath);
 
-  if (!existsSync(filePath)) return getNewInstallDefaults();
+  if (!existsSync(filePath)) return rememberLoadedSettings(getNewInstallDefaults());
   try {
     const raw = JSON.parse(readFileSync(filePath, 'utf-8'));
     // Spread raw first to preserve unknown top-level keys (forward-compatibility),
@@ -647,12 +707,8 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       memoryGateway: raw.memoryGateway && typeof raw.memoryGateway === 'object' ? raw.memoryGateway : {},
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       browser: parseBrowserSettings(raw.browser),
-      signals: {
-        unixSocketPubSub:
-          raw.signals && typeof raw.signals === 'object' && typeof raw.signals.unixSocketPubSub === 'boolean'
-            ? raw.signals.unixSocketPubSub
-            : DEFAULTS.signals.unixSocketPubSub,
-      },
+      shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
+      signals: parseSignalSettings(raw.signals),
       observability: parseObservabilitySettings(raw.observability),
     };
 
@@ -675,9 +731,9 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       saveSettings(settings, filePath);
     }
 
-    return settings;
+    return rememberLoadedSettings(settings);
   } catch {
-    return structuredClone(DEFAULTS);
+    return rememberLoadedSettings(structuredClone(DEFAULTS));
   }
 }
 
@@ -832,11 +888,33 @@ export function resolveOmModel(
   return resolveOmRoleModel(settings, 'observer', builtinOmPacks);
 }
 
+function getSignalSettingsForSave(settings: GlobalSettings, filePath: string): SignalSettings {
+  const loadedSignals = loadedSignalSettings.get(settings);
+  if (!loadedSignals || !signalSettingsEqual(settings.signals, loadedSignals) || !existsSync(filePath)) {
+    return settings.signals;
+  }
+
+  try {
+    const currentRaw = JSON.parse(readFileSync(filePath, 'utf-8')) as Record<string, unknown>;
+    const currentSignals = parseSignalSettings(currentRaw.signals);
+    if (!signalSettingsEqual(currentSignals, loadedSignals)) {
+      return currentSignals;
+    }
+  } catch {
+    // If the current file is unreadable, fall back to the caller's settings.
+  }
+
+  return settings.signals;
+}
+
 export function saveSettings(settings: GlobalSettings, filePath: string = getSettingsPath()): void {
   const dir = dirname(filePath);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
+  const signals = getSignalSettingsForSave(settings, filePath);
+  settings.signals = signals;
+  loadedSignalSettings.set(settings, cloneSignalSettings(signals));
   writeFileSync(filePath, JSON.stringify(settings, null, 2), 'utf-8');
 }
 

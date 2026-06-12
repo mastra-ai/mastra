@@ -12,6 +12,7 @@ vi.mock('@mastra/core/llm', () => ({
 
 vi.mock('@mastra/core/agent', () => ({
   Agent: class {},
+  SignalProvider: class {},
 }));
 
 vi.mock('@mastra/core/harness', () => ({
@@ -45,12 +46,15 @@ vi.mock('./agents/model.js', () => ({
 vi.mock('./agents/subagents/execute.js', () => ({ executeSubagent: {} }));
 vi.mock('./agents/subagents/explore.js', () => ({ exploreSubagent: {} }));
 vi.mock('./agents/subagents/plan.js', () => ({ planSubagent: {} }));
-vi.mock('./agents/tools.js', () => ({ createDynamicTools: vi.fn() }));
+vi.mock('./agents/tools.js', () => ({ createDynamicTools: vi.fn(), createToolHooks: vi.fn() }));
 vi.mock('./agents/workspace.js', () => ({ getDynamicWorkspace: vi.fn() }));
 
 vi.mock('./auth/storage.js', () => ({
   AuthStorage: class {
     get() {
+      return undefined;
+    }
+    getStoredApiKey() {
       return undefined;
     }
     loadStoredApiKeysIntoEnv() {}
@@ -145,6 +149,43 @@ vi.mock('./utils/thread-lock.js', () => ({
   acquireThreadLock: vi.fn(),
   releaseThreadLock: vi.fn(),
 }));
+
+describe('createMastraCode startup performance', () => {
+  it('does not wait for background gateway sync before returning storage warnings', async () => {
+    const [{ GatewayRegistry }, { createStorage }] = await Promise.all([
+      import('@mastra/core/llm'),
+      import('./utils/storage-factory.js'),
+    ]);
+    let resolveSync: (() => void) | undefined;
+    const syncGateways = vi.fn(
+      () =>
+        new Promise<void>(resolve => {
+          resolveSync = resolve;
+        }),
+    );
+    vi.mocked(GatewayRegistry.getInstance).mockReturnValue({
+      syncGateways,
+      getProviders: vi.fn(() => ({})),
+    } as never);
+    vi.mocked(createStorage).mockReturnValue({
+      storage: {},
+      backend: 'memory',
+      warning: 'Storage fallback warning',
+    } as never);
+    const { createMastraCode } = await import('./index.js');
+
+    const result = await Promise.race([
+      createMastraCode(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('createMastraCode waited for gateway sync')), 1000),
+      ),
+    ]);
+
+    expect(syncGateways).toHaveBeenCalledWith(true);
+    expect(result.storageWarning).toBe('Storage fallback warning');
+    resolveSync?.();
+  });
+});
 
 describe('createAuthStorage', () => {
   it('wires the same AuthStorage instance into every OAuth-capable provider', async () => {

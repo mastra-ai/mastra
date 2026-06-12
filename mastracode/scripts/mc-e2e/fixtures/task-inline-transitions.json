@@ -1,0 +1,86 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "userMessage": "Exercise task inline transitions through real task tools.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_task_inline_write",
+            "name": "task_write",
+            "arguments": {
+              "tasks": [
+                {
+                  "id": "task-inline-plan",
+                  "content": "Plan task inline e2e",
+                  "status": "completed",
+                  "activeForm": "Planning task inline e2e"
+                },
+                {
+                  "id": "task-inline-finish",
+                  "content": "Finish task inline e2e",
+                  "status": "in_progress",
+                  "activeForm": "Finishing task inline e2e"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "streamingProfile": { "ttft": 200, "tps": 30 }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_task_inline_write",
+        "hasToolResult": true
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_task_inline_complete",
+            "name": "task_complete",
+            "arguments": {
+              "id": "task-inline-finish"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_task_inline_complete",
+        "hasToolResult": true
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_task_inline_clear",
+            "name": "task_write",
+            "arguments": {
+              "tasks": []
+            }
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
+        "toolCallId": "call_task_inline_clear",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Task inline transition e2e complete."
+      }
+    }
+  ]
+}

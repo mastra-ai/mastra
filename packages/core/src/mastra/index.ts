@@ -19,12 +19,16 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
-import type { MastraModelGateway } from '../llm/model/gateways';
+import { LicenseClient } from '../license';
+import type { MastraModelGatewayInterface } from '../llm/model/gateways';
+import { getGatewayId } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/router';
 import { LogLevel, noopLogger, ConsoleLogger, DualLogger } from '../logger';
 import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
+import type { NotificationDispatchConfig } from '../notifications/workflow';
+import { createNotificationDispatchWorkflow } from '../notifications/workflow';
 import type {
   DefinitionSource,
   ObservabilityEntrypoint,
@@ -32,14 +36,19 @@ import type {
   ObservabilityInstance,
   LoggerContext,
   MetricsContext,
+  TracingContext,
 } from '../observability';
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
 import type { MastraServerBase } from '../server/base';
-import type { ApiRoute, Middleware, ServerConfig } from '../server/types';
+import type { ApiRoute, Middleware, ServerConfig, StudioConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
+import { InMemoryStore } from '../storage';
+import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inmemory';
+import { InMemoryDB } from '../storage/domains/inmemory-db';
 import type { Schedule, ScheduleUpdate, SchedulesStorage } from '../storage/domains/schedules/base';
+import { WorkflowsInMemory } from '../storage/domains/workflows/inmemory';
 import { augmentWithInit } from '../storage/storageWithInit';
 import type { StorageResolvedPromptBlockType } from '../storage/types';
 import type { ToolLoopAgentLike } from '../tool-loop-agent';
@@ -311,6 +320,38 @@ export interface Config<
   server?: ServerConfig;
 
   /**
+   * Studio-specific authentication and authorization configuration.
+   *
+   * When configured, Studio uses separate auth from the server (API) auth,
+   * allowing different providers for internal team members vs external customers.
+   *
+   * - `server.auth` handles API authentication (external customers)
+   * - `studio.auth` handles Studio authentication (internal team)
+   *
+   * **Dual auth is opt-in:** If `studio.auth` is not configured, Studio requests
+   * fall back to `server.auth` for backward compatibility. To enable strict
+   * separation between Studio and API auth, configure both `studio.auth` and
+   * `server.auth`.
+   *
+   * @example
+   * ```typescript
+   * const mastra = new Mastra({
+   *   server: {
+   *     auth: new MastraAuthWorkos({ ... }), // External customers
+   *   },
+   *   studio: {
+   *     auth: new MastraAuthOkta({ ... }), // Internal team
+   *     rbac: new StaticRBACProvider({
+   *       roles: DEFAULT_ROLES,
+   *       getUserRoles: (user) => [user.role],
+   *     }),
+   *   },
+   * });
+   * ```
+   */
+  studio?: StudioConfig;
+
+  /**
    * MCP servers provide tools and resources that agents can use.
    */
   mcpServers?: TMCPServers;
@@ -370,7 +411,7 @@ export interface Config<
    * Custom model router gateways for accessing LLM providers.
    * Gateways handle provider-specific authentication, URL construction, and model resolution.
    */
-  gateways?: Record<string, MastraModelGateway>;
+  gateways?: Record<string, MastraModelGatewayInterface>;
 
   /**
    * Event handlers for custom application events.
@@ -423,6 +464,13 @@ export interface Config<
    * storage adapter implementing the `schedules` domain (e.g. `@mastra/libsql`).
    */
   scheduler?: WorkflowSchedulerConfig;
+
+  /**
+   * Notification runtime configuration. Notification dispatch is scheduled automatically by default.
+   */
+  notifications?: {
+    dispatch?: NotificationDispatchConfig;
+  };
 
   /**
    * Platform channels for messaging integrations (Slack, Discord, etc.).
@@ -532,6 +580,7 @@ export class Mastra<
   #agents: TAgents;
   #logger: TLogger;
   #workflows: TWorkflows;
+  #hiddenWorkflowKeys = new Set<string>();
   #observability: ObservabilityEntrypoint;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
@@ -550,6 +599,7 @@ export class Mastra<
   #workspace?: Workspace;
   #workspaces: Record<string, RegisteredWorkspace> = {};
   #server?: ServerConfig;
+  #studio?: StudioConfig;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
@@ -558,13 +608,14 @@ export class Mastra<
   #backgroundTaskConfig?: BackgroundTaskManagerConfig;
   #backgroundTaskManager?: BackgroundTaskManager;
   #schedulerConfig?: WorkflowSchedulerConfig;
+  #notificationDispatchConfig?: NotificationDispatchConfig;
   /**
    * Tracks whether any registered workflow has declared a `schedule` config.
    * Used as a fast short-circuit so users without scheduled workflows pay
    * zero cost beyond a boolean check.
    */
   #hasScheduledWorkflow = false;
-  #gateways?: Record<string, MastraModelGateway>;
+  #gateways?: Record<string, MastraModelGatewayInterface>;
   #channels?: TChannels;
   #environment?: string;
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
@@ -589,7 +640,18 @@ export class Mastra<
   #events: {
     [topic: string]: ((event: Event, cb?: () => Promise<void>) => Promise<void>)[];
   } = {};
-  #internalMastraWorkflows: Record<string, Workflow> = {};
+  #internalMastraWorkflows: Record<string, AnyWorkflow> = {};
+  // Tracks registration timestamps for run-scoped internal workflows so a lazy
+  // TTL sweep can evict entries from abandoned suspended runs that were never
+  // resumed. Unscoped (singleton) entries are not tracked — they live forever.
+  #runScopedWorkflowTimestamps: Map<string, number> = new Map();
+  // Run-scoped internal workflows older than this TTL (ms) are evicted during
+  // the lazy sweep that runs on each new registration.
+  static readonly INTERNAL_WORKFLOW_TTL_MS = 30 * 60 * 1000; // 30 minutes
+  // Per-run tracing context for evented workflow runs. `currentSpan` is a
+  // non-serializable AISpan, so it cannot ride the engine's pubsub events —
+  // the event processor reads it from here, keyed by runId, instead.
+  #runTracingContexts: Map<string, TracingContext> = new Map();
   // Server cache for temporary persistence and durable agent resumable streams
   #serverCache: MastraServerCache;
   // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
@@ -603,9 +665,82 @@ export class Mastra<
   #datasets?: DatasetsManager;
   // Global version overrides for primitives (agents, etc.)
   #versions?: VersionOverrides;
+  // Cached pubsub proxy that tags internal-workflow events with `_localOnly`
+  // so the broker skips relaying multi-MB payloads to non-owning instances.
+  #pubsubProxy?: PubSub;
 
-  get pubsub() {
-    return this.#pubsub;
+  get pubsub(): PubSub {
+    if (!this.#pubsubProxy) {
+      const raw = this.#pubsub;
+      const self = this;
+      this.#pubsubProxy = new Proxy(raw, {
+        get(target, prop, _receiver) {
+          if (prop === 'publish') {
+            return function publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>) {
+              // Internal execution-workflows / agentic-loops are run-scoped:
+              // only the owning instance needs their events. Pass `localOnly`
+              // so the broker delivers locally + echoes back to the sender,
+              // but does NOT fan out to other clients (avoids serialising
+              // cumulative stepResults blobs — often 9 MB+ — across the unix
+              // socket). The flag rides on the publish-frame envelope, not on
+              // event.data, so WEP consumers never see it.
+              if (topic === 'workflows' || topic === 'workflows-finish') {
+                const data = event.data as Record<string, unknown> | undefined;
+                const wfId = data?.workflowId as string | undefined;
+                const rId = data?.runId as string | undefined;
+                // Walk parentWorkflow chain to root — nested internal workflows
+                // (e.g. `executionWorkflow` inside `agentic-loop`) carry an
+                // immediate workflowId that isn't itself in the internal registry,
+                // but their root parent (the registered agentic-loop) is. If any
+                // ancestor matches an internal registration, this instance owns
+                // the run and the event should stay local. Also tag publishes
+                // for workflow ids only known to this instance's public registry
+                // (e.g. background scheduler runs like the notification
+                // dispatcher) — they have no cross-instance consumer.
+                const isOwnedHere = (() => {
+                  if (wfId && rId && self.__hasInternalWorkflow(wfId, rId)) return true;
+                  let parent = data?.parentWorkflow as
+                    | { workflowId?: string; runId?: string; parentWorkflow?: unknown }
+                    | undefined;
+                  let depth = 0;
+                  while (parent && depth < 16) {
+                    const pwfId = parent.workflowId;
+                    const prId = parent.runId;
+                    if (pwfId && prId && self.__hasInternalWorkflow(pwfId, prId)) return true;
+                    parent = parent.parentWorkflow as typeof parent;
+                    depth++;
+                  }
+                  // Scheduler-spawned background workflows: runId carries the
+                  // workflow id prefix `sched_wf_<workflowId>_<timestamp>`. These
+                  // ticks fire on every instance independently — events are
+                  // only meaningful to the publishing process.
+                  if (rId && rId.startsWith('sched_wf_')) return true;
+                  return false;
+                })();
+                if (isOwnedHere) {
+                  return target.publish(topic, event, { localOnly: true });
+                }
+              } else if (topic.startsWith('workflow.events.v2.')) {
+                // Per-run watch stream events. Only the publishing process
+                // consumes these (execution-engine subscribes per-run). No
+                // cross-instance fan-out needed.
+                return target.publish(topic, event, { localOnly: true });
+              }
+              return target.publish(topic, event);
+            };
+          }
+          // Bind methods to `target` so private field access (#subscribers etc.)
+          // works correctly — JS Proxies set `this` to the proxy, which breaks
+          // private fields since they are scoped to the declaring class instance.
+          const val = Reflect.get(target, prop, target);
+          if (typeof val === 'function') {
+            return val.bind(target);
+          }
+          return val;
+        },
+      }) as PubSub;
+    }
+    return this.#pubsubProxy;
   }
 
   get agentThreadStreamRuntime() {
@@ -908,11 +1043,7 @@ export class Mastra<
     // Server cache for temporary persistence and durable agent resumable streams
     this.#serverCache = config?.cache ?? new InMemoryServerCache();
 
-    // Set the editor if provided and register this Mastra instance with it
     this.#editor = config?.editor;
-    if (this.#editor && typeof this.#editor.registerWithMastra === 'function') {
-      this.#editor.registerWithMastra(this);
-    }
 
     // Store global version overrides
     this.#versions = config?.versions;
@@ -1011,10 +1142,40 @@ export class Mastra<
 
     this.#idGenerator = config?.idGenerator;
 
-    let storage = config?.storage;
+    // Default to an in-memory store when none is configured. The evented
+    // workflow engine uses storage as the source of truth for cross-branch
+    // coordination in parallel/foreach steps, so a missing store would cause
+    // parallel branches to silently fail to aggregate. In-memory is the safe
+    // default for `new Mastra({})` / tests; production callers always override.
+    let storage: MastraCompositeStore;
+    if (config?.storage) {
+      storage = config.storage;
+    } else {
+      storage = new InMemoryStore();
+      this.#logger?.warn(
+        'No `storage` configured on Mastra — falling back to an in-memory store. ' +
+          'In-memory storage is not durable: all data is lost on restart, and it is not safe for production. ' +
+          'Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare).',
+      );
+    }
+    storage = augmentWithInit(storage);
 
-    if (storage) {
-      storage = augmentWithInit(storage);
+    // The evented workflow engine (used internally by the agentic loop) requires
+    // `workflows` and `backgroundTasks` storage domains. When a user provides a
+    // MastraCompositeStore with only specific domains (e.g. just `notifications`),
+    // these infrastructure domains may be missing. Patch them in with lightweight
+    // in-memory defaults so the engine works transparently without requiring users
+    // to configure internal implementation details.
+    if (storage.stores) {
+      if (!storage.stores.workflows || !storage.stores.backgroundTasks) {
+        const fallbackDb = new InMemoryDB();
+        if (!storage.stores.workflows) {
+          storage.stores.workflows = new WorkflowsInMemory({ db: fallbackDb });
+        }
+        if (!storage.stores.backgroundTasks) {
+          storage.stores.backgroundTasks = new BackgroundTasksInMemory({ db: fallbackDb });
+        }
+      }
     }
 
     // Validate and assign observability instance
@@ -1046,6 +1207,29 @@ export class Mastra<
 
     this.#storage = storage;
 
+    // Give storage adapters a back-pointer to this Mastra instance so they
+    // can look up code-defined agents, editor config, etc. when needed
+    // (e.g. filesystem code-mode snapshot filtering).
+    storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
+
+    // Register the editor after storage is assigned so code mode can overlay
+    // filesystem-backed editor storage while preserving app storage domains.
+    if (this.#editor && typeof this.#editor.registerWithMastra === 'function') {
+      this.#editor.registerWithMastra(this);
+    }
+
+    // Kick off background license validation against the license server when
+    // an enterprise license key is configured. Fire-and-forget: LicenseClient
+    // caches the result, schedules revalidation, and fails open on network
+    // errors, so this never blocks or throws during construction.
+    if (process.env.MASTRA_LICENSE_KEY || process.env.MASTRA_EE_LICENSE) {
+      LicenseClient.getInstance(this.#logger)
+        .validate()
+        .catch(() => {
+          // Failures are logged and handled inside LicenseClient.
+        });
+    }
+
     this.#backgroundTaskConfig = config?.backgroundTasks;
     // Auto-create the background-task manager only when this Mastra is
     // running workers. When `workers: false`, the consumer of the
@@ -1059,6 +1243,7 @@ export class Mastra<
     }
 
     this.#schedulerConfig = config?.scheduler;
+    this.#notificationDispatchConfig = config?.notifications?.dispatch;
 
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;
@@ -1070,7 +1255,7 @@ export class Mastra<
     this.#processors = {} as TProcessors;
     this.#memory = {} as TMemory;
     this.#workflows = {} as TWorkflows;
-    this.#gateways = {} as Record<string, MastraModelGateway>;
+    this.#gateways = {} as Record<string, MastraModelGatewayInterface>;
 
     // Now add primitives - order matters for auto-registration
     // Tools and processors should be added before agents and MCP servers that might use them
@@ -1122,6 +1307,12 @@ export class Mastra<
       });
     }
 
+    if (this.#notificationDispatchConfig?.enabled !== false) {
+      const workflow = createNotificationDispatchWorkflow(this.#notificationDispatchConfig);
+      this.addWorkflow(workflow, workflow.id);
+      this.#hiddenWorkflowKeys.add(workflow.id);
+    }
+
     if (config?.workflows) {
       Object.entries(config.workflows).forEach(([key, workflow]) => {
         if (workflow != null) {
@@ -1143,9 +1334,15 @@ export class Mastra<
     // Skip duplicates so user-provided gateways above take precedence.
     // Added directly to #gateways to avoid triggering #syncGatewayRegistry for built-ins.
     for (const gateway of defaultGateways) {
-      const key = gateway.getId();
-      if (!(this.#gateways as Record<string, MastraModelGateway>)[key]) {
-        (this.#gateways as Record<string, MastraModelGateway>)[key] = gateway;
+      const key = getGatewayId(gateway);
+      // Check by logical ID to avoid duplicates when a user-registered gateway
+      // exists under a different registry key but has the same gateway ID.
+      const existingGateways = Object.values(this.#gateways as Record<string, MastraModelGatewayInterface>);
+      const alreadyRegistered = existingGateways.some(
+        existingGateway => existingGateway != null && getGatewayId(existingGateway) === key,
+      );
+      if (!alreadyRegistered) {
+        (this.#gateways as Record<string, MastraModelGatewayInterface>)[key] = gateway;
       }
     }
 
@@ -1168,6 +1365,10 @@ export class Mastra<
 
     if (config?.server) {
       this.#server = config.server;
+    }
+
+    if (config?.studio) {
+      this.#studio = config.studio;
     }
 
     // Register channels and merge their routes into server config
@@ -2183,6 +2384,37 @@ export class Mastra<
   }
 
   /**
+   * Removes a registered workspace by its ID.
+   *
+   * When `destroy` is true, the workspace is destroyed before it is removed from
+   * the registry. If destruction fails, the workspace remains registered and the
+   * error is rethrown.
+   *
+   * @example
+   * ```typescript
+   * await mastra.removeWorkspace('workspace-123', { destroy: true });
+   * ```
+   */
+  public async removeWorkspace(id: string, options?: { destroy?: boolean }): Promise<boolean> {
+    const entry = this.#workspaces[id];
+    if (!entry) {
+      return false;
+    }
+
+    if (options?.destroy) {
+      await entry.workspace.destroy();
+    }
+
+    delete this.#workspaces[id];
+
+    if (this.#workspace === entry.workspace) {
+      this.#workspace = undefined;
+    }
+
+    return true;
+  }
+
+  /**
    * Retrieves a registered workflow by its ID.
    *
    * @template TWorkflowId - The specific workflow ID type from the registered workflows
@@ -2237,20 +2469,94 @@ export class Mastra<
     return workflow;
   }
 
-  __registerInternalWorkflow(workflow: Workflow) {
+  /**
+   * Register a workflow under an internal-only registry.
+   *
+   * - Without `runId`: stored at the bare `${id}` slot. Used by single-instance
+   *   internal workflows (background tasks, score-traces) that are looked up
+   *   without a runId.
+   * - With `runId`: stored *only* at `${id}:${runId}`. Concurrent or nested
+   *   invocations that share a workflow id (e.g. a parent and a sub-agent both
+   *   registering their `agentic-loop`) each get their own closure-bound
+   *   instance keyed by run, and the bare `${id}` slot is never overwritten by
+   *   a run-scoped registration — so a run-scoped lookup can never resolve a
+   *   *different* run's instance via an id scan.
+   */
+  __registerInternalWorkflow(workflow: AnyWorkflow, runId?: string) {
     workflow.__registerMastra(this);
     workflow.__registerPrimitives({
       logger: this.getLogger(),
     });
-    this.#internalMastraWorkflows[workflow.id] = workflow;
+    if (runId) {
+      const key = `${workflow.id}:${runId}`;
+      this.#internalMastraWorkflows[key] = workflow;
+      this.#runScopedWorkflowTimestamps.set(key, Date.now());
+      this.#sweepStaleRunScopedWorkflows();
+    } else {
+      this.#internalMastraWorkflows[workflow.id] = workflow;
+    }
   }
 
-  __hasInternalWorkflow(id: string): boolean {
-    return Object.values(this.#internalMastraWorkflows).some(workflow => workflow.id === id);
+  /**
+   * Remove a runId-scoped registration. The unscoped `${id}` entry is left intact
+   * so single-instance callers (background tasks, score-traces) continue to resolve.
+   */
+  __unregisterInternalWorkflow(id: string, runId: string) {
+    const key = `${id}:${runId}`;
+    delete this.#internalMastraWorkflows[key];
+    this.#runScopedWorkflowTimestamps.delete(key);
   }
 
-  __getInternalWorkflow(id: string): Workflow {
-    const workflow = Object.values(this.#internalMastraWorkflows).find(a => a.id === id);
+  __hasInternalWorkflow(id: string, runId?: string): boolean {
+    if (runId) {
+      // Only the exact run-scoped entry or the genuinely-unscoped slot — never
+      // another run's `${id}:${otherRunId}` registration.
+      return !!this.#internalMastraWorkflows[`${id}:${runId}`] || !!this.#internalMastraWorkflows[id];
+    }
+    return !!this.#internalMastraWorkflows[id];
+  }
+
+  /**
+   * Returns `true` when this Mastra instance can resolve the workflow
+   * identified by `workflowId` + `runId`.  Mirrors the resolution order in
+   * the WEP's `#dispatch` — internal registry → nested (parentWorkflow
+   * present) → public registry — without side-effects.
+   *
+   * Used by the push-subscription guard in {@link startWorkers} to drop
+   * cross-process events for internal workflows that belong to another
+   * process.
+   */
+  #ownsWorkflow(workflowId: string, runId: string, parentWorkflow: unknown): boolean {
+    // 1. Internal registry (run-scoped execution-workflow, agentic-loop, etc.)
+    if (this.__hasInternalWorkflow(workflowId, runId)) return true;
+    // 2. Nested workflow — walk up the parentWorkflow chain to the root and
+    //    verify that the root workflow is owned by this instance. Without this
+    //    check, cross-process subscribers would process foreign nested events
+    //    (the parentWorkflow field is truthy on both processes) and publish
+    //    spurious workflow.fail events that kill the correct owner's run.
+    if (parentWorkflow) {
+      let root = parentWorkflow as { workflowId?: string; runId?: string; parentWorkflow?: unknown };
+      while (root.parentWorkflow) {
+        root = root.parentWorkflow as typeof root;
+      }
+      const rootId = root.workflowId as string | undefined;
+      const rootRunId = root.runId as string | undefined;
+      if (rootId && rootRunId) {
+        return this.#ownsWorkflow(rootId, rootRunId, undefined);
+      }
+      // Malformed chain — fall through to public registry check below.
+    }
+    // 3. Public workflow registry — direct lookup to avoid telemetry noise
+    //    from getWorkflowById() on the expected "foreign workflow" path.
+    const workflows = this.#workflows as Record<string, AnyWorkflow> | undefined;
+    if (workflows?.[workflowId]) return true;
+    return Object.values(workflows ?? {}).some(w => w.id === workflowId);
+  }
+
+  __getInternalWorkflow(id: string, runId?: string): AnyWorkflow {
+    const workflow = runId
+      ? (this.#internalMastraWorkflows[`${id}:${runId}`] ?? this.#internalMastraWorkflows[id])
+      : this.#internalMastraWorkflows[id];
     if (!workflow) {
       throw new MastraError({
         id: 'MASTRA_GET_INTERNAL_WORKFLOW_BY_ID_NOT_FOUND',
@@ -2265,6 +2571,42 @@ export class Mastra<
     }
 
     return workflow;
+  }
+
+  /**
+   * @internal Records the tracing context for an evented workflow run so the
+   * event processor can nest step spans under the run's parent span. The
+   * `currentSpan` is non-serializable, so it is held here rather than passed
+   * through the engine's pubsub events.
+   */
+  __registerRunTracingContext(runId: string, tracingContext: TracingContext) {
+    this.#runTracingContexts.set(runId, tracingContext);
+  }
+
+  /** @internal Returns the tracing context recorded for an evented workflow run. */
+  __getRunTracingContext(runId: string): TracingContext | undefined {
+    return this.#runTracingContexts.get(runId);
+  }
+
+  /** @internal Clears the tracing context once an evented workflow run finishes. */
+  __unregisterRunTracingContext(runId: string) {
+    this.#runTracingContexts.delete(runId);
+  }
+
+  /**
+   * Lazily evict run-scoped internal workflow entries that have exceeded
+   * {@link Mastra.INTERNAL_WORKFLOW_TTL_MS}. Called on every new run-scoped
+   * registration so cleanup is proportional to activity — zero overhead when
+   * the system is idle.
+   */
+  #sweepStaleRunScopedWorkflows() {
+    const now = Date.now();
+    for (const [key, registeredAt] of this.#runScopedWorkflowTimestamps) {
+      if (now - registeredAt > Mastra.INTERNAL_WORKFLOW_TTL_MS) {
+        delete this.#internalMastraWorkflows[key];
+        this.#runScopedWorkflowTimestamps.delete(key);
+      }
+    }
   }
 
   /**
@@ -2338,17 +2680,12 @@ export class Mastra<
     // Get all workflows with default engine type
     const defaultEngineWorkflows = Object.values(this.#workflows).filter(workflow => workflow.engineType === 'default');
 
-    // Collect all active runs for workflows with default engine type
-    const allRuns: WorkflowRuns['runs'] = [];
-    let allTotal = 0;
+    const activeRunsByWorkflow = await Promise.all(
+      defaultEngineWorkflows.map(workflow => workflow.listActiveWorkflowRuns()),
+    );
 
-    for (const workflow of defaultEngineWorkflows) {
-      const runningRuns = await workflow.listWorkflowRuns({ status: 'running' });
-      const waitingRuns = await workflow.listWorkflowRuns({ status: 'waiting' });
-
-      allRuns.push(...runningRuns.runs, ...waitingRuns.runs);
-      allTotal += runningRuns.total + waitingRuns.total;
-    }
+    const allRuns = activeRunsByWorkflow.flatMap(activeRuns => activeRuns.runs);
+    const allTotal = activeRunsByWorkflow.reduce((total, activeRuns) => total + activeRuns.total, 0);
 
     return {
       runs: allRuns,
@@ -3185,15 +3522,19 @@ export class Mastra<
    * ```
    */
   public listWorkflows(props: { serialized?: boolean } = {}): Record<string, Workflow> {
+    const workflows = Object.fromEntries(
+      Object.entries(this.#workflows).filter(([key]) => !this.#hiddenWorkflowKeys.has(key)),
+    ) as Record<string, Workflow>;
+
     if (props.serialized) {
-      return Object.entries(this.#workflows).reduce((acc, [k, v]) => {
+      return Object.entries(workflows).reduce((acc, [k, v]) => {
         return {
           ...acc,
           [k]: { name: v.name },
         };
       }, {});
     }
-    return this.#workflows;
+    return workflows;
   }
 
   /**
@@ -3306,6 +3647,7 @@ export class Mastra<
    */
   public setStorage(storage: MastraCompositeStore) {
     this.#storage = augmentWithInit(storage);
+    this.#storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
     this.#ensureBackgroundTaskManager();
     // If storage was attached after construction, the SchedulerWorker
     // will pick it up when startWorkers() is called.
@@ -3511,6 +3853,23 @@ export class Mastra<
 
   public getServer() {
     return this.#server;
+  }
+
+  /**
+   * Gets the Studio-specific authentication and authorization configuration.
+   *
+   * @returns The studio config, or undefined if not configured
+   *
+   * @example
+   * ```typescript
+   * const studioConfig = mastra.getStudio();
+   * if (studioConfig?.auth) {
+   *   // Studio has separate auth configured
+   * }
+   * ```
+   */
+  public getStudio() {
+    return this.#studio;
   }
 
   /**
@@ -3960,6 +4319,24 @@ export class Mastra<
       const pushOnly = modes.includes('push') && !modes.includes('pull');
       if (pushOnly && !this.#pushSubscription) {
         const cb: EventCallback = (event, ack) => {
+          // In cross-process push environments (e.g. UnixSocketPubSub),
+          // every subscriber receives every event — including events for
+          // internal workflows registered on a different process. Skip
+          // events whose workflow exists in neither the internal nor the
+          // public registry so only the owning process handles them.
+          // Without this guard the WEP would publish workflow.fail,
+          // propagating through workflows-finish and erroneously
+          // terminating the correct process's run.
+          const data = event.data as Record<string, unknown> | undefined;
+          const wfId = data?.workflowId as string | undefined;
+          const rId = data?.runId as string | undefined;
+          if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
+            if (ack) {
+              void ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err));
+            }
+            return;
+          }
+
           void this.handleWorkflowEvent(event)
             .then(result => {
               if (result.ok && ack) {
@@ -4059,7 +4436,7 @@ export class Mastra<
    * const gateway = mastra.getGateway('myGateway');
    * ```
    */
-  public getGateway(key: string): MastraModelGateway {
+  public getGateway(key: string): MastraModelGatewayInterface {
     const gateway = this.#gateways?.[key];
     if (!gateway) {
       const error = new MastraError({
@@ -4104,10 +4481,10 @@ export class Mastra<
    * const gateway = mastra.getGatewayById('custom-gateway-v1');
    * ```
    */
-  public getGatewayById(id: string): MastraModelGateway {
+  public getGatewayById(id: string): MastraModelGatewayInterface {
     const gateways = this.#gateways ?? {};
     for (const gateway of Object.values(gateways)) {
-      if (gateway.getId() === id) {
+      if (getGatewayId(gateway) === id) {
         return gateway;
       }
     }
@@ -4121,7 +4498,7 @@ export class Mastra<
         status: 404,
         gatewayId: id,
         availableIds: Object.values(gateways)
-          .map(g => g.getId())
+          .map(g => getGatewayId(g))
           .join(', '),
       },
     });
@@ -4130,22 +4507,43 @@ export class Mastra<
   }
 
   /**
-   * Returns all registered gateways as a record keyed by their names.
+   * Returns all registered gateways as a record keyed by their registration keys.
+   *
+   * Gateways can be plain objects that satisfy `MastraModelGatewayInterface` or
+   * classes that extend `MastraModelGateway`.
    *
    * @example
    * ```typescript
+   * import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
+   * import { MastraModelGateway, type MastraModelGatewayInterface } from '@mastra/core/llm';
+   *
+   * const plainGateway: MastraModelGatewayInterface = {
+   *   id: 'plain-gateway',
+   *   name: 'Plain Gateway',
+   *   async fetchProviders() { return {}; },
+   *   buildUrl() { return undefined; },
+   *   async getApiKey() { return ''; },
+   *   resolveLanguageModel(args) { return createOpenAICompatible({ name: args.providerId, apiKey: args.apiKey }).chatModel(args.modelId); },
+   * };
+   *
+   * class ClassGateway extends MastraModelGateway {
+   *   readonly id = 'class-gateway';
+   *   readonly name = 'Class Gateway';
+   *   // Implement fetchProviders, buildUrl, getApiKey, and resolveLanguageModel.
+   * }
+   *
    * const mastra = new Mastra({
    *   gateways: {
-   *     netlify: new NetlifyGateway(),
-   *     custom: new CustomGateway()
-   *   }
+   *     plain: plainGateway,
+   *     class: new ClassGateway(),
+   *   },
    * });
    *
    * const allGateways = mastra.listGateways();
-   * console.log(Object.keys(allGateways)); // ['netlify', 'custom']
+   * console.log(Object.keys(allGateways ?? {})); // ['plain', 'class']
    * ```
    */
-  public listGateways(): Record<string, MastraModelGateway> | undefined {
+  public listGateways(): Record<string, MastraModelGatewayInterface> | undefined {
     return this.#gateways;
   }
 
@@ -4156,60 +4554,66 @@ export class Mastra<
    * has been created. Gateways enable access to LLM providers through custom
    * authentication and routing logic.
    *
-   * If no key is provided, the gateway's ID (or name if no ID is set) will be used as the key.
+   * If no key is provided, the gateway's ID will be used as the key.
    *
-   * @example
+   * @example Plain object gateway
    * ```typescript
-   * import { MastraModelGateway } from '@mastra/core';
+   * import type { MastraModelGatewayInterface } from '@mastra/core/llm';
    *
-   * class CustomGateway extends MastraModelGateway {
-   *   readonly id = 'custom-gateway-v1';  // Optional, defaults to name
-   *   readonly name = 'custom';
-   *   readonly prefix = 'custom';
-   *
+   * const customGateway: MastraModelGatewayInterface = {
+   *   id: 'custom-gateway-v1',
+   *   name: 'Custom Gateway',
    *   async fetchProviders() {
    *     return {
    *       myProvider: {
    *         name: 'My Provider',
    *         models: ['model-1', 'model-2'],
    *         apiKeyEnvVar: 'MY_API_KEY',
-   *         gateway: 'custom'
-   *       }
+   *         gateway: 'custom-gateway-v1',
+   *       },
    *     };
-   *   }
-   *
-   *   buildUrl(modelId: string) {
+   *   },
+   *   buildUrl() {
    *     return 'https://api.myprovider.com/v1';
-   *   }
-   *
-   *   async getApiKey(modelId: string) {
+   *   },
+   *   async getApiKey() {
    *     return process.env.MY_API_KEY || '';
-   *   }
-   *
+   *   },
    *   async resolveLanguageModel({ modelId, providerId, apiKey }) {
-   *     const baseURL = this.buildUrl(`${providerId}/${modelId}`);
-   *     return createOpenAICompatible({
+   *     const provider = createOpenAICompatible({
    *       name: providerId,
    *       apiKey,
-   *       baseURL,
+   *       baseURL: this.buildUrl(),
    *       supportsStructuredOutputs: true,
-   *     }).chatModel(modelId);
-   *   }
-   * }
+   *     });
+   *     return provider.chatModel(modelId);
+   *   },
+   * };
    *
    * const mastra = new Mastra();
-   * const newGateway = new CustomGateway();
-   * mastra.addGateway(newGateway); // Uses gateway.getId() as key (gateway.id)
-   * // or
-   * mastra.addGateway(newGateway, 'customKey'); // Uses custom key
+   * mastra.addGateway(customGateway);
+   * ```
+   *
+   * @example Convenience base class
+   * ```typescript
+   * import { MastraModelGateway } from '@mastra/core/llm';
+   *
+   * class CustomGateway extends MastraModelGateway {
+   *   readonly id = 'custom-gateway-v1';
+   *   readonly name = 'Custom Gateway';
+   *
+   *   // Implement fetchProviders, buildUrl, getApiKey, and resolveLanguageModel.
+   * }
+   *
+   * mastra.addGateway(new CustomGateway(), 'customKey');
    * ```
    */
-  public addGateway(gateway: MastraModelGateway, key?: string): void {
+  public addGateway(gateway: MastraModelGatewayInterface, key?: string): void {
     if (!gateway) {
       throw createUndefinedPrimitiveError('gateway', gateway, key);
     }
-    const gatewayKey = key || gateway.getId();
-    const gateways = this.#gateways as Record<string, MastraModelGateway>;
+    const gatewayKey = key || getGatewayId(gateway);
+    const gateways = this.#gateways as Record<string, MastraModelGatewayInterface>;
     if (gateways[gatewayKey]) {
       return;
     }
@@ -4264,6 +4668,7 @@ export class Mastra<
    * This method performs a clean shutdown of all Mastra components, including:
    * - tracing registry and all tracing instances
    * - Event engine and pub/sub system
+   * - registered workspaces (sandbox processes, filesystem handles, LSP, browser)
    * - All registered components and their resources
    *
    * It's important to call this method when your application is shutting down
@@ -4286,6 +4691,25 @@ export class Mastra<
   async shutdown(): Promise<void> {
     // SchedulerWorker is stopped as part of stopWorkers().
     await this.stopWorkers();
+
+    const workspaceIds = Object.keys(this.#workspaces);
+    const teardownResults = await Promise.allSettled(
+      workspaceIds.map(id => this.removeWorkspace(id, { destroy: true })),
+    );
+    teardownResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        this.#logger?.error('Failed to destroy workspace during shutdown', {
+          workspaceId: workspaceIds[index],
+          error: result.reason,
+        });
+      }
+    });
+
+    // Close storage to release OS file handles (critical on Windows: open WAL/shm
+    // handles cause EBUSY when callers try to fs.rm the storage dir after shutdown).
+    if (this.#storage?.close) {
+      await this.#storage.close();
+    }
     // Shutdown observability registry, exporters, etc...
     await this.#observability.shutdown();
 

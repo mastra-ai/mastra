@@ -1,8 +1,12 @@
 import type { IAgentBuilder } from '@mastra/core/agent-builder/ee';
 import type { IMastraEditor } from '@mastra/core/editor';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import { GET_EDITOR_BUILDER_SETTINGS_ROUTE, GET_INFRASTRUCTURE_STATUS_ROUTE } from './editor-builder';
+import {
+  GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE,
+  GET_EDITOR_BUILDER_SETTINGS_ROUTE,
+  GET_INFRASTRUCTURE_STATUS_ROUTE,
+} from './editor-builder';
 
 // Minimal mock mastra for handler testing
 const createMockMastra = (
@@ -11,6 +15,8 @@ const createMockMastra = (
 ) =>
   ({
     getEditor: () => editor,
+    // buildProvidersList() reads gateways; an empty map keeps it to PROVIDER_REGISTRY.
+    listGateways: () => ({}),
     listTools: () => registry?.tools ?? {},
     listAgents: () => registry?.agents ?? {},
     listWorkflows: () => registry?.workflows ?? {},
@@ -601,5 +607,118 @@ describe('GET /editor/builder/infrastructure route metadata', () => {
 
   it('requires authentication', () => {
     expect(GET_INFRASTRUCTURE_STATUS_ROUTE.requiresAuth).toBe(true);
+  });
+});
+
+describe('GET /editor/builder/models/available', () => {
+  const runAvailable = (editor?: Partial<IMastraEditor>) =>
+    GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE.handler({ mastra: createMockMastra(editor) } as any) as Promise<{
+      providers: Array<{ id: string; models: string[]; connected: boolean }>;
+    }>;
+
+  const originalOpenAIKey = process.env.OPENAI_API_KEY;
+  const originalAnthropicKey = process.env.ANTHROPIC_API_KEY;
+
+  beforeEach(() => {
+    // The endpoint only surfaces providers with a configured API key, so make
+    // exactly one provider "connected" and ensure another is not.
+    process.env.OPENAI_API_KEY = 'test-key';
+    delete process.env.ANTHROPIC_API_KEY;
+  });
+
+  afterEach(() => {
+    if (originalOpenAIKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = originalOpenAIKey;
+    if (originalAnthropicKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+    else process.env.ANTHROPIC_API_KEY = originalAnthropicKey;
+  });
+
+  it('returns only providers with a configured API key when no policy is configured', async () => {
+    const { providers } = await runAvailable();
+
+    expect(providers.length).toBeGreaterThan(0);
+    // Every returned provider is connected (has its API key configured).
+    expect(providers.every(p => p.connected)).toBe(true);
+
+    const openai = providers.find(p => p.id === 'openai');
+    expect(openai).toBeDefined();
+    expect(openai!.models.length).toBeGreaterThan(0);
+  });
+
+  it('omits providers whose API key is not configured', async () => {
+    const { providers } = await runAvailable();
+
+    // anthropic has no API key set in this test, so it must be filtered out
+    // even though it exists in the provider registry.
+    expect(providers.find(p => p.id === 'anthropic')).toBeUndefined();
+    expect(providers.find(p => p.id === 'openai')).toBeDefined();
+  });
+
+  it('filters models down to the active policy allowlist (provider wildcard)', async () => {
+    const builder: IAgentBuilder = {
+      enabled: true,
+      getFeatures: () => ({ agent: { tools: true } }),
+      getConfiguration: () => ({
+        agent: {
+          models: {
+            // Provider wildcard: every openai model is allowed, all others denied.
+            allowed: [{ provider: 'openai' }],
+          },
+        },
+      }),
+    };
+
+    const { providers } = await runAvailable({
+      hasEnabledBuilderConfig: () => true,
+      resolveBuilder: vi.fn().mockResolvedValue(builder),
+    });
+
+    // Only the allowed provider survives the filter.
+    expect(providers.map(p => p.id)).toEqual(['openai']);
+    expect(providers[0]!.models.length).toBeGreaterThan(0);
+  });
+
+  it('keeps only the explicitly allowed model under a provider', async () => {
+    // Pick a real model id from the unfiltered output so the test is not
+    // coupled to a hardcoded registry entry.
+    const { providers: all } = await runAvailable();
+    const openai = all.find(p => p.id === 'openai')!;
+    const allowedModelId = openai.models[0]!;
+
+    const builder: IAgentBuilder = {
+      enabled: true,
+      getFeatures: () => ({ agent: { tools: true } }),
+      // Cast: the strict config type discriminates known-provider entries by a
+      // `kind` field; the runtime policy matcher only needs provider + modelId.
+      getConfiguration: () =>
+        ({
+          agent: {
+            models: { allowed: [{ provider: 'openai', modelId: allowedModelId }] },
+          },
+        }) as any,
+    };
+
+    const { providers } = await runAvailable({
+      hasEnabledBuilderConfig: () => true,
+      resolveBuilder: vi.fn().mockResolvedValue(builder),
+    });
+
+    expect(providers.map(p => p.id)).toEqual(['openai']);
+    expect(providers[0]!.models).toEqual([allowedModelId]);
+  });
+});
+
+describe('GET /editor/builder/models/available route metadata', () => {
+  it('has correct path and method', () => {
+    expect(GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE.path).toBe('/editor/builder/models/available');
+    expect(GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE.method).toBe('GET');
+  });
+
+  it('requires stored-agents:read permission', () => {
+    expect(GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE.requiresPermission).toBe('stored-agents:read');
+  });
+
+  it('requires authentication', () => {
+    expect(GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE.requiresAuth).toBe(true);
   });
 });

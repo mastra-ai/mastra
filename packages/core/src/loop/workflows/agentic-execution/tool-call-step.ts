@@ -18,13 +18,14 @@ import {
   withToolPayloadTransformProviderMetadata,
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
-import type { MastraToolInvocationOptions } from '../../../tools/types';
+import { getNeedsApprovalFn } from '../../../tools/toolchecks';
+import type { MastraToolInvocationOptions, ToolApprovalContext } from '../../../tools/types';
 import { noopObserve } from '../../../tools/types';
 import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
 import type { OuterLLMRun } from '../../types';
-import { ToolNotFoundError } from '../errors';
+import { serializeToolError, ToolNotFoundError } from '../errors';
 import { toolCallInputSchema, toolCallOutputSchema } from '../schema';
 
 type AddToolMetadataOptions = {
@@ -58,6 +59,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   logger,
   agentId,
   mastra,
+  requireToolApproval: requireToolApprovalFromFactory,
+  actor,
 }: OuterLLMRun<Tools, OUTPUT>) {
   return createStep({
     id: 'toolCallStep',
@@ -325,8 +328,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const availableToolsStr =
           availableToolNames.length > 0 ? ` Available tools: ${availableToolNames.join(', ')}` : '';
         return {
-          error: new ToolNotFoundError(
-            `Tool "${inputData.toolName}" not found.${availableToolsStr}. Call tools by their exact name only — never add prefixes, namespaces, or colons.`,
+          // The workflow step output crosses the evented engine's pubsub boundary, where
+          // `JSON.stringify` reduces Error instances to `{}`. Serialize to a plain object
+          // here so `name`/`message`/`stack` survive and the consumer can reify the Error.
+          error: serializeToolError(
+            new ToolNotFoundError(
+              `Tool "${inputData.toolName}" not found.${availableToolsStr}. Call tools by their exact name only — never add prefixes, namespaces, or colons.`,
+            ),
           ),
           ...inputData,
         };
@@ -350,7 +358,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
       }
 
       try {
-        const requireToolApproval = requestContext.get('__mastra_requireToolApproval');
+        // The factory closure value is authoritative when set: a function-valued policy
+        // doesn't survive `RequestContext.toJSON()` across the evented engine's event bus,
+        // so reading only from requestContext would lose it. Fall back to requestContext for
+        // direct callers (e.g. legacy tests) that seed the value there.
+        const requireToolApproval =
+          requireToolApprovalFromFactory ?? requestContext.get('__mastra_requireToolApproval');
 
         let resumeDataFromArgs: any = undefined;
         let args: any = inputData.args;
@@ -365,20 +378,51 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         const isResumeToolCall = !!resumeDataFromArgs;
 
-        // Check if approval is required
-        // requireApproval can be:
-        // - boolean (from Mastra createTool or mapped from AI SDK needsApproval: true)
-        // - undefined (no approval needed)
-        // If needsApprovalFn exists, evaluate it with the tool args and context
-        let toolRequiresApproval = requireToolApproval || (tool as any).requireApproval;
-        if ((tool as any).needsApprovalFn) {
-          // Evaluate the function with parsed args and available context
+        // Check if approval is required.
+        //
+        // The global `requireToolApproval` option (boolean, or — new — a function evaluated per
+        // call so policies can inspect the tool name and args, e.g. regex allowlists) and the
+        // tool's own boolean `requireApproval` flag seed the decision: the call requires approval
+        // if either is truthy.
+        //
+        // A per-tool `needsApprovalFn` (from `createTool({ requireApproval: fn })` or an
+        // MCP-derived tool) is authoritative when present and OVERRIDES the seed — it may return
+        // `false` to allow a call the global policy/flag would otherwise gate. This preserves the
+        // long-standing precedence; the only new behavior is that the global may now be a function.
+        // Any policy that throws defaults to requiring approval, to be safe.
+        const buildApprovalContext = (): ToolApprovalContext => ({
+          toolName: inputData.toolName,
+          args,
+          // Exclude the internal approval hook so policies only see public request-context entries.
+          requestContext: requestContext
+            ? Object.fromEntries(
+                [...requestContext.entries()].filter(([key]) => key !== '__mastra_requireToolApproval'),
+              )
+            : {},
+          workspace: _internal?.stepWorkspace,
+        });
+
+        let globalRequiresApproval: boolean;
+        if (typeof requireToolApproval === 'function') {
           try {
-            const needsApprovalResult = await (tool as any).needsApprovalFn(args, {
-              requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
-              workspace: _internal?.stepWorkspace,
-            });
-            toolRequiresApproval = needsApprovalResult;
+            globalRequiresApproval = !!(await requireToolApproval(buildApprovalContext()));
+          } catch (error) {
+            logger?.error(`Error evaluating global requireToolApproval for tool ${inputData.toolName}:`, error);
+            // On error, default to requiring approval to be safe.
+            globalRequiresApproval = true;
+          }
+        } else {
+          globalRequiresApproval = !!requireToolApproval;
+        }
+
+        let toolRequiresApproval: boolean = globalRequiresApproval || !!(tool as any).requireApproval;
+
+        const needsApprovalFn = getNeedsApprovalFn(tool);
+        if (needsApprovalFn) {
+          // Per-tool needsApprovalFn overrides the seed (matches prior behavior).
+          try {
+            const { toolName: _toolName, ...needsApprovalCtx } = buildApprovalContext();
+            toolRequiresApproval = !!(await needsApprovalFn(args, needsApprovalCtx));
           } catch (error) {
             // Log error to help developers debug faulty needsApprovalFn implementations
             logger?.error(`Error evaluating needsApprovalFn for tool ${inputData.toolName}:`, error);
@@ -480,6 +524,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           workspace: _internal?.stepWorkspace,
           // Forward requestContext so tools receive values set by the workflow step
           requestContext,
+          actor,
           // Let tools that read thread history mid-stream (e.g. forked subagents
           // cloning the parent thread) drain the save queue so the store reflects
           // the latest user/assistant messages before they read.
@@ -615,7 +660,6 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           const shouldUsePartsFallback = !isResumeToolCall || !args.suspendedToolRunId;
           const messages = messageList.get.all.db();
           const assistantMessages = [...messages].reverse().filter(message => message.role === 'assistant');
-
           for (const message of assistantMessages) {
             const pendingOrSuspendedTools = (message.content.metadata?.suspendedTools ||
               message.content.metadata?.pendingToolApprovals) as Record<string, any>;
@@ -651,8 +695,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         if (args === null || args === undefined) {
           return {
-            error: new Error(
-              `Tool "${inputData.toolName}" received invalid arguments — the provided JSON could not be parsed. Please provide valid JSON arguments.`,
+            error: serializeToolError(
+              new Error(
+                `Tool "${inputData.toolName}" received invalid arguments — the provided JSON could not be parsed. Please provide valid JSON arguments.`,
+              ),
             ),
             ...inputData,
           };
@@ -669,19 +715,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const toolFgaProvider = mastra?.getServer?.()?.fga;
         if (toolFgaProvider) {
           const fgaUser = requestContext?.get('user');
-          const { checkFGA, FGADeniedError } = await import('../../../auth/ee/fga-check');
-          if (!fgaUser) {
-            throw new FGADeniedError(
-              { id: 'unknown' },
-              { type: 'tool', id: inputData.toolName },
-              MastraFGAPermissions.TOOLS_EXECUTE,
-            );
-          }
+          const { checkFGA } = await import('../../../auth/ee/fga-check');
           await checkFGA({
             fgaProvider: toolFgaProvider,
             user: fgaUser,
             resource: { type: 'tool', id: inputData.toolName },
             permission: MastraFGAPermissions.TOOLS_EXECUTE,
+            requestContext,
+            actor,
           });
         }
 
@@ -1128,7 +1169,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           throw error;
         }
         return {
-          error: error as Error,
+          error: serializeToolError(error),
           ...inputData,
         };
       }

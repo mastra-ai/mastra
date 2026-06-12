@@ -592,6 +592,29 @@ describe('DaytonaSandbox', () => {
       expect(cmd).toContain('export KEEP=yes');
       expect(cmd).not.toContain('REMOVE');
     });
+
+    it('rejects invalid env names before building shell exports', async () => {
+      const sandbox = new DaytonaSandbox();
+
+      await sandbox._start();
+
+      await expect(
+        sandbox.executeCommand('echo', ['test'], { env: { 'sandbox not found; printf injected': 'x' } }),
+      ).rejects.toThrow('Invalid environment variable name');
+      expect(mockDaytona.create).toHaveBeenCalledTimes(1);
+      expect(mockSandbox.process.executeSessionCommand).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid sandbox env names', async () => {
+      const sandbox = new DaytonaSandbox({
+        env: { 'INVALID-NAME': 'x' },
+      });
+
+      await sandbox._start();
+
+      await expect(sandbox.executeCommand('echo', ['test'])).rejects.toThrow('Invalid environment variable name');
+      expect(mockSandbox.process.executeSessionCommand).not.toHaveBeenCalled();
+    });
   });
 
   describe('Mount Configuration', () => {
@@ -1196,6 +1219,8 @@ describe('DaytonaSandbox', () => {
       expect(result.success).toBe(true);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toBe('hello world');
+      expect(result.killed).toBeUndefined();
+      expect(result.timedOut).toBeUndefined();
       expect(result.executionTimeMs).toBeGreaterThanOrEqual(0);
     });
 
@@ -1258,7 +1283,34 @@ describe('DaytonaSandbox', () => {
       const result = await sandbox.executeCommand('sleep', ['9999']);
 
       expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(124);
       expect(result.stderr).toContain('timed out');
+      expect(result.killed).toBe(true);
+      expect(result.timedOut).toBe(true);
+    });
+
+    it('marks explicit kill results as killed without timeout', async () => {
+      let finishLogs!: (error: Error) => void;
+      mockSandbox.process.getSessionCommandLogs.mockImplementationOnce(
+        () =>
+          new Promise((_resolve, reject) => {
+            finishLogs = reject;
+          }),
+      );
+
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes.spawn('sleep 9999');
+      await handle.kill();
+      finishLogs(new Error('session deleted'));
+
+      const result = await handle.wait();
+
+      expect(result.success).toBe(false);
+      expect(result.exitCode).toBe(137);
+      expect(result.killed).toBe(true);
+      expect(result.timedOut).toBe(false);
     });
 
     it('wraps command in subshell', async () => {

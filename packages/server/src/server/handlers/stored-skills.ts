@@ -27,7 +27,7 @@ import {
 } from './authorship';
 import { isBuilderFeatureEnabled } from './editor-builder';
 import { handleError } from './error';
-import { prepareFavoritesEnrichment, stripFavoriteFields } from './favorites-enrichment';
+import { enrichOrStripFavorites, prepareFavoritesEnrichment, stripFavoriteFields } from './favorites-enrichment';
 
 // ============================================================================
 // Helpers
@@ -229,7 +229,7 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
       );
       const annotated = enrichment
         ? visibleSkills.map(record => ({ ...record, isFavorited: enrichment.starredIds.has(record.id) }))
-        : visibleSkills;
+        : visibleSkills.map(stripFavoriteFields);
 
       return { ...result, skills: annotated };
     } catch (error) {
@@ -273,11 +273,7 @@ export const GET_STORED_SKILL_ROUTE = createRoute({
 
       assertReadAccess({ requestContext, resource: 'stored-skills', resourceId: storedSkillId, record: skill });
 
-      const enrichment = await prepareFavoritesEnrichment(mastra, requestContext, 'skill', [skill.id]);
-      if (enrichment) {
-        return { ...skill, isFavorited: enrichment.starredIds.has(skill.id) };
-      }
-      return stripFavoriteFields(skill);
+      return enrichOrStripFavorites(mastra, requestContext, 'skill', skill);
     } catch (error) {
       return handleError(error, 'Error getting stored skill');
     }
@@ -376,7 +372,7 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Failed to resolve created skill' });
       }
 
-      return resolved;
+      return enrichOrStripFavorites(mastra, requestContext, 'skill', resolved);
     } catch (error) {
       return handleError(error, 'Error creating stored skill');
     }
@@ -487,7 +483,7 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Failed to resolve updated skill' });
       }
 
-      return resolved;
+      return enrichOrStripFavorites(mastra, requestContext, 'skill', resolved);
     } catch (error) {
       return handleError(error, 'Error updating stored skill');
     }
@@ -689,7 +685,7 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
         throw new HTTPException(500, { message: 'Failed to resolve skill after publish' });
       }
 
-      return resolved;
+      return enrichOrStripFavorites(mastra, requestContext, 'skill', resolved);
     } catch (error) {
       return handleError(error, 'Error publishing stored skill');
     }

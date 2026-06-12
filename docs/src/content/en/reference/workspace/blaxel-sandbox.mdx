@@ -55,6 +55,7 @@ const workspace = new Workspace({
   sandbox: new BlaxelSandbox({
     image: 'node:20-slim',
     memory: 8192,
+    region: 'auto',
     timeout: '10m',
   }),
 })
@@ -91,6 +92,14 @@ const workspace = new Workspace({
     type: 'string',
     description: "Execution timeout as a duration string (e.g. '5m', '1h'). Maps to the Blaxel sandbox TTL.",
     isOptional: true,
+  },
+  {
+    name: 'region',
+    type: 'string',
+    description:
+      "Blaxel region where the sandbox should be created. Use 'auto' to choose a region automatically, or set a concrete region like 'us-pdx-1'.",
+    isOptional: true,
+    defaultValue: "process.env.BL_REGION || 'auto'",
   },
   {
     name: 'env',
