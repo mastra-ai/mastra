@@ -33,3 +33,21 @@ export type {
   TaskCheckResult,
 } from './builtin/task-tools';
 export { TaskStateProcessor } from './builtin/task-state-processor';
+
+// The goal built-in lives under `agent/goal`; these are re-exported here to
+// preserve the public `@mastra/core/tools` surface (e.g. `DEFAULT_GOAL_JUDGE_PROMPT`).
+export {
+  GoalStateProcessor,
+  GOAL_STATE_ID,
+  GOAL_STATE_TYPE,
+  DEFAULT_GOAL_JUDGE_PROMPT,
+  DEFAULT_GOAL_MAX_RUNS,
+  resolveGoalStore,
+  resolveEffectiveGoalSettings,
+  readObjective,
+  writeObjective,
+  clearObjective,
+  getObjectiveFromRequestContext,
+  type EffectiveGoalSettings,
+  type AgentGoalConfigDefaults,
+} from '../agent/goal';
