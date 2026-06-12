@@ -1,13 +1,52 @@
-import { MastraCompositeStore } from '@mastra/core/storage';
+import { InMemoryDB, MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
 import { Redis } from '@upstash/redis';
 import { BackgroundTasksUpstash } from './domains/background-tasks';
 import { StoreMemoryUpstash } from './domains/memory';
+import {
+  AgentsUpstash,
+  BlobsUpstash,
+  ChannelsUpstash,
+  DatasetsUpstash,
+  ExperimentsUpstash,
+  FavoritesUpstash,
+  MCPClientsUpstash,
+  MCPServersUpstash,
+  NotificationsUpstash,
+  ObservabilityUpstash,
+  PromptBlocksUpstash,
+  SchedulesUpstash,
+  ScorerDefinitionsUpstash,
+  SkillsUpstash,
+  ToolProviderConnectionsUpstash,
+  WorkspacesUpstash,
+} from './domains/persisted-inmemory';
 import { ScoresUpstash } from './domains/scores';
 import { WorkflowsUpstash } from './domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
-export { BackgroundTasksUpstash, StoreMemoryUpstash, ScoresUpstash, WorkflowsUpstash };
+export {
+  AgentsUpstash,
+  BackgroundTasksUpstash,
+  BlobsUpstash,
+  ChannelsUpstash,
+  DatasetsUpstash,
+  ExperimentsUpstash,
+  FavoritesUpstash,
+  MCPClientsUpstash,
+  MCPServersUpstash,
+  StoreMemoryUpstash,
+  NotificationsUpstash,
+  ObservabilityUpstash,
+  PromptBlocksUpstash,
+  ScorerDefinitionsUpstash,
+  ScoresUpstash,
+  SchedulesUpstash,
+  SkillsUpstash,
+  ToolProviderConnectionsUpstash,
+  WorkflowsUpstash,
+  WorkspacesUpstash,
+};
 export type { UpstashDomainConfig } from './db';
 
 /**
@@ -123,13 +162,31 @@ export class UpstashStore extends MastraCompositeStore {
     const workflows = new WorkflowsUpstash({ client: this.redis });
     const memory = new StoreMemoryUpstash({ client: this.redis });
     const backgroundTasks = new BackgroundTasksUpstash({ client: this.redis });
+    const persistedDb = new InMemoryDB();
+    const persistedConfig = { client: this.redis, namespace: config.id, db: persistedDb };
 
     this.stores = {
       scores,
       workflows,
       memory,
       backgroundTasks,
-    };
+      agents: new AgentsUpstash(persistedConfig),
+      blobs: new BlobsUpstash(persistedConfig),
+      channels: new ChannelsUpstash(persistedConfig),
+      datasets: new DatasetsUpstash(persistedConfig),
+      experiments: new ExperimentsUpstash(persistedConfig),
+      favorites: new FavoritesUpstash(persistedConfig),
+      mcpClients: new MCPClientsUpstash(persistedConfig),
+      mcpServers: new MCPServersUpstash(persistedConfig),
+      notifications: new NotificationsUpstash(persistedConfig),
+      observability: new ObservabilityUpstash(persistedConfig),
+      promptBlocks: new PromptBlocksUpstash(persistedConfig),
+      schedules: new SchedulesUpstash(persistedConfig),
+      scorerDefinitions: new ScorerDefinitionsUpstash(persistedConfig),
+      skills: new SkillsUpstash(persistedConfig),
+      toolProviderConnections: new ToolProviderConnectionsUpstash(persistedConfig),
+      workspaces: new WorkspacesUpstash(persistedConfig),
+    } as unknown as StorageDomains;
   }
 
   async close(): Promise<void> {

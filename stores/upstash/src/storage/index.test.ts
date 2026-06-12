@@ -307,3 +307,79 @@ describe('updateMessages keeps msg-idx index in sync', () => {
     expect(messages[0]!.threadId).toBe(sourceThread.id);
   });
 });
+
+describe('pg parity storage domains', () => {
+  it('wires every persistent domain exposed by PostgresStore', () => {
+    const store = new UpstashStore({
+      id: `upstash-domain-parity-${randomUUID()}`,
+      client: createTestClient(),
+    });
+
+    const domains = store.stores as Record<string, unknown>;
+    expect(domains.agents).toBeDefined();
+    expect(domains.blobs).toBeDefined();
+    expect(domains.channels).toBeDefined();
+    expect(domains.datasets).toBeDefined();
+    expect(domains.experiments).toBeDefined();
+    expect(domains.favorites).toBeDefined();
+    expect(domains.mcpClients).toBeDefined();
+    expect(domains.mcpServers).toBeDefined();
+    expect(domains.notifications).toBeDefined();
+    expect(domains.observability).toBeDefined();
+    expect(domains.promptBlocks).toBeDefined();
+    expect(domains.schedules).toBeDefined();
+    expect(domains.scorerDefinitions).toBeDefined();
+    expect(domains.skills).toBeDefined();
+    expect(domains.toolProviderConnections).toBeDefined();
+    expect(domains.workspaces).toBeDefined();
+  });
+});
+
+describe('observational memory support', () => {
+  it('lists messages by resource id and persists observational memory history', async () => {
+    const memoryDomain = new StoreMemoryUpstash({ client: createTestClient() });
+    await memoryDomain.init();
+
+    const resourceId = `resource-${randomUUID()}`;
+    const thread = createThread(resourceId);
+    await memoryDomain.saveThread({ thread });
+
+    const firstMessage = createMessage(thread, {
+      id: `msg-${randomUUID()}`,
+      createdAt: new Date('2024-01-01T00:00:00.000Z'),
+    });
+    const secondMessage = createMessage(thread, {
+      id: `msg-${randomUUID()}`,
+      createdAt: new Date('2024-01-02T00:00:00.000Z'),
+    });
+    await memoryDomain.saveMessages({ messages: [firstMessage, secondMessage] });
+
+    const listed = await memoryDomain.listMessagesByResourceId({
+      resourceId,
+      orderBy: { field: 'createdAt', direction: 'ASC' },
+    });
+    expect(listed.messages.map(message => message.id)).toEqual([firstMessage.id, secondMessage.id]);
+
+    const record = await memoryDomain.initializeObservationalMemory({
+      threadId: null,
+      resourceId,
+      scope: 'resource',
+      config: { enabled: true },
+    });
+    await memoryDomain.updateActiveObservations({
+      id: record.id,
+      observations: 'User likes concise answers.',
+      tokenCount: 5,
+      lastObservedAt: secondMessage.createdAt,
+      observedMessageIds: [firstMessage.id, secondMessage.id],
+    });
+
+    const current = await memoryDomain.getObservationalMemory(null, resourceId);
+    expect(current?.activeObservations).toBe('User likes concise answers.');
+    expect(current?.observedMessageIds).toEqual([firstMessage.id, secondMessage.id]);
+
+    const history = await memoryDomain.getObservationalMemoryHistory(null, resourceId, 10);
+    expect(history).toHaveLength(1);
+    expect(history[0]?.id).toBe(record.id);
+  });
+});

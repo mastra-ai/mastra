@@ -24,6 +24,19 @@ import type {
   StorageCloneThreadInput,
   StorageCloneThreadOutput,
   ThreadCloneMetadata,
+  StorageListMessagesByResourceIdInput,
+  ObservationalMemoryRecord,
+  ObservationalMemoryHistoryOptions,
+  BufferedObservationChunk,
+  CreateObservationalMemoryInput,
+  UpdateActiveObservationsInput,
+  UpdateBufferedObservationsInput,
+  UpdateBufferedReflectionInput,
+  SwapBufferedToActiveInput,
+  SwapBufferedToActiveResult,
+  SwapBufferedReflectionToActiveInput,
+  CreateReflectionGenerationInput,
+  UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
 import type { Redis } from '@upstash/redis';
 import { UpstashDB, resolveUpstashConfig } from '../../db';
@@ -44,7 +57,20 @@ function getMessageIndexKey(messageId: string): string {
   return `msg-idx:${messageId}`;
 }
 
+function getResourceMessagesKey(resourceId: string): string {
+  return `resource:${resourceId}:messages`;
+}
+
+function getObservationalMemoryKey(threadId: string | null, resourceId: string): string {
+  return `observational-memory:${threadId ?? 'resource'}:${resourceId}`;
+}
+
+function getObservationalMemoryIndexKey(id: string): string {
+  return `observational-memory-index:${id}`;
+}
+
 export class StoreMemoryUpstash extends MemoryStorage {
+  readonly supportsObservationalMemory = true;
   private client: Redis;
   #db: UpstashDB;
   constructor(config: UpstashDomainConfig) {
@@ -447,6 +473,11 @@ export class StoreMemoryUpstash extends MemoryStorage {
           // Add to sorted set for this thread
           pipeline.zadd(getThreadMessagesKey(message.threadId!), {
             score,
+            member: message.id,
+          });
+
+          pipeline.zadd(getResourceMessagesKey(message.resourceId!), {
+            score: createdAtScore,
             member: message.id,
           });
         }
@@ -1140,9 +1171,21 @@ export class StoreMemoryUpstash extends MemoryStorage {
                 ? (updatedMessage as any)._index
                 : new Date(updatedMessage.createdAt).getTime();
             pipeline.zadd(newThreadMessagesKey, { score, member: id });
+            if (updatedMessage.resourceId) {
+              pipeline.zadd(getResourceMessagesKey(updatedMessage.resourceId), {
+                score: new Date(updatedMessage.createdAt).getTime(),
+                member: id,
+              });
+            }
           } else {
             // No thread change, just update the existing key
             pipeline.set(key, updatedMessage);
+            if (updatedMessage.resourceId) {
+              pipeline.zadd(getResourceMessagesKey(updatedMessage.resourceId), {
+                score: new Date(updatedMessage.createdAt).getTime(),
+                member: id,
+              });
+            }
           }
         }
       }
@@ -1267,6 +1310,14 @@ export class StoreMemoryUpstash extends MemoryStorage {
         pipeline.del(getMessageIndexKey(messageId));
       }
 
+      for (const messageId of foundMessageIds) {
+        const message = await this.listMessagesById({ messageIds: [messageId] });
+        const resourceId = message.messages[0]?.resourceId;
+        if (resourceId) {
+          pipeline.zrem(getResourceMessagesKey(resourceId), messageId);
+        }
+      }
+
       // Update thread timestamps
       if (threadIds.size > 0) {
         for (const threadId of threadIds) {
@@ -1297,6 +1348,401 @@ export class StoreMemoryUpstash extends MemoryStorage {
         error,
       );
     }
+  }
+
+  async listMessagesByResourceId({
+    resourceId,
+    filter,
+    perPage: perPageInput,
+    page = 0,
+    orderBy,
+  }: StorageListMessagesByResourceIdInput): Promise<StorageListMessagesOutput> {
+    const { field, direction } = this.parseOrderBy(orderBy, 'ASC');
+    const perPage = normalizePerPage(perPageInput, 40);
+    this.validatePaginationInput(page, perPageInput ?? 40);
+    const { offset, perPage: perPageForResponse } = calculatePagination(page, perPageInput, perPage);
+
+    try {
+      const indexedIds = await this.client.zrange(getResourceMessagesKey(resourceId), 0, -1);
+      let messages: MastraDBMessage[] = [];
+
+      if (indexedIds.length > 0) {
+        const indexPipeline = this.client.pipeline();
+        indexedIds.forEach(id => indexPipeline.get(getMessageIndexKey(id as string)));
+        const threadIds = (await indexPipeline.exec()) as (string | null)[];
+
+        const messagePipeline = this.client.pipeline();
+        indexedIds.forEach((id, index) => {
+          const threadId = threadIds[index];
+          if (threadId) {
+            messagePipeline.get(getMessageKey(threadId, id as string));
+          }
+        });
+        messages = ((await messagePipeline.exec()) as (MastraDBMessage | null)[]).filter(
+          (message): message is MastraDBMessage => !!message && message.resourceId === resourceId,
+        );
+      } else {
+        const keys = await this.#db.scanKeys(`${TABLE_MESSAGES}:*`);
+        if (keys.length > 0) {
+          const pipeline = this.client.pipeline();
+          keys.forEach(key => pipeline.get(key));
+          messages = ((await pipeline.exec()) as (MastraDBMessage | null)[]).filter(
+            (message): message is MastraDBMessage => !!message && message.resourceId === resourceId,
+          );
+        }
+      }
+
+      messages = filterByDateRange(messages, message => new Date(message.createdAt), filter?.dateRange);
+      messages = this._sortMessages(messages, field, direction);
+
+      const total = messages.length;
+      const paginated = perPageInput === false ? messages : messages.slice(offset, offset + perPage);
+      const list = new MessageList().add(paginated, 'memory');
+
+      return {
+        messages: list.get.all.db(),
+        total,
+        page,
+        perPage: perPageForResponse,
+        hasMore: perPageInput === false ? false : offset + perPage < total,
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('UPSTASH', 'LIST_MESSAGES_BY_RESOURCE_ID', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { resourceId },
+        },
+        error,
+      );
+    }
+  }
+
+  private async getObservationalMemoryRecords(
+    threadId: string | null,
+    resourceId: string,
+  ): Promise<ObservationalMemoryRecord[]> {
+    const records = await this.client.get<ObservationalMemoryRecord[]>(getObservationalMemoryKey(threadId, resourceId));
+    return (records ?? []).map(record => this.reviveObservationalMemoryRecord(record));
+  }
+
+  private async saveObservationalMemoryRecords(
+    threadId: string | null,
+    resourceId: string,
+    records: ObservationalMemoryRecord[],
+  ): Promise<void> {
+    await this.client.set(getObservationalMemoryKey(threadId, resourceId), records);
+    const pipeline = this.client.pipeline();
+    records.forEach(record => pipeline.set(getObservationalMemoryIndexKey(record.id), getObservationalMemoryKey(threadId, resourceId)));
+    await pipeline.exec();
+  }
+
+  private reviveObservationalMemoryRecord(record: ObservationalMemoryRecord): ObservationalMemoryRecord {
+    return {
+      ...record,
+      createdAt: ensureDate(record.createdAt)!,
+      updatedAt: ensureDate(record.updatedAt)!,
+      lastObservedAt: record.lastObservedAt ? ensureDate(record.lastObservedAt) : undefined,
+      lastBufferedAtTime: record.lastBufferedAtTime ? ensureDate(record.lastBufferedAtTime)! : null,
+      bufferedObservationChunks: record.bufferedObservationChunks?.map(chunk => ({
+        ...chunk,
+        createdAt: ensureDate(chunk.createdAt)!,
+        lastObservedAt: chunk.lastObservedAt ? ensureDate(chunk.lastObservedAt)! : new Date(0),
+      })),
+    };
+  }
+
+  private async updateObservationalMemoryRecord(
+    id: string,
+    updater: (record: ObservationalMemoryRecord) => void,
+  ): Promise<ObservationalMemoryRecord> {
+    const key = await this.client.get<string>(getObservationalMemoryIndexKey(id));
+    if (!key) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    const records = ((await this.client.get<ObservationalMemoryRecord[]>(key)) ?? []).map(record =>
+      this.reviveObservationalMemoryRecord(record),
+    );
+    const record = records.find(item => item.id === id);
+    if (!record) {
+      throw new Error(`Observational memory record not found: ${id}`);
+    }
+
+    updater(record);
+    record.updatedAt = new Date();
+    await this.client.set(key, records);
+    return record;
+  }
+
+  async getObservationalMemory(
+    threadId: string | null,
+    resourceId: string,
+  ): Promise<ObservationalMemoryRecord | null> {
+    const records = await this.getObservationalMemoryRecords(threadId, resourceId);
+    return records[0] ?? null;
+  }
+
+  async getObservationalMemoryHistory(
+    threadId: string | null,
+    resourceId: string,
+    limit?: number,
+    options?: ObservationalMemoryHistoryOptions,
+  ): Promise<ObservationalMemoryRecord[]> {
+    let records = await this.getObservationalMemoryRecords(threadId, resourceId);
+    if (options?.from) records = records.filter(record => record.createdAt >= options.from!);
+    if (options?.to) records = records.filter(record => record.createdAt <= options.to!);
+    if (options?.offset != null) records = records.slice(options.offset);
+    return limit != null ? records.slice(0, limit) : records;
+  }
+
+  async initializeObservationalMemory(input: CreateObservationalMemoryInput): Promise<ObservationalMemoryRecord> {
+    const now = new Date();
+    const record: ObservationalMemoryRecord = {
+      id: crypto.randomUUID(),
+      scope: input.scope,
+      threadId: input.threadId,
+      resourceId: input.resourceId,
+      createdAt: now,
+      updatedAt: now,
+      lastObservedAt: undefined,
+      originType: 'initial',
+      generationCount: 0,
+      activeObservations: '',
+      bufferedObservations: undefined,
+      bufferedReflection: undefined,
+      totalTokensObserved: 0,
+      observationTokenCount: 0,
+      pendingMessageTokens: 0,
+      isReflecting: false,
+      isObserving: false,
+      isBufferingObservation: false,
+      isBufferingReflection: false,
+      lastBufferedAtTokens: 0,
+      lastBufferedAtTime: null,
+      config: input.config,
+      observedTimezone: input.observedTimezone,
+      metadata: {},
+    };
+    const records = await this.getObservationalMemoryRecords(input.threadId, input.resourceId);
+    await this.saveObservationalMemoryRecords(input.threadId, input.resourceId, [record, ...records]);
+    return record;
+  }
+
+  async insertObservationalMemoryRecord(record: ObservationalMemoryRecord): Promise<void> {
+    const records = await this.getObservationalMemoryRecords(record.threadId, record.resourceId);
+    records.push(record);
+    records.sort((a, b) => b.generationCount - a.generationCount);
+    await this.saveObservationalMemoryRecords(record.threadId, record.resourceId, records);
+  }
+
+  async updateActiveObservations(input: UpdateActiveObservationsInput): Promise<void> {
+    await this.updateObservationalMemoryRecord(input.id, record => {
+      record.activeObservations = input.observations;
+      record.observationTokenCount = input.tokenCount;
+      record.totalTokensObserved += input.tokenCount;
+      record.pendingMessageTokens = 0;
+      record.lastObservedAt = input.lastObservedAt;
+      if (input.observedMessageIds) record.observedMessageIds = input.observedMessageIds;
+    });
+  }
+
+  async updateBufferedObservations(input: UpdateBufferedObservationsInput): Promise<void> {
+    await this.updateObservationalMemoryRecord(input.id, record => {
+      const chunk: BufferedObservationChunk = {
+        id: `ombuf-${crypto.randomUUID()}`,
+        cycleId: input.chunk.cycleId,
+        observations: input.chunk.observations,
+        tokenCount: input.chunk.tokenCount,
+        messageIds: input.chunk.messageIds,
+        messageTokens: input.chunk.messageTokens,
+        lastObservedAt: input.chunk.lastObservedAt,
+        createdAt: new Date(),
+        suggestedContinuation: input.chunk.suggestedContinuation,
+        currentTask: input.chunk.currentTask,
+        threadTitle: input.chunk.threadTitle,
+      };
+      record.bufferedObservationChunks = [...(record.bufferedObservationChunks ?? []), chunk];
+      if (input.lastBufferedAtTime) record.lastBufferedAtTime = input.lastBufferedAtTime;
+    });
+  }
+
+  async swapBufferedToActive(input: SwapBufferedToActiveInput): Promise<SwapBufferedToActiveResult> {
+    let result: SwapBufferedToActiveResult | undefined;
+    await this.updateObservationalMemoryRecord(input.id, record => {
+      const chunks = input.bufferedChunks ?? record.bufferedObservationChunks ?? [];
+      if (chunks.length === 0) {
+        result = {
+          chunksActivated: 0,
+          messageTokensActivated: 0,
+          observationTokensActivated: 0,
+          messagesActivated: 0,
+          activatedCycleIds: [],
+          activatedMessageIds: [],
+        };
+        return;
+      }
+
+      const targetMessageTokens = Math.max(0, input.currentPendingTokens - input.messageTokensThreshold * (1 - input.activationRatio));
+      let cumulative = 0;
+      let chunksToActivate = chunks.length;
+      for (let index = 0; index < chunks.length; index++) {
+        cumulative += chunks[index]!.messageTokens ?? 0;
+        if (cumulative >= targetMessageTokens) {
+          chunksToActivate = index + 1;
+          break;
+        }
+      }
+
+      const activated = chunks.slice(0, chunksToActivate);
+      const remaining = chunks.slice(chunksToActivate);
+      const observations = activated.map(chunk => chunk.observations).join('\n\n');
+      const observationTokensActivated = activated.reduce((sum, chunk) => sum + chunk.tokenCount, 0);
+      const messageTokensActivated = activated.reduce((sum, chunk) => sum + (chunk.messageTokens ?? 0), 0);
+      const activatedMessageIds = activated.flatMap(chunk => chunk.messageIds);
+      const lastObservedAt = input.lastObservedAt ?? activated[activated.length - 1]?.lastObservedAt ?? new Date();
+
+      record.activeObservations = record.activeObservations
+        ? `${record.activeObservations}\n\n--- message boundary (${new Date(lastObservedAt).toISOString()}) ---\n\n${observations}`
+        : observations;
+      record.observationTokenCount = (record.observationTokenCount ?? 0) + observationTokensActivated;
+      record.pendingMessageTokens = Math.max(0, (record.pendingMessageTokens ?? 0) - messageTokensActivated);
+      record.bufferedObservationChunks = remaining.length > 0 ? remaining : undefined;
+      record.lastObservedAt = new Date(lastObservedAt);
+
+      result = {
+        chunksActivated: activated.length,
+        messageTokensActivated,
+        observationTokensActivated,
+        messagesActivated: activatedMessageIds.length,
+        activatedCycleIds: activated.map(chunk => chunk.cycleId).filter((id): id is string => !!id),
+        activatedMessageIds,
+        observations,
+        perChunk: activated.map(chunk => ({
+          cycleId: chunk.cycleId ?? '',
+          messageTokens: chunk.messageTokens ?? 0,
+          observationTokens: chunk.tokenCount,
+          messageCount: chunk.messageIds.length,
+          observations: chunk.observations,
+        })),
+        suggestedContinuation: activated[activated.length - 1]?.suggestedContinuation,
+        currentTask: activated[activated.length - 1]?.currentTask,
+      };
+    });
+    return result!;
+  }
+
+  async createReflectionGeneration(input: CreateReflectionGenerationInput): Promise<ObservationalMemoryRecord> {
+    const now = new Date();
+    const newRecord: ObservationalMemoryRecord = {
+      id: crypto.randomUUID(),
+      scope: input.currentRecord.scope,
+      threadId: input.currentRecord.threadId,
+      resourceId: input.currentRecord.resourceId,
+      createdAt: now,
+      updatedAt: now,
+      lastObservedAt: input.currentRecord.lastObservedAt ?? now,
+      originType: 'reflection',
+      generationCount: input.currentRecord.generationCount + 1,
+      activeObservations: input.reflection,
+      config: input.currentRecord.config,
+      totalTokensObserved: input.currentRecord.totalTokensObserved,
+      observationTokenCount: input.tokenCount,
+      pendingMessageTokens: 0,
+      isReflecting: false,
+      isObserving: false,
+      isBufferingObservation: false,
+      isBufferingReflection: false,
+      lastBufferedAtTokens: 0,
+      lastBufferedAtTime: null,
+      observedTimezone: input.currentRecord.observedTimezone,
+      metadata: {},
+    };
+    const records = await this.getObservationalMemoryRecords(input.currentRecord.threadId, input.currentRecord.resourceId);
+    await this.saveObservationalMemoryRecords(input.currentRecord.threadId, input.currentRecord.resourceId, [
+      newRecord,
+      ...records,
+    ]);
+    return newRecord;
+  }
+
+  async updateBufferedReflection(input: UpdateBufferedReflectionInput): Promise<void> {
+    await this.updateObservationalMemoryRecord(input.id, record => {
+      record.bufferedReflection = record.bufferedReflection
+        ? `${record.bufferedReflection}\n\n${input.reflection}`
+        : input.reflection;
+      record.bufferedReflectionTokens = (record.bufferedReflectionTokens ?? 0) + input.tokenCount;
+      record.bufferedReflectionInputTokens = (record.bufferedReflectionInputTokens ?? 0) + input.inputTokenCount;
+      record.reflectedObservationLineCount = input.reflectedObservationLineCount;
+    });
+  }
+
+  async swapBufferedReflectionToActive(input: SwapBufferedReflectionToActiveInput): Promise<ObservationalMemoryRecord> {
+    const record = await this.updateObservationalMemoryRecord(input.currentRecord.id, current => {
+      if (!current.bufferedReflection) throw new Error('No buffered reflection to swap');
+    });
+    const reflectedLineCount = record.reflectedObservationLineCount ?? 0;
+    const unreflected = (record.activeObservations ?? '').split('\n').slice(reflectedLineCount).join('\n').trim();
+    const reflection = unreflected ? `${record.bufferedReflection}\n\n${unreflected}` : record.bufferedReflection!;
+    const newRecord = await this.createReflectionGeneration({
+      currentRecord: record,
+      reflection,
+      tokenCount: input.tokenCount,
+    });
+    await this.updateObservationalMemoryRecord(record.id, current => {
+      current.bufferedReflection = undefined;
+      current.bufferedReflectionTokens = undefined;
+      current.bufferedReflectionInputTokens = undefined;
+      current.reflectedObservationLineCount = undefined;
+    });
+    return newRecord;
+  }
+
+  async setReflectingFlag(id: string, isReflecting: boolean): Promise<void> {
+    await this.updateObservationalMemoryRecord(id, record => {
+      record.isReflecting = isReflecting;
+    });
+  }
+
+  async setObservingFlag(id: string, isObserving: boolean): Promise<void> {
+    await this.updateObservationalMemoryRecord(id, record => {
+      record.isObserving = isObserving;
+    });
+  }
+
+  async setBufferingObservationFlag(id: string, isBuffering: boolean, lastBufferedAtTokens?: number): Promise<void> {
+    await this.updateObservationalMemoryRecord(id, record => {
+      record.isBufferingObservation = isBuffering;
+      if (lastBufferedAtTokens !== undefined) record.lastBufferedAtTokens = lastBufferedAtTokens;
+    });
+  }
+
+  async setBufferingReflectionFlag(id: string, isBuffering: boolean): Promise<void> {
+    await this.updateObservationalMemoryRecord(id, record => {
+      record.isBufferingReflection = isBuffering;
+    });
+  }
+
+  async clearObservationalMemory(threadId: string | null, resourceId: string): Promise<void> {
+    const key = getObservationalMemoryKey(threadId, resourceId);
+    const records = (await this.client.get<ObservationalMemoryRecord[]>(key)) ?? [];
+    const pipeline = this.client.pipeline();
+    pipeline.del(key);
+    records.forEach(record => pipeline.del(getObservationalMemoryIndexKey(record.id)));
+    await pipeline.exec();
+  }
+
+  async setPendingMessageTokens(id: string, tokenCount: number): Promise<void> {
+    await this.updateObservationalMemoryRecord(id, record => {
+      record.pendingMessageTokens = tokenCount;
+    });
+  }
+
+  async updateObservationalMemoryConfig(input: UpdateObservationalMemoryConfigInput): Promise<void> {
+    await this.updateObservationalMemoryRecord(input.id, record => {
+      record.config = this.deepMergeConfig(record.config as Record<string, unknown>, input.config);
+    });
   }
 
   private sortThreads(
