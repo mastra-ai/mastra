@@ -36,6 +36,21 @@ type SubscribeWaiter = {
 
 const DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES = 64 * 1024 * 1024;
 
+/**
+ * Max number of times a local subscriber callback may be redelivered after a
+ * nack. MUST be >= the consumer-side retry budget
+ * (`WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS`) — otherwise the transport
+ * gives up before the consumer can exhaust its budget and surface the terminal
+ * failure, which would leave the run silently hung.
+ *
+ * An invariant test in
+ * `packages/core/src/events/unix-socket-pubsub-redelivery-budget.test.ts`
+ * pins this ordering against the consumer constant so the two constants stay
+ * in sync as the consumer budget changes.
+ */
+export const MAX_LOCAL_REDELIVERIES = 6;
+const REDELIVERY_DELAY_MS = 100;
+
 function serializeFrame(frame: ClientFrame | ServerFrame): string {
   // Encode through the codec so non-JSON-safe values (Date, Error, Map, Set,
   // RegExp, URL, BigInt, undefined, registered classes) survive the wire
@@ -641,13 +656,6 @@ export class UnixSocketPubSub extends PubSub {
   }
 
   #invokeLocalCallback(topic: string, event: Event, cb: EventCallback, attempt: number) {
-    // Keep this aligned with (or above) the consumer-side retry budget
-    // (e.g. WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS). The transport must
-    // give the consumer enough redeliveries to exhaust its own retry budget
-    // and surface a terminal failure, otherwise the consumer never sees
-    // attempt N and the run silently hangs.
-    const MAX_LOCAL_REDELIVERIES = 6;
-    const REDELIVERY_DELAY_MS = 100;
     let nacked = false;
     const nack = async () => {
       if (nacked || this.#closed) return;
