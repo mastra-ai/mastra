@@ -291,6 +291,18 @@ describe('StagehandBrowser', () => {
       expect(tools[STAGEHAND_TOOLS.TABS]).toBeDefined();
       expect(tools[STAGEHAND_TOOLS.CLOSE]).toBeDefined();
     });
+
+    it('should include recording tools only when opted in', () => {
+      expect(browser.getTools().browser_record).toBeUndefined();
+      expect(browser.getTools().browser_record_caption).toBeUndefined();
+
+      const recordingBrowser = new StagehandBrowser({ scope: 'shared', recording: { outputDir: '/tmp/recordings' } });
+      const tools = recordingBrowser.getTools();
+
+      expect(tools.browser_record).toBeDefined();
+      expect(tools.browser_record_caption).toBeDefined();
+      expect(tools[STAGEHAND_TOOLS.NAVIGATE]).toBeDefined();
+    });
   });
 
   describe('act', () => {

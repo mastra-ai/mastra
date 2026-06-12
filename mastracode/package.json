@@ -79,7 +79,6 @@
     "cli-highlight": "^2.1.11",
     "execa": "^9.6.1",
     "fastest-levenshtein": "^1.0.16",
-    "jpeg-js": "^0.4.4",
     "partial-json": "^0.1.7",
     "posthog-node": "^5.28.3",
     "strip-ansi": "^7.2.0",

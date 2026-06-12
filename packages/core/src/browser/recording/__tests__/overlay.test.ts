@@ -1,10 +1,14 @@
 import { encode as encodeJpegBytes } from 'jpeg-js';
 import { describe, expect, it } from 'vitest';
 
-import { decodeJpeg, drawCaptionOnFrame, encodeJpeg, selectCaptionAt } from '../browser-recording-overlay.js';
-import type { RecordingCaption, RgbaFrame } from '../browser-recording-overlay.js';
+import { decodeJpeg, drawCaptionOnFrame, encodeJpeg, selectCaptionAt } from '../overlay.js';
+import type { RecordingCaption, RgbaFrame } from '../overlay.js';
 
-function makeJpeg(width: number, height: number, rgba: [number, number, number, number] = [10, 20, 30, 255]): Uint8Array {
+function makeJpeg(
+  width: number,
+  height: number,
+  rgba: [number, number, number, number] = [10, 20, 30, 255],
+): Uint8Array {
   const data = new Uint8Array(width * height * 4);
   for (let i = 0; i < width * height; i++) {
     data[i * 4] = rgba[0];

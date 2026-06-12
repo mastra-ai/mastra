@@ -315,7 +315,11 @@ export function drawCaptionOnFrame(frame: RgbaFrame, caption: string, options: C
  */
 export function encodeJpeg(frame: RgbaFrame, quality = 80): Uint8Array {
   const encoded = encodeJpegBytes(
-    { data: Buffer.from(frame.data.buffer, frame.data.byteOffset, frame.data.byteLength), width: frame.width, height: frame.height },
+    {
+      data: Buffer.from(frame.data.buffer, frame.data.byteOffset, frame.data.byteLength),
+      width: frame.width,
+      height: frame.height,
+    },
     quality,
   );
   return new Uint8Array(encoded.data.buffer, encoded.data.byteOffset, encoded.data.byteLength);

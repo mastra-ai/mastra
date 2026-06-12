@@ -1,27 +1,23 @@
 /**
- * Mastra Code-only browser recording tools.
+ * Opt-in browser recording tools.
  *
- * Wraps the existing CDP screencast infrastructure in `@mastra/core/browser` to
- * capture frames, lets the agent drop short captions at specific moments, and
- * encodes the result as a Motion-JPEG AVI video written to disk. The AVI
- * format is used because it can be muxed in pure JavaScript (no ffmpeg) and
- * plays natively in QuickTime / Preview / VLC / browsers.
- *
- * These tools are intentionally NOT exposed from `@mastra/stagehand` or
- * `@mastra/agent-browser`. They are only attached to browsers that Mastra Code
- * itself constructs (see `createBrowserFromSettings`).
+ * Wraps the existing browser screencast infrastructure to capture frames, lets
+ * the agent drop short captions at specific moments, and encodes the result as
+ * a Motion-JPEG AVI video written to disk. The AVI format is used because it
+ * can be muxed in pure JavaScript (no ffmpeg) and plays natively in QuickTime /
+ * Preview / VLC / browsers.
  */
 
-import { relative, resolve, sep, join } from 'node:path';
-import type { MastraBrowser, ScreencastStream } from '@mastra/core/browser';
-import { createTool } from '@mastra/core/tools';
+import { join, relative, resolve, sep } from 'node:path';
+
 import { z } from 'zod';
 
-import { getAppDataDir } from '../utils/project.js';
-import { decodeJpeg, drawCaptionOnFrame, encodeJpeg, selectCaptionAt } from './browser-recording-overlay.js';
-import type { RecordingCaption } from './browser-recording-overlay.js';
+import { createTool } from '../../tools';
+import type { MastraBrowser, ScreencastStream } from '../browser';
 import { writeMjpegAviFile } from './mjpeg-avi.js';
 import type { MjpegFrame } from './mjpeg-avi.js';
+import { decodeJpeg, drawCaptionOnFrame, encodeJpeg, selectCaptionAt } from './overlay.js';
+import type { RecordingCaption } from './overlay.js';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -60,12 +56,17 @@ interface BufferedFrame {
   bytes: Uint8Array;
 }
 
+export interface BrowserRecordingOptions {
+  /** Directory where browser recordings are written. */
+  outputDir: string;
+}
+
 interface RecordingState {
   id: string;
   stream: ScreencastStream;
   startedAt: number;
   maxDurationMs: number;
-  outputPath?: string;
+  outputPath: string;
   frames: BufferedFrame[];
   captions: RecordingCaption[];
   autoStopTimer: NodeJS.Timeout | null;
@@ -84,8 +85,8 @@ interface RecordingState {
 }
 
 /**
- * Module-local state. Only one recording at a time per Mastra Code process —
- * this is intentional and is enforced by the browser_record tool.
+ * Module-local state. Only one recording at a time per process — this is
+ * intentional and is enforced by the browser_record tool.
  */
 let active: RecordingState | null = null;
 
@@ -93,17 +94,17 @@ function generateRecordingId(): string {
   return `rec_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function recordingsDir(): string {
-  return resolve(getAppDataDir(), 'browser-recordings');
+function recordingsDir(outputDir: string): string {
+  return resolve(outputDir);
 }
 
-function defaultOutputPath(id: string): string {
-  return join(recordingsDir(), `${id}.avi`);
+function defaultOutputPath(id: string, outputDir: string): string {
+  return join(recordingsDir(outputDir), `${id}.avi`);
 }
 
-function resolveOutputPath(id: string, requestedPath?: string): string {
-  const baseDir = recordingsDir();
-  const outputPath = requestedPath ? resolve(requestedPath) : defaultOutputPath(id);
+function resolveOutputPath(id: string, outputDir: string, requestedPath?: string): string {
+  const baseDir = recordingsDir(outputDir);
+  const outputPath = requestedPath ? resolve(requestedPath) : defaultOutputPath(id, outputDir);
   const rel = relative(baseDir, outputPath);
   if (rel.startsWith('..') || rel === '..' || rel.includes(`..${sep}`) || resolve(outputPath) === baseDir) {
     throw new Error(`Recording outputPath must be inside ${baseDir}`);
@@ -158,7 +159,10 @@ function buildCaptionedFrame(state: RecordingState, frame: BufferedFrame): Mjpeg
  * The AVI stream has one fixed frame size, so fail fast if the browser changes
  * screencast dimensions mid-recording.
  */
-function encodeFramesAsAvi(state: RecordingState, outputPath: string): { width: number; height: number; written: number } {
+function encodeFramesAsAvi(
+  state: RecordingState,
+  outputPath: string,
+): { width: number; height: number; written: number } {
   if (state.frames.length === 0) {
     throw new Error('No frames captured during recording');
   }
@@ -172,7 +176,9 @@ function encodeFramesAsAvi(state: RecordingState, outputPath: string): { width: 
   for (const frame of state.frames) {
     const rgba = decodeJpeg(frame.bytes);
     if (rgba.width !== width || rgba.height !== height) {
-      throw new Error(`Frame dimensions changed during recording: expected ${width}x${height}, got ${rgba.width}x${rgba.height}`);
+      throw new Error(
+        `Frame dimensions changed during recording: expected ${width}x${height}, got ${rgba.width}x${rgba.height}`,
+      );
     }
     const out = buildCaptionedFrame(state, frame);
     muxFrames.push(out);
@@ -195,6 +201,7 @@ async function startRecording(
     maxHeight?: number;
     outputPath?: string;
     threadId?: string;
+    outputDir: string;
   },
 ): Promise<{ id: string; outputPath: string; maxDurationMs: number }> {
   if (active) {
@@ -212,7 +219,7 @@ async function startRecording(
   const maxHeight = Math.max(120, Math.floor(opts.maxHeight ?? DEFAULT_MAX_HEIGHT));
 
   const id = generateRecordingId();
-  const outputPath = resolveOutputPath(id, opts.outputPath);
+  const outputPath = resolveOutputPath(id, opts.outputDir, opts.outputPath);
 
   let stream: ScreencastStream;
   try {
@@ -356,7 +363,7 @@ async function stopRecording(): Promise<{
     throw new Error(`Browser recording failed: ${err.message}`);
   }
 
-  const outputPath = state.outputPath ?? defaultOutputPath(state.id);
+  const outputPath = state.outputPath;
   try {
     encodeFramesAsAvi(state, outputPath);
   } catch (err) {
@@ -499,7 +506,7 @@ const recordSchema = z.object({
     .min(1)
     .optional()
     .describe(
-      'Only used with action="start". Absolute path inside the Mastra Code browser-recordings app-data directory. Defaults to a generated file there.',
+      'Only used with action="start". Absolute path inside the configured recording output directory. Defaults to a generated file there.',
     ),
 });
 
@@ -518,13 +525,13 @@ const recordCaptionSchema = z.object({
 });
 
 /**
- * Create the Mastra Code-only browser recording tools bound to a browser.
+ * Create opt-in browser recording tools bound to a browser.
  *
- * Intended to be merged into the underlying browser's `getTools()` by the
- * Mastra Code-side wrapper in `createBrowserFromSettings`. Do NOT export
- * this from `@mastra/stagehand` or `@mastra/agent-browser`.
+ * These tools are alpha and are only exposed when a browser provider or caller
+ * explicitly enables recording and provides a safe output directory.
  */
-export function createBrowserRecordingTools(browser: MastraBrowser) {
+export function createBrowserRecordingTools(browser: MastraBrowser, options: BrowserRecordingOptions) {
+  const outputDir = recordingsDir(options.outputDir);
   return {
     browser_record: createTool({
       id: 'browser_record',
@@ -537,6 +544,7 @@ export function createBrowserRecordingTools(browser: MastraBrowser) {
             const { id, outputPath, maxDurationMs } = await startRecording(browser, {
               ...input,
               threadId: agent?.threadId,
+              outputDir,
             });
             return {
               content: `Recording started (id: ${id}). Will auto-stop after ${maxDurationMs}ms or when you call this tool with action="stop". Output: ${outputPath}`,

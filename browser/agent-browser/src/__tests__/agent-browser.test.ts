@@ -135,6 +135,7 @@ vi.mock('agent-browser', () => ({
 
 // Import AFTER vi.mock
 import { AgentBrowser } from '../agent-browser';
+import { BROWSER_TOOLS } from '../tools/constants';
 
 describe('AgentBrowser', () => {
   let browser: AgentBrowser;
@@ -218,6 +219,27 @@ describe('AgentBrowser', () => {
       });
 
       expect(browserWithCdp['threadManager'].getScope()).toBe('shared');
+    });
+  });
+
+  describe('getTools', () => {
+    it('returns provider tools without recording tools by default', () => {
+      const tools = browser.getTools();
+
+      expect(Object.keys(tools)).toHaveLength(16);
+      expect(tools[BROWSER_TOOLS.GOTO]).toBeDefined();
+      expect(tools.browser_record).toBeUndefined();
+      expect(tools.browser_record_caption).toBeUndefined();
+    });
+
+    it('includes recording tools when opted in', () => {
+      const recordingBrowser = new AgentBrowser({ scope: 'shared', recording: { outputDir: '/tmp/recordings' } });
+      const tools = recordingBrowser.getTools();
+
+      expect(tools[BROWSER_TOOLS.GOTO]).toBeDefined();
+      expect(tools.browser_record).toBeDefined();
+      expect(tools.browser_record_caption).toBeDefined();
+      expect(Object.keys(tools)).toHaveLength(18);
     });
   });
 

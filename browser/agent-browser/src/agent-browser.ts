@@ -1,4 +1,9 @@
-import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID } from '@mastra/core/browser';
+import {
+  MastraBrowser,
+  ScreencastStreamImpl,
+  DEFAULT_THREAD_ID,
+  createBrowserRecordingTools,
+} from '@mastra/core/browser';
 import type {
   BrowserState,
   BrowserTabState,
@@ -296,6 +301,10 @@ export class AgentBrowser extends MastraBrowser {
    */
   getTools(): Record<string, Tool<any, any>> {
     const tools = createAgentBrowserTools(this);
+    if (this.browserConfig.recording) {
+      Object.assign(tools, createBrowserRecordingTools(this, this.browserConfig.recording));
+    }
+
     const exclude = this.browserConfig.excludeTools;
     if (exclude?.length) {
       for (const name of exclude) {
