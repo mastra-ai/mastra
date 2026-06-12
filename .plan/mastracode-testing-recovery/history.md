@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### GitHub unsubscribe reload coverage (2026-06-12)
+
+Added `github-signals-unsubscribe-reload` as the 73rd checked-in TUI e2e scenario. The scenario seeds an isolated thread with GitHub Signals metadata for `mastra-ai/mastra#17639`, enables experimental GitHub Signals in `settings.json`, points `MASTRACODE_GITCRAWL_BIN` and `GITCRAWL_DB_PATH` at deterministic local fixtures, opens the persisted thread through `/threads`, verifies `/github debug` sees the active subscription, runs `/github unsubscribe mastra-ai/mastra#17639`, verifies `/github debug` reports no subscribed PRs, then switches away and reopens the thread to prove the empty subscription state reloads.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test github-signals-unsubscribe-reload
+```
+
+Break validations:
+
+- Skipping `GithubSignals.#unsubscribe` metadata persistence kept `/github debug` at one subscription and failed the scenario.
+- Corrupting `/github unsubscribe` command dispatch produced the usage error instead of the unsubscribe result and failed the scenario.
+- Corrupting the empty-subscription debug projection replaced `no subscribed PRs` with alternate copy and failed the scenario.
+
+The `Git: GitHub signal subscriptions` row remains `needs-follow-up` for interval polling delivery, notification inbox read transitions, branch auto-subscribe lifecycle, and notification history reload parity.
+
+
 ### State signal browser processor coverage (2026-06-12)
 
 Added `state-signal-browser-processor` as the 72nd checked-in TUI e2e scenario. The scenario starts Mastra Code with a deterministic browser provider, lets `BrowserContextProcessor` emit a live `State snapshot: browser` during the first AIMock-backed model turn, mutates the browser state through shell passthrough, and verifies the second normal model turn emits a `State delta: browser` with user-driven active URL change classification. AIMock request verification proves the processor-generated browser state is included in model request bodies.

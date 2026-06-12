@@ -20,6 +20,7 @@ export type ScenarioName =
   | 'first-run-onboarding'
   | 'github-signals-command'
   | 'github-signals-incremental'
+  | 'github-signals-unsubscribe-reload'
   | 'harness-api-config'
   | 'openai-strict-schema'
   | 'plan-approval-goal-handoff'

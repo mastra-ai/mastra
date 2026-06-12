@@ -33,9 +33,8 @@
 
 - Row: `Git: GitHub signal subscriptions`.
 - Completed: `github-signals-incremental` seeds a persisted subscribed thread whose cursor last observed failing CI, points `MASTRACODE_GITCRAWL_BIN` at a deterministic recovered gitcrawl sqlite snapshot, runs `/github sync`, and asserts the `pull-request-ci-recovered` notification plus `/github debug` `ci=success` cursor update.
-- Proposed scenarios:
-  - `github-signals-unsubscribe-reload`: subscribe via `/github subscribe`, unsubscribe via `/github unsubscribe`, reload `/github debug`, and assert metadata/polling stops.
-- Fixture/data needs: sanitized sqlite fixture derived from `~/.config/gitcrawl/gitcrawl.db`; mock gitcrawl binary for unsubscribe/reload or multi-process polling breadth.
+- Completed: `github-signals-unsubscribe-reload` opens a persisted subscribed thread, verifies `/github debug` shows the active subscription, runs `/github unsubscribe`, verifies debug state changes to no subscribed PRs, then reopens the thread through `/threads` to prove the empty subscription state reloads.
+- Fixture/data needs: sanitized sqlite fixture derived from `~/.config/gitcrawl/gitcrawl.db`; mock gitcrawl binary for multi-process polling breadth.
 
 ### 4. MCP and browser integration depth
 
