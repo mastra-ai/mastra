@@ -1,0 +1,89 @@
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle, ScrollArea, cn } from '@mastra/playground-ui';
+import { Highlight, themes } from 'prism-react-renderer';
+
+import type { WorkflowCardDisplayStatus, WorkflowConditionCodeCondition } from './types';
+
+export interface WorkflowConditionCodeProps {
+  condition: WorkflowConditionCodeCondition;
+  previousDisplayStatus?: WorkflowCardDisplayStatus;
+  hasNextStep?: boolean;
+  onOpen: () => void;
+}
+
+export const WorkflowConditionCode = ({
+  condition,
+  previousDisplayStatus,
+  hasNextStep,
+  onOpen,
+}: WorkflowConditionCodeProps) => (
+  <div className="px-3">
+    <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
+      {({ className, style, tokens, getLineProps, getTokenProps }) => (
+        <pre
+          className={cn(
+            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs bg-surface4! whitespace-pre-wrap wrap-break-word',
+            className,
+            previousDisplayStatus === 'success' && hasNextStep && 'bg-accent1Dark!',
+            previousDisplayStatus === 'failed' && hasNextStep && 'bg-accent2Dark!',
+            previousDisplayStatus === 'tripwire' && hasNextStep && 'bg-amber-900/40!',
+          )}
+          onClick={onOpen}
+          style={style}
+        >
+          {tokens.map((line, i) => (
+            <div key={i} {...getLineProps({ line })}>
+              <span className="inline-block mr-2 text-neutral3">{i + 1}</span>
+              {line.map((token, key) => (
+                <span key={key} {...getTokenProps({ token })} />
+              ))}
+            </div>
+          ))}
+        </pre>
+      )}
+    </Highlight>
+  </div>
+);
+
+export interface WorkflowConditionDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  condition?: WorkflowConditionCodeCondition;
+}
+
+export const WorkflowConditionDialog = ({ open, onOpenChange, condition }: WorkflowConditionDialogProps) => (
+  <Dialog open={open} onOpenChange={onOpenChange}>
+    <DialogContent className="max-w-[30rem]">
+      <DialogHeader>
+        <DialogTitle className="sr-only">Condition Function</DialogTitle>
+        <DialogDescription>View the condition function code</DialogDescription>
+      </DialogHeader>
+      <DialogBody>
+        <ScrollArea className="w-full" maxHeight="400px">
+          {condition && (
+            <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
+              {({ className, style, tokens, getLineProps, getTokenProps }) => (
+                <pre
+                  className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full rounded-lg mt-2 dark:bg-zinc-800`}
+                  style={{
+                    ...style,
+                    backgroundColor: '#121212',
+                    padding: '0 0.75rem 0 0',
+                  }}
+                >
+                  {tokens.map((line, i) => (
+                    <div key={i} {...getLineProps({ line })}>
+                      <span className="inline-block mr-2 text-neutral3">{i + 1}</span>
+                      {line.map((token, key) => (
+                        <span key={key} {...getTokenProps({ token })} />
+                      ))}
+                    </div>
+                  ))}
+                </pre>
+              )}
+            </Highlight>
+          )}
+        </ScrollArea>
+      </DialogBody>
+    </DialogContent>
+  </Dialog>
+);

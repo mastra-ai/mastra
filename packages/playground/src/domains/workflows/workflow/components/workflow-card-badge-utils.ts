@@ -1,40 +1,37 @@
 import {
-  Timer,
   CalendarClock,
-  List,
-  Workflow,
-  PlayCircle,
-  Network,
-  Repeat,
-  RefreshCw,
-  GitBranch,
-  CornerDownRight,
-  Repeat1,
   Clock,
+  CornerDownRight,
+  GitBranch,
   Layers,
+  List,
+  Network,
+  PlayCircle,
+  RefreshCw,
+  Repeat,
+  Repeat1,
+  Timer,
+  Workflow,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-// Badge colors for different node types
 export const BADGE_COLORS = {
-  sleep: '#A855F7', // Purple
-  forEach: '#F97316', // Orange
-  map: '#F97316', // Orange
-  parallel: '#3B82F6', // Blue
-  suspend: '#EC4899', // Pink
-  after: '#14B8A6', // Teal
-  workflow: '#8B5CF6', // Purple
-  // Condition colors
-  when: '#ECB047', // Orange
-  dountil: '#8B5CF6', // Purple
-  dowhile: '#06B6D4', // Cyan
-  until: '#F59E0B', // Amber
-  while: '#10B981', // Green
-  if: '#3B82F6', // Blue
-  else: '#6B7280', // Gray
+  sleep: '#A855F7',
+  forEach: '#F97316',
+  map: '#F97316',
+  parallel: '#3B82F6',
+  suspend: '#EC4899',
+  after: '#14B8A6',
+  workflow: '#8B5CF6',
+  when: '#ECB047',
+  dountil: '#8B5CF6',
+  dowhile: '#06B6D4',
+  until: '#F59E0B',
+  while: '#10B981',
+  if: '#3B82F6',
+  else: '#6B7280',
 } as const;
 
-// Badge icons for different node types
 export const BADGE_ICONS = {
   sleep: Timer,
   sleepUntil: CalendarClock,
@@ -44,7 +41,6 @@ export const BADGE_ICONS = {
   suspend: PlayCircle,
   after: Clock,
   workflow: Layers,
-  // Condition icons
   when: Network,
   dountil: Repeat1,
   dowhile: Repeat,
@@ -59,7 +55,7 @@ export interface ConditionIconConfig {
   color: string | undefined;
 }
 
-export const getConditionIconAndColor = (type: string): ConditionIconConfig => {
+export const getConditionIconAndColor = (type?: string): ConditionIconConfig => {
   switch (type) {
     case 'when':
       return { icon: BADGE_ICONS.when, color: BADGE_COLORS.when };
@@ -80,7 +76,7 @@ export const getConditionIconAndColor = (type: string): ConditionIconConfig => {
   }
 };
 
-export interface NodeBadgeInfo {
+export interface WorkflowNodeBadgeInfo {
   isSleepNode: boolean;
   isForEachNode: boolean;
   isMapNode: boolean;
@@ -88,21 +84,31 @@ export interface NodeBadgeInfo {
   hasSpecialBadge: boolean;
 }
 
-export const getNodeBadgeInfo = (data: {
+export interface WorkflowCardBadgesProps {
   duration?: number;
   date?: Date;
   isForEach?: boolean;
   mapConfig?: string;
   canSuspend?: boolean;
   isParallel?: boolean;
-  stepGraph?: any;
-}): NodeBadgeInfo => {
-  const isSleepNode = Boolean(data.duration || data.date);
-  const isForEachNode = Boolean(data.isForEach);
-  const isMapNode = Boolean(data.mapConfig && !data.isForEach);
-  const isNestedWorkflow = Boolean(data.stepGraph);
+  stepGraph?: unknown;
+}
+
+export const getNodeBadgeInfo = ({
+  duration,
+  date,
+  isForEach,
+  mapConfig,
+  canSuspend,
+  isParallel,
+  stepGraph,
+}: WorkflowCardBadgesProps): WorkflowNodeBadgeInfo => {
+  const isSleepNode = Boolean(duration || date);
+  const isForEachNode = Boolean(isForEach);
+  const isMapNode = Boolean(mapConfig && !isForEach);
+  const isNestedWorkflow = Boolean(stepGraph);
   const hasSpecialBadge =
-    isSleepNode || data.canSuspend || data.isParallel || isForEachNode || isMapNode || isNestedWorkflow;
+    isSleepNode || Boolean(canSuspend || isParallel) || isForEachNode || isMapNode || isNestedWorkflow;
 
   return {
     isSleepNode,
