@@ -51,14 +51,12 @@ describe('registerApiRoute Type Tests', () => {
       });
     });
 
-    it('should allow accessing requestContext in createHandler', () => {
+    it('should avoid leaking Hono context types from createHandler', () => {
       registerApiRoute('/user-profile', {
         method: 'GET',
         createHandler: async () => {
           return async c => {
-            // requestContext should also be typed in createHandler's returned handler
-            const requestContext = c.get('requestContext');
-            expectTypeOf(requestContext).toEqualTypeOf<RequestContext>();
+            expectTypeOf(c).toBeAny();
 
             return c.json({ ok: true });
           };
