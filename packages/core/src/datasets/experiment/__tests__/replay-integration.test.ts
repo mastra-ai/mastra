@@ -1132,4 +1132,37 @@ describe('tool replay integration', () => {
       expect(summary.results[0]?.error?.code).toBe('TOOL_REPLAY_UNCONSUMED');
     });
   });
+
+  describe('async setup failures', () => {
+    it('persists the failure reason on the pre-created experiment record', async () => {
+      await experimentsStorage.createExperiment({
+        id: 'pre-created-bad-source',
+        datasetId: null,
+        datasetVersion: null,
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        totalItems: 0,
+      });
+
+      await expect(
+        runExperiment(mastra, {
+          experimentId: 'pre-created-bad-source',
+          data: [{ id: 'item-1', input: 'Look up first and second' }],
+          targetType: 'agent',
+          targetId: 'replay-test-agent',
+          toolReplay: { fromExperimentId: 'does-not-exist' },
+        }),
+      ).rejects.toThrowError();
+
+      const experiment = await experimentsStorage.getExperimentById({ id: 'pre-created-bad-source' });
+      expect(experiment?.status).toBe('failed');
+      // The async HTTP caller reads WHY from the record, not from server logs.
+      expect(experiment?.metadata).toMatchObject({
+        failureReason: { id: 'EXPERIMENT_TOOL_REPLAY_SOURCE_NOT_FOUND' },
+      });
+      expect((experiment?.metadata as { failureReason?: { message?: string } }).failureReason?.message).toContain(
+        'does-not-exist',
+      );
+    });
+  });
 });

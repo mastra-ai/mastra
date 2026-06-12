@@ -3,7 +3,13 @@ import { RETHROWN_TOOL_ERROR_NAMES } from '../../../loop/workflows/errors';
 import { SpanType } from '../../../observability';
 import type { SpanRecord } from '../../../storage/domains/observability/tracing';
 import type { ToolHookContext } from '../../../tools/types';
-import { extractToolReplayEvents, createReplayState, buildReplayHooks, finalizeReplayReport } from '../replay';
+import {
+  extractToolReplayEvents,
+  createReplayState,
+  buildReplayHooks,
+  finalizeReplayReport,
+  getToolReplayMarker,
+} from '../replay';
 
 const TRACE_ID = 'trace-1';
 
@@ -731,5 +737,27 @@ describe('adversarial review regressions', () => {
     expect(report.replayedCount).toBe(0);
     expect(report.unconsumed).toEqual([{ toolName: 'lookup', count: 1 }]);
     expect(report.calls).toEqual([{ order: 0, toolName: 'lookup', outcome: 'mocked' }]);
+  });
+});
+
+describe('getToolReplayMarker', () => {
+  it('parses the stamped shapes and rejects user-owned junk', () => {
+    expect(getToolReplayMarker({ toolReplay: { fromExperimentId: 'exp-1', onMiss: 'error', matching: 'strict' } })).toEqual({
+      fromExperimentId: 'exp-1',
+      onMiss: 'error',
+      matching: 'strict',
+    });
+    expect(getToolReplayMarker({ toolReplay: { mockedTools: ['lookup', 7, 'send'] } })).toEqual({
+      mockedTools: ['lookup', 'send'],
+    });
+    // Not the stamped shape: user junk, arrays, bare fromExperimentId.
+    expect(getToolReplayMarker({ toolReplay: 'user junk' })).toBeNull();
+    expect(getToolReplayMarker({ toolReplay: ['onMiss'] })).toBeNull();
+    expect(getToolReplayMarker({ toolReplay: { fromExperimentId: 'exp-1' } })).toBeNull();
+    expect(getToolReplayMarker(null)).toBeNull();
+    // Unknown enum values are dropped, the marker itself still parses.
+    expect(getToolReplayMarker({ toolReplay: { onMiss: 'explode', mockedTools: ['a'] } })).toEqual({
+      mockedTools: ['a'],
+    });
   });
 });

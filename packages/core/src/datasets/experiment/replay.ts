@@ -389,6 +389,38 @@ function containsRedactionMarker(payload: unknown): boolean {
 }
 
 /**
+ * The marker the experiment runner stamps into `experiment.metadata.toolReplay`
+ * on replay/mock runs. `onMiss` is present on replay runs; `mockedTools` lists
+ * suppressing mocks on mock runs; either may appear alone or combined.
+ */
+export interface ToolReplayExperimentMarker {
+  fromExperimentId?: string;
+  onMiss?: ToolReplayOnMiss;
+  matching?: ToolReplayMatching;
+  mockedTools?: string[];
+}
+
+/**
+ * Parse the runner-stamped replay/mock marker out of experiment metadata.
+ * Exact-shape check: a user-owned `toolReplay` metadata key that is not the
+ * stamped shape (an object carrying `onMiss` or `mockedTools`) returns null,
+ * so live runs can never be misclassified. The single source of truth for the
+ * duck-typing the runner's source-guard and every UI/SDK consumer need.
+ */
+export function getToolReplayMarker(metadata: Record<string, unknown> | null | undefined): ToolReplayExperimentMarker | null {
+  const candidate = metadata?.toolReplay;
+  if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) return null;
+  if (!('onMiss' in candidate) && !('mockedTools' in candidate)) return null;
+  const raw = candidate as Record<string, unknown>;
+  return {
+    ...(typeof raw.fromExperimentId === 'string' ? { fromExperimentId: raw.fromExperimentId } : {}),
+    ...(raw.onMiss === 'error' || raw.onMiss === 'passthrough' ? { onMiss: raw.onMiss } : {}),
+    ...(raw.matching === 'fifo' || raw.matching === 'strict' ? { matching: raw.matching } : {}),
+    ...(Array.isArray(raw.mockedTools) ? { mockedTools: raw.mockedTools.filter(t => typeof t === 'string') } : {}),
+  };
+}
+
+/**
  * A mock that answers calls itself (output stub, error injection, or function
  * replacement) — the live tool never executes. Expect-only entries observe and
  * fall through. Suppressing mocks drive the metadata stamp AND the strict
