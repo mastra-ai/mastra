@@ -14,7 +14,7 @@ import {
 
 import { CloudUpload, Link } from 'lucide-react';
 import type { FormEvent } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { acceptAttributeValue, getAcceptedAttachmentTypes } from './accepted-types';
 import { useComposerAttachments } from './composer-attachments';
 
@@ -27,6 +27,13 @@ export const AttachFileDialog = ({ onOpenChange, open }: AttachFileDialogProps) 
   const { addFiles, addUrl } = useComposerAttachments();
   const [rejectedNames, setRejectedNames] = useState<string[]>([]);
   const acceptedTypes = getAcceptedAttachmentTypes();
+
+  // Clear stale rejection feedback whenever the dialog is (re)opened.
+  useEffect(() => {
+    if (open) {
+      setRejectedNames([]);
+    }
+  }, [open]);
 
   const openFilePicker = () => {
     const input = document.createElement('input');

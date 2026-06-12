@@ -104,8 +104,9 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
   const templatesEnabled = process.env.MASTRA_TEMPLATES === 'true' ? 'true' : 'false';
   const agentSignals = process.env.MASTRA_AGENT_SIGNALS === 'false' ? 'false' : 'true';
   // Comma-separated MIME allowlist for chat attachments (e.g. "image/*,application/pdf,text/csv").
-  // Empty = accept all file types.
-  const attachmentTypes = process.env.MASTRA_STUDIO_ATTACHMENT_TYPES ?? '';
+  // Empty = accept all file types. Sanitized to MIME-legal characters because the
+  // value is injected into a JS string literal in the HTML shell.
+  const attachmentTypes = (process.env.MASTRA_STUDIO_ATTACHMENT_TYPES ?? '').replace(/[^a-zA-Z0-9.+*/, -]/g, '');
 
   let html = readFileSync(indexHtmlPath, 'utf8')
     .replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', basePath)

@@ -22,7 +22,11 @@ const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginO
       .replace(/%%MASTRA_EXPERIMENTAL_FEATURES%%/g, process.env.EXPERIMENTAL_FEATURES || 'false')
       .replace(/%%MASTRA_EXPERIMENTAL_UI%%/g, process.env.MASTRA_EXPERIMENTAL_UI || 'false')
       .replace(/%%MASTRA_AGENT_SIGNALS%%/g, process.env.MASTRA_AGENT_SIGNALS ?? 'true')
-      .replace(/%%MASTRA_STUDIO_ATTACHMENT_TYPES%%/g, process.env.MASTRA_STUDIO_ATTACHMENT_TYPES ?? '');
+      .replace(
+        /%%MASTRA_STUDIO_ATTACHMENT_TYPES%%/g,
+        // Sanitized to MIME-legal characters: the value lands in a JS string literal.
+        (process.env.MASTRA_STUDIO_ATTACHMENT_TYPES ?? '').replace(/[^a-zA-Z0-9.+*/, -]/g, ''),
+      );
   },
 });
 
