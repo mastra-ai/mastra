@@ -61,6 +61,93 @@ describe('validate', () => {
     await expect(validate(filePath, { moduleResolveMapLocation: moduleMapPath })).rejects.toThrow();
   }, 10000);
 
+  it('should resolve named imports from stubbed externals', async () => {
+    const filePath = join(tempDir, 'stubbed-external.js');
+    await writeFile(
+      filePath,
+      `
+        import { pgTable, text } from 'custom-user-external/pg-core';
+
+        export const users = pgTable('users', { id: text('id') });
+      `,
+    );
+
+    await expect(
+      validate(filePath, {
+        moduleResolveMapLocation: moduleMapPath,
+        stubbedExternals: ['custom-user-external'],
+        stubbedExternalExports: {
+          'custom-user-external/pg-core': ['pgTable', 'text'],
+        },
+      }),
+    ).resolves.toBeUndefined();
+  }, 10000);
+
+  it('should resolve namespace imports from the real external when Rollup only reports namespace usage', async () => {
+    const packageDir = join(tempDir, 'node_modules', 'custom-user-external');
+    await mkdir(packageDir, { recursive: true });
+    await writeFile(
+      join(packageDir, 'package.json'),
+      JSON.stringify({
+        type: 'module',
+        exports: {
+          './pg-core': './pg-core.js',
+        },
+      }),
+    );
+    await writeFile(
+      join(packageDir, 'pg-core.js'),
+      `
+        export function pgTable() {
+          return {};
+        }
+      `,
+    );
+
+    const filePath = join(tempDir, 'stubbed-namespace-external.js');
+    await writeFile(
+      filePath,
+      `
+        import * as pg from 'custom-user-external/pg-core';
+
+        export const users = pg.pgTable('users');
+      `,
+    );
+
+    await expect(
+      validate(filePath, {
+        moduleResolveMapLocation: moduleMapPath,
+        stubbedExternals: ['custom-user-external'],
+        stubbedExternalExports: {
+          'custom-user-external/pg-core': ['*'],
+        },
+      }),
+    ).resolves.toBeUndefined();
+  }, 10000);
+
+  it('should not treat awaited stub calls as pending thenables', async () => {
+    const filePath = join(tempDir, 'stubbed-external-await.js');
+    await writeFile(
+      filePath,
+      `
+        import { connect } from 'custom-user-external/client';
+
+        await connect();
+        throw new Error('validation continued after awaited stub');
+      `,
+    );
+
+    await expect(
+      validate(filePath, {
+        moduleResolveMapLocation: moduleMapPath,
+        stubbedExternals: ['custom-user-external'],
+        stubbedExternalExports: {
+          'custom-user-external/client': ['connect'],
+        },
+      }),
+    ).rejects.toThrow('validation continued after awaited stub');
+  }, 10000);
+
   it('should reject when file does not exist', async () => {
     const filePath = join(tempDir, 'does-not-exist.js');
 

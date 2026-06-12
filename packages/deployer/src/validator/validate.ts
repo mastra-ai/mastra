@@ -68,7 +68,13 @@ export function validate(
     injectESMShim = false,
     moduleResolveMapLocation,
     stubbedExternals = [],
-  }: { injectESMShim?: boolean; moduleResolveMapLocation: string; stubbedExternals?: string[] },
+    stubbedExternalExports = {},
+  }: {
+    injectESMShim?: boolean;
+    moduleResolveMapLocation: string;
+    stubbedExternals?: string[];
+    stubbedExternalExports?: Record<string, string[]>;
+  },
 ) {
   let prefixCode = '';
   if (injectESMShim) {
@@ -110,6 +116,7 @@ globalThis.__dirname = dirname(__filename);
         ...process.env,
         MODULE_MAP: `${moduleResolveMapLocation}`,
         STUBBED_EXTERNALS: JSON.stringify(stubbedExternals),
+        STUBBED_EXTERNAL_EXPORTS: JSON.stringify(stubbedExternalExports),
       },
       cwd: dirname(file),
     },

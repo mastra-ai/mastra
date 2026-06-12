@@ -172,12 +172,14 @@ async function validateFile(
     logger,
     workspaceMap,
     stubbedExternals,
+    stubbedExternalExports,
   }: {
     binaryMapData: Record<string, string[]>;
     moduleResolveMapLocation: string;
     logger: IMastraLogger;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     stubbedExternals: string[];
+    stubbedExternalExports: Record<string, string[]>;
   },
 ) {
   try {
@@ -187,6 +189,7 @@ async function validateFile(
         moduleResolveMapLocation,
         injectESMShim: false,
         stubbedExternals,
+        stubbedExternalExports,
       });
     }
   } catch (err) {
@@ -201,6 +204,7 @@ async function validateFile(
           moduleResolveMapLocation,
           injectESMShim: true,
           stubbedExternals,
+          stubbedExternalExports,
         });
         errorToHandle = null;
       } catch (err) {
@@ -234,6 +238,7 @@ async function validateOutput(
     projectRoot,
     workspaceMap,
     depsVersionInfo,
+    stubbedExternals,
   }: {
     output: (OutputChunk | OutputAsset)[];
     reverseVirtualReferenceMap: Map<string, string>;
@@ -242,6 +247,7 @@ async function validateOutput(
     projectRoot: string;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     depsVersionInfo: Map<string, ExternalDependencyInfo>;
+    stubbedExternals: string[];
   },
   logger: IMastraLogger,
 ) {
@@ -274,6 +280,21 @@ async function validateOutput(
     binaryMapData = JSON.parse(binaryMap);
   }
 
+  const stubbedExternalExports: Record<string, string[]> = {};
+  for (const file of output) {
+    if (file.type === 'asset') {
+      continue;
+    }
+
+    for (const [specifier, bindings] of Object.entries(file.importedBindings)) {
+      if (!stubbedExternals.some(external => isDependencyPartOfPackage(specifier, external))) {
+        continue;
+      }
+
+      stubbedExternalExports[specifier] = [...new Set([...(stubbedExternalExports[specifier] ?? []), ...bindings])];
+    }
+  }
+
   for (const file of output) {
     if (file.type === 'asset') {
       continue;
@@ -290,7 +311,8 @@ async function validateOutput(
       moduleResolveMapLocation: join(outputDir, 'module-resolve-map.json'),
       logger,
       workspaceMap,
-      stubbedExternals: [...GLOBAL_EXTERNALS, ...DEPS_TO_IGNORE],
+      stubbedExternals,
+      stubbedExternalExports,
     });
   }
 
@@ -498,6 +520,10 @@ export async function analyzeBundle(
     }
   }
 
+  const stubbedExternals = [
+    ...new Set([...GLOBAL_EXTERNALS, ...DEPS_TO_IGNORE, ...userExternals, ...allUsedExternals.keys()]),
+  ];
+
   const result = await validateOutput(
     {
       output,
@@ -507,6 +533,7 @@ export async function analyzeBundle(
       projectRoot: workspaceRoot || projectRoot,
       workspaceMap,
       depsVersionInfo,
+      stubbedExternals,
     },
     logger,
   );
