@@ -1,4 +1,4 @@
-import { Txt, PanelSeparator, CollapsiblePanel } from '@mastra/playground-ui';
+import { Txt, PanelSeparator, CollapsiblePanel, PanelDrawer, useIsMobile } from '@mastra/playground-ui';
 import { Group, useDefaultLayout } from 'react-resizable-panels';
 
 import { AgentPlaygroundConfig } from './agent-playground-config';
@@ -143,10 +143,52 @@ export function AgentPlaygroundView({
   onOpenPr,
   isViewingPreviousVersion,
 }: AgentPlaygroundViewProps) {
+  const isMobile = useIsMobile();
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     id: `agent-playground`,
     storage: localStorage,
   });
+
+  // Side-by-side resizable panels don't fit small viewports: the chat takes
+  // the full width and the configuration moves into an edge drawer.
+  if (isMobile) {
+    return (
+      <div className="relative flex h-full flex-col overflow-hidden">
+        <div className="min-h-0 flex-1">
+          <AgentPlaygroundTestChat
+            agentId={agentId}
+            agentName={agentName}
+            modelVersion={modelVersion}
+            agentVersionId={agentVersionId}
+            hasMemory={hasMemory}
+          />
+        </div>
+        <PanelDrawer direction="left" label="Open configuration">
+          <LeftPanel
+            agentId={agentId}
+            activeVersionId={activeVersionId}
+            selectedVersionId={selectedVersionId}
+            latestVersionId={latestVersionId}
+            onVersionSelect={onVersionSelect}
+            isDirty={isDirty}
+            isSavingDraft={isSavingDraft}
+            isPublishing={isPublishing}
+            hasDraft={hasDraft}
+            readOnly={readOnly}
+            isCodeSourceAgent={isCodeSourceAgent}
+            showCodeModeActions={showCodeModeActions}
+            canOpenPr={canOpenPr}
+            openPrTitle={openPrTitle}
+            onSaveDraft={onSaveDraft}
+            onPublish={onPublish}
+            onDownloadJson={onDownloadJson}
+            onOpenPr={onOpenPr}
+            isViewingPreviousVersion={isViewingPreviousVersion}
+          />
+        </PanelDrawer>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -157,9 +199,8 @@ export function AgentPlaygroundView({
           id="playground-config"
           minSize={420}
           defaultSize="50%"
-          collapsedSize={80}
+          collapsedSize={0}
           collapsible
-          className="overflow-hidden"
         >
           <LeftPanel
             agentId={agentId}
@@ -192,9 +233,8 @@ export function AgentPlaygroundView({
           id="playground-chat"
           minSize={420}
           defaultSize="50%"
-          collapsedSize={80}
+          collapsedSize={0}
           collapsible
-          className="overflow-hidden"
         >
           <div className="flex flex-col h-full overflow-hidden">
             <div className="flex-1 min-h-0">

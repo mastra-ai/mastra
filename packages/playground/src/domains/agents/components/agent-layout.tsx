@@ -1,4 +1,4 @@
-import { CollapsiblePanel, PanelSeparator } from '@mastra/playground-ui';
+import { CollapsiblePanel, PanelDrawer, PanelSeparator, useIsMobile } from '@mastra/playground-ui';
 import { Panel, useDefaultLayout, Group } from 'react-resizable-panels';
 
 export interface AgentLayoutProps {
@@ -10,10 +10,32 @@ export interface AgentLayoutProps {
 }
 
 export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserOverlay }: AgentLayoutProps) => {
+  const isMobile = useIsMobile();
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     id: `agent-layout-v2-${agentId}`,
     storage: localStorage,
   });
+
+  // Resizable side panels are a desktop paradigm; below the breakpoint the
+  // slots move into edge drawers and the main content takes the full width.
+  if (isMobile) {
+    return (
+      <div className="relative h-full w-full overflow-hidden">
+        <div className="h-full w-full min-w-0">{children}</div>
+        {leftSlot && (
+          <PanelDrawer direction="left" label="Open left panel">
+            {leftSlot}
+          </PanelDrawer>
+        )}
+        {rightSlot && (
+          <PanelDrawer direction="right" label="Open right panel">
+            {rightSlot}
+          </PanelDrawer>
+        )}
+        {browserOverlay}
+      </div>
+    );
+  }
 
   return (
     <div className="relative h-full w-full overflow-hidden">
@@ -26,7 +48,7 @@ export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserOve
               minSize={200}
               maxSize={'30%'}
               defaultSize={300}
-              collapsedSize={60}
+              collapsedSize={0}
               collapsible={true}
               className="min-w-0"
             >
@@ -47,7 +69,7 @@ export const AgentLayout = ({ agentId, children, leftSlot, rightSlot, browserOve
               minSize={300}
               maxSize={'50%'}
               defaultSize="30%"
-              collapsedSize={60}
+              collapsedSize={0}
               collapsible={true}
               className="min-w-0"
             >
