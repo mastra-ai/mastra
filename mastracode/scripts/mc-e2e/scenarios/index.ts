@@ -19,6 +19,7 @@ import { mcpServerConfigScenario } from './mcp-server-config.js';
 import { modalAndShellScenario } from './modal-and-shell.js';
 import { modelsPackActivationPersistenceScenario } from './models-pack-activation-persistence.js';
 import { notificationInboxCrudFlowScenario } from './notification-inbox-crud-flow.js';
+import { notificationInboxReloadScenario } from './notification-inbox-reload.js';
 import { notificationInboxToolFlowScenario } from './notification-inbox-tool-flow.js';
 import { notificationSignalRenderingScenario } from './notification-signal-rendering.js';
 import { omGlobalSettingsPersistenceScenario } from './om-global-settings-persistence.js';
@@ -89,6 +90,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'mcp-server-config': mcpServerConfigScenario,
   'models-pack-activation-persistence': modelsPackActivationPersistenceScenario,
   'notification-inbox-crud-flow': notificationInboxCrudFlowScenario,
+  'notification-inbox-reload': notificationInboxReloadScenario,
   'notification-inbox-tool-flow': notificationInboxToolFlowScenario,
   'notification-signal-rendering': notificationSignalRenderingScenario,
   'om-global-settings-persistence': omGlobalSettingsPersistenceScenario,

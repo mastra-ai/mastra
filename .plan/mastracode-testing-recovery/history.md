@@ -1,5 +1,25 @@
 # Mastra Code testing recovery history
 
+
+### Notification inbox reload coverage (2026-06-12)
+
+Added `notification-inbox-reload` as the 64th checked-in TUI e2e scenario. The scenario seeds a persisted thread with `role=signal` notification and notification-summary DB messages, switches to it through `/threads`, and asserts loaded-history reconstruction for the notification summary count/source/hint plus dismissed, archived, and coalesced pending notification cards.
+
+Focused verification:
+
+```sh
+pnpm build:core
+pnpm --filter ./mastracode run e2e:test notification-inbox-reload
+```
+
+Break validations:
+
+- Dropping reconstructed notification `status` in `packages/core/src/harness/harness.ts` removed the dismissed/archived/pending status text and failed the scenario after rebuilding core.
+- Forcing reconstructed notification-summary `pending` to `0` changed the loaded summary title and failed the scenario after rebuilding core.
+- Changing `NotificationSummaryComponent` guidance copy away from `notification_inbox` failed the scenario once core dist was rebuilt clean.
+
+The `Chat: Notification inbox signals` tracker row is now validated for TUI-visible behavior: live urgent delivery, active summary + inbox read delivery, CRUD/search transitions, and loaded-history notification/summary signal reload are covered. Backend-only storage migration breadth remains appropriate for core/storage tests.
+
 ## 2026-06-03
 
 ### Context

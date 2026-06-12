@@ -32,6 +32,7 @@ export type ScenarioName =
   | 'mcp-server-config'
   | 'models-pack-activation-persistence'
   | 'notification-inbox-crud-flow'
+  | 'notification-inbox-reload'
   | 'notification-inbox-tool-flow'
   | 'notification-signal-rendering'
   | 'om-settings'

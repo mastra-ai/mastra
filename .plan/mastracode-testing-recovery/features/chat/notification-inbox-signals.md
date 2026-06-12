@@ -76,10 +76,11 @@
 - `mastracode/scripts/mc-e2e/scenarios/notification-signal-rendering.ts` — checked-in PTY e2e coverage for a custom entrypoint that emits urgent `agent.sendNotificationSignal()` into the active TUI thread, renders the `notification from github` card with priority/kind/status and alert body, and verifies the captured AIMock request body includes the notification contents.
 - `mastracode/scripts/mc-e2e/scenarios/notification-inbox-tool-flow.ts` — checked-in PTY e2e coverage for active medium-priority summary delivery followed by an AIMock-driven `notification_inbox read` tool call; asserts the summary prompt, delivered detail card, and read-result follow-up through the real TUI.
 - `mastracode/scripts/mc-e2e/scenarios/notification-inbox-crud-flow.ts` — checked-in PTY e2e coverage for deterministic seeded notification records managed through AIMock-driven `notification_inbox list`, `markSeen`, `dismiss`, `archive`, and `search`; asserts list-only visibility plus searchable `seen`, `dismissed`, and `archived` status transitions in the real TUI.
+- `mastracode/scripts/mc-e2e/scenarios/notification-inbox-reload.ts` — checked-in PTY e2e coverage for persisted `role=signal` notification and notification-summary DB messages reloaded through `/threads`; asserts loaded-history summary counts/hint plus dismissed, archived, and coalesced pending notification-card status/body reconstruction.
 
 ## Missing tests
 
-- Persistence/reload regression covering pending, delivered, seen, dismissed, archived, and coalesced notification records across a real storage backend.
+- Backend-only storage migration/reload breadth for notification records across non-memory storage implementations can stay in core/storage-focused tests; the TUI-visible live, tool, CRUD/search, and loaded-history signal paths are covered.
 
 ## Known risks / regressions
 

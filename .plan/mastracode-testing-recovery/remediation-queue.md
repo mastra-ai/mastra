@@ -3,7 +3,7 @@
 ## Current state
 
 - Checked-in TUI e2e coverage is no longer missing for any tracker row.
-- 25 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
+- 24 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
 - Keep the user-realism rule: drive behavior through terminal input, slash commands, AIMock fixtures, deterministic pre-launch config/DB seeds, or approved external signal APIs for notification/state-signal origins. Do not emit Harness internals or mutate runtime display state directly.
 
 ## Priority queue
@@ -24,9 +24,9 @@
 - Rows: `Chat: Notification inbox signals`, `Chat: Processor state signals`.
 - Completed: `notification-inbox-tool-flow` sends a public medium-priority notification signal during an active run, renders the active summary card, then uses AIMock to call `notification_inbox read` and asserts the delivered details render in the same TUI thread.
 - Completed: `notification-inbox-crud-flow` seeds deterministic notification records, uses AIMock to call `notification_inbox list`, `markSeen`, `dismiss`, `archive`, and `search`, and asserts list-only visibility plus searchable `seen`, `dismissed`, and `archived` status transitions in the real TUI.
+- Completed: `notification-inbox-reload` seeds persisted notification and notification-summary signal DB messages, reloads them through `/threads`, and asserts loaded-history summary counts/hint plus dismissed, archived, and coalesced pending notification cards.
 - Completed: `state-signal-reload` seeds a persisted state signal DB message, reloads it through `/threads`, and asserts loaded-history `State delta: browser` rendering with the persisted preview.
 - Proposed scenarios:
-  - `notification-reload`: seed notification signal/message history and assert summary/provenance survives `/threads` reload.
   - `state-signal-browser-pruning`: drive a browser-processor-backed state source or sanitized long-session fixture to verify live browser snapshot/delta projection and pruning behavior.
 - Fixture/data needs: sanitized notification/state-signal DB rows; AIMock `notification_inbox` tool-call fixtures.
 
