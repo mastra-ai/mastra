@@ -11,3 +11,5 @@ Fixed agent runs hanging or stopping silently when a model refuses a turn. Anthr
 **Avoided the refusal in the first place:** when the harness runs `claude-fable-5`, it now automatically enables Anthropic's server-side fallback to `claude-opus-4-8` (`providerOptions.anthropic.fallbacks`). If fable-5's safety classifiers block a turn, Anthropic transparently retries it on the fallback model and returns that answer. If the whole chain still refuses, the run ends on the terminal `content-filter` error state described above.
 
 **Made the fallback visible:** when a turn is served by a fallback model (reported via `fallback_message` entries in `providerMetadata.anthropic.iterations`), the harness now emits an `info` event naming the model that actually generated the response, so users know the selected model declined the turn.
+
+**Attributed tracing to the serving model:** the `MODEL_GENERATION` span's `responseModel` attribute now reports the fallback model when a server-side fallback served the turn, so tracing exporters (Langfuse, etc.) attribute usage and cost to the model that actually generated the response instead of the requested model.
