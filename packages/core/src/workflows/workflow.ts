@@ -2356,9 +2356,11 @@ export class Workflow<
       stepResults: {},
     });
 
-    const existingRun = await this.getWorkflowRunById(runIdToUse, {
-      withNestedWorkflows: false,
-    });
+    const existingRun = shouldPersistSnapshot
+      ? await this.getWorkflowRunById(runIdToUse, {
+          withNestedWorkflows: false,
+        })
+      : null;
 
     // Check if run exists in persistent storage (not just in-memory)
     const existsInStorage = existingRun && !existingRun.isFromInMemory;

@@ -1,7 +1,9 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
+import { InMemoryStore } from '../../storage';
 import type { ChunkType } from '../../stream/types';
 import { createTool, Tool } from '../../tools';
 import { createWorkflow, createStep } from '../../workflows';
@@ -325,6 +327,31 @@ describe('Working memory tool context propagation', () => {
     }
 
     expect(toolNames).not.toContain('updateWorkingMemory');
+  });
+
+  it('should keep internal stream workflows out of Mastra workflow storage', async () => {
+    const storage = new InMemoryStore();
+    const agent = new Agent({
+      id: 'internal-stream-workflow-test',
+      name: 'Internal Stream Workflow Test',
+      instructions: 'You are a helpful agent.',
+      model: createSimpleMockModel(),
+    });
+    const mastra = new Mastra({
+      agents: { internalStreamWorkflowTest: agent },
+      storage,
+      logger: false,
+    });
+
+    const stream = await mastra.getAgent('internalStreamWorkflowTest').stream('Hello', { maxSteps: 1 });
+
+    for await (const _ of stream.fullStream) {
+      // consume
+    }
+
+    const workflowsStore = await storage.getStore('workflows');
+    const workflowRuns = await workflowsStore?.listWorkflowRuns({ workflowName: 'execution-workflow' });
+    expect(workflowRuns?.total ?? 0).toBe(0);
   });
 
   it('should provide memory context when updateWorkingMemory is called inside a workflow step', async () => {
