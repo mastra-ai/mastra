@@ -1,6 +1,24 @@
 # Mastra Code testing recovery history
 
 
+### API key multi-provider delete coverage (2026-06-12)
+
+Added `api-key-multi-provider-delete` as the 93rd checked-in TUI e2e scenario. The scenario seeds stored `302ai` and Anthropic API keys, opens `/api-keys`, proves provider ordering shows `302ai` before `anthropic`, deletes the selected `302ai` key, then uses shell passthrough to prove the deleted provider is cleared from both `auth.json` and the current env projection while Anthropic remains stored and env-backed.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test api-key-multi-provider-delete
+```
+
+Break validations:
+
+- Reversed provider sorting; the scenario failed because `302ai` no longer appeared in the initial sorted viewport.
+- Removed the wrong provider key during Delete; the scenario failed because `302ai` stayed stored.
+- Skipped process-env cleanup after stored-key deletion; the scenario failed because `302ai` stayed visible as env-backed instead of `not set`.
+
+The Settings row remains `needs-follow-up`: direct `/api-keys` provider ordering and multi-provider delete isolation are now covered, while remaining settings submenu navigation breadth and deeper wizard/reload parity remain follow-up work.
+
 ### Subagent model startup restore coverage (2026-06-12)
 
 Added `subagent-model-startup-restore` as the 92nd checked-in TUI e2e scenario. The scenario seeds an active custom model pack before launch, creates a thread through the real TUI, delegates to the Explore subagent, verifies the completed subagent footer uses the restored fast model (`openai/gpt-5.5`) instead of the parent/build default, and proves the persisted settings still carry the active custom pack/defaults.

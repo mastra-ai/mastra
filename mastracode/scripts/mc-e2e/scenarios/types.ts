@@ -3,6 +3,7 @@ export type ScenarioName =
   | 'branch-context-long-name'
   | 'active-signal-followup'
   | 'api-key-delete-env'
+  | 'api-key-multi-provider-delete'
   | 'api-key-prompt'
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
