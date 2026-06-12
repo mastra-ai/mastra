@@ -8,7 +8,7 @@
  * Preview / VLC / browsers.
  */
 
-import { join, relative, resolve, sep } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 import { z } from 'zod';
 
@@ -106,7 +106,7 @@ function resolveOutputPath(id: string, outputDir: string, requestedPath?: string
   const baseDir = recordingsDir(outputDir);
   const outputPath = requestedPath ? resolve(requestedPath) : defaultOutputPath(id, outputDir);
   const rel = relative(baseDir, outputPath);
-  if (rel.startsWith('..') || rel === '..' || rel.includes(`..${sep}`) || resolve(outputPath) === baseDir) {
+  if (rel === '' || isAbsolute(rel) || rel === '..' || rel.startsWith(`..${sep}`)) {
     throw new Error(`Recording outputPath must be inside ${baseDir}`);
   }
   return outputPath;
