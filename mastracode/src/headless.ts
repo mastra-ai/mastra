@@ -616,9 +616,11 @@ export async function headlessMain(predrainedInput?: string | null): Promise<nev
   const { harness, mcpManager, effectiveDefaults } = result;
 
   if (mcpManager?.hasServers()) {
-    mcpManager.initInBackground().catch(err => {
+    try {
+      await mcpManager.initInBackground();
+    } catch (err) {
       process.stderr.write(`Warning: MCP server initialization failed: ${(err as Error).message ?? err}\n`);
-    });
+    }
   }
 
   setupDebugLogging();

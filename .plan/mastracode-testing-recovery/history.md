@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Headless MCP tool availability coverage (2026-06-12)
+
+Added `headless-mcp-tool-availability` as the 85th checked-in e2e scenario. The scenario launches a delayed, header-protected Streamable HTTP MCP server through isolated global MCP config, runs `headlessMain` with AIMock, and verifies the namespaced MCP tool result (`MC_HEADLESS_MCP_RESULT:headless-e2e:ok`) reaches the follow-up model request. The product fix makes headless startup await MCP initialization before sending the first prompt so the first provider turn has the configured MCP tools available.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test headless-mcp-tool-availability
+```
+
+Break validations:
+
+- Restoring background-only headless MCP init made the delayed server race the first model turn; the AIMock follow-up saw `Tool "e2e_headless_mcp_delayed_lookup" not found` instead of the MCP payload.
+- Dropping HTTP request headers from MCP server definitions made the protected server reject requests, so the MCP payload never reached the follow-up request.
+- Disabling MCP dynamic-tool injection removed the connected MCP tool from the runtime tool map, again preventing the real MCP payload from reaching the model follow-up.
+
+The MCP server configuration row remains `needs-follow-up`; this chunk closes headless HTTP MCP tool availability, while OAuth token persistence/refresh remains.
+
+
 ### Long-running MCP tool coverage (2026-06-12)
 
 Added `mcp-long-running-tool` as the 84th checked-in TUI e2e scenario, committed as `7b0d2f3e64`. The scenario launches a local Streamable HTTP MCP server with a header-protected `slow_lookup` tool, waits beyond a short timeout budget before returning `MC_MCP_LONG_TOOL_RESULT:timeout-e2e:complete`, invokes the namespaced tool through AIMock, and verifies the delayed tool result reaches the follow-up model request.

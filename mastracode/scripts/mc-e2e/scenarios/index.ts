@@ -23,6 +23,7 @@ import { githubSignalsCommandScenario } from './github-signals-command.js';
 import { githubSignalsIncrementalScenario } from './github-signals-incremental.js';
 import { githubSignalsUnsubscribeReloadScenario } from './github-signals-unsubscribe-reload.js';
 import { harnessApiConfigScenario } from './harness-api-config.js';
+import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { mcpHttpToolCallScenario } from './mcp-http-tool-call.js';
 import { mcpLongRunningToolScenario } from './mcp-long-running-tool.js';
@@ -113,6 +114,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'github-signals-incremental': githubSignalsIncrementalScenario,
   'github-signals-unsubscribe-reload': githubSignalsUnsubscribeReloadScenario,
   'harness-api-config': harnessApiConfigScenario,
+  'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,
   'modal-and-shell': modalAndShellScenario,

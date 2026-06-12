@@ -25,6 +25,7 @@ export type ScenarioName =
   | 'github-signals-incremental'
   | 'github-signals-unsubscribe-reload'
   | 'harness-api-config'
+  | 'headless-mcp-tool-availability'
   | 'openai-strict-schema'
   | 'plan-approval-goal-handoff'
   | 'plan-approval-handoff'

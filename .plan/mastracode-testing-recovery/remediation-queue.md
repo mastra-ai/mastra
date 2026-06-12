@@ -45,6 +45,7 @@
   - Completed: `mcp-selector-reconnect` starts with a failed HTTP MCP server, drives the interactive `/mcp` selector reconnect submenu until the server/tool row is connected, then rewrites project config and uses selector `r` reload-all to surface a second connected HTTP server/tool.
   - Completed: `mcp-skipped-validation` seeds invalid MCP config entries and verifies both `/mcp status` and the interactive selector render skipped validation reasons for ambiguous command+URL, malformed URL, invalid OAuth redirect, and missing-field servers.
   - Completed: `mcp-long-running-tool` launches a local Streamable HTTP MCP server with a delayed tool result, invokes it through AIMock, and proves the delayed payload reaches the model follow-up instead of timing out under a short result budget.
+  - Completed: `headless-mcp-tool-availability` launches a delayed header-protected HTTP MCP server through global config, runs headless mode, and proves headless waits for MCP init so the namespaced tool result reaches the follow-up AIMock request.
   - Completed: `browser-toggle-attach` seeds AgentBrowser CDP settings, drives `/browser on`, verifies enabled `/browser status` with the CDP endpoint, proves settings persisted, and uses AIMock request verification to confirm browser tools reached the next model turn.
 - Fixture/data needs: local mock MCP server fixture, optional OAuth/token fixture if testing auth refresh; no live browser credentials.
 

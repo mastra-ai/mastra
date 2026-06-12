@@ -81,10 +81,10 @@
 - `mastracode/scripts/mc-e2e/scenarios/mcp-selector-reconnect.ts` — real PTY coverage for interactive `/mcp` selector actions: starts with a failed HTTP server, makes it available, reconnects it through the selector submenu, rewrites project config, and uses selector `r` reload-all to refresh the overlay with a second HTTP server/tool.
 - `mastracode/scripts/mc-e2e/scenarios/mcp-skipped-validation.ts` — real PTY coverage for invalid MCP config entries: seeds ambiguous command+URL, malformed URL, invalid OAuth redirect, and missing-field servers, then asserts skipped validation reasons in both `/mcp status` and the interactive selector.
 - `mastracode/scripts/mc-e2e/scenarios/mcp-long-running-tool.ts` — real PTY + AIMock coverage for a delayed HTTP MCP tool call: waits beyond a short timeout budget, returns `MC_MCP_LONG_TOOL_RESULT:timeout-e2e:complete`, and proves the result reaches the follow-up model request.
+- `mastracode/scripts/mc-e2e/scenarios/headless-mcp-tool-availability.ts` — real PTY-launched headless coverage for global HTTP MCP config: starts a delayed header-protected Streamable HTTP server, runs `headlessMain`, proves headless waits for MCP init before the first model turn, and verifies the namespaced tool result reaches the follow-up AIMock request.
 
 ## Missing tests
 
-- Headless test proving HTTP MCP tools are initialized and available for a headless run.
 - OAuth flow test covering a real protected HTTP MCP server's token persistence/refresh callback behavior and failure display; current coverage verifies config/provider/storage construction through mocks.
 
 ## Known risks / regressions
@@ -93,7 +93,7 @@
 - Programmatic configs have highest priority; a typo or duplicate server name can intentionally shadow a working file-based server.
 - Invalid entries are skipped silently except via `/mcp` status/selector; users may not notice configuration typos until they inspect MCP status.
 - OAuth token storage is keyed by project/server/url/redirect/client/scopes; changing any field creates a new token file.
-- Most lower-level tests mock `@mastra/mcp`; real PTY coverage now covers Streamable HTTP tool calls, selector reconnect/reload status refresh, skipped validation display, and a delayed long-running MCP result. OAuth and headless MCP tool availability remain unproven.
+- Most lower-level tests mock `@mastra/mcp`; real PTY coverage now covers Streamable HTTP tool calls, selector reconnect/reload status refresh, skipped validation display, a delayed long-running MCP result, and headless HTTP MCP tool availability. OAuth remains unproven.
 
 ## Verification checklist
 
