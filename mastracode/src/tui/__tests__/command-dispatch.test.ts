@@ -150,15 +150,15 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.showError).toHaveBeenCalledWith(state, 'Unknown command: models:pack');
   });
 
-  it('routes /judge to handleJudgeCommand', async () => {
+  it('routes /goal judge to handleGoalCommand', async () => {
     const state = { customSlashCommands: [] } as any;
     const ctx = {} as any;
 
-    const handled = await dispatchSlashCommand('/judge', state, () => ctx);
+    const handled = await dispatchSlashCommand('/goal judge', state, () => ctx);
 
     expect(handled).toBe(true);
-    expect(mocks.handleJudgeCommand).toHaveBeenCalledTimes(1);
-    expect(mocks.handleJudgeCommand).toHaveBeenCalledWith(ctx);
+    expect(mocks.handleGoalCommand).toHaveBeenCalledTimes(1);
+    expect(mocks.handleGoalCommand).toHaveBeenCalledWith(ctx, ['judge']);
   });
 
   it('routes /github to handleGithubCommand', async () => {

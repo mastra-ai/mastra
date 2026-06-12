@@ -7,7 +7,7 @@ import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
-import { TASKS_STATE_ID } from '@mastra/core/tools';
+import { GOAL_STATE_ID, TASKS_STATE_ID } from '@mastra/core/tools';
 import chalk from 'chalk';
 import {
   insertChatComponentWithBoundarySpacing,
@@ -324,7 +324,9 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
 
   // The `tasks` state signal is rendered by the pinned task list UI (replayed
   // from task tool history), so skip its raw <current-task-list> snapshot here.
-  if (stateSignalPart && stateSignalPart.stateId === TASKS_STATE_ID) {
+  // The `goal` state signal is surfaced by the goal/judge UI, so likewise skip
+  // its raw <current-objective> snapshot.
+  if (stateSignalPart && (stateSignalPart.stateId === TASKS_STATE_ID || stateSignalPart.stateId === GOAL_STATE_ID)) {
     return;
   }
 
