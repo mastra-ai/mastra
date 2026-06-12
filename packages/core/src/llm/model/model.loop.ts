@@ -13,6 +13,7 @@ import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
 
 import type { ModelLoopStreamArgs } from './model.loop.types';
+import { resolveResponseModelId } from './server-side-fallback';
 import type { MastraModelOptions } from './shared.types';
 
 export class MastraLLMVNext extends MastraBase {
@@ -302,7 +303,10 @@ export class MastraLLMVNext extends MastraBase {
               attributes: {
                 finishReason: props?.finishReason,
                 responseId: props?.response.id,
-                responseModel: props?.response.modelId,
+                // Account for Anthropic server-side fallbacks: when the primary
+                // model declines a turn and a fallback serves it, attribute the
+                // response to the model that actually generated it.
+                responseModel: resolveResponseModelId(props?.providerMetadata, props?.response.modelId),
               },
               usage: props?.totalUsage,
               providerMetadata: props?.providerMetadata,
