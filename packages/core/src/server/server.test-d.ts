@@ -6,6 +6,7 @@ import type { MastraAuthProvider } from './auth';
 import { CompositeAuth } from './composite-auth';
 import { SimpleAuth } from './simple-auth';
 import { registerApiRoute } from './index';
+import type { Methods, ServerConfig } from './index';
 
 /**
  * Type tests for registerApiRoute
@@ -143,5 +144,23 @@ describe('CORS type tests', () => {
         credentials: true,
       },
     });
+  });
+});
+
+describe('server entrypoint type exports', () => {
+  it('allows declaring a server config in a separate module', () => {
+    const server: ServerConfig = {
+      port: 4111,
+      middleware: async (_c, next) => {
+        await next();
+      },
+    };
+
+    new Mastra({ server });
+  });
+
+  it('allows naming the HTTP method union', () => {
+    const protectedMethods: Methods[] = ['POST', 'PUT', 'DELETE'];
+    expectTypeOf(protectedMethods).items.toEqualTypeOf<Methods>();
   });
 });
