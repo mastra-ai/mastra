@@ -62,6 +62,30 @@ export const runningAgentExperiment: DatasetExperiment = {
   completedAt: null,
 };
 
+/**
+ * Failed during async setup: the trigger answered `pending`, then setup found
+ * no source experiment — the runner marked the run `failed` and stamped
+ * `metadata.failureReason`. No results exist.
+ */
+export const failedAtSetupExperiment: DatasetExperiment = {
+  ...experimentBase,
+  id: 'exp-failed-setup',
+  name: 'replay-of-missing-source',
+  status: 'failed',
+  totalItems: 0,
+  succeededCount: 0,
+  failedCount: 0,
+  startedAt: null,
+  completedAt: null,
+  metadata: {
+    toolReplay: { fromExperimentId: 'exp-gone', onMiss: 'error' },
+    failureReason: {
+      id: 'EXPERIMENT_TOOL_REPLAY_SOURCE_NOT_FOUND',
+      message: "Tool replay source experiment 'exp-gone' was not found.",
+    },
+  },
+};
+
 export const completedWorkflowExperiment: DatasetExperiment = {
   ...experimentBase,
   id: 'exp-workflow',

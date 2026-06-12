@@ -6,6 +6,7 @@ import {
   errorOutcomesCallFlowReport,
   expectationFailedReport,
   expectationFailedResult,
+  failedAtSetupExperiment,
   failedReplayResult,
   junkMarkerExperiment,
   liveExperiment,
@@ -20,6 +21,7 @@ import type { ReplayTapeSpan } from '../tool-replay';
 import {
   buildReplayTape,
   classifyReplayDivergence,
+  getExperimentFailureReason,
   getReplayMarker,
   getToolReplayErrorLabel,
   getToolReplayReport,
@@ -77,6 +79,36 @@ describe('getReplayMarker / isReplayExperiment', () => {
         metadata: { toolReplay: { onMiss: 'error', mockedTools: ['weatherInfo', 42, 'sendEmail'] } },
       }),
     ).toEqual({ onMiss: 'error', mockedTools: ['weatherInfo', 'sendEmail'] });
+  });
+});
+
+describe('getExperimentFailureReason', () => {
+  it('reads the exact stamped shape', () => {
+    expect(getExperimentFailureReason(failedAtSetupExperiment)).toEqual({
+      id: 'EXPERIMENT_TOOL_REPLAY_SOURCE_NOT_FOUND',
+      message: "Tool replay source experiment 'exp-gone' was not found.",
+    });
+  });
+
+  it('ignores experiments without metadata or without the key', () => {
+    expect(getExperimentFailureReason(liveExperiment)).toBeNull();
+    expect(getExperimentFailureReason(replayExperiment)).toBeNull();
+  });
+
+  it('ignores user-owned junk under the key', () => {
+    expect(getExperimentFailureReason({ metadata: { failureReason: 'it broke' } })).toBeNull();
+    expect(getExperimentFailureReason({ metadata: { failureReason: 42 } })).toBeNull();
+    expect(getExperimentFailureReason({ metadata: { failureReason: ['EXPERIMENT_NO_ITEMS'] } })).toBeNull();
+    expect(getExperimentFailureReason({ metadata: { failureReason: null } })).toBeNull();
+  });
+
+  it('requires both id and message to be strings', () => {
+    expect(getExperimentFailureReason({ metadata: { failureReason: { id: 'EXPERIMENT_NO_ITEMS' } } })).toBeNull();
+    expect(getExperimentFailureReason({ metadata: { failureReason: { message: 'no items' } } })).toBeNull();
+    expect(getExperimentFailureReason({ metadata: { failureReason: { id: 1, message: 'no items' } } })).toBeNull();
+    expect(
+      getExperimentFailureReason({ metadata: { failureReason: { id: 'EXPERIMENT_NO_ITEMS', message: 7 } } }),
+    ).toBeNull();
   });
 });
 

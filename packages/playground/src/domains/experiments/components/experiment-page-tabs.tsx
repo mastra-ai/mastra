@@ -25,7 +25,7 @@ import { useState, useMemo, useCallback } from 'react';
 import { useExperimentTrace } from '../hooks/use-experiment-trace';
 import { useReplayAggregates } from '../hooks/use-replay-aggregates';
 import { useSourceExperimentResults } from '../hooks/use-source-experiment-results';
-import { getReplayMarker, getToolReplayReport } from '../utils/tool-replay';
+import { getExperimentFailureReason, getReplayMarker, getToolReplayReport } from '../utils/tool-replay';
 import { ExperimentReplaySummary } from './experiment-replay-summary';
 import { ExperimentResultPanel } from './experiment-result-panel';
 import { ExperimentResultsList } from './experiment-results-list';
@@ -170,6 +170,14 @@ export function ExperimentPageTabs({
     enabled: isReplay && Boolean(replayMarker?.fromExperimentId) && Boolean(featuredResult),
   });
   const originalResult = featuredResult ? (sourceResults?.get(featuredResult.itemId) ?? null) : null;
+
+  // Async setup failures (unknown replay source, no eligible items, …) leave
+  // the experiment failed with zero results and no error anywhere else — the
+  // stamped metadata.failureReason is the only explanation, so the Summary
+  // tab (the page a confused user lands on) surfaces it.
+  const failureReason = experiment ? getExperimentFailureReason(experiment) : null;
+  const failedAtSetup =
+    experiment?.status === 'failed' && failureReason !== null && (experiment.totalItems === 0 || results.length === 0);
 
   const scorerIds = useMemo(() => {
     if (!scoresByExperimentId) return [];
@@ -319,6 +327,14 @@ export function ExperimentPageTabs({
       </TabList>
 
       <TabContent value="summary" className="overflow-y-auto mt-5">
+        {failedAtSetup && failureReason && (
+          <Notice variant="destructive" title="Failed at setup" className="mb-5">
+            <Notice.Message>
+              {failureReason.message} <span className="opacity-60">· {failureReason.id}</span>
+            </Notice.Message>
+            <Notice.Message>No items ran — fix the setup issue and trigger the experiment again.</Notice.Message>
+          </Notice>
+        )}
         {replayMarker && (
           <ExperimentReplaySummary
             marker={replayMarker}

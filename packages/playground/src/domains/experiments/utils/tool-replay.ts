@@ -111,6 +111,30 @@ export function getReplayMarker(experiment: Pick<DatasetExperiment, 'metadata'>)
   };
 }
 
+export interface ExperimentFailureReason {
+  id: string;
+  message: string;
+}
+
+/**
+ * Reads the `failureReason` an async-failed experiment is stamped with. The
+ * trigger route answers `pending` before setup runs, so a setup failure
+ * (unknown replay source, no eligible items, …) never crosses HTTP as an
+ * error — `metadata.failureReason` (`{ id, message }`) is the only place the
+ * reason surfaces. Metadata is user-writable, so this matches the exact
+ * stamped shape (plain object with string `id` and `message`), mirroring
+ * getReplayMarker; junk under the key never reads as a failure reason.
+ */
+export function getExperimentFailureReason(
+  experiment: Pick<DatasetExperiment, 'metadata'>,
+): ExperimentFailureReason | null {
+  const candidate = experiment.metadata?.failureReason;
+  if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) return null;
+  const { id, message } = candidate as Record<string, unknown>;
+  if (typeof id !== 'string' || typeof message !== 'string') return null;
+  return { id, message };
+}
+
 /** "a, b, c +2" — joined mocked-tool names capped for compact UI surfaces. */
 export function formatMockedToolNames(names: string[], max = 3): string {
   const shown = names.slice(0, max).join(', ');

@@ -7,7 +7,7 @@ import { http, HttpResponse } from 'msw';
 import type { AnchorHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { mockOnlyExperiment, replayExperiment } from '../../__tests__/fixtures/tool-replay';
+import { failedAtSetupExperiment, mockOnlyExperiment, replayExperiment } from '../../__tests__/fixtures/tool-replay';
 import { ExperimentTopArea } from '../experiment-top-area';
 import type { LinkComponentProviderProps } from '@/lib/framework';
 import { LinkComponentProvider } from '@/lib/framework';
@@ -93,6 +93,30 @@ beforeEach(() => {
 });
 
 afterEach(cleanup);
+
+describe('ExperimentTopArea failure reason', () => {
+  it('surfaces the stamped setup-failure reason on a failed experiment', () => {
+    renderTopArea(failedAtSetupExperiment);
+
+    expect(screen.getByText('Failed at setup')).toBeDefined();
+    expect(screen.getByText(/Tool replay source experiment 'exp-gone' was not found\./)).toBeDefined();
+    // The machine-readable id rides along as a muted suffix.
+    expect(screen.getByText(/EXPERIMENT_TOOL_REPLAY_SOURCE_NOT_FOUND/)).toBeDefined();
+  });
+
+  it('renders nothing for user-owned junk under the key', () => {
+    renderTopArea({ ...failedAtSetupExperiment, metadata: { failureReason: 'it broke' } });
+    expect(screen.queryByText('Failed at setup')).toBeNull();
+
+    renderTopArea({ ...failedAtSetupExperiment, metadata: { failureReason: 42 } });
+    expect(screen.queryByText('Failed at setup')).toBeNull();
+  });
+
+  it('renders nothing when the experiment did not fail', () => {
+    renderTopArea({ ...failedAtSetupExperiment, status: 'completed' });
+    expect(screen.queryByText('Failed at setup')).toBeNull();
+  });
+});
 
 describe('ExperimentTopArea tool replay row', () => {
   it('shows the full replay policy — source, on-miss, and matching', () => {

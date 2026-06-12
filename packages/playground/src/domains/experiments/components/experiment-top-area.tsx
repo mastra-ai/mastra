@@ -1,9 +1,9 @@
 import type { DatasetExperiment } from '@mastra/client-js';
-import { DataKeysAndValues, PageLayout } from '@mastra/playground-ui';
+import { DataKeysAndValues, Notice, PageLayout } from '@mastra/playground-ui';
 import { format } from 'date-fns';
 import { useAgents } from '@/domains/agents/hooks/use-agents';
 import { ExperimentStats } from '@/domains/experiments/components/experiment-stats';
-import { getReplayMarker } from '@/domains/experiments/utils/tool-replay';
+import { getExperimentFailureReason, getReplayMarker } from '@/domains/experiments/utils/tool-replay';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 import { useLinkComponent } from '@/lib/framework';
@@ -63,8 +63,20 @@ export function ExperimentTopArea({ experiment }: ExperimentTopAreaProps) {
       : paths.experimentLink(replayMarker.fromExperimentId)
     : null;
 
+  // Async-triggered experiments that fail during setup carry the reason in
+  // metadata.failureReason — without this row a failed-at-setup run shows
+  // zero results and no explanation anywhere in Studio.
+  const failureReason = experiment.status === 'failed' ? getExperimentFailureReason(experiment) : null;
+
   return (
     <PageLayout.TopArea>
+      {failureReason && (
+        <Notice variant="destructive" title="Failed at setup">
+          <Notice.Message>
+            {failureReason.message} <span className="opacity-60">· {failureReason.id}</span>
+          </Notice.Message>
+        </Notice>
+      )}
       <PageLayout.Row>
         <PageLayout.Column>
           <DataKeysAndValues numOfCol={2}>
