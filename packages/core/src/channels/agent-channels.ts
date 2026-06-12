@@ -8,7 +8,12 @@ import type { AgentThreadSubscription } from '../agent/types';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
-import type { InputProcessor, InputProcessorOrWorkflow } from '../processors';
+import type {
+  InputProcessor,
+  InputProcessorOrWorkflow,
+  OutputProcessor,
+  OutputProcessorOrWorkflow,
+} from '../processors';
 import { isProcessorWorkflow } from '../processors';
 import { RequestContext } from '../request-context';
 import type { ApiRoute } from '../server/types';
@@ -28,6 +33,8 @@ import {
   normalizeInlineLinks,
 } from './inline-media';
 import type { InlineLinkRule } from './inline-media';
+import { ChatChannelOutputProcessor, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
+import type { ChatChannelRenderContext } from './output-processor';
 import { ChatChannelProcessor } from './processor';
 import { MastraStateAdapter } from './state-adapter';
 import type { PendingApprovalRecord } from './stream-helpers';
@@ -45,6 +52,7 @@ import type {
 } from './types';
 import { defaultTypingStatus } from './typing-status';
 import type { TypingStatusContext, TypingStatusFn } from './typing-status';
+import { describeWaitUntilContext, resolveWaitUntil } from './wait-until';
 
 /**
  * Manages a single Chat SDK instance for an agent, wiring all adapters
@@ -261,7 +269,12 @@ export class AgentChannels {
         adapters: this.adapters,
         state: this.stateAdapter,
         userName: this.userName,
-        concurrency: { strategy: 'queue' },
+        // Dispatch every incoming message immediately. Concurrency and queueing
+        // for the same thread are handled by the agent signals layer
+        // (ifActive/ifIdle behaviors), so chat-sdk's own lock-based queue would
+        // be redundant — and in serverless runtimes a stale lock from a frozen
+        // Lambda can cause subsequent messages to be queued forever.
+        concurrency: { strategy: 'concurrent' },
         ...this.chatOptions,
       });
 
@@ -609,14 +622,16 @@ export class AgentChannels {
 
             // Pass platform execution context (e.g. Vercel/Cloudflare waitUntil)
             // to the Chat SDK so background processing survives serverless responses.
-            // Hono's `executionCtx` getter throws in Node.js when no ExecutionContext exists.
-            let execCtx: { waitUntil?: (p: Promise<unknown>) => void } | undefined;
+            // Resolution order: bare `waitUntil` fn from config → user resolver → default.
+            const waitUntilFn =
+              self.channelConfig.waitUntil ?? self.channelConfig.resolveWaitUntil?.(c) ?? resolveWaitUntil(c);
+            // TEMP: log context shape so we can diagnose runtime-specific resolution.
+            // Strip before release.
             try {
-              execCtx = c.executionCtx as { waitUntil?: (p: Promise<unknown>) => void } | undefined;
-            } catch {
-              execCtx = undefined;
-            }
-            const waitUntilFn = execCtx?.waitUntil?.bind(execCtx);
+              console.info(
+                `[wait-until] agent-channels resolved=${Boolean(waitUntilFn)} ${JSON.stringify(describeWaitUntilContext(c))}`,
+              );
+            } catch {}
             return webhookHandler(c.req.raw, waitUntilFn ? { waitUntil: waitUntilFn } : undefined);
           };
         },
@@ -684,6 +699,20 @@ export class AgentChannels {
     const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-context');
     if (hasProcessor) return [];
     return [new ChatChannelProcessor()];
+  }
+
+  /**
+   * Returns channel output processors that render the agent's stream to the
+   * originating chat platform. The processor is a no-op for runs that didn't
+   * come in through the channels path (it keys off a marker on
+   * `requestContext` set by `processChatMessage`).
+   *
+   * Skipped if the user already added a processor with the same id.
+   */
+  getOutputProcessors(configuredProcessors: OutputProcessorOrWorkflow[] = []): OutputProcessor[] {
+    const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-render');
+    if (hasProcessor) return [];
+    return [new ChatChannelOutputProcessor()];
   }
 
   /**
@@ -1034,12 +1063,15 @@ export class AgentChannels {
     const requestContext = new RequestContext();
     requestContext.set('channel', channelContext);
 
-    this.ensureThreadSubscription({
-      mastraThreadId: mastraThread.id,
-      resourceId: threadResourceId,
-      chatThread,
-      platform,
-    });
+    // Stash the per-event render deps so `ChatChannelOutputProcessor` can
+    // route the agent's stream to the chat platform. The processor opens an
+    // async queue on the first chunk and hands the iterable to the existing
+    // streaming/static driver. This replaces the previous per-thread
+    // subscription consumer: rendering now happens inline with the run that
+    // produces the chunks, so only the Lambda that won the wake race
+    // (signals reservation) renders the reply.
+    const renderContext = this._buildRenderContext(chatThread, platform);
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, renderContext);
 
     void chatThread.subscribe().catch(err => {
       this.log('debug', 'chatThread.subscribe failed', err);
@@ -1049,7 +1081,7 @@ export class AgentChannels {
     // Otherwise pass the parts array directly — both shapes match AgentSignalContents.
     const signalContents: AgentSignalContents = parts.length === 1 && parts[0]?.type === 'text' ? parts[0].text : parts;
 
-    this.agent.sendMessage(
+    const result = this.agent.sendMessage(
       {
         contents: signalContents,
         attributes,
@@ -1073,6 +1105,24 @@ export class AgentChannels {
         },
       },
     );
+
+    // When this call wakes a new run, drive it to completion before returning.
+    // Without this, serverless runtimes (Vercel, Lambda, etc.) terminate the
+    // invocation as soon as the webhook handler returns and kill the run
+    // mid-flight. `consumeStream()` is idempotent and safe to call alongside
+    // the existing per-thread subscription consumer.
+    if (result.ownerStream) {
+      try {
+        const ownerStream = await result.ownerStream;
+        // Loser Lambda gets undefined: another invocation acquired the lease
+        // and will drive the run. Nothing to do here.
+        if (ownerStream) {
+          await ownerStream.consumeStream();
+        }
+      } catch (err) {
+        this.log('debug', 'ownerStream consume failed', err);
+      }
+    }
   }
 
   /**
@@ -1178,12 +1228,22 @@ export class AgentChannels {
     return placeholder;
   }
 
-  private async consumeAgentStream(
-    stream: AsyncIterable<AgentChunkType<any>>,
+  /**
+   * Build the per-event render dependencies handed to the output processor (or
+   * the legacy `consumeAgentStream` path). Captures the adapter, driver mode,
+   * tool-display config, approval-card stash callbacks, and the typing-status
+   * wrapper as a callable so the processor can apply it after the queue is
+   * created. The returned object is plain data — no streams, no promises —
+   * so it's safe to stash on `requestContext` for the processor to read later.
+   *
+   * @internal Used by `processChatMessage` (via `requestContext`) and by
+   * `consumeAgentStream` for the slash-command / approval-resume paths.
+   */
+  _buildRenderContext(
     chatThread: Thread,
     platform: string,
     approvalContext?: { toolCallId: string; messageId: string },
-  ): Promise<void> {
+  ): ChatChannelRenderContext {
     const adapter = this.adapters[platform]!;
     const adapterConfig = this.adapterConfigs[platform];
     const streaming = this.resolveStreaming(adapterConfig?.streaming);
@@ -1195,23 +1255,7 @@ export class AgentChannels {
       adapterConfig?.formatToolCall,
     );
 
-    // Seed the approval-card stash on resumed runs so the driver can resolve
-    // `messageId` for the incoming `tool-result` even though it never saw the
-    // pre-suspension `tool-call`.
-    if (approvalContext) {
-      this.pendingApprovalCards.set(approvalContext.toolCallId, {
-        messageId: approvalContext.messageId,
-        displayName: '',
-        argsSummary: '',
-        startedAt: Date.now(),
-      });
-    }
-
-    // The streaming driver flips `typingGate.active = true` while a
-    // StreamingPlan post is in flight; the typing-status wrapper reads it
-    // and skips `startTyping` during that window.
     const typingGate = { active: false };
-    const wrapped = this.withTypingStatus(stream, chatThread, platform, adapterConfig, typingGate);
 
     const onApprovalPosted = (toolCallId: string, record: PendingApprovalRecord) => {
       this.pendingApprovalCards.set(toolCallId, record);
@@ -1223,35 +1267,76 @@ export class AgentChannels {
       return r;
     };
 
-    if (streaming.enabled) {
+    return {
+      adapter,
+      chatThread,
+      platform,
+      streaming,
+      toolDisplay,
+      toolDisplayFn,
+      channelToolNames: this.channelToolNames,
+      logger: this.logger,
+      onApprovalPosted,
+      getPendingApproval,
+      takePendingApproval,
+      wrapStream: stream => this.withTypingStatus(stream, chatThread, platform, adapterConfig, typingGate),
+      typingGate,
+      formatError: adapterConfig?.formatError,
+      approvalContext,
+    };
+  }
+
+  private async consumeAgentStream(
+    stream: AsyncIterable<AgentChunkType<any>>,
+    chatThread: Thread,
+    platform: string,
+    approvalContext?: { toolCallId: string; messageId: string },
+  ): Promise<void> {
+    const render = this._buildRenderContext(chatThread, platform, approvalContext);
+
+    // Seed the approval-card stash on resumed runs so the driver can resolve
+    // `messageId` for the incoming `tool-result` even though it never saw the
+    // pre-suspension `tool-call`.
+    if (render.approvalContext) {
+      this.pendingApprovalCards.set(render.approvalContext.toolCallId, {
+        messageId: render.approvalContext.messageId,
+        displayName: '',
+        argsSummary: '',
+        startedAt: Date.now(),
+      });
+    }
+
+    const wrapped = render.wrapStream(stream);
+
+    if (render.streaming.enabled) {
       await runStreamingDriver({
         stream: wrapped,
-        chatThread,
-        adapter,
-        toolDisplay: toolDisplay as 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden',
-        toolDisplayFn,
-        streamingOptions: streaming.options,
-        channelToolNames: this.channelToolNames,
-        logger: this.logger,
-        onApprovalPosted,
-        getPendingApproval,
-        takePendingApproval,
-        typingGate,
-        formatError: adapterConfig?.formatError,
+        chatThread: render.chatThread,
+        adapter: render.adapter,
+        toolDisplay: render.toolDisplay as 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden',
+        toolDisplayFn: render.toolDisplayFn,
+        streamingOptions: render.streaming.options,
+        channelToolNames: render.channelToolNames,
+        logger: render.logger,
+        onApprovalPosted: render.onApprovalPosted,
+        getPendingApproval: render.getPendingApproval,
+        takePendingApproval: render.takePendingApproval,
+        typingGate: render.typingGate,
+        formatError: render.formatError,
       });
     } else {
       await runStaticDriver({
         stream: wrapped,
-        chatThread,
-        adapter,
-        toolDisplay: toolDisplay as 'cards' | 'text' | 'hidden',
-        toolDisplayFn,
-        channelToolNames: this.channelToolNames,
-        logger: this.logger,
-        onApprovalPosted,
-        getPendingApproval,
-        takePendingApproval,
-        formatError: adapterConfig?.formatError,
+        chatThread: render.chatThread,
+        adapter: render.adapter,
+        toolDisplay: render.toolDisplay as 'cards' | 'text' | 'hidden',
+        toolDisplayFn: render.toolDisplayFn,
+        channelToolNames: render.channelToolNames,
+        logger: render.logger,
+        onApprovalPosted: render.onApprovalPosted,
+        getPendingApproval: render.getPendingApproval,
+        takePendingApproval: render.takePendingApproval,
+        formatError: render.formatError,
       });
     }
   }

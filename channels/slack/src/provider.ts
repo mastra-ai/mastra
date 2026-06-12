@@ -7,6 +7,8 @@ import {
   type ChannelConnectResult,
   type ChannelAdapterConfig,
   AgentChannels,
+  describeWaitUntilContext,
+  resolveWaitUntil,
 } from '@mastra/core/channels';
 import type { ApiRoute, ContextWithMastra } from '@mastra/core/server';
 import { type ChannelsStorage, type ChannelInstallation } from '@mastra/core/storage';
@@ -1431,8 +1433,26 @@ export class SlackProvider implements ChannelProvider {
       body: rawBody,
     });
 
+    // Resolve waitUntil for this request. Lookup order: bare fn from config (Vercel
+    // users pass `waitUntil` from `@vercel/functions` here), user resolver, then the
+    // core default (Cloudflare Workers + Netlify). Without waitUntil, the serverless
+    // invocation freezes after returning 200 and kills the agent run mid-flight.
+    const waitUntilFn =
+      this.#channelConfig.waitUntil ?? this.#channelConfig.resolveWaitUntil?.(c) ?? resolveWaitUntil(c);
+    // TEMP: log context shape so we can diagnose runtime-specific resolution.
+    // Strip before release.
     try {
-      return await agentChannels.handleWebhookEvent('slack', delegateRequest);
+      console.info(
+        `[wait-until] slack resolved=${Boolean(waitUntilFn)} ${JSON.stringify(describeWaitUntilContext(c))}`,
+      );
+    } catch {}
+
+    try {
+      return await agentChannels.handleWebhookEvent(
+        'slack',
+        delegateRequest,
+        waitUntilFn ? { waitUntil: waitUntilFn } : undefined,
+      );
     } catch (error) {
       console.error('[Slack] Error delegating to AgentChannels:', error);
       return c.json({ ok: true });
@@ -1504,8 +1524,8 @@ export class SlackProvider implements ChannelProvider {
       });
     };
 
-    // Process in background
-    (async () => {
+    // Process in background and keep the serverless invocation alive while it runs.
+    const task = (async () => {
       try {
         const result = await agent.generate(prompt);
         const text = typeof result.text === 'string' ? result.text : JSON.stringify(result.text);
@@ -1516,6 +1536,10 @@ export class SlackProvider implements ChannelProvider {
         await sendDelayedResponse(`Error: ${message}`);
       }
     })();
+
+    const slashWaitUntil =
+      this.#channelConfig.waitUntil ?? this.#channelConfig.resolveWaitUntil?.(c) ?? resolveWaitUntil(c);
+    slashWaitUntil?.(task);
 
     // Return immediate acknowledgment
     return c.json({ response_type: 'ephemeral', text: 'Processing...' });
