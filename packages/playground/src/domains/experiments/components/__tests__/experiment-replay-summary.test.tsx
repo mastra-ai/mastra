@@ -71,12 +71,72 @@ describe('ExperimentReplaySummary', () => {
     );
 
     const table = screen.getByTestId('replay-flow-table');
-    const row = within(table).getByRole('button', { name: 'Open result for item item-5' });
+    // The row label carries the outcome counts — the glyphs are decorative.
+    // Miss-passthrough gets its own bucket so it stays distinguishable from
+    // a plain unmocked live call by screen readers.
+    const row = within(table).getByRole('button', {
+      name: 'Open result for item item-5 — 2 replayed, 1 mocked, 1 ran live on a miss',
+    });
     expect(row.textContent).toContain('item-5');
     expect(row.textContent).toContain('✓✓Ⓜ⚡');
 
     fireEvent.click(row);
     expect(onSelectResult).toHaveBeenCalledWith('result-replay-3');
+  });
+
+  it('hides the glyphs from assistive tech and sets miss-passthrough apart beyond color', () => {
+    render(
+      <ExperimentReplaySummary
+        marker={{ onMiss: 'passthrough' }}
+        experimentId="exp-replay-1"
+        aggregates={aggregates}
+        isLoading={false}
+        experimentStatus="completed"
+      />,
+    );
+
+    const table = screen.getByTestId('replay-flow-table');
+    const glyphs = [...table.querySelectorAll('[title]')];
+    expect(glyphs).toHaveLength(4);
+    for (const glyph of glyphs) {
+      expect(glyph.getAttribute('aria-hidden')).toBe('true');
+    }
+    // Live and miss-passthrough share ⚡ — the passthrough one alone carries
+    // the dotted underline and the passthrough title.
+    const passthrough = glyphs.find(glyph => glyph.getAttribute('title')?.includes('passthrough'));
+    expect(passthrough?.className).toContain('decoration-dotted');
+    const others = glyphs.filter(glyph => glyph !== passthrough);
+    for (const glyph of others) {
+      expect(glyph.className).not.toContain('decoration-dotted');
+    }
+  });
+
+  it('announces the capped window while the summary is partial', () => {
+    render(
+      <ExperimentReplaySummary
+        marker={{ onMiss: 'error' }}
+        experimentId="exp-replay-1"
+        aggregates={{ ...aggregates, partial: true }}
+        isLoading={false}
+        experimentStatus="running"
+      />,
+    );
+
+    expect(screen.getByText('Summary over the first 500 items — final after completion.')).toBeDefined();
+  });
+
+  it('renders no partial note once the summary covers everything', () => {
+    render(
+      <ExperimentReplaySummary
+        marker={{ onMiss: 'error' }}
+        experimentId="exp-replay-1"
+        aggregates={aggregates}
+        isLoading={false}
+        experimentStatus="completed"
+      />,
+    );
+
+    expect(screen.queryByText(/Summary over the first/)).toBeNull();
   });
 
   it('renders no graph or table when no report carries a call flow', () => {

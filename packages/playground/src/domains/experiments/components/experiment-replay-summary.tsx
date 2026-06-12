@@ -1,7 +1,8 @@
 import type { ExperimentStatus } from '@mastra/core/storage';
-import { Button, Chip, Spinner, Txt } from '@mastra/playground-ui';
+import { Button, Chip, Spinner, Txt, cn } from '@mastra/playground-ui';
 import { GitCompareArrows, HistoryIcon } from 'lucide-react';
 import type { ReplayAggregates, ReplayItemFlow } from '../hooks/use-replay-aggregates';
+import { REPLAY_AGGREGATES_ITEM_CAP } from '../hooks/use-replay-aggregates';
 import type { ToolReplayCallsSummary, ToolReplayMarker } from '../utils/tool-replay';
 import { formatMockedToolNames, getCallOutcomeView } from '../utils/tool-replay';
 import { useLinkComponent } from '@/lib/framework';
@@ -129,6 +130,12 @@ export function ExperimentReplaySummary({
         </div>
       ) : null}
 
+      {aggregates?.partial && (
+        <Txt variant="ui-xs" className="text-neutral3">
+          Summary over the first {REPLAY_AGGREGATES_ITEM_CAP} items — final after completion.
+        </Txt>
+      )}
+
       {aggregates && aggregates.callTotals.total > 0 && (
         <div className="grid gap-1.5" data-testid="replay-flow-graph">
           <Txt variant="ui-sm" className="text-neutral4">
@@ -164,7 +171,10 @@ export function ExperimentReplaySummary({
               key={flow.resultId}
               type="button"
               onClick={() => onSelectResult?.(flow.resultId)}
-              aria-label={`Open result for item ${flow.itemId}`}
+              // The glyph strip is aria-hidden — this label is the row's whole
+              // accessible story, so it carries the outcome counts (with
+              // miss-passthrough as its own "ran live on a miss" bucket).
+              aria-label={`Open result for item ${flow.itemId} — ${formatFlowOutcomesLabel(flow.outcomes)}`}
               className="grid grid-cols-[6rem_auto_1fr] items-center gap-3 rounded-md px-2 py-1 text-left hover:bg-surface4 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent1"
             >
               <span className="font-mono text-ui-smd text-neutral3 truncate">{flow.itemId.slice(0, 8)}</span>
@@ -182,7 +192,10 @@ export function ExperimentReplaySummary({
                       <FlowGlyph key={i} call={call} />
                     ))}
                     {flow.outcomes.length > MAX_FLOW_GLYPHS && (
-                      <span className="text-neutral3 tracking-normal"> +{flow.outcomes.length - MAX_FLOW_GLYPHS}</span>
+                      <span aria-hidden="true" className="text-neutral3 tracking-normal">
+                        {' '}
+                        +{flow.outcomes.length - MAX_FLOW_GLYPHS}
+                      </span>
                     )}
                   </>
                 )}
@@ -279,13 +292,61 @@ function flowBarSegments(totals: ToolReplayCallsSummary): FlowBarSegment[] {
   ].filter(segment => segment.count > 0);
 }
 
-/** One call in an item's flow row — drifted replays render yellow to match the bar. */
+/**
+ * "2 replayed, 1 mocked, 1 ran live on a miss" — accessible counts for one
+ * item's flow row. Miss-passthrough is its own bucket so screen readers can
+ * tell a passthrough beyond a recording from a regular unmocked live call.
+ */
+function formatFlowOutcomesLabel(outcomes: ReplayItemFlow['outcomes']): string {
+  if (outcomes.length === 0) return 'no tool calls';
+  const counts = { replayed: 0, mocked: 0, missed: 0, missPassthrough: 0, live: 0 };
+  for (const call of outcomes) {
+    switch (call.outcome) {
+      case 'replayed':
+      case 'replayed-error':
+        counts.replayed += 1;
+        break;
+      case 'mocked':
+      case 'mock-error':
+        counts.mocked += 1;
+        break;
+      case 'miss-error':
+        counts.missed += 1;
+        break;
+      case 'miss-passthrough':
+        counts.missPassthrough += 1;
+        break;
+      case 'live':
+        counts.live += 1;
+        break;
+    }
+  }
+  const segments: string[] = [];
+  if (counts.replayed > 0) segments.push(`${counts.replayed} replayed`);
+  if (counts.mocked > 0) segments.push(`${counts.mocked} mocked`);
+  if (counts.missed > 0) segments.push(`${counts.missed} missed`);
+  if (counts.missPassthrough > 0) segments.push(`${counts.missPassthrough} ran live on a miss`);
+  if (counts.live > 0) segments.push(`${counts.live} ran live`);
+  // Reports come from storage — unknown future outcomes still get a count.
+  return segments.length > 0 ? segments.join(', ') : `${outcomes.length} tool call${outcomes.length === 1 ? '' : 's'}`;
+}
+
+/**
+ * One call in an item's flow row — drifted replays render yellow to match the
+ * bar. Glyphs are decorative (aria-hidden): the row's aria-label carries the
+ * counts. Miss-passthrough shares the ⚡ glyph with live but is set apart
+ * beyond color by a dotted underline, plus its distinct title.
+ */
 function FlowGlyph({ call }: { call: ReplayItemFlow['outcomes'][number] }) {
   const view = getCallOutcomeView(call.outcome);
   const className = call.argsDiffered && call.outcome === 'replayed' ? 'text-yellow-400' : view.glyphClassName;
   const title = `${view.label || call.outcome}${call.argsDiffered ? ' · args differed' : ''}${view.note ? ` · ${view.note}` : ''}`;
   return (
-    <span className={className} title={title}>
+    <span
+      aria-hidden="true"
+      className={cn(call.outcome === 'miss-passthrough' && 'underline decoration-dotted underline-offset-2', className)}
+      title={title}
+    >
       {view.glyph}
     </span>
   );

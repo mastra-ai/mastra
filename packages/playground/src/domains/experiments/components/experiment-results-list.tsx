@@ -1,5 +1,6 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
 import { Chip, DataList, DataListSkeleton, Tooltip, TooltipContent, TooltipTrigger, cn } from '@mastra/playground-ui';
+import { useEffect, useRef } from 'react';
 import { classifyReplayDivergence, getToolReplayReport } from '../utils/tool-replay';
 
 export type ExperimentResultsListProps = {
@@ -40,6 +41,14 @@ export function ExperimentResultsList({
   const hasSelection = Boolean(selectedIds && onToggleSelect);
   const gridColumns = [hasSelection ? 'auto' : '', ...columns.map(c => c.size)].filter(Boolean).join(' ');
   const hasInputColumn = columns.some(col => col.name === 'input');
+
+  // Featured rows can be selected from outside the list (e.g. the replay
+  // summary's flow table) — bring them into view. 'nearest' keeps direct
+  // in-list clicks scroll-stable: an already-visible row never moves.
+  const featuredRowRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    featuredRowRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [featuredResultId]);
 
   if (isLoading) {
     return <DataListSkeleton columns={gridColumns} />;
@@ -108,7 +117,12 @@ export function ExperimentResultsList({
 
             if (!hasSelection) {
               return (
-                <DataList.RowButton key={result.id} featured={isFeatured} onClick={() => onResultClick(result.id)}>
+                <DataList.RowButton
+                  key={result.id}
+                  ref={isFeatured ? featuredRowRef : undefined}
+                  featured={isFeatured}
+                  onClick={() => onResultClick(result.id)}
+                >
                   {rowCells}
                 </DataList.RowButton>
               );
@@ -122,6 +136,7 @@ export function ExperimentResultsList({
                   aria-label={`Select result ${result.itemId}`}
                 />
                 <DataList.RowButton
+                  ref={isFeatured ? featuredRowRef : undefined}
                   flushLeft
                   colStart={2}
                   featured={isFeatured}
