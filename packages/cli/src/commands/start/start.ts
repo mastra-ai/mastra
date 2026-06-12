@@ -49,21 +49,23 @@ export async function start(options: StartOptions = {}) {
     let stderrBuffer = '';
     server.stderr.on('data', data => {
       stderrBuffer += data.toString();
+      // Stream the server's stderr through live so logs from a healthy,
+      // running process (warnings, channel/adapter errors) are visible.
+      // The buffer above is retained only for the non-zero exit diagnostics.
+      process.stderr.write(data);
     });
 
     server.on('exit', code => {
-      if (code !== 0 && stderrBuffer) {
+      if (code !== 0) {
+        // Raw stderr has already been streamed live above. On a crash, add a
+        // friendly hint for the common "missing dependency" case on top of it.
         if (stderrBuffer.includes('ERR_MODULE_NOT_FOUND')) {
           const packageNameMatch = stderrBuffer.match(/Cannot find package '([^']+)'/);
           const packageName = packageNameMatch ? packageNameMatch[1] : null;
 
-          if (!packageName) {
-            logger.error(stderrBuffer.trim());
-          } else {
+          if (packageName) {
             logger.error('Module not found while starting Mastra server', { package: packageName });
           }
-        } else {
-          logger.error(stderrBuffer.trim());
         }
         process.exit(code);
       }

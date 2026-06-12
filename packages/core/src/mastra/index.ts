@@ -2025,7 +2025,9 @@ export class Mastra<
           apiRoutes: [...(this.#server?.apiRoutes ?? []), ...channelRoutes],
         };
       }
-      void agentChannelsInstance.initialize(this);
+      agentChannelsInstance.initialize(this).catch(err => {
+        this.#logger?.error(`Failed to initialize channels for agent ${agentKey}:`, err);
+      });
     }
   }
 
