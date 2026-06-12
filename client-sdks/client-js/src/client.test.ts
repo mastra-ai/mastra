@@ -1,5 +1,9 @@
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from './client';
+// Public-surface imports: getToolReplayMarker is re-exported as a value from
+// @mastra/core/datasets; the types ride along for the type-level assertions.
+import { getToolReplayMarker } from './index';
+import type { DatasetExperimentResult, ToolReplayCall } from './index';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -975,6 +979,59 @@ describe('MastraClient', () => {
       expect('toolReplay' in body).toBe(false);
       expect('toolMocks' in body).toBe(false);
       expect('itemIds' in body).toBe(false);
+    });
+
+    it('re-exports getToolReplayMarker as a value usable on experiment metadata', () => {
+      // Runner-stamped marker shapes parse.
+      expect(getToolReplayMarker({ toolReplay: { onMiss: 'error' } })).toEqual({ onMiss: 'error' });
+      expect(
+        getToolReplayMarker({
+          toolReplay: { fromExperimentId: 'prior-exp', onMiss: 'passthrough', matching: 'strict' },
+        }),
+      ).toEqual({ fromExperimentId: 'prior-exp', onMiss: 'passthrough', matching: 'strict' });
+      expect(getToolReplayMarker({ toolReplay: { mockedTools: ['weatherTool'] } })).toEqual({
+        mockedTools: ['weatherTool'],
+      });
+      // User-owned `toolReplay` metadata that is not the stamped shape is not
+      // misclassified as a replay run.
+      expect(getToolReplayMarker({ toolReplay: { custom: true } })).toBeNull();
+      expect(getToolReplayMarker({})).toBeNull();
+      expect(getToolReplayMarker(undefined)).toBeNull();
+    });
+
+    it('types experiment results with optional scores and a typed calls[] replay report', () => {
+      // `scores` is absent from the results endpoints, so a result without it
+      // must be a valid DatasetExperimentResult (it was required before).
+      const result: DatasetExperimentResult = {
+        id: 'res-1',
+        experimentId: 'exp-1',
+        itemId: 'item-1',
+        itemDatasetVersion: 1,
+        input: { city: 'Paris' },
+        output: { temperature: 70 },
+        groundTruth: null,
+        error: null,
+        startedAt: '2026-01-01T00:00:00.000Z',
+        completedAt: '2026-01-01T00:00:01.000Z',
+        retryCount: 0,
+        traceId: 'trace-1',
+        status: null,
+        tags: null,
+        toolReplay: {
+          sourceTraceId: 'trace-0',
+          totalRecorded: 1,
+          replayedCount: 1,
+          misses: [],
+          unconsumed: [],
+          argMismatches: [],
+          // The report's per-call flow is visible on the re-exported type.
+          calls: [{ order: 0, toolName: 'weatherTool', outcome: 'replayed', sequence: 0 }],
+        },
+        createdAt: '2026-01-01T00:00:01.000Z',
+      };
+      const calls: ToolReplayCall[] | undefined = result.toolReplay?.calls;
+      expect(calls?.[0]?.outcome).toBe('replayed');
+      expect(result.scores).toBeUndefined();
     });
   });
 });

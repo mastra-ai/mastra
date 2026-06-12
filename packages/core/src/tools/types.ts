@@ -99,6 +99,14 @@ export interface ToolBeforeHookResult<TOutput = unknown> {
   /** Set to false to skip the tool execution and return `output` instead. */
   proceed: false;
   output: TOutput;
+  /**
+   * Optional outcome detail for the synthetic TOOL_CALL span recorded for the
+   * short-circuited call (live tool spans are created inside tool execution,
+   * which a short-circuit never reaches). Merged into the span's
+   * `metadata.toolReplay` alongside the always-set `synthetic: true` flag,
+   * which cannot be overridden. Ignored on untraced runs.
+   */
+  spanMetadata?: Record<string, unknown>;
 }
 
 export interface ToolAfterHookContext<

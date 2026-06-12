@@ -82277,6 +82277,7 @@ export type GetExperiments_Response = {
     targetId: string;
     name?: string | undefined;
     description?: string | undefined;
+    /** User metadata, plus runner-stamped keys: `toolReplay` marks replay/mock runs (onMiss, matching, mockedTools), and `failureReason` ({id, message}) records why an async experiment failed at setup */
     metadata?:
       | {
           [key: string]: unknown;
@@ -82370,6 +82371,7 @@ export type GetDatasetsDatasetIdExperiments_Response = {
     targetId: string;
     name?: string | undefined;
     description?: string | undefined;
+    /** User metadata, plus runner-stamped keys: `toolReplay` marks replay/mock runs (onMiss, matching, mockedTools), and `failureReason` ({id, message}) records why an async experiment failed at setup */
     metadata?:
       | {
           [key: string]: unknown;
@@ -82566,6 +82568,7 @@ export type GetDatasetsDatasetIdExperimentsExperimentId_Response = {
   targetId: string;
   name?: string | undefined;
   description?: string | undefined;
+  /** User metadata, plus runner-stamped keys: `toolReplay` marks replay/mock runs (onMiss, matching, mockedTools), and `failureReason` ({id, message}) records why an async experiment failed at setup */
   metadata?:
     | {
         [key: string]: unknown;

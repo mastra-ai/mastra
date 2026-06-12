@@ -182,6 +182,42 @@ describe('tool replay end-to-end through the real tracing pipeline', () => {
     const serializedResults = JSON.stringify(output.toolResults);
     expect(serializedResults).toContain('live:first:1');
     expect(serializedResults).toContain('live:second:2');
+
+    // ── 4. The replay run's own trace shows the served calls as SYNTHETIC
+    // tool spans — named like live ones, flagged toolReplay.synthetic ────────
+    await storageExporter.flush();
+    const replayTraceId = (replayed.results[0]?.output as { traceId?: string }).traceId;
+    expect(replayTraceId).toBeTruthy();
+    const replayTrace = await observabilityStore!.getTrace({ traceId: replayTraceId! });
+    const syntheticSpans = replayTrace!.spans.filter(s => s.spanType === SpanType.TOOL_CALL && !s.isEvent);
+    expect(syntheticSpans).toHaveLength(2);
+    for (const span of syntheticSpans) {
+      expect(span.name).toBe("tool: 'lookup'");
+      expect(span.entityName ?? span.entityId).toBe('lookup');
+      const marker = (span.metadata as { toolReplay?: Record<string, unknown> })?.toolReplay;
+      expect(marker?.synthetic).toBe(true);
+      expect(marker?.outcome).toBe('replayed');
+      // The span carries the served observation, so the timeline stays readable.
+      expect(span.output).toMatchObject({ value: expect.stringMatching(/^live:/) });
+      expect(span.parentSpanId).toBeTruthy();
+    }
+    const sequences = syntheticSpans
+      .map(s => (s.metadata as { toolReplay: { sequence: number } }).toolReplay.sequence)
+      .sort();
+    expect(sequences).toEqual([0, 1]);
+
+    // ── 5. Synthetic spans can never serve as a recording: chaining a replay
+    // directly at the replay run's trace finds zero events and all-misses ───
+    const chained = await runExperiment(mastra, {
+      data: [{ id: 'item-1', input: 'Look up first and second', replayTraceId: replayTraceId! }],
+      targetType: 'agent',
+      targetId: 'replay-e2e-agent',
+      toolReplay: {},
+    });
+    expect(chained.failedCount).toBe(1);
+    expect(chained.results[0]?.error?.code).toBe('TOOL_REPLAY_MISS');
+    expect(chained.results[0]?.toolReplay?.totalRecorded).toBe(0);
+    expect(liveCalls).toBe(2); // the external world stayed frozen throughout
   });
 
   it('fails a replay miss with the report and trace link intact through real persistence', async () => {
@@ -262,6 +298,60 @@ describe('tool replay end-to-end through the real tracing pipeline', () => {
     const observabilityStore = await storage.getStore('observability');
     const missTrace = await observabilityStore!.getTrace({ traceId: row.traceId! });
     expect(missTrace?.spans.length).toBeGreaterThan(0);
+  });
+
+  it('a mock run records flagged synthetic tool spans and its trace can never serve as a recording', async () => {
+    let liveCalls = 0;
+    const lookupTool = createTool({
+      id: 'lookup',
+      description: 'Look up a record in an external system',
+      inputSchema: z.object({ recordId: z.string() }),
+      execute: async ({ recordId }) => {
+        liveCalls++;
+        return { value: `live:${recordId}` };
+      },
+    });
+    const agent = new Agent({
+      id: 'mock-e2e-agent',
+      name: 'Mock E2E Agent',
+      instructions: 'Use the lookup tool.',
+      model: createToolCallingModel('lookup', ['{"recordId":"first"}']),
+      tools: { lookup: lookupTool },
+    });
+    const { mastra, storage, storageExporter } = createTracedMastra(agent);
+
+    const mocked = await runExperiment(mastra, {
+      data: [{ id: 'item-1', input: 'Look up first' }],
+      targetType: 'agent',
+      targetId: 'mock-e2e-agent',
+      toolMocks: { lookup: { output: { value: 'stubbed' } } },
+    });
+    expect(mocked.succeededCount).toBe(1);
+    expect(liveCalls).toBe(0);
+    await storageExporter.flush();
+
+    // The mock run's own trace shows the stubbed call as a synthetic span.
+    const mockTraceId = (mocked.results[0]?.output as { traceId?: string }).traceId;
+    expect(mockTraceId).toBeTruthy();
+    const observabilityStore = await storage.getStore('observability');
+    const trace = await observabilityStore!.getTrace({ traceId: mockTraceId! });
+    const toolSpans = trace!.spans.filter(s => s.spanType === SpanType.TOOL_CALL && !s.isEvent);
+    expect(toolSpans).toHaveLength(1);
+    expect(toolSpans[0]!.name).toBe("tool: 'lookup'");
+    expect(toolSpans[0]!.output).toEqual({ value: 'stubbed' });
+    expect(toolSpans[0]!.metadata).toMatchObject({ toolReplay: { synthetic: true, outcome: 'mocked' } });
+
+    // Pointing a replay at the mock run's trace finds zero replayable events.
+    const chained = await runExperiment(mastra, {
+      data: [{ id: 'item-1', input: 'Look up first', replayTraceId: mockTraceId! }],
+      targetType: 'agent',
+      targetId: 'mock-e2e-agent',
+      toolReplay: {},
+    });
+    expect(chained.failedCount).toBe(1);
+    expect(chained.results[0]?.error?.code).toBe('TOOL_REPLAY_MISS');
+    expect(chained.results[0]?.toolReplay?.totalRecorded).toBe(0);
+    expect(liveCalls).toBe(0); // the stub answered; live tools never ran
   });
 
   it('replays redacted recordings: sensitive fields are [REDACTED] in spans and replay returns them as recorded', async () => {

@@ -1,5 +1,6 @@
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
+import { getToolReplayMarker } from '@mastra/core/datasets';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -19,12 +20,15 @@ import { createTestServerContext } from './test-utils';
  *   POST trigger (pending) → background runExperiment with replay hooks
  *     → GET experiment until terminal status
  *     → GET results: divergence report / error codes survive the route's
- *       response serialization (output is the only place the report persists)
+ *       response serialization (the report persists in the dedicated
+ *       `toolReplay` column on each result — never inside `output`)
  *
  * Edge cases covered: recording runs dry over the API (deterministic failure,
  * no retries), nonexistent fromExperimentId (async trigger reports pending,
- * then the experiment fails at setup with zero items run), and
- * onMiss: 'passthrough' mixing exactly the unmatched call live.
+ * then the experiment fails at setup with zero items run and the reason
+ * surfaced in metadata.failureReason), onMiss: 'passthrough' mixing exactly
+ * the unmatched call live, and a mock-only run (no recording) suppressing
+ * live execution and stamping the experiment's replay marker.
  */
 
 /**
@@ -227,16 +231,13 @@ describe('tool replay over the experiment trigger API (e2e)', () => {
     expect(modelCounter.modelCalls).toBe(3);
 
     // The divergence report survives the results route's response serialization
-    // (output is the only place the report persists).
+    // in the dedicated `toolReplay` column — the scored output stays clean.
     const results = await fetchResults(triggered.experimentId);
     expect(results).toHaveLength(1);
     expect(results[0]!.itemId).toBe(itemId);
-    const output = results[0]!.output as {
-      text?: string;
-      toolReplay?: { sourceTraceId: string; replayedCount: number; misses: unknown[]; unconsumed: unknown[] };
-    };
-    expect(output.text).toBe('Done with lookups.');
-    expect(output.toolReplay).toMatchObject({
+    expect((results[0]!.output as { text?: string }).text).toBe('Done with lookups.');
+    expect(results[0]!.output).not.toHaveProperty('toolReplay');
+    expect(results[0]!.toolReplay).toMatchObject({
       sourceTraceId: 'rec-api-1',
       replayedCount: 2,
       misses: [],
@@ -276,11 +277,12 @@ describe('tool replay over the experiment trigger API (e2e)', () => {
     expect(results[0]!.retryCount).toBe(0);
     // Failed items keep their divergence report through the route's response
     // serialization — failures are when API consumers need it most.
-    const failedOutput = results[0]!.output as {
-      toolReplay?: { replayedCount: number; misses: { toolName: string }[] };
-    };
-    expect(failedOutput.toolReplay?.replayedCount).toBe(1);
-    expect(failedOutput.toolReplay?.misses).toEqual([expect.objectContaining({ toolName: 'lookup' })]);
+    const failedReport = results[0]!.toolReplay as
+      | { replayedCount: number; misses: { toolName: string }[] }
+      | null
+      | undefined;
+    expect(failedReport?.replayedCount).toBe(1);
+    expect(failedReport?.misses).toEqual([expect.objectContaining({ toolName: 'lookup' })]);
   });
 
   it('fails the experiment at setup when fromExperimentId does not exist', async () => {
@@ -295,10 +297,15 @@ describe('tool replay over the experiment trigger API (e2e)', () => {
 
     // A nonexistent source experiment is rejected at setup, before any item
     // runs. The async trigger has already returned pending, so the API
-    // surface is a terminal 'failed' experiment with zero results (the
-    // setup reason is currently only logged server-side).
+    // surface is a terminal 'failed' experiment with zero results — and the
+    // setup reason persists in `metadata.failureReason`, the only place an
+    // HTTP caller can learn why the run never started.
     const run = await waitForExperiment(triggered.experimentId);
     expect(run!.status).toBe('failed');
+    expect(run!.metadata?.failureReason).toMatchObject({
+      id: 'EXPERIMENT_TOOL_REPLAY_SOURCE_NOT_FOUND',
+      message: expect.stringContaining('no-such-experiment'),
+    });
     expect(liveCalls).toBe(0);
     // The agent is never invoked at all — no item ever started.
     expect(modelCounter.modelCalls).toBe(0);
@@ -326,10 +333,43 @@ describe('tool replay over the experiment trigger API (e2e)', () => {
     expect(liveCalls).toBe(1);
 
     const results = await fetchResults(triggered.experimentId);
-    const output = results[0]!.output as {
-      toolReplay?: { replayedCount: number; misses: { toolName: string; action: string }[] };
-    };
-    expect(output.toolReplay?.replayedCount).toBe(1);
-    expect(output.toolReplay?.misses).toEqual([expect.objectContaining({ toolName: 'lookup', action: 'passthrough' })]);
+    const report = results[0]!.toolReplay as
+      | { replayedCount: number; misses: { toolName: string; action: string }[] }
+      | null
+      | undefined;
+    expect(report?.replayedCount).toBe(1);
+    expect(report?.misses).toEqual([expect.objectContaining({ toolName: 'lookup', action: 'passthrough' })]);
+  });
+
+  it('runs a mock-only experiment through the async lifecycle and stamps the replay marker', async () => {
+    // No recording is seeded and no toolReplay is sent — toolMocks alone must
+    // suppress live execution, persist mock usage in the report column, and
+    // stamp the experiment metadata so it is refused as a future replay source.
+    const triggered = await TRIGGER_EXPERIMENT_ROUTE.handler({
+      ...createTestServerContext({ mastra }),
+      datasetId,
+      targetType: 'agent',
+      targetId: 'replay-api-agent',
+      toolMocks: { lookup: { output: { value: 'mocked-lookup' } } },
+    });
+    expect(triggered.status).toBe('pending');
+
+    const run = await waitForExperiment(triggered.experimentId);
+    expect(run!.status).toBe('completed');
+    expect(run!.succeededCount).toBe(1);
+    // Both of the agent's lookup calls were answered by the mock.
+    expect(liveCalls).toBe(0);
+    expect(modelCounter.modelCalls).toBe(3);
+
+    // GET experiment carries the runner-stamped marker in metadata — parsed
+    // here exactly the way SDK/UI consumers do.
+    expect(getToolReplayMarker(run!.metadata)).toEqual({ mockedTools: ['lookup'] });
+
+    // Mock usage accounting persists in the dedicated report column.
+    const results = await fetchResults(triggered.experimentId);
+    expect(results).toHaveLength(1);
+    expect(results[0]!.error).toBeNull();
+    const report = results[0]!.toolReplay as { mocks?: { toolName: string; calls: number; kind: string }[] } | null;
+    expect(report?.mocks).toEqual([{ toolName: 'lookup', calls: 2, kind: 'output' }]);
   });
 });

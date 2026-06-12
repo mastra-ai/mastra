@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import type { validateToolMockNames as ValidateToolMockNames } from '@mastra/core/datasets';
 import { MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { resolveModelConfig } from '@mastra/core/llm';
@@ -78,6 +79,10 @@ function isSchemaValidationError(error: unknown): error is SchemaValidationLike 
 
 function isSchemaUpdateValidationError(error: unknown): error is SchemaUpdateValidationLike {
   return error instanceof Error && error.name === 'SchemaUpdateValidationError';
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 // ============================================================================
@@ -633,6 +638,17 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
       // check alone can be bypassed (e.g. toolReplay supplied as a query
       // param). The route is fire-and-forget — reject here instead of
       // returning 200/pending and failing the experiment in the background.
+      // Shape checks first: a query param like `?toolReplay=x` merges in as a
+      // string, which would otherwise flow into startExperimentAsync as-is.
+      if (toolReplay !== undefined && !isPlainObject(toolReplay)) {
+        throw new HTTPException(400, { message: 'toolReplay must be an object' });
+      }
+      if (toolMocks !== undefined && !isPlainObject(toolMocks)) {
+        throw new HTTPException(400, { message: 'toolMocks must be an object' });
+      }
+      if (itemIds !== undefined && (!Array.isArray(itemIds) || itemIds.some(id => typeof id !== 'string'))) {
+        throw new HTTPException(400, { message: 'itemIds must be an array of strings' });
+      }
       if (toolReplay && targetType !== 'agent') {
         throw new HTTPException(400, {
           message: `toolReplay is only supported for agent targets (got targetType '${targetType}')`,
@@ -642,6 +658,28 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         throw new HTTPException(400, {
           message: `toolMocks is only supported for agent targets (got targetType '${targetType}')`,
         });
+      }
+      if (toolMocks) {
+        // Mock-name collisions (keys normalizing to the same tool name) are
+        // otherwise detected at experiment setup — in the background, after
+        // this route has already answered 200/pending, leaving only a failed
+        // experiment record. Pre-validate so the caller gets the 400 directly.
+        // Imported dynamically because the export is newer than the
+        // @mastra/core peer floor; on an older core the pre-check degrades
+        // away and setup-time validation still rejects the collision.
+        let validateToolMockNames: typeof ValidateToolMockNames | undefined;
+        try {
+          ({ validateToolMockNames } = await import('@mastra/core/datasets'));
+        } catch {
+          // Core build without the datasets subpath — nothing to pre-validate with.
+        }
+        if (validateToolMockNames) {
+          try {
+            validateToolMockNames(toolMocks);
+          } catch (err) {
+            throw new HTTPException(400, { message: err instanceof Error ? err.message : String(err) });
+          }
+        }
       }
       // The adapter middleware merges body + query requestContext into a RequestContext instance.
       // startExperimentAsync expects a plain Record, so convert it.

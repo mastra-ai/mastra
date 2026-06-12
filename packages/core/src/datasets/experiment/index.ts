@@ -4,7 +4,7 @@ import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
 import { executeTarget } from './executor';
 import type { Target, ExecutionResult, ToolReplayExecutionOptions } from './executor';
-import { extractToolReplayEvents, validateToolMockNames } from './replay';
+import { extractToolReplayEvents, validateToolMockNames, isSuppressingMock, getToolReplayMarker } from './replay';
 import { resolveScorers, resolveStepScorers, runScorersForItem, runStepScorersForItem } from './scorer';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
@@ -45,12 +45,16 @@ export {
   type ToolMockExpectationResult,
   type ToolMockFunction,
   type ToolMockUsage,
+  type ToolReplayCall,
   type ToolReplayEvent,
+  type ToolReplayExperimentMarker,
   type ToolReplayMatching,
   type ToolReplayOnMiss,
   type ToolReplayMiss,
   type ToolReplayArgMismatch,
   type ToolReplayReport,
+  getToolReplayMarker,
+  validateToolMockNames,
 } from './replay';
 
 // Re-export analytics
@@ -115,10 +119,18 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   const markFailedOnSetupError = async (err: unknown) => {
     if (providedExperimentId && experimentsStore) {
       try {
+        // Persist the reason — on the async HTTP path this record is the only
+        // place the caller can learn why the run never started.
+        const existing = await experimentsStore.getExperimentById({ id: experimentId });
+        const failureReason = {
+          id: err instanceof MastraError ? err.id : 'EXPERIMENT_SETUP_FAILED',
+          message: err instanceof Error ? err.message : String(err),
+        };
         await experimentsStore.updateExperiment({
           id: experimentId,
           status: 'failed',
           completedAt: new Date(),
+          metadata: { ...(existing?.metadata ?? {}), failureReason },
         });
       } catch (updateErr) {
         mastra.getLogger()?.error(`Failed to mark experiment ${experimentId} as failed: ${updateErr}`);
@@ -265,19 +277,20 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             category: 'USER',
           });
         }
-        // Replay runs short-circuit tools before any tool span is created, so
-        // a replay experiment's traces contain no tool spans — chaining one as
-        // a recording source would make every item miss (onMiss 'error') or
-        // run fully live (onMiss 'passthrough'). Recordings must come from
-        // live runs. Experiment metadata is user-writable, so match the exact
-        // marker shape this feature stamps (an object carrying onMiss) rather
-        // than bare truthiness — an unrelated user `toolReplay` key must not
-        // disqualify a live recording source.
-        const sourceMarker = (sourceExperiment.metadata as Record<string, unknown> | null | undefined)?.toolReplay;
-        if (typeof sourceMarker === 'object' && sourceMarker !== null && ('onMiss' in sourceMarker || 'mockedTools' in sourceMarker)) {
+        // Replay runs short-circuit tools before the live tool span is
+        // created, so a replay experiment's traces contain only synthetic
+        // tool spans (flagged toolReplay.synthetic, skipped by extraction) —
+        // chaining one as a recording source would make every item miss
+        // (onMiss 'error') or run fully live (onMiss 'passthrough').
+        // Recordings must come from live runs. Experiment metadata is
+        // user-writable, so match the exact marker shape this feature stamps
+        // rather than bare truthiness — an unrelated user `toolReplay` key
+        // must not disqualify a live recording source.
+        const sourceMarker = getToolReplayMarker(sourceExperiment.metadata as Record<string, unknown> | null | undefined);
+        if (sourceMarker !== null) {
           throw new MastraError({
             id: 'EXPERIMENT_TOOL_REPLAY_SOURCE_IS_REPLAY',
-            text: `Experiment '${toolReplay.fromExperimentId}' is itself a tool replay run; its traces contain no tool spans. Use the original live experiment as fromExperimentId.`,
+            text: `Experiment '${toolReplay.fromExperimentId}' is itself a tool replay run; its traces contain no replayable tool spans (only synthetic served-from-recording spans). Use the original live experiment as fromExperimentId.`,
             domain: 'STORAGE',
             category: 'USER',
           });
@@ -480,7 +493,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   // entries observe live executions (tool spans stay complete), so they don't
   // stamp the run and it remains an eligible replay source.
   const suppressingMockNames = Object.entries(toolMocks ?? {})
-    .filter(([, mockConfig]) => typeof mockConfig === 'function' || Boolean(mockConfig.error) || 'output' in mockConfig)
+    .filter(([, mockConfig]) => isSuppressingMock(mockConfig))
     .map(([toolName]) => toolName);
   const replayMarker =
     toolReplay || suppressingMockNames.length > 0

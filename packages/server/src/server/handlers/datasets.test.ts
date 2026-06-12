@@ -185,6 +185,56 @@ describe('Datasets Handlers', () => {
       expect(startSpy).not.toHaveBeenCalled();
     });
 
+    it('rejects colliding toolMocks keys with a 400 before starting the experiment', async () => {
+      // Keys that normalize to the same agent-formatted tool name would
+      // otherwise only collide at experiment setup — in the background, after
+      // this fire-and-forget route already answered 200/pending.
+      const startSpy = vi.spyOn(Dataset.prototype, 'startExperimentAsync');
+      const dataset = await mastra.datasets.create({ name: 'Collision Dataset' });
+
+      await expect(
+        TRIGGER_EXPERIMENT_ROUTE.handler({
+          ...createTestServerContext({ mastra }),
+          datasetId: dataset.id,
+          targetType: 'agent',
+          targetId: 'my-agent',
+          toolMocks: {
+            'my.tool': { output: { ok: true } },
+            my_tool: { output: { ok: false } },
+          },
+        }),
+      ).rejects.toMatchObject({ status: 400, message: expect.stringMatching(/both normalize/) });
+      expect(startSpy).not.toHaveBeenCalled();
+    });
+
+    it('rejects malformed replay fields merged in past the body schema (query-param shapes)', async () => {
+      // Adapters merge raw query params into handler params after zod runs on
+      // the body, so `?toolReplay=x` or `?itemIds=abc` arrive as strings.
+      // Direct handler invocation models exactly that bypass.
+      const startSpy = vi.spyOn(Dataset.prototype, 'startExperimentAsync');
+      const dataset = await mastra.datasets.create({ name: 'Shape Bypass Dataset' });
+      const base = {
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        targetType: 'agent' as const,
+        targetId: 'my-agent',
+      };
+
+      await expect(TRIGGER_EXPERIMENT_ROUTE.handler({ ...base, toolReplay: 'x' as never })).rejects.toMatchObject({
+        status: 400,
+        message: 'toolReplay must be an object',
+      });
+      await expect(TRIGGER_EXPERIMENT_ROUTE.handler({ ...base, toolMocks: 'x' as never })).rejects.toMatchObject({
+        status: 400,
+        message: 'toolMocks must be an object',
+      });
+      await expect(TRIGGER_EXPERIMENT_ROUTE.handler({ ...base, itemIds: 'abc' as never })).rejects.toMatchObject({
+        status: 400,
+        message: 'itemIds must be an array of strings',
+      });
+      expect(startSpy).not.toHaveBeenCalled();
+    });
+
     it('passes itemIds through to startExperimentAsync', async () => {
       const startSpy = vi.spyOn(Dataset.prototype, 'startExperimentAsync').mockResolvedValue({
         experimentId: 'exp-items',
@@ -208,6 +258,37 @@ describe('Datasets Handlers', () => {
           targetType: 'agent',
           targetId: 'my-agent',
           itemIds: ['item-1', 'item-2'],
+        }),
+      );
+    });
+
+    it('forwards itemIds and toolReplay together from one request body', async () => {
+      // The re-run-one-diverging-item flow sends both in a single request —
+      // neither field may clobber the other on the way to the runner.
+      const startSpy = vi.spyOn(Dataset.prototype, 'startExperimentAsync').mockResolvedValue({
+        experimentId: 'exp-combined',
+        status: 'pending',
+        totalItems: 1,
+      });
+      const dataset = await mastra.datasets.create({ name: 'Combined Dataset' });
+
+      const result = await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        targetType: 'agent',
+        targetId: 'my-agent',
+        itemIds: ['item-3'],
+        toolReplay: { fromExperimentId: 'prior-exp', onMiss: 'error', matching: 'strict' },
+      });
+
+      expect(result.status).toBe('pending');
+      expect(startSpy).toHaveBeenCalledTimes(1);
+      expect(startSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          targetType: 'agent',
+          targetId: 'my-agent',
+          itemIds: ['item-3'],
+          toolReplay: { fromExperimentId: 'prior-exp', onMiss: 'error', matching: 'strict' },
         }),
       );
     });

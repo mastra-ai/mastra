@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { TestIntegration } from '../../integration/openapi-toolset.mock';
 import { Mastra } from '../../mastra';
+import { EntityType, SpanType } from '../../observability';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
@@ -1644,6 +1645,184 @@ describe('requireApproval property preservation', () => {
 
     expect(output).toEqual({ value: 'blocked' });
     expect(execute).not.toHaveBeenCalled();
+  });
+});
+
+describe('synthetic tool spans for hook short-circuited calls', () => {
+  // The live TOOL_CALL span is created inside the built tool's execute
+  // (CoreToolBuilder), which a beforeToolCall short-circuit never reaches.
+  // The agent's hook wrapper records a synthetic span instead, flagged
+  // metadata.toolReplay.synthetic so it can never be mistaken for a recording.
+
+  /** Fake parent span that records createChildSpan calls and child end/error calls. */
+  function createRecordingParentSpan() {
+    const children: Array<{
+      options: Record<string, any>;
+      endCalls: any[];
+      errorCalls: any[];
+    }> = [];
+    const parentSpan = {
+      createChildSpan: vi.fn((options: Record<string, any>) => {
+        const record = { options, endCalls: [] as any[], errorCalls: [] as any[] };
+        children.push(record);
+        return {
+          end: vi.fn((endOptions?: any) => record.endCalls.push(endOptions)),
+          error: vi.fn((errorOptions?: any) => record.errorCalls.push(errorOptions)),
+          update: vi.fn(),
+          createChildSpan: vi.fn(),
+        };
+      }),
+    };
+    return { parentSpan, children };
+  }
+
+  function makeAgent() {
+    const execute = vi.fn(async () => ({ value: 'executed' }));
+    const testTool = createTool({
+      id: 'test-tool',
+      description: 'Test tool',
+      inputSchema: z.object({ value: z.string() }),
+      execute,
+    });
+    const agent = new Agent({
+      id: 'test-agent',
+      name: 'Test Agent',
+      instructions: 'Test agent for synthetic spans',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          content: [{ type: 'text', text: 'ok' }],
+          warnings: [],
+        }),
+      }),
+      tools: { testTool },
+    });
+    return { agent, execute };
+  }
+
+  it('records a flagged synthetic TOOL_CALL span when a hook short-circuits with an output', async () => {
+    const { agent, execute } = makeAgent();
+    const { parentSpan, children } = createRecordingParentSpan();
+    const tools = await agent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+      hooks: {
+        beforeToolCall: () => ({ proceed: false, output: { value: 'blocked' } }),
+      },
+    });
+
+    const output = await tools.testTool.execute?.({ value: 'ok' }, {
+      tracingContext: { currentSpan: parentSpan },
+    } as any);
+
+    expect(output).toEqual({ value: 'blocked' });
+    expect(execute).not.toHaveBeenCalled();
+    expect(children).toHaveLength(1);
+    const span = children[0]!;
+    // Shaped like a live tool span so the trace timeline reads naturally…
+    expect(span.options).toMatchObject({
+      type: SpanType.TOOL_CALL,
+      name: "tool: 'testTool'",
+      entityType: EntityType.TOOL,
+      entityId: 'testTool',
+      entityName: 'testTool',
+      input: { value: 'ok' },
+    });
+    expect(span.options.attributes).toMatchObject({ toolDescription: 'Test tool', toolType: 'tool' });
+    // …but unmistakably flagged as synthetic.
+    expect(span.options.metadata).toEqual({ toolReplay: { synthetic: true } });
+    expect(span.endCalls).toEqual([{ output: { value: 'blocked' }, attributes: { success: true } }]);
+    expect(span.errorCalls).toEqual([]);
+  });
+
+  it('merges hook-provided spanMetadata under toolReplay without letting it unset the synthetic flag', async () => {
+    const { agent } = makeAgent();
+    const { parentSpan, children } = createRecordingParentSpan();
+    const tools = await agent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+      hooks: {
+        beforeToolCall: () => ({
+          proceed: false,
+          output: { value: 'mocked' },
+          // synthetic: false is adversarial — the flag must survive.
+          spanMetadata: { outcome: 'mocked', synthetic: false },
+        }),
+      },
+    });
+
+    await tools.testTool.execute?.({ value: 'ok' }, { tracingContext: { currentSpan: parentSpan } } as any);
+
+    expect(children[0]!.options.metadata).toEqual({
+      toolReplay: { outcome: 'mocked', synthetic: true },
+    });
+  });
+
+  it('records a synthetic span with the error when the hook throws (replayed/mocked errors)', async () => {
+    const { agent, execute } = makeAgent();
+    const { parentSpan, children } = createRecordingParentSpan();
+    const hookError = Object.assign(new Error('upstream timed out'), { name: 'TimeoutError' });
+    const tools = await agent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+      hooks: {
+        beforeToolCall: () => {
+          throw hookError;
+        },
+      },
+    });
+
+    await expect(
+      tools.testTool.execute?.({ value: 'ok' }, { tracingContext: { currentSpan: parentSpan } } as any),
+    ).rejects.toBe(hookError);
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(children).toHaveLength(1);
+    const span = children[0]!;
+    expect(span.options.metadata).toEqual({ toolReplay: { synthetic: true } });
+    expect(span.errorCalls).toEqual([{ error: hookError, attributes: { success: false } }]);
+    expect(span.endCalls).toEqual([]);
+  });
+
+  it('skips silently on untraced runs — short-circuits still work without a tracing context', async () => {
+    const { agent } = makeAgent();
+    const tools = await agent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+      hooks: {
+        beforeToolCall: () => ({ proceed: false, output: { value: 'blocked' } }),
+      },
+    });
+
+    // No execOptions tracing at all, and a context without a current span.
+    await expect(tools.testTool.execute?.({ value: 'ok' }, {} as any)).resolves.toEqual({ value: 'blocked' });
+    await expect(tools.testTool.execute?.({ value: 'ok' }, { tracingContext: {} } as any)).resolves.toEqual({
+      value: 'blocked',
+    });
+  });
+
+  it('does not flag the live span when the hook lets the call proceed', async () => {
+    const { agent, execute } = makeAgent();
+    const { parentSpan, children } = createRecordingParentSpan();
+    const tools = await agent['convertTools']({
+      requestContext: new RequestContext(),
+      methodType: 'generate',
+      hooks: {
+        beforeToolCall: () => undefined,
+      },
+    });
+
+    const output = await tools.testTool.execute?.({ value: 'ok' }, {
+      tracingContext: { currentSpan: parentSpan },
+    } as any);
+
+    expect(output).toEqual({ value: 'executed' });
+    expect(execute).toHaveBeenCalledTimes(1);
+    // Exactly one span — the live one from CoreToolBuilder, not synthetic-flagged.
+    expect(children).toHaveLength(1);
+    expect(children[0]!.options.metadata?.toolReplay).toBeUndefined();
   });
 });
 

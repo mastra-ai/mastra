@@ -530,8 +530,9 @@ describe('tool replay integration', () => {
   });
 
   it('rejects fromExperimentId pointing at a replay experiment — recordings must come from live runs', async () => {
-    // A replay run's trace contains no tool spans, so chaining it would make
-    // every item miss (onMiss 'error') or run fully live (onMiss 'passthrough').
+    // A replay run's trace contains only synthetic tool spans (which
+    // extraction skips), so chaining it would make every item miss (onMiss
+    // 'error') or run fully live (onMiss 'passthrough').
     await experimentsStorage.createExperiment({
       id: 'replay-exp',
       datasetId: null,
@@ -550,6 +551,66 @@ describe('tool replay integration', () => {
         toolReplay: { fromExperimentId: 'replay-exp' },
       }),
     ).rejects.toThrowError(/itself a tool replay run/);
+  });
+
+  it('never replays a trace made of synthetic spans — a replay run trace pointed at via replayTraceId all-misses', async () => {
+    // Replay/mock runs record synthetic TOOL_CALL spans for short-circuited
+    // calls (flagged metadata.toolReplay.synthetic, exactly as the agent's
+    // hook wrapper emits them). Pointing a second replay directly at such a
+    // trace must find zero replayable events: the trace exists, so resolution
+    // succeeds, but every call misses — the synthetic outputs are never served
+    // as recordings.
+    const base = Date.parse('2026-01-02T00:00:00Z');
+    await observabilityStorage.batchCreateSpans({
+      records: [
+        {
+          traceId: 'replay-run-trace',
+          spanId: 'replay-run-root',
+          name: "agent run: 'replay-test-agent'",
+          spanType: SpanType.AGENT_RUN,
+          isEvent: false,
+          entityType: EntityType.AGENT,
+          entityId: 'replay-test-agent',
+          entityName: 'Replay Test Agent',
+          startedAt: new Date(base),
+          endedAt: new Date(base + 10_000),
+        },
+        ...[0, 1].map(i => ({
+          traceId: 'replay-run-trace',
+          spanId: `replay-run-tool-${i}`,
+          parentSpanId: 'replay-run-root',
+          name: "tool: 'lookup'",
+          spanType: SpanType.TOOL_CALL,
+          isEvent: false,
+          entityType: EntityType.TOOL,
+          entityId: 'lookup',
+          entityName: 'lookup',
+          input: { key: i === 0 ? 'first' : 'second' },
+          output: { value: `served-from-recording:${i}` },
+          metadata: { toolReplay: { synthetic: true, outcome: 'replayed', sequence: i } },
+          startedAt: new Date(base + 1000 * (i + 1)),
+          endedAt: new Date(base + 1000 * (i + 1) + 500),
+        })),
+      ],
+    });
+
+    const summary = await runExperiment(mastra, {
+      data: [{ id: 'item-1', input: 'Look up first and second', replayTraceId: 'replay-run-trace' }],
+      targetType: 'agent',
+      targetId: 'replay-test-agent',
+      toolReplay: {},
+    });
+
+    expect(summary.failedCount).toBe(1);
+    const result = summary.results[0]!;
+    expect(result.error?.code).toBe('TOOL_REPLAY_MISS');
+    expect(liveExecute).not.toHaveBeenCalled();
+    // Zero events extracted: nothing recorded, nothing replayed, first call missed.
+    expect(result.toolReplay?.totalRecorded).toBe(0);
+    expect(result.toolReplay?.replayedCount).toBe(0);
+    expect(result.toolReplay?.misses.length).toBeGreaterThan(0);
+    // The synthetic outputs never reached the agent.
+    expect(JSON.stringify(result.toolReplay)).not.toContain('served-from-recording');
   });
 
   it('accepts a live source experiment whose user metadata happens to contain a toolReplay key', async () => {
@@ -862,33 +923,33 @@ describe('tool replay integration', () => {
 
   describe('itemIds filter', () => {
     it('runs only the selected items — single-item replay re-runs', async () => {
-    await observabilityStorage.batchCreateSpans({ records: [] }).catch(() => {});
-    const summary = await runExperiment(mastra, {
-      data: [
-        { id: 'item-1', input: 'Look up first and second' },
-        { id: 'item-2', input: 'Look up first and second' },
-        { id: 'item-3', input: 'Look up first and second' },
-      ],
-      targetType: 'agent',
-      targetId: 'replay-test-agent',
-      itemIds: ['item-2'],
-    });
+      await observabilityStorage.batchCreateSpans({ records: [] }).catch(() => {});
+      const summary = await runExperiment(mastra, {
+        data: [
+          { id: 'item-1', input: 'Look up first and second' },
+          { id: 'item-2', input: 'Look up first and second' },
+          { id: 'item-3', input: 'Look up first and second' },
+        ],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        itemIds: ['item-2'],
+      });
 
-    expect(summary.totalItems).toBe(1);
-    expect(summary.results.map(r => r.itemId)).toEqual(['item-2']);
+      expect(summary.totalItems).toBe(1);
+      expect(summary.results.map(r => r.itemId)).toEqual(['item-2']);
     });
 
     it('fails at setup when no item matches', async () => {
-    await expect(
-      runExperiment(mastra, {
-        data: [{ id: 'item-1', input: 'hello' }],
-        targetType: 'agent',
-        targetId: 'replay-test-agent',
-        itemIds: ['nope'],
-      }),
-    ).rejects.toThrowError(/No items match itemIds/);
+      await expect(
+        runExperiment(mastra, {
+          data: [{ id: 'item-1', input: 'hello' }],
+          targetType: 'agent',
+          targetId: 'replay-test-agent',
+          itemIds: ['nope'],
+        }),
+      ).rejects.toThrowError(/No items match itemIds/);
     });
-});
+  });
 
   describe('review regressions (Codex + adversarial)', () => {
     it('stamps mockedTools on the async path (pre-created experiment record)', async () => {
@@ -1021,6 +1082,87 @@ describe('tool replay integration', () => {
           toolMocks: { 'look.up': { output: 1 }, look_up: { output: 2 } },
         }),
       ).rejects.toThrowError(/both normalize to tool name 'look_up'/);
+    });
+  });
+
+  describe('strict matching + mocks: the per-tool escape hatch', () => {
+    it('a suppressing mock on a recorded tool does not breach the strict contract', async () => {
+      // The documented recipe: strict everywhere, mock the one tool whose args
+      // drift. The mock answers every call, so the tool's recorded events can
+      // never be consumed — that must not fail the item.
+      await seedRecordedTrace('rec-trace-strict-mock', [
+        { input: { key: 'first' }, output: { value: 'recorded:first' } },
+        { input: { key: 'second' }, output: { value: 'recorded:second' } },
+      ]);
+
+      const summary = await runExperiment(mastra, {
+        data: [{ id: 'item-1', input: 'Look up first and second', replayTraceId: 'rec-trace-strict-mock' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        toolReplay: { matching: 'strict' },
+        toolMocks: { lookup: { output: { value: 'mocked' } } },
+      });
+
+      expect(summary.results[0]?.error).toBeNull();
+      expect(summary.succeededCount).toBe(1);
+      const report = summary.results[0]?.toolReplay;
+      // The evidence stays honest: the events are still reported unconsumed.
+      expect(report?.unconsumed).toEqual([{ toolName: 'lookup', count: 2 }]);
+      expect(report?.mocks).toEqual([{ toolName: 'lookup', calls: 2, kind: 'output' }]);
+    });
+
+    it('an expect-only mock stays inside the strict contract — leftovers still fail', async () => {
+      // Expect-only entries observe and fall through to the queue; a leftover
+      // recorded call is a genuine breach, not an exemption.
+      await seedRecordedTrace('rec-trace-strict-observe', [
+        { input: { key: 'first' }, output: { value: 'recorded:first' } },
+        { input: { key: 'second' }, output: { value: 'recorded:second' } },
+        { input: { key: 'third' }, output: { value: 'recorded:third' } },
+      ]);
+
+      const summary = await runExperiment(mastra, {
+        data: [{ id: 'item-1', input: 'Look up first and second', replayTraceId: 'rec-trace-strict-observe' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        toolReplay: { matching: 'strict' },
+        toolMocks: { lookup: { expect: { calledTimes: 2 } } },
+      });
+
+      expect(summary.failedCount).toBe(1);
+      expect(summary.results[0]?.error?.code).toBe('TOOL_REPLAY_UNCONSUMED');
+    });
+  });
+
+  describe('async setup failures', () => {
+    it('persists the failure reason on the pre-created experiment record', async () => {
+      await experimentsStorage.createExperiment({
+        id: 'pre-created-bad-source',
+        datasetId: null,
+        datasetVersion: null,
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        totalItems: 0,
+      });
+
+      await expect(
+        runExperiment(mastra, {
+          experimentId: 'pre-created-bad-source',
+          data: [{ id: 'item-1', input: 'Look up first and second' }],
+          targetType: 'agent',
+          targetId: 'replay-test-agent',
+          toolReplay: { fromExperimentId: 'does-not-exist' },
+        }),
+      ).rejects.toThrowError();
+
+      const experiment = await experimentsStorage.getExperimentById({ id: 'pre-created-bad-source' });
+      expect(experiment?.status).toBe('failed');
+      // The async HTTP caller reads WHY from the record, not from server logs.
+      expect(experiment?.metadata).toMatchObject({
+        failureReason: { id: 'EXPERIMENT_TOOL_REPLAY_SOURCE_NOT_FOUND' },
+      });
+      expect((experiment?.metadata as { failureReason?: { message?: string } }).failureReason?.message).toContain(
+        'does-not-exist',
+      );
     });
   });
 });

@@ -427,7 +427,12 @@ export const experimentResponseSchema = z.object({
   targetId: z.string(),
   name: z.string().optional(),
   description: z.string().optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  metadata: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe(
+      'User metadata, plus runner-stamped keys: `toolReplay` marks replay/mock runs (onMiss, matching, mockedTools), and `failureReason` ({id, message}) records why an async experiment failed at setup',
+    ),
   status: z.enum(['pending', 'running', 'completed', 'failed']),
   totalItems: z.number(),
   succeededCount: z.number(),
