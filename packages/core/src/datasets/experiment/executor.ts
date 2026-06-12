@@ -343,9 +343,9 @@ async function executeAgent(
     if (replayState) {
       // Any other failure during replay (provider error, mid-run abort) keeps
       // the divergence report — partial replay and passthrough live-execution
-      // evidence matters most on failures. (When an outer signal aborts, the
+      // evidence matters most on failures. (When an outer signal aborts,
       // raceWithSignal in executeTarget can reject first and bypass this catch;
-      // only the report is lost on that path, not the failure itself.)
+      // executeTarget's own catch then attaches the report via replayReportHolder.)
       return {
         output: null,
         error: {
