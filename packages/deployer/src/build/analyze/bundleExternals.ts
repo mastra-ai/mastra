@@ -31,7 +31,7 @@ import {
   slash,
 } from '../utils';
 import type { BundlerPlatform } from '../utils';
-import { DEPS_TO_IGNORE, GLOBAL_EXTERNALS, DEPRECATED_EXTERNALS } from './constants';
+import { DEPS_TO_IGNORE, getSafeBundlerExternals } from './constants';
 
 type VirtualDependency = {
   name: string;
@@ -484,7 +484,7 @@ export async function bundleExternals(
 
   // If `externals` is an array (and not `true`), we proceed as normal
   const externalsList = Array.isArray(customExternals) ? customExternals : [];
-  const allExternals = [...GLOBAL_EXTERNALS, ...DEPRECATED_EXTERNALS, ...externalsList];
+  const allExternals = getSafeBundlerExternals(externalsList, { includeDeprecated: true });
 
   const workspacePackagesNames = Array.from(workspaceMap.keys());
   const packagesToTranspile = new Set([...transpilePackages, ...workspacePackagesNames]);
