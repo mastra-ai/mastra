@@ -331,6 +331,145 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(result.stepResult.isContinued).toBe(false);
   });
 
+  it('does not continue when finishReason is content-filter', async () => {
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'finish',
+                  finishReason: 'content-filter',
+                  providerMetadata: {
+                    anthropic: {
+                      stopDetails: { type: 'refusal', category: 'cyber', explanation: 'blocked' },
+                    },
+                  },
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: {
+                headers: undefined,
+              },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun);
+
+    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    // A content-filter refusal is terminal: continuing would re-send the same
+    // request and re-trigger the refusal, hanging the run until maxSteps.
+    expect(result.stepResult.reason).toBe('content-filter');
+    expect(result.stepResult.isContinued).toBe(false);
+  });
+
+  it('does not continue when finishReason is content-filter even with a pending tool call', async () => {
+    const tools = {
+      echo: createTool({
+        id: 'echo',
+        description: 'Echo input text',
+        inputSchema: z.object({
+          text: z.string(),
+        }),
+        execute: vi.fn(async ({ text }) => ({ text })),
+      }),
+    };
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'echo',
+                  input: '{"text":"partial"}',
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'content-filter',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: {
+                headers: undefined,
+              },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+
+    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(result.stepResult.reason).toBe('content-filter');
+    expect(result.stepResult.isContinued).toBe(false);
+  });
+
   it('creates a client tool observability span early and ends it with streamed args', async () => {
     const carrier = {
       traceparent: '00-1234567890abcdef1234567890abcdef-abcdef1234567890-01',

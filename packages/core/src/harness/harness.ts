@@ -71,6 +71,12 @@ type HarnessStreamState = {
   isSuspended: boolean;
   textContentById: Map<string, { index: number; text: string }>;
   thinkingContentById: Map<string, { index: number; text: string }>;
+  /**
+   * Set when a stream ends on a non-success finish reason (e.g. `content-filter`,
+   * `error`, `length`). Carries the user-facing message so the run finalizes
+   * into an explicit terminal error state instead of silently completing.
+   */
+  terminalError?: string;
 };
 
 type HarnessSendNotificationSignalOptions = {
@@ -80,6 +86,66 @@ type HarnessSendNotificationSignalOptions = {
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
 };
+
+/**
+ * Build a user-facing message for a non-success stream finish reason.
+ *
+ * Anthropic's classifier blocks / model refusals (e.g. `claude-fable-5`) surface
+ * through the AI SDK as a `content-filter` finish reason, with details on
+ * `providerMetadata.anthropic.stopDetails`. Without explicit handling these
+ * runs end on an empty assistant message with no error, so the run appears to
+ * silently stop. Returning a message here lets the harness finalize the run
+ * into an explicit terminal error state.
+ */
+export function describeNonSuccessFinishReason(reason: string, providerMetadata: unknown): string | undefined {
+  switch (reason) {
+    case 'content-filter': {
+      const stopDetails = (providerMetadata as { anthropic?: { stopDetails?: Record<string, unknown> } } | undefined)
+        ?.anthropic?.stopDetails;
+      const explanation =
+        stopDetails && typeof stopDetails.explanation === 'string' ? stopDetails.explanation : undefined;
+      const category = stopDetails && typeof stopDetails.category === 'string' ? stopDetails.category : undefined;
+      const detail = explanation ?? (category ? `category: ${category}` : undefined);
+      return detail
+        ? `The model stopped on a content filter (${detail}).`
+        : 'The model stopped on a content filter.';
+    }
+    case 'error':
+      return 'The model stream ended with an error before producing a final response.';
+    case 'length':
+      return 'The model stopped because it reached its maximum output length before finishing.';
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * The Anthropic model that `claude-fable-5` runs are automatically retried on
+ * server-side when fable-5's safety classifiers block a turn. See
+ * {@link buildFableFallbackProviderOptions}.
+ */
+const FABLE_FALLBACK_MODEL = 'claude-opus-4-8';
+
+/**
+ * Returns Anthropic `providerOptions` that enable a server-side fallback to
+ * {@link FABLE_FALLBACK_MODEL} when the active model is `claude-fable-5`, and
+ * `undefined` otherwise.
+ *
+ * fable-5 can have a turn blocked server-side by its safety classifiers. With
+ * a fallback configured, Anthropic transparently retries the blocked turn on
+ * the fallback model and returns that model's answer instead of refusing. If
+ * the whole chain refuses, the run still ends on a `content-filter` finish
+ * reason, which is handled as a terminal error.
+ *
+ * The match is suffix-based so it covers `anthropic/claude-fable-5`, a bare
+ * `claude-fable-5`, and any pack/provider-prefixed form.
+ */
+export function buildFableFallbackProviderOptions(modelId: string): { anthropic: { fallbacks: { model: string }[] } } | undefined {
+  if (!/(^|\/)claude-fable-5$/.test(modelId)) {
+    return undefined;
+  }
+  return { anthropic: { fallbacks: [{ model: FABLE_FALLBACK_MODEL }] } };
+}
 
 function getUsageNumber(usage: Record<string, unknown>, key: string): number | undefined {
   const value = usage[key];
@@ -1785,6 +1851,19 @@ export class Harness<TState = {}> {
       ...(tracingOptions && { tracingOptions }),
     };
     streamOptions.toolsets = await this.buildToolsets(requestContext);
+
+    // Auto-enable Anthropic server-side fallbacks for fable-5 so a classifier
+    // block is transparently retried on the fallback model instead of failing.
+    const fableFallback = buildFableFallbackProviderOptions(this.getCurrentModelId());
+    if (fableFallback) {
+      const existing = streamOptions.providerOptions as Record<string, unknown> | undefined;
+      const existingAnthropic = (existing?.anthropic as Record<string, unknown> | undefined) ?? {};
+      streamOptions.providerOptions = {
+        ...existing,
+        anthropic: { ...existingAnthropic, ...fableFallback.anthropic },
+      };
+    }
+
     return streamOptions;
   }
 
@@ -1905,13 +1984,23 @@ export class Harness<TState = {}> {
             chunk.type === 'tool-call-suspended'
           ) {
             const finishedRunId: string | null = chunkRunId ?? this.currentRunId;
+            const suspended =
+              chunk.type === 'tool-call-suspended' ||
+              (streamResult ?? this.finishStreamState(currentRun)).suspended ||
+              undefined;
+            const aborted = chunk.type === 'abort';
+            // A non-success terminal finish reason (e.g. a `claude-fable-5`
+            // content-filter refusal) is surfaced as an explicit error so the
+            // run never silently stops without a visible terminal state.
+            let isError = chunk.type === 'error';
+            if (currentRun.terminalError && !isError && !aborted && !this.abortRequested && !suspended) {
+              isError = true;
+              this.emit({ type: 'error', error: new Error(currentRun.terminalError) });
+            }
             await this.finishSubscribedStreamRun({
-              suspended:
-                chunk.type === 'tool-call-suspended' ||
-                (streamResult ?? this.finishStreamState(currentRun)).suspended ||
-                undefined,
-              error: chunk.type === 'error',
-              aborted: chunk.type === 'abort',
+              suspended,
+              error: isError,
+              aborted,
             });
             lastFinishedRunId = finishedRunId;
             currentRun = undefined;
@@ -2552,6 +2641,15 @@ export class Harness<TState = {}> {
     }
 
     result ??= this.finishStreamState(state);
+
+    // A non-success terminal finish reason (e.g. a `claude-fable-5`
+    // content-filter refusal) is surfaced as an explicit error so the run never
+    // silently stops without a visible terminal state.
+    if (state.terminalError && !error && !aborted && !this.abortRequested && !result.suspended) {
+      error = true;
+      this.emit({ type: 'error', error: new Error(state.terminalError) });
+    }
+
     this.emit({
       type: 'agent_end',
       reason: error
@@ -2820,7 +2918,19 @@ export class Harness<TState = {}> {
         } else if (finishReason === 'tool-calls') {
           state.currentMessage.stopReason = 'tool_use';
         } else {
-          state.currentMessage.stopReason = 'complete';
+          // Non-success terminal reasons (e.g. `content-filter` from a
+          // `claude-fable-5` refusal, `error`, or `length`) must surface as an
+          // explicit terminal error rather than a silent `complete`. Otherwise
+          // the run ends with no final message and no error, leaving the user
+          // unable to tell whether it completed, failed, or is still active.
+          const errorMessage = describeNonSuccessFinishReason(finishReason, chunk.payload?.providerMetadata);
+          if (errorMessage) {
+            state.currentMessage.stopReason = 'error';
+            state.currentMessage.errorMessage = errorMessage;
+            state.terminalError = errorMessage;
+          } else {
+            state.currentMessage.stopReason = 'complete';
+          }
         }
         break;
       }
