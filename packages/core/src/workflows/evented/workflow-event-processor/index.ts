@@ -2492,12 +2492,26 @@ export class WorkflowEventProcessor extends EventProcessor {
    *   should drop the event (or return 4xx for HTTP push).
    */
   async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
+    // Build a stable retry key once per call. If event.id is missing we fall
+    // back to a deterministic composite of type/runId/workflowId/executionPath
+    // so the same logical event lands in the same bucket on each redelivery
+    // and eventually reaches MAX_DELIVERY_ATTEMPTS. Never include a timestamp
+    // (or any monotonically-changing token) here — that resets the counter
+    // every attempt and reopens the infinite-retry path this guards against.
+    const workflowData = event.data as Partial<Pick<ProcessorArgs, 'workflowId' | 'executionPath'>>;
+    const eventKey =
+      event.id ??
+      JSON.stringify({
+        type: event.type,
+        runId: event.runId,
+        workflowId: workflowData?.workflowId,
+        executionPath: workflowData?.executionPath,
+      });
     try {
       await this.#dispatch(event);
-      if (event.id) this.deliveryAttempts.delete(event.id);
+      this.deliveryAttempts.delete(eventKey);
       return { ok: true };
     } catch (err) {
-      const eventKey = event.id ?? `${event.type}:${event.runId}:${Date.now()}`;
       const attempts = (this.deliveryAttempts.get(eventKey) ?? 0) + 1;
       this.deliveryAttempts.set(eventKey, attempts);
       const exhausted = attempts >= WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS;

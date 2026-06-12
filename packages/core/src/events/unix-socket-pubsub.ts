@@ -635,8 +635,8 @@ export class UnixSocketPubSub extends PubSub {
   }
 
   #invokeLocalCallback(topic: string, event: Event, cb: EventCallback, attempt: number) {
-    // Keep this aligned with the consumer-side retry budget (e.g.
-    // WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS = 5). The transport must
+    // Keep this aligned with (or above) the consumer-side retry budget
+    // (e.g. WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS). The transport must
     // give the consumer enough redeliveries to exhaust its own retry budget
     // and surface a terminal failure, otherwise the consumer never sees
     // attempt N and the run silently hangs.
@@ -653,7 +653,11 @@ export class UnixSocketPubSub extends PubSub {
         () => {
           if (this.#closed) return;
           if (!this.#callbacks.get(topic)?.has(cb)) return;
-          this.#invokeLocalCallback(topic, event, cb, attempt + 1);
+          const redeliveredEvent: Event = {
+            ...event,
+            deliveryAttempt: (event.deliveryAttempt ?? 1) + 1,
+          };
+          this.#invokeLocalCallback(topic, redeliveredEvent, cb, attempt + 1);
         },
         REDELIVERY_DELAY_MS * (attempt + 1),
       );
