@@ -56,23 +56,23 @@ const mastra = new Mastra({
 
 ### Auth Provider
 
-| Option | Environment Variable | Description |
-| --- | --- | --- |
-| `baseUrl` | `NEON_AUTH_BASE_URL` | Neon Auth base URL (e.g., `https://your-project.neon.tech`) |
-| `jwksUrl` | `NEON_AUTH_JWKS_URL` | Explicit JWKS URL (overrides `baseUrl`-derived URL) |
-| `sessionCookieName` | — | Session cookie name (default: `neonauth.session_token`) |
-| `signUpEnabled` | — | Whether sign-up is allowed (default: `true`) |
+| Option              | Environment Variable | Description                                                 |
+| ------------------- | -------------------- | ----------------------------------------------------------- |
+| `baseUrl`           | `NEON_AUTH_BASE_URL` | Neon Auth base URL (e.g., `https://your-project.neon.tech`) |
+| `jwksUrl`           | `NEON_AUTH_JWKS_URL` | Explicit JWKS URL (overrides `baseUrl`-derived URL)         |
+| `sessionCookieName` | —                    | Session cookie name (default: `neonauth.session_token`)     |
+| `signUpEnabled`     | —                    | Whether sign-up is allowed (default: `true`)                |
 
 ### RBAC Provider
 
-| Option | Description |
-| --- | --- |
-| `baseUrl` | Neon Auth base URL (falls back to `NEON_AUTH_BASE_URL` env var) |
-| `roleMapping` | Map of role slugs to Mastra permission patterns (use `_default` for unmapped roles) |
-| `organizationId` | Scope role lookups to a specific organization |
-| `cache.ttlMs` | Role cache TTL in ms (default: 60000) |
-| `cache.maxSize` | Max cached entries (default: 1000) |
-| `getUserRoles` | Custom function to extract roles from user (bypasses API calls) |
+| Option           | Description                                                                         |
+| ---------------- | ----------------------------------------------------------------------------------- |
+| `baseUrl`        | Neon Auth base URL (falls back to `NEON_AUTH_BASE_URL` env var)                     |
+| `roleMapping`    | Map of role slugs to Mastra permission patterns (use `_default` for unmapped roles) |
+| `organizationId` | Scope role lookups to a specific organization                                       |
+| `cache.ttlMs`    | Role cache TTL in ms (default: 60000)                                               |
+| `cache.maxSize`  | Max cached entries (default: 1000)                                                  |
+| `getUserRoles`   | Custom function to extract roles from user (bypasses API calls)                     |
 
 ## Authentication flow
 
@@ -94,7 +94,7 @@ The adapter verifies tokens in two stages:
 ```typescript
 const auth = new MastraAuthNeon({
   baseUrl: process.env.NEON_AUTH_BASE_URL,
-  authorizeUser: async (user) => {
+  authorizeUser: async user => {
     return user.jwt?.role === 'authenticated';
   },
 });
