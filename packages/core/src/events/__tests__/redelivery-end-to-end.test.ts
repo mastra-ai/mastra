@@ -82,6 +82,7 @@ function makeWorkflow(id: string) {
  */
 class FlakyProcessor extends WorkflowEventProcessor {
   public dispatchCalls = 0;
+  public failuresTriggered = 0;
   constructor(
     args: ConstructorParameters<typeof WorkflowEventProcessor>[0],
     private failuresLeft: number,
@@ -94,6 +95,7 @@ class FlakyProcessor extends WorkflowEventProcessor {
     this.dispatchCalls++;
     if (event.type === this.failOnType && event.runId === this.failOnRunId && this.failuresLeft > 0) {
       this.failuresLeft--;
+      this.failuresTriggered++;
       return this.runOnceWithFailure(event);
     }
     return super.handle(event);
@@ -122,7 +124,14 @@ function makeHandleCallback(processor: WorkflowEventProcessor): EventCallback {
         // Terminal failure: ack so the transport drops the poisoned event.
         return ack?.();
       })
-      .catch(() => ack?.());
+      // Production wires the same pattern in `mastra/index.ts` and logs but
+      // never acks on an unhandled rejection — acking a thrown handle()
+      // would silently drop the event. The WEP swallows internally so this
+      // catch should never fire; surface it loudly if it ever does.
+      .catch(err => {
+        // eslint-disable-next-line no-console
+        console.error('unexpected handle() rejection in test wiring', err);
+      });
   };
 }
 
@@ -191,15 +200,25 @@ describe('redelivery end-to-end (UnixSocketPubSub + WorkflowEventProcessor)', ()
     // (attempt + 1)) so this resolves quickly but is not synchronous.
     await waitFor(() => flaky.dispatchCalls >= 3);
 
+    // Pin that the failure path actually fired the requested number of times.
+    // If the gate ever stops matching (e.g. the broker rewriting runIds the
+    // way it already rewrites event ids), `failuresTriggered` would be 0,
+    // the next assertion would still pass vacuously with 3 SUCCESS calls,
+    // and the "redelivery on nack" contract would silently go untested.
+    expect(flaky.failuresTriggered).toBe(2);
+
     // The successful third attempt must not have published workflow.fail.
     // Sample twice to catch a late publish from a stray redelivery.
     await new Promise(r => setTimeout(r, 250));
     expect(failEvents).toEqual([]);
 
-    // And no further redeliveries happen after the success.
-    const settled = flaky.dispatchCalls;
+    // And no further failure-path redeliveries fire after the success.
+    // (dispatchCalls may still tick from downstream events on the same
+    // topic — workflow.start → step.run → step.end → workflow.end — so
+    // pin failuresTriggered, which only counts the sabotage gate.)
+    const settledFailures = flaky.failuresTriggered;
     await new Promise(r => setTimeout(r, 500));
-    expect(flaky.dispatchCalls).toBe(settled);
+    expect(flaky.failuresTriggered).toBe(settledFailures);
 
     await mastra.shutdown();
   });
@@ -237,13 +256,24 @@ describe('redelivery end-to-end (UnixSocketPubSub + WorkflowEventProcessor)', ()
     // user-visible contract: a single terminal workflow.fail.
     await waitFor(() => failEvents.length >= 1);
 
-    // At least the consumer budget worth of dispatches happened. The
-    // cross-layer transport-vs-consumer budget ordering is pinned by
-    // unix-socket-pubsub-redelivery-budget.test.ts; here we just prove
-    // the consumer side actually trips.
+    // Pin that the failure path actually fired at least consumerBudget
+    // times. If the gate ever stops matching, failuresTriggered would
+    // be 0 and the test below could pass with the workflow.fail event
+    // coming from some other path — masking a real regression.
     const consumerBudget = (WorkflowEventProcessor as unknown as { MAX_DELIVERY_ATTEMPTS: number })
       .MAX_DELIVERY_ATTEMPTS;
+    expect(flaky.failuresTriggered).toBeGreaterThanOrEqual(consumerBudget);
+
+    // Bound the dispatch count on both sides so an infinite redelivery
+    // loop (consumer never trips) or a no-redelivery bug (transport
+    // hands off only once) would both fail this test. The cross-layer
+    // transport-vs-consumer budget ordering is pinned by
+    // unix-socket-pubsub-redelivery-budget.test.ts.
     expect(flaky.dispatchCalls).toBeGreaterThanOrEqual(consumerBudget);
+    // workflow.start trips terminal after consumerBudget attempts; the
+    // resulting workflow.fail also re-enters handle() exactly once via
+    // the same topic subscription. The upper bound is consumerBudget + 1.
+    expect(flaky.dispatchCalls).toBeLessThanOrEqual(consumerBudget + 1);
 
     // workflow.fail must be published exactly once even though the
     // terminal event itself re-enters the consumer (errorWorkflow

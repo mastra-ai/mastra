@@ -149,7 +149,9 @@ describe.each([
     // engine terminates the run after each step, so the scope is released
     // when the WEP finishes processing the suspend — resume creates a fresh
     // registration that hydrates from `_internal` via readScoped fallback.
-    if (!evented) {
+    if (evented) {
+      expect(mastra.__getRunScope(stream.runId)).toBeUndefined();
+    } else {
       expect(mastra.__getRunScope(stream.runId)).toBeDefined();
     }
 
@@ -253,7 +255,9 @@ describe.each([
     // suspend boundary. Evented engine: each step terminates async, so the
     // scope is released — resume re-creates it. See the single-agent test
     // above for the engine-asymmetry rationale.
-    if (!evented) {
+    if (evented) {
+      expect(mastra.__getRunScope(stream.runId)).toBeUndefined();
+    } else {
       expect(mastra.__getRunScope(stream.runId)).toBeDefined();
     }
 
@@ -344,7 +348,9 @@ describe.each([
     // reads back the same memory/transport handles the original stream
     // registered. Evented engine: scope was released when WEP processed the
     // suspend; decline re-registers and reads back via readScoped fallback.
-    if (!evented) {
+    if (evented) {
+      expect(mastra.__getRunScope(stream.runId)).toBeUndefined();
+    } else {
       expect(mastra.__getRunScope(stream.runId)).toBeDefined();
     }
 

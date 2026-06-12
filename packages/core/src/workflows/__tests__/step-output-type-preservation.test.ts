@@ -79,7 +79,11 @@ async function runWorkflowReturning(payload: unknown) {
 
 describe.each(ENGINES)('step-output type preservation ($name engine)', ({ evented }) => {
   beforeEach(() => {
-    if (evented) process.env.MASTRA_EVENTED_EXECUTION = 'true';
+    if (evented) {
+      process.env.MASTRA_EVENTED_EXECUTION = 'true';
+    } else {
+      delete process.env.MASTRA_EVENTED_EXECUTION;
+    }
   });
   afterEach(() => {
     delete process.env.MASTRA_EVENTED_EXECUTION;
@@ -179,15 +183,16 @@ describe.each(ENGINES)('step-output type preservation ($name engine)', ({ evente
   });
 
   it('preserves self-referential cycles without throwing', async () => {
-    // The codec replaces cycles with null on the second visit (see
-    // codec.test.ts); the in-process clone path tracks via WeakMap and
-    // restores the cycle. Either way, the workflow must not throw.
+    // This suite traverses the in-process snapshot path — neither engine
+    // hits the codec (default uses InMemoryStore clone, evented uses
+    // EventEmitterPubSub which skips serialization). Both engines track
+    // cycles via WeakMap during clone and must restore the self-reference.
+    // The codec's "cycle → null" behavior is covered separately in
+    // codec.test.ts; pinning it here would mask snapshot-clone regressions.
     const a: any = { name: 'a' };
     a.self = a;
     const out = (await runWorkflowReturning(a)) as { name: string; self?: unknown };
     expect(out.name).toBe('a');
-    // The self-reference may be the same object (default engine via WeakMap)
-    // or null (codec engine). Both are acceptable per the codec contract.
-    expect(out.self === out || out.self === null).toBe(true);
+    expect(out.self).toBe(out);
   });
 });

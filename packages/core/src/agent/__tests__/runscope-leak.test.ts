@@ -73,6 +73,16 @@ describe.each([
     const runIds = streams.map(s => s.runId);
     expect(new Set(runIds).size).toBe(N);
 
+    // Sample mid-flight: on the default engine at least one scope must
+    // currently be live, otherwise the after-drain "all released" assertion
+    // below would pass vacuously (e.g. if __createRunScope ever silently
+    // became a no-op). The evented engine releases the scope per-step so
+    // this sample is racy on that path — skip it there.
+    if (!evented) {
+      const liveBeforeDrain = runIds.filter(id => mastra.__getRunScope(id) !== undefined).length;
+      expect(liveBeforeDrain).toBeGreaterThan(0);
+    }
+
     // Drain every stream concurrently to exercise overlapping in-flight runs.
     await Promise.all(
       streams.map(async s => {
@@ -103,12 +113,24 @@ describe.each([
     });
 
     const runIds: string[] = [];
+    let sawLiveScopeDuringRun = false;
     for (let i = 0; i < 20; i++) {
       const s = await agent.stream(`seq-${i}`);
       runIds.push(s.runId);
-      for await (const _chunk of s.fullStream) {
-        // consume
+      for await (const chunk of s.fullStream) {
+        // Sample once per run: on the default engine the scope must be live
+        // while the stream is being drained, otherwise the after-loop "all
+        // released" assertion would pass vacuously (e.g. if scope creation
+        // silently became a no-op). The evented engine releases per-step,
+        // so this sample is racy there — skip it.
+        if (!evented && !sawLiveScopeDuringRun && mastra.__getRunScope(s.runId) !== undefined) {
+          sawLiveScopeDuringRun = true;
+        }
+        void chunk;
       }
+    }
+    if (!evented) {
+      expect(sawLiveScopeDuringRun).toBe(true);
     }
 
     // After the sequence, every run's scope must be released — if any one
@@ -189,13 +211,14 @@ describe.each([
 
     // After suspend the default engine keeps the scope alive (the loop
     // workflow registration stays); the evented engine releases it at the
-    // step boundary. Only the default-engine path is exercising the TTL
-    // sweep in the abandoned-run case — on the evented engine there is no
-    // remaining registration for the sweep to evict, so this test is only
-    // meaningful for the default engine.
+    // step boundary. Two distinct contracts:
+    //   - evented: scope MUST already be gone by the time the stream
+    //     drains. If a future change starts leaking on evented suspend
+    //     this assertion fires immediately.
+    //   - default: scope must remain until the TTL sweep collects it.
+    // The TTL-sweep path is only exercised on the default engine because
+    // there is no remaining registration to evict on evented.
     if (evented) {
-      // Sanity: the evented engine has already dropped the scope at the
-      // suspend boundary (see snapshot-lifecycle suspended-keeps tests).
       expect(mastra.__getRunScope(stream.runId)).toBeUndefined();
       return;
     }
