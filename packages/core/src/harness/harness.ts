@@ -3142,6 +3142,20 @@ export class Harness<TState = {}> {
   }
 
   /**
+   * Detach from the current thread's event stream without switching to another
+   * thread. Used by the TUI `/new` command to stop receiving cross-process
+   * events from the old thread while the new thread creation is deferred until
+   * the first user message.
+   *
+   * The current thread ID is preserved so that {@link createThread} can still
+   * release the thread lock (when configured) for the previous thread.
+   */
+  detachFromCurrentThread(): void {
+    this.abort();
+    this.cleanupAgentThreadSubscription();
+  }
+
+  /**
    * Steer the agent mid-stream: aborts current run and sends a new message.
    */
   async steer({ content, requestContext }: { content: string; requestContext?: RequestContext }): Promise<void> {
