@@ -68,6 +68,7 @@ export type ScenarioName =
   | 'state-signal-rendering'
   | 'setup-completion-persistence'
   | 'setup-custom-pack-completion'
+  | 'setup-login-refresh'
   | 'setup-nested-model-selector'
   | 'settings-startup-model-restore'
   | 'storage-settings'

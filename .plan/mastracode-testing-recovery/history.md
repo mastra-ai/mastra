@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Setup login refresh coverage (2026-06-12)
+
+Added `setup-login-refresh` as the 90th checked-in TUI e2e scenario. The scenario removes seeded settings/auth state, starts first-run onboarding, completes a deterministic Anthropic OAuth login through the real Authentication step, verifies the Model Packs and Observational Memory steps refresh to expose Anthropic choices without restarting, then proves `auth.json` and `settings.json` persist the OAuth credential and selected built-in mode/OM pack IDs.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test setup-login-refresh
+```
+
+Break validations:
+
+- Skipped the post-login `updateModePacks()`/`updateOmPacks()` refresh; setup stayed on Custom-only packs and never showed Anthropic.
+- Skipped OAuth credential persistence in `AuthStorage.login()`; refreshed provider access stayed false, so Anthropic never appeared.
+- Skipped active model-pack persistence in `applyOnboardingResult()`; setup completed visibly, but the settings shell proof showed `activeModelPackId=null`.
+
+The Settings row remains `needs-follow-up`: `/setup` login refresh is now covered, while browser wizard breadth and deeper reload parity remain follow-up work.
+
+
 ### Browser startup restore coverage (2026-06-12)
 
 Added `browser-startup-restore` as the 89th checked-in TUI e2e scenario. The scenario seeds enabled AgentBrowser/CDP settings before launch, starts the normal `src/main.ts` path through a tiny AgentBrowser preload patch, verifies `/browser status` restores provider/headless/CDP projection without requiring `/browser on`, then sends an AIMock-backed prompt and proves the first model request includes the browser context processor output plus browser tools.

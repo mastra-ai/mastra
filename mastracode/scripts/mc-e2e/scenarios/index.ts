@@ -62,6 +62,7 @@ import { requestAccessModalScenario } from './request-access-modal.js';
 import { settingsStartupModelRestoreScenario } from './settings-startup-model-restore.js';
 import { setupCompletionPersistenceScenario } from './setup-completion-persistence.js';
 import { setupCustomPackCompletionScenario } from './setup-custom-pack-completion.js';
+import { setupLoginRefreshScenario } from './setup-login-refresh.js';
 import { setupNestedModelSelectorScenario } from './setup-nested-model-selector.js';
 import { startupScenario } from './startup.js';
 import { stateCommandsScenario } from './state-commands.js';
@@ -161,6 +162,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'state-signal-rendering': stateSignalRenderingScenario,
   'setup-completion-persistence': setupCompletionPersistenceScenario,
   'setup-custom-pack-completion': setupCustomPackCompletionScenario,
+  'setup-login-refresh': setupLoginRefreshScenario,
   'setup-nested-model-selector': setupNestedModelSelectorScenario,
   'settings-startup-model-restore': settingsStartupModelRestoreScenario,
   'storage-settings': storageSettingsScenario,
