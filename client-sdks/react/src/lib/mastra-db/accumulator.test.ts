@@ -314,6 +314,26 @@ const isTaskCompleteChunk = (passed: boolean, suppressFeedback = false): ChunkTy
     },
   }) as unknown as ChunkType;
 
+const goalChunk = (passed: boolean): ChunkType =>
+  ({
+    type: 'goal',
+    runId: RUN_ID,
+    from: 'AGENT',
+    payload: {
+      objective: 'Ship the feature',
+      iteration: 1,
+      maxRuns: 50,
+      passed,
+      status: passed ? 'done' : 'active',
+      results: [],
+      reason: passed ? 'Goal achieved' : 'Not yet',
+      duration: 5,
+      timedOut: false,
+      maxRunsReached: false,
+      suppressFeedback: false,
+    },
+  }) as unknown as ChunkType;
+
 const finishChunk = (finishReason = 'stop'): ChunkType =>
   ({
     type: 'finish',
@@ -899,6 +919,15 @@ describe('accumulateChunk - content', () => {
     const initial = reduce([startChunk()]);
     const out = reduce([isTaskCompleteChunk(true, true)], streamMeta(), initial);
     expect(out).toEqual(initial);
+  });
+
+  // The goal chunk is a consumer-only signal: the core goal step already injects
+  // its feedback into the message history, so the accumulator must NOT surface it
+  // as its own DB message (unlike is-task-complete).
+  it('goal chunk returns the conversation unchanged (no DB message)', () => {
+    const initial = reduce([startChunk()]);
+    expect(reduce([goalChunk(false)], streamMeta(), initial)).toEqual(initial);
+    expect(reduce([goalChunk(true)], streamMeta(), initial)).toEqual(initial);
   });
 });
 

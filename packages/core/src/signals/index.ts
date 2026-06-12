@@ -11,3 +11,8 @@ export { WebhookSignalProvider, type WebhookSignalProviderOptions } from './webh
 // `TaskSignalProvider` is a SignalProvider that bundles the built-in task tools
 // and the TaskStateProcessor so they are registered together on an agent.
 export { TaskSignalProvider } from './task-signal-provider';
+
+// `GoalSignalProvider` projects the agent's current objective onto the
+// state-signal lane. Auto-registered when an agent is configured with `goal`.
+// The implementation lives with the goal built-in under `agent/goal`.
+export { GoalSignalProvider } from '../agent/goal';
