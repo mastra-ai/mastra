@@ -39,6 +39,7 @@ export type ExperimentResultReplaySectionProps = {
 const MOCK_KIND_LABELS: Record<ToolReplayMockKind, string> = {
   output: 'stub',
   error: 'error',
+  cases: 'cases',
   function: 'function',
   observe: 'observed',
 };

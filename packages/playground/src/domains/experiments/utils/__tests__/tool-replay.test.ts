@@ -51,8 +51,27 @@ describe('getReplayMarker / isReplayExperiment', () => {
     expect(getReplayMarker(noOnMissMarkerExperiment)).toBeNull();
   });
 
-  it('normalizes unknown onMiss values to error for display', () => {
-    expect(getReplayMarker({ metadata: { toolReplay: { onMiss: 'weird' } } })).toEqual({ onMiss: 'error' });
+  it('drops unknown onMiss values instead of inventing a policy (canonical parser semantics)', () => {
+    // The backend rejects unknown onMiss at the boundary, so this only arises
+    // from metadata tampering — the marker reads as stamped (the key gates the
+    // shape) but carries no policy, exactly like the core source-guard sees it.
+    expect(getReplayMarker({ metadata: { toolReplay: { onMiss: 'weird' } } })).toEqual({});
+  });
+
+  it('passes the persisted mockConfigs through and drops non-object entries', () => {
+    expect(
+      getReplayMarker({
+        metadata: {
+          toolReplay: {
+            mockedTools: ['weatherInfo'],
+            mockConfigs: { weatherInfo: { output: 'sunny' }, sendEmail: { function: true }, junk: 42 },
+          },
+        },
+      }),
+    ).toEqual({
+      mockedTools: ['weatherInfo'],
+      mockConfigs: { weatherInfo: { output: 'sunny' }, sendEmail: { function: true } },
+    });
   });
 
   it('reads a mock-only marker (mockedTools without onMiss)', () => {
@@ -428,6 +447,26 @@ describe('summarizeReplayCalls', () => {
       replayedWithDrift: 0,
       mocked: 1,
       missed: 0,
+      live: 1,
+    });
+  });
+
+  it('buckets cases-mock misses like recording misses: error stops, passthrough runs live', () => {
+    expect(
+      summarizeReplayCalls({
+        ...cleanReport,
+        calls: [
+          { order: 0, toolName: 'weatherInfo', outcome: 'mocked', caseIndex: 1 },
+          { order: 1, toolName: 'weatherInfo', outcome: 'case-miss-passthrough' },
+          { order: 2, toolName: 'weatherInfo', outcome: 'case-miss-error' },
+        ],
+      }),
+    ).toEqual({
+      total: 3,
+      replayed: 0,
+      replayedWithDrift: 0,
+      mocked: 1,
+      missed: 1,
       live: 1,
     });
   });

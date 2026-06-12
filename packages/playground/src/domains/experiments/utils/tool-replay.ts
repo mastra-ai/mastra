@@ -1,8 +1,9 @@
+import { getToolReplayMarker } from '@mastra/client-js';
 import type {
   DatasetExperiment,
   DatasetExperimentResult,
+  ToolReplayExperimentMarker,
   ToolReplayMatching,
-  ToolReplayOnMiss,
   ToolReplayReport,
   TriggerDatasetExperimentParams,
 } from '@mastra/client-js';
@@ -32,9 +33,9 @@ export interface ToolReplayCallsSummary {
   replayedWithDrift: number;
   /** Calls answered by configured mocks (`mocked` and `mock-error`). */
   mocked: number;
-  /** Calls with no recorded event left that stopped the item (`miss-error`). */
+  /** Calls that stopped the item: no recorded event left (`miss-error`) or no matching case (`case-miss-error`). */
   missed: number;
-  /** Calls that executed the live tool (`miss-passthrough` and `live`). */
+  /** Calls that executed the live tool (`miss-passthrough`, `case-miss-passthrough`, and `live`). */
   live: number;
 }
 
@@ -64,9 +65,11 @@ export function summarizeReplayCalls(report: ToolReplayReportExtended): ToolRepl
         summary.mocked += 1;
         break;
       case 'miss-error':
+      case 'case-miss-error':
         summary.missed += 1;
         break;
       case 'miss-passthrough':
+      case 'case-miss-passthrough':
       case 'live':
         summary.live += 1;
         break;
@@ -75,41 +78,26 @@ export function summarizeReplayCalls(report: ToolReplayReportExtended): ToolRepl
   return summary;
 }
 
-export interface ToolReplayMarker {
-  fromExperimentId?: string;
-  /** Absent on mock-only runs — mocks always answer, so there is no miss policy. */
-  onMiss?: ToolReplayOnMiss;
-  matching?: ToolReplayMatching;
-  /** Tools answered by mocks (stamped for mock and replay+mock runs). */
-  mockedTools?: string[];
-}
+/**
+ * Studio's marker type IS the canonical client marker: `fromExperimentId`,
+ * `onMiss` (absent on mock-only runs — mocks always answer, so there is no
+ * miss policy), `matching`, `mockedTools` (tools answered by mocks), and
+ * `mockConfigs` (the persisted mock configuration, when stamped).
+ */
+export type ToolReplayMarker = ToolReplayExperimentMarker;
 
 /**
- * Reads the marker an experiment run with `toolReplay` is stamped with:
- * `{ fromExperimentId?, onMiss, matching? }` for replay runs and/or
- * `{ mockedTools }` for mocked tools (mock-only runs omit `onMiss`).
- * Metadata is user-writable, so this matches the exact shapes the backend
- * stamps — an object carrying `onMiss` or a `mockedTools` array — mirroring
- * the core source-experiment guard; arbitrary user `toolReplay` keys never
- * read as replay runs.
+ * Reads the marker an experiment run with `toolReplay`/`toolMocks` is stamped
+ * with, through the canonical `getToolReplayMarker` parser re-exported by
+ * @mastra/client-js — the exact shape-check the backend's source-experiment
+ * guard runs, so Studio can never classify a run differently than the runner.
+ * Metadata is user-writable: junk under the `toolReplay` key (non-objects,
+ * arrays, objects without `onMiss` or `mockedTools`) reads as null, unknown
+ * `onMiss`/`matching` values and non-string tool names are dropped, and only
+ * plain-object `mockConfigs` entries survive.
  */
 export function getReplayMarker(experiment: Pick<DatasetExperiment, 'metadata'>): ToolReplayMarker | null {
-  const marker = experiment.metadata?.toolReplay;
-  if (typeof marker !== 'object' || marker === null) return null;
-  const { fromExperimentId, onMiss, matching, mockedTools } = marker as Record<string, unknown>;
-  const hasOnMiss = 'onMiss' in marker;
-  const mockedToolNames = Array.isArray(mockedTools)
-    ? mockedTools.filter((tool): tool is string => typeof tool === 'string')
-    : null;
-  if (!hasOnMiss && !mockedToolNames) return null;
-  return {
-    ...(typeof fromExperimentId === 'string' ? { fromExperimentId } : {}),
-    // Unknown onMiss values normalize to the safe default for display — but
-    // only when the key exists (mock-only markers legitimately omit it).
-    ...(hasOnMiss ? { onMiss: onMiss === 'passthrough' ? ('passthrough' as const) : ('error' as const) } : {}),
-    ...(matching === 'fifo' || matching === 'strict' ? { matching } : {}),
-    ...(mockedToolNames ? { mockedTools: mockedToolNames } : {}),
-  };
+  return getToolReplayMarker(experiment.metadata);
 }
 
 export interface ExperimentFailureReason {
@@ -410,6 +398,18 @@ export const CALL_OUTCOME_VIEWS: Record<ToolReplayCall['outcome'], ReplayCallOut
     glyphClassName: 'text-amber-400',
     label: 'miss',
     note: 'ran live (passthrough)',
+  },
+  'case-miss-error': {
+    glyph: '✗',
+    glyphClassName: 'text-red-400',
+    label: 'miss',
+    note: 'no mock case matched (onNoMatch: error)',
+  },
+  'case-miss-passthrough': {
+    glyph: '⚡',
+    glyphClassName: 'text-amber-400',
+    label: 'miss',
+    note: 'no mock case matched — ran live',
   },
   live: { glyph: '⚡', glyphClassName: 'text-blue-400', label: 'live', note: 'ran live (not mocked)' },
 };
