@@ -34,6 +34,7 @@ export type ScenarioName =
   | 'persistent-goal-reload'
   | 'process-shortcuts'
   | 'provider-history-compat'
+  | 'provider-history-rejection-retry'
   | 'prompt-context-instructions'
   | 'prompt-queue-interleave'
   | 'visible-commands'

@@ -51,6 +51,7 @@ import { processShortcutsScenario } from './process-shortcuts.js';
 import { promptContextInstructionsScenario } from './prompt-context-instructions.js';
 import { promptQueueInterleaveScenario } from './prompt-queue-interleave.js';
 import { providerHistoryCompatScenario } from './provider-history-compat.js';
+import { providerHistoryRejectionRetryScenario } from './provider-history-rejection-retry.js';
 import { quietSettingsScenario } from './quiet-settings.js';
 import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
@@ -141,6 +142,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'plan-approval-handoff': planApprovalHandoffScenario,
   'process-shortcuts': processShortcutsScenario,
   'provider-history-compat': providerHistoryCompatScenario,
+  'provider-history-rejection-retry': providerHistoryRejectionRetryScenario,
   'prompt-context-instructions': promptContextInstructionsScenario,
   'prompt-queue-interleave': promptQueueInterleaveScenario,
   'quiet-settings': quietSettingsScenario,

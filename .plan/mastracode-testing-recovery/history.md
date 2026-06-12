@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Provider history rejection retry coverage (2026-06-12)
+
+Added `provider-history-rejection-retry` as the 86th checked-in TUI e2e scenario. The scenario seeds a loaded-history thread with an invalid stored tool-call ID, routes a custom OpenAI-compatible provider through AIMock, injects a one-shot HTTP 400 matching Anthropic's `tool_use.id` validation error, and proves the recovered request reaches AIMock only after `ProviderHistoryCompat` retries with the sanitized `call_provider_history_retry` ID.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test provider-history-rejection-retry
+```
+
+Break validations:
+
+- Changing the Anthropic tool-ID error pattern prevented the retry; the scenario timed out before any successful AIMock request.
+- Making `sanitizeToolId()` a no-op let the retry reach AIMock but failed the shell proof because the forwarded request still contained the invalid ID.
+- Removing `ProviderHistoryCompat` from Mastra Code error processors prevented the retry path entirely, again yielding zero successful AIMock requests.
+
+The Provider history compatibility row is now `validated`: TUI coverage exists for both provider-boundary prompt stripping (`provider-history-compat`) and reactive API-error retry recovery (`provider-history-rejection-retry`), with core unit shields covering rule-level details.
+
+
 ### MCP OAuth storage persistence coverage (2026-06-12)
 
 Added focused `mastracode/src/mcp/__tests__/manager.test.ts` coverage for Mastra Code's file-backed MCP OAuth storage. The test uses isolated `MASTRA_APP_DATA_DIR`, configures an OAuth HTTP MCP server, writes initial tokens through the manager-provided storage, recreates managers with the same project/server config, and verifies the same storage file is reused and refreshed token replacements persist to disk.

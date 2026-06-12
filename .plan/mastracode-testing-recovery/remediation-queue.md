@@ -3,7 +3,7 @@
 ## Current state
 
 - Checked-in TUI e2e coverage is no longer missing for any tracker row.
-- 23 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
+- 22 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
 - Keep the user-realism rule: drive behavior through terminal input, slash commands, AIMock fixtures, deterministic pre-launch config/DB seeds, or approved external signal APIs for notification/state-signal origins. Do not emit Harness internals or mutate runtime display state directly.
 
 ## Priority queue
@@ -72,7 +72,7 @@
   - `settings-reload-persistence`: combine remaining storage/browser/custom-provider changes, relaunch scenario, assert settings persist without relying on runtime state; active custom model-pack startup restore is covered by `settings-startup-model-restore`.
   - Completed: `custom-provider-edit-share-import` edits a provider name/URL/API key through `/custom-providers`, shares a saved custom pack to clipboard, cancels a colliding shared-pack import through `/models`, and proves settings only persist the completed provider edit.
   - Completed: `custom-pack-import-rename` imports a shared `mastra-pack:` string through `/models`, selects Rename on a colliding saved pack, and proves the original pack remains while the renamed imported pack becomes active. Remaining breadth: custom-pack completion, invalid provider URL/duplicate-name branches, remove-model, and selector persistence.
-  - `provider-history-rejection-retry`: custom provider that rejects reasoning once, then verifies `ProviderHistoryCompat` error-processor retry specifically handles the rejection.
+  - Completed: `provider-history-rejection-retry` seeds invalid stored tool-call history, injects a one-shot provider 400, then proves `ProviderHistoryCompat` retries with a sanitized tool-call ID before the recovered AIMock response renders.
 - Fixture/data needs: settings.json seeds, AIMock custom provider fixtures, one-shot local HTTP provider mock for rejection/retry cases.
 
 ### 6. Workspace, skills, hooks, and shell surfaces
