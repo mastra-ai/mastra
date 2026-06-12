@@ -25,6 +25,7 @@ import { githubSignalsUnsubscribeReloadScenario } from './github-signals-unsubsc
 import { harnessApiConfigScenario } from './harness-api-config.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { mcpHttpToolCallScenario } from './mcp-http-tool-call.js';
+import { mcpLongRunningToolScenario } from './mcp-long-running-tool.js';
 import { mcpReloadConfigScenario } from './mcp-reload-config.js';
 import { mcpSelectorReconnectScenario } from './mcp-selector-reconnect.js';
 import { mcpServerConfigScenario } from './mcp-server-config.js';
@@ -116,6 +117,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'integration-commands': integrationCommandsScenario,
   'modal-and-shell': modalAndShellScenario,
   'mcp-http-tool-call': mcpHttpToolCallScenario,
+  'mcp-long-running-tool': mcpLongRunningToolScenario,
   'mcp-reload-config': mcpReloadConfigScenario,
   'mcp-selector-reconnect': mcpSelectorReconnectScenario,
   'mcp-server-config': mcpServerConfigScenario,

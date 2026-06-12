@@ -39,6 +39,7 @@ export type ScenarioName =
   | 'integration-commands'
   | 'modal-and-shell'
   | 'mcp-http-tool-call'
+  | 'mcp-long-running-tool'
   | 'mcp-reload-config'
   | 'mcp-selector-reconnect'
   | 'mcp-server-config'

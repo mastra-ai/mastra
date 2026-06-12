@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Long-running MCP tool coverage (2026-06-12)
+
+Added `mcp-long-running-tool` as the 84th checked-in TUI e2e scenario. The scenario launches a local Streamable HTTP MCP server with a header-protected `slow_lookup` tool, waits beyond a short timeout budget before returning `MC_MCP_LONG_TOOL_RESULT:timeout-e2e:complete`, invokes the namespaced tool through AIMock, and verifies the delayed tool result reaches the follow-up model request.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test mcp-long-running-tool
+```
+
+Break validations:
+
+- Reducing the MCP client timeout to 500ms let the UI run but prevented the delayed MCP result from reaching the follow-up AIMock request.
+- Disabling MCP dynamic-tool injection kept the provider turn from receiving the real MCP result.
+- Removing server-name namespacing from collected MCP tools removed `e2e_long_mcp_slow_lookup` from the provider-visible tool list.
+
+The MCP status/configuration rows remain `needs-follow-up`; this chunk closes long-running MCP timeout integration breadth, while OAuth token persistence/refresh and headless MCP tool availability remain.
+
+
 ### Setup custom-pack completion coverage (2026-06-12)
 
 Added `setup-custom-pack-completion` as the 83rd checked-in TUI e2e scenario. The scenario seeds completed setup state, launches `/setup`, skips auth, selects the Custom mode-pack path, names a new pack, chooses env-backed synthetic `302ai` models for plan/build/fast, selects a custom OM model, disables YOLO, and proves `settings.json` persisted the saved custom pack, active/onboarding pack IDs, mode defaults, custom OM override, stale subagent override cleanup, and YOLO preference.

@@ -72,11 +72,11 @@
 - `mastracode/scripts/mc-e2e/scenarios/mcp-reload-config.ts` — real PTY/TUI e2e coverage for `/mcp reload` replacing an initial failing project-config stdio server with a newly loaded HTTP server and showing the reloaded status/tool row.
 - `mastracode/scripts/mc-e2e/scenarios/mcp-selector-reconnect.ts` — real PTY/TUI e2e coverage for the interactive `/mcp` selector reconnect submenu and `r` reload-all shortcut updating visible server/tool rows from the live manager.
 - `mastracode/scripts/mc-e2e/scenarios/mcp-skipped-validation.ts` — real PTY/TUI e2e coverage proving `/mcp status` and the interactive selector both display skipped MCP validation reasons for invalid config entries.
+- `mastracode/scripts/mc-e2e/scenarios/mcp-long-running-tool.ts` — real PTY/TUI + AIMock e2e coverage proving a delayed HTTP MCP tool result completes and reaches the model follow-up instead of timing out under a short result budget.
 
 ## Missing tests
 
 - Focused `McpSelectorComponent` tests for detail views, polling, and stale reconnect results during reload.
-- Real long-running MCP tool integration test proving the timeout handoff allows completion beyond the upstream short default.
 
 ## Known risks / regressions
 
