@@ -9,6 +9,7 @@ import {
   buildReplayHooks,
   finalizeReplayReport,
   getToolReplayMarker,
+  isSuppressingMock,
 } from '../replay';
 
 const TRACE_ID = 'trace-1';
@@ -605,6 +606,175 @@ describe('tool mocks', () => {
   });
 });
 
+describe('cases mocks (args-conditional)', () => {
+  const weatherCases = () => ({
+    cases: [
+      { args: { city: 'Paris' }, output: { temp: 18 } },
+      { args: { city: 'Tokyo' }, output: { temp: 26 } },
+    ],
+  });
+
+  it('serves each call by its args, not by order, and reports kind and caseIndex', async () => {
+    const state = createReplayState([], null, { replayActive: false, mocks: { weather: weatherCases() } });
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    expect(await callHook(hooks, 'weather', { city: 'Tokyo' })).toEqual({
+      proceed: false,
+      output: { temp: 26 },
+      spanMetadata: { outcome: 'mocked', caseIndex: 1 },
+    });
+    expect(await callHook(hooks, 'weather', { city: 'Paris' })).toEqual({
+      proceed: false,
+      output: { temp: 18 },
+      spanMetadata: { outcome: 'mocked', caseIndex: 0 },
+    });
+
+    const report = finalizeReplayReport(state);
+    expect(report.mocks).toEqual([{ toolName: 'weather', calls: 2, kind: 'cases' }]);
+    expect(report.calls).toEqual([
+      { order: 0, toolName: 'weather', outcome: 'mocked', caseIndex: 1 },
+      { order: 1, toolName: 'weather', outcome: 'mocked', caseIndex: 0 },
+    ]);
+  });
+
+  it('matches cases with canonicalized args — runtime-injected nullish keys are ignored', async () => {
+    const state = createReplayState([], null, { replayActive: false, mocks: { weather: weatherCases() } });
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    expect(
+      await callHook(hooks, 'weather', { city: 'Paris', _background: null, suspendedToolRunId: null }),
+    ).toMatchObject({ output: { temp: 18 } });
+  });
+
+  it('first matching case wins for duplicate args', async () => {
+    const state = createReplayState([], null, {
+      replayActive: false,
+      mocks: {
+        weather: {
+          cases: [
+            { args: { city: 'Paris' }, output: { temp: 'first-wins' } },
+            { args: { city: 'Paris' }, output: { temp: 'never-served' } },
+          ],
+        },
+      },
+    });
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    // Both calls land on the first entry — the table is a lookup, not a queue.
+    expect(await callHook(hooks, 'weather', { city: 'Paris' })).toMatchObject({ output: { temp: 'first-wins' } });
+    expect(await callHook(hooks, 'weather', { city: 'Paris' })).toMatchObject({ output: { temp: 'first-wins' } });
+  });
+
+  it('throws a matched case error with the rethrown-name guard applied', async () => {
+    const makeState = (name: string) =>
+      createReplayState([], null, {
+        replayActive: false,
+        mocks: { weather: { cases: [{ args: { city: 'Atlantis' }, error: { name, message: 'unknown city' } }] } },
+      });
+
+    const okState = makeState('LookupError');
+    await expect(
+      callHook(buildReplayHooks(okState, { onMiss: 'error' }), 'weather', { city: 'Atlantis' }),
+    ).rejects.toThrowError(expect.objectContaining({ name: 'LookupError', message: 'unknown city' }));
+    expect(finalizeReplayReport(okState).calls).toEqual([
+      { order: 0, toolName: 'weather', outcome: 'mock-error', caseIndex: 0 },
+    ]);
+
+    for (const rethrownName of RETHROWN_TOOL_ERROR_NAMES) {
+      const guarded = makeState(rethrownName);
+      await expect(
+        callHook(buildReplayHooks(guarded, { onMiss: 'error' }), 'weather', { city: 'Atlantis' }),
+      ).rejects.toThrowError(expect.objectContaining({ name: 'Error', message: 'unknown city' }));
+    }
+  });
+
+  it("onNoMatch 'error' (default) aborts like a replay miss and notifies onFatalCaseMiss", async () => {
+    const state = createReplayState([], null, { replayActive: false, mocks: { weather: weatherCases() } });
+    const onFatalCaseMiss = vi.fn();
+    const hooks = buildReplayHooks(state, { onMiss: 'error', onFatalCaseMiss });
+
+    await expect(callHook(hooks, 'weather', { city: 'Berlin' })).rejects.toThrowError(
+      /no case matches the call's args — execution aborted \(onNoMatch: 'error'\)/,
+    );
+    expect(onFatalCaseMiss).toHaveBeenCalledTimes(1);
+
+    const report = finalizeReplayReport(state);
+    expect(report.calls).toEqual([{ order: 0, toolName: 'weather', outcome: 'case-miss-error' }]);
+    // A case miss is a mock concern, not a replay-queue event.
+    expect(report.misses).toEqual([]);
+  });
+
+  it("onNoMatch 'passthrough' lets the live tool run and still counts the call", async () => {
+    const state = createReplayState([], null, {
+      replayActive: false,
+      mocks: { weather: { ...weatherCases(), onNoMatch: 'passthrough' as const } },
+    });
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    // undefined = proceed with live execution.
+    expect(await callHook(hooks, 'weather', { city: 'Berlin' })).toBeUndefined();
+
+    const report = finalizeReplayReport(state);
+    expect(report.mocks).toEqual([{ toolName: 'weather', calls: 1, kind: 'cases' }]);
+    expect(report.calls).toEqual([{ order: 0, toolName: 'weather', outcome: 'case-miss-passthrough' }]);
+  });
+
+  it('expect counts every call, matched or case-missed', async () => {
+    const state = createReplayState([], null, {
+      replayActive: false,
+      mocks: { weather: { ...weatherCases(), onNoMatch: 'passthrough' as const, expect: { calledTimes: 2 } } },
+    });
+    const hooks = buildReplayHooks(state, { onMiss: 'error' });
+
+    await callHook(hooks, 'weather', { city: 'Paris' }); // matched
+    await callHook(hooks, 'weather', { city: 'Berlin' }); // case-missed, live
+
+    expect(finalizeReplayReport(state).expectations).toEqual([
+      { toolName: 'weather', satisfied: true, calledTimes: 2 },
+    ]);
+  });
+
+  it('cases mocks are suppressing — expect-only entries are not', () => {
+    expect(isSuppressingMock(weatherCases())).toBe(true);
+    expect(isSuppressingMock({ ...weatherCases(), onNoMatch: 'passthrough' })).toBe(true);
+    expect(isSuppressingMock({ expect: { calledTimes: 1 } })).toBe(false);
+  });
+
+  it('rejects cases combined with a static output or error', () => {
+    for (const invalid of [
+      { output: 'static', cases: [{ args: {}, output: 1 }] },
+      { error: { message: 'static' }, cases: [{ args: {}, output: 1 }] },
+    ]) {
+      expect(() => createReplayState([], null, { replayActive: false, mocks: { weather: invalid } })).toThrowError(
+        /either static or conditional/,
+      );
+    }
+  });
+
+  it('rejects an empty or non-array cases value', () => {
+    expect(() => createReplayState([], null, { replayActive: false, mocks: { weather: { cases: [] } } })).toThrowError(
+      /non-empty cases array/,
+    );
+    // Data mocks cross the HTTP API as JSON — junk shapes must fail at setup,
+    // not as a mid-run TypeError.
+    expect(() =>
+      createReplayState([], null, {
+        replayActive: false,
+        mocks: { weather: { cases: 'junk' as unknown as [] } },
+      }),
+    ).toThrowError(/non-empty cases array/);
+  });
+
+  it('rejects a case without an output or error', () => {
+    expect(() =>
+      createReplayState([], null, {
+        replayActive: false,
+        mocks: { weather: { cases: [{ args: { city: 'Paris' }, output: 1 }, { args: { city: 'Tokyo' } }] } },
+      }),
+    ).toThrowError(/cases\[1\] needs an output or error/);
+  });
+});
+
 describe('call flow (report.calls)', () => {
   it('records every call with its outcome, consumed sequence, and arg drift', async () => {
     const events = extractToolReplayEvents([
@@ -742,7 +912,9 @@ describe('adversarial review regressions', () => {
 
 describe('getToolReplayMarker', () => {
   it('parses the stamped shapes and rejects user-owned junk', () => {
-    expect(getToolReplayMarker({ toolReplay: { fromExperimentId: 'exp-1', onMiss: 'error', matching: 'strict' } })).toEqual({
+    expect(
+      getToolReplayMarker({ toolReplay: { fromExperimentId: 'exp-1', onMiss: 'error', matching: 'strict' } }),
+    ).toEqual({
       fromExperimentId: 'exp-1',
       onMiss: 'error',
       matching: 'strict',
@@ -757,6 +929,36 @@ describe('getToolReplayMarker', () => {
     expect(getToolReplayMarker(null)).toBeNull();
     // Unknown enum values are dropped, the marker itself still parses.
     expect(getToolReplayMarker({ toolReplay: { onMiss: 'explode', mockedTools: ['a'] } })).toEqual({
+      mockedTools: ['a'],
+    });
+  });
+
+  it('parses mockConfigs defensively — plain-object values only', () => {
+    expect(
+      getToolReplayMarker({
+        toolReplay: {
+          mockedTools: ['weather', 'searchDocs'],
+          mockConfigs: {
+            weather: { cases: [{ args: { city: 'Paris' }, output: { temp: 18 } }], onNoMatch: 'passthrough' },
+            searchDocs: { function: true },
+            junkString: 'nope',
+            junkArray: ['nope'],
+            junkNull: null,
+          },
+        },
+      }),
+    ).toEqual({
+      mockedTools: ['weather', 'searchDocs'],
+      mockConfigs: {
+        weather: { cases: [{ args: { city: 'Paris' }, output: { temp: 18 } }], onNoMatch: 'passthrough' },
+        searchDocs: { function: true },
+      },
+    });
+    // A non-object mockConfigs is dropped wholesale; the marker still parses.
+    expect(getToolReplayMarker({ toolReplay: { mockedTools: ['a'], mockConfigs: 'junk' } })).toEqual({
+      mockedTools: ['a'],
+    });
+    expect(getToolReplayMarker({ toolReplay: { mockedTools: ['a'], mockConfigs: ['junk'] } })).toEqual({
       mockedTools: ['a'],
     });
   });

@@ -39,11 +39,13 @@ export { resolveScorers, runScorersForItem } from './scorer';
 // Only the report-facing types are public API; the replay mechanics
 // (extraction, state, hooks) are internal to the experiment runner.
 export {
+  type ToolMockCase,
   type ToolMockConfig,
   type ToolMockDataConfig,
   type ToolMockExpectation,
   type ToolMockExpectationResult,
   type ToolMockFunction,
+  type ToolMockFunctionMarker,
   type ToolMockUsage,
   type ToolReplayCall,
   type ToolReplayEvent,
@@ -286,7 +288,9 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         // user-writable, so match the exact marker shape this feature stamps
         // rather than bare truthiness — an unrelated user `toolReplay` key
         // must not disqualify a live recording source.
-        const sourceMarker = getToolReplayMarker(sourceExperiment.metadata as Record<string, unknown> | null | undefined);
+        const sourceMarker = getToolReplayMarker(
+          sourceExperiment.metadata as Record<string, unknown> | null | undefined,
+        );
         if (sourceMarker !== null) {
           throw new MastraError({
             id: 'EXPERIMENT_TOOL_REPLAY_SOURCE_IS_REPLAY',
@@ -490,11 +494,17 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   // distinguishable from live runs (dashboards and score comparisons must
   // never silently mix the two, and such runs are refused as replay sources —
   // their traces lack tool spans for replayed/mocked calls). Expect-only mock
-  // entries observe live executions (tool spans stay complete), so they don't
-  // stamp the run and it remains an eligible replay source.
+  // entries observe live executions (tool spans stay complete), so by
+  // themselves they don't stamp the run and it remains an eligible replay
+  // source. Stamped runs persist the full toolMocks config (expect-only
+  // entries included) under mockConfigs: names alone can't reconstruct or
+  // audit a mock run. Data mocks persist verbatim — their outputs become part
+  // of the experiment record, same trust level as item inputs — and function
+  // mocks as placeholders, since code cannot be serialized.
   const suppressingMockNames = Object.entries(toolMocks ?? {})
     .filter(([, mockConfig]) => isSuppressingMock(mockConfig))
     .map(([toolName]) => toolName);
+  const mockConfigEntries = Object.entries(toolMocks ?? {});
   const replayMarker =
     toolReplay || suppressingMockNames.length > 0
       ? {
@@ -506,6 +516,16 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
               }
             : {}),
           ...(suppressingMockNames.length > 0 ? { mockedTools: suppressingMockNames } : {}),
+          ...(mockConfigEntries.length > 0
+            ? {
+                mockConfigs: Object.fromEntries(
+                  mockConfigEntries.map(([toolName, mockConfig]) => [
+                    toolName,
+                    typeof mockConfig === 'function' ? { function: true } : mockConfig,
+                  ]),
+                ),
+              }
+            : {}),
         }
       : undefined;
   const experimentMetadata = replayMarker ? { ...metadata, toolReplay: replayMarker } : metadata;
@@ -576,14 +596,16 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         let execResult = await execFn(item, itemSignal);
 
         while (execResult.error && retryCount < maxRetries) {
-          // Don't retry deterministic tool replay failures — neither the
-          // recording (miss) nor its absence (no recording: the resolver
-          // memoizes resolved lookups) can change within a run. Checked before
-          // the message heuristic so the structured codes stay load-bearing.
+          // Don't retry deterministic tool replay/mock failures — neither the
+          // recording (miss), its absence (no recording: the resolver memoizes
+          // resolved lookups), nor a mock's case table can change within a
+          // run. Checked before the message heuristic so the structured codes
+          // stay load-bearing.
           if (
             execResult.error.code === 'TOOL_REPLAY_MISS' ||
             execResult.error.code === 'TOOL_REPLAY_NO_RECORDING' ||
             execResult.error.code === 'TOOL_MOCK_EXPECTATION_FAILED' ||
+            execResult.error.code === 'TOOL_MOCK_ARGS_MISMATCH' ||
             execResult.error.code === 'TOOL_REPLAY_UNCONSUMED'
           )
             break;
