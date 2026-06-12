@@ -13,6 +13,11 @@ import { deepEqual } from '../../utils';
  * queues, and a `beforeToolCall` hook short-circuits each matching call with
  * the recorded output (or re-throws the recorded error). The agent's own
  * behavior stays free to diverge — divergence is reported, not prevented.
+ *
+ * Short-circuited calls appear in the replay run's own trace as synthetic
+ * TOOL_CALL spans flagged `metadata.toolReplay.synthetic: true` (recorded by
+ * the agent's hook wrapper); extraction skips them so a replay run's trace
+ * can never serve as a recording.
  */
 
 /** One recorded tool invocation derived from a trace tool span. */
@@ -250,6 +255,23 @@ function isToolSpan(span: SpanRecord): boolean {
 }
 
 /**
+ * True for synthetic tool spans the agent records when a `beforeToolCall`
+ * hook short-circuits the call (see `Agent.recordShortCircuitedToolSpan`).
+ * They carry `metadata.toolReplay.synthetic: true` and represent a served
+ * recording or mock, not an execution — extracting them would let a replay
+ * run's own trace masquerade as a recording. Shape-checked defensively:
+ * metadata is user-writable, so anything that isn't the exact marker shape
+ * stays extractable.
+ */
+function isSyntheticToolSpan(span: SpanRecord): boolean {
+  const metadata = span.metadata;
+  if (metadata == null || typeof metadata !== 'object') return false;
+  const toolReplay = (metadata as Record<string, unknown>).toolReplay;
+  if (toolReplay == null || typeof toolReplay !== 'object') return false;
+  return (toolReplay as Record<string, unknown>).synthetic === true;
+}
+
+/**
  * True when the span has another tool span anywhere in its ancestor chain.
  * Such spans belong to nested executions (sub-agents via agent-as-tool,
  * workflow-as-tool internals) that the top-level replay hooks never intercept —
@@ -318,6 +340,10 @@ export function extractToolReplayEvents(spans: SpanRecord[]): ToolReplayEvent[] 
       // those would feed the agent fabricated empty observations — skip them; the
       // resulting miss (or unconsumed gap) is visible in the report instead.
       span.endedAt != null &&
+      // Synthetic spans record served recordings/mocks, not executions — a
+      // replay run's trace must never serve as a recording, even when pointed
+      // at directly via replayTraceId.
+      !isSyntheticToolSpan(span) &&
       !hasToolSpanAncestor(span, spansById),
   );
 
@@ -360,6 +386,49 @@ function containsRedactionMarker(payload: unknown): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * The marker the experiment runner stamps into `experiment.metadata.toolReplay`
+ * on replay/mock runs. `onMiss` is present on replay runs; `mockedTools` lists
+ * suppressing mocks on mock runs; either may appear alone or combined.
+ */
+export interface ToolReplayExperimentMarker {
+  fromExperimentId?: string;
+  onMiss?: ToolReplayOnMiss;
+  matching?: ToolReplayMatching;
+  mockedTools?: string[];
+}
+
+/**
+ * Parse the runner-stamped replay/mock marker out of experiment metadata.
+ * Exact-shape check: a user-owned `toolReplay` metadata key that is not the
+ * stamped shape (an object carrying `onMiss` or `mockedTools`) returns null,
+ * so live runs can never be misclassified. The single source of truth for the
+ * duck-typing the runner's source-guard and every UI/SDK consumer need.
+ */
+export function getToolReplayMarker(metadata: Record<string, unknown> | null | undefined): ToolReplayExperimentMarker | null {
+  const candidate = metadata?.toolReplay;
+  if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) return null;
+  if (!('onMiss' in candidate) && !('mockedTools' in candidate)) return null;
+  const raw = candidate as Record<string, unknown>;
+  return {
+    ...(typeof raw.fromExperimentId === 'string' ? { fromExperimentId: raw.fromExperimentId } : {}),
+    ...(raw.onMiss === 'error' || raw.onMiss === 'passthrough' ? { onMiss: raw.onMiss } : {}),
+    ...(raw.matching === 'fifo' || raw.matching === 'strict' ? { matching: raw.matching } : {}),
+    ...(Array.isArray(raw.mockedTools) ? { mockedTools: raw.mockedTools.filter(t => typeof t === 'string') } : {}),
+  };
+}
+
+/**
+ * A mock that answers calls itself (output stub, error injection, or function
+ * replacement) — the live tool never executes. Expect-only entries observe and
+ * fall through. Suppressing mocks drive the metadata stamp AND the strict
+ * unconsumed-contract exemption: a tool the user explicitly took out of the
+ * contract cannot fail it.
+ */
+export function isSuppressingMock(config: ToolMockConfig): boolean {
+  return typeof config === 'function' || Boolean(config.error) || 'output' in config;
 }
 
 /**
@@ -491,7 +560,7 @@ export function buildReplayHooks(
           state.calls.push(call);
           try {
             const output = await mock.config({ input, callIndex: mock.calls.length - 1 });
-            return { proceed: false, output };
+            return { proceed: false, output, spanMetadata: { outcome: 'mocked' } };
           } catch (error) {
             call.outcome = 'mock-error';
             throw error;
@@ -509,7 +578,7 @@ export function buildReplayHooks(
         }
         if ('output' in mock.config) {
           state.calls.push({ order: state.calls.length, toolName, outcome: 'mocked' });
-          return { proceed: false, output: mock.config.output };
+          return { proceed: false, output: mock.config.output, spanMetadata: { outcome: 'mocked' } };
         }
         // expect-only: fall through.
       }
@@ -579,7 +648,11 @@ export function buildReplayHooks(
         throw error;
       }
 
-      return { proceed: false, output: event.output };
+      return {
+        proceed: false,
+        output: event.output,
+        spanMetadata: { outcome: 'replayed', sequence: event.sequence },
+      };
     },
   };
 }

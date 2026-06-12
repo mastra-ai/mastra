@@ -5488,8 +5488,26 @@ export class Agent<
             agentName: this.name,
           },
         };
-        const beforeResult = await hooks.beforeToolCall?.(hookContext);
+        let beforeResult;
+        try {
+          beforeResult = await hooks.beforeToolCall?.(hookContext);
+        } catch (error) {
+          // The hook intercepted the call by throwing (e.g. a replayed or
+          // mocked tool error) — the tool never executes, so record the
+          // synthetic span here before the loop turns this into a tool-error
+          // result (or re-throws it for reserved error names).
+          this.recordShortCircuitedToolSpan({ toolName, tool, input, context, result: { type: 'error', error } });
+          throw error;
+        }
         if (beforeResult?.proceed === false) {
+          this.recordShortCircuitedToolSpan({
+            toolName,
+            tool,
+            input,
+            context,
+            result: { type: 'output', output: beforeResult.output },
+            spanMetadata: beforeResult.spanMetadata,
+          });
           return beforeResult.output;
         }
 
@@ -5505,6 +5523,69 @@ export class Agent<
         return output;
       },
     };
+  }
+
+  /**
+   * Records a synthetic TOOL_CALL span for a tool call short-circuited by a
+   * `beforeToolCall` hook (tool replay and mocks serve recorded outputs or
+   * throw recorded errors instead of executing). The live TOOL_CALL span is
+   * created inside the built tool's execute (see CoreToolBuilder), which a
+   * short-circuit never reaches — without this, intercepted calls would leave
+   * no trace of having happened.
+   *
+   * The span is flagged `metadata.toolReplay.synthetic: true` so trace
+   * consumers can tell served recordings/mocks from real executions; tool
+   * replay extraction (datasets/experiment/replay.ts) skips flagged spans so
+   * a replay run's own trace can never serve as a recording. Skips silently
+   * when no tracing context is active.
+   */
+  private recordShortCircuitedToolSpan({
+    toolName,
+    tool,
+    input,
+    context,
+    result,
+    spanMetadata,
+  }: {
+    toolName: string;
+    tool: CoreTool;
+    input: unknown;
+    context: MastraToolInvocationOptions | undefined;
+    result: { type: 'output'; output: unknown } | { type: 'error'; error: unknown };
+    spanMetadata?: Record<string, unknown>;
+  }): void {
+    try {
+      const tracingContext = context?.tracingContext;
+      if (!tracingContext?.currentSpan) return;
+      const span = getOrCreateSpan({
+        type: SpanType.TOOL_CALL,
+        name: `tool: '${toolName}'`,
+        input,
+        entityType: EntityType.TOOL,
+        entityId: toolName,
+        entityName: toolName,
+        attributes: {
+          ...(tool.description ? { toolDescription: tool.description } : {}),
+          toolType: 'tool',
+        },
+        // `synthetic: true` goes last so hook-provided metadata can never unset it.
+        metadata: { toolReplay: { ...spanMetadata, synthetic: true } },
+        tracingPolicy: this.#options?.tracingPolicy,
+        tracingContext,
+        requestContext: context?.requestContext,
+      });
+      if (!span) return;
+      if (result.type === 'error') {
+        span.error({
+          error: result.error instanceof Error ? result.error : new Error(String(result.error)),
+          attributes: { success: false },
+        });
+      } else {
+        span.end({ output: result.output, attributes: { success: true } });
+      }
+    } catch {
+      // Span recording must never break tool execution or the short-circuit path.
+    }
   }
 
   /**

@@ -214,9 +214,11 @@ const strict = await dataset.startExperiment({
 })
 ```
 
+The matching policy applies to the whole run. To be lenient about one tool whose arguments drift benignly (a generated SQL string, a free-text search query) while staying strict everywhere else, mock that tool — mocks take precedence over the replay queues per tool, so `toolMocks: { runSql: { output: recordedRows } }` answers every `runSql` call regardless of arguments while the remaining tools stay under the strict contract. A tool answered by a suppressing mock is exempt from the strict unconsumed-contract — its recorded calls can never be consumed, so they stay visible in the report's `unconsumed` as signal without failing the item. Expect-only entries observe live calls and stay inside the contract. The other direction needs no escape hatch: under `'fifo'` nothing fails on drift, and `argMismatches` tells you where it happened.
+
 ### Tool mocks
 
-`toolMocks` overrides individual tools without needing a recording — usable with or without `toolReplay`. Mocks take precedence over replay queues per tool; tools that are neither mocked nor covered by replay execute live.
+`toolMocks` overrides individual tools without needing a recording — usable with or without `toolReplay`. Mocks take precedence over replay queues per tool. In a mock-only run, unmocked tools execute live; when `toolReplay` is active, an unmocked tool with no recorded event left is a miss handled by `onMiss` — it never silently runs live.
 
 ```typescript
 const mocked = await dataset.startExperiment({
@@ -235,7 +237,7 @@ const mocked = await dataset.startExperiment({
 })
 ```
 
-An entry with only `expect` doesn't stub anything: the call executes normally (replayed or live) and only the assertion is recorded. `expect.calledTimes: 0` asserts the tool must NOT be called. An unsatisfied expectation fails the item with `TOOL_MOCK_EXPECTATION_FAILED` (not retried — the run is over, retrying cannot change it); outcomes are listed in the report's `expectations` array, and per-tool usage in `mocks`. Experiments run with mocks are stamped in their metadata (`mockedTools`) and — like replay runs — are refused as replay sources, since mocked calls produce no tool spans.
+An entry with only `expect` doesn't stub anything: the call executes normally (replayed or live) and only the assertion is recorded. `expect.calledTimes: 0` asserts the tool must NOT be called. An unsatisfied expectation fails the item with `TOOL_MOCK_EXPECTATION_FAILED` (not retried — the run is over, retrying cannot change it); outcomes are listed in the report's `expectations` array, and per-tool usage in `mocks`. Experiments run with mocks are stamped in their metadata (`mockedTools`) and — like replay runs — are refused as replay sources: mocked calls record only synthetic tool spans, which replay extraction ignores.
 
 ### Divergence report
 
@@ -258,21 +260,33 @@ The report also carries two recording-quality signals: `redactedPayloadCount` co
 
 `toolReplay` is also available through the experiment trigger API: pass it in the body of `POST /api/datasets/:datasetId/experiments` alongside `targetType` and `targetId`.
 
+### What replay freezes — and what it doesn't
+
+Replay freezes the external world _as the recorded run observed it through tools_ — nothing more. Knowing what stays live keeps comparisons honest:
+
+- **The model runs live.** A replay run is a real LLM run making its own decisions against frozen observations — that is the point. Identical scores are not guaranteed even with an unchanged agent; sampling alone can vary the output.
+- **The agent definition resolves at run time.** Instructions, model, and tools are whatever the agent is _now_. Pin `agentVersion` in the experiment config to run a stored version, or leave it unpinned when the change is exactly what you are measuring. The pinned version is persisted on the experiment; unpinned runs resolve the current definition and store no version.
+- **No conversation state is involved.** Each experiment item executes as a standalone run without a memory thread, so between two experiments nothing can drift. One caveat: an item saved from a production trace replays that run's tool observations, not its conversation — if the original run leaned on thread memory, the replayed agent reasons without it.
+- **Item inputs can drift.** `staleRecording` flags an item edited after its recording was made; pin the dataset version (`version`) for stable inputs.
+- **`requestContext` passes through as configured.** If the agent reads it, keep it identical between the recording run and the replay run.
+
+For a contract-style comparison, the checklist is: pinned `agentVersion`, pinned dataset `version`, identical `requestContext`, and `matching: 'strict'`.
+
 ### Limitations
 
 - Tool replay supports agent targets only. Workflow targets and inline `task` functions are rejected at setup.
 - Tools run inside sub-agents (agent-as-tool) or workflow-as-tool internals are not intercepted. The top-level call replays as a single recorded output.
 - Provider-executed tools (for example provider-side web search) run on the model provider as part of the live model call. They cannot be intercepted, record no tool spans, and never appear in the divergence report — a run using them is not frozen by replay.
 - Tools injected mid-run by input processors (for example tool-search or skill-discovery processors) are not intercepted yet. They execute live during replay, and their recorded events surface as `unconsumed` in the report.
-- Replayed calls do not execute the real tool, so replay runs produce no tool spans in their own traces. Use the divergence report to inspect replay behavior.
-- Trajectory scorers extract trajectories from the run's trace, and replay traces contain no tool spans — trajectory scores are not comparable between baseline and replay runs. Use output-based scorers when comparing the two.
+- Replayed and mocked calls do not execute the real tool. They appear in the run's own trace as synthetic tool spans flagged with `metadata.toolReplay.synthetic: true` (plus an `outcome` such as `replayed` or `mocked`, and the consumed recording's `sequence` for replayed calls), so trace timelines stay readable. The spans record the served observation, not an execution; replay extraction ignores them, so they can never be replayed from. The divergence report stays the primary tool for inspecting replay behavior.
+- Trajectory scorers extract trajectories from the run's trace. Synthetic tool spans make replay trajectories visible, so baseline and replay trajectories are comparable in shape — but the replay run's tool steps represent served recordings or mocks, not executions (the synthetic flag is carried in each step's metadata). Interpret trajectory scores with that in mind.
 - Replay uses per-execution tool hooks, which override agent-level `hooks` (such as a configured `beforeToolCall`) for the replayed runs. With `onMiss: 'passthrough'`, missed calls execute live without those agent-level guards. A tool's own `onInputAvailable` and `onOutput` callbacks still fire for replayed calls.
 - Recordings inherit tracing's sensitive-data filtering. Redacted input fields surface as `argMismatches` in the report, and redacted output fields replay as `[REDACTED]` values. If a tool returns sensitive values that replay needs, adjust the `sensitiveDataFilter` option on your observability config.
 - Traces are exported asynchronously. When replaying immediately after a recording run in the same process, ensure the tracing exporter has flushed before starting the replay; an incomplete trace replays as missing events.
 - Tool spans that never completed (the recorded run crashed, was aborted, or is still running) are skipped during extraction. The affected calls follow the `onMiss` policy instead of replaying empty outputs.
 - Tools that require approval are not replayed: the approval gate runs before tool execution, so the run suspends for approval before the replay hook can return the recorded output. Avoid `toolReplay` with approval-required tools.
 - A source trace should contain a single top-level agent run. A trace spanning several runs contributes all of their tool calls to the replay queues.
-- Replay runs emit no tool spans, so an experiment that was itself replayed cannot serve as a recording. `fromExperimentId` pointing at a replay experiment is rejected at setup; a `replayTraceId` pointing at a replay run's trace finds zero events and every call follows the `onMiss` policy.
+- Replay runs emit only synthetic-flagged tool spans, which extraction skips, so an experiment that was itself replayed cannot serve as a recording. `fromExperimentId` pointing at a replay experiment is rejected at setup; a `replayTraceId` pointing at a replay run's trace finds zero events and every call follows the `onMiss` policy.
 
 :::note
 
