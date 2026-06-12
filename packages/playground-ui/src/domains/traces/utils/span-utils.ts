@@ -92,3 +92,41 @@ export function getTokenLimitMessage(span?: SpanRecord): string {
 
   return `The model stopped generating because it reached the maximum token limit (${totalTokens} tokens). The response was truncated and may be incomplete.`;
 }
+
+/** Outcome detail of a synthetic tool span (a replayed or mocked call that never executed). */
+export interface SyntheticToolReplayMarker {
+  /** What answered the call, e.g. 'replayed' or 'mocked' (free-form: written by the runner). */
+  outcome?: string;
+  /** 0-based recording-tape position of the consumed event (replayed outcomes only). */
+  sequence?: number;
+}
+
+/**
+ * Reads the `metadata.toolReplay.synthetic` marker the agent stamps on
+ * synthetic TOOL_CALL spans — calls served from a tool-replay recording or a
+ * tool mock instead of executing. Metadata is user-writable, so only the
+ * exact stamped shape (`synthetic: true`) reads as a marker; anything else
+ * returns null.
+ */
+export function getSyntheticToolReplayMarker(metadata: unknown): SyntheticToolReplayMarker | null {
+  if (metadata == null || typeof metadata !== 'object') return null;
+  const toolReplay = (metadata as Record<string, unknown>).toolReplay;
+  if (toolReplay == null || typeof toolReplay !== 'object') return null;
+  const marker = toolReplay as Record<string, unknown>;
+  if (marker.synthetic !== true) return null;
+  return {
+    ...(typeof marker.outcome === 'string' ? { outcome: marker.outcome } : {}),
+    ...(typeof marker.sequence === 'number' && Number.isFinite(marker.sequence) ? { sequence: marker.sequence } : {}),
+  };
+}
+
+/**
+ * One-line explanation for the synthetic-span notice. The tape reference is
+ * 1-based for humans (`sequence` is the runner's 0-based event index).
+ */
+export function formatSyntheticToolReplayMessage(marker: SyntheticToolReplayMarker): string {
+  const outcome = marker.outcome
+    ? `outcome: ${marker.outcome}${typeof marker.sequence === 'number' ? `, tape #${marker.sequence + 1}` : ''}. `
+    : '';
+  return `${outcome}This call was served from a recording/mock, not executed.`;
+}

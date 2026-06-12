@@ -1,7 +1,9 @@
 import type { SpanRecord } from '@mastra/core/storage';
 import { format } from 'date-fns';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
+import { formatSyntheticToolReplayMessage, getSyntheticToolReplayMarker } from '../utils/span-utils';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
+import { Notice } from '@/ds/components/Notice';
 
 const KV = DataDetailsPanel.KeyValueList;
 
@@ -21,6 +23,9 @@ export interface SpanDetailsViewProps {
 export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetailsViewProps) {
   const durationMs =
     span?.startedAt && span?.endedAt ? new Date(span.endedAt).getTime() - new Date(span.startedAt).getTime() : null;
+  // Tool replay / tool mocks record short-circuited calls as synthetic spans —
+  // flag them so nobody mistakes a served recording for a live execution.
+  const syntheticReplayMarker = getSyntheticToolReplayMarker(span?.metadata);
 
   return (
     <DataDetailsPanel>
@@ -76,6 +81,11 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
             icon={<FileOutputIcon />}
             codeStr={JSON.stringify(span.output ?? null, null, 2)}
           />
+          {syntheticReplayMarker && (
+            <Notice variant="info" title="Synthetic replay span">
+              <Notice.Message>{formatSyntheticToolReplayMessage(syntheticReplayMarker)}</Notice.Message>
+            </Notice>
+          )}
           <DataDetailsPanel.CodeSection
             title="Metadata"
             icon={<BracesIcon />}
