@@ -34,6 +34,8 @@ import { statusAction } from './commands/studio/deploy-status';
 import { suggestionsAction } from './commands/studio/deploy-suggestions';
 import { listProjectsAction, createProjectAction } from './commands/studio/projects';
 import { parseComponents, parseLlmProvider, parseMcp, parseSkills } from './commands/utils';
+import { registerEnvCommands } from './commands/env/index.js';
+import { unifiedDeployAction } from './commands/deploy/index.js';
 import { buildWorker } from './commands/worker/build';
 import { devWorker } from './commands/worker/dev';
 import { startWorker } from './commands/worker/start';
@@ -249,6 +251,24 @@ program
   )
   .action(startProject);
 
+// ---- Unified deploy command (new entry point) ----
+
+program
+  .command('deploy [dir]')
+  .description('Deploy your Mastra application to an environment')
+  .option('--env <name>', 'Target environment (default: production)', 'production')
+  .option('--org <id>', 'Organization ID')
+  .option('--project <id>', 'Project ID, slug, or name (creates new project if not found)')
+  .option('-y, --yes', 'Auto-accept defaults without confirmation')
+  .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
+  .option('--env-file <file>', 'Env file to deploy (for example: .env.production)')
+  .option('--skip-build', 'Skip the build step and use existing .mastra/output')
+  .option('--skip-preflight', 'Skip the pre-deploy build/env validation')
+  .option('--debug', 'Enable debug logs', false)
+  .action(wrapAction(unifiedDeployAction));
+
+// ---- Studio commands (legacy, will show deprecation warning) ----
+
 const studioCommand = program
   .command('studio')
   .description('Manage Mastra Studio')
@@ -342,6 +362,10 @@ const authTokens = authCommand.command('tokens').description('Manage API tokens'
 authTokens.command('create <name>').description('Create a new API token').action(wrapAction(createTokenAction));
 
 authTokens.command('revoke <token-id>').description('Revoke an API token').action(wrapAction(revokeTokenAction));
+
+// ---- Environment commands ----
+
+registerEnvCommands(program);
 
 // ---- Server commands ----
 

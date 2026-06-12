@@ -343,6 +343,7 @@ export async function serverDeployAction(
   const autoAccept = opts.yes ?? isHeadless;
   const skipPreflight = opts.skipPreflight || process.env.MASTRA_SKIP_PREFLIGHT === '1';
 
+  p.log.warn('⚠️  mastra server deploy is deprecated. Use "mastra deploy" instead.');
   p.intro('mastra server deploy');
 
   const packageName = getPackageName(targetDir);
