@@ -448,6 +448,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'browser/recording',
+          label: 'Recording',
+        },
+        {
+          type: 'doc',
           id: 'browser/browser-viewer',
           label: 'BrowserViewer',
         },

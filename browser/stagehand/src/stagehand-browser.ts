@@ -9,7 +9,12 @@
 
 import { existsSync, mkdirSync } from 'node:fs';
 import { Stagehand } from '@browserbasehq/stagehand';
-import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID, createBrowserRecordingTools } from '@mastra/core/browser';
+import {
+  MastraBrowser,
+  ScreencastStreamImpl,
+  DEFAULT_THREAD_ID,
+  createBrowserRecordingTools,
+} from '@mastra/core/browser';
 import type {
   BrowserState,
   BrowserTabState,
