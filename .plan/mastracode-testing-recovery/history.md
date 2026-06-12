@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Memory Gateway startup env coverage (2026-06-12)
+
+Added focused `mastracode/src/__tests__/index.test.ts` coverage for the headless-relevant Memory Gateway startup bridge. The test seeds stored gateway auth plus a persisted gateway base URL, boots `createMastraCode()`, and proves startup hydrates `MASTRA_GATEWAY_API_KEY` and `MASTRA_GATEWAY_URL`, loads stored API keys under the gateway provider env var, and lets `modelAuthChecker` authorize providers served by the Mastra gateway.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode exec vitest run src/__tests__/index.test.ts --reporter=dot --bail=1
+```
+
+Break validations:
+
+- Removed stored gateway key env hydration in `mastracode/src/index.ts`; the test failed because `MASTRA_GATEWAY_API_KEY` stayed undefined.
+- Removed stored gateway base-URL env hydration in `mastracode/src/index.ts`; the test failed because `MASTRA_GATEWAY_URL` stayed undefined.
+- Disabled the gateway-backed provider branch in `modelAuthChecker`; the test failed because a provider marked `gateway: "mastra"` was no longer authorized.
+
+The Settings row remains `needs-follow-up`: Memory Gateway startup env/base-URL ownership is now covered, while browser/settings wizard variants and remaining deeper submenu/navigation breadth remain follow-up work.
+
+
 ### Storage settings raw-value coverage (2026-06-12)
 
 Strengthened the existing `storage-settings` checked-in TUI e2e scenario. It now verifies the PostgreSQL connection string remains masked in the serialized terminal while typing, then reads the isolated `settings.json` after save to prove the raw connection string is persisted alongside `storage.backend = "pg"`.

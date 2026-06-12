@@ -30,6 +30,10 @@ const harnessConstructorMock = vi.fn();
 const loadSettingsMock = vi.fn();
 const getAvailableModePacksMock = vi.fn(() => []);
 const getAvailableOmPacksMock = vi.fn(() => []);
+const authGetStoredApiKeyMock = vi.fn<(provider: string) => string | undefined>(() => undefined);
+const authHasStoredApiKeyMock = vi.fn<(provider: string) => boolean>(() => false);
+const authIsLoggedInMock = vi.fn<(provider: string) => boolean>(() => false);
+const authLoadStoredApiKeysIntoEnvMock = vi.fn<(providerEnvVars: Record<string, string | undefined>) => void>();
 const harnessSubscribeMock = vi.fn();
 const detectProjectMock = vi.fn(() => ({
   mode: 'none',
@@ -183,12 +187,23 @@ vi.mock('./agents/workspace.js', () => ({
   getDynamicWorkspace: getDynamicWorkspaceMock,
 }));
 
-vi.mock('./auth/storage.js', () => ({
+vi.mock('../auth/storage.js', () => ({
   AuthStorage: class {
     get() {
       return undefined;
     }
-    loadStoredApiKeysIntoEnv() {}
+    getStoredApiKey(provider: string) {
+      return authGetStoredApiKeyMock(provider);
+    }
+    hasStoredApiKey(provider: string) {
+      return authHasStoredApiKeyMock(provider);
+    }
+    isLoggedIn(provider: string) {
+      return authIsLoggedInMock(provider);
+    }
+    loadStoredApiKeysIntoEnv(providerEnvVars: Record<string, string | undefined>) {
+      return authLoadStoredApiKeysIntoEnvMock(providerEnvVars);
+    }
   },
 }));
 
@@ -318,6 +333,13 @@ describe('createMastraCode', () => {
       contextFiles: [],
     });
     harnessStateMock = { cavemanObservations: false };
+    authGetStoredApiKeyMock.mockReset();
+    authGetStoredApiKeyMock.mockReturnValue(undefined);
+    authHasStoredApiKeyMock.mockReset();
+    authHasStoredApiKeyMock.mockReturnValue(false);
+    authIsLoggedInMock.mockReset();
+    authIsLoggedInMock.mockReturnValue(false);
+    authLoadStoredApiKeysIntoEnvMock.mockReset();
     loadSettingsMock.mockReset();
     loadSettingsMock.mockReturnValue(createMockSettings());
     agentConstructorMock.mockReset();
@@ -333,6 +355,8 @@ describe('createMastraCode', () => {
     }
     delete process.env.MC_E2E_PRIMARY_KEY;
     delete process.env.MC_E2E_SECONDARY_KEY;
+    delete process.env.MASTRA_GATEWAY_API_KEY;
+    delete process.env.MASTRA_GATEWAY_URL;
   });
 
   it('enables dynamic provider registry loading before bootstrapping auth and models', async () => {
@@ -356,6 +380,27 @@ describe('createMastraCode', () => {
 
     expect(gatewayRegistrySyncGateways).toHaveBeenCalledWith(true);
     resolveSync?.();
+  });
+
+  it('hydrates Memory Gateway env from stored auth and settings before model access checks', async () => {
+    const settings = createMockSettings();
+    settings.memoryGateway = { baseUrl: 'https://gateway.e2e.example.com/v1' };
+    loadSettingsMock.mockReturnValue(settings);
+    authGetStoredApiKeyMock.mockImplementation(provider =>
+      provider === 'mastra' || provider === 'mastra-gateway' ? 'msk_startup_gateway_key' : undefined,
+    );
+    gatewayRegistryGetProviders.mockReturnValue({ openai: { gateway: 'mastra' } });
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode();
+
+    expect(process.env.MASTRA_GATEWAY_API_KEY).toBe('msk_startup_gateway_key');
+    expect(process.env.MASTRA_GATEWAY_URL).toBe('https://gateway.e2e.example.com/v1');
+    expect(authLoadStoredApiKeysIntoEnvMock).toHaveBeenCalledWith(expect.objectContaining({ mastra: 'MASTRA_GATEWAY_API_KEY' }));
+    const harnessConfig = harnessConstructorMock.mock.calls[0]?.[0] as
+      | { modelAuthChecker?: (provider: string) => boolean | undefined }
+      | undefined;
+    expect(harnessConfig?.modelAuthChecker?.('openai')).toBe(true);
   });
 
   it('treats registry providers with any configured API-key env var as startup provider access', async () => {
