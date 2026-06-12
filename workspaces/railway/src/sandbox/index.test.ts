@@ -5,13 +5,12 @@
  * - Constructor options and ID generation
  * - Lifecycle (create, connect, destroy)
  * - Command execution and result mapping
- * - Process spawning, env/cwd command building, and kill
+ * - Process spawning, env/cwd passthrough, and kill
  */
 
 import { SandboxNotReadyError } from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-import { buildSpawnCommand } from './process-manager';
 import { RailwaySandbox } from './index';
 
 // =============================================================================
@@ -373,17 +372,58 @@ describe('RailwaySandbox', () => {
   });
 });
 
-describe('buildSpawnCommand', () => {
-  it('returns the bare command wrapped in sh -c', () => {
-    expect(buildSpawnCommand('echo hi')).toBe("sh -c 'echo hi'");
+describe('exec cwd/env passthrough', () => {
+  beforeEach(() => {
+    mockCreate.mockClear().mockResolvedValue(mockSandbox);
+    mockSandbox.exec.mockClear();
+    mockSandbox.exec.mockImplementation((_command: string, options?: { onStdout?: (c: string) => void }) =>
+      makeExecHandle({ exitCode: 0, stdout: 'ok' }, options),
+    );
   });
 
-  it('prepends a cd for the working directory', () => {
-    expect(buildSpawnCommand('ls', '/app')).toBe("sh -c 'cd /app && ls'");
+  it('passes cwd to exec options', async () => {
+    const sandbox = new RailwaySandbox({ token: 't' });
+    await sandbox._start();
+    await sandbox.processes.spawn('ls', { cwd: '/app' });
+
+    const sentOptions = mockSandbox.exec.mock.calls[0]![1] as { cwd?: string };
+    expect(sentOptions.cwd).toBe('/app');
   });
 
-  it('exports environment variables via env', () => {
-    const cmd = buildSpawnCommand('printenv FOO', undefined, { FOO: 'bar baz' });
-    expect(cmd).toBe("env FOO='bar baz' sh -c 'printenv FOO'");
+  it('passes env to exec options', async () => {
+    const sandbox = new RailwaySandbox({ token: 't', env: { FOO: 'bar' } });
+    await sandbox._start();
+    await sandbox.processes.spawn('printenv FOO');
+
+    const sentOptions = mockSandbox.exec.mock.calls[0]![1] as { env?: Record<string, string> };
+    expect(sentOptions.env).toEqual({ FOO: 'bar' });
+  });
+
+  it('merges default env with per-spawn env', async () => {
+    const sandbox = new RailwaySandbox({ token: 't', env: { A: '1' } });
+    await sandbox._start();
+    await sandbox.processes.spawn('env', { env: { B: '2' } });
+
+    const sentOptions = mockSandbox.exec.mock.calls[0]![1] as { env?: Record<string, string> };
+    expect(sentOptions.env).toEqual({ A: '1', B: '2' });
+  });
+
+  it('filters undefined per-spawn env values', async () => {
+    const sandbox = new RailwaySandbox({ token: 't', env: { A: '1' } });
+    await sandbox._start();
+    await sandbox.processes.spawn('env', { env: { B: undefined } });
+
+    const sentOptions = mockSandbox.exec.mock.calls[0]![1] as { env?: Record<string, string> };
+    expect(sentOptions.env).toEqual({ A: '1' });
+  });
+
+  it('does not include cwd or env when not provided', async () => {
+    const sandbox = new RailwaySandbox({ token: 't' });
+    await sandbox._start();
+    await sandbox.processes.spawn('echo hi');
+
+    const sentOptions = mockSandbox.exec.mock.calls[0]![1] as Record<string, unknown>;
+    expect(sentOptions).not.toHaveProperty('cwd');
+    expect(sentOptions).not.toHaveProperty('env');
   });
 });
