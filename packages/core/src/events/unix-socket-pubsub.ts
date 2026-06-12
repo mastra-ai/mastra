@@ -66,6 +66,8 @@ function writeSerializedFrame(socket: net.Socket, serializedFrame: string): Prom
       }
     };
     const onError = (error: Error) => settle(error);
+    // NOTE: keep this exact message in sync with the transient-error classifier
+    // in #sendToBroker (search for 'socket closed before write completed').
     const onClose = () => settle(new Error('UnixSocketPubSub socket closed before write completed'));
     const onDrain = () => {
       drainCompleted = true;
@@ -359,6 +361,8 @@ export class UnixSocketPubSub extends PubSub {
         this.#clientSocket = socket;
         this.#isBroker = false;
         readFrames(socket, frame => this.#handleServerFrame(frame));
+        // NOTE: keep this exact message in sync with the transient-error
+        // classifier in #sendToBroker (search for 'broker connection closed').
         socket.on('close', () =>
           this.#handleClientDisconnect(socket, new Error('UnixSocketPubSub broker connection closed')),
         );
@@ -741,6 +745,8 @@ export class UnixSocketPubSub extends PubSub {
     }
     const activeSocket = this.#clientSocket;
     if (!activeSocket || activeSocket.destroyed) {
+      // NOTE: keep this exact message in sync with the transient-error
+      // classifier in #sendToBroker (search for 'not connected to a broker').
       throw new Error('UnixSocketPubSub is not connected to a broker');
     }
     await writeFrame(activeSocket, frame);

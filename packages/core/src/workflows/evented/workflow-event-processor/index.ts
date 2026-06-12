@@ -100,6 +100,12 @@ export class WorkflowEventProcessor extends EventProcessor {
   // the same logical event short-circuits as terminal and does NOT re-run
   // errorWorkflow or reset the per-event budget.
   private static readonly TERMINAL_SENTINEL = Number.POSITIVE_INFINITY;
+  // Upper bound on entries kept in deliveryAttempts so a long-lived processor
+  // can't grow the map without limit. When the map exceeds this size we evict
+  // the oldest entries in insertion order (Map preserves insertion order). The
+  // cap is high enough that a realistic burst of concurrent runs never trims
+  // an entry mid-retry, but low enough to bound memory.
+  private static readonly DELIVERY_ATTEMPTS_MAX_ENTRIES = 1024;
 
   constructor({ mastra, stepExecutionStrategy }: { mastra: Mastra; stepExecutionStrategy?: StepExecutionStrategy }) {
     super({ mastra });
@@ -2526,7 +2532,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       return { ok: true };
     } catch (err) {
       const attempts = (this.deliveryAttempts.get(eventKey) ?? 0) + 1;
-      this.deliveryAttempts.set(eventKey, attempts);
+      this.#setDeliveryAttempts(eventKey, attempts);
       const exhausted = attempts >= WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS;
 
       this.mastra.getLogger()?.error('WorkflowEventProcessor.handle: error processing event', {
@@ -2548,7 +2554,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       // TERMINAL sentinel so any later redelivery of the same logical event
       // short-circuits at the top of handle() instead of rerunning
       // errorWorkflow or resetting the budget.
-      this.deliveryAttempts.set(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
+      this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
       try {
         const failWorkflowData = event.data as Omit<ProcessorArgs, 'workflow'>;
         if (failWorkflowData && failWorkflowData.workflowId && failWorkflowData.runId) {
@@ -2564,6 +2570,25 @@ export class WorkflowEventProcessor extends EventProcessor {
           });
       }
       return { ok: false, retry: false };
+    }
+  }
+
+  /**
+   * Set a deliveryAttempts entry and evict the oldest entries (FIFO via Map's
+   * insertion-order iteration) if we've exceeded DELIVERY_ATTEMPTS_MAX_ENTRIES.
+   * Re-setting an existing key first deletes then re-inserts so that the entry
+   * moves to the tail of the iteration order; this keeps actively-retrying
+   * events from being evicted while idle TERMINAL_SENTINEL entries age out.
+   */
+  #setDeliveryAttempts(eventKey: string, value: number): void {
+    if (this.deliveryAttempts.has(eventKey)) {
+      this.deliveryAttempts.delete(eventKey);
+    }
+    this.deliveryAttempts.set(eventKey, value);
+    while (this.deliveryAttempts.size > WorkflowEventProcessor.DELIVERY_ATTEMPTS_MAX_ENTRIES) {
+      const oldestKey = this.deliveryAttempts.keys().next().value;
+      if (oldestKey === undefined) break;
+      this.deliveryAttempts.delete(oldestKey);
     }
   }
 

@@ -124,6 +124,40 @@ describe('WorkflowEventProcessor retry budget (Sig D)', () => {
     await mastra.shutdown();
   });
 
+  it('caps deliveryAttempts map size so a long-lived processor cannot leak memory', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { wf: makeWorkflow('wf') } as any,
+      pubsub,
+    });
+
+    const processor = new AlwaysThrowsProcessor({ mastra });
+    // Touch the static cap via the class so the test stays in sync with the
+    // implementation even if the value is tuned later.
+    const cap = (WorkflowEventProcessor as unknown as { DELIVERY_ATTEMPTS_MAX_ENTRIES: number })
+      .DELIVERY_ATTEMPTS_MAX_ENTRIES;
+    expect(typeof cap).toBe('number');
+    expect(cap).toBeGreaterThan(0);
+
+    // Drive 2x the cap of distinct event ids through handle(). Each one fails
+    // exactly once, so each leaves a counter behind. After this loop the map
+    // size must still be <= cap.
+    for (let i = 0; i < cap * 2; i++) {
+      await processor.handle(makeStartEvent('wf', `run-${i}`, `event-id-${i}`));
+    }
+
+    const map = (processor as unknown as { deliveryAttempts: Map<string, number> }).deliveryAttempts;
+    expect(map.size).toBeLessThanOrEqual(cap);
+    // The newest entries (the back half of the loop) must still be present;
+    // the oldest entries should have been evicted.
+    expect(map.has(`event-id-${cap * 2 - 1}`)).toBe(true);
+    expect(map.has(`event-id-0`)).toBe(false);
+
+    await mastra.shutdown();
+  });
+
   it('clears the counter on success so a later transient failure gets a fresh budget', async () => {
     const pubsub = new EventEmitterPubSub();
     const mastra = new Mastra({
