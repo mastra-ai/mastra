@@ -12,9 +12,11 @@ import {
   callFlowResult,
   expectationFailedResult,
   failedAtSetupExperiment,
+  functionMockExperiment,
   listExperimentsResponse,
   listResultsResponse,
   mockOnlyExperiment,
+  mockOnlyWithConfigsExperiment,
   strictVersionedReplayExperiment,
   triggerExperimentResponse,
 } from '../../__tests__/fixtures/tool-replay';
@@ -188,7 +190,7 @@ describe('ExperimentPageTabs re-run item with replay', () => {
     });
   });
 
-  it('keeps the re-run disabled with the mock explanation on a mock-only run', async () => {
+  it('keeps the re-run disabled with the mock explanation on a legacy mock-only run (no mockConfigs)', async () => {
     const capture = useTabsHandlers(mockOnlyExperiment, [expectationFailedResult]);
     renderTabs(mockOnlyExperiment, [expectationFailedResult]);
 
@@ -198,6 +200,43 @@ describe('ExperimentPageTabs re-run item with replay', () => {
     const inertWrapper = button.closest('[aria-disabled="true"]');
     expect(inertWrapper).not.toBeNull();
     expect(inertWrapper!.className).toContain('pointer-events-none');
+
+    fireEvent.click(button);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(capture).not.toHaveBeenCalled();
+  });
+
+  it('re-runs one item of a mock-only run with the exact persisted mocks — and no invented replay policy', async () => {
+    const capture = useTabsHandlers(mockOnlyWithConfigsExperiment, [expectationFailedResult]);
+    renderTabs(mockOnlyWithConfigsExperiment, [expectationFailedResult]);
+
+    await featureResult('item-4');
+    fireEvent.click(await screen.findByRole('button', { name: 'Re-run item with replay' }));
+
+    await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+    // The exact wire payload: the persisted mock configs verbatim (data mocks
+    // and the expect-only entry), narrowed to this one item — no toolReplay.
+    expect(capture.mock.calls[0][0]).toEqual({
+      targetType: 'agent',
+      targetId: 'support-agent',
+      itemIds: ['item-4'],
+      toolMocks: {
+        weatherInfo: { output: { temp: 20, unit: 'C' } },
+        sendEmail: { error: { name: 'MailError', message: 'mail service down' } },
+        chargeCard: { expect: { calledTimes: 0 } },
+      },
+      version: 1,
+    });
+  });
+
+  it('keeps the re-run disabled when the record holds a function-mock placeholder', async () => {
+    const capture = useTabsHandlers(functionMockExperiment, [expectationFailedResult]);
+    renderTabs(functionMockExperiment, [expectationFailedResult]);
+
+    await featureResult('item-4');
+
+    const button = (await screen.findByText('Re-run item with replay')).closest('button')!;
+    expect(button.closest('[aria-disabled="true"]')).not.toBeNull();
 
     fireEvent.click(button);
     await new Promise(resolve => setTimeout(resolve, 50));

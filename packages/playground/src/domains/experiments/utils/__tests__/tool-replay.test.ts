@@ -8,11 +8,13 @@ import {
   expectationFailedResult,
   failedAtSetupExperiment,
   failedReplayResult,
+  functionMockExperiment,
   junkMarkerExperiment,
   liveExperiment,
   liveResultWithJunkToolReplay,
   mockOnlyCallFlowReport,
   mockOnlyExperiment,
+  mockOnlyWithConfigsExperiment,
   noOnMissMarkerExperiment,
   replayExperiment,
   replayResult,
@@ -25,6 +27,7 @@ import {
   classifyReplayDivergence,
   getExperimentFailureReason,
   getReplayMarker,
+  getReplayReRunDisabledReason,
   getToolReplayErrorLabel,
   getToolReplayReport,
   isReplayExperiment,
@@ -171,7 +174,7 @@ describe('buildReplayItemReRunParams', () => {
     });
   });
 
-  it('refuses mock-marked runs — mock values are not stored on the run', () => {
+  it('refuses legacy mock-marked runs — names alone cannot rebuild the mock values', () => {
     expect(
       buildReplayItemReRunParams({
         datasetId: 'dataset-1',
@@ -180,12 +183,85 @@ describe('buildReplayItemReRunParams', () => {
         itemId: 'item-1',
       }),
     ).toBeNull();
-    // Replay+mock combined runs are just as unreconstructable.
+    // Replay+mock combined legacy runs are just as unreconstructable.
     expect(
       buildReplayItemReRunParams({
         datasetId: 'dataset-1',
         experiment: replayExperiment,
         marker: { fromExperimentId: 'exp-live-1', onMiss: 'error', mockedTools: ['weatherInfo'] },
+        itemId: 'item-1',
+      }),
+    ).toBeNull();
+  });
+
+  it('rebuilds a mock-only run verbatim from the persisted mockConfigs — no invented replay policy', () => {
+    expect(
+      buildReplayItemReRunParams({
+        datasetId: 'dataset-1',
+        experiment: mockOnlyWithConfigsExperiment,
+        marker: getReplayMarker(mockOnlyWithConfigsExperiment)!,
+        itemId: 'item-4',
+      }),
+    ).toEqual({
+      datasetId: 'dataset-1',
+      targetType: 'agent',
+      targetId: 'support-agent',
+      itemIds: ['item-4'],
+      // Data mocks round-trip exactly, the expect-only entry included.
+      toolMocks: {
+        weatherInfo: { output: { temp: 20, unit: 'C' } },
+        sendEmail: { error: { name: 'MailError', message: 'mail service down' } },
+        chargeCard: { expect: { calledTimes: 0 } },
+      },
+      version: 1,
+    });
+  });
+
+  it('re-runs a replay+mock run with BOTH the replay policy and the rebuilt mocks (cases round-trip)', () => {
+    expect(
+      buildReplayItemReRunParams({
+        datasetId: 'dataset-1',
+        experiment: replayExperiment,
+        marker: {
+          fromExperimentId: 'exp-live-1',
+          onMiss: 'error',
+          mockedTools: ['weatherInfo'],
+          mockConfigs: {
+            weatherInfo: { cases: [{ args: { city: 'Paris' }, output: 'sunny' }], onNoMatch: 'passthrough' },
+          },
+        },
+        itemId: 'item-1',
+      }),
+    ).toEqual({
+      datasetId: 'dataset-1',
+      targetType: 'agent',
+      targetId: 'support-agent',
+      itemIds: ['item-1'],
+      toolReplay: { fromExperimentId: 'exp-live-1', onMiss: 'error' },
+      toolMocks: {
+        weatherInfo: { cases: [{ args: { city: 'Paris' }, output: 'sunny' }], onNoMatch: 'passthrough' },
+      },
+      version: 1,
+    });
+  });
+
+  it('refuses function-mock records — code never persists', () => {
+    expect(
+      buildReplayItemReRunParams({
+        datasetId: 'dataset-1',
+        experiment: functionMockExperiment,
+        marker: getReplayMarker(functionMockExperiment)!,
+        itemId: 'item-1',
+      }),
+    ).toBeNull();
+  });
+
+  it('refuses configs that do not cover every mocked tool — a re-run would silently drop mocks', () => {
+    expect(
+      buildReplayItemReRunParams({
+        datasetId: 'dataset-1',
+        experiment: mockOnlyExperiment,
+        marker: { mockedTools: ['weatherInfo', 'sendEmail'], mockConfigs: { weatherInfo: { output: 'sunny' } } },
         itemId: 'item-1',
       }),
     ).toBeNull();
@@ -208,6 +284,33 @@ describe('buildReplayItemReRunParams', () => {
         itemId: 'item-1',
       }),
     ).toBeNull();
+  });
+});
+
+describe('getReplayReRunDisabledReason', () => {
+  it('explains function-mock records with the code-only copy', () => {
+    expect(getReplayReRunDisabledReason(getReplayMarker(functionMockExperiment)!)).toBe(
+      "Function mocks can't be re-run from Studio — re-create the experiment in code.",
+    );
+  });
+
+  it('keeps the legacy copy for mock records without persisted configs', () => {
+    expect(getReplayReRunDisabledReason(getReplayMarker(mockOnlyExperiment)!)).toBe(
+      "Mock values aren't stored on the run yet — re-create the experiment from the trigger dialog.",
+    );
+    // Partial coverage reads as values-not-stored too — some of them are missing.
+    expect(
+      getReplayReRunDisabledReason({
+        mockedTools: ['weatherInfo', 'sendEmail'],
+        mockConfigs: { weatherInfo: { output: 'sunny' } },
+      }),
+    ).toBe("Mock values aren't stored on the run yet — re-create the experiment from the trigger dialog.");
+  });
+
+  it('returns null when a re-run is possible or the run is not mock-marked', () => {
+    expect(getReplayReRunDisabledReason(getReplayMarker(mockOnlyWithConfigsExperiment)!)).toBeNull();
+    expect(getReplayReRunDisabledReason({ fromExperimentId: 'exp-live-1', onMiss: 'error' })).toBeNull();
+    expect(getReplayReRunDisabledReason({})).toBeNull();
   });
 });
 

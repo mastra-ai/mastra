@@ -55,9 +55,13 @@ export type ExperimentResultPanelProps = {
   sourceTraceSpans?: ReplayTapeSpan[];
   /** Same item's result from the replay's source experiment — enables the original-vs-replay output comparison. */
   originalResult?: DatasetExperimentResult | null;
-  /** Re-runs this item under the same replay policy — provided only on replay runs. */
+  /** Re-runs this item under the same replay policy and mocks — provided only on replay/mock runs. */
   onReRunWithReplay?: () => void;
-  /** When set, the re-run button renders disabled with this tooltip (mock runs: mock values aren't persisted). */
+  /**
+   * When set, the re-run button renders disabled with this tooltip — mock
+   * runs whose configs can't be rebuilt from the marker: function mocks
+   * (code never persists) or legacy records without persisted mock values.
+   */
   reRunDisabledReason?: string;
   /** Pending state of the re-run trigger — guards against double-clicks. */
   isReRunPending?: boolean;

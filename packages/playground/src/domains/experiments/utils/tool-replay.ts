@@ -2,6 +2,8 @@ import { getToolReplayMarker } from '@mastra/client-js';
 import type {
   DatasetExperiment,
   DatasetExperimentResult,
+  ToolMockDataConfig,
+  ToolMockFunctionMarker,
   ToolReplayExperimentMarker,
   ToolReplayMatching,
   ToolReplayReport,
@@ -124,15 +126,69 @@ export function getExperimentFailureReason(
   return { id, message };
 }
 
+/** The `{ function: true }` placeholder stamped for function mocks — code never persists. */
+function isFunctionMockPlaceholder(
+  config: ToolMockDataConfig | ToolMockFunctionMarker,
+): config is ToolMockFunctionMarker {
+  return 'function' in config;
+}
+
+/** Whether the run was stamped as mocked — by names (`mockedTools`) or configs (`mockConfigs`). */
+function isMockMarked(marker: ToolReplayMarker): boolean {
+  return Boolean(marker.mockedTools?.length) || Object.keys(marker.mockConfigs ?? {}).length > 0;
+}
+
 /**
- * Builds the trigger params for re-running one item of a replay experiment
- * under the same conditions: same dataset version, same agent version, same
- * replay policy — only `itemIds` narrows the run to the one item.
+ * Rebuilds the `toolMocks` trigger payload from the marker's persisted
+ * `mockConfigs` — data configs round-trip verbatim (output/error/cases/
+ * onNoMatch/expect, the expect-only entries included). Returns null when a
+ * faithful reconstruction is impossible: a function-mock placeholder (code
+ * never persists), a legacy record without `mockConfigs`, or configs that
+ * don't cover every tool in `mockedTools` (tampered metadata) — re-running
+ * any of those would silently drop mocks.
+ */
+function reconstructToolMocks(
+  marker: ToolReplayMarker,
+): NonNullable<TriggerDatasetExperimentParams['toolMocks']> | null {
+  const entries = Object.entries(marker.mockConfigs ?? {});
+  if (entries.length === 0) return null;
+  const dataEntries: [string, ToolMockDataConfig][] = [];
+  for (const [toolName, config] of entries) {
+    if (isFunctionMockPlaceholder(config)) return null;
+    dataEntries.push([toolName, config]);
+  }
+  const configNames = new Set(dataEntries.map(([toolName]) => toolName));
+  if ((marker.mockedTools ?? []).some(toolName => !configNames.has(toolName))) return null;
+  return Object.fromEntries(dataEntries);
+}
+
+/**
+ * Why one item of this mock-marked run cannot be re-run from Studio — the
+ * disabled button's tooltip. Null when a re-run is possible, or when the run
+ * is not mock-marked at all (no mocks to explain; replay-only refusals render
+ * no button instead).
+ */
+export function getReplayReRunDisabledReason(marker: ToolReplayMarker): string | null {
+  if (!isMockMarked(marker)) return null;
+  if (Object.values(marker.mockConfigs ?? {}).some(isFunctionMockPlaceholder)) {
+    return "Function mocks can't be re-run from Studio — re-create the experiment in code.";
+  }
+  if (reconstructToolMocks(marker) === null) {
+    return "Mock values aren't stored on the run yet — re-create the experiment from the trigger dialog.";
+  }
+  return null;
+}
+
+/**
+ * Builds the trigger params for re-running one item of a replay or mock
+ * experiment under the same conditions: same dataset version, same agent
+ * version, same replay policy, same mocks (rebuilt from the marker's
+ * persisted `mockConfigs`) — only `itemIds` narrows the run to the one item.
  *
  * Returns null when the run is not faithfully re-runnable from its marker:
- * markers without `onMiss` carry no replay policy, and mock-marked runs
- * (`mockedTools`) can't be reconstructed — mock values aren't stored on the
- * run, so a re-run would silently drop the mocks.
+ * no replay policy (`onMiss`) and no mocks, mock-marked runs whose configs
+ * can't be rebuilt (function-mock placeholders, legacy records without
+ * `mockConfigs`), or a non-agent target.
  */
 export function buildReplayItemReRunParams({
   datasetId,
@@ -145,20 +201,30 @@ export function buildReplayItemReRunParams({
   marker: ToolReplayMarker;
   itemId: string;
 }): TriggerDatasetExperimentParams | null {
-  if (!marker.onMiss || marker.mockedTools?.length) return null;
   // Tool replay is agent-only — a marker on any other target is junk.
   if (experiment.targetType !== 'agent') return null;
+  // Mock-marked runs re-run only from a complete persisted config — anything
+  // less would silently drop the mocks.
+  const toolMocks = isMockMarked(marker) ? reconstructToolMocks(marker) : undefined;
+  if (toolMocks === null) return null;
+  // Without a replay policy and without mocks there is nothing to reproduce.
+  if (!marker.onMiss && !toolMocks) return null;
   return {
     datasetId,
     targetType: 'agent',
     targetId: experiment.targetId,
     itemIds: [itemId],
-    toolReplay: {
-      ...(marker.fromExperimentId ? { fromExperimentId: marker.fromExperimentId } : {}),
-      onMiss: marker.onMiss,
-      // fifo is the backend default — only the explicit strict policy is re-sent.
-      ...(marker.matching === 'strict' ? { matching: 'strict' as const } : {}),
-    },
+    ...(marker.onMiss
+      ? {
+          toolReplay: {
+            ...(marker.fromExperimentId ? { fromExperimentId: marker.fromExperimentId } : {}),
+            onMiss: marker.onMiss,
+            // fifo is the backend default — only the explicit strict policy is re-sent.
+            ...(marker.matching === 'strict' ? { matching: 'strict' as const } : {}),
+          },
+        }
+      : {}),
+    ...(toolMocks ? { toolMocks } : {}),
     ...(experiment.datasetVersion != null ? { version: experiment.datasetVersion } : {}),
     ...(experiment.agentVersion ? { agentVersion: experiment.agentVersion } : {}),
   };

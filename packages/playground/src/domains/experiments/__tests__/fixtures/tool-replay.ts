@@ -55,6 +55,41 @@ export const mockOnlyExperiment: DatasetExperiment = {
   metadata: { toolReplay: { mockedTools: ['weatherInfo'] } },
 };
 
+/**
+ * Mock-only run stamped with the full persisted mock configuration — data
+ * mocks verbatim, expect-only entries included (they don't suppress, so they
+ * are absent from `mockedTools` but still part of the record). Re-runnable
+ * from the record alone.
+ */
+export const mockOnlyWithConfigsExperiment: DatasetExperiment = {
+  ...experimentBase,
+  id: 'exp-mock-configs',
+  name: 'mock-only-with-configs',
+  metadata: {
+    toolReplay: {
+      mockedTools: ['weatherInfo', 'sendEmail'],
+      mockConfigs: {
+        weatherInfo: { output: { temp: 20, unit: 'C' } },
+        sendEmail: { error: { name: 'MailError', message: 'mail service down' } },
+        chargeCard: { expect: { calledTimes: 0 } },
+      },
+    },
+  },
+};
+
+/** Mock run whose marker records a function mock placeholder — code never persists, not re-runnable from Studio. */
+export const functionMockExperiment: DatasetExperiment = {
+  ...experimentBase,
+  id: 'exp-mock-function',
+  name: 'function-mock',
+  metadata: {
+    toolReplay: {
+      mockedTools: ['searchDocs'],
+      mockConfigs: { searchDocs: { function: true } },
+    },
+  },
+};
+
 export const runningAgentExperiment: DatasetExperiment = {
   ...experimentBase,
   id: 'exp-running',

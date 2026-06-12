@@ -29,6 +29,7 @@ import {
   buildReplayItemReRunParams,
   getExperimentFailureReason,
   getReplayMarker,
+  getReplayReRunDisabledReason,
   getToolReplayReport,
 } from '../utils/tool-replay';
 import { ExperimentReplaySummary } from './experiment-replay-summary';
@@ -186,17 +187,17 @@ export function ExperimentPageTabs({
   const failedAtSetup =
     experiment?.status === 'failed' && failureReason !== null && (experiment.totalItems === 0 || results.length === 0);
 
-  // Single-item re-run loop for replay runs: same dataset version, same agent
-  // version, same replay policy — only this item. Mock-marked runs can't be
-  // re-run faithfully (mock values aren't stored on the run), so they get a
-  // disabled button with the reason instead of a silently-different run.
+  // Single-item re-run loop for replay/mock runs: same dataset version, same
+  // agent version, same replay policy, same mocks (rebuilt from the marker's
+  // persisted mockConfigs) — only this item. Mock-marked runs whose configs
+  // can't be rebuilt (function mocks, legacy records without mockConfigs) get
+  // a disabled button with the exact reason instead of a silently-different run.
   const reRunParams =
     experiment && replayMarker && featuredResult
       ? buildReplayItemReRunParams({ datasetId, experiment, marker: replayMarker, itemId: featuredResult.itemId })
       : null;
-  const reRunDisabledReason = replayMarker?.mockedTools?.length
-    ? "Mock values aren't stored on the run yet — re-create the experiment from the trigger dialog."
-    : undefined;
+  const reRunDisabledReason =
+    !reRunParams && replayMarker ? (getReplayReRunDisabledReason(replayMarker) ?? undefined) : undefined;
   const reRunItemWithReplay = async () => {
     if (!reRunParams) return;
     try {
