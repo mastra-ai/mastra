@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Setup custom-pack completion coverage (2026-06-12)
+
+Added `setup-custom-pack-completion` as the 83rd checked-in TUI e2e scenario. The scenario seeds completed setup state, launches `/setup`, skips auth, selects the Custom mode-pack path, names a new pack, chooses env-backed synthetic `302ai` models for plan/build/fast, selects a custom OM model, disables YOLO, and proves `settings.json` persisted the saved custom pack, active/onboarding pack IDs, mode defaults, custom OM override, stale subagent override cleanup, and YOLO preference.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test setup-custom-pack-completion
+```
+
+Break validations:
+
+- Skipping per-mode custom model capture left persisted custom pack/default models empty.
+- Skipping the new custom-pack settings upsert left active defaults changed but no saved pack entry.
+- Dropping custom OM override persistence left `omModelOverride` as `null` after selecting a custom OM model.
+
+The Settings onboarding/global-settings row remains `needs-follow-up`; this chunk closes `/setup` custom-pack completion, while login refresh, browser wizard/startup restore, and broader reload parity remain.
+
+
 ### Model selection cancel/env precedence coverage (2026-06-12)
 
 Added `model-selection-cancel-env` as the 82nd checked-in TUI e2e scenario. The scenario seeds a saved custom model pack, launches with a real `302AI_API_KEY`, edits the pack through `/models`, selects a synthetic `302ai` plan model that should inherit env-backed provider availability without opening the missing-key dialog, then selects a second synthetic provider for build mode, cancels the `API Key Required` dialog, saves, and proves both selected model IDs persisted while no stored auth keys were written.
