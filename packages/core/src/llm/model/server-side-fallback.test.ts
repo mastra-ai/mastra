@@ -17,11 +17,11 @@ describe('getServerSideFallbackInfo', () => {
         anthropic: {
           iterations: [
             { type: 'message', model: 'claude-fable-5', inputTokens: 10, outputTokens: 0 },
-            { type: 'fallback_message', model: 'claude-opus-4-8', inputTokens: 10, outputTokens: 50 },
+            { type: 'fallback_message', model: 'claude-opus-4-7', inputTokens: 10, outputTokens: 50 },
           ],
         },
       }),
-    ).toEqual({ model: 'claude-opus-4-8' });
+    ).toEqual({ model: 'claude-opus-4-7' });
   });
 
   it('returns the last fallback iteration when multiple fallbacks fired', () => {
@@ -65,10 +65,10 @@ describe('resolveResponseModelId', () => {
   it('prefers the fallback model over the response model id', () => {
     expect(
       resolveResponseModelId(
-        { anthropic: { iterations: [{ type: 'fallback_message', model: 'claude-opus-4-8' }] } },
+        { anthropic: { iterations: [{ type: 'fallback_message', model: 'claude-opus-4-7' }] } },
         'claude-fable-5',
       ),
-    ).toBe('claude-opus-4-8');
+    ).toBe('claude-opus-4-7');
   });
 
   it('falls back to the response model id when no server-side fallback fired', () => {
