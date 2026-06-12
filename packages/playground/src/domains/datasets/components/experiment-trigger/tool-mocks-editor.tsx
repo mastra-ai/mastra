@@ -1,3 +1,4 @@
+import type { TriggerDatasetExperimentParams } from '@mastra/client-js';
 import { Button, Icon, Input, Label, Switch, Textarea } from '@mastra/playground-ui';
 import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { useId } from 'react';
@@ -137,17 +138,8 @@ export function areToolMockRowsValid(rows: ToolMockRow[]): boolean {
   return validateToolMockRows(rows).size === 0;
 }
 
-/**
- * One `toolMocks` entry of the trigger payload. The field is not on the
- * client param type yet (client types catch up in the stacked PR), so it
- * rides through the same wider-local-shape pattern as
- * `buildToolReplayPayload`'s `matching`.
- */
-export interface ToolMockPayloadEntry {
-  output?: unknown;
-  error?: { name?: string; message: string };
-  expect?: { args?: unknown; calledTimes?: number };
-}
+/** One `toolMocks` entry of the trigger payload — the client param type, verbatim. */
+export type ToolMockPayloadEntry = NonNullable<TriggerDatasetExperimentParams['toolMocks']>[string];
 
 /**
  * Builds the `toolMocks` trigger payload from the editor rows. Returns
@@ -268,6 +260,13 @@ export function ToolMocksEditor({
           {rows.map(row => {
             const rowIssues = issues.get(row.id);
             const showAssertCalls = row.kind !== 'expect';
+            const trimmedName = row.toolName.trim();
+            // Non-blocking: MCP/dynamic tools are legitimately absent from the
+            // suggestions, so an unknown name warns but never gates Run.
+            const isUnknownTool =
+              !rowIssues?.toolName &&
+              trimmedName.length > 0 &&
+              Boolean(toolSuggestions && toolSuggestions.length > 0 && !toolSuggestions.includes(trimmedName));
             return (
               <div key={row.id} className="grid gap-2 rounded-lg border border-border1 p-3">
                 <div className="flex items-start gap-2">
@@ -282,6 +281,11 @@ export function ToolMocksEditor({
                       error={Boolean(rowIssues?.toolName)}
                     />
                     {rowIssues?.toolName && <p className="text-ui-sm text-negative1">{rowIssues.toolName}</p>}
+                    {isUnknownTool && (
+                      <p className="text-ui-sm text-amber-400">
+                        Not among this agent&apos;s tools — this mock will never fire.
+                      </p>
+                    )}
                   </div>
                   <Button
                     type="button"

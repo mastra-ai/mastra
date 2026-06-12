@@ -258,6 +258,51 @@ describe('ToolMocksEditor', () => {
     expect(screen.getByText('Duplicate tool name — "weatherInfo" already has a mock.')).toBeDefined();
   });
 
+  it('hints when the tool name is not among the agent tools — without blocking Run', () => {
+    render(<EditorHarness toolSuggestions={['weatherInfo', 'sendEmail']} />);
+    fireEvent.click(screen.getByRole('switch', { name: 'Mock tools' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add mock' }));
+
+    const nameInput = screen.getByLabelText('Tool name');
+    fireEvent.change(nameInput, { target: { value: 'weatherInfoo' } });
+    fireEvent.change(screen.getByLabelText('Stub output (JSON or plain text)'), { target: { value: '"sunny"' } });
+
+    expect(screen.getByText("Not among this agent's tools — this mock will never fire.")).toBeDefined();
+    // Non-blocking: MCP/dynamic tools are legitimate, so the row stays valid.
+    expect(areToolMockRowsValid([makeRow({ toolName: 'weatherInfoo', kind: 'output', outputText: '"sunny"' })])).toBe(
+      true,
+    );
+
+    // Fixing the typo clears the hint.
+    fireEvent.change(nameInput, { target: { value: 'weatherInfo' } });
+    expect(screen.queryByText("Not among this agent's tools — this mock will never fire.")).toBeNull();
+  });
+
+  it('never hints without suggestions, on empty names, or under a name error', () => {
+    render(<EditorHarness />);
+    fireEvent.click(screen.getByRole('switch', { name: 'Mock tools' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add mock' }));
+
+    // No suggestions to compare against (e.g. tools still loading) — no hint.
+    fireEvent.change(screen.getByLabelText('Tool name'), { target: { value: 'someCustomTool' } });
+    expect(screen.queryByText(/this mock will never fire/)).toBeNull();
+  });
+
+  it('shows the duplicate error instead of stacking the unknown-tool hint on it', () => {
+    render(<EditorHarness toolSuggestions={['weatherInfo']} />);
+    fireEvent.click(screen.getByRole('switch', { name: 'Mock tools' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add mock' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add mock' }));
+
+    const nameInputs = screen.getAllByLabelText('Tool name');
+    fireEvent.change(nameInputs[0], { target: { value: 'unknownTool' } });
+    fireEvent.change(nameInputs[1], { target: { value: 'unknownTool' } });
+
+    // Row 1: unknown-tool hint. Row 2: duplicate error only — one message per row.
+    expect(screen.getAllByText("Not among this agent's tools — this mock will never fire.")).toHaveLength(1);
+    expect(screen.getByText('Duplicate tool name — "unknownTool" already has a mock.')).toBeDefined();
+  });
+
   it('offers the agent tools as datalist suggestions while keeping free text', () => {
     render(<EditorHarness toolSuggestions={['weatherInfo', 'sendEmail']} />);
     fireEvent.click(screen.getByRole('switch', { name: 'Mock tools' }));
