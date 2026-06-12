@@ -11,7 +11,14 @@ import type { TargetType } from '../../storage/types';
 import type { ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
 import { buildReplayHooks, createReplayState, finalizeReplayReport } from './replay';
-import type { ToolReplayEvent, ToolReplayOnMiss, ToolReplayReport, ToolReplayState } from './replay';
+import type {
+  ToolMockConfig,
+  ToolReplayEvent,
+  ToolReplayMatching,
+  ToolReplayOnMiss,
+  ToolReplayReport,
+  ToolReplayState,
+} from './replay';
 
 /**
  * Common fields extracted from both FullOutput (v2/v3) and GenerateTextResult/GenerateObjectResult (v1).
@@ -61,7 +68,7 @@ export interface ExecutionResult {
   toolReplay?: ToolReplayReport;
 }
 
-/** Resolved tool replay input for a single item execution. */
+/** Resolved tool replay / tool mock input for a single item execution. */
 export interface ToolReplayExecutionOptions {
   /** Recorded events derived from the source trace (empty when no recording was found). */
   events: ToolReplayEvent[];
@@ -69,8 +76,14 @@ export interface ToolReplayExecutionOptions {
   sourceTraceId: string | null;
   /** Behavior when a tool call has no remaining recorded event. */
   onMiss: ToolReplayOnMiss;
+  /** How recorded events are matched to the agent's calls (default 'fifo'). */
+  matching?: ToolReplayMatching;
   /** True when the recording came from a different version of this dataset item. */
   staleRecording?: boolean;
+  /** Per-tool mocks — take precedence over the replay queues. */
+  mocks?: Record<string, ToolMockConfig>;
+  /** False for mock-only runs: unmocked tools execute live instead of missing. */
+  replayActive?: boolean;
 }
 
 /**
@@ -254,7 +267,11 @@ async function executeAgent(
   let fatalMissError: Error | undefined;
 
   if (toolReplay) {
-    replayState = createReplayState(toolReplay.events, toolReplay.sourceTraceId);
+    replayState = createReplayState(toolReplay.events, toolReplay.sourceTraceId, {
+      matching: toolReplay.matching,
+      replayActive: toolReplay.replayActive,
+      mocks: toolReplay.mocks,
+    });
     replayAbort = new AbortController();
     hooks = buildReplayHooks(replayState, {
       onMiss: toolReplay.onMiss,
@@ -345,13 +362,53 @@ async function executeAgent(
   const scoringData = result.scoringData;
   const replayReport = replayState ? composeReport() : undefined;
 
+  // Post-run assertion failures. Error-code precedence for one attempt is:
+  // TOOL_REPLAY_MISS (run aborted mid-flight, handled above) >
+  // TOOL_MOCK_EXPECTATION_FAILED > TOOL_REPLAY_UNCONSUMED — the report always
+  // carries the full picture regardless of which code wins.
+  // Unsatisfied mock expectations fail the item — an assertion that doesn't
+  // fail isn't an assertion. Deterministic (the run is over), so the runner's
+  // retry loop skips this code, like replay misses.
+  const failedExpectations = replayReport?.expectations?.filter(expectation => !expectation.satisfied) ?? [];
+  if (failedExpectations.length > 0) {
+    return {
+      output: null,
+      error: {
+        message: `Tool mock expectation failed: ${failedExpectations
+          .map(expectation => `${expectation.toolName} (${expectation.reason})`)
+          .join('; ')}`,
+        code: 'TOOL_MOCK_EXPECTATION_FAILED',
+      },
+      traceId,
+      toolReplay: replayReport,
+    };
+  }
+
+  // Strict matching treats the recording as a contract: every recorded call
+  // must be consumed. Unconsumed events under 'fifo' are signal (often the
+  // intended fix); under 'strict' they are a broken contract and fail the
+  // item — deterministic, so never retried.
+  if (toolReplay?.matching === 'strict' && replayReport && replayReport.unconsumed.length > 0) {
+    return {
+      output: null,
+      error: {
+        message: `Strict replay left recorded calls unconsumed: ${replayReport.unconsumed
+          .map(entry => `${entry.toolName} (${entry.count})`)
+          .join('; ')}`,
+        code: 'TOOL_REPLAY_UNCONSUMED',
+      },
+      traceId,
+      toolReplay: replayReport,
+    };
+  }
+
   // Only persist fields relevant to experiment evaluation — drop provider metadata,
   // duplicate messages, steps trace, and other debugging internals.
   // The replay report is deliberately NOT part of output: scorers receive
   // output, and replay metadata would make replay runs score differently
   // than baselines for any output-shape-sensitive scorer. The report lives
-  // on ExecutionResult.toolReplay and is merged into the stored output
-  // column at persistence time (see runExperiment).
+  // on ExecutionResult.toolReplay and the dedicated stored column (see
+  // runExperiment).
   const trimmedOutput = {
     text: result.text,
     object: result.object,

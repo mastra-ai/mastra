@@ -4,7 +4,7 @@ import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
 import { executeTarget } from './executor';
 import type { Target, ExecutionResult, ToolReplayExecutionOptions } from './executor';
-import { extractToolReplayEvents } from './replay';
+import { extractToolReplayEvents, validateToolMockNames } from './replay';
 import { resolveScorers, resolveStepScorers, runScorersForItem, runStepScorersForItem } from './scorer';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
 
@@ -39,7 +39,14 @@ export { resolveScorers, runScorersForItem } from './scorer';
 // Only the report-facing types are public API; the replay mechanics
 // (extraction, state, hooks) are internal to the experiment runner.
 export {
+  type ToolMockConfig,
+  type ToolMockDataConfig,
+  type ToolMockExpectation,
+  type ToolMockExpectationResult,
+  type ToolMockFunction,
+  type ToolMockUsage,
   type ToolReplayEvent,
+  type ToolReplayMatching,
   type ToolReplayOnMiss,
   type ToolReplayMiss,
   type ToolReplayArgMismatch,
@@ -83,6 +90,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     signal,
     itemTimeout,
     maxRetries = 0,
+    itemIds,
     experimentId: providedExperimentId,
     name,
     description,
@@ -91,6 +99,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     agentVersion,
     versions,
     toolReplay,
+    toolMocks,
   } = config;
   const startedAt = new Date();
   // Use provided experimentId (async trigger) or generate new one
@@ -184,6 +193,19 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     } else {
       throw new Error('No data source: provide datasetId or data');
     }
+
+    if (itemIds && itemIds.length > 0) {
+      const wanted = new Set(itemIds);
+      items = items.filter(item => wanted.has(item.id));
+      if (items.length === 0) {
+        throw new MastraError({
+          id: 'EXPERIMENT_NO_ITEMS',
+          text: `No items match itemIds [${itemIds.join(', ')}]${datasetId ? ` in dataset ${datasetId} at version ${datasetVersion}` : ''}`,
+          domain: 'STORAGE',
+          category: 'USER',
+        });
+      }
+    }
   } catch (err) {
     await markFailedOnSetupError(err);
     throw err; // unreachable, but satisfies TS control flow
@@ -198,16 +220,21 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   let resolveToolReplay: ((item: ExperimentItem) => Promise<ToolReplayExecutionOptions>) | undefined;
 
   try {
-    if (toolReplay) {
-      if (config.task || targetType !== 'agent') {
-        throw new MastraError({
-          id: 'EXPERIMENT_TOOL_REPLAY_UNSUPPORTED_TARGET',
-          text: `toolReplay is only supported for agent targets (got ${config.task ? 'inline task' : `targetType '${targetType}'`})`,
-          domain: 'STORAGE',
-          category: 'USER',
-        });
-      }
+    if ((toolReplay || toolMocks) && (config.task || (targetType !== undefined && targetType !== 'agent'))) {
+      const feature = toolReplay ? 'toolReplay' : 'toolMocks';
+      throw new MastraError({
+        id: 'EXPERIMENT_TOOL_REPLAY_UNSUPPORTED_TARGET',
+        text: `${feature} is only supported for agent targets (got ${config.task ? 'inline task' : `targetType '${targetType}'`})`,
+        domain: 'STORAGE',
+        category: 'USER',
+      });
+    }
 
+    if (toolMocks) {
+      validateToolMockNames(toolMocks);
+    }
+
+    if (toolReplay) {
       const observabilityStore = await storage?.getStore('observability');
       if (!observabilityStore) {
         throw new MastraError({
@@ -247,7 +274,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         // than bare truthiness — an unrelated user `toolReplay` key must not
         // disqualify a live recording source.
         const sourceMarker = (sourceExperiment.metadata as Record<string, unknown> | null | undefined)?.toolReplay;
-        if (typeof sourceMarker === 'object' && sourceMarker !== null && 'onMiss' in sourceMarker) {
+        if (typeof sourceMarker === 'object' && sourceMarker !== null && ('onMiss' in sourceMarker || 'mockedTools' in sourceMarker)) {
           throw new MastraError({
             id: 'EXPERIMENT_TOOL_REPLAY_SOURCE_IS_REPLAY',
             text: `Experiment '${toolReplay.fromExperimentId}' is itself a tool replay run; its traces contain no tool spans. Use the original live experiment as fromExperimentId.`,
@@ -317,7 +344,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             category: 'USER',
           });
         }
-        return { ...resolved, onMiss };
+        return { ...resolved, onMiss, matching: toolReplay.matching ?? 'fifo', replayActive: true };
       };
     }
 
@@ -379,6 +406,13 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
             };
           }
         }
+        if (toolMocks) {
+          // Mocks ride on the same execution options. Mock-only runs get an
+          // inactive replay (unmocked tools execute live, nothing misses).
+          itemToolReplay = itemToolReplay
+            ? { ...itemToolReplay, mocks: toolMocks }
+            : { events: [], sourceTraceId: null, onMiss: 'error', replayActive: false, mocks: toolMocks };
+        }
         return executeTarget(target, targetType, item, {
           signal: itemSignal,
           requestContext: mergedRequestContext,
@@ -439,15 +473,29 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   // Resolve per-step scorers (keyed by step ID) for workflow targets
   const stepScorers = resolveStepScorers(mastra, stepsConfigInput);
 
-  // Mark replay experiments in their metadata so stored runs are
+  // Mark replay/mock experiments in their metadata so stored runs are
   // distinguishable from live runs (dashboards and score comparisons must
-  // never silently mix the two).
-  const experimentMetadata = toolReplay
-    ? {
-        ...metadata,
-        toolReplay: { fromExperimentId: toolReplay.fromExperimentId, onMiss: toolReplay.onMiss ?? 'error' },
-      }
-    : metadata;
+  // never silently mix the two, and such runs are refused as replay sources —
+  // their traces lack tool spans for replayed/mocked calls). Expect-only mock
+  // entries observe live executions (tool spans stay complete), so they don't
+  // stamp the run and it remains an eligible replay source.
+  const suppressingMockNames = Object.entries(toolMocks ?? {})
+    .filter(([, mockConfig]) => typeof mockConfig === 'function' || Boolean(mockConfig.error) || 'output' in mockConfig)
+    .map(([toolName]) => toolName);
+  const replayMarker =
+    toolReplay || suppressingMockNames.length > 0
+      ? {
+          ...(toolReplay
+            ? {
+                fromExperimentId: toolReplay.fromExperimentId,
+                onMiss: toolReplay.onMiss ?? 'error',
+                matching: toolReplay.matching ?? 'fifo',
+              }
+            : {}),
+          ...(suppressingMockNames.length > 0 ? { mockedTools: suppressingMockNames } : {}),
+        }
+      : undefined;
+  const experimentMetadata = replayMarker ? { ...metadata, toolReplay: replayMarker } : metadata;
 
   // 5. Create experiment record (if storage available and not pre-created)
   if (experimentsStore) {
@@ -477,7 +525,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       status: 'running',
       totalItems: items.length,
       startedAt,
-      ...(toolReplay ? { metadata: experimentMetadata } : {}),
+      ...(replayMarker ? { metadata: experimentMetadata } : {}),
     });
   }
 
@@ -519,7 +567,12 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
           // recording (miss) nor its absence (no recording: the resolver
           // memoizes resolved lookups) can change within a run. Checked before
           // the message heuristic so the structured codes stay load-bearing.
-          if (execResult.error.code === 'TOOL_REPLAY_MISS' || execResult.error.code === 'TOOL_REPLAY_NO_RECORDING')
+          if (
+            execResult.error.code === 'TOOL_REPLAY_MISS' ||
+            execResult.error.code === 'TOOL_REPLAY_NO_RECORDING' ||
+            execResult.error.code === 'TOOL_MOCK_EXPECTATION_FAILED' ||
+            execResult.error.code === 'TOOL_REPLAY_UNCONSUMED'
+          )
             break;
           // Don't retry abort errors
           if (execResult.error.message.toLowerCase().includes('abort')) break;
@@ -604,31 +657,24 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         // Persist result with scores (if storage available)
         if (experimentsStore) {
           try {
-            // The replay report rides inside the stored output column (no
-            // storage schema change) — merged here, AFTER scoring, so scorers
-            // never see replay metadata in the output they evaluate. Failed
+            // The replay report is persisted in its own column — never inside
+            // the stored output — so scorers and consumers see the same output
+            // a live run would produce, and reports stay queryable. Failed
             // items (output null) keep their report too: failures are when
             // the report is most needed for debugging over the API.
-            const persistedOutput = execResult.toolReplay
-              ? {
-                  ...(execResult.output && typeof execResult.output === 'object'
-                    ? (execResult.output as Record<string, unknown>)
-                    : {}),
-                  toolReplay: execResult.toolReplay,
-                }
-              : execResult.output;
             await experimentsStore.addExperimentResult({
               experimentId,
               itemId: item.id,
               itemDatasetVersion: item.datasetVersion,
               input: item.input,
-              output: persistedOutput,
+              output: execResult.output,
               groundTruth: item.groundTruth ?? null,
               error: execResult.error,
               startedAt: itemStartedAt,
               completedAt: itemCompletedAt,
               retryCount,
               traceId: execResult.traceId,
+              toolReplay: execResult.toolReplay ?? null,
             });
           } catch (persistError) {
             console.warn(`Failed to persist result for item ${item.id}:`, persistError);

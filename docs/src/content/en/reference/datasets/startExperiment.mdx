@@ -132,6 +132,13 @@ console.log(`Status: ${summary2.status}`)
     description: 'Maximum retries per item on failure. Defaults to `0` (no retries). Abort errors are never retried.',
   },
   {
+    name: 'itemIds',
+    type: 'string[]',
+    isOptional: true,
+    description:
+      'Run only these item IDs (after version resolution) — e.g. re-run a single diverging item with tool replay without paying for the whole dataset. Matching nothing is a setup error.',
+  },
+  {
     name: 'toolReplay',
     type: 'object',
     isOptional: true,
@@ -155,9 +162,23 @@ console.log(`Status: ${summary2.status}`)
             description:
               "Behavior when a tool call has no remaining recorded event. `'error'` fails the item without retries; `'passthrough'` executes the call live and records the miss. Defaults to `'error'`.",
           },
+          {
+            name: 'matching',
+            type: "'fifo' | 'strict'",
+            isOptional: true,
+            description:
+              "How recorded events are matched to the agent's calls. `'fifo'` (default) serves per-tool events in recorded order regardless of args and reports drift in `argMismatches`. `'strict'` serves an event only on an exact canonicalized args match — anything else is a miss, and `argMismatches` stays empty by construction.",
+          },
         ],
       },
     ],
+  },
+  {
+    name: 'toolMocks',
+    type: 'Record<string, ToolMockConfig>',
+    isOptional: true,
+    description:
+      'Per-tool mocks, by tool name. Agent targets only; usable with or without `toolReplay`. Mocks take precedence over replay queues; tools that are neither mocked nor replayed execute live. A data mock stubs an output (`{ output }`), injects an error (`{ error: { name?, message } }`), and/or asserts calls (`{ expect: { args?, calledTimes? } }` — an unsatisfied expectation fails the item with `TOOL_MOCK_EXPECTATION_FAILED`, not retried; `calledTimes: 0` asserts the tool must not be called). A function mock `({ input, callIndex }) => output` replaces execute entirely and is code-only (not available over HTTP); a throwing function mock propagates like a throwing live tool. Mock keys that normalize to the same tool name are rejected upfront (`TOOL_MOCK_NAME_COLLISION`). Mock usage and expectation outcomes are reported in `toolReplay.mocks` and `toolReplay.expectations`. Runs with output/error/function mocks are stamped (`metadata.toolReplay.mockedTools`) and refused as replay sources; expect-only runs execute tools live, so they stay eligible. See [Tool mocks](/docs/evals/datasets/running-experiments#tool-mocks).',
   },
 ]}
 />
@@ -277,7 +298,7 @@ console.log(`Status: ${summary2.status}`)
                     type: 'ToolReplayReport',
                     isOptional: true,
                     description:
-                      'Tool replay divergence summary. Only present when `toolReplay` was active for the item. Contains `sourceTraceId`, `totalRecorded`, `replayedCount`, `misses`, `unconsumed`, `argMismatches`, plus the recording-quality signals `redactedPayloadCount` (recorded payloads containing the sensitive-data redaction marker) and `staleRecording` (the recording came from an older version of the dataset item). Stored results (`listExperimentResults()` and the HTTP API) carry the same report inside the item output as `output.toolReplay` instead of this field. Items that resolve no recording fail with a `TOOL_REPLAY_NO_RECORDING` error; replay misses fail with `TOOL_REPLAY_MISS`. Neither failure is retried.',
+                      'Tool replay divergence summary. Only present when `toolReplay` was active for the item. Contains `sourceTraceId`, `totalRecorded`, `replayedCount`, `misses`, `unconsumed`, `argMismatches`, plus the recording-quality signals `redactedPayloadCount` (recorded payloads containing the sensitive-data redaction marker) and `staleRecording` (the recording came from an older version of the dataset item). Stored results (`listExperimentResults()` and the HTTP API) expose the same top-level `toolReplay` field, persisted in its own column. Items that resolve no recording fail with a `TOOL_REPLAY_NO_RECORDING` error; replay misses fail with `TOOL_REPLAY_MISS`. Neither failure is retried.',
                   },
                   {
                     name: 'scores',

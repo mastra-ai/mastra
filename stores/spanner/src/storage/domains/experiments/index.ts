@@ -74,6 +74,7 @@ function rowToExperimentResult(row: Record<string, any>): ExperimentResult {
     traceId: t.traceId ?? null,
     status: (t.status ?? null) as ExperimentResult['status'],
     tags: (t.tags ?? null) as string[] | null,
+    toolReplay: (t.toolReplay ?? null) as ExperimentResult['toolReplay'],
     createdAt: toDate(t.createdAt),
   };
 }
@@ -103,6 +104,13 @@ export class ExperimentsSpanner extends ExperimentsStorage {
   async init(): Promise<void> {
     await this.db.createTable({ tableName: TABLE_EXPERIMENTS, schema: TABLE_SCHEMAS[TABLE_EXPERIMENTS] });
     await this.db.createTable({ tableName: TABLE_EXPERIMENT_RESULTS, schema: TABLE_SCHEMAS[TABLE_EXPERIMENT_RESULTS] });
+    // `toolReplay` was added after the initial schema shipped; backfill on
+    // existing tables so older deployments keep working when they upgrade.
+    await this.db.alterTable({
+      tableName: TABLE_EXPERIMENT_RESULTS,
+      schema: TABLE_SCHEMAS[TABLE_EXPERIMENT_RESULTS],
+      ifNotExists: ['toolReplay'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -398,6 +406,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
         traceId: input.traceId ?? null,
         status: input.status ?? null,
         tags: input.tags ?? null,
+        toolReplay: input.toolReplay ?? null,
         createdAt: now,
       };
       await this.db.insert({
@@ -417,6 +426,7 @@ export class ExperimentsSpanner extends ExperimentsStorage {
           traceId: result.traceId,
           status: result.status,
           tags: result.tags,
+          toolReplay: result.toolReplay,
           createdAt: now,
         },
       });

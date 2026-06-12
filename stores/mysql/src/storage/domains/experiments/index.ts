@@ -79,6 +79,7 @@ interface ExperimentResultRow {
   traceId: string | null;
   status: string | null;
   tags: string | null;
+  toolReplay: string | null;
   createdAt: Date | string;
 }
 
@@ -156,6 +157,11 @@ export class ExperimentsMySQL extends ExperimentsStorage {
   async init(): Promise<void> {
     await this.operations.createTable({ tableName: TABLE_EXPERIMENTS, schema: EXPERIMENTS_SCHEMA });
     await this.operations.createTable({ tableName: TABLE_EXPERIMENT_RESULTS, schema: EXPERIMENT_RESULTS_SCHEMA });
+    await this.operations.alterTable({
+      tableName: TABLE_EXPERIMENT_RESULTS,
+      schema: EXPERIMENT_RESULTS_SCHEMA,
+      ifNotExists: ['status', 'tags', 'toolReplay'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
@@ -203,6 +209,9 @@ export class ExperimentsMySQL extends ExperimentsStorage {
       traceId: row.traceId ?? null,
       status: (row.status as ExperimentResultStatus | null) ?? null,
       tags: row.tags ? (parseJSON<string[]>(row.tags) ?? null) : null,
+      toolReplay: row.toolReplay
+        ? (parseJSON<NonNullable<ExperimentResult['toolReplay']>>(row.toolReplay) ?? null)
+        : null,
       createdAt: parseDateTime(row.createdAt) ?? new Date(),
     };
   }
@@ -455,6 +464,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           traceId: input.traceId ?? null,
           status: input.status ?? null,
           tags: input.tags ? JSON.stringify(input.tags) : null,
+          toolReplay: input.toolReplay ? JSON.stringify(input.toolReplay) : null,
           createdAt: now,
         },
       });
@@ -474,6 +484,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
         traceId: input.traceId ?? null,
         status: input.status ?? null,
         tags: input.tags ?? null,
+        toolReplay: input.toolReplay ?? null,
         createdAt: now,
       };
     } catch (error) {

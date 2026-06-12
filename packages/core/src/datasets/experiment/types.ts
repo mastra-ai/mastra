@@ -3,7 +3,7 @@ import type { MastraScorer } from '../../evals/base';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
 import type { TargetType, ExperimentStatus } from '../../storage/types';
-import type { ToolReplayOnMiss, ToolReplayReport } from './replay';
+import type { ToolMockConfig, ToolReplayMatching, ToolReplayOnMiss, ToolReplayReport } from './replay';
 
 /**
  * A single data item for inline experiment data.
@@ -87,6 +87,12 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
 
   /** Pin to specific dataset version (default: latest). Only applies when datasetId is used. */
   version?: number;
+  /**
+   * Run only these item IDs (after version resolution). Lets a caller re-run
+   * a single diverging item — e.g. with tool replay — without paying for the
+   * whole dataset. Unknown IDs are ignored; matching nothing is an error.
+   */
+  itemIds?: string[];
   /** Maximum concurrent executions (default: 5) */
   maxConcurrency?: number;
   /** AbortSignal for cancellation */
@@ -120,7 +126,22 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
     fromExperimentId?: string;
     /** Behavior when a tool call has no remaining recorded event (default: 'error'). */
     onMiss?: ToolReplayOnMiss;
+    /**
+     * How recorded events are matched to the agent's calls (default: 'fifo').
+     * 'strict' serves an event only on an exact (canonicalized) args match —
+     * anything else is a miss, and argMismatches stays empty by construction.
+     */
+    matching?: ToolReplayMatching;
   };
+  /**
+   * Per-tool mocks, by tool name. Agent targets only. Take precedence over
+   * replay queues; tools that are neither mocked nor covered by toolReplay
+   * execute live. Data mocks stub an output or inject an error; an `expect`
+   * asserts how the tool must be called (an unsatisfied expectation fails the
+   * item with TOOL_MOCK_EXPECTATION_FAILED). Function mocks replace execute
+   * entirely and are code-only (they cannot cross the HTTP API).
+   */
+  toolMocks?: Record<string, ToolMockConfig>;
 }
 
 /**

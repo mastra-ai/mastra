@@ -256,7 +256,7 @@ describe('tool replay end-to-end through the real tracing pipeline', () => {
       pagination: { page: 0, perPage: false },
     });
     const row = persisted.results[0]!;
-    expect((row.output as { toolReplay?: { misses: unknown[] } }).toolReplay?.misses).toHaveLength(1);
+    expect(row.toolReplay?.misses).toHaveLength(1);
     expect(row.traceId).toBeTruthy();
     await storageExporter.flush();
     const observabilityStore = await storage.getStore('observability');

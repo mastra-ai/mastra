@@ -200,6 +200,43 @@ With `'passthrough'`, unmatched calls run against the real world, including writ
 
 An item with no recording at all fails with `TOOL_REPLAY_NO_RECORDING` regardless of `onMiss`, and is not retried: replay never runs an item silently live. This also applies when the source trace was purged or not yet flushed. When using `fromExperimentId` with inline data, give items explicit `id`s; auto-generated ids change between runs and never match the prior experiment's results.
 
+### Matching policy
+
+By default, recorded events match the agent's calls per tool, in recorded order (`matching: 'fifo'`): the next recorded event for a tool is served regardless of arguments, and argument drift is reported in `argMismatches` rather than prevented. This is the right mode for evaluating a changed agent — a modified prompt reformulates its arguments by nature, and an exact-match requirement would fail the very thing being measured.
+
+For contract-style tests where any deviation must fail, use `matching: 'strict'`: a recorded event is served only when the call's arguments exactly match the recorded call's arguments (canonicalized comparison — runtime-injected nullish keys are ignored). Anything else is a miss, handled by `onMiss`. With multiple recorded argument variants for the same tool, each variant answers only its exact arguments; `argMismatches` is empty by construction in this mode. The contract cuts both ways: recorded calls the agent never consumed fail the item with `TOOL_REPLAY_UNCONSUMED` (not retried) — an agent that stops calling an expected tool cannot pass silently. Under `'fifo'`, leftover events are only reported in `unconsumed`.
+
+```typescript
+const strict = await dataset.startExperiment({
+  targetType: 'agent',
+  targetId: 'support-agent',
+  toolReplay: { fromExperimentId: baseline.experimentId, matching: 'strict' },
+})
+```
+
+### Tool mocks
+
+`toolMocks` overrides individual tools without needing a recording — usable with or without `toolReplay`. Mocks take precedence over replay queues per tool; tools that are neither mocked nor covered by replay execute live.
+
+```typescript
+const mocked = await dataset.startExperiment({
+  targetType: 'agent',
+  targetId: 'support-agent',
+  toolMocks: {
+    // Static stub — every call returns this; the tool never executes
+    weatherInfo: { output: { temp: 20, condition: 'sunny' } },
+    // Failure injection — every call throws; the tool never executes
+    paymentApi: { error: { name: 'TimeoutError', message: 'timed out' } },
+    // Assertion — the run must call this tool once with these args, or the item fails
+    createTicket: { output: { ok: true }, expect: { args: { priority: 'high' }, calledTimes: 1 } },
+    // Function mock — replaces execute entirely (code-only; not available over HTTP)
+    searchDocs: async ({ input }) => fakeIndex.search(input),
+  },
+})
+```
+
+An entry with only `expect` doesn't stub anything: the call executes normally (replayed or live) and only the assertion is recorded. `expect.calledTimes: 0` asserts the tool must NOT be called. An unsatisfied expectation fails the item with `TOOL_MOCK_EXPECTATION_FAILED` (not retried — the run is over, retrying cannot change it); outcomes are listed in the report's `expectations` array, and per-tool usage in `mocks`. Experiments run with mocks are stamped in their metadata (`mockedTools`) and — like replay runs — are refused as replay sources, since mocked calls produce no tool spans.
+
 ### Divergence report
 
 Every replayed item result carries a `toolReplay` report describing how the run differed from the recording:
@@ -213,7 +250,7 @@ console.log(report.unconsumed) // recorded events the agent never requested
 console.log(report.argMismatches) // replayed calls whose args differed from the recording
 ```
 
-The report's location depends on how you read the result. Results returned by `startExperiment()` expose it as the top-level `toolReplay` field shown above. Stored results — what [`listExperimentResults()`](/reference/datasets/listExperimentResults) and the HTTP API return — carry it inside the item's `output` as `output.toolReplay`, merged after scoring. Scorers never see it either way: the output they evaluate stays free of replay metadata, so replay runs score the same way as baseline runs. The report is kept for failed items too, except when the failure happens outside the agent run itself (for example an item timeout racing the run).
+The report is the top-level `toolReplay` field on every result — both on the summary returned by `startExperiment()` and on stored results ([`listExperimentResults()`](/reference/datasets/listExperimentResults) and the HTTP API), where it persists in its own column. Scorers never see it: the output they evaluate stays free of replay metadata, so replay runs score the same way as baseline runs. The report is kept for failed items too, except when the failure happens outside the agent run itself (for example an item timeout racing the run).
 
 Treat divergence as a trust signal for scores. An entry in `argMismatches` means the agent received a re-paired recorded observation: matching is per-tool and ordered, so the replayed output came from a call whose original arguments differed. A `passthrough` miss means a live observation entered the run. In either case, inspect the report before trusting the item's scores.
 
