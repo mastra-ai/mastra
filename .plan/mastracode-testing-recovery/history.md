@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Storage settings raw-value coverage (2026-06-12)
+
+Strengthened the existing `storage-settings` checked-in TUI e2e scenario. It now verifies the PostgreSQL connection string remains masked in the serialized terminal while typing, then reads the isolated `settings.json` after save to prove the raw connection string is persisted alongside `storage.backend = "pg"`.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test storage-settings
+```
+
+Break validations:
+
+- Rendered `MaskedInput` with the raw value instead of asterisks; the scenario failed because the terminal exposed the PostgreSQL URL.
+- Submitted asterisks instead of the preserved raw value from the masked input; the scenario failed because `settings.json` persisted the masked string.
+- Skipped the `/settings` command handler write for the PostgreSQL connection string; the restart notice still appeared, but the raw persisted-value assertion failed.
+
+The Storage backend row remains `needs-follow-up`: raw connection-string persistence is now covered, while selected-backend restart/reload behavior and real PostgreSQL integration remain follow-up work.
+
+
 ### OM pack startup restore coverage (2026-06-12)
 
 Added `om-pack-startup-restore` as the 94th checked-in TUI e2e scenario. The scenario seeds `settings.models.activeOmPackId = "openai"` before launch with no role-specific OM overrides, creates an AIMock-backed thread, opens `/om`, verifies both Observer and Reflector model rows restore to the built-in OpenAI Mini model (`gpt-5.4-mini`), and proves `settings.json` remains pack-backed (`openai:null:null:null`) rather than converting to custom overrides.
