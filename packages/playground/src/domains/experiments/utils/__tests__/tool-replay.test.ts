@@ -16,9 +16,11 @@ import {
   noOnMissMarkerExperiment,
   replayExperiment,
   replayResult,
+  strictVersionedReplayExperiment,
 } from '../../__tests__/fixtures/tool-replay';
 import type { ReplayTapeSpan } from '../tool-replay';
 import {
+  buildReplayItemReRunParams,
   buildReplayTape,
   classifyReplayDivergence,
   getExperimentFailureReason,
@@ -108,6 +110,84 @@ describe('getExperimentFailureReason', () => {
     expect(getExperimentFailureReason({ metadata: { failureReason: { id: 1, message: 'no items' } } })).toBeNull();
     expect(
       getExperimentFailureReason({ metadata: { failureReason: { id: 'EXPERIMENT_NO_ITEMS', message: 7 } } }),
+    ).toBeNull();
+  });
+});
+
+describe('buildReplayItemReRunParams', () => {
+  it('reproduces the full run for one item — policy, dataset version, and agent version', () => {
+    expect(
+      buildReplayItemReRunParams({
+        datasetId: 'dataset-1',
+        experiment: strictVersionedReplayExperiment,
+        marker: { fromExperimentId: 'exp-live-1', onMiss: 'error', matching: 'strict' },
+        itemId: 'item-5',
+      }),
+    ).toEqual({
+      datasetId: 'dataset-1',
+      targetType: 'agent',
+      targetId: 'support-agent',
+      itemIds: ['item-5'],
+      toolReplay: { fromExperimentId: 'exp-live-1', onMiss: 'error', matching: 'strict' },
+      version: 1,
+      agentVersion: 'agent-v2',
+    });
+  });
+
+  it('omits the fifo default, an absent source, and null versions', () => {
+    expect(
+      buildReplayItemReRunParams({
+        datasetId: 'dataset-1',
+        experiment: { ...replayExperiment, datasetVersion: null, agentVersion: null },
+        // Per-item replayTraceId mode: no fromExperimentId on the marker.
+        marker: { onMiss: 'passthrough', matching: 'fifo' },
+        itemId: 'item-2',
+      }),
+    ).toEqual({
+      datasetId: 'dataset-1',
+      targetType: 'agent',
+      targetId: 'support-agent',
+      itemIds: ['item-2'],
+      toolReplay: { onMiss: 'passthrough' },
+    });
+  });
+
+  it('refuses mock-marked runs — mock values are not stored on the run', () => {
+    expect(
+      buildReplayItemReRunParams({
+        datasetId: 'dataset-1',
+        experiment: mockOnlyExperiment,
+        marker: { mockedTools: ['weatherInfo'] },
+        itemId: 'item-1',
+      }),
+    ).toBeNull();
+    // Replay+mock combined runs are just as unreconstructable.
+    expect(
+      buildReplayItemReRunParams({
+        datasetId: 'dataset-1',
+        experiment: replayExperiment,
+        marker: { fromExperimentId: 'exp-live-1', onMiss: 'error', mockedTools: ['weatherInfo'] },
+        itemId: 'item-1',
+      }),
+    ).toBeNull();
+  });
+
+  it('refuses markers without a replay policy and non-agent targets', () => {
+    expect(
+      buildReplayItemReRunParams({
+        datasetId: 'dataset-1',
+        experiment: replayExperiment,
+        marker: {},
+        itemId: 'item-1',
+      }),
+    ).toBeNull();
+    expect(
+      buildReplayItemReRunParams({
+        datasetId: 'dataset-1',
+        experiment: { ...replayExperiment, targetType: 'workflow' },
+        marker: { fromExperimentId: 'exp-live-1', onMiss: 'error' },
+        itemId: 'item-1',
+      }),
     ).toBeNull();
   });
 });

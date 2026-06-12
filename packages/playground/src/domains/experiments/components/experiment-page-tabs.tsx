@@ -25,7 +25,12 @@ import { useState, useMemo, useCallback } from 'react';
 import { useExperimentTrace } from '../hooks/use-experiment-trace';
 import { useReplayAggregates } from '../hooks/use-replay-aggregates';
 import { useSourceExperimentResults } from '../hooks/use-source-experiment-results';
-import { getExperimentFailureReason, getReplayMarker, getToolReplayReport } from '../utils/tool-replay';
+import {
+  buildReplayItemReRunParams,
+  getExperimentFailureReason,
+  getReplayMarker,
+  getToolReplayReport,
+} from '../utils/tool-replay';
 import { ExperimentReplaySummary } from './experiment-replay-summary';
 import { ExperimentResultPanel } from './experiment-result-panel';
 import { ExperimentResultsList } from './experiment-results-list';
@@ -35,6 +40,7 @@ import { useScoresByExperimentId } from '@/domains/datasets/hooks/use-dataset-ex
 import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
 import { DatasetReview } from '@/domains/review/components/dataset-review';
 import { useDatasetReviewItems } from '@/domains/review/hooks/use-dataset-review-items';
+import { useLinkComponent } from '@/lib/framework';
 import { Link } from '@/lib/link';
 
 export type ExperimentPageTabsProps = {
@@ -75,7 +81,8 @@ export function ExperimentPageTabs({
   const [traceCollapsed, setTraceCollapsed] = useState(false);
   const [scoreCollapsed, setScoreCollapsed] = useState(false);
 
-  const { updateExperimentResult } = useDatasetMutations();
+  const { updateExperimentResult, triggerExperiment } = useDatasetMutations();
+  const { navigate, paths } = useLinkComponent();
 
   const toggleSelect = useCallback((resultId: string) => {
     setSelectedIds(prev => {
@@ -178,6 +185,32 @@ export function ExperimentPageTabs({
   const failureReason = experiment ? getExperimentFailureReason(experiment) : null;
   const failedAtSetup =
     experiment?.status === 'failed' && failureReason !== null && (experiment.totalItems === 0 || results.length === 0);
+
+  // Single-item re-run loop for replay runs: same dataset version, same agent
+  // version, same replay policy — only this item. Mock-marked runs can't be
+  // re-run faithfully (mock values aren't stored on the run), so they get a
+  // disabled button with the reason instead of a silently-different run.
+  const reRunParams =
+    experiment && replayMarker && featuredResult
+      ? buildReplayItemReRunParams({ datasetId, experiment, marker: replayMarker, itemId: featuredResult.itemId })
+      : null;
+  const reRunDisabledReason = replayMarker?.mockedTools?.length
+    ? "Mock values aren't stored on the run yet — re-create the experiment from the trigger dialog."
+    : undefined;
+  const reRunItemWithReplay = async () => {
+    if (!reRunParams) return;
+    try {
+      const { experimentId: reRunExperimentId } = await triggerExperiment.mutateAsync(reRunParams);
+      toast.success('Re-run started', {
+        action: {
+          label: 'View experiment',
+          onClick: () => navigate(paths.datasetExperimentLink(datasetId, reRunExperimentId)),
+        },
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to start the re-run');
+    }
+  };
 
   const scorerIds = useMemo(() => {
     if (!scoresByExperimentId) return [];
@@ -445,6 +478,9 @@ export function ExperimentPageTabs({
                 onShowSourceTrace={showSourceTrace}
                 sourceTraceSpans={sourceTraceData?.spans}
                 originalResult={originalResult}
+                onReRunWithReplay={reRunParams ? reRunItemWithReplay : undefined}
+                reRunDisabledReason={reRunDisabledReason}
+                isReRunPending={triggerExperiment.isPending}
               />
 
               {featuredScore && (

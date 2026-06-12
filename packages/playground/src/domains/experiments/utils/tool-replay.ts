@@ -4,6 +4,7 @@ import type {
   ToolReplayMatching,
   ToolReplayOnMiss,
   ToolReplayReport,
+  TriggerDatasetExperimentParams,
 } from '@mastra/client-js';
 
 /** How recorded answers are matched to calls: FIFO per tool, or exact-args only. */
@@ -133,6 +134,46 @@ export function getExperimentFailureReason(
   const { id, message } = candidate as Record<string, unknown>;
   if (typeof id !== 'string' || typeof message !== 'string') return null;
   return { id, message };
+}
+
+/**
+ * Builds the trigger params for re-running one item of a replay experiment
+ * under the same conditions: same dataset version, same agent version, same
+ * replay policy — only `itemIds` narrows the run to the one item.
+ *
+ * Returns null when the run is not faithfully re-runnable from its marker:
+ * markers without `onMiss` carry no replay policy, and mock-marked runs
+ * (`mockedTools`) can't be reconstructed — mock values aren't stored on the
+ * run, so a re-run would silently drop the mocks.
+ */
+export function buildReplayItemReRunParams({
+  datasetId,
+  experiment,
+  marker,
+  itemId,
+}: {
+  datasetId: string;
+  experiment: Pick<DatasetExperiment, 'targetType' | 'targetId' | 'datasetVersion' | 'agentVersion'>;
+  marker: ToolReplayMarker;
+  itemId: string;
+}): TriggerDatasetExperimentParams | null {
+  if (!marker.onMiss || marker.mockedTools?.length) return null;
+  // Tool replay is agent-only — a marker on any other target is junk.
+  if (experiment.targetType !== 'agent') return null;
+  return {
+    datasetId,
+    targetType: 'agent',
+    targetId: experiment.targetId,
+    itemIds: [itemId],
+    toolReplay: {
+      ...(marker.fromExperimentId ? { fromExperimentId: marker.fromExperimentId } : {}),
+      onMiss: marker.onMiss,
+      // fifo is the backend default — only the explicit strict policy is re-sent.
+      ...(marker.matching === 'strict' ? { matching: 'strict' as const } : {}),
+    },
+    ...(experiment.datasetVersion != null ? { version: experiment.datasetVersion } : {}),
+    ...(experiment.agentVersion ? { agentVersion: experiment.agentVersion } : {}),
+  };
 }
 
 /** "a, b, c +2" — joined mocked-tool names capped for compact UI surfaces. */

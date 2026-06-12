@@ -1,7 +1,18 @@
 'use client';
 
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
-import { Button, ButtonsGroup, DataKeysAndValues, DataList, DataPanel, Notice, TraceIcon } from '@mastra/playground-ui';
+import {
+  Button,
+  ButtonsGroup,
+  DataKeysAndValues,
+  DataList,
+  DataPanel,
+  Notice,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TraceIcon,
+} from '@mastra/playground-ui';
 import { format } from 'date-fns/format';
 import {
   ChevronsDownUpIcon,
@@ -10,6 +21,7 @@ import {
   ExternalLinkIcon,
   FileCodeIcon,
   FileOutputIcon,
+  RotateCcwIcon,
   TagIcon,
   TargetIcon,
 } from 'lucide-react';
@@ -43,6 +55,12 @@ export type ExperimentResultPanelProps = {
   sourceTraceSpans?: ReplayTapeSpan[];
   /** Same item's result from the replay's source experiment — enables the original-vs-replay output comparison. */
   originalResult?: DatasetExperimentResult | null;
+  /** Re-runs this item under the same replay policy — provided only on replay runs. */
+  onReRunWithReplay?: () => void;
+  /** When set, the re-run button renders disabled with this tooltip (mock runs: mock values aren't persisted). */
+  reRunDisabledReason?: string;
+  /** Pending state of the re-run trigger — guards against double-clicks. */
+  isReRunPending?: boolean;
 };
 
 export function ExperimentResultPanel({
@@ -63,6 +81,9 @@ export function ExperimentResultPanel({
   onShowSourceTrace,
   sourceTraceSpans,
   originalResult,
+  onReRunWithReplay,
+  reRunDisabledReason,
+  isReRunPending,
 }: ExperimentResultPanelProps) {
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
@@ -104,6 +125,28 @@ export function ExperimentResultPanel({
             previousLabel="Previous result"
             nextLabel="Next result"
           />
+          {reRunDisabledReason ? (
+            // Disabled buttons swallow pointer events, so the tooltip needs the
+            // inert-wrapper pattern (same as the dataset page's Run button).
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="cursor-not-allowed">
+                  <div className="pointer-events-none opacity-50" inert aria-disabled="true">
+                    <Button size="md">
+                      <RotateCcwIcon />
+                      Re-run item with replay
+                    </Button>
+                  </div>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{reRunDisabledReason}</TooltipContent>
+            </Tooltip>
+          ) : onReRunWithReplay ? (
+            <Button size="md" onClick={onReRunWithReplay} disabled={isReRunPending}>
+              <RotateCcwIcon />
+              Re-run item with replay
+            </Button>
+          ) : null}
           <Button size="md" onClick={onShowTrace} disabled={!result.traceId}>
             <TraceIcon />
             Trace

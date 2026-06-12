@@ -62,6 +62,15 @@ export const runningAgentExperiment: DatasetExperiment = {
   completedAt: null,
 };
 
+/** Strict replay run pinned to an agent version — a single-item re-run must reproduce all of it. */
+export const strictVersionedReplayExperiment: DatasetExperiment = {
+  ...experimentBase,
+  id: 'exp-replay-strict',
+  name: 'strict-replay',
+  agentVersion: 'agent-v2',
+  metadata: { toolReplay: { fromExperimentId: 'exp-live-1', onMiss: 'error', matching: 'strict' } },
+};
+
 /**
  * Failed during async setup: the trigger answered `pending`, then setup found
  * no source experiment — the runner marked the run `failed` and stamped

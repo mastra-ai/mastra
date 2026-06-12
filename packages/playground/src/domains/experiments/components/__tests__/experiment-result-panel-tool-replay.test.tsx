@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   callFlowResult,
@@ -137,6 +137,74 @@ describe('ExperimentResultPanel tool replay', () => {
     expect(screen.getByText('Output')).toBeDefined();
     expect(screen.queryByText('Output — original run')).toBeNull();
     expect(screen.queryByText('Output — this replay')).toBeNull();
+  });
+});
+
+describe('ExperimentResultPanel re-run with replay', () => {
+  afterEach(cleanup);
+
+  it('renders the re-run button on replay runs and fires the callback', () => {
+    const onReRunWithReplay = vi.fn();
+    render(
+      <ExperimentResultPanel
+        result={replayResult}
+        onClose={vi.fn()}
+        isReplayExperiment
+        onReRunWithReplay={onReRunWithReplay}
+      />,
+    );
+
+    const button = screen.getByRole('button', { name: 'Re-run item with replay' });
+    expect((button as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(button);
+    expect(onReRunWithReplay).toHaveBeenCalledTimes(1);
+  });
+
+  it('disables the button while the re-run trigger is pending', () => {
+    const onReRunWithReplay = vi.fn();
+    render(
+      <ExperimentResultPanel
+        result={replayResult}
+        onClose={vi.fn()}
+        isReplayExperiment
+        onReRunWithReplay={onReRunWithReplay}
+        isReRunPending
+      />,
+    );
+
+    const button = screen.getByRole('button', { name: 'Re-run item with replay' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    fireEvent.click(button);
+    expect(onReRunWithReplay).not.toHaveBeenCalled();
+  });
+
+  it('renders an inert disabled button with the mock explanation on mock-marked runs', () => {
+    render(
+      <ExperimentResultPanel
+        result={expectationFailedResult}
+        onClose={vi.fn()}
+        isReplayExperiment
+        reRunDisabledReason="Mock values aren't stored on the run yet — re-create the experiment from the trigger dialog."
+      />,
+    );
+
+    // The inert wrapper carries the disabled semantics (same pattern as the
+    // dataset page's gated Run button); the tooltip explains why.
+    const button = screen.getByText('Re-run item with replay').closest('button')!;
+    const inertWrapper = button.closest('[aria-disabled="true"]')!;
+    expect(inertWrapper).not.toBeNull();
+    expect(inertWrapper.className).toContain('pointer-events-none');
+
+    fireEvent.focus(button);
+    expect(
+      screen.getByText("Mock values aren't stored on the run yet — re-create the experiment from the trigger dialog."),
+    ).toBeDefined();
+  });
+
+  it('renders no re-run button outside replay runs', () => {
+    render(<ExperimentResultPanel result={liveResultWithJunkToolReplay} onClose={vi.fn()} />);
+
+    expect(screen.queryByText('Re-run item with replay')).toBeNull();
   });
 });
 
