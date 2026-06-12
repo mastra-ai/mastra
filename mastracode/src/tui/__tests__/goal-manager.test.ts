@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  loadSettings: vi.fn(() => ({ models: { goalJudgeModel: 'openai/gpt-5.5', goalMaxTurns: 50 } })),
+  loadSettings: vi.fn(() => ({ models: { goalJudgeModel: '__GATEWAY_OPENAI_MODEL__', goalMaxTurns: 50 } })),
 }));
 
 vi.mock('../../onboarding/settings.js', () => ({
@@ -25,7 +25,7 @@ function makeRecord(overrides: Record<string, unknown> = {}) {
     status: 'active',
     runsUsed: 0,
     maxRuns: 50,
-    judgeModelId: 'openai/gpt-5.5',
+    judgeModelId: '__GATEWAY_OPENAI_MODEL__',
     startedAt: now,
     updatedAt: now,
     ...overrides,
@@ -56,7 +56,7 @@ function createAgent(): FakeAgent {
 
 describe('GoalManager adapter', () => {
   beforeEach(() => {
-    mocks.loadSettings.mockReturnValue({ models: { goalJudgeModel: 'openai/gpt-5.5', goalMaxTurns: 50 } });
+    mocks.loadSettings.mockReturnValue({ models: { goalJudgeModel: '__GATEWAY_OPENAI_MODEL__', goalMaxTurns: 50 } });
   });
 
   it('sets an objective via the agent and exposes a GoalState view', async () => {
@@ -64,14 +64,14 @@ describe('GoalManager adapter', () => {
     const state = createState(agent);
     const manager = new GoalManager();
 
-    const goal = await manager.setGoal(state, 'finish the task', 'openai/gpt-5.5', 25);
+    const goal = await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__', 25);
 
     expect(agent.setObjective).toHaveBeenCalledWith(
       'finish the task',
       expect.objectContaining({
         threadId: 'parent-thread',
         resourceId: 'resource-1',
-        judgeModelId: 'openai/gpt-5.5',
+        judgeModelId: '__GATEWAY_OPENAI_MODEL__',
         maxRuns: 25,
       }),
     );
@@ -83,7 +83,7 @@ describe('GoalManager adapter', () => {
     const state = createState(undefined, undefined);
     const manager = new GoalManager();
 
-    const goal = await manager.setGoal(state, 'offline goal', 'openai/gpt-5.5', DEFAULT_MAX_TURNS);
+    const goal = await manager.setGoal(state, 'offline goal', '__GATEWAY_OPENAI_MODEL__', DEFAULT_MAX_TURNS);
 
     expect(goal).toMatchObject({ objective: 'offline goal', status: 'active', maxTurns: DEFAULT_MAX_TURNS });
   });
@@ -92,7 +92,7 @@ describe('GoalManager adapter', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-15T10:00:00.000Z'));
     const manager = new GoalManager();
-    await manager.setGoal(createState(createAgent()), 'finish the task', 'openai/gpt-5.5');
+    await manager.setGoal(createState(createAgent()), 'finish the task', '__GATEWAY_OPENAI_MODEL__');
     manager.applyEvaluation({ runsUsed: 3, status: 'active' });
 
     vi.setSystemTime(new Date('2026-05-15T10:05:00.000Z'));
@@ -115,7 +115,7 @@ describe('GoalManager adapter', () => {
     );
     const state = createState(agent);
     const manager = new GoalManager();
-    await manager.setGoal(state, 'finish the task', 'openai/gpt-5.5', 50);
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__', 50);
 
     const goal = await manager.updateJudgeDefaults(state, 'anthropic/claude-sonnet-4-5', 25);
 
@@ -127,7 +127,7 @@ describe('GoalManager adapter', () => {
 
   it('applies in-loop evaluations (runsUsed + status) from the goal chunk', async () => {
     const manager = new GoalManager();
-    await manager.setGoal(createState(createAgent()), 'finish the task', 'openai/gpt-5.5');
+    await manager.setGoal(createState(createAgent()), 'finish the task', '__GATEWAY_OPENAI_MODEL__');
 
     manager.applyEvaluation({ runsUsed: 2, status: 'active' });
     expect(manager.getGoal()).toMatchObject({ turnsUsed: 2, status: 'active' });
@@ -139,7 +139,7 @@ describe('GoalManager adapter', () => {
 
   it('clears the goal', async () => {
     const manager = new GoalManager();
-    await manager.setGoal(createState(createAgent()), 'finish the task', 'openai/gpt-5.5');
+    await manager.setGoal(createState(createAgent()), 'finish the task', '__GATEWAY_OPENAI_MODEL__');
     manager.clear();
     expect(manager.getGoal()).toBeNull();
     expect(manager.isActive()).toBe(false);
@@ -179,7 +179,7 @@ describe('GoalManager adapter', () => {
         status: 'active',
         turnsUsed: 1,
         maxTurns: 20,
-        judgeModelId: 'openai/gpt-5.5',
+        judgeModelId: '__GATEWAY_OPENAI_MODEL__',
         startedAt: '2026-05-15T10:00:00.000Z',
         activeStartedAt: '2026-05-15T10:00:00.000Z',
         activeDurationMs: 10 * 60_000,
@@ -219,7 +219,7 @@ describe('GoalManager adapter', () => {
     const agent = createAgent();
     const state = createState(agent);
     const manager = new GoalManager();
-    await manager.setGoal(state, 'finish the task', 'openai/gpt-5.5');
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__');
     manager.pause();
 
     await manager.saveToThread(state);

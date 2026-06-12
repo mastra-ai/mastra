@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 const settingsMock = vi.hoisted(() => ({
   loadSettings: vi.fn(() => ({
     models: {
-      goalJudgeModel: 'openai/gpt-5.5',
+      goalJudgeModel: '__GATEWAY_OPENAI_MODEL__',
       goalMaxTurns: 50,
     },
   })),
@@ -141,7 +141,7 @@ describe('createGoalReminderMessage', () => {
       'goal-1',
       'Finish <the> task & verify it',
       DEFAULT_MAX_TURNS,
-      'openai/gpt-5.5',
+      '__GATEWAY_OPENAI_MODEL__',
     );
 
     expect(message).toMatchObject({
@@ -153,7 +153,7 @@ describe('createGoalReminderMessage', () => {
           reminderType: 'goal',
           message: 'Finish <the> task & verify it',
           goalMaxTurns: DEFAULT_MAX_TURNS,
-          judgeModelId: 'openai/gpt-5.5',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
         },
       ],
     });
@@ -187,7 +187,7 @@ describe('handleGoalCommand', () => {
       status: 'paused',
       turnsUsed: 3,
       maxTurns: DEFAULT_MAX_TURNS,
-      judgeModelId: 'openai/gpt-5.5',
+      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
     };
     const goalManager = {
       getGoal: vi.fn(() => goal),
@@ -226,7 +226,7 @@ describe('handleGoalCommand', () => {
       status: 'active',
       turnsUsed: 0,
       maxTurns: 50,
-      judgeModelId: 'openai/gpt-5.5',
+      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
     };
     const goalManager = {
       setGoal: vi.fn().mockResolvedValue(goal),
@@ -262,7 +262,7 @@ describe('handleGoalCommand', () => {
       type: 'system-reminder',
       contents: 'finish the task',
       attributes: { type: 'goal' },
-      metadata: { goalId: 'goal-1', maxTurns: 50, judgeModelId: 'openai/gpt-5.5' },
+      metadata: { goalId: 'goal-1', maxTurns: 50, judgeModelId: '__GATEWAY_OPENAI_MODEL__' },
     });
   });
 
@@ -279,7 +279,7 @@ describe('handleGoalCommand', () => {
       status: 'active' as const,
       turnsUsed: 0,
       maxTurns: 50,
-      judgeModelId: 'openai/gpt-5.5',
+      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
     };
     const goalManager = {
       setGoal: vi.fn().mockResolvedValue(goal),
@@ -305,7 +305,7 @@ describe('handleGoalCommand', () => {
 
     // Goal lifecycle is entered before the trigger message is sent so the
     // judge runs after the agent's first response.
-    expect(goalManager.setGoal).toHaveBeenCalledWith(expect.anything(), objective, 'openai/gpt-5.5', 50);
+    expect(goalManager.setGoal).toHaveBeenCalledWith(expect.anything(), objective, '__GATEWAY_OPENAI_MODEL__', 50);
     expect(goalManager.saveToThread).toHaveBeenCalledTimes(1);
     expect(goalManager.saveToThread.mock.invocationCallOrder[0]).toBeLessThan(sendSignal.mock.invocationCallOrder[0]);
     expect(goalManager.isActive()).toBe(true);
@@ -315,7 +315,7 @@ describe('handleGoalCommand', () => {
       type: 'system-reminder',
       contents: '# Ship it\n\n1. Build\n2. Test',
       attributes: { type: 'goal' },
-      metadata: { goalId: 'goal-1', maxTurns: 50, judgeModelId: 'openai/gpt-5.5' },
+      metadata: { goalId: 'goal-1', maxTurns: 50, judgeModelId: '__GATEWAY_OPENAI_MODEL__' },
     });
   });
 
@@ -334,7 +334,7 @@ describe('handleGoalCommand', () => {
       status: 'active' as const,
       turnsUsed: 0,
       maxTurns: 50,
-      judgeModelId: 'openai/gpt-5.5',
+      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
     };
     let active = false;
 
@@ -504,7 +504,7 @@ describe('handleGoalCommand', () => {
         status: 'done',
         turnsUsed: 2,
         maxTurns: DEFAULT_MAX_TURNS,
-        judgeModelId: 'openai/gpt-5.5',
+        judgeModelId: '__GATEWAY_OPENAI_MODEL__',
       })),
       resume: vi.fn(),
       saveToThread: vi.fn(),
@@ -557,7 +557,7 @@ describe('handleGoalCommand', () => {
       status: 'active' as const,
       turnsUsed: 0,
       maxTurns: 50,
-      judgeModelId: 'openai/gpt-5.5',
+      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
       startedAt: new Date().toISOString(),
     };
     const goalManager = {

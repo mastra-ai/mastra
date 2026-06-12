@@ -208,7 +208,7 @@ describe('MastraTUI queueing', () => {
     };
     const state = {
       editor,
-      activeGoalJudge: { modelId: 'openai/gpt-5.5' },
+      activeGoalJudge: { modelId: '__GATEWAY_OPENAI_MODEL__' },
       harness: { isRunning: vi.fn(() => false) },
       pendingSlashCommands: [],
       pendingQueuedActions: [],
@@ -570,7 +570,7 @@ describe('MastraTUI queueing', () => {
         getGoal: vi.fn(() => ({
           id: 'plan-goal-456',
           status: 'done',
-          judgeModelId: 'openai/gpt-5.5',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
           turnsUsed: 3,
           maxTurns: 20,
         })),
@@ -599,7 +599,7 @@ describe('MastraTUI queueing', () => {
         getGoal: vi.fn(() => ({
           id: 'manual-goal-789',
           status: 'done',
-          judgeModelId: 'openai/gpt-5.5',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
           turnsUsed: 2,
           maxTurns: 20,
         })),
@@ -625,7 +625,7 @@ describe('MastraTUI queueing', () => {
         getGoal: vi.fn(() => ({
           id: 'plan-goal-123',
           status: 'active',
-          judgeModelId: 'openai/gpt-5.5',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
           turnsUsed: 1,
           maxTurns: 20,
         })),
@@ -652,7 +652,7 @@ describe('MastraTUI queueing', () => {
         getGoal: vi.fn(() => ({
           id: 'plan-goal-321',
           status: 'paused',
-          judgeModelId: 'openai/gpt-5.5',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
           turnsUsed: 5,
           maxTurns: 20,
         })),
@@ -680,7 +680,7 @@ describe('MastraTUI queueing', () => {
         getGoal: vi.fn(() => ({
           id: 'different-goal-abc',
           status: 'done',
-          judgeModelId: 'openai/gpt-5.5',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
           turnsUsed: 1,
           maxTurns: 20,
         })),
@@ -708,7 +708,7 @@ describe('MastraTUI queueing', () => {
         getGoal: vi.fn(() => ({
           id: 'plan-goal-failed',
           status: 'done',
-          judgeModelId: 'openai/gpt-5.5',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
           turnsUsed: 1,
           maxTurns: 20,
         })),
@@ -741,7 +741,7 @@ describe('MastraTUI queueing', () => {
         getGoal: vi.fn(() => ({
           id: 'new-goal-456',
           status: 'done',
-          judgeModelId: 'openai/gpt-5.5',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
           turnsUsed: 0,
           maxTurns: 20,
         })),
@@ -823,7 +823,7 @@ describe('syncInitialThreadState', () => {
       status: 'active' as const,
       turnsUsed: 1,
       maxTurns: 50,
-      judgeModelId: 'openai/gpt-5.5',
+      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
     };
     const state = {
       harness: {
@@ -859,7 +859,7 @@ describe('syncInitialThreadState', () => {
       status: 'active' as const,
       turnsUsed: 1,
       maxTurns: 50,
-      judgeModelId: 'openai/gpt-5.5',
+      judgeModelId: '__GATEWAY_OPENAI_MODEL__',
     };
     const durableGoal = {
       id: 'goal-2',
