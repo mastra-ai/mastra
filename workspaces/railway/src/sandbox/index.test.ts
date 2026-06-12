@@ -408,6 +408,15 @@ describe('exec cwd/env passthrough', () => {
     expect(sentOptions.env).toEqual({ A: '1', B: '2' });
   });
 
+  it('filters undefined per-spawn env values', async () => {
+    const sandbox = new RailwaySandbox({ token: 't', env: { A: '1' } });
+    await sandbox._start();
+    await sandbox.processes.spawn('env', { env: { B: undefined } });
+
+    const sentOptions = mockSandbox.exec.mock.calls[0]![1] as { env?: Record<string, string> };
+    expect(sentOptions.env).toEqual({ A: '1' });
+  });
+
   it('does not include cwd or env when not provided', async () => {
     const sandbox = new RailwaySandbox({ token: 't' });
     await sandbox._start();
