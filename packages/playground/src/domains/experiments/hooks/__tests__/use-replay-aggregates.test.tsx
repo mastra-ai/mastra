@@ -67,6 +67,9 @@ describe('useReplayAggregates', () => {
       withArgMismatches: 101,
       // expectationFailedResult: top-level report with one unsatisfied expectation.
       withFailedExpectations: 1,
+      // Its report asserts two expectations, one satisfied — every other fixture asserts none.
+      satisfiedExpectations: 1,
+      totalExpectations: 2,
       // TOOL_MOCK_EXPECTATION_FAILED is not a TOOL_REPLAY_* code — only the miss counts here.
       failedReplay: 1,
       // expectationFailedResult mocked everything: nothing was ever on the tape.

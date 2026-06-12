@@ -21,6 +21,10 @@ export interface ReplayAggregates {
   withArgMismatches: number;
   /** Items whose report carries at least one unsatisfied tool-call expectation. */
   withFailedExpectations: number;
+  /** Satisfied tool-call expectations summed across every item's report. */
+  satisfiedExpectations: number;
+  /** All tool-call expectations summed across every item's report. */
+  totalExpectations: number;
   /** Items failed with a TOOL_REPLAY_* error code. */
   failedReplay: number;
   /** Recordings that contained zero tool calls — nothing was replayed for these items. */
@@ -83,6 +87,8 @@ export const useReplayAggregates = ({
         withUnconsumed: 0,
         withArgMismatches: 0,
         withFailedExpectations: 0,
+        satisfiedExpectations: 0,
+        totalExpectations: 0,
         failedReplay: 0,
         emptyRecordings: 0,
         staleRecordings: 0,
@@ -107,7 +113,12 @@ export const useReplayAggregates = ({
           if (report.misses.length > 0) aggregates.withMisses++;
           if (report.unconsumed.length > 0) aggregates.withUnconsumed++;
           if (report.argMismatches.length > 0) aggregates.withArgMismatches++;
-          if (report.expectations?.some(expectation => !expectation.satisfied)) aggregates.withFailedExpectations++;
+          if (report.expectations?.length) {
+            const satisfied = report.expectations.filter(expectation => expectation.satisfied).length;
+            aggregates.totalExpectations += report.expectations.length;
+            aggregates.satisfiedExpectations += satisfied;
+            if (satisfied < report.expectations.length) aggregates.withFailedExpectations++;
+          }
           if (report.staleRecording) aggregates.staleRecordings++;
           const callsSummary = summarizeReplayCalls(report);
           if (callsSummary) {

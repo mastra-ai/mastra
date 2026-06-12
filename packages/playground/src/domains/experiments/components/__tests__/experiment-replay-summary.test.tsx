@@ -12,6 +12,8 @@ const aggregates: ReplayAggregates = {
   withUnconsumed: 1,
   withArgMismatches: 1,
   withFailedExpectations: 0,
+  satisfiedExpectations: 0,
+  totalExpectations: 0,
   failedReplay: 0,
   emptyRecordings: 0,
   staleRecordings: 0,
@@ -27,6 +29,38 @@ const aggregates: ReplayAggregates = {
         { outcome: 'mocked' },
         { outcome: 'miss-passthrough' },
       ],
+      hasError: false,
+    },
+  ],
+};
+
+/** What useReplayAggregates folds out of an all-mock run: no tape anywhere, mocks answering, expectations asserted. */
+const mockOnlyAggregates: ReplayAggregates = {
+  total: 2,
+  fullyGrounded: 0,
+  withMisses: 0,
+  withUnconsumed: 0,
+  withArgMismatches: 0,
+  withFailedExpectations: 1,
+  satisfiedExpectations: 3,
+  totalExpectations: 4,
+  failedReplay: 0,
+  // Every mock-only item reads as an empty recording — vacuous, never charted.
+  emptyRecordings: 2,
+  staleRecordings: 0,
+  redactedPayloads: 0,
+  callTotals: { total: 5, replayed: 0, replayedWithDrift: 0, mocked: 3, missed: 0, live: 2 },
+  itemFlows: [
+    {
+      resultId: 'result-mock-1',
+      itemId: 'item-4',
+      outcomes: [{ outcome: 'mocked' }, { outcome: 'live' }],
+      hasError: true,
+    },
+    {
+      resultId: 'result-mock-2',
+      itemId: 'item-5',
+      outcomes: [{ outcome: 'mocked' }, { outcome: 'mocked' }, { outcome: 'live' }],
       hasError: false,
     },
   ],
@@ -156,5 +190,138 @@ describe('ExperimentReplaySummary', () => {
 
     expect(screen.queryByTestId('replay-flow-graph')).toBeNull();
     expect(screen.queryByTestId('replay-flow-table')).toBeNull();
+  });
+
+  it('keeps the replay layout untouched for replay runs — title, grounded lead, empty-recordings chip', () => {
+    render(
+      <ExperimentReplaySummary
+        marker={{ fromExperimentId: 'exp-live-1', onMiss: 'error' }}
+        experimentId="exp-replay-1"
+        aggregates={{ ...aggregates, total: 3, fullyGrounded: 1, emptyRecordings: 1 }}
+        isLoading={false}
+        experimentStatus="completed"
+      />,
+    );
+
+    expect(screen.getByText('Tool Replay')).toBeDefined();
+    expect(screen.getByText('1/2 fully grounded')).toBeDefined();
+    expect(screen.getByText('1 without recorded tool calls')).toBeDefined();
+    expect(screen.queryByText('Tool Mocks')).toBeNull();
+    expect(screen.queryByText(/calls answered by mocks/)).toBeNull();
+    expect(screen.queryByText(/expectations satisfied/)).toBeNull();
+  });
+});
+
+describe('ExperimentReplaySummary mock-only runs', () => {
+  afterEach(cleanup);
+
+  const mockOnlyMarker = { mockedTools: ['weatherInfo', 'sendEmail'] };
+
+  it('leads with mocks: Tool Mocks title, expectations and mocked-calls chips, no groundedness noise', () => {
+    render(
+      <ExperimentReplaySummary
+        marker={mockOnlyMarker}
+        experimentId="exp-mock-only"
+        aggregates={mockOnlyAggregates}
+        isLoading={false}
+        experimentStatus="completed"
+      />,
+    );
+
+    expect(screen.getByText('Tool Mocks')).toBeDefined();
+    expect(screen.queryByText('Tool Replay')).toBeNull();
+    expect(screen.getByText('· mocked: weatherInfo, sendEmail')).toBeDefined();
+
+    // Lead chips: expectations verdict (red — one failed) and mock usage (purple).
+    expect(screen.getByText('expectations satisfied 3/4').className).toContain('bg-red-500');
+    expect(screen.getByText('3 calls answered by mocks').className).toContain('bg-purple-500');
+    expect(screen.getByText('1 failed expectations')).toBeDefined();
+
+    // Groundedness language is suppressed: no grounded ratio, no vacuous
+    // empty-recordings chip even though every item has an empty tape.
+    expect(screen.queryByText(/fully grounded/)).toBeNull();
+    expect(screen.queryByText(/without recorded tool calls/)).toBeNull();
+  });
+
+  it('turns the expectations chip green when every expectation held', () => {
+    render(
+      <ExperimentReplaySummary
+        marker={mockOnlyMarker}
+        experimentId="exp-mock-only"
+        aggregates={{ ...mockOnlyAggregates, withFailedExpectations: 0, satisfiedExpectations: 4 }}
+        isLoading={false}
+        experimentStatus="completed"
+      />,
+    );
+
+    const chip = screen.getByText('expectations satisfied 4/4');
+    expect(chip.className).toContain('bg-green-500');
+    expect(screen.queryByText(/failed expectations/)).toBeNull();
+  });
+
+  it('omits the expectations chip when no expectations were asserted', () => {
+    render(
+      <ExperimentReplaySummary
+        marker={mockOnlyMarker}
+        experimentId="exp-mock-only"
+        aggregates={{
+          ...mockOnlyAggregates,
+          withFailedExpectations: 0,
+          satisfiedExpectations: 0,
+          totalExpectations: 0,
+        }}
+        isLoading={false}
+        experimentStatus="completed"
+      />,
+    );
+
+    expect(screen.queryByText(/expectations satisfied/)).toBeNull();
+    expect(screen.getByText('3 calls answered by mocks')).toBeDefined();
+  });
+
+  it('computes mock usage, not groundedness, while loading and mid-run', () => {
+    render(
+      <ExperimentReplaySummary
+        marker={mockOnlyMarker}
+        experimentId="exp-mock-only"
+        isLoading
+        experimentStatus="running"
+      />,
+    );
+
+    expect(screen.getByText('Computing mock usage…')).toBeDefined();
+    expect(screen.queryByText('Computing groundedness…')).toBeNull();
+  });
+
+  it('announces live mock-usage updates while running with aggregates', () => {
+    render(
+      <ExperimentReplaySummary
+        marker={mockOnlyMarker}
+        experimentId="exp-mock-only"
+        aggregates={mockOnlyAggregates}
+        isLoading={false}
+        experimentStatus="running"
+      />,
+    );
+
+    expect(screen.getByText('Experiment in progress — mock usage updates live.')).toBeDefined();
+    expect(screen.queryByText(/groundedness updates live/)).toBeNull();
+  });
+
+  it('keeps the full replay layout for replay+mock combined runs', () => {
+    render(
+      <ExperimentReplaySummary
+        marker={{ fromExperimentId: 'exp-live-1', onMiss: 'error', mockedTools: ['weatherInfo'] }}
+        experimentId="exp-replay-1"
+        aggregates={aggregates}
+        isLoading={false}
+        experimentStatus="completed"
+      />,
+    );
+
+    // A combined run still replays a recording — groundedness applies.
+    expect(screen.getByText('Tool Replay')).toBeDefined();
+    expect(screen.getByText('0/1 fully grounded')).toBeDefined();
+    expect(screen.queryByText('Tool Mocks')).toBeNull();
   });
 });

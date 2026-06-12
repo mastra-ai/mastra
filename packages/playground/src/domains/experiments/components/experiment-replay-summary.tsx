@@ -36,6 +36,12 @@ export function ExperimentReplaySummary({
   const { Link: LinkComponent, paths } = useLinkComponent();
   const isRunning = experimentStatus === 'running' || experimentStatus === 'pending';
 
+  // Mock-only runs (mocks always answer — no miss policy) have no recording,
+  // so groundedness language is noise: the card leads with mock usage and
+  // expectations instead. Replay (and replay+mock) runs keep the full
+  // groundedness layout.
+  const isMockOnly = Boolean(marker.mockedTools?.length) && !marker.onMiss;
+
   const sourceHref = marker.fromExperimentId
     ? datasetId
       ? paths.datasetExperimentLink(datasetId, marker.fromExperimentId)
@@ -55,7 +61,7 @@ export function ExperimentReplaySummary({
       <div className="flex items-center gap-2">
         <HistoryIcon className="w-4 h-4 text-neutral3" />
         <Txt variant="ui-md" className="text-neutral5 font-medium">
-          Tool Replay
+          {isMockOnly ? 'Tool Mocks' : 'Tool Replay'}
         </Txt>
         {marker.fromExperimentId &&
           (sourceHref ? (
@@ -94,21 +100,36 @@ export function ExperimentReplaySummary({
         <div className="flex items-center gap-2">
           <Spinner className="w-3 h-3" />
           <Txt variant="ui-sm" className="text-neutral3">
-            Computing groundedness…
+            {isMockOnly ? 'Computing mock usage…' : 'Computing groundedness…'}
           </Txt>
         </div>
       ) : aggregates ? (
         <div className="flex flex-wrap items-center gap-1.5">
-          {(() => {
-            // Items with an empty recording can't be grounded — keep them out
-            // of the denominator so the headline ratio stays honest, and color
-            // by the ratio itself (a 0/2 must never read as green).
-            const gradedTotal = aggregates.total - aggregates.emptyRecordings;
-            if (gradedTotal <= 0) return null;
-            const color =
-              aggregates.fullyGrounded === gradedTotal ? 'green' : aggregates.fullyGrounded > 0 ? 'yellow' : 'red';
-            return <Chip color={color}>{`${aggregates.fullyGrounded}/${gradedTotal} fully grounded`}</Chip>;
-          })()}
+          {isMockOnly ? (
+            // Mock-only leads: did the asserted expectations hold, and how many
+            // calls the mocks answered — there is no recording to be grounded on.
+            <>
+              {aggregates.totalExpectations > 0 && (
+                <Chip
+                  color={aggregates.satisfiedExpectations === aggregates.totalExpectations ? 'green' : 'red'}
+                >{`expectations satisfied ${aggregates.satisfiedExpectations}/${aggregates.totalExpectations}`}</Chip>
+              )}
+              {aggregates.callTotals.mocked > 0 && (
+                <Chip color="purple">{`${aggregates.callTotals.mocked} calls answered by mocks`}</Chip>
+              )}
+            </>
+          ) : (
+            (() => {
+              // Items with an empty recording can't be grounded — keep them out
+              // of the denominator so the headline ratio stays honest, and color
+              // by the ratio itself (a 0/2 must never read as green).
+              const gradedTotal = aggregates.total - aggregates.emptyRecordings;
+              if (gradedTotal <= 0) return null;
+              const color =
+                aggregates.fullyGrounded === gradedTotal ? 'green' : aggregates.fullyGrounded > 0 ? 'yellow' : 'red';
+              return <Chip color={color}>{`${aggregates.fullyGrounded}/${gradedTotal} fully grounded`}</Chip>;
+            })()
+          )}
           {aggregates.withFailedExpectations > 0 && (
             <Chip color="red">{`${aggregates.withFailedExpectations} failed expectations`}</Chip>
           )}
@@ -118,7 +139,8 @@ export function ExperimentReplaySummary({
             <Chip color="yellow">{`${aggregates.withArgMismatches} with arg mismatches`}</Chip>
           )}
           {aggregates.failedReplay > 0 && <Chip color="red">{`${aggregates.failedReplay} failed (replay)`}</Chip>}
-          {aggregates.emptyRecordings > 0 && (
+          {/* Mock-only runs have no tape at all — "without recorded tool calls" is vacuously true for every item. */}
+          {!isMockOnly && aggregates.emptyRecordings > 0 && (
             <Chip color="gray">{`${aggregates.emptyRecordings} without recorded tool calls`}</Chip>
           )}
           {aggregates.staleRecordings > 0 && (
@@ -212,7 +234,9 @@ export function ExperimentReplaySummary({
 
       {isRunning && (
         <Txt variant="ui-xs" className="text-neutral3">
-          Experiment in progress — groundedness updates live.
+          {isMockOnly
+            ? 'Experiment in progress — mock usage updates live.'
+            : 'Experiment in progress — groundedness updates live.'}
         </Txt>
       )}
     </div>
