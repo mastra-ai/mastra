@@ -577,7 +577,7 @@ importers:
   auth/supabase:
     dependencies:
       '@supabase/supabase-js':
-        specifier: ^2.107.0
+        specifier: ^2.108.0
         version: 2.108.0
     devDependencies:
       '@internal/lint':
