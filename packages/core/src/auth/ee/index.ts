@@ -17,6 +17,7 @@ export * from './capabilities';
 // License
 export {
   validateLicense,
+  startLicenseValidation,
   isLicenseValid,
   isEELicenseValid,
   isFeatureEnabled,
