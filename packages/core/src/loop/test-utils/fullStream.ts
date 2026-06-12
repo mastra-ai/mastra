@@ -1,5 +1,4 @@
 import { delay } from '@ai-sdk/provider-utils-v5';
-import { convertAsyncIterableToArray } from '@ai-sdk/provider-utils-v5/test';
 import { tool } from '@internal/ai-sdk-v5';
 import {
   convertArrayToReadableStream as convertArrayToReadableStreamV2,
@@ -11,6 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MessageList } from '../../agent/message-list';
 import type { loop } from '../loop';
+import { convertAsyncIterableToArray } from './stream-conversion';
 import {
   createMessageListWithUserMessage,
   defaultSettings,
