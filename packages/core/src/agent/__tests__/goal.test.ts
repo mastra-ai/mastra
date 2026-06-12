@@ -180,13 +180,58 @@ describe('in-loop goal scoring', () => {
 
     expect(scorer.run).toHaveBeenCalled();
     expect(goalChunks.length).toBeGreaterThan(0);
-    expect(goalChunks[0].payload.passed).toBe(true);
-    expect(goalChunks[0].payload.objective).toBe('Reach the goal');
-    expect(goalChunks[0].payload.status).toBe('done');
+
+    // Lock the public `goal` chunk payload shape (consumed by the TUI + client-js).
+    expect(goalChunks[0].type).toBe('goal');
+    expect(goalChunks[0].payload).toMatchObject({
+      objective: 'Reach the goal',
+      iteration: 1,
+      maxRuns: DEFAULT_GOAL_MAX_RUNS,
+      passed: true,
+      status: 'done',
+      maxRunsReached: false,
+      timedOut: false,
+      suppressFeedback: false,
+    });
+    expect(Array.isArray(goalChunks[0].payload.results)).toBe(true);
+    expect(typeof goalChunks[0].payload.duration).toBe('number');
 
     const record = await agent.getObjective({ threadId: THREAD });
     expect(record?.status).toBe('done');
     expect(record?.runsUsed).toBe(1);
+  });
+
+  it('goal gate wins over isTaskComplete: an incomplete goal forces continuation past an isTaskComplete pass', async () => {
+    // isTaskComplete passes immediately (would normally end the loop), but the
+    // goal is never complete, so the goal step (which runs after isTaskComplete)
+    // overrides isContinued and keeps the loop running until maxRuns.
+    const taskScorer = passingScorer(1, 'task done');
+    const goalScorer = passingScorer(0, 'goal not yet');
+    const agent = makeAgent({ judge: 'mock-model-id', scorer: goalScorer as any, maxRuns: 2 });
+    await agent.setObjective('Keep going', { threadId: THREAD, resourceId: RESOURCE });
+
+    const taskChunks: any[] = [];
+    const goalChunks: any[] = [];
+    const stream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 10,
+      isTaskComplete: { scorers: [taskScorer as any] },
+    });
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'is-task-complete') taskChunks.push(chunk);
+      if (chunk.type === 'goal') goalChunks.push(chunk);
+    }
+
+    // isTaskComplete reported complete...
+    expect(taskChunks.some(c => c.payload.passed === true)).toBe(true);
+    // ...but the goal gate overrode it and drove the loop to the run budget.
+    expect(goalScorer.run).toHaveBeenCalledTimes(2);
+    expect(goalChunks).toHaveLength(2);
+    expect(goalChunks[goalChunks.length - 1].payload.maxRunsReached).toBe(true);
+
+    const record = await agent.getObjective({ threadId: THREAD });
+    expect(record?.runsUsed).toBe(2);
+    expect(record?.status).toBe('active');
   });
 
   it('emits no goal chunk when there is no active objective', async () => {
