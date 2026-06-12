@@ -73,6 +73,7 @@ import { toolHistoryReloadScenario } from './tool-history-reload.js';
 import { toolSchemaCompatScenario } from './tool-schema-compat.js';
 import type { McE2eScenario, ScenarioName } from './types.js';
 import { updateCommandPromptScenario } from './update-command-prompt.js';
+import { updateStartupPromptScenario } from './update-startup-prompt.js';
 import { visibleCommandsScenario } from './visible-commands.js';
 import { webSearchRenderingScenario } from './web-search-rendering.js';
 import { workspaceCommandsScenario } from './workspace-commands.js';
@@ -158,6 +159,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'tool-history-reload': toolHistoryReloadScenario,
   'tool-schema-compat': toolSchemaCompatScenario,
   'update-command-prompt': updateCommandPromptScenario,
+  'update-startup-prompt': updateStartupPromptScenario,
   'web-search-rendering': webSearchRenderingScenario,
   'workspace-commands': workspaceCommandsScenario,
   'workspace-plan-mode-tools': workspacePlanModeToolsScenario,

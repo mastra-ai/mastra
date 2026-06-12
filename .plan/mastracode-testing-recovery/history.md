@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Startup update prompt coverage (2026-06-12)
+
+Added `update-startup-prompt` as the 81st checked-in TUI e2e scenario. The scenario boots the real TUI with hermetic `MASTRACODE_UPDATE_LATEST_VERSION` and `MASTRACODE_UPDATE_CHANGELOG` env overrides, waits for the automatic startup inline update prompt, verifies the changelog entry is rendered, selects `No`, and proves `settings.updateDismissedVersion` is persisted through shell passthrough.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test update-startup-prompt
+```
+
+Break validations:
+
+- Disabling startup update-check scheduling prevented the automatic prompt from rendering.
+- Dropping startup changelog fetch rendered the prompt without the `What's new` section and fixture entry.
+- Skipping dismissed-version persistence left `settings.updateDismissedVersion` undefined after selecting `No`.
+
+The auto-update row remains `needs-follow-up`; this chunk closes automatic startup prompt/changelog/dismissal persistence, while dismissed-version startup suppression, passive recheck banner, safe `Yes` install success, and packaged-version detection remain.
+
+
 ### Custom pack import rename coverage (2026-06-12)
 
 Added `custom-pack-import-rename` as the 80th checked-in TUI e2e scenario. The scenario seeds a custom OpenAI-compatible provider plus an existing saved custom pack, imports a colliding `mastra-pack:` payload through `/models`, selects the Rename collision branch, enters a new pack name, and proves `settings.json` retains the original pack while activating the renamed imported pack with imported model defaults.

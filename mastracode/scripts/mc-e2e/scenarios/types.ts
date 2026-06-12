@@ -74,6 +74,7 @@ export type ScenarioName =
   | 'tool-history-reload'
   | 'tool-schema-compat'
   | 'update-command-prompt'
+  | 'update-startup-prompt'
   | 'web-search-rendering'
   | 'workspace-commands'
   | 'workspace-plan-mode-tools'

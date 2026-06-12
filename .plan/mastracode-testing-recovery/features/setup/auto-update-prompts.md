@@ -67,10 +67,11 @@
 - `mastracode/src/tui/commands/__tests__/update.test.ts` — direct `/update` coverage for registry failure, already-latest path, changelog prompt text, clearing previous dismissed versions, No dismissed-version persistence, and failed-update manual install guidance.
 - Settings tests include `updateDismissedVersion` defaults/loading in the global settings object.
 - `mastracode/scripts/mc-e2e/scenarios/update-command-prompt.ts` — partial TUI e2e coverage for manual `/update`: uses hermetic update latest-version/changelog env overrides, renders the inline question/changelog through the real TUI, selects `No`, and asserts `Update skipped.`
+- `mastracode/scripts/mc-e2e/scenarios/update-startup-prompt.ts` — partial TUI e2e coverage for automatic startup update prompts: uses the same hermetic latest-version/changelog env overrides, waits for the startup inline prompt, selects `No`, and proves `settings.updateDismissedVersion` persistence.
 
 ## Missing tests
 
-- TUI startup integration test for the automatic update prompt, dismissed-version suppression, passive 45-minute recheck banner, and startup changelog text insertion.
+- Dismissed-version startup suppression and passive 45-minute recheck banner remain; automatic startup update prompt rendering, startup changelog insertion, and `No` dismissal persistence are covered by `update-startup-prompt`.
 - Dedicated `/update` command test for Yes update success without exiting the test process.
 - Package-manager detection tests across npm/pnpm/yarn/bun install contexts.
 - `getCurrentVersion()` tests for build-time define, ESM-safe source fallback, and packaged-build behavior without `package.json`.
