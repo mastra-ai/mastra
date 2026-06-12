@@ -30,6 +30,15 @@ function getRequestHeader(request: MastraAuthRequest, name: string): string | nu
   return request.raw?.headers.get(name) ?? request.headers?.get(name) ?? request.header(name) ?? null;
 }
 
+function parseCookies(response: Response): string[] {
+  if (typeof response.headers.getSetCookie === 'function') {
+    return response.headers.getSetCookie();
+  }
+  const raw = response.headers.get('set-cookie');
+  if (!raw) return [];
+  return raw.split(/,(?=\s*\w+=)/);
+}
+
 /**
  * Response shape from Neon Auth session endpoint.
  */
@@ -173,7 +182,7 @@ export class MastraAuthNeon
       );
     }
 
-    this.baseUrl = baseUrl.replace(/\/+$/, '');
+    this.baseUrl = baseUrl.endsWith('/') ? baseUrl.replace(/\/+$/, '') : baseUrl;
     this.jwksUrl = options?.jwksUrl ?? process.env.NEON_AUTH_JWKS_URL ?? `${this.baseUrl}/auth/jwks`;
     this.sessionCookieName = options?.sessionCookieName ?? 'neonauth.session_token';
     this.signUpEnabledConfig = options?.signUpEnabled ?? true;
@@ -299,11 +308,7 @@ export class MastraAuthNeon
       throw new Error('Invalid email or password');
     }
 
-    const cookies: string[] = [];
-    const setCookieHeader = response.headers.get('set-cookie');
-    if (setCookieHeader) {
-      cookies.push(...setCookieHeader.split(/,(?=\s*\w+=)/));
-    }
+    const cookies = parseCookies(response);
 
     return {
       user: mapNeonUserToEEUser(result.user),
@@ -340,11 +345,7 @@ export class MastraAuthNeon
       throw new Error('Failed to create account');
     }
 
-    const cookies: string[] = [];
-    const setCookieHeader = response.headers.get('set-cookie');
-    if (setCookieHeader) {
-      cookies.push(...setCookieHeader.split(/,(?=\s*\w+=)/));
-    }
+    const cookies = parseCookies(response);
 
     return {
       user: mapNeonUserToEEUser(result.user),

@@ -119,7 +119,8 @@ export class MastraRBACNeon implements IRBACProvider<NeonAuthUser> {
 
   constructor(options: MastraRBACNeonOptions) {
     this.options = options;
-    this.baseUrl = (options.baseUrl ?? process.env.NEON_AUTH_BASE_URL ?? '').replace(/\/+$/, '');
+    const rawUrl = options.baseUrl ?? process.env.NEON_AUTH_BASE_URL ?? '';
+    this.baseUrl = rawUrl.endsWith('/') ? rawUrl.replace(/\/+$/, '') : rawUrl;
     this.cacheTtlMs = options.cache?.ttlMs ?? DEFAULT_CACHE_TTL_MS;
     this.cacheMaxSize = options.cache?.maxSize ?? DEFAULT_CACHE_MAX_SIZE;
   }
@@ -138,9 +139,11 @@ export class MastraRBACNeon implements IRBACProvider<NeonAuthUser> {
     const userId = user.user?.id;
     if (!userId) return [];
 
-    // Check cache.
+    // Check cache (promote on hit for LRU eviction).
     const cached = this.rolesCache.get(userId);
     if (cached && cached.expiresAt > Date.now()) {
+      this.rolesCache.delete(userId);
+      this.rolesCache.set(userId, cached);
       return cached.roles;
     }
 
