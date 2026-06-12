@@ -454,4 +454,79 @@ describe('UnixSocketPubSub', () => {
     expect(pubsub.isBroker).toBe(true);
     expect(cb).toHaveBeenCalledTimes(1);
   });
+
+  describe('local nack redelivery', () => {
+    it('redelivers nacked events to the same subscriber with bumped deliveryAttempt', async () => {
+      const path = await socketPath();
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+
+      const attempts: number[] = [];
+      let nacksRemaining = 2;
+      await pubsub.subscribe('topic-a', async (event, _ack, nack) => {
+        attempts.push(event.deliveryAttempt ?? 1);
+        if (nacksRemaining > 0) {
+          nacksRemaining--;
+          await nack?.();
+        }
+      });
+
+      await pubsub.publish('topic-a', makeEvent({ type: 'redelivered' }));
+
+      await waitFor(() => {
+        expect(attempts.length).toBe(3);
+      });
+      // Contract from Event type: deliveryAttempt starts at 1 and increments
+      // on each redelivery so consumers can see how many times they've seen
+      // the same logical event.
+      expect(attempts).toEqual([1, 2, 3]);
+    });
+
+    it('caps local redeliveries so a permanently-nacking subscriber does not loop forever', async () => {
+      const path = await socketPath();
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+
+      let deliveries = 0;
+      await pubsub.subscribe('topic-a', async (_event, _ack, nack) => {
+        deliveries++;
+        await nack?.();
+      });
+
+      await pubsub.publish('topic-a', makeEvent({ type: 'poison' }));
+
+      // Wait long enough for any plausible redelivery schedule
+      // (MAX_LOCAL_REDELIVERIES * REDELIVERY_DELAY_MS * (n+1) ≈ a few hundred ms).
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      // 1 initial + at most MAX_LOCAL_REDELIVERIES (currently 6) follow-ups.
+      // The exact cap is an internal constant — assert "bounded and small"
+      // so the test stays robust against tuning.
+      expect(deliveries).toBeGreaterThanOrEqual(2);
+      expect(deliveries).toBeLessThanOrEqual(8);
+    });
+
+    it('does not redeliver after the subscription is removed', async () => {
+      const path = await socketPath();
+      const pubsub = new UnixSocketPubSub(path);
+      pubsubs.push(pubsub);
+
+      let deliveries = 0;
+      const cb = async (
+        _event: Event,
+        _ack?: () => Promise<void>,
+        nack?: () => Promise<void>,
+      ): Promise<void> => {
+        deliveries++;
+        await nack?.();
+        await pubsub.unsubscribe('topic-a', cb);
+      };
+      await pubsub.subscribe('topic-a', cb);
+
+      await pubsub.publish('topic-a', makeEvent({ type: 'unsubscribed' }));
+
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect(deliveries).toBe(1);
+    });
+  });
 });

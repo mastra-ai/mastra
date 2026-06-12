@@ -95,6 +95,11 @@ export class WorkflowEventProcessor extends EventProcessor {
   // so 3 transport-level redeliveries is enough headroom for transient
   // failures without keeping a poisoned event in flight for minutes.
   private static readonly MAX_DELIVERY_ATTEMPTS = 3;
+  // Sentinel value stored in deliveryAttempts to mark an event whose terminal
+  // workflow.fail has already been published. Any subsequent redelivery of
+  // the same logical event short-circuits as terminal and does NOT re-run
+  // errorWorkflow or reset the per-event budget.
+  private static readonly TERMINAL_SENTINEL = Number.POSITIVE_INFINITY;
 
   constructor({ mastra, stepExecutionStrategy }: { mastra: Mastra; stepExecutionStrategy?: StepExecutionStrategy }) {
     super({ mastra });
@@ -2498,15 +2503,23 @@ export class WorkflowEventProcessor extends EventProcessor {
     // and eventually reaches MAX_DELIVERY_ATTEMPTS. Never include a timestamp
     // (or any monotonically-changing token) here — that resets the counter
     // every attempt and reopens the infinite-retry path this guards against.
-    const workflowData = event.data as Partial<Pick<ProcessorArgs, 'workflowId' | 'executionPath'>>;
+    const baseWorkflowData = event.data as Partial<Pick<ProcessorArgs, 'workflowId' | 'executionPath'>>;
     const eventKey =
       event.id ??
       JSON.stringify({
         type: event.type,
         runId: event.runId,
-        workflowId: workflowData?.workflowId,
-        executionPath: workflowData?.executionPath,
+        workflowId: baseWorkflowData?.workflowId,
+        executionPath: baseWorkflowData?.executionPath,
       });
+
+    // If we've already declared this event terminal, stay terminal. A buggy
+    // transport that re-delivers a poisoned event must not rerun
+    // errorWorkflow on every redelivery or reset the per-event budget.
+    if (this.deliveryAttempts.get(eventKey) === WorkflowEventProcessor.TERMINAL_SENTINEL) {
+      return { ok: false, retry: false };
+    }
+
     try {
       await this.#dispatch(event);
       this.deliveryAttempts.delete(eventKey);
@@ -2531,12 +2544,15 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       // Transport-level retries are exhausted. Surface as a terminal workflow
       // failure so any caller awaiting workflows-finish (e.g. agent.generate())
-      // sees an error instead of hanging forever.
-      this.deliveryAttempts.delete(eventKey);
+      // sees an error instead of hanging forever. Replace the counter with a
+      // TERMINAL sentinel so any later redelivery of the same logical event
+      // short-circuits at the top of handle() instead of rerunning
+      // errorWorkflow or resetting the budget.
+      this.deliveryAttempts.set(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
       try {
-        const workflowData = event.data as Omit<ProcessorArgs, 'workflow'>;
-        if (workflowData && workflowData.workflowId && workflowData.runId) {
-          await this.errorWorkflow(workflowData, getErrorFromUnknown(err));
+        const failWorkflowData = event.data as Omit<ProcessorArgs, 'workflow'>;
+        if (failWorkflowData && failWorkflowData.workflowId && failWorkflowData.runId) {
+          await this.errorWorkflow(failWorkflowData, getErrorFromUnknown(err));
         }
       } catch (failErr) {
         this.mastra

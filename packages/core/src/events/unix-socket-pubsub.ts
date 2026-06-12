@@ -661,6 +661,11 @@ export class UnixSocketPubSub extends PubSub {
         },
         REDELIVERY_DELAY_MS * (attempt + 1),
       );
+      // Unrefed so a queued redelivery never holds the event loop open at
+      // shutdown. The trade-off: an in-flight redelivery during process exit
+      // is silently dropped. That's acceptable because the consumer (WEP)
+      // is itself shutting down and the workflow will be re-driven from
+      // durable state on the next start.
       timer.unref?.();
     };
     try {
@@ -703,7 +708,10 @@ export class UnixSocketPubSub extends PubSub {
         const code = (error as NodeJS.ErrnoException)?.code;
         // EPIPE/ECONNRESET/ENOTCONN: broker died mid-write — retry against a
         // fresh broker. Anything else (e.g. closed pubsub, validation error)
-        // is not safe to retry blindly.
+        // is not safe to retry blindly. The string-message checks cover two
+        // internal errors thrown from within this file (#handleClientDisconnect
+        // and #sendToActiveBroker) that don't carry an ErrnoException-style
+        // `code`; keep them in lockstep with those throw sites.
         const transient =
           code === 'EPIPE' ||
           code === 'ECONNRESET' ||
