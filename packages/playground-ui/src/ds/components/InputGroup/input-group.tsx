@@ -4,8 +4,9 @@ import * as React from 'react';
 
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
-import { formElementSizes, inputFocusBorderWithin, inputHoverBorderWithin } from '@/ds/primitives/form-element';
-import type { FormElementSize } from '@/ds/primitives/form-element';
+import { controlHeight } from '@/ds/primitives/control-size';
+import type { ControlSize } from '@/ds/primitives/control-size';
+import { inputFocusBorderWithin, inputHoverBorderWithin } from '@/ds/primitives/form-element';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -75,7 +76,7 @@ const inputGroupVariants = cva(inputGroupBaseClassName, {
 });
 
 export type InputGroupProps = React.ComponentPropsWithoutRef<'div'> & {
-  size?: FormElementSize;
+  size?: ControlSize;
 } & VariantProps<typeof inputGroupVariants>;
 
 const InputGroup = React.forwardRef<HTMLDivElement, InputGroupProps>(
@@ -86,7 +87,7 @@ const InputGroup = React.forwardRef<HTMLDivElement, InputGroupProps>(
         role="group"
         data-slot="input-group"
         data-size={size}
-        className={cn(inputGroupVariants({ variant }), formElementSizes[size], className)}
+        className={cn(inputGroupVariants({ variant }), controlHeight[size], className)}
         {...props}
       />
     );
@@ -149,12 +150,14 @@ InputGroupAddon.displayName = 'InputGroupAddon';
 // doesn't collapse to the line-height in block mode (flex-col + flex-none); the root's
 // explicit border-box height means this never makes the group grow.
 const inputGroupControlHeightBySize = cn(
+  'group-data-[size=xs]/input-group:h-form-xs',
   'group-data-[size=sm]/input-group:h-form-sm',
   'group-data-[size=md]/input-group:h-form-md',
   'group-data-[size=default]/input-group:h-form-default',
   'group-data-[size=lg]/input-group:h-form-lg',
 );
 const inputGroupControlTextBySize = cn(
+  'group-data-[size=xs]/input-group:text-ui-xs',
   'group-data-[size=sm]/input-group:text-ui-sm',
   'group-data-[size=md]/input-group:text-ui-md',
   'group-data-[size=default]/input-group:text-ui-md',

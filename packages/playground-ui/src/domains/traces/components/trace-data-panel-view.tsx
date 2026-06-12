@@ -1,7 +1,16 @@
 import type { LightSpanRecord } from '@mastra/core/storage';
-import { CircleGaugeIcon, ChevronsDownUpIcon, ChevronsUpDownIcon, Link2Icon, SaveIcon } from 'lucide-react';
+import {
+  CircleGaugeIcon,
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
+  DownloadIcon,
+  Link2Icon,
+  Loader2Icon,
+  SaveIcon,
+} from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
+import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceKeysAndValues } from './trace-keys-and-values';
 import { TraceTimeline } from './trace-timeline';
@@ -76,6 +85,8 @@ export function TraceDataPanelView({
   const collapsed = controlledCollapsed ?? internalCollapsed;
   const setCollapsed = onCollapsedChange ?? setInternalCollapsed;
 
+  const { download: downloadTraceJson, isPending: isDownloadingTrace } = useDownloadTraceJson();
+
   const contentRef = useRef<HTMLDivElement>(null);
   const [selectedSpanId, setSelectedSpanId] = useState<string | undefined>(initialSpanId ?? undefined);
 
@@ -132,11 +143,28 @@ export function TraceDataPanelView({
 
   const showOpenTracePageLink = !isOnTracePage && LinkComponent && traceHref;
 
+  // Shared across both header layouts (list side panel and full trace page) so a trace can be
+  // downloaded from wherever it's being inspected.
+  const downloadTraceButton = (
+    <Button
+      size="md"
+      tooltip="Download trace JSON"
+      aria-label="Download trace JSON"
+      disabled={isDownloadingTrace}
+      onClick={() => downloadTraceJson(traceId)}
+    >
+      {isDownloadingTrace ? <Loader2Icon className="animate-spin" /> : <DownloadIcon />}
+    </Button>
+  );
+
   return (
     <DataPanel collapsed={collapsed}>
       <DataPanel.Header>
         {isOnTracePage ? (
-          <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
+          <>
+            <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
+            <ButtonsGroup className="ml-auto shrink-0">{downloadTraceButton}</ButtonsGroup>
+          </>
         ) : (
           <>
             <DataPanel.Heading>
@@ -171,6 +199,7 @@ export function TraceDataPanelView({
                   <Link2Icon />
                 </Button>
               )}
+              {downloadTraceButton}
               <DataPanel.CloseButton onClick={onClose} />
             </ButtonsGroup>
           </>

@@ -9,6 +9,7 @@ import type {
 import type { AgentChunkType, ChunkType, NetworkChunkType } from '@mastra/core/stream';
 import type { WorkflowStreamResult, StepResult } from '@mastra/core/workflows';
 import { formatCompletionFeedback, formatStreamCompletionFeedback } from './formatCompletionFeedback';
+import { CLIENT_MESSAGE_ID_KEY } from './types';
 import type {
   BackgroundTaskEntry,
   MastraDBMessageMetadata,
@@ -57,6 +58,24 @@ const withMetadata = (message: MastraDBMessage, metadata: MastraDBMessageMetadat
     metadata,
   },
 });
+
+// Drops the transient `pending` status and the `clientMessageId` correlation
+// key from an optimistic user message once its server echo confirms it, leaving
+// the rest of the metadata intact.
+const clearPendingStatus = (message: MastraDBMessage): MastraDBMessage => {
+  const { status: _status, [CLIENT_MESSAGE_ID_KEY]: _clientMessageId, ...rest } = message.content.metadata ?? {};
+  return withMetadata(message, rest);
+};
+
+// Like `clearPendingStatus` but retains the `clientMessageId` correlation key.
+// Used during `data-user-message` reconciliation so the rendered row key (which
+// prefers `clientMessageId`) stays stable across the id swap, preventing a
+// React unmount/remount and the resulting layout shift. `clientMessageId` is
+// still stripped from persisted threads by `resolveInitialMessages`.
+const clearPendingStatusKeepClientId = (message: MastraDBMessage): MastraDBMessage => {
+  const { status: _status, ...rest } = message.content.metadata ?? {};
+  return withMetadata(message, rest);
+};
 
 const replaceLast = (conversation: MastraDBMessage[], message: MastraDBMessage): MastraDBMessage[] => [
   ...conversation.slice(0, -1),
@@ -109,6 +128,7 @@ const partProviderMetadata = (part: MastraMessagePart): Record<string, unknown> 
 export const finishStreamingAssistantMessage = (conversation: MastraDBMessage[]): MastraDBMessage[] => {
   const lastMessage = conversation[conversation.length - 1];
   if (!lastMessage || lastMessage.role !== 'assistant') return conversation;
+  if (lastMessage.content.parts.length === 0) return conversation.slice(0, -1);
 
   const nextParts = lastMessage.content.parts.map(part => {
     if ((part.type === 'text' || part.type === 'reasoning') && partState(part) === 'streaming') {
@@ -437,8 +457,39 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       ((chunk as any).data?.type === 'user-message' || (chunk as any).data?.type === 'user')
     ) {
       const signalId = (chunk as any).data.id;
+
+      // Preferred reconciliation: the optimistic pending bubble and the outgoing
+      // message both carry a client-generated `clientMessageId`; the server
+      // echoes it back here. Match on it (not the server-assigned signal id) so
+      // the single optimistic bubble adopts the server id and clears its
+      // transient pending state instead of being duplicated.
+      const echoedClientMessageId = (chunk as any).data?.metadata?.[CLIENT_MESSAGE_ID_KEY];
+      if (
+        typeof echoedClientMessageId === 'string' &&
+        result.some(
+          message =>
+            message.content.metadata?.status === 'pending' &&
+            message.content.metadata[CLIENT_MESSAGE_ID_KEY] === echoedClientMessageId,
+        )
+      ) {
+        return finishStreamingAssistantMessage(
+          result.map(message =>
+            message.content.metadata?.status === 'pending' &&
+            message.content.metadata[CLIENT_MESSAGE_ID_KEY] === echoedClientMessageId
+              ? clearPendingStatusKeepClientId(typeof signalId === 'string' ? { ...message, id: signalId } : message)
+              : message,
+          ),
+        );
+      }
+
       if (typeof signalId === 'string' && result.some(message => message.id === signalId)) {
-        return result;
+        return finishStreamingAssistantMessage(
+          result.map(message =>
+            message.id === signalId && message.content.metadata?.status === 'pending'
+              ? clearPendingStatus(message)
+              : message,
+          ),
+        );
       }
 
       const userMessages = signalContentsToUserMessages((chunk as any).data.contents, metadata);

@@ -2084,3 +2084,198 @@ describe('UPDATE_STORED_AGENT_ROUTE — model policy is surface-scoped, not enfo
   // the UPDATE assertion in this describe block is enough to lock in the
   // surface-scoped policy direction.
 });
+
+// =============================================================================
+// Author Enrichment
+// =============================================================================
+describe('Stored Agents author enrichment', () => {
+  type FakeAuthor = { id: string; name?: string; email?: string; avatarUrl?: string };
+
+  function makeAuthProvider(users: Record<string, FakeAuthor | Error>, opts: { batch?: boolean } = {}) {
+    const getUser = vi.fn(async (id: string): Promise<FakeAuthor | null> => {
+      const v = users[id];
+      if (v instanceof Error) throw v;
+      return v ?? null;
+    });
+    const provider: any = {
+      authenticateToken: vi.fn(),
+      getCurrentUser: vi.fn(),
+      getUser,
+    };
+    if (opts.batch) {
+      provider.getUsers = vi.fn(async (ids: string[]): Promise<Array<FakeAuthor | null>> => {
+        const out: Array<FakeAuthor | null> = [];
+        for (const id of ids) {
+          const v = users[id];
+          if (v instanceof Error) throw v;
+          out.push(v ?? null);
+        }
+        return out;
+      });
+    }
+    return provider;
+  }
+
+  function setup(users: Record<string, FakeAuthor | Error>, opts: { batch?: boolean; auth?: unknown } = {}) {
+    const data = new Map<string, MockStoredAgent>();
+    const store = createMockAgentsStore(data);
+    const storage = createMockStorage(store);
+    const editor = createMockEditor(store);
+    const auth = opts.auth !== undefined ? opts.auth : makeAuthProvider(users, { batch: opts.batch });
+    const mastra = createMockMastra({ storage, editor, server: auth === null ? {} : { auth } });
+    return { data, store, mastra, auth };
+  }
+
+  it('returns rows with resolved `author` for the list endpoint', async () => {
+    const { data, mastra } = setup({
+      'author-1': { id: 'author-1', name: 'Alice', email: 'alice@example.com' },
+      'author-2': { id: 'author-2', name: 'Bob' },
+    });
+    data.set('agent1', {
+      id: 'agent1',
+      name: 'Agent 1',
+      model: { name: 'gpt-4', provider: 'openai' },
+      authorId: 'author-1',
+    });
+    data.set('agent2', {
+      id: 'agent2',
+      name: 'Agent 2',
+      model: { name: 'gpt-4', provider: 'openai' },
+      authorId: 'author-2',
+    });
+
+    const result = await LIST_STORED_AGENTS_ROUTE.handler({
+      ...createTestContext(mastra),
+      page: 1,
+    });
+
+    const byId = new Map(result.agents.map(a => [a.id, a]));
+    expect(byId.get('agent1')).toMatchObject({
+      authorId: 'author-1',
+      author: { id: 'author-1', name: 'Alice', email: 'alice@example.com' },
+    });
+    expect(byId.get('agent2')).toMatchObject({
+      authorId: 'author-2',
+      author: { id: 'author-2', name: 'Bob' },
+    });
+  });
+
+  it('deduplicates author ids before calling the provider', async () => {
+    const { data, mastra, auth } = setup(
+      {
+        'author-1': { id: 'author-1', name: 'Alice' },
+      },
+      { batch: true },
+    );
+    data.set('agent1', {
+      id: 'agent1',
+      name: 'Agent 1',
+      model: { name: 'gpt-4', provider: 'openai' },
+      authorId: 'author-1',
+    });
+    data.set('agent2', {
+      id: 'agent2',
+      name: 'Agent 2',
+      model: { name: 'gpt-4', provider: 'openai' },
+      authorId: 'author-1',
+    });
+
+    await LIST_STORED_AGENTS_ROUTE.handler({
+      ...createTestContext(mastra),
+      page: 1,
+    });
+
+    expect((auth as any).getUsers).toHaveBeenCalledTimes(1);
+    expect((auth as any).getUsers.mock.calls[0][0]).toEqual(['author-1']);
+  });
+
+  it('omits `author` when no auth provider is configured', async () => {
+    const { data, mastra } = setup({}, { auth: null });
+    data.set('agent1', {
+      id: 'agent1',
+      name: 'Agent 1',
+      model: { name: 'gpt-4', provider: 'openai' },
+      authorId: 'author-1',
+    });
+
+    const result = await LIST_STORED_AGENTS_ROUTE.handler({
+      ...createTestContext(mastra),
+      page: 1,
+    });
+
+    expect(result.agents[0]).toMatchObject({ id: 'agent1', authorId: 'author-1' });
+    expect((result.agents[0] as any).author).toBeUndefined();
+  });
+
+  it('omits `author` for ids the provider cannot resolve, without failing the list', async () => {
+    const { data, mastra } = setup({
+      'author-1': { id: 'author-1', name: 'Alice' },
+      bad: new Error('boom'),
+    });
+    data.set('agent1', {
+      id: 'agent1',
+      name: 'Agent 1',
+      model: { name: 'gpt-4', provider: 'openai' },
+      authorId: 'author-1',
+    });
+    data.set('agent2', {
+      id: 'agent2',
+      name: 'Agent 2',
+      model: { name: 'gpt-4', provider: 'openai' },
+      authorId: 'bad',
+    });
+
+    const result = await LIST_STORED_AGENTS_ROUTE.handler({
+      ...createTestContext(mastra),
+      page: 1,
+    });
+
+    const byId = new Map(result.agents.map(a => [a.id, a]));
+    expect((byId.get('agent1') as any).author).toMatchObject({ id: 'author-1', name: 'Alice' });
+    expect((byId.get('agent2') as any).author).toBeUndefined();
+  });
+
+  it('returns `author` from the GET single agent endpoint', async () => {
+    const { data, mastra } = setup({
+      'author-1': { id: 'author-1', name: 'Alice', avatarUrl: 'https://x/y.png' },
+    });
+    data.set('agent1', {
+      id: 'agent1',
+      name: 'Agent 1',
+      model: { name: 'gpt-4', provider: 'openai' },
+      authorId: 'author-1',
+    });
+
+    const result = await GET_STORED_AGENT_ROUTE.handler({
+      ...createTestContext(mastra),
+      storedAgentId: 'agent1',
+      status: 'published',
+    });
+
+    expect((result as any).author).toEqual({
+      id: 'author-1',
+      name: 'Alice',
+      avatarUrl: 'https://x/y.png',
+    });
+  });
+
+  it('omits `author` from GET single agent when the id cannot be resolved', async () => {
+    const { data, mastra } = setup({
+      // 'author-1' is intentionally not in the user map
+    });
+    data.set('agent1', {
+      id: 'agent1',
+      name: 'Agent 1',
+      model: { name: 'gpt-4', provider: 'openai' },
+      authorId: 'author-1',
+    });
+
+    const result = await GET_STORED_AGENT_ROUTE.handler({
+      ...createTestContext(mastra),
+      storedAgentId: 'agent1',
+      status: 'published',
+    });
+
+    expect((result as any).author).toBeUndefined();
+  });
+});

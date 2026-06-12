@@ -1,6 +1,6 @@
 {
   "name": "@mastra/cursor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Cursor SDK package for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -34,7 +34,7 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@cursor/sdk": "^1.0.17",
+    "@cursor/sdk": "^1.0.18",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",

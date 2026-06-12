@@ -1,13 +1,17 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "33.0.0-alpha.0",
+  "version": "33.0.0",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
   "types": "dist/index.d.ts",
+  "sideEffects": [
+    "**/*.css"
+  ],
   "files": [
     "dist",
+    "theme.css",
     "CHANGELOG.md"
   ],
   "exports": {
@@ -18,6 +22,7 @@
       }
     },
     "./style.css": "./dist/index.css",
+    "./theme.css": "./theme.css",
     "./tokens": {
       "import": {
         "types": "./dist/tokens.d.ts",
@@ -36,6 +41,12 @@
       "require": {
         "types": "./dist/utils.d.ts",
         "default": "./dist/utils.cjs.js"
+      }
+    },
+    "./components/*": {
+      "import": {
+        "types": "./dist/components/*.d.ts",
+        "default": "./dist/components/*.es.js"
       }
     },
     "./package.json": "./package.json"
@@ -59,7 +70,6 @@
   "author": "Mastra",
   "license": "Apache-2.0",
   "dependencies": {
-    "@assistant-ui/react-ui": "^0.2.1",
     "@base-ui/react": "^1.5.0",
     "@codemirror/autocomplete": "^6.20.1",
     "@codemirror/lang-javascript": "^6.2.5",
@@ -126,6 +136,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "eslint-plugin-storybook": "^10.4.2",
     "jsdom": "^26.1.0",
+    "msw": "^2.12.11",
     "react": "catalog:",
     "react-dom": "catalog:",
     "rollup-plugin-node-externals": "^8.1.2",

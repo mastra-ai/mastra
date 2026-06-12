@@ -3,7 +3,10 @@ description: 'Create GitHub App installation token, expose outputs, set .netrc'
 inputs:
   client-id:
     description: 'GitHub App Client ID'
-    required: true
+    required: false
+  app-id:
+    description: 'GitHub App ID fallback when client-id is unavailable'
+    required: false
   private-key:
     description: 'GitHub App private key'
     required: true
@@ -36,6 +39,7 @@ runs:
       uses: actions/create-github-app-token@v3
       with:
         client-id: ${{ inputs.client-id }}
+        app-id: ${{ inputs.app-id }}
         private-key: ${{ inputs.private-key }}
         owner: ${{ inputs.owner }}
         repositories: ${{ inputs.repositories }}

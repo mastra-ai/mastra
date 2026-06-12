@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { MastraMemory } from '../../memory';
+import { MastraCompositeStore } from '../../storage';
 import type { StorageCloneThreadInput } from '../../storage';
 import { HarnessStorage } from '../../storage/domains/harness';
 import type { SessionRecord } from '../../storage/domains/harness';
@@ -10,6 +11,11 @@ import { Harness } from './harness';
 
 class RecordingHarnessStorage extends HarnessStorage {
   readonly records = new Map<string, SessionRecord>();
+  initCalls = 0;
+
+  override async init(): Promise<void> {
+    this.initCalls += 1;
+  }
 
   async dangerouslyClearAll(): Promise<void> {
     this.records.clear();
@@ -94,17 +100,20 @@ describe('Harness.session()', () => {
     expect(session.getModelId()).toBe('test-model');
     expect(session.ownerId).toBe(harness.ownerId);
     expect([...storage.records.values()]).toEqual([
-      {
+      expect.objectContaining({
         id: expect.stringMatching(/^sess-[a-f0-9]{32}$/),
         ownerId: harness.ownerId,
         threadId: 'thread-1',
         resourceId: 'resource-1',
         origin: 'top-level',
+        source: { type: 'top-level' },
+        subagentDepth: 0,
         modeId: 'plan',
         modelId: 'test-model',
+        pending: [],
         createdAt: expect.any(Date),
         lastActivityAt: expect.any(Date),
-      },
+      }),
     ]);
   });
 
@@ -148,6 +157,28 @@ describe('Harness.session()', () => {
     await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
     const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
 
+    expect(storage.records).toHaveLength(1);
+    expect(session.getMode()).toMatchObject({ id: 'build' });
+  });
+
+  it('resolves the harness domain from a top-level storage adapter', async () => {
+    const storage = new RecordingHarnessStorage();
+    const storageAdapter = new MastraCompositeStore({
+      id: 'storage-adapter',
+      domains: { harness: storage },
+    });
+    const harness = new Harness({
+      agents: {},
+      storage: storageAdapter,
+      memory: createMemory(),
+      modes: [{ id: 'build', agentId: 'default', defaultModelId: 'test-build-model' }],
+      defaultModeId: 'build',
+    });
+
+    await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+    expect(storage.initCalls).toBe(1);
     expect(storage.records).toHaveLength(1);
     expect(session.getMode()).toMatchObject({ id: 'build' });
   });
@@ -229,18 +260,23 @@ describe('Harness.session()', () => {
     expect(clone.getMode()).toMatchObject({ id: 'build' });
     expect(clone.getModelId()).toBe('override-model');
     expect(clone.ownerId).toBe(harness.ownerId);
-    expect(storage.records.get('session-2')).toEqual({
-      id: 'session-2',
-      ownerId: harness.ownerId,
-      threadId: 'thread-2',
-      resourceId: 'resource-2',
-      parentSessionId: 'parent-session',
-      origin: 'subagent-tool',
-      modeId: 'build',
-      modelId: 'override-model',
-      createdAt: expect.any(Date),
-      lastActivityAt: expect.any(Date),
-    });
+    expect(storage.records.get('session-2')).toEqual(
+      expect.objectContaining({
+        id: 'session-2',
+        ownerId: harness.ownerId,
+        threadId: 'thread-2',
+        resourceId: 'resource-2',
+        parentSessionId: 'parent-session',
+        origin: 'subagent-tool',
+        source: { type: 'subagent-tool', parentSessionId: 'parent-session' },
+        subagentDepth: 1,
+        modeId: 'build',
+        modelId: 'override-model',
+        pending: [],
+        createdAt: expect.any(Date),
+        lastActivityAt: expect.any(Date),
+      }),
+    );
   });
 
   it('loads the backing memory thread', async () => {
@@ -275,6 +311,139 @@ describe('Harness.session()', () => {
 
     expect(memory.saveMessages).toHaveBeenCalledWith({ messages });
     expect(result.messages).toEqual(messages);
+  });
+
+  it('hydrates session state and pending projections from durable records', async () => {
+    const storage = new RecordingHarnessStorage();
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+    await storage.saveSession({
+      id: 'session-1',
+      ownerId: 'owner-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      origin: 'top-level',
+      modeId: 'build',
+      modelId: 'test-build-model',
+      state: { count: 2 },
+      pending: [
+        {
+          id: 'pending-1',
+          kind: 'question',
+          status: 'pending',
+          sessionId: 'session-1',
+          createdAt,
+          updatedAt: createdAt,
+        },
+      ],
+      createdAt,
+      lastActivityAt: createdAt,
+    });
+    const harness = new Harness({
+      agents: {},
+      ownerId: 'owner-1',
+      storage,
+      memory: createMemory(),
+      modes: [{ id: 'build', agentId: 'default', defaultModelId: 'test-build-model' }],
+      defaultModeId: 'build',
+    });
+
+    const session = await harness.session({ sessionId: 'session-1', resourceId: 'resource-1' });
+
+    expect(session.getState()).toEqual({ count: 2 });
+    expect(session.isBusy()).toBe(true);
+    expect(session.getQueueDepth()).toBe(1);
+    expect(session.getCurrentRunId()).toBeNull();
+    expect(session.getCurrentTraceId()).toBeNull();
+  });
+
+  it('persists state and pending item changes without storing live projections', async () => {
+    const { harness, storage } = createHarness(createMemory());
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+    await session.setState({ count: 1 } as never);
+    await session.registerPendingItem({ id: 'pending-1', kind: 'plan-approval', status: 'pending' });
+
+    expect(session.isBusy()).toBe(true);
+    expect(session.getQueueDepth()).toBe(1);
+    expect(storage.records.get(session.id)).toMatchObject({
+      state: { count: 1 },
+    });
+    expect(storage.records.get(session.id)).not.toHaveProperty('live');
+
+    await session.removePendingItem('pending-1');
+
+    expect(session.isBusy()).toBe(false);
+    expect(session.getQueueDepth()).toBe(0);
+  });
+
+  it('responds to session-owned pending items and removes them from the queue', async () => {
+    const storage = new RecordingHarnessStorage();
+    const memory = createMemory();
+    const harness = new Harness({
+      agents: {},
+      storage,
+      memory,
+      runtimeCompatibilityGeneration: 'runtime-v1',
+      modes: [
+        { id: 'build', agentId: 'default', defaultModelId: 'test-build-model' },
+        { id: 'plan', agentId: 'default', defaultModelId: 'test-plan-model' },
+      ],
+      defaultModeId: 'build',
+    });
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+    await session.registerPendingItem({
+      id: 'pending-question',
+      kind: 'question',
+      status: 'pending',
+      payload: { question: 'continue?' },
+    });
+
+    const updated = await session.respondToQuestion('pending-question', { answer: 'yes' });
+
+    expect(updated).toMatchObject({
+      id: 'pending-question',
+      kind: 'question',
+      status: 'responded',
+      response: { answer: 'yes' },
+      runtimeCompatibilityGeneration: 'runtime-v1',
+    });
+    expect(session.getQueueDepth()).toBe(0);
+    expect(storage.records.get(session.id)).toMatchObject({
+      pending: [expect.objectContaining({ id: 'pending-question', status: 'responded' })],
+    });
+  });
+
+  it('applies pending plan approval mode transitions at the session boundary', async () => {
+    const storage = new RecordingHarnessStorage();
+    const harness = new Harness({
+      agents: {},
+      storage,
+      memory: createMemory(),
+      modes: [
+        { id: 'build', agentId: 'default', defaultModelId: 'test-build-model' },
+        { id: 'plan', agentId: 'default', defaultModelId: 'test-plan-model', transitionsTo: 'build' },
+      ],
+      defaultModeId: 'plan',
+    });
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1', modeId: 'plan' });
+    await session.registerPendingItem({
+      id: 'pending-plan',
+      kind: 'plan-approval',
+      status: 'pending',
+      payload: { plan: 'Ship it', transitionModeId: 'build' },
+    });
+
+    const updated = await session.respondToPlanApproval('pending-plan', { approved: true });
+
+    expect(session.getMode().id).toBe('build');
+    expect(updated).toMatchObject({
+      id: 'pending-plan',
+      status: 'responded',
+      response: { approved: true, resumeResult: { transitionModeId: 'build', modeChanged: true } },
+    });
+    expect(storage.records.get(session.id)).toMatchObject({
+      modeId: 'build',
+    });
   });
 });
 

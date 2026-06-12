@@ -1,6 +1,6 @@
 {
   "name": "@mastra/clickhouse",
-  "version": "1.9.1",
+  "version": "1.10.0",
   "description": "Clickhouse provider for Mastra - includes db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@clickhouse/client": "^1.18.2"
+    "@clickhouse/client": "^1.20.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

@@ -10,6 +10,7 @@ import { ChannelsLibSQL } from './domains/channels';
 import { DatasetsLibSQL } from './domains/datasets';
 import { ExperimentsLibSQL } from './domains/experiments';
 import { FavoritesLibSQL } from './domains/favorites';
+import { HarnessLibSQL } from './domains/harness';
 import { MCPClientsLibSQL } from './domains/mcp-clients';
 import { MCPServersLibSQL } from './domains/mcp-servers';
 import { MemoryLibSQL } from './domains/memory';
@@ -20,6 +21,7 @@ import { SchedulesLibSQL } from './domains/schedules';
 import { ScorerDefinitionsLibSQL } from './domains/scorer-definitions';
 import { ScoresLibSQL } from './domains/scores';
 import { SkillsLibSQL } from './domains/skills';
+import { ThreadStateLibSQL } from './domains/thread-state';
 import { ToolProviderConnectionsLibSQL } from './domains/tool-provider-connections';
 import { WorkflowsLibSQL } from './domains/workflows';
 import { WorkspacesLibSQL } from './domains/workspaces';
@@ -32,6 +34,7 @@ export {
   ChannelsLibSQL,
   DatasetsLibSQL,
   ExperimentsLibSQL,
+  HarnessLibSQL,
   MCPClientsLibSQL,
   MCPServersLibSQL,
   MemoryLibSQL,
@@ -43,6 +46,7 @@ export {
   ScoresLibSQL,
   SkillsLibSQL,
   FavoritesLibSQL,
+  ThreadStateLibSQL,
   ToolProviderConnectionsLibSQL,
   WorkflowsLibSQL,
   WorkspacesLibSQL,
@@ -204,8 +208,10 @@ export class LibSQLStore extends MastraCompositeStore {
     const blobs = new BlobsLibSQL(domainConfig);
     const backgroundTasks = new BackgroundTasksLibSQL(domainConfig);
     const schedules = new SchedulesLibSQL(domainConfig);
+    const harness = new HarnessLibSQL(domainConfig);
     const toolProviderConnections = new ToolProviderConnectionsLibSQL(domainConfig);
     const notifications = new NotificationsLibSQL(domainConfig);
+    const threadState = new ThreadStateLibSQL(domainConfig);
 
     this.stores = {
       scores,
@@ -226,8 +232,10 @@ export class LibSQLStore extends MastraCompositeStore {
       blobs,
       backgroundTasks,
       schedules,
+      harness,
       toolProviderConnections,
       notifications,
+      threadState,
     };
   }
 

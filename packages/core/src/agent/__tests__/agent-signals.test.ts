@@ -57,7 +57,7 @@ class AsyncCallbackPubSub extends PubSub {
   #index = 0;
   #pending = new Set<Promise<void>>();
 
-  async publish(topic: string, event: any): Promise<void> {
+  async publish(topic: string, event: any, _options?: { localOnly?: boolean }): Promise<void> {
     const subscribers = [...(this.#subscribers.get(topic) ?? [])];
     const envelope = {
       ...event,
@@ -1307,19 +1307,21 @@ describe('Agent signals', () => {
       id: 'active-priority-notification-storage',
       domains: { notifications },
     });
+    const responseText = 'active response';
     const model = new MockLanguageModelV2({
       doStream: async () => {
         streamCount += 1;
+        const currentStream = streamCount;
         return {
           rawCall: { rawPrompt: null, rawSettings: {} },
           warnings: [],
           stream: new ReadableStream({
             async start(controller) {
               controller.enqueue({ type: 'stream-start', warnings: [] });
-              controller.enqueue({ type: 'text-start', id: 'text-1' });
-              controller.enqueue({ type: 'text-delta', id: 'text-1', delta: 'active response' });
-              controller.enqueue({ type: 'text-end', id: 'text-1' });
-              await firstFinished;
+              controller.enqueue({ type: 'text-start', id: `text-${currentStream}` });
+              controller.enqueue({ type: 'text-delta', id: `text-${currentStream}`, delta: responseText });
+              controller.enqueue({ type: 'text-end', id: `text-${currentStream}` });
+              if (currentStream === 1) await firstFinished;
               controller.enqueue({
                 type: 'finish',
                 finishReason: 'stop',
@@ -1361,8 +1363,6 @@ describe('Agent signals', () => {
       { resourceId: 'active-priority-notification-user', threadId: 'active-priority-notification-thread' },
     );
 
-    await nextTick();
-    expect(streamCount).toBe(1);
     expect(high.signal).toMatchObject({ type: 'notification', tagName: 'notification-summary' });
     expect(high.decision).toMatchObject({ action: 'summarize', reason: 'active-high-summary-then-full' });
     expect(high.record).toMatchObject({
@@ -1386,6 +1386,8 @@ describe('Agent signals', () => {
     expect(low.record.summaryAt).toBeInstanceOf(Date);
 
     releaseFirst();
+    // The high-priority summary signal is delivered to the active run, which the
+    // agentic loop picks up and processes with an additional model iteration.
     await expect(stream.text).resolves.toBe('active responseactive response');
     expect(streamCount).toBe(2);
     subscription.unsubscribe();
@@ -1470,7 +1472,8 @@ describe('Agent signals', () => {
       contents: 'github: 1',
       attributes: { pending: 1 },
     });
-    expect(streamCount).toBe(1);
+    // The summary signal is delivered to the active run, triggering an additional model iteration.
+    expect(streamCount).toBe(2);
     await expect(
       notifications.getNotification({ threadId: 'high-active-thread', id: result.record.id }),
     ).resolves.toMatchObject({
@@ -1674,7 +1677,8 @@ describe('Agent signals', () => {
       contents: 'slack: 1',
       attributes: { pending: 1 },
     });
-    expect(streamCount).toBe(1);
+    // The summary signal is delivered to the active run, triggering an additional model iteration.
+    expect(streamCount).toBe(2);
     await expect(
       notifications.getNotification({ threadId: 'medium-active-thread', id: 'medium-active-notification' }),
     ).resolves.toMatchObject({
@@ -2878,8 +2882,10 @@ describe('Agent signals', () => {
       model: createTextStreamModel('observer response'),
     });
     new Mastra({ agents: { runner, observer }, logger: false, pubsub });
-    expect(runner.getPubSub()).toBe(pubsub);
-    expect(observer.getPubSub()).toBe(pubsub);
+    // Mastra wraps the raw pubsub in a Proxy (for localOnly tagging), so
+    // reference equality against the raw instance won't hold. Verify both
+    // agents share the *same* (proxy-wrapped) pubsub instead.
+    expect(runner.getPubSub()).toBe(observer.getPubSub());
 
     const subscription = await observer.subscribeToThread({
       threadId: 'shared-thread',

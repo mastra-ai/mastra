@@ -17,6 +17,7 @@ export type {
   ValidationErrorContext,
   ValidationErrorResponse,
   ValidationErrorHook,
+  StudioConfig,
 } from './types';
 export { MastraAuthProvider } from './auth';
 export type { MastraAuthProviderOptions } from './auth';
