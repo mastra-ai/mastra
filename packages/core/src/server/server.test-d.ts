@@ -6,6 +6,7 @@ import type { MastraAuthProvider } from './auth';
 import { CompositeAuth } from './composite-auth';
 import { SimpleAuth } from './simple-auth';
 import { registerApiRoute } from './index';
+import type { Middleware } from './index';
 
 /**
  * Type tests for registerApiRoute
@@ -143,5 +144,19 @@ describe('CORS type tests', () => {
         credentials: true,
       },
     });
+  });
+});
+
+describe('Middleware type exports', () => {
+  it('supports middleware declared separately', () => {
+    const middleware: Middleware = {
+      path: '/api/*',
+      handler: async (c, next) => {
+        c.req.header('authorization');
+        await next();
+      },
+    };
+
+    expectTypeOf(middleware).toMatchTypeOf<Middleware>();
   });
 });
