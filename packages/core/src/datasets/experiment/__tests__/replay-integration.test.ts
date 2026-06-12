@@ -12,6 +12,7 @@ import { InMemoryDB } from '../../../storage/domains/inmemory-db';
 import { ObservabilityInMemory } from '../../../storage/domains/observability/inmemory';
 import { createTool } from '../../../tools';
 import { runExperiment } from '../index';
+import { getToolReplayMarker } from '../replay';
 import type { ToolReplayReport } from '../replay';
 
 /**
@@ -921,6 +922,193 @@ describe('tool replay integration', () => {
     });
   });
 
+  describe('cases mocks (runner integration)', () => {
+    // The model calls lookup twice: { key: 'first' } then { key: 'second' }.
+    const bothCases = [
+      { args: { key: 'first' }, output: { value: 'case:first' } },
+      { args: { key: 'second' }, output: { value: 'case:second' } },
+    ];
+
+    it('serves args-conditional outputs per call and reports kind and caseIndex', async () => {
+      const summary = await runExperiment(mastra, {
+        data: [{ id: 'item-1', input: 'Look up first and second' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        toolMocks: { lookup: { cases: bothCases } },
+      });
+
+      expect(summary.results[0]?.error).toBeNull();
+      expect(summary.succeededCount).toBe(1);
+      expect(liveExecute).not.toHaveBeenCalled();
+      // Each call got ITS answer — not a shared static stub.
+      const output = summary.results[0]?.output as { toolResults?: unknown[] };
+      const serialized = JSON.stringify(output.toolResults);
+      expect(serialized).toContain('case:first');
+      expect(serialized).toContain('case:second');
+
+      const report = summary.results[0]?.toolReplay;
+      expect(report?.mocks).toEqual([{ toolName: 'lookup', calls: 2, kind: 'cases' }]);
+      expect(report?.calls).toEqual([
+        { order: 0, toolName: 'lookup', outcome: 'mocked', caseIndex: 0 },
+        { order: 1, toolName: 'lookup', outcome: 'mocked', caseIndex: 1 },
+      ]);
+    });
+
+    it("onNoMatch 'error' (default) fails the item deterministically with TOOL_MOCK_ARGS_MISMATCH", async () => {
+      const summary = await runExperiment(mastra, {
+        data: [{ id: 'item-1', input: 'Look up first and second' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        maxRetries: 2,
+        // Only the first call has a case — the second call misses the table.
+        toolMocks: { lookup: { cases: [bothCases[0]!] } },
+      });
+
+      expect(summary.failedCount).toBe(1);
+      const result = summary.results[0]!;
+      expect(result.error?.code).toBe('TOOL_MOCK_ARGS_MISMATCH');
+      expect(result.error?.message).toContain("Tool mock case miss for 'lookup'");
+      expect(result.output).toBeNull();
+      // Deterministic — the case table cannot change within a run.
+      expect(result.retryCount).toBe(0);
+      expect(liveExecute).not.toHaveBeenCalled();
+      expect(result.toolReplay?.calls?.map(call => call.outcome)).toEqual(['mocked', 'case-miss-error']);
+    });
+
+    it("onNoMatch 'passthrough' executes unmatched calls live and still counts them", async () => {
+      const summary = await runExperiment(mastra, {
+        data: [{ id: 'item-1', input: 'Look up first and second' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        toolMocks: { lookup: { cases: [bothCases[0]!], onNoMatch: 'passthrough' } },
+      });
+
+      expect(summary.results[0]?.error).toBeNull();
+      expect(summary.succeededCount).toBe(1);
+      // Exactly the unmatched second call hit the live tool.
+      expect(liveExecute).toHaveBeenCalledTimes(1);
+      const report = summary.results[0]?.toolReplay;
+      expect(report?.mocks).toEqual([{ toolName: 'lookup', calls: 2, kind: 'cases' }]);
+      expect(report?.calls?.map(call => call.outcome)).toEqual(['mocked', 'case-miss-passthrough']);
+    });
+
+    it('combines with expect — every call counts, matched or case-missed', async () => {
+      const summary = await runExperiment(mastra, {
+        data: [{ id: 'item-1', input: 'Look up first and second' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        toolMocks: {
+          lookup: { cases: [bothCases[0]!], onNoMatch: 'passthrough', expect: { calledTimes: 2 } },
+        },
+      });
+
+      expect(summary.succeededCount).toBe(1);
+      expect(summary.results[0]?.toolReplay?.expectations).toEqual([
+        { toolName: 'lookup', satisfied: true, calledTimes: 2 },
+      ]);
+    });
+
+    it('a cases mock on a strict-replayed tool wins and keeps the unconsumed exemption', async () => {
+      await seedRecordedTrace('rec-trace-strict-cases', [
+        { input: { key: 'first' }, output: { value: 'recorded:first' } },
+        { input: { key: 'second' }, output: { value: 'recorded:second' } },
+      ]);
+
+      const summary = await runExperiment(mastra, {
+        data: [{ id: 'item-1', input: 'Look up first and second', replayTraceId: 'rec-trace-strict-cases' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        toolReplay: { matching: 'strict' },
+        toolMocks: { lookup: { cases: bothCases } },
+      });
+
+      expect(summary.results[0]?.error).toBeNull();
+      expect(summary.succeededCount).toBe(1);
+      const report = summary.results[0]?.toolReplay;
+      // The mock answered both calls; the recording stays visibly unconsumed
+      // without breaching the strict contract.
+      expect(report?.replayedCount).toBe(0);
+      expect(report?.unconsumed).toEqual([{ toolName: 'lookup', count: 2 }]);
+      expect(report?.mocks).toEqual([{ toolName: 'lookup', calls: 2, kind: 'cases' }]);
+    });
+
+    it('rejects misconfigured cases at setup, before any item runs', async () => {
+      await expect(
+        runExperiment(mastra, {
+          data: [{ id: 'item-1', input: 'Look up first and second' }],
+          targetType: 'agent',
+          targetId: 'replay-test-agent',
+          toolMocks: { lookup: { output: { value: 'static' }, cases: bothCases } },
+        }),
+      ).rejects.toThrowError(/either static or conditional/);
+      expect(liveExecute).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('persisted mock configs (marker round-trip)', () => {
+    it('stamps data mocks verbatim and function mocks as placeholders, parseable via getToolReplayMarker', async () => {
+      const summary = await runExperiment(mastra, {
+        data: [{ id: 'item-1', input: 'Look up first and second' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        toolMocks: {
+          lookup: {
+            cases: [
+              { args: { key: 'first' }, output: { value: 'case:first' } },
+              { args: { key: 'second' }, output: { value: 'case:second' } },
+            ],
+            onNoMatch: 'passthrough',
+            expect: { calledTimes: 2 },
+          },
+          searchDocs: async () => ({ hits: [] }),
+        },
+      });
+
+      expect(summary.succeededCount).toBe(1);
+      const experiment = await experimentsStorage.getExperimentById({ id: summary.experimentId });
+      const marker = getToolReplayMarker(experiment?.metadata as Record<string, unknown>);
+      // mockedTools stays the cheap display field…
+      expect(marker?.mockedTools).toEqual(['lookup', 'searchDocs']);
+      // …and the config itself persists, so the run is auditable and re-runnable.
+      expect(marker?.mockConfigs).toEqual({
+        lookup: {
+          cases: [
+            { args: { key: 'first' }, output: { value: 'case:first' } },
+            { args: { key: 'second' }, output: { value: 'case:second' } },
+          ],
+          onNoMatch: 'passthrough',
+          expect: { calledTimes: 2 },
+        },
+        searchDocs: { function: true },
+      });
+    });
+
+    it('stamps mockConfigs on the async path (pre-created experiment record)', async () => {
+      await experimentsStorage.createExperiment({
+        id: 'pre-created-config-run',
+        datasetId: null,
+        datasetVersion: null,
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        totalItems: 0,
+      });
+
+      const summary = await runExperiment(mastra, {
+        experimentId: 'pre-created-config-run',
+        data: [{ id: 'item-1', input: 'Look up first and second' }],
+        targetType: 'agent',
+        targetId: 'replay-test-agent',
+        toolMocks: { lookup: { output: { value: 'mocked' } } },
+      });
+
+      expect(summary.succeededCount).toBe(1);
+      const experiment = await experimentsStorage.getExperimentById({ id: 'pre-created-config-run' });
+      expect(getToolReplayMarker(experiment?.metadata as Record<string, unknown>)?.mockConfigs).toEqual({
+        lookup: { output: { value: 'mocked' } },
+      });
+    });
+  });
+
   describe('itemIds filter', () => {
     it('runs only the selected items — single-item replay re-runs', async () => {
       await observabilityStorage.batchCreateSpans({ records: [] }).catch(() => {});
@@ -1171,9 +1359,7 @@ describe('tool replay integration', () => {
       // One recorded event; the second call misses into a slow live
       // passthrough, so the item timeout deterministically wins mid-run.
       await seedRecordedTrace('rec-trace-timeout', [{ input: { key: 'first' }, output: { value: 'recorded:first' } }]);
-      liveExecute.mockImplementation(
-        () => new Promise(resolve => setTimeout(() => resolve({ value: 'slow' }), 300)),
-      );
+      liveExecute.mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({ value: 'slow' }), 300)));
 
       const summary = await runExperiment(mastra, {
         data: [{ id: 'item-1', input: 'Look up first and second', replayTraceId: 'rec-trace-timeout' }],

@@ -629,6 +629,8 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
           {
             output?: unknown;
             error?: { name?: string; message: string };
+            cases?: Array<{ args: unknown; output?: unknown; error?: { name?: string; message: string } }>;
+            onNoMatch?: 'error' | 'passthrough';
             expect?: { args?: unknown; calledTimes?: number };
           }
         >;
