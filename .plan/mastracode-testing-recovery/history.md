@@ -3,7 +3,7 @@
 
 ### Long-running MCP tool coverage (2026-06-12)
 
-Added `mcp-long-running-tool` as the 84th checked-in TUI e2e scenario. The scenario launches a local Streamable HTTP MCP server with a header-protected `slow_lookup` tool, waits beyond a short timeout budget before returning `MC_MCP_LONG_TOOL_RESULT:timeout-e2e:complete`, invokes the namespaced tool through AIMock, and verifies the delayed tool result reaches the follow-up model request.
+Added `mcp-long-running-tool` as the 84th checked-in TUI e2e scenario, committed as `7b0d2f3e64`. The scenario launches a local Streamable HTTP MCP server with a header-protected `slow_lookup` tool, waits beyond a short timeout budget before returning `MC_MCP_LONG_TOOL_RESULT:timeout-e2e:complete`, invokes the namespaced tool through AIMock, and verifies the delayed tool result reaches the follow-up model request.
 
 Focused verification:
 

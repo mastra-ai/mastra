@@ -252,7 +252,7 @@ Follow-up TUI reload coverage added `mcp-reload-config`: starts with a project `
 
 Follow-up selector coverage added `mcp-selector-reconnect`: starts with a failed header-protected HTTP MCP server, makes it available through shell passthrough, uses the interactive `/mcp` selector submenu to reconnect the failed server into a connected tool row, rewrites project config to add a second server, and presses selector `r` to prove reload-all refreshes the overlay from the live manager. Breaks proved the Reconnect action, `r` reload shortcut, and reload-result status replacement are all required.
 
-Follow-up long-running coverage added `mcp-long-running-tool`: starts a local Streamable HTTP MCP server whose `slow_lookup` tool waits beyond a short timeout budget, invokes it through AIMock, and proves `MC_MCP_LONG_TOOL_RESULT:timeout-e2e:complete` reaches the follow-up model request. Breaks proved the seven-day MCP timeout handoff, MCP dynamic-tool injection, and server-name tool namespacing are required.
+Follow-up long-running coverage added `mcp-long-running-tool` (committed as `7b0d2f3e64`): starts a local Streamable HTTP MCP server whose `slow_lookup` tool waits beyond a short timeout budget, invokes it through AIMock, and proves `MC_MCP_LONG_TOOL_RESULT:timeout-e2e:complete` reaches the follow-up model request. Breaks proved the seven-day MCP timeout handoff, MCP dynamic-tool injection, and server-name tool namespacing are required.
 
 ### Integrations: MCP server configuration
 
@@ -260,7 +260,7 @@ Validated the programmatic MCP server startup boundary, committed as `cf2b3ec325
 
 Break validations: dropping `config.mcpServers` fails the new startup test; ignoring custom `configDir` fails the existing configDir startup shield; using `cwd` instead of detected project root fails the new startup test. Final verification passed: focused startup tests, typecheck, lint, and `pnpm run build:mastracode`.
 
-Follow-up file-config reload coverage added `mcp-reload-config`: real PTY `/mcp reload` rereads the project MCP config and replaces the old server map/status/tool list with the new HTTP config. Follow-up selector coverage added `mcp-selector-reconnect`: real PTY `/mcp` overlay reconnects a failed HTTP server and uses selector reload-all to surface a newly added HTTP server/tool. Follow-up validation coverage added `mcp-skipped-validation`, and follow-up long-running coverage added `mcp-long-running-tool`. Remaining gaps are headless MCP tool availability and OAuth persistence/refresh.
+Follow-up file-config reload coverage added `mcp-reload-config`: real PTY `/mcp reload` rereads the project MCP config and replaces the old server map/status/tool list with the new HTTP config. Follow-up selector coverage added `mcp-selector-reconnect`: real PTY `/mcp` overlay reconnects a failed HTTP server and uses selector reload-all to surface a newly added HTTP server/tool. Follow-up validation coverage added `mcp-skipped-validation`, and follow-up long-running coverage added `mcp-long-running-tool` (`7b0d2f3e64`). Remaining gaps are headless MCP tool availability and OAuth persistence/refresh.
 
 ### Integrations: Core Harness API and reference docs
 
