@@ -13,8 +13,6 @@ export type {
   CorsOptions,
   ApiRoute,
   Middleware,
-  Methods,
-  ServerConfig,
   HttpLoggingConfig,
   ValidationErrorContext,
   ValidationErrorResponse,

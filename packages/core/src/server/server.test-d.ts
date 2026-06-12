@@ -6,7 +6,7 @@ import type { MastraAuthProvider } from './auth';
 import { CompositeAuth } from './composite-auth';
 import { SimpleAuth } from './simple-auth';
 import { registerApiRoute } from './index';
-import type { Methods, Middleware, ServerConfig } from './index';
+import type { Middleware } from './index';
 
 /**
  * Type tests for registerApiRoute
@@ -181,19 +181,5 @@ describe('server entrypoint type exports', () => {
         middleware: requestLogger,
       },
     });
-  });
-
-  it('allows declaring a full server config in a separate module', () => {
-    const protectedMethods: Methods[] = ['POST', 'PUT', 'DELETE'];
-    expectTypeOf(protectedMethods).items.toEqualTypeOf<Methods>();
-
-    const server: ServerConfig = {
-      port: 4111,
-      middleware: async (_c, next) => {
-        await next();
-      },
-    };
-
-    new Mastra({ server });
   });
 });
