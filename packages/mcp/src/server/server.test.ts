@@ -9,6 +9,8 @@ import type { InternalCoreTool, Tool } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { createStep, Workflow } from '@mastra/core/workflows';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import type {
   Resource,
@@ -1436,6 +1438,147 @@ describe('MCPServer', () => {
       expect(Object.keys(tools).length).toBeGreaterThan(0);
 
       await client.disconnect();
+    });
+
+    it('should still return final tool results in serverless JSON response mode (default)', async () => {
+      sessionServer = new MCPServer({
+        name: 'ServerlessJsonServer',
+        version: '1.0.0',
+        tools: {
+          echoTool: {
+            description: 'Echoes the provided message',
+            parameters: z.object({ message: z.string() }),
+            execute: async ({ message }: { message: string }) => ({ echoed: message }),
+          },
+        },
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          // Default serverless mode: enableJsonResponse stays true (no streaming opt-in)
+          options: { serverless: true },
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+
+      const client = new Client({ name: 'serverless-json-client', version: '1.0.0' });
+      const transport = new StreamableHTTPClientTransport(new URL(`http://localhost:${currentTestPort}/http`));
+      await client.connect(transport);
+
+      const result = await client.callTool({ name: 'echoTool', arguments: { message: 'hello' } });
+
+      // Final tool result is still delivered in JSON response mode
+      const content = result.content as Array<{ type: string; text: string }>;
+      expect(JSON.parse(content[0].text)).toEqual({ echoed: 'hello' });
+
+      await client.close();
+      await transport.close();
+    });
+
+    it('should deliver notifications/progress to an MCP client onprogress handler in serverless streaming mode', async () => {
+      sessionServer = new MCPServer({
+        name: 'ServerlessStreamingServer',
+        version: '1.0.0',
+        tools: {
+          progressTool: {
+            description: 'Reports progress while working',
+            parameters: z.object({}),
+            execute: async (_args: unknown, context: any) => {
+              const extra = context?.mcp?.extra;
+              const progressToken = extra?._meta?.progressToken;
+              if (progressToken !== undefined && extra?.sendNotification) {
+                await extra.sendNotification({
+                  method: 'notifications/progress',
+                  params: { progressToken, progress: 1, total: 2 },
+                });
+                await extra.sendNotification({
+                  method: 'notifications/progress',
+                  params: { progressToken, progress: 2, total: 2 },
+                });
+              }
+              return { result: 'done' };
+            },
+          },
+        },
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          // Opt into request-scoped SSE streaming for serverless requests
+          options: { serverless: true, serverlessStreaming: true },
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+
+      const client = new Client({ name: 'serverless-streaming-client', version: '1.0.0' });
+      const transport = new StreamableHTTPClientTransport(new URL(`http://localhost:${currentTestPort}/http`));
+      await client.connect(transport);
+
+      const progressUpdates: Array<{ progress: number; total?: number }> = [];
+      const result = await client.callTool({ name: 'progressTool', arguments: {} }, undefined, {
+        onprogress: notification =>
+          progressUpdates.push({ progress: notification.progress, total: notification.total }),
+      });
+
+      // The client received the request-scoped progress notifications
+      expect(progressUpdates).toEqual([
+        { progress: 1, total: 2 },
+        { progress: 2, total: 2 },
+      ]);
+
+      // The final tool result is still delivered after the stream completes
+      const content = result.content as Array<{ type: string; text: string }>;
+      expect(JSON.parse(content[0].text)).toEqual({ result: 'done' });
+
+      await client.close();
+      await transport.close();
+    });
+
+    it('should not require or persist an mcp-session-id in serverless streaming mode', async () => {
+      sessionServer = new MCPServer({
+        name: 'ServerlessNoSessionServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: { serverless: true, serverlessStreaming: true },
+        });
+      });
+
+      await new Promise<void>(resolve => sessionHttpServer.listen(currentTestPort, () => resolve()));
+
+      const client = new Client({ name: 'serverless-no-session-client', version: '1.0.0' });
+      const transport = new StreamableHTTPClientTransport(new URL(`http://localhost:${currentTestPort}/http`));
+      await client.connect(transport);
+
+      // Stateless mode: the server assigns no session, so the client transport has no session ID
+      expect(transport.sessionId).toBeUndefined();
+
+      // Subsequent requests still work without an mcp-session-id
+      const tools = await client.listTools();
+      expect(tools.tools.length).toBeGreaterThan(0);
+
+      await client.close();
+      await transport.close();
     });
   });
 });

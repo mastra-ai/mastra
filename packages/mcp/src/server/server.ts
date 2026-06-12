@@ -1341,7 +1341,22 @@ export class MCPServer extends MCPServerBase {
     httpPath: string;
     req: http.IncomingMessage;
     res: http.ServerResponse<http.IncomingMessage>;
-    options?: Partial<StreamableHTTPServerTransportOptions> & { serverless?: boolean };
+    options?: Partial<StreamableHTTPServerTransportOptions> & {
+      serverless?: boolean;
+      /**
+       * Opt into request-scoped SSE streaming for serverless requests.
+       *
+       * When `true`, the transient serverless transport is created with
+       * `enableJsonResponse: false`, which allows in-request `notifications/progress`
+       * to stream back to the client before the final result. Defaults to `false`,
+       * preserving the JSON-response behavior that buffers only the final result.
+       *
+       * This only enables notifications scoped to the current request (e.g. progress).
+       * Elicitation, subscriptions, and out-of-request resource/list-change
+       * notifications still require a stateful session or another protocol model.
+       */
+      serverlessStreaming?: boolean;
+    };
   }) {
     this.logger.debug(`startHTTP: Received ${req.method} request to ${url.pathname}`);
 
@@ -1358,7 +1373,11 @@ export class MCPServer extends MCPServerBase {
 
     if (isStatelessMode) {
       this.logger.debug('startHTTP: Running in stateless mode (serverless or sessionIdGenerator: undefined)');
-      await this.handleServerlessRequest(req, res);
+      // Default to JSON responses for backward compatibility. Opt into request-scoped
+      // SSE streaming (e.g. notifications/progress) via serverlessStreaming or an explicit
+      // enableJsonResponse: false.
+      const enableJsonResponse = options?.serverlessStreaming === true ? false : (options?.enableJsonResponse ?? true);
+      await this.handleServerlessRequest(req, res, { enableJsonResponse });
       return;
     }
 
@@ -1520,9 +1539,17 @@ export class MCPServer extends MCPServerBase {
    *
    * @param req - Incoming HTTP request
    * @param res - HTTP response object
+   * @param options - Transport options for this request
+   * @param options.enableJsonResponse - When `true` (default), buffers and returns a single
+   *   JSON-RPC response. When `false`, the request is handled with request-scoped SSE streaming,
+   *   so in-request `notifications/progress` reach the client before the final result.
    * @private
    */
-  private async handleServerlessRequest(req: http.IncomingMessage, res: http.ServerResponse<http.IncomingMessage>) {
+  private async handleServerlessRequest(
+    req: http.IncomingMessage,
+    res: http.ServerResponse<http.IncomingMessage>,
+    { enableJsonResponse = true }: { enableJsonResponse?: boolean } = {},
+  ) {
     try {
       this.logger.debug(`handleServerlessRequest: Received ${req.method} request`);
 
@@ -1533,17 +1560,19 @@ export class MCPServer extends MCPServerBase {
       this.logger.debug(`handleServerlessRequest: Processing ${req.method} request`, {
         method: body?.method,
         id: body?.id,
+        enableJsonResponse,
       });
 
       // Create a transient server instance for this single request
       const transientServer = this.createServerInstance();
 
-      // Create a one-time transport that handles this single request
-      // sessionIdGenerator: undefined disables session management entirely
-      // enableJsonResponse: true forces JSON-RPC responses instead of SSE streaming
+      // Create a one-time transport that handles this single request.
+      // sessionIdGenerator: undefined disables session management entirely.
+      // enableJsonResponse: true (default) buffers a single JSON-RPC response; false enables
+      // request-scoped SSE streaming so notifications/progress can reach the client.
       const tempTransport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined,
-        enableJsonResponse: true,
+        enableJsonResponse,
       });
 
       // Connect the transient server to the temporary transport
