@@ -1254,6 +1254,67 @@ describe('Agent vNext', () => {
     expect(hasToolResult).toBe(true);
   });
 
+  it('stream: recursive call after client tool execution preserves providerMetadata on the tool-invocation part (e.g. Gemini thought_signature)', async () => {
+    const toolCallId = 'call_1';
+    const thoughtSignature = 'sig-from-gemini';
+
+    // First cycle: emit a tool-call chunk that carries providerMetadata
+    // (the shape Gemini thinking models produce — `vertex.thoughtSignature`).
+    const firstCycle = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      {
+        type: 'tool-call',
+        payload: {
+          toolCallId,
+          toolName: 'weatherTool',
+          args: { location: 'NYC' },
+          providerMetadata: { vertex: { thoughtSignature } },
+        },
+      },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+
+    // Second cycle: trivial completion after the tool result
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'ok' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
+    ];
+
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+
+    const resp = await agent.stream('weather?', { clientTools: { weatherTool } });
+    await resp.processDataStream({ onChunk: async () => {} });
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+
+    const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
+
+    // The recursive request must surface providerMetadata on the part itself
+    // (sibling of `toolInvocation`), since `MessageList.updateToolInvocation`
+    // server-side reads it from `part.providerMetadata`. If it stays buried
+    // inside `toolInvocation`, the next provider call drops the signature and
+    // Gemini fails with `Function call is missing a thought_signature`.
+    const toolPart = secondCallBody.messages
+      .flatMap((m: any) => m.parts ?? [])
+      .find((p: any) => p?.type === 'tool-invocation' && p.toolInvocation?.toolCallId === toolCallId);
+
+    expect(toolPart).toBeDefined();
+    expect(toolPart.providerMetadata).toEqual({ vertex: { thoughtSignature } });
+  });
+
   // Companion test for issue #11386 - verify server-side memory case doesn't include duplicate messages
   it('stream: recursive call with threadId should NOT duplicate original messages (server-side memory)', async () => {
     const toolCallId = 'call_1';
