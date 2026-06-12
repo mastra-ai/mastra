@@ -239,6 +239,29 @@ const mocked = await dataset.startExperiment({
 
 An entry with only `expect` doesn't stub anything: the call executes normally (replayed or live) and only the assertion is recorded. `expect.calledTimes: 0` asserts the tool must NOT be called. An unsatisfied expectation fails the item with `TOOL_MOCK_EXPECTATION_FAILED` (not retried — the run is over, retrying cannot change it); outcomes are listed in the report's `expectations` array, and per-tool usage in `mocks`. Experiments run with mocks are stamped in their metadata (`mockedTools`) and — like replay runs — are refused as replay sources: mocked calls record only synthetic tool spans, which replay extraction ignores.
 
+A data mock can also answer conditionally on arguments. `cases` is a first-match table: the first case whose `args` match the call's arguments (the same canonicalized comparison strict matching uses) serves its `output` or throws its `error`. A mock is either static or conditional — `cases` cannot combine with a top-level `output`/`error` — while `expect` combines freely and counts every call to the tool, whether a case matched or not.
+
+```typescript
+const conditional = await dataset.startExperiment({
+  targetType: 'agent',
+  targetId: 'support-agent',
+  toolMocks: {
+    weatherInfo: {
+      cases: [
+        { args: { city: 'Paris' }, output: { temp: 18, condition: 'cloudy' } },
+        { args: { city: 'Tokyo' }, output: { temp: 26, condition: 'sunny' } },
+        { args: { city: 'Atlantis' }, error: { message: 'unknown city' } },
+      ],
+      onNoMatch: 'passthrough',
+    },
+  },
+})
+```
+
+When no case matches, `onNoMatch` decides: `'error'` (default) fails the item with `TOOL_MOCK_ARGS_MISMATCH` — deterministic and never retried, like a replay miss — and `'passthrough'` runs the live tool. Case-served calls appear in the report's `calls` with the `caseIndex` that answered them, and the mock is listed with kind `'cases'`.
+
+Stamped mock runs also persist the mock configuration itself on the experiment record (`metadata.toolReplay.mockConfigs`): data mocks verbatim, function mocks as `{ function: true }` placeholders since code cannot be persisted. This makes mock runs auditable and re-runnable from the stored record alone; `mockedTools` remains the cheap list of mocked names. Note that persisted data mocks include their outputs — if those contain sensitive values, they are stored in the experiments table with the same trust level as item inputs.
+
 ### Divergence report
 
 Every replayed item result carries a `toolReplay` report describing how the run differed from the recording:

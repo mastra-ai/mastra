@@ -136,10 +136,13 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   /**
    * Per-tool mocks, by tool name. Agent targets only. Take precedence over
    * replay queues; tools that are neither mocked nor covered by toolReplay
-   * execute live. Data mocks stub an output or inject an error; an `expect`
-   * asserts how the tool must be called (an unsatisfied expectation fails the
-   * item with TOOL_MOCK_EXPECTATION_FAILED). Function mocks replace execute
-   * entirely and are code-only (they cannot cross the HTTP API).
+   * execute live. Data mocks stub an output, inject an error, or answer
+   * conditionally on args (`cases`, with `onNoMatch` deciding unmatched
+   * calls); an `expect` asserts how the tool must be called (an unsatisfied
+   * expectation fails the item with TOOL_MOCK_EXPECTATION_FAILED). Function
+   * mocks replace execute entirely and are code-only (they cannot cross the
+   * HTTP API). Stamped mock runs persist the mock configuration on the
+   * experiment record (`metadata.toolReplay.mockConfigs`).
    */
   toolMocks?: Record<string, ToolMockConfig>;
 }

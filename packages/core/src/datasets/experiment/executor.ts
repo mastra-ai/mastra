@@ -265,12 +265,14 @@ async function executeAgent(
   const tracingOptions = experimentId ? { metadata: { experimentId } } : undefined;
 
   // Tool replay: fresh state per attempt so retries start with full queues.
-  // A replay-miss error thrown from the hook only surfaces to the model as a
-  // tool-error result, so onMiss: 'error' aborts the run via its own signal.
+  // An error thrown from the hook only surfaces to the model as a tool-error
+  // result, so the deterministic fatal failures (replay miss under onMiss:
+  // 'error', case miss under onNoMatch: 'error') abort the run via their own
+  // signal instead.
   let replayState: ToolReplayState | undefined;
   let hooks: ToolHooks | undefined;
   let replayAbort: AbortController | undefined;
-  let fatalMissError: Error | undefined;
+  let fatalHookFailure: { error: Error; code: 'TOOL_REPLAY_MISS' | 'TOOL_MOCK_ARGS_MISMATCH' } | undefined;
 
   if (toolReplay) {
     replayState = createReplayState(toolReplay.events, toolReplay.sourceTraceId, {
@@ -279,16 +281,18 @@ async function executeAgent(
       mocks: toolReplay.mocks,
     });
     replayAbort = new AbortController();
+    // Keep the FIRST fatal failure: the abort signal's reason is frozen at the
+    // first abort() call, and later failures (parallel tool calls in the same
+    // step still run their hooks) must not make the reported error disagree
+    // with it. Everything is listed in the report regardless.
+    const failFatally = (code: NonNullable<typeof fatalHookFailure>['code']) => (error: Error) => {
+      fatalHookFailure ??= { error, code };
+      replayAbort!.abort(error);
+    };
     hooks = buildReplayHooks(replayState, {
       onMiss: toolReplay.onMiss,
-      onFatalMiss: error => {
-        // Keep the FIRST miss: the abort signal's reason is frozen at the first
-        // abort() call, and later misses (parallel tool calls in the same step
-        // still run their hooks) must not make the reported error disagree
-        // with it. All misses are listed in the report regardless.
-        fatalMissError ??= error;
-        replayAbort!.abort(error);
-      },
+      onFatalMiss: failFatally('TOOL_REPLAY_MISS'),
+      onFatalCaseMiss: failFatally('TOOL_MOCK_ARGS_MISMATCH'),
     });
   }
 
@@ -311,9 +315,9 @@ async function executeAgent(
   // Keep the failure contract: failed executions have output: null (scorers
   // run against output even on errors). The divergence report stays available
   // on ExecutionResult.toolReplay / ItemResult.toolReplay.
-  const fatalMissResult = (traceId: string | null = null): ExecutionResult => ({
+  const fatalHookResult = (traceId: string | null = null): ExecutionResult => ({
     output: null,
-    error: { message: fatalMissError!.message, code: 'TOOL_REPLAY_MISS' },
+    error: { message: fatalHookFailure!.error.message, code: fatalHookFailure!.code },
     traceId,
     toolReplay: composeReport(),
   });
@@ -339,7 +343,7 @@ async function executeAgent(
           ...(hooks ? { hooks } : {}),
         });
   } catch (error) {
-    if (fatalMissError && replayState) return fatalMissResult();
+    if (fatalHookFailure && replayState) return fatalHookResult();
     if (replayState) {
       // Any other failure during replay (provider error, mid-run abort) keeps
       // the divergence report — partial replay and passthrough live-execution
@@ -359,10 +363,11 @@ async function executeAgent(
     throw error;
   }
 
-  // The model may finish the step before the miss abort propagates — a fatal
-  // miss is an item failure even when generate() resolved. The resolved run's
-  // traceId is kept so the diverging attempt stays debuggable from its trace.
-  if (fatalMissError && replayState) return fatalMissResult((rawResult as AgentGenerateResult).traceId ?? null);
+  // The model may finish the step before the abort propagates — a fatal hook
+  // failure (replay miss or case miss) is an item failure even when generate()
+  // resolved. The resolved run's traceId is kept so the diverging attempt
+  // stays debuggable from its trace.
+  if (fatalHookFailure && replayState) return fatalHookResult((rawResult as AgentGenerateResult).traceId ?? null);
 
   // Narrow to the common fields we need — both v1 and v2 results share these
   const result = rawResult as AgentGenerateResult;
@@ -372,9 +377,10 @@ async function executeAgent(
   const replayReport = replayState ? composeReport() : undefined;
 
   // Post-run assertion failures. Error-code precedence for one attempt is:
-  // TOOL_REPLAY_MISS (run aborted mid-flight, handled above) >
-  // TOOL_MOCK_EXPECTATION_FAILED > TOOL_REPLAY_UNCONSUMED — the report always
-  // carries the full picture regardless of which code wins.
+  // TOOL_REPLAY_MISS / TOOL_MOCK_ARGS_MISMATCH (run aborted mid-flight, first
+  // failure wins, handled above) > TOOL_MOCK_EXPECTATION_FAILED >
+  // TOOL_REPLAY_UNCONSUMED — the report always carries the full picture
+  // regardless of which code wins.
   // Unsatisfied mock expectations fail the item — an assertion that doesn't
   // fail isn't an assertion. Deterministic (the run is over), so the runner's
   // retry loop skips this code, like replay misses.
