@@ -8,7 +8,7 @@ import type {
 import { wrapLanguageModel as wrapLanguageModelV5 } from '@internal/ai-sdk-v5';
 import type { LanguageModelV3, LanguageModelMiddleware as LanguageModelV3Middleware } from '@internal/ai-v6';
 import { wrapLanguageModel as wrapLanguageModelV6 } from '@internal/ai-v6';
-import { MessageList, TripWire, aiV5ModelMessageToV2PromptMessage } from '@mastra/core/agent';
+import { MessageList, TripWire, aiV5ModelMessageToV2PromptMessage, attachFatal } from '@mastra/core/agent';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/di';
 import type { MemoryConfig, SemanticRecall as SemanticRecallConfig } from '@mastra/core/memory';
@@ -501,9 +501,9 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
               systemMessages: messageList.getSystemMessages(),
               messageList,
               requestContext,
-              abort: (reason?: string): never => {
+              abort: attachFatal((reason?: string): never => {
                 throw new TripWire(reason || 'Aborted by processor');
-              },
+              }),
             } as ProcessInputArgs);
           } catch (error) {
             if (error instanceof TripWire) {
@@ -617,9 +617,9 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
               },
               retryCount: 0,
               requestContext,
-              abort: (reason?: string): never => {
+              abort: attachFatal((reason?: string): never => {
                 throw new TripWire(reason || 'Aborted by processor');
-              },
+              }),
             } as ProcessOutputResultArgs);
           } catch (error) {
             if (error instanceof TripWire) {
@@ -698,9 +698,9 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
                     streamParts: state.streamParts,
                     state: state.customState,
                     requestContext,
-                    abort: (reason?: string): never => {
+                    abort: attachFatal((reason?: string): never => {
                       throw new TripWire(reason || 'Aborted by processor');
-                    },
+                    }),
                   } as ProcessOutputStreamArgs);
 
                   // If result is null/undefined, filter out this chunk
@@ -798,9 +798,9 @@ export function createProcessorMiddleware(options: ProcessorMiddlewareOptions): 
                   result: outputResult,
                   retryCount: 0,
                   requestContext,
-                  abort: (reason?: string): never => {
+                  abort: attachFatal((reason?: string): never => {
                     throw new TripWire(reason || 'Aborted by processor');
-                  },
+                  }),
                 } as ProcessOutputResultArgs);
               } catch (error) {
                 if (error instanceof TripWire) {

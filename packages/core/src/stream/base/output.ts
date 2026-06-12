@@ -1,5 +1,6 @@
 import { EventEmitter } from 'node:events';
 import { ReadableStream, TransformStream } from 'node:stream/web';
+import { isFatalError } from '../../agent/fatal-error';
 import { coreContentToString } from '../../agent/message-list';
 import type { MessageList, MastraDBMessage } from '../../agent/message-list';
 import { TripWire } from '../../agent/trip-wire';
@@ -953,7 +954,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     text: '',
                   });
                 } else {
-                  self.#error = getErrorFromUnknown(error, {
+                  // Unwrap FatalError so callers receive the original user error, not the wrapper.
+                  const surfaced = isFatalError(error) && error.cause instanceof Error ? error.cause : error;
+                  self.#error = getErrorFromUnknown(surfaced, {
                     fallbackMessage: 'Unknown error in stream',
                   });
                   self.resolvePromises({

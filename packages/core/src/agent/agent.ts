@@ -121,6 +121,7 @@ import type {
   DelegationStartContext,
   DelegationCompleteContext,
 } from './agent.types';
+import { isFatalError } from './fatal-error';
 import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
@@ -3530,6 +3531,12 @@ export class Agent<
             processorId: error.processorId,
             retry: error.options?.retry,
           });
+        } else if (isFatalError(error)) {
+          // Fatal abort: re-throw the FatalError sentinel as-is. The outer
+          // generate()/stream() boundary detects `result.fatal` and re-throws
+          // the user-provided `cause` unwrapped to preserve class identity
+          // and custom properties.
+          throw error;
         } else {
           throw new MastraError(
             {
@@ -6865,6 +6872,13 @@ export class Agent<
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
+        // If the underlying failure carries a FatalError marker, propagate the
+        // original user error instance unwrapped so callers can use
+        // `instanceof` and access custom properties directly.
+        const fatal = (result as { fatal?: { cause: unknown } }).fatal;
+        if (fatal && fatal.cause instanceof Error) {
+          throw fatal.cause;
+        }
         throw new MastraError(
           {
             id: 'AGENT_GENERATE_FAILED',
@@ -7272,6 +7286,13 @@ export class Agent<
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
+        // If the underlying failure carries a FatalError marker, propagate the
+        // original user error instance unwrapped so callers can use
+        // `instanceof` and access custom properties directly.
+        const fatal = (result as { fatal?: { cause: unknown } }).fatal;
+        if (fatal && fatal.cause instanceof Error) {
+          throw fatal.cause;
+        }
         throw new MastraError(
           {
             id: 'AGENT_STREAM_FAILED',
@@ -7597,6 +7618,13 @@ export class Agent<
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
+        // If the underlying failure carries a FatalError marker, propagate the
+        // original user error instance unwrapped so callers can use
+        // `instanceof` and access custom properties directly.
+        const fatal = (result as { fatal?: { cause: unknown } }).fatal;
+        if (fatal && fatal.cause instanceof Error) {
+          throw fatal.cause;
+        }
         throw new MastraError(
           {
             id: 'AGENT_STREAM_FAILED',
@@ -7740,6 +7768,13 @@ export class Agent<
 
     if (result.status !== 'success') {
       if (result.status === 'failed') {
+        // If the underlying failure carries a FatalError marker, propagate the
+        // original user error instance unwrapped so callers can use
+        // `instanceof` and access custom properties directly.
+        const fatal = (result as { fatal?: { cause: unknown } }).fatal;
+        if (fatal && fatal.cause instanceof Error) {
+          throw fatal.cause;
+        }
         throw new MastraError(
           {
             id: 'AGENT_GENERATE_FAILED',

@@ -1,3 +1,4 @@
+import { isFatalError } from '../agent/fatal-error';
 import { TripWire } from '../agent/trip-wire';
 import type { ActorSignal } from '../auth/ee';
 import { RequestContext } from '../di';
@@ -41,6 +42,7 @@ import type {
   StepFailure,
   StepFlowEntry,
   StepResult,
+  StepFatalInfo,
   StepTripwireInfo,
   TimeTravelExecutionParams,
 } from './types';
@@ -412,6 +414,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           error: Error;
           endedAt: number;
           tripwire?: StepTripwireInfo;
+          fatal?: StepFatalInfo;
         };
       }
   > {
@@ -465,6 +468,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
                       processorId: e.processorId,
                     }
                   : undefined,
+              // Preserve FatalError data (the original user error instance) so the
+              // processor runner can re-throw it unwrapped to the agent caller.
+              // Travels in-process; not serialized through the workflow result envelope.
+              fatal: isFatalError(e)
+                ? {
+                    cause: e.cause,
+                    processorId: e.processorId,
+                  }
+                : undefined,
             },
           };
         }
@@ -573,7 +585,18 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     } else if (lastOutput.status === 'failed') {
       // Check if the failure was due to a TripWire
       const tripwireData = lastOutput?.tripwire;
-      if (tripwireData instanceof TripWire) {
+      // Check if the failure was due to a FatalError (raw thrown FatalError or
+      // a `fatal` marker attached by executeStepWithRetry)
+      const errAsFatal = isFatalError(error) ? error : undefined;
+      const fatalData =
+        lastOutput?.fatal ??
+        (errAsFatal ? { cause: errAsFatal.cause, processorId: errAsFatal.processorId } : undefined);
+      if (fatalData) {
+        // Keep status as 'failed' but attach the original user error instance so
+        // the processor runner can re-throw it unwrapped.
+        base.fatal = fatalData;
+        base.error = this.formatResultError(error, lastOutput);
+      } else if (tripwireData instanceof TripWire) {
         // Use 'tripwire' status instead of 'failed' for tripwire errors (TripWire instance)
         base.status = 'tripwire';
         base.tripwire = {

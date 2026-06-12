@@ -1,7 +1,7 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MessageInput } from '@mastra/core/agent/message-list';
 import { isProcessorWorkflow } from '@mastra/core/processors';
-import type { Processor, ProcessorWorkflow } from '@mastra/core/processors';
+import type { Processor, ProcessorWorkflow, ProcessorAbortFn } from '@mastra/core/processors';
 
 import { HTTPException } from '../http-exception';
 import {
@@ -366,11 +366,19 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
       let tripwireReason: string | undefined;
       let tripwireMetadata: unknown;
 
-      const abort = (reason?: string, options?: { retry?: boolean; metadata?: unknown }) => {
+      // `abort.fatal` mirrors @mastra/core's `attachFatal` but is defined locally so
+      // @mastra/server keeps a wide @mastra/core peer-dependency range (the exported
+      // `attachFatal` helper is newer than the declared floor). This isolated test
+      // route surfaces the thrown error via `handleError`, so it does not need core's
+      // `FatalError` sentinel — re-throwing the original error is sufficient here.
+      const abort = ((reason?: string, options?: { retry?: boolean; metadata?: unknown }): never => {
         tripwireTriggered = true;
         tripwireReason = reason;
         tripwireMetadata = options?.metadata;
         throw new Error(`TRIPWIRE:${reason || 'Processor aborted'}`);
+      }) as ProcessorAbortFn;
+      abort.fatal = (error: unknown): never => {
+        throw error instanceof Error ? error : new Error(String(error));
       };
 
       // Build the context based on phase

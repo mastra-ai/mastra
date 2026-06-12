@@ -91,6 +91,22 @@ export interface StepTripwireInfo {
   processorId?: string;
 }
 
+/**
+ * Marker carried on a failed step (and lifted to the workflow result) when
+ * the step terminated via `FatalError`. Preserves the original user error
+ * instance so the processor runner can re-throw it unwrapped, surviving
+ * serialization at the workflow result boundary.
+ *
+ * Marked `@internal` because this only travels in-process between the
+ * workflow engine and the processor runner; external consumers should
+ * observe the unwrapped error thrown to the agent caller instead.
+ */
+export interface StepFatalInfo {
+  /** The original error instance the user passed to `abort.fatal(err)` (or threw as FatalError). */
+  cause: unknown;
+  processorId?: string;
+}
+
 export type StepFailure<P, R, S, T> = {
   status: 'failed';
   error: Error;
@@ -105,6 +121,8 @@ export type StepFailure<P, R, S, T> = {
   metadata?: StepMetadata;
   /** Tripwire data when step failed due to processor rejection */
   tripwire?: StepTripwireInfo;
+  /** @internal Fatal-abort marker preserving the original user error instance for in-process propagation. */
+  fatal?: StepFatalInfo;
 };
 
 export type StepSuspended<P, S, T> = {
@@ -1082,6 +1100,8 @@ export type FormattedWorkflowResult = {
   suspendPayload?: any;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
+  /** @internal Fatal-abort marker preserving the original user error instance for in-process propagation. */
+  fatal?: StepFatalInfo;
   /** The sequence of step IDs executed in this run */
   stepExecutionPath?: string[];
 };

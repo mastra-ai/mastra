@@ -3,6 +3,7 @@ import { ReadableStream } from 'node:stream/web';
 import type { CoreMessage } from '@internal/ai-sdk-v4';
 import { z } from 'zod/v4';
 import type { Agent } from '../../agent/agent';
+import { attachFatal } from '../../agent/fatal-error';
 import { MessageList, messagesAreEqual } from '../../agent/message-list';
 import type { MastraDBMessage, MessageInput } from '../../agent/message-list';
 import { isAgentCompatible } from '../../agent/subagent';
@@ -815,10 +816,11 @@ function createStepFromProcessor<TProcessorId extends string>(
         abortSignal,
       } = input;
 
-      // Create a minimal abort function that throws TripWire
-      const abort = (reason?: string, options?: { retry?: boolean; metadata?: unknown }): never => {
+      // Create a minimal abort function that throws TripWire, plus a `.fatal()`
+      // escape hatch that propagates the original user error unwrapped.
+      const abort = attachFatal((reason?: string, options?: { retry?: boolean; metadata?: unknown }): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-      };
+      }, processor.id);
       const initialMessageId = messageId;
       let currentMessageId = messageId;
       const rotateCurrentResponseMessageId = rotateResponseMessageId

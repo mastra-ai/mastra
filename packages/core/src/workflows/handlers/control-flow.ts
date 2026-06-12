@@ -187,11 +187,12 @@ export async function executeParallel(
 
   const hasSuspended = results.find(result => result.status === 'suspended');
   if (hasFailed) {
-    // Preserve tripwire property for proper status conversion in fmtReturnValue
+    // Preserve tripwire/fatal property for proper status conversion in fmtReturnValue
     execResults = {
       status: 'failed',
       error: hasFailed.error,
       tripwire: (hasFailed as any).tripwire,
+      fatal: (hasFailed as any).fatal,
     };
   } else if (hasSuspended) {
     execResults = {
@@ -488,11 +489,12 @@ export async function executeConditional(
   const hasFailed = results.find(result => result.status === 'failed') as StepFailure<any, any, any, any>;
   const hasSuspended = results.find(result => result.status === 'suspended');
   if (hasFailed) {
-    // Preserve tripwire property for proper status conversion in fmtReturnValue
+    // Preserve tripwire/fatal property for proper status conversion in fmtReturnValue
     execResults = {
       status: 'failed',
       error: hasFailed.error,
       tripwire: (hasFailed as any).tripwire,
+      fatal: (hasFailed as any).fatal,
     };
   } else if (hasSuspended) {
     execResults = {

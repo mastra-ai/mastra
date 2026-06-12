@@ -1,5 +1,6 @@
 import type { LanguageModelV2Prompt, LanguageModelV2CallWarning } from '@ai-sdk/provider-v5';
 import type { StepResult } from '@internal/ai-sdk-v5';
+import { FatalError, attachFatal, isFatalError } from '../agent/fatal-error';
 import type { MastraDBMessage, MessageInput } from '../agent/message-list';
 import { MessageList, messagesAreEqual } from '../agent/message-list';
 import { createSignal } from '../agent/signals';
@@ -39,6 +40,7 @@ import type {
   OutputResult,
   ProcessInputStepResult,
   Processor,
+  ProcessorAbortFn,
   ProcessorMessageResult,
   ProcessorStreamWriter,
   ProcessorViolation,
@@ -346,7 +348,7 @@ export class ProcessorRunner {
     steps: Array<StepResult<any>>;
     requestContext?: RequestContext;
     writer?: ProcessorStreamWriter;
-    abort: (reason?: string, options?: TripWireOptions) => never;
+    abort: ProcessorAbortFn;
     processorState: ProcessorState;
     memory?: MastraMemory;
     resourceId?: string;
@@ -471,9 +473,9 @@ export class ProcessorRunner {
     retryCount: number;
   }): Promise<void> {
     for (const processor of workflow.__stateSignalProcessors ?? []) {
-      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+      const abort = attachFatal(<TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-      };
+      }, processor.id);
 
       await this.runComputeStateSignal({
         processor,
@@ -521,6 +523,15 @@ export class ProcessorRunner {
       requestContext,
       outputWriter: writer ? chunk => writer.custom(chunk) : undefined,
     });
+
+    // Check for fatal status - a processor (or step) inside the workflow called
+    // abort.fatal(err) (or threw a FatalError). Re-throw as a FatalError so that
+    // outer catch blocks (which look for FatalError specifically) detect it and
+    // propagate the original user error unwrapped to the agent caller.
+    const fatalData = (result as { fatal?: { cause: unknown; processorId?: string } }).fatal;
+    if (fatalData) {
+      throw new FatalError(fatalData.cause, fatalData.processorId);
+    }
 
     // Check for tripwire status - this means a processor in the workflow called abort()
     if (result.status === 'tripwire') {
@@ -616,9 +627,9 @@ export class ProcessorRunner {
 
       // Handle regular processor
       const processor = processorOrWorkflow;
-      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+      const abort = attachFatal(<TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-      };
+      }, processor.id);
 
       // Use the processOutputResult method if available
       const processMethod = processor.processOutputResult?.bind(processor);
@@ -820,6 +831,9 @@ export class ProcessorRunner {
                 processorId: error.processorId || workflowId,
               };
             }
+            if (isFatalError(error)) {
+              throw error;
+            }
             this.logger.error('Output processor workflow failed', { agent: this.agentName, workflowId, error });
           }
           continue;
@@ -847,9 +861,12 @@ export class ProcessorRunner {
               part: processedPart as ChunkType,
               streamParts: state.streamParts as ChunkType[],
               state: state.customState,
-              abort: <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
-                throw new TripWire(reason || `Stream part blocked by ${processor.id}`, options, processor.id);
-              },
+              abort: attachFatal(
+                <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+                  throw new TripWire(reason || `Stream part blocked by ${processor.id}`, options, processor.id);
+                },
+                processor.id,
+              ),
               ...createObservabilityContext({ currentSpan: state.span }),
               requestContext,
               messageList,
@@ -888,6 +905,9 @@ export class ProcessorRunner {
           // End span with error
           const state = processorStates.get(processor.id);
           state?.span?.error({ error: error as Error, endSpan: true });
+          if (isFatalError(error)) {
+            throw error;
+          }
           // Log error but continue with original part
           this.logger.error('Output processor failed', { agent: this.agentName, processorId: processor.id, error });
         }
@@ -909,6 +929,11 @@ export class ProcessorRunner {
       // End all spans on fatal error
       for (const state of processorStates.values()) {
         state.span?.error({ error: error as Error, endSpan: true });
+      }
+      // FatalError must propagate so callers receive the original user error;
+      // swallowing it here would convert a fatal abort into a no-op.
+      if (isFatalError(error)) {
+        throw error;
       }
       return { part, blocked: false };
     }
@@ -1123,9 +1148,9 @@ export class ProcessorRunner {
 
       // Handle regular processor
       const processor = processorOrWorkflow;
-      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+      const abort = attachFatal(<TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-      };
+      }, processor.id);
 
       // Use the processInput method if available
       const processMethod = processor.processInput?.bind(processor);
@@ -1413,9 +1438,9 @@ export class ProcessorRunner {
         continue;
       }
 
-      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+      const abort = attachFatal(<TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-      };
+      }, processor.id);
 
       // Pass only the untagged system messages — tagged buckets belong to
       // their owning processors and are merged back in at final model assembly.
@@ -1640,9 +1665,9 @@ export class ProcessorRunner {
       const processMethod = processor.processLLMRequest?.bind(processor);
       if (!processMethod) continue;
 
-      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+      const abort = attachFatal(<TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-      };
+      }, processor.id);
 
       try {
         const processorState = this.getProcessorState(processor.id);
@@ -1724,9 +1749,9 @@ export class ProcessorRunner {
       const processMethod = processor.processLLMResponse?.bind(processor);
       if (!processMethod) continue;
 
-      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+      const abort = attachFatal(<TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-      };
+      }, processor.id);
 
       try {
         const processorState = this.getProcessorState(processor.id);
@@ -1863,9 +1888,9 @@ export class ProcessorRunner {
         continue;
       }
 
-      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+      const abort = attachFatal(<TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-      };
+      }, processor.id);
 
       const currentSystemMessages = messageList.getSystemMessages();
       const defaultUsage: LanguageModelUsage = {
@@ -2041,9 +2066,9 @@ export class ProcessorRunner {
         continue;
       }
 
-      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+      const abort = attachFatal(<TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
-      };
+      }, processor.id);
 
       const processableMessages: MastraDBMessage[] = messageList.get.all.db();
       const systemMessagesBefore = messageList.getAllSystemMessages();

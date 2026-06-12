@@ -6,7 +6,13 @@ import type { MastraScorers } from '@mastra/core/evals';
 import type { CoreMessage } from '@mastra/core/llm';
 import type { TracingContext } from '@mastra/core/observability';
 import { EntityType, SpanType } from '@mastra/core/observability';
-import type { Processor, ProcessorStepOutput, ProcessorStepInputSchema, OutputResult } from '@mastra/core/processors';
+import type {
+  Processor,
+  ProcessorStepOutput,
+  ProcessorStepInputSchema,
+  OutputResult,
+  ProcessorAbortFn,
+} from '@mastra/core/processors';
 import { ProcessorRunner, ProcessorStepOutputSchema, ProcessorStepSchema } from '@mastra/core/processors';
 import type { InferPublicSchema, PublicSchema, StandardSchemaWithJSON } from '@mastra/core/schema';
 import { toStandardSchema } from '@mastra/core/schema';
@@ -617,9 +623,21 @@ function createStepFromProcessor<TProcessorId extends string>(
         usage,
       } = input;
 
-      // Create a minimal abort function that throws TripWire
-      const abort = (reason?: string, options?: { retry?: boolean; metadata?: unknown }): never => {
+      // Create a minimal abort function that throws TripWire.
+      // `abort.fatal` mirrors @mastra/core's `attachFatal` but is defined locally so
+      // @mastra/inngest keeps a wide @mastra/core peer-dependency range (the exported
+      // `attachFatal`/`FatalError` values are newer than the declared core floor).
+      // The thrown error is shaped so core's cross-realm `isFatalError` recognizes it,
+      // letting the original user error propagate unwrapped to the agent caller.
+      const abort = ((reason?: string, options?: { retry?: boolean; metadata?: unknown }): never => {
         throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      }) as ProcessorAbortFn;
+      abort.fatal = (error: unknown): never => {
+        const fatal = new Error(error instanceof Error ? error.message : String(error ?? 'Fatal abort'));
+        fatal.name = 'FatalError';
+        (fatal as { cause?: unknown }).cause = error;
+        (fatal as { processorId?: string }).processorId = processor.id;
+        throw fatal;
       };
 
       // Early return if processor doesn't implement this phase - no span created
