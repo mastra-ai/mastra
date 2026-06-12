@@ -12,6 +12,7 @@ export type ScenarioName =
   | 'commit-attribution-prompt'
   | 'custom-config-dir'
   | 'custom-pack-import-overwrite'
+  | 'custom-pack-import-rename'
   | 'custom-pack-rename-active'
   | 'custom-provider-delete'
   | 'custom-provider-edit-share-import'

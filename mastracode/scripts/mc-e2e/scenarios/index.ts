@@ -10,6 +10,7 @@ import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
 import { commitAttributionPromptScenario } from './commit-attribution-prompt.js';
 import { customConfigDirScenario } from './custom-config-dir.js';
 import { customPackImportOverwriteScenario } from './custom-pack-import-overwrite.js';
+import { customPackImportRenameScenario } from './custom-pack-import-rename.js';
 import { customPackRenameActiveScenario } from './custom-pack-rename-active.js';
 import { customProviderDeleteScenario } from './custom-provider-delete.js';
 import { customProviderEditShareImportScenario } from './custom-provider-edit-share-import.js';
@@ -95,6 +96,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'commit-attribution-prompt': commitAttributionPromptScenario,
   'custom-config-dir': customConfigDirScenario,
   'custom-pack-import-overwrite': customPackImportOverwriteScenario,
+  'custom-pack-import-rename': customPackImportRenameScenario,
   'custom-pack-rename-active': customPackRenameActiveScenario,
   'custom-provider-delete': customProviderDeleteScenario,
   'custom-provider-edit-share-import': customProviderEditShareImportScenario,

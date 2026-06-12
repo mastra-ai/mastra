@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Custom pack import rename coverage (2026-06-12)
+
+Added `custom-pack-import-rename` as the 80th checked-in TUI e2e scenario. The scenario seeds a custom OpenAI-compatible provider plus an existing saved custom pack, imports a colliding `mastra-pack:` payload through `/models`, selects the Rename collision branch, enters a new pack name, and proves `settings.json` retains the original pack while activating the renamed imported pack with imported model defaults.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test custom-pack-import-rename
+```
+
+Break validations:
+
+- Skipping the renamed import `name`/`id` mutation applied the import under the original pack name and failed the renamed confirmation assertion.
+- Misrouting the Rename collision action as overwrite skipped the rename prompt and failed the modal-flow assertion.
+- Replacing the existing saved pack instead of pushing the renamed import left only one custom pack and failed the persisted two-pack proof.
+
+The Settings onboarding/global-settings row remains `needs-follow-up`; this chunk closes import-collision Rename breadth, while custom-pack completion, model-selection cancellation/env-precedence, browser wizard/startup restore, and reload parity remain.
+
+
 ### MCP skipped validation coverage (2026-06-12)
 
 Added `mcp-skipped-validation` as the 79th checked-in TUI e2e scenario. The scenario seeds project `.mastracode/mcp.json` with invalid MCP server entries covering command+URL ambiguity, malformed URL parsing, invalid OAuth redirect validation, and missing command/url fields. It launches a real MCP-enabled TUI entrypoint, asserts `/mcp status` renders all skipped validation reasons, then opens the interactive `/mcp` selector and asserts the same skipped rows are visible there.
