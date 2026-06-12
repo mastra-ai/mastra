@@ -163,6 +163,17 @@ export function DatasetExperimentsComparison({
 
   return (
     <div className="grid gap-10">
+      {comparison.warnings && comparison.warnings.length > 0 && (
+        <Notice variant="warning" title="Compare with care">
+          <Notice.Message>
+            {comparison.warnings.map((warning, i) => (
+              <span key={i} className="block">
+                {warning}
+              </span>
+            ))}
+          </Notice.Message>
+        </Notice>
+      )}
       {/* Experiment infos */}
       {expA && expB && (
         <div className={cn('relative grid xl:grid-cols-[1fr_auto_1fr] gap-4 xl:gap-0')}>
