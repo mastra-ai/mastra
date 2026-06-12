@@ -11,6 +11,7 @@ import { customConfigDirScenario } from './custom-config-dir.js';
 import { customPackImportOverwriteScenario } from './custom-pack-import-overwrite.js';
 import { customPackRenameActiveScenario } from './custom-pack-rename-active.js';
 import { customProviderDeleteScenario } from './custom-provider-delete.js';
+import { customProviderEditShareImportScenario } from './custom-provider-edit-share-import.js';
 import { customProviderManagementScenario } from './custom-provider-management.js';
 import { customSlashCommandScenario } from './custom-slash-command.js';
 import { debugLoggingScenario } from './debug-logging.js';
@@ -92,6 +93,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'custom-pack-import-overwrite': customPackImportOverwriteScenario,
   'custom-pack-rename-active': customPackRenameActiveScenario,
   'custom-provider-delete': customProviderDeleteScenario,
+  'custom-provider-edit-share-import': customProviderEditShareImportScenario,
   'custom-provider-management': customProviderManagementScenario,
   'custom-slash-command': customSlashCommandScenario,
   'debug-logging': debugLoggingScenario,

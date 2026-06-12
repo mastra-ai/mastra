@@ -13,6 +13,7 @@ export type ScenarioName =
   | 'custom-pack-import-overwrite'
   | 'custom-pack-rename-active'
   | 'custom-provider-delete'
+  | 'custom-provider-edit-share-import'
   | 'custom-provider-management'
   | 'custom-slash-command'
   | 'debug-logging'

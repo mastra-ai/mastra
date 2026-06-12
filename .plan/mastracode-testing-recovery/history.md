@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Custom provider edit/share/import coverage (2026-06-12)
+
+Added `custom-provider-edit-share-import` as the 76th checked-in TUI e2e scenario. The scenario seeds a custom OpenAI-compatible provider plus a saved custom model pack, shares the pack through the real `/models` custom-pack action menu, decodes the clipboard `mastra-pack:` payload through shell passthrough, starts an import of the same shared pack and selects the collision `Cancel` action, then edits the provider name, base URL, and API key through `/custom-providers` default-valued modal prompts. Final shell assertions prove the shared import did not activate a pack while the provider edit persisted and preserved model IDs.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test custom-provider-edit-share-import
+```
+
+Break validations:
+
+- Corrupting `serializePack()` wrote the wrong model ID to the clipboard payload and failed the decoded `PACK_CLIPBOARD_MODELS` assertion.
+- Letting import collision `Cancel` fall through activated the imported pack and failed the persisted `CUSTOM_IMPORT_ACTIVE=null` assertion.
+- Skipping `saveSettings()` in provider edit kept the original provider name/URL/API key in `settings.json` and failed the persisted provider assertion.
+
+The settings and custom-provider rows remain `needs-follow-up`; this chunk closes provider edit plus custom-pack share/import-cancel modal breadth, while custom-pack completion/import-rename, invalid provider URL/duplicate-name branches, remove-model, model-selection cancellation/env precedence, browser wizard/startup restore, and reload parity remain.
+
+
 ### MCP reload config coverage (2026-06-12)
 
 Added `mcp-reload-config` as the 75th checked-in TUI e2e scenario. The scenario starts from a hermetic project `.mastracode/mcp.json` containing a failing stdio MCP server, launches Mastra Code, verifies startup and `/mcp status` show the `reload_before [stdio]` failure, rewrites the project config via shell passthrough to a local header-protected Streamable HTTP MCP server, runs `/mcp reload`, and verifies `/mcp status` renders `reload_after [http]` plus the `reload_after_reload_probe` tool.
