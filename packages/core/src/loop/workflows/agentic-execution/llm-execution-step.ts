@@ -2024,15 +2024,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // excluded 'length' from shouldContinue; this guard prevents hasPendingToolCalls from
       // inadvertently re-enabling it.
       // See: https://github.com/mastra-ai/mastra/issues/15717
-      // `length` truncation and `content-filter` refusals must never be
-      // overridden by a pending tool call: retrying re-sends the same request
-      // (reproducing the truncation, or re-triggering the same refusal) and the
-      // loop spins until maxSteps — or forever when maxSteps is unset. Note we
-      // deliberately do NOT exclude `stop` here: some models return
-      // finishReason='stop' alongside tool calls, which the loop must process.
+      // `error` failures, `length` truncation, and `content-filter` refusals
+      // must never be overridden by a pending tool call: retrying re-sends the
+      // same request (reproducing the failure/truncation, or re-triggering the
+      // same refusal) and the loop spins until maxSteps — or forever when
+      // maxSteps is unset. Note we deliberately do NOT exclude `stop` here:
+      // some models return finishReason='stop' alongside tool calls, which the
+      // loop must process.
       const hasPendingToolCalls =
         toolCalls &&
         toolCalls.some(tc => !tc.providerExecuted) &&
+        finishReason !== 'error' &&
         finishReason !== 'length' &&
         finishReason !== 'content-filter';
       const shouldContinue =

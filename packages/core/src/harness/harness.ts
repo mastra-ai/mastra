@@ -2923,7 +2923,8 @@ export class Harness<TState = {}> {
           // explicit terminal error rather than a silent `complete`. Otherwise
           // the run ends with no final message and no error, leaving the user
           // unable to tell whether it completed, failed, or is still active.
-          const errorMessage = describeNonSuccessFinishReason(finishReason, chunk.payload?.providerMetadata);
+          const finishProviderMetadata = chunk.payload?.metadata?.providerMetadata ?? chunk.payload?.providerMetadata;
+          const errorMessage = describeNonSuccessFinishReason(finishReason, finishProviderMetadata);
           if (errorMessage) {
             state.currentMessage.stopReason = 'error';
             state.currentMessage.errorMessage = errorMessage;
