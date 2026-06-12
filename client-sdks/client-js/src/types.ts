@@ -2605,26 +2605,50 @@ export interface DatasetRecord {
 
 // Re-exported from @mastra/core/datasets for convenience: the divergence
 // report shape carried by the top-level `toolReplay` field of replay-run
-// experiment results, plus the replay/mock config and report sub-types.
+// experiment results, plus the replay/mock config and report sub-types and
+// the experiment-metadata marker stamped on replay/mock runs.
 export type {
   ToolReplayReport,
   ToolReplayOnMiss,
   ToolReplayMatching,
+  ToolReplayCall,
+  ToolReplayEvent,
+  ToolReplayMiss,
+  ToolReplayArgMismatch,
+  ToolReplayExperimentMarker,
   ToolMockConfig,
+  ToolMockDataConfig,
+  ToolMockFunction,
   ToolMockExpectation,
   ToolMockUsage,
   ToolMockExpectationResult,
 } from '@mastra/core/datasets';
+// Value re-export (the package already re-exports core values, e.g.
+// `RequestContext`): parses the runner-stamped replay/mock marker out of
+// `DatasetExperiment.metadata`. Prefer it over reading `metadata.toolReplay`
+// directly — a user-owned `toolReplay` metadata key that is not the stamped
+// shape returns null, so live runs are never misclassified.
+export { getToolReplayMarker } from '@mastra/core/datasets';
 
 export interface DatasetExperiment {
   id: string;
   name?: string;
   description?: string;
-  /** Arbitrary experiment metadata. Experiments run with tool replay or tool mocks carry a `toolReplay` marker here. */
+  /**
+   * Arbitrary experiment metadata, plus runner-stamped keys:
+   * - `toolReplay` — marks replay/mock runs. Parse it with the re-exported
+   *   `getToolReplayMarker(experiment.metadata)` helper, which returns a
+   *   `ToolReplayExperimentMarker` (`fromExperimentId`, `onMiss`, `matching`,
+   *   `mockedTools`) or null for live runs.
+   * - `failureReason` — `{ id, message }` recording why an async-triggered
+   *   experiment failed during setup. The trigger route answers `pending`
+   *   before setup runs, so this is the only place the reason surfaces over
+   *   HTTP (read it via `getDatasetExperiment`).
+   */
   metadata?: Record<string, unknown>;
   datasetId: string | null;
   datasetVersion: number | null;
-  agentVersion: string | null;
+  agentVersion?: string | null;
   targetType: 'agent' | 'workflow' | 'scorer' | 'processor';
   targetId: string;
   status: 'pending' | 'running' | 'completed' | 'failed';
@@ -2657,6 +2681,7 @@ export interface DatasetExperimentResult {
   input: unknown;
   output: unknown | null;
   groundTruth: unknown | null;
+  expectedTrajectory?: unknown;
   error: { message: string; stack?: string; code?: string } | null;
   startedAt: string | Date;
   completedAt: string | Date;
@@ -2666,7 +2691,13 @@ export interface DatasetExperimentResult {
   tags: string[] | null;
   /** Tool replay divergence report — present only for items executed with tool replay or tool mocks. */
   toolReplay?: ToolReplayReport | null;
-  scores: Array<{
+  /**
+   * Per-scorer scores. NOT returned by the results endpoints today — the
+   * list/update result responses carry no `scores` field, so always guard
+   * before use. (Scores for the synchronous trigger path live on
+   * `triggerDatasetExperiment`'s own return type instead.)
+   */
+  scores?: Array<{
     scorerId: string;
     scorerName: string;
     score: number | null;
@@ -2716,6 +2747,12 @@ export interface AddDatasetItemParams {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
+  /**
+   * Arbitrary item metadata. For tool replay, set `metadata.replayTraceId`
+   * to pin this item to an explicit recorded trace — it takes precedence
+   * over the `toolReplay.fromExperimentId` per-item mapping, and
+   * `toolReplay: {}` with per-item trace IDs alone is a valid replay mode.
+   */
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
 }
@@ -2727,6 +2764,12 @@ export interface UpdateDatasetItemParams {
   groundTruth?: unknown;
   expectedTrajectory?: unknown;
   requestContext?: Record<string, unknown>;
+  /**
+   * Arbitrary item metadata. For tool replay, set `metadata.replayTraceId`
+   * to pin this item to an explicit recorded trace — it takes precedence
+   * over the `toolReplay.fromExperimentId` per-item mapping, and
+   * `toolReplay: {}` with per-item trace IDs alone is a valid replay mode.
+   */
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
 }
@@ -2773,8 +2816,13 @@ export interface TriggerDatasetExperimentParams {
   version?: number;
   /**
    * Run only these dataset item IDs (after version resolution) — for subset
-   * or single-item re-runs. Unknown IDs are ignored; if nothing matches, the
-   * experiment fails at setup with `EXPERIMENT_NO_ITEMS`.
+   * or single-item re-runs. An empty array is rejected with a 400 at the
+   * boundary. Unknown IDs are ignored; if nothing matches, the trigger still
+   * answers `pending` and the experiment then fails asynchronously during
+   * setup — no error code crosses HTTP. Instead the experiment record is
+   * marked `failed` with `metadata.failureReason` set to
+   * `{ id: 'EXPERIMENT_NO_ITEMS', message }`, readable via
+   * `getDatasetExperiment`.
    */
   itemIds?: string[];
   agentVersion?: string;
@@ -2789,6 +2837,18 @@ export interface TriggerDatasetExperimentParams {
    * Replay recorded tool outputs from a prior traced run instead of executing
    * live tools. Agent targets only. Requires a server with tool replay
    * support; older servers ignore this field and run the experiment live.
+   *
+   * `toolReplay: {}` (no `fromExperimentId`) is a valid mode: each item's
+   * recording is resolved from its own `metadata.replayTraceId`. When both
+   * are present, a per-item `metadata.replayTraceId` wins over the
+   * `fromExperimentId` mapping.
+   *
+   * The trigger route answers `pending` before setup runs, so replay setup
+   * failures (unknown `fromExperimentId`, a source experiment that is itself
+   * a replay/mock run, no observability or experiments store) do not surface
+   * as HTTP errors. The experiment is instead marked `failed` with
+   * `metadata.failureReason` set to `{ id, message }` — read it via
+   * `getDatasetExperiment`.
    */
   toolReplay?: {
     fromExperimentId?: string;
@@ -2806,6 +2866,16 @@ export interface TriggerDatasetExperimentParams {
    * called via `expect` (an unsatisfied expectation fails the item). Function
    * mocks are code-only and cannot cross the HTTP API — use @mastra/core's
    * `startExperiment` directly for those.
+   *
+   * Some combinations compile but are rejected with a 400 at the boundary:
+   * an empty mock (`{}` — at least one of `output`, `error`, or `expect` is
+   * required), `output` and `error` together, a negative or non-integer
+   * `expect.calledTimes`, mock keys that collide after tool-name formatting,
+   * and `toolMocks` on a non-agent target (same for `toolReplay` and
+   * `itemIds: []`). On older servers that predate the collision pre-check,
+   * colliding keys fail the experiment asynchronously instead, with
+   * `metadata.failureReason` (`{ id, message }`) readable via
+   * `getDatasetExperiment`.
    */
   toolMocks?: Record<
     string,
@@ -2827,7 +2897,6 @@ export interface TriggerDatasetExperimentParams {
 type ExpectTrue<T extends true> = T;
 type TriggerExperimentGeneratedBody = Body<'POST /datasets/:datasetId/experiments'>;
 type TriggerExperimentHandBody = Omit<TriggerDatasetExperimentParams, 'datasetId'>;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _TriggerExperimentBodyKeysInSync = ExpectTrue<
   [Exclude<keyof TriggerExperimentGeneratedBody, keyof TriggerExperimentHandBody>] extends [never]
     ? [Exclude<keyof TriggerExperimentHandBody, keyof TriggerExperimentGeneratedBody>] extends [never]
@@ -2835,9 +2904,59 @@ type _TriggerExperimentBodyKeysInSync = ExpectTrue<
       : false
     : false
 >;
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _TriggerExperimentBodyTypesCompatible = ExpectTrue<
   GeneratedRequest<TriggerExperimentGeneratedBody> extends TriggerExperimentHandBody ? true : false
+>;
+// Reverse direction: everything the hand type admits must be a valid request
+// body — catches the hand type widening a field the schema would reject.
+type _TriggerExperimentBodyTypesCompatibleReverse = ExpectTrue<
+  TriggerExperimentHandBody extends GeneratedRequest<TriggerExperimentGeneratedBody> ? true : false
+>;
+
+// Response-side drift detectors, mirroring the request-side ones above:
+// DatasetExperiment and DatasetExperimentResult are hand-maintained while the
+// response types are generated from the server route schemas.
+type ExperimentGeneratedResponse = NonNullable<GeneratedResponse<'GET /datasets/:datasetId/experiments/:experimentId'>>;
+type _ExperimentResponseKeysInSync = ExpectTrue<
+  [Exclude<keyof ExperimentGeneratedResponse, keyof DatasetExperiment>] extends [never]
+    ? [Exclude<keyof DatasetExperiment, keyof ExperimentGeneratedResponse>] extends [never]
+      ? true
+      : false
+    : false
+>;
+// The serialized wire shape must parse as the hand type — catches the hand
+// type requiring a field the schema marks optional, or narrowing a value the
+// wire can send.
+type _ExperimentResponseTypesCompatible = ExpectTrue<
+  ExperimentGeneratedResponse extends DatasetExperiment ? true : false
+>;
+
+type ExperimentResultGeneratedItem =
+  GeneratedResponse<'GET /datasets/:datasetId/experiments/:experimentId/results'>['results'][number];
+// `scores` is exempt from the hand→generated key check: the results routes
+// carry no `scores` field (it is optional on the hand type and documented as
+// absent on the wire; the sync trigger path types its scores inline).
+type _ExperimentResultResponseKeysInSync = ExpectTrue<
+  [Exclude<keyof ExperimentResultGeneratedItem, keyof DatasetExperimentResult>] extends [never]
+    ? [Exclude<keyof DatasetExperimentResult, keyof ExperimentResultGeneratedItem | 'scores'>] extends [never]
+      ? true
+      : false
+    : false
+>;
+// Assignability with documented exemptions:
+// - `toolReplay`: the schema says `unknown`; the hand type deliberately
+//   narrows to `ToolReplayReport | null` (the runner's actual report shape).
+// - `status`/`tags`: storage rows always carry them (possibly null) and the
+//   hand type keeps that runtime truth, but the route schema marks them
+//   `.optional()`, so the generated optionals are not assignable to the
+//   required-nullable hand fields.
+type _ExperimentResultResponseTypesCompatible = ExpectTrue<
+  Omit<ExperimentResultGeneratedItem, 'toolReplay' | 'status' | 'tags'> extends Omit<
+    DatasetExperimentResult,
+    'toolReplay' | 'status' | 'tags'
+  >
+    ? true
+    : false
 >;
 
 export interface CompareExperimentsParams {
