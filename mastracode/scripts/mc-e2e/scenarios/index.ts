@@ -7,6 +7,7 @@ import { branchContextLongNameScenario } from './branch-context-long-name.js';
 import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
 import { commitAttributionPromptScenario } from './commit-attribution-prompt.js';
 import { customConfigDirScenario } from './custom-config-dir.js';
+import { customProviderDeleteScenario } from './custom-provider-delete.js';
 import { customProviderManagementScenario } from './custom-provider-management.js';
 import { customSlashCommandScenario } from './custom-slash-command.js';
 import { debugLoggingScenario } from './debug-logging.js';
@@ -78,6 +79,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'clipboard-image-paste': clipboardImagePasteScenario,
   'commit-attribution-prompt': commitAttributionPromptScenario,
   'custom-config-dir': customConfigDirScenario,
+  'custom-provider-delete': customProviderDeleteScenario,
   'custom-provider-management': customProviderManagementScenario,
   'custom-slash-command': customSlashCommandScenario,
   'debug-logging': debugLoggingScenario,

@@ -9,6 +9,7 @@ export type ScenarioName =
   | 'clipboard-image-paste'
   | 'commit-attribution-prompt'
   | 'custom-config-dir'
+  | 'custom-provider-delete'
   | 'custom-provider-management'
   | 'custom-slash-command'
   | 'debug-logging'

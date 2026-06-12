@@ -56,11 +56,12 @@
   - Completed: `setup-completion-persistence` seeds Memory Gateway provider access, steps `/setup` through OpenAI mode/OM pack selection and Disable YOLO, then proves completed/skipped state, pack IDs, YOLO, and built-in default persistence in `settings.json`.
   - Completed: `models-pack-activation-persistence` seeds a custom provider plus saved custom pack, activates it through `/models`, then proves active pack ID, custom mode defaults, stale subagent override cleanup, and custom pack retention in `settings.json`.
   - Completed: `api-key-delete-env` seeds a stored `302ai` API key alongside a real `302AI_API_KEY`, deletes the stored key through `/api-keys`, and proves the TUI falls back to env status while `auth.json` is cleared and the real env key remains intact.
+  - Completed: `custom-provider-delete` seeds a custom OpenAI-compatible provider, deletes it through `/custom-providers`, confirms the destructive modal, and proves `settings.json` removes the provider while unrelated saved custom packs remain intact.
   - `onboarding-full-wizard`: remaining breadth for login refresh and custom pack completion.
   - `update-startup-prompt`: use existing update env seams to assert passive startup prompt, then `Yes` path with a stub install command if a safe seam is added.
   - Completed: `quiet-tool-history-parity` enables Quiet mode in settings, drives AIMock-backed live `view` + `task_write`, asserts compact tool/task rendering, then reloads a seeded tool-history thread and asserts loaded quiet compact rendering.
   - `settings-reload-persistence`: combine storage/custom-provider changes, relaunch scenario, assert settings persist without relying on runtime state.
-  - `custom-provider-edit-delete`: exercise edit/delete provider modals and `/models` selection visibility.
+  - `custom-provider-edit-share-import`: exercise targeted edit/import/share provider and custom-pack modals plus `/models` selection visibility; delete persistence is covered by `custom-provider-delete`.
   - `provider-history-rejection-retry`: custom provider that rejects reasoning once, then verifies `ProviderHistoryCompat` error-processor retry specifically handles the rejection.
 - Fixture/data needs: settings.json seeds, AIMock custom provider fixtures, one-shot local HTTP provider mock for rejection/retry cases.
 

@@ -1,6 +1,24 @@
 # Mastra Code testing recovery history
 
 
+### Custom provider delete coverage (2026-06-12)
+
+Added `custom-provider-delete` as the 66th checked-in TUI e2e scenario. The scenario seeds a custom OpenAI-compatible provider and unrelated saved custom pack, opens `/custom-providers`, selects the provider, chooses `Delete provider`, confirms the destructive modal, and uses shell passthrough to prove `settings.json` no longer contains the provider while unrelated custom packs remain intact.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test custom-provider-delete
+```
+
+Break validations:
+
+- Skipping `removeCustomProviderFromSettings()` left `CUSTOM_PROVIDER_COUNT=1` and failed the scenario.
+- Routing the `Delete provider` option to a non-delete action prevented the destructive confirmation modal and failed the scenario.
+- Skipping `saveSettings()` after removal showed the success message but left the provider in `settings.json`, failing the persisted count assertion.
+
+The `Settings: Onboarding and global settings` row remains `needs-follow-up`; this chunk closes the `/custom-providers` delete persistence path, while model-selection missing-key, browser/global-settings, custom-pack completion/import/edit/share, and reload breadth remain.
+
 ### API key delete/env preservation coverage (2026-06-12)
 
 Added `api-key-delete-env` as the 65th checked-in TUI e2e scenario. The scenario seeds a stored `302ai` API key and a real `302AI_API_KEY`, opens `/api-keys`, deletes the stored key with Delete, verifies the list falls back to `✓ (env)` with the environment-variable detail copy, then uses shell passthrough to prove `auth.json` no longer contains `apikey:302ai` while `302AI_API_KEY` still has the original shell value.
