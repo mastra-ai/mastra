@@ -186,7 +186,9 @@ export type { PgDomainConfig, PgDomainClientConfig, PgDomainPoolConfig, PgDomain
  */
 export class PostgresStore extends MastraCompositeStore {
   #pool: Pool;
-  #db: DbClient;
+  // Narrowed to RoutingDbClient so init()'s pin/unpin path is type-checked.
+  // The public `db` getter still exposes it as DbClient.
+  #db: RoutingDbClient;
   #ownsPool: boolean;
   #poolClosed: boolean = false;
   private schema: string;
@@ -281,16 +283,17 @@ export class PostgresStore extends MastraCompositeStore {
     //   - transaction-pooler budget exhaustion under concurrent DDL fan-out
     //   - inter-statement lock contention across domains (issue #17679)
     // Runtime queries continue to use the pool normally once init completes.
-    const routing = this.#db as RoutingDbClient;
     const pinnedClient = await this.#pool.connect();
     const pinned = new PinnedClientAdapter(this.#pool, pinnedClient);
 
     try {
-      routing.pin(pinned);
-      this.isInitialized = true;
+      this.#db.pin(pinned);
       await super.init();
+      // Only mark initialized after schema creation actually finishes so a
+      // racing second init() caller can't return early and issue runtime
+      // queries against tables that aren't yet created.
+      this.isInitialized = true;
     } catch (error) {
-      this.isInitialized = false;
       // Rethrow MastraError directly to preserve structured error IDs (e.g., MIGRATION_REQUIRED::DUPLICATE_SPANS)
       if (error instanceof MastraError) {
         throw error;
@@ -304,7 +307,7 @@ export class PostgresStore extends MastraCompositeStore {
         error,
       );
     } finally {
-      routing.unpin();
+      this.#db.unpin();
       pinnedClient.release();
     }
   }
