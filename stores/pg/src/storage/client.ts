@@ -252,82 +252,122 @@ class TransactionClient implements TxClient {
  * The wrapped client is the caller's responsibility to release.
  */
 export class PinnedClientAdapter implements DbClient {
+  /**
+   * Serialization tail. Domain init() methods fire via Promise.all in
+   * MastraCompositeStore.#runInit(), so without our own gate every domain's
+   * query() lands on the same PoolClient concurrently. pg@8 queues those
+   * internally and emits a deprecation warning; pg@9 will throw. Chaining
+   * each new query off the previous one's settlement (success or failure)
+   * gives us deterministic FIFO ordering at the adapter layer and removes
+   * the reliance on pg's internal queue.
+   */
+  #tail: Promise<unknown> = Promise.resolve();
+
   constructor(
     public readonly $pool: Pool,
     private readonly pinnedClient: PoolClient,
   ) {}
 
+  /**
+   * Run `fn` after any previously enqueued work on this pinned client has
+   * settled. Failures in earlier calls don't poison the queue — we always
+   * resume on the next caller's turn.
+   */
+  #enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    const next = this.#tail.then(fn, fn);
+    // Swallow rejection on the chained tail so a failing call doesn't
+    // leave an unhandled rejection on later enqueues.
+    this.#tail = next.catch(() => undefined);
+    return next;
+  }
+
   connect(): Promise<PoolClient> {
-    // Returning a wrapper around the pinned client would risk callers
-    // releasing it prematurely. Domain init paths don't call connect(),
-    // so we fall back to the pool here.
-    return this.$pool.connect();
+    // No domain init() currently calls connect(), and silently falling
+    // back to the pool would bypass pinning. Throw so a future code path
+    // that adds a connect()-based init fails loud instead of silently
+    // re-introducing the parallel-DDL fan-out we're trying to prevent.
+    throw new Error(
+      'PinnedClientAdapter.connect() is not supported during PostgresStore.init(). ' +
+        'All DDL must flow through the pinned client.',
+    );
   }
 
-  async none(query: string, values?: QueryValues): Promise<null> {
-    await this.pinnedClient.query(query, values);
-    return null;
-  }
-
-  async one<T = any>(query: string, values?: QueryValues): Promise<T> {
-    const result = await this.pinnedClient.query(query, values);
-    if (result.rows.length === 0) {
-      throw new Error(`No data returned from query: ${truncateQuery(query)}`);
-    }
-    if (result.rows.length > 1) {
-      throw new Error(`Multiple rows returned when one was expected: ${truncateQuery(query)}`);
-    }
-    return result.rows[0] as T;
-  }
-
-  async oneOrNone<T = any>(query: string, values?: QueryValues): Promise<T | null> {
-    const result = await this.pinnedClient.query(query, values);
-    if (result.rows.length === 0) {
+  none(query: string, values?: QueryValues): Promise<null> {
+    return this.#enqueue(async () => {
+      await this.pinnedClient.query(query, values);
       return null;
-    }
-    if (result.rows.length > 1) {
-      throw new Error(`Multiple rows returned when one or none was expected: ${truncateQuery(query)}`);
-    }
-    return result.rows[0] as T;
+    });
   }
 
-  async any<T = any>(query: string, values?: QueryValues): Promise<T[]> {
-    const result = await this.pinnedClient.query(query, values);
-    return result.rows as T[];
+  one<T = any>(query: string, values?: QueryValues): Promise<T> {
+    return this.#enqueue(async () => {
+      const result = await this.pinnedClient.query(query, values);
+      if (result.rows.length === 0) {
+        throw new Error(`No data returned from query: ${truncateQuery(query)}`);
+      }
+      if (result.rows.length > 1) {
+        throw new Error(`Multiple rows returned when one was expected: ${truncateQuery(query)}`);
+      }
+      return result.rows[0] as T;
+    });
   }
 
-  async manyOrNone<T = any>(query: string, values?: QueryValues): Promise<T[]> {
+  oneOrNone<T = any>(query: string, values?: QueryValues): Promise<T | null> {
+    return this.#enqueue(async () => {
+      const result = await this.pinnedClient.query(query, values);
+      if (result.rows.length === 0) {
+        return null;
+      }
+      if (result.rows.length > 1) {
+        throw new Error(`Multiple rows returned when one or none was expected: ${truncateQuery(query)}`);
+      }
+      return result.rows[0] as T;
+    });
+  }
+
+  any<T = any>(query: string, values?: QueryValues): Promise<T[]> {
+    return this.#enqueue(async () => {
+      const result = await this.pinnedClient.query(query, values);
+      return result.rows as T[];
+    });
+  }
+
+  manyOrNone<T = any>(query: string, values?: QueryValues): Promise<T[]> {
     return this.any<T>(query, values);
   }
 
-  async many<T = any>(query: string, values?: QueryValues): Promise<T[]> {
-    const result = await this.pinnedClient.query(query, values);
-    if (result.rows.length === 0) {
-      throw new Error(`No data returned from query: ${truncateQuery(query)}`);
-    }
-    return result.rows as T[];
-  }
-
-  async query(query: string, values?: QueryValues): Promise<QueryResult> {
-    return this.pinnedClient.query(query, values);
-  }
-
-  async tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T> {
-    // Run BEGIN/COMMIT/ROLLBACK on the pinned client itself rather than
-    // checking out a new one. Safe to use during init.
-    await this.pinnedClient.query('BEGIN');
-    try {
-      const result = await callback(new TransactionClient(this.pinnedClient));
-      await this.pinnedClient.query('COMMIT');
-      return result;
-    } catch (error) {
-      try {
-        await this.pinnedClient.query('ROLLBACK');
-      } catch (rollbackError) {
-        console.error('Transaction rollback failed:', rollbackError);
+  many<T = any>(query: string, values?: QueryValues): Promise<T[]> {
+    return this.#enqueue(async () => {
+      const result = await this.pinnedClient.query(query, values);
+      if (result.rows.length === 0) {
+        throw new Error(`No data returned from query: ${truncateQuery(query)}`);
       }
-      throw error;
-    }
+      return result.rows as T[];
+    });
+  }
+
+  query(query: string, values?: QueryValues): Promise<QueryResult> {
+    return this.#enqueue(() => this.pinnedClient.query(query, values));
+  }
+
+  tx<T>(callback: (t: TxClient) => Promise<T>): Promise<T> {
+    // Enqueue the entire BEGIN/work/COMMIT block so concurrent callers
+    // can't interleave statements inside someone else's transaction.
+    return this.#enqueue(async () => {
+      await this.pinnedClient.query('BEGIN');
+      try {
+        const result = await callback(new TransactionClient(this.pinnedClient));
+        await this.pinnedClient.query('COMMIT');
+        return result;
+      } catch (error) {
+        try {
+          await this.pinnedClient.query('ROLLBACK');
+        } catch (rollbackError) {
+          console.error('Transaction rollback failed:', rollbackError);
+        }
+        throw error;
+      }
+    });
   }
 }
 
