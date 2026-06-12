@@ -1,5 +1,17 @@
 # @mastra/voice-google-gemini-live
 
+## 0.12.1
+
+### Patch Changes
+
+- dependencies updates: ([#17144](https://github.com/mastra-ai/mastra/pull/17144))
+  - Updated dependency [`@google/genai@^1.52.0` ↗︎](https://www.npmjs.com/package/@google/genai/v/1.52.0) (from `^1.45.0`, in `dependencies`)
+
+- dependencies updates: ([#17518](https://github.com/mastra-ai/mastra/pull/17518))
+  - Updated dependency [`google-auth-library@^10.6.2` ↗︎](https://www.npmjs.com/package/google-auth-library/v/10.6.2) (from `^10.6.1`, in `dependencies`)
+
+- Update ai-sdk deps ([#17144](https://github.com/mastra-ai/mastra/pull/17144))
+
 ## 0.12.1-alpha.1
 
 ### Patch Changes

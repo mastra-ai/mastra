@@ -19,6 +19,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
 import { AvailableHooks, registerHook } from '../hooks';
+import { LicenseClient } from '../license';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { getGatewayId } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/router';
@@ -1215,6 +1216,18 @@ export class Mastra<
     // filesystem-backed editor storage while preserving app storage domains.
     if (this.#editor && typeof this.#editor.registerWithMastra === 'function') {
       this.#editor.registerWithMastra(this);
+    }
+
+    // Kick off background license validation against the license server when
+    // an enterprise license key is configured. Fire-and-forget: LicenseClient
+    // caches the result, schedules revalidation, and fails open on network
+    // errors, so this never blocks or throws during construction.
+    if (process.env.MASTRA_LICENSE_KEY || process.env.MASTRA_EE_LICENSE) {
+      LicenseClient.getInstance(this.#logger)
+        .validate()
+        .catch(() => {
+          // Failures are logged and handled inside LicenseClient.
+        });
     }
 
     this.#backgroundTaskConfig = config?.backgroundTasks;
