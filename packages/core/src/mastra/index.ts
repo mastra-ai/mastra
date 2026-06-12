@@ -4350,10 +4350,10 @@ export class Mastra<
                 // the workflow run. Log and let the transport's own delivery
                 // semantics decide (most non-ack transports redeliver until
                 // explicitly acked).
-                this.#logger?.error?.(
-                  'Retryable workflow event cannot be requeued because nack is unavailable',
-                  { type: event.type, runId: event.runId },
-                );
+                this.#logger?.error?.('Retryable workflow event cannot be requeued because nack is unavailable', {
+                  type: event.type,
+                  runId: event.runId,
+                });
                 return;
               }
               if (ack) {
