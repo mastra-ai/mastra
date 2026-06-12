@@ -11,6 +11,7 @@ export type ScenarioName =
   | 'commit-attribution-prompt'
   | 'custom-config-dir'
   | 'custom-pack-import-overwrite'
+  | 'custom-pack-rename-active'
   | 'custom-provider-delete'
   | 'custom-provider-management'
   | 'custom-slash-command'

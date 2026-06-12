@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Custom pack rename active coverage (2026-06-12)
+
+Added `custom-pack-rename-active` as the 70th checked-in TUI e2e scenario. The scenario seeds an active saved custom model pack, opens `/models`, chooses `Edit`, renames the pack through the real modal input, saves, and uses shell passthrough to prove `settings.json` migrates the active pack ID and onboarding mode pack ID to the new custom pack, removes the old pack entry, and preserves the plan/build/fast model defaults.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test custom-pack-rename-active
+```
+
+Break validations:
+
+- Dropping `previousPackId` during rename left the old active/onboarding IDs and duplicate old/new packs, failing the scenario.
+- Skipping onboarding pack-id migration left `RENAME_ONBOARDING=null`, failing the scenario.
+- Skipping `saveSettings()` after edit showed the success message but left the old persisted pack/settings, failing the scenario.
+
+The `Settings: Onboarding and global settings` row remains `needs-follow-up`; this chunk closes active custom-pack targeted rename/edit persistence, while custom-pack share/import-cancel/completion, model-selection cancellation/env-precedence, browser wizard/startup restore, and reload breadth remain.
+
+
 ### Custom pack import overwrite coverage (2026-06-12)
 
 Added `custom-pack-import-overwrite` as the 69th checked-in TUI e2e scenario. The scenario seeds a custom provider plus a saved custom pack, opens `/models`, selects `Import Pack`, pastes a deterministic `mastra-pack:` string with a colliding pack name, confirms `Overwrite`, and uses shell passthrough to prove the imported model defaults, active pack ID, and saved pack models persist in `settings.json`.
