@@ -152,6 +152,9 @@ export async function executeTarget(
     toolReplay?: ToolReplayExecutionOptions;
   },
 ): Promise<ExecutionResult> {
+  // Filled by executeAgent once replay state exists — lets the catch below
+  // attach the divergence report even when the failure is an outer abort.
+  const replayReportHolder: { snapshot?: () => ToolReplayReport } = {};
   try {
     const signal = options?.signal;
 
@@ -171,6 +174,7 @@ export async function executeTarget(
           options?.experimentId,
           options?.versions,
           options?.toolReplay,
+          replayReportHolder,
         );
         break;
       case 'workflow':
@@ -200,6 +204,7 @@ export async function executeTarget(
         stack: error instanceof Error ? error.stack : undefined,
       },
       traceId: null,
+      ...(replayReportHolder.snapshot ? { toolReplay: replayReportHolder.snapshot() } : {}),
     };
   }
 }
@@ -244,6 +249,7 @@ async function executeAgent(
   experimentId?: string,
   versions?: VersionOverrides,
   toolReplay?: ToolReplayExecutionOptions,
+  replayReportHolder?: { snapshot?: () => ToolReplayReport },
 ): Promise<ExecutionResult> {
   const model = await agent.getModel();
 
@@ -298,6 +304,9 @@ async function executeAgent(
     ...finalizeReplayReport(replayState!),
     ...(toolReplay?.staleRecording ? { staleRecording: true } : {}),
   });
+  // Expose a snapshot to executeTarget: when an outer race (item timeout /
+  // experiment abort) wins, the divergence evidence must survive the loss.
+  if (replayState && replayReportHolder) replayReportHolder.snapshot = composeReport;
 
   // Keep the failure contract: failed executions have output: null (scorers
   // run against output even on errors). The divergence report stays available

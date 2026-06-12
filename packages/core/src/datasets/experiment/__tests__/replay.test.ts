@@ -761,3 +761,27 @@ describe('getToolReplayMarker', () => {
     });
   });
 });
+
+describe('capMissInput via miss recording', () => {
+  it('truncates oversized miss args to a marked preview', async () => {
+    const state = createReplayState([], 'trace-1', {});
+    const hooks = buildReplayHooks(state, { onMiss: 'passthrough' });
+    const huge = { blob: 'x'.repeat(10_000) };
+
+    await callHook(hooks, 'lookup', huge);
+
+    const recorded = finalizeReplayReport(state).misses[0]?.input as {
+      __truncated?: boolean;
+      originalChars?: number;
+      preview?: string;
+    };
+    expect(recorded.__truncated).toBe(true);
+    expect(recorded.originalChars).toBeGreaterThan(10_000);
+    expect(recorded.preview?.length).toBe(4096);
+
+    // Small args persist untouched.
+    const small = createReplayState([], 'trace-1', {});
+    await callHook(buildReplayHooks(small, { onMiss: 'passthrough' }), 'lookup', { key: 'tiny' });
+    expect(finalizeReplayReport(small).misses[0]?.input).toEqual({ key: 'tiny' });
+  });
+});
