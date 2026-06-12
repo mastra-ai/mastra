@@ -29,7 +29,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@microsoft/api-extractor": "^7.57.7",
-    "tinyglobby": "^0.2.16",
+    "tinyglobby": "^0.2.17",
     "local-pkg": "^1.1.2",
     "resolve.exports": "^2.0.3",
     "ts-morph": "^27.0.2",

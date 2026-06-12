@@ -1234,7 +1234,9 @@ Prints help message and exits.
 
 By default, Mastra collects anonymous information about your project like your OS, Mastra version or Node.js version. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/cli/src/analytics/index.ts) to check what's collected.
 
-You can opt out of the CLI analytics by setting an environment variable:
+When a server started with `mastra dev` or `mastra start` has observability metrics enabled, Mastra also sends anonymous, aggregated model usage at startup: input and output token counts per provider and model, plus the command (`dev` or `start`) and `NODE_ENV`. No prompts, responses, or other message content is ever sent. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/telemetry/usage-telemetry.ts) to check what's collected.
+
+You can opt out of all CLI and usage analytics by setting an environment variable:
 
 ```bash
 MASTRA_TELEMETRY_DISABLED=1
