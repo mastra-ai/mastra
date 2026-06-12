@@ -42,6 +42,7 @@ import { notificationInboxToolFlowScenario } from './notification-inbox-tool-flo
 import { notificationSignalRenderingScenario } from './notification-signal-rendering.js';
 import { omGlobalSettingsPersistenceScenario } from './om-global-settings-persistence.js';
 import { omSettingsScenario } from './om-settings.js';
+import { omThresholdPersistenceScenario } from './om-threshold-persistence.js';
 import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
 import { persistentGoalCommandsScenario } from './persistent-goal-commands.js';
 import { persistentGoalJudgeDecisionScenario } from './persistent-goal-judge-decision.js';
@@ -136,6 +137,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'notification-signal-rendering': notificationSignalRenderingScenario,
   'om-global-settings-persistence': omGlobalSettingsPersistenceScenario,
   'om-settings': omSettingsScenario,
+  'om-threshold-persistence': omThresholdPersistenceScenario,
   'openai-strict-schema': openaiStrictSchemaScenario,
   'persistent-goal-commands': persistentGoalCommandsScenario,
   'persistent-goal-judge-decision': persistentGoalJudgeDecisionScenario,

@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### OM threshold persistence coverage (2026-06-12)
+
+Added `om-threshold-persistence` as the 88th checked-in TUI e2e scenario. The scenario seeds persisted global OM thresholds before startup, creates an active AIMock-backed thread, opens `/om` to prove the overlay restores 12k/80k from settings, changes observation/reflection thresholds to 15k/60k through the real threshold submenus, then proves `settings.json`, the status footer, and active-thread metadata carry the updated values.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test om-threshold-persistence
+```
+
+Break validations:
+
+- Removed `saveSettings()` from threshold persistence; the shell proof stayed at the seeded `12000:80000` values.
+- Removed `setThreadSetting()` for threshold changes; global settings updated, but the active-thread metadata proof disappeared.
+- Disabled startup seeding of `observationThreshold`/`reflectionThreshold`; `/om` opened with default 30k/40k instead of seeded 12k/80k.
+
+The Settings row remains `needs-follow-up`: `/om` threshold restore/persistence is now covered, while browser wizard/startup restore, login refresh, and deeper thread/subagent/OM model reload breadth remain follow-up work.
+
+
 ### GitHub polling inbox coverage (2026-06-12)
 
 Added `github-signals-polling-inbox` as the 87th checked-in TUI e2e scenario. The scenario seeds a persisted subscribed thread whose cursor last observed failing CI, points `MASTRACODE_GITCRAWL_BIN` at a deterministic recovered-CI sqlite fixture, triggers polling, renders the delivered `pull-request-ci-recovered` GitHub notification card, asks the model to call `notification_inbox read`, proves the notification status becomes `seen`, and verifies the subscribed thread appears after `/new` → `/threads` reload.

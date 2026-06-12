@@ -56,6 +56,7 @@ export type ScenarioName =
   | 'notification-signal-rendering'
   | 'om-settings'
   | 'om-global-settings-persistence'
+  | 'om-threshold-persistence'
   | 'quiet-settings'
   | 'quiet-tool-history-parity'
   | 'report-issue-command'
