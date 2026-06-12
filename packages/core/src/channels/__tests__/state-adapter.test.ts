@@ -12,7 +12,7 @@ describe('MastraStateAdapter', () => {
   beforeEach(async () => {
     db = new InMemoryDB();
     memoryStore = new InMemoryMemory({ db });
-    adapter = new MastraStateAdapter(memoryStore);
+    adapter = new MastraStateAdapter(memoryStore, 'agent-a');
     await adapter.connect();
   });
 
@@ -39,7 +39,7 @@ describe('MastraStateAdapter', () => {
           updatedAt: new Date(),
           metadata: {
             channel_platform: 'discord',
-            channel_externalThreadId: externalThreadId,
+            channel_externalThreadId: `agent-a:${externalThreadId}`,
             channel_externalChannelId: 'discord:guild1:channel1',
           },
         },
@@ -73,11 +73,58 @@ describe('MastraStateAdapter', () => {
       expect(await adapter.isSubscribed(externalThreadId)).toBe(true);
 
       // Create a new adapter instance (simulating server restart)
-      const newAdapter = new MastraStateAdapter(memoryStore);
+      const newAdapter = new MastraStateAdapter(memoryStore, 'agent-a');
       await newAdapter.connect();
 
       // Subscription should still be there since it's in storage
       expect(await newAdapter.isSubscribed(externalThreadId)).toBe(true);
+    });
+
+    it('isolates subscriptions between agents sharing the same external thread ID', async () => {
+      const agentA = new MastraStateAdapter(memoryStore, 'agent-a');
+      const agentB = new MastraStateAdapter(memoryStore, 'agent-b');
+
+      await agentA.connect();
+      await agentB.connect();
+
+      await memoryStore.saveThread({
+        thread: {
+          id: 'thread-agent-a',
+          title: 'Agent A thread',
+          resourceId: 'discord:user1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {
+            channel_platform: 'discord',
+            channel_externalThreadId: `agent-a:${externalThreadId}`,
+            channel_externalChannelId: 'discord:guild1:channel1',
+          },
+        },
+      });
+
+      await memoryStore.saveThread({
+        thread: {
+          id: 'thread-agent-b',
+          title: 'Agent B thread',
+          resourceId: 'discord:user1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {
+            channel_platform: 'discord',
+            channel_externalThreadId: `agent-b:${externalThreadId}`,
+            channel_externalChannelId: 'discord:guild1:channel1',
+          },
+        },
+      });
+
+      await agentA.subscribe(externalThreadId);
+
+      expect(await agentA.isSubscribed(externalThreadId)).toBe(true);
+      expect(await agentB.isSubscribed(externalThreadId)).toBe(false);
+
+      await agentB.subscribe(externalThreadId);
+
+      expect(await agentB.isSubscribed(externalThreadId)).toBe(true);
     });
   });
 
