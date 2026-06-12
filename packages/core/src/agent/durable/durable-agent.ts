@@ -12,6 +12,7 @@ import type { MessageListInput } from '../message-list';
 import type { ToolsInput } from '../types';
 
 import { AGENT_STREAM_TOPIC } from './constants';
+import { EntityType, SpanType, getOrCreateSpan } from '../../observability';
 import { runDurableStreamUntilIdle } from './durable-stream-until-idle';
 import { prepareForDurableExecution } from './preparation';
 import { ExtendedRunRegistry, globalRunRegistry } from './run-registry';
@@ -64,6 +65,10 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   structuredOutput?: AgentExecutionOptions<OUTPUT>['structuredOutput'];
   /** Version overrides for sub-agent delegation */
   versions?: AgentExecutionOptions<OUTPUT>['versions'];
+  /** Tracing options for observability */
+  tracingOptions?: AgentExecutionOptions<OUTPUT>['tracingOptions'];
+  /** Tracing context for span propagation */
+  tracingContext?: AgentExecutionOptions<OUTPUT>['tracingContext'];
   /** Callback when chunk is received */
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   /** Callback when step finishes */
@@ -385,10 +390,11 @@ export class DurableAgent<
    */
   protected async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
     const workflow = this.getWorkflow();
-    const requestContext = globalRunRegistry.get(runId)?.requestContext;
-
+    const registryEntry = globalRunRegistry.get(runId);
+    const requestContext = registryEntry?.requestContext;
+    const spanTracingContext = (registryEntry?.agentSpan as any)?.getTracingContext?.();
     const run = await workflow.createRun({ runId, pubsub: this.pubsub });
-    const result = await run.start({ inputData: workflowInput, requestContext });
+    const result = await run.start({ inputData: workflowInput, requestContext, tracingContext: spanTracingContext });
 
     if (result?.status === 'failed') {
       const error = new Error((result as any).error?.message || 'Workflow execution failed');
@@ -434,7 +440,22 @@ export class DurableAgent<
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
-    // 1. Prepare for durable execution (non-durable phase)
+    // 1. Create AGENT_RUN root span so durable traces have an exportable root,
+    //    matching the non-durable Agent.stream() path.
+    const agentSpan = getOrCreateSpan({
+      type: SpanType.AGENT_RUN,
+      name: `agent run: '${this.#wrappedAgent.id}'`,
+      entityType: EntityType.AGENT,
+      entityId: this.#wrappedAgent.id,
+      entityName: this.#wrappedAgent.name,
+      input: messages,
+      tracingOptions: options?.tracingOptions,
+      tracingContext: options?.tracingContext,
+      requestContext: options?.requestContext,
+      mastra: this.#mastra,
+    });
+
+    // 2. Prepare for durable execution (non-durable phase)
     const preparation = await prepareForDurableExecution<TOutput>({
       agent: this.#wrappedAgent as Agent<string, any, TOutput>,
       messages,
@@ -448,7 +469,7 @@ export class DurableAgent<
 
     // 2. Register non-serializable state (both local and global registries)
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
-    globalRunRegistry.set(runId, { ...registryEntry, messageList });
+    globalRunRegistry.set(runId, { ...registryEntry, messageList, agentSpan });
 
     // Track cleanup state to avoid double cleanup
     let cleanedUp = false;
@@ -487,10 +508,13 @@ export class DurableAgent<
       onStepFinish: options?.onStepFinish,
       onFinish: async result => {
         await options?.onFinish?.(result);
+        agentSpan?.end?.({ output: result.output });
         scheduleAutoCleanup();
       },
       onError: async error => {
         await options?.onError?.(error);
+        agentSpan?.error?.({ error });
+        agentSpan?.end?.({});
         scheduleAutoCleanup();
       },
       onSuspended: options?.onSuspended,

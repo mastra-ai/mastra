@@ -435,6 +435,8 @@ export interface RunRegistryEntry {
   backgroundTaskManager?: BackgroundTaskManager;
   /** Agent background tasks configuration */
   backgroundTasksConfig?: AgentBackgroundConfig;
+  /** AGENT_RUN span for trace propagation into workflow steps (non-serializable) */
+  agentSpan?: any;
 }
 
 /**
