@@ -7,6 +7,7 @@ import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
 import type { ObservabilityEntrypoint } from '../observability/types/core';
 import type { PublicSchema } from '../schema';
+import type { GoalEvaluationPayload } from '../stream/types';
 import type { MastraCompositeStore } from '../storage/base';
 import type { DynamicArgument } from '../types';
 import type { Workspace, WorkspaceConfig, WorkspaceStatus } from '../workspace';
@@ -849,6 +850,10 @@ export type HarnessEvent =
   | {
       type: 'task_updated';
       tasks: TaskItemSnapshot[];
+    }
+  | {
+      type: 'goal_evaluation';
+      payload: GoalEvaluationPayload;
     }
   | { type: 'display_state_changed'; displayState: HarnessDisplayState };
 

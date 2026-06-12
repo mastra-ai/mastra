@@ -29,6 +29,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
 import { TaskSignalProvider } from '@mastra/core/signals';
 import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
+import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
 import { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
@@ -41,7 +42,7 @@ import {
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
-import { getDynamicModel, resolveModel } from './agents/model.js';
+import { getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
 import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-instructions.js';
 import { executeSubagent } from './agents/subagents/execute.js';
 import { exploreSubagent } from './agents/subagents/explore.js';
@@ -466,6 +467,20 @@ export async function createMastraCode(config?: MastraCodeConfig) {
     // the tools into the toolset and registers the task state-signal processor,
     // so the task list persists across turns and survives OM truncation.
     signals: [new TaskSignalProvider(), ...(githubSignals ? [githubSignals] : [])],
+    // Native goal mechanism: the in-loop goal step judges the thread's active
+    // objective each qualifying iteration. The judge model is required for any
+    // gating to occur; when unset the goal step is a complete no-op. A6 auto-wires
+    // the GoalStateProcessor so the `<current-objective>` signal persists across
+    // turns. Per-thread overrides live in the ThreadState `goal` record and win
+    // over these defaults.
+    goal: {
+      // Resolve the judge model through mastracode's gateway (a model-resolver
+      // function) so provider credentials are injected; returns undefined when no
+      // judge model is configured, keeping the goal step a no-op.
+      judge: getGoalJudgeModel,
+      maxRuns: globalSettings.models.goalMaxTurns ?? 50,
+      prompt: DEFAULT_GOAL_JUDGE_PROMPT,
+    },
     inputProcessors: [
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {

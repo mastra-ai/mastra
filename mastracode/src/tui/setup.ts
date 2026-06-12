@@ -215,6 +215,10 @@ function abortActiveGoalJudge(state: TUIState): boolean {
   state.userInitiatedAbort = true;
   activeGoalJudge.abortController.abort();
   activeGoalJudge.component.setInterrupted();
+  // Esc during an in-loop goal evaluation pauses the goal so it does not
+  // continue on the next iteration; persistence follows on the next save.
+  state.goalManager.pause();
+  state.activeGoalJudge = undefined;
   state.ui.requestRender();
   return true;
 }
@@ -373,9 +377,9 @@ export function setupAutocomplete(state: TUIState): void {
           { value: 'pause', label: 'pause', description: 'Pause the goal continuation loop' },
           { value: 'resume', label: 'resume', description: 'Resume the current goal' },
           { value: 'clear', label: 'clear', description: 'Clear the current goal' },
+          { value: 'judge', label: 'judge', description: 'Set the goal judge model and max attempts' },
         ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
     },
-    { name: 'judge', description: 'Set goal judge defaults' },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
   ];

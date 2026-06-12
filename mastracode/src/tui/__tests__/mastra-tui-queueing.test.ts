@@ -23,8 +23,9 @@ vi.mock('../display.js', () => ({
 }));
 
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
-import { handleAgentAborted, handleAgentEnd } from '../handlers/agent-lifecycle.js';
+import { handleAgentAborted, handleAgentEnd, handleGoalEvaluation } from '../handlers/agent-lifecycle.js';
 import type { EventHandlerContext } from '../handlers/types.js';
+import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { MastraTUI, consumePendingImages, syncInitialThreadState } from '../mastra-tui.js';
 import type { TUIState } from '../state.js';
 
@@ -87,6 +88,23 @@ function createQueueContext(state: TUIState, overrides: Partial<EventHandlerCont
     renderExistingMessages: vi.fn(),
     renderClearedTasksInline: vi.fn(),
     refreshModelAuthStatus: vi.fn(),
+    ...overrides,
+  };
+}
+
+function createGoalPayload(overrides: Partial<GoalEvaluationPayload> = {}): GoalEvaluationPayload {
+  return {
+    objective: 'finish the goal',
+    iteration: 1,
+    maxRuns: 20,
+    passed: false,
+    status: 'active',
+    results: [],
+    reason: 'Keep going.',
+    duration: 0,
+    timedOut: false,
+    maxRunsReached: false,
+    suppressFeedback: false,
     ...overrides,
   };
 }
@@ -537,207 +555,17 @@ describe('MastraTUI queueing', () => {
     expect(ctx.updateStatusLine).toHaveBeenCalledTimes(6);
   });
 
-  it('drains queued user actions before goal continuation when queued during judge evaluation', async () => {
-    let resolveEvaluation:
-      | ((value: { continuation: string; judgeResult: { decision: 'continue'; reason: string } }) => void)
-      | undefined;
-    const state = createQueueState({
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
-      goalManager: {
-        isActive: vi.fn(() => true),
-        getGoal: vi.fn(() => ({
-          id: 'goal-1',
-          status: 'active',
-          judgeModelId: 'openai/gpt-5.5',
-          turnsUsed: 1,
-          maxTurns: 20,
-        })),
-        evaluateAfterTurn: vi.fn(
-          () =>
-            new Promise(resolve => {
-              resolveEvaluation = resolve;
-            }),
-        ),
-      } as any,
-    });
-    const ctx = createQueueContext(state);
-
-    handleAgentEnd(ctx);
-    state.pendingQueuedActions.push('message');
-    state.pendingFollowUpMessages.push({ content: 'user follow-up' });
-    resolveEvaluation?.({
-      continuation: 'goal continuation',
-      judgeResult: { decision: 'continue', reason: 'Keep going.' },
-    });
-
-    await vi.waitFor(() => {
-      expect(ctx.fireMessage).toHaveBeenCalledWith('user follow-up', undefined);
-    });
-    expect(ctx.fireMessage).not.toHaveBeenCalledWith('goal continuation');
-    expect(ctx.addUserMessage).toHaveBeenCalledWith({
-      id: expect.stringMatching(/^user-/),
-      role: 'user',
-      content: [{ type: 'text', text: 'user follow-up' }],
-      createdAt: expect.any(Date),
-    });
-  });
-
-  it('does not continue a goal that was paused while judge evaluation was running', async () => {
-    let goal: { id: string; status: 'active' | 'paused'; judgeModelId: string; turnsUsed: number; maxTurns: number } = {
-      id: 'goal-1',
-      status: 'active',
-      judgeModelId: 'openai/gpt-5.5',
-      turnsUsed: 1,
-      maxTurns: 20,
-    };
-    let resolveEvaluation:
-      | ((value: { continuation: string; judgeResult: { decision: 'continue'; reason: string } }) => void)
-      | undefined;
-    const state = createQueueState({
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
-      goalManager: {
-        isActive: vi.fn(() => true),
-        getGoal: vi.fn(() => goal),
-        evaluateAfterTurn: vi.fn(
-          () =>
-            new Promise(resolve => {
-              resolveEvaluation = resolve;
-            }),
-        ),
-      } as any,
-    });
-    const ctx = createQueueContext(state);
-
-    handleAgentEnd(ctx);
-    goal = { ...goal, status: 'paused' };
-    resolveEvaluation?.({
-      continuation: 'goal continuation',
-      judgeResult: { decision: 'continue', reason: 'Keep going.' },
-    });
-
-    await vi.waitFor(() => {
-      expect(state.gradientAnimator?.fadeOut).toHaveBeenCalled();
-    });
-    expect(ctx.fireMessage).not.toHaveBeenCalledWith('goal continuation');
-  });
-
-  it('sends goal continuation as a system-reminder signal', async () => {
-    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
-    const state = createQueueState({
-      harness: {
-        getFollowUpCount: vi.fn(() => 0),
-        sendSignal,
-      } as any,
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
-      goalManager: {
-        isActive: vi.fn(() => true),
-        getGoal: vi.fn(() => ({
-          id: 'goal-1',
-          status: 'active',
-          judgeModelId: 'openai/gpt-5.5',
-          turnsUsed: 2,
-          maxTurns: 20,
-        })),
-        evaluateAfterTurn: vi.fn().mockResolvedValue({
-          continuation: 'goal continuation',
-          judgeResult: { decision: 'continue', reason: 'Keep going.' },
-        }),
-      } as any,
-    });
-    const ctx = createQueueContext(state);
-
-    handleAgentEnd(ctx);
-
-    await vi.waitFor(() => {
-      expect(sendSignal).toHaveBeenCalledWith({
-        type: 'system-reminder',
-        contents: 'goal continuation',
-        attributes: { type: 'goal-judge' },
-        metadata: {
-          goalId: 'goal-1',
-          turnsUsed: 2,
-          maxTurns: 20,
-          judgeModelId: 'openai/gpt-5.5',
-        },
-      });
-    });
-    expect(ctx.fireMessage).not.toHaveBeenCalled();
-  });
-
-  it('shows an error when goal continuation signal delivery fails', async () => {
-    const sendSignal = vi.fn(() => ({ accepted: Promise.reject(new Error('signal rejected')) }));
-    const state = createQueueState({
-      harness: {
-        getFollowUpCount: vi.fn(() => 0),
-        sendSignal,
-      } as any,
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
-      goalManager: {
-        isActive: vi.fn(() => true),
-        getGoal: vi.fn(() => ({
-          id: 'goal-1',
-          status: 'active',
-          judgeModelId: 'openai/gpt-5.5',
-          turnsUsed: 2,
-          maxTurns: 20,
-        })),
-        evaluateAfterTurn: vi.fn().mockResolvedValue({
-          continuation: 'goal continuation',
-          judgeResult: { decision: 'continue', reason: 'Keep going.' },
-        }),
-      } as any,
-    });
-    const ctx = createQueueContext(state);
-
-    handleAgentEnd(ctx);
-
-    await vi.waitFor(() => {
-      expect(ctx.showError).toHaveBeenCalledWith('Failed to send goal continuation: signal rejected');
-    });
-  });
-
-  it('persists terminal goal judge responses when no continuation is queued', async () => {
-    const saveSystemReminderMessage = vi.fn().mockResolvedValue(null);
-    const state = createQueueState({
-      harness: {
-        getFollowUpCount: vi.fn(() => 0),
-        saveSystemReminderMessage,
-      } as any,
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
-      goalManager: {
-        isActive: vi.fn(() => true),
-        getGoal: vi.fn(() => ({ status: 'active', judgeModelId: 'openai/gpt-5.5', turnsUsed: 1, maxTurns: 20 })),
-        evaluateAfterTurn: vi.fn().mockResolvedValue({
-          continuation: null,
-          judgeResult: { decision: 'waiting', reason: 'Waiting for explicit verification.' },
-        }),
-      } as any,
-    });
-    const ctx = createQueueContext(state);
-
-    handleAgentEnd(ctx);
-
-    await vi.waitFor(() => {
-      expect(saveSystemReminderMessage).toHaveBeenCalledWith({
-        reminderType: 'goal-judge',
-        message: 'waiting (1/20)\nWaiting for explicit verification.',
-      });
-    });
-  });
-
-  it('switches to plan mode when a plan-started goal completes with decision=done', async () => {
+  it('switches to plan mode when a plan-started goal completes with status=done', () => {
     const switchMode = vi.fn().mockResolvedValue({ accepted: true });
-    const saveSystemReminderMessage = vi.fn().mockResolvedValue(null);
+    const applyEvaluation = vi.fn();
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-456',
       harness: {
         getFollowUpCount: vi.fn(() => 0),
         switchMode,
-        saveSystemReminderMessage,
       } as any,
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
       goalManager: {
-        isActive: vi.fn(() => true),
+        applyEvaluation,
         getGoal: vi.fn(() => ({
           id: 'plan-goal-456',
           status: 'done',
@@ -745,42 +573,28 @@ describe('MastraTUI queueing', () => {
           turnsUsed: 3,
           maxTurns: 20,
         })),
-        evaluateAfterTurn: vi.fn().mockResolvedValue({
-          continuation: null,
-          judgeResult: { decision: 'done', reason: 'All objectives completed.' },
-        }),
       } as any,
     });
     const ctx = createQueueContext(state);
 
-    handleAgentEnd(ctx);
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 3, status: 'done', passed: true }));
 
-    await vi.waitFor(() => {
-      expect(saveSystemReminderMessage).toHaveBeenCalledWith({
-        reminderType: 'goal-judge',
-        message: 'done (3/20)\nAll objectives completed.',
-      });
-    });
-    await vi.waitFor(() => {
-      expect(switchMode).toHaveBeenCalledWith({ modeId: 'plan' });
-    });
-    expect(mocks.showInfo).not.toHaveBeenCalled();
+    expect(applyEvaluation).toHaveBeenCalledWith({ runsUsed: 3, status: 'done' });
+    expect(switchMode).toHaveBeenCalledWith({ modeId: 'plan' });
     expect(state.planStartedGoalId).toBeUndefined();
+    expect(state.activeGoalJudge).toBeUndefined();
   });
 
-  it('does not switch to plan mode for non-plan goals even when they complete', async () => {
+  it('does not switch to plan mode for non-plan goals even when they complete', () => {
     const switchMode = vi.fn().mockResolvedValue({ accepted: true });
-    const saveSystemReminderMessage = vi.fn().mockResolvedValue(null);
     const state = createQueueState({
       planStartedGoalId: undefined,
       harness: {
         getFollowUpCount: vi.fn(() => 0),
         switchMode,
-        saveSystemReminderMessage,
       } as any,
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
       goalManager: {
-        isActive: vi.fn(() => true),
+        applyEvaluation: vi.fn(),
         getGoal: vi.fn(() => ({
           id: 'manual-goal-789',
           status: 'done',
@@ -788,36 +602,25 @@ describe('MastraTUI queueing', () => {
           turnsUsed: 2,
           maxTurns: 20,
         })),
-        evaluateAfterTurn: vi.fn().mockResolvedValue({
-          continuation: null,
-          judgeResult: { decision: 'done', reason: 'Manual goal finished.' },
-        }),
       } as any,
     });
     const ctx = createQueueContext(state);
 
-    handleAgentEnd(ctx);
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 2, status: 'done', passed: true }));
 
-    await vi.waitFor(() => {
-      expect(saveSystemReminderMessage).toHaveBeenCalled();
-    });
     expect(switchMode).not.toHaveBeenCalled();
-    expect(mocks.showInfo).not.toHaveBeenCalled();
   });
 
-  it('does not switch to plan mode when goal completes with decision=waiting', async () => {
+  it('does not switch to plan mode when goal evaluation reports status=active (was decision=waiting)', () => {
     const switchMode = vi.fn().mockResolvedValue({ accepted: true });
-    const saveSystemReminderMessage = vi.fn().mockResolvedValue(null);
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-123',
       harness: {
         getFollowUpCount: vi.fn(() => 0),
         switchMode,
-        saveSystemReminderMessage,
       } as any,
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
       goalManager: {
-        isActive: vi.fn(() => true),
+        applyEvaluation: vi.fn(),
         getGoal: vi.fn(() => ({
           id: 'plan-goal-123',
           status: 'active',
@@ -825,36 +628,26 @@ describe('MastraTUI queueing', () => {
           turnsUsed: 1,
           maxTurns: 20,
         })),
-        evaluateAfterTurn: vi.fn().mockResolvedValue({
-          continuation: null,
-          judgeResult: { decision: 'waiting', reason: 'Needs user verification.' },
-        }),
       } as any,
     });
     const ctx = createQueueContext(state);
 
-    handleAgentEnd(ctx);
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 1, status: 'active' }));
 
-    await vi.waitFor(() => {
-      expect(saveSystemReminderMessage).toHaveBeenCalled();
-    });
     expect(switchMode).not.toHaveBeenCalled();
     expect(state.planStartedGoalId).toBe('plan-goal-123');
   });
 
-  it('does not switch to plan mode when goal completes with decision=paused', async () => {
+  it('does not switch to plan mode when goal evaluation reports status=paused', () => {
     const switchMode = vi.fn().mockResolvedValue({ accepted: true });
-    const saveSystemReminderMessage = vi.fn().mockResolvedValue(null);
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-321',
       harness: {
         getFollowUpCount: vi.fn(() => 0),
         switchMode,
-        saveSystemReminderMessage,
       } as any,
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
       goalManager: {
-        isActive: vi.fn(() => true),
+        applyEvaluation: vi.fn(),
         getGoal: vi.fn(() => ({
           id: 'plan-goal-321',
           status: 'paused',
@@ -862,37 +655,27 @@ describe('MastraTUI queueing', () => {
           turnsUsed: 5,
           maxTurns: 20,
         })),
-        evaluateAfterTurn: vi.fn().mockResolvedValue({
-          continuation: null,
-          judgeResult: { decision: 'paused', reason: 'Goal paused by system.' },
-        }),
       } as any,
     });
     const ctx = createQueueContext(state);
 
-    handleAgentEnd(ctx);
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 5, status: 'paused' }));
 
-    await vi.waitFor(() => {
-      expect(saveSystemReminderMessage).toHaveBeenCalled();
-    });
     expect(switchMode).not.toHaveBeenCalled();
     expect(state.planStartedGoalId).toBe('plan-goal-321');
-    expect(mocks.showInfo).toHaveBeenCalledWith(state, 'Goal paused (attempt 5/20). Use /goal resume to continue.');
+    expect(state.activeGoalJudge).toBeUndefined();
   });
 
-  it('does not switch to plan mode when completed goal ID does not match planStartedGoalId', async () => {
+  it('does not switch to plan mode when completed goal ID does not match planStartedGoalId', () => {
     const switchMode = vi.fn().mockResolvedValue({ accepted: true });
-    const saveSystemReminderMessage = vi.fn().mockResolvedValue(null);
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-xyz',
       harness: {
         getFollowUpCount: vi.fn(() => 0),
         switchMode,
-        saveSystemReminderMessage,
       } as any,
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
       goalManager: {
-        isActive: vi.fn(() => true),
+        applyEvaluation: vi.fn(),
         getGoal: vi.fn(() => ({
           id: 'different-goal-abc',
           status: 'done',
@@ -900,36 +683,27 @@ describe('MastraTUI queueing', () => {
           turnsUsed: 1,
           maxTurns: 20,
         })),
-        evaluateAfterTurn: vi.fn().mockResolvedValue({
-          continuation: null,
-          judgeResult: { decision: 'done', reason: 'Different goal done.' },
-        }),
       } as any,
     });
     const ctx = createQueueContext(state);
 
-    handleAgentEnd(ctx);
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 1, status: 'done', passed: true }));
 
-    await vi.waitFor(() => {
-      expect(saveSystemReminderMessage).toHaveBeenCalled();
-    });
     expect(switchMode).not.toHaveBeenCalled();
     expect(state.planStartedGoalId).toBe('plan-goal-xyz');
   });
 
   it('restores planStartedGoalId if mode switch fails', async () => {
     const switchMode = vi.fn().mockRejectedValue(new Error('Switch failed'));
-    const saveSystemReminderMessage = vi.fn().mockResolvedValue(null);
+    const showError = vi.fn();
     const state = createQueueState({
       planStartedGoalId: 'plan-goal-failed',
       harness: {
         getFollowUpCount: vi.fn(() => 0),
         switchMode,
-        saveSystemReminderMessage,
       } as any,
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
       goalManager: {
-        isActive: vi.fn(() => true),
+        applyEvaluation: vi.fn(),
         getGoal: vi.fn(() => ({
           id: 'plan-goal-failed',
           status: 'done',
@@ -937,127 +711,68 @@ describe('MastraTUI queueing', () => {
           turnsUsed: 1,
           maxTurns: 20,
         })),
-        evaluateAfterTurn: vi.fn().mockResolvedValue({
-          continuation: null,
-          judgeResult: { decision: 'done', reason: 'Goal done but switch failed.' },
-        }),
       } as any,
     });
-    const ctx = createQueueContext(state);
+    const ctx = createQueueContext(state, { showError });
 
-    handleAgentEnd(ctx);
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 1, status: 'done', passed: true }));
 
-    await vi.waitFor(() => {
-      expect(saveSystemReminderMessage).toHaveBeenCalled();
-    });
     await vi.waitFor(() => {
       expect(switchMode).toHaveBeenCalledWith({ modeId: 'plan' });
     });
-    expect(ctx.showError).toHaveBeenCalledWith('Failed to switch to Plan mode: Switch failed');
+    await vi.waitFor(() => {
+      expect(showError).toHaveBeenCalledWith('Failed to switch to Plan mode: Switch failed');
+    });
     expect(state.planStartedGoalId).toBe('plan-goal-failed');
   });
 
-  it('does not persist or switch mode when goal is replaced during evaluation', async () => {
+  it('does not switch mode when the goal was replaced before evaluation completed', () => {
     const switchMode = vi.fn().mockResolvedValue({ accepted: true });
-    const saveSystemReminderMessage = vi.fn().mockResolvedValue(null);
     const originalGoalId = 'original-goal-123';
-    let callCount = 0;
-    const evaluateAfterTurn = vi.fn().mockResolvedValue({
-      continuation: null,
-      judgeResult: { decision: 'done', reason: 'Original goal done.' },
-    });
     const state = createQueueState({
       planStartedGoalId: originalGoalId,
       harness: {
         getFollowUpCount: vi.fn(() => 0),
         switchMode,
-        saveSystemReminderMessage,
       } as any,
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
       goalManager: {
-        isActive: vi.fn(() => true),
-        getGoal: vi.fn(() => {
-          callCount++;
-          if (callCount === 1) {
-            return {
-              id: originalGoalId,
-              status: 'active',
-              judgeModelId: 'openai/gpt-5.5',
-              turnsUsed: 2,
-              maxTurns: 20,
-            };
-          }
-          return {
-            id: 'new-goal-456',
-            status: 'active',
-            judgeModelId: 'openai/gpt-5.5',
-            turnsUsed: 0,
-            maxTurns: 20,
-          };
-        }),
-        evaluateAfterTurn,
+        applyEvaluation: vi.fn(),
+        getGoal: vi.fn(() => ({
+          id: 'new-goal-456',
+          status: 'done',
+          judgeModelId: 'openai/gpt-5.5',
+          turnsUsed: 0,
+          maxTurns: 20,
+        })),
       } as any,
     });
     const ctx = createQueueContext(state);
 
-    handleAgentEnd(ctx);
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 0, status: 'done', passed: true }));
 
-    await vi.waitFor(() => {
-      expect(evaluateAfterTurn).toHaveBeenCalled();
-      expect(callCount).toBeGreaterThanOrEqual(2);
-    });
-    expect(saveSystemReminderMessage).not.toHaveBeenCalled();
     expect(switchMode).not.toHaveBeenCalled();
-    expect(state.chatContainer.children).toHaveLength(0);
     expect(state.planStartedGoalId).toBe(originalGoalId);
   });
 
-  it('does not persist or switch mode when goal is cleared during evaluation', async () => {
+  it('does not switch mode when the goal was cleared before evaluation completed', () => {
     const switchMode = vi.fn().mockResolvedValue({ accepted: true });
-    const saveSystemReminderMessage = vi.fn().mockResolvedValue(null);
     const originalGoalId = 'original-goal-123';
-    let callCount = 0;
-    const evaluateAfterTurn = vi.fn().mockResolvedValue({
-      continuation: null,
-      judgeResult: { decision: 'done', reason: 'Original goal done.' },
-    });
     const state = createQueueState({
       planStartedGoalId: originalGoalId,
       harness: {
         getFollowUpCount: vi.fn(() => 0),
         switchMode,
-        saveSystemReminderMessage,
       } as any,
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
       goalManager: {
-        isActive: vi.fn(() => true),
-        getGoal: vi.fn(() => {
-          callCount++;
-          if (callCount === 1) {
-            return {
-              id: originalGoalId,
-              status: 'active',
-              judgeModelId: 'openai/gpt-5.5',
-              turnsUsed: 2,
-              maxTurns: 20,
-            };
-          }
-          return undefined;
-        }),
-        evaluateAfterTurn,
+        applyEvaluation: vi.fn(),
+        getGoal: vi.fn(() => null),
       } as any,
     });
     const ctx = createQueueContext(state);
 
-    handleAgentEnd(ctx);
+    handleGoalEvaluation(ctx, createGoalPayload({ iteration: 1, status: 'done', passed: true }));
 
-    await vi.waitFor(() => {
-      expect(evaluateAfterTurn).toHaveBeenCalled();
-      expect(callCount).toBeGreaterThanOrEqual(2);
-    });
-    expect(saveSystemReminderMessage).not.toHaveBeenCalled();
     expect(switchMode).not.toHaveBeenCalled();
-    expect(state.chatContainer.children).toHaveLength(0);
     expect(state.planStartedGoalId).toBe(originalGoalId);
   });
 
@@ -1081,51 +796,6 @@ describe('MastraTUI queueing', () => {
     expect(goalManager.saveToThread).not.toHaveBeenCalled();
     expect(state.userInitiatedAbort).toBe(false);
     expect(mocks.showInfo).not.toHaveBeenCalledWith(state, 'Goal paused (interrupted). Use /goal resume to continue.');
-  });
-
-  it('cancels an in-flight goal judge when the user aborts before it resolves', async () => {
-    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, runId: 'run-1' }) }));
-    let resolveEvaluation:
-      | ((value: { continuation: string; judgeResult: { decision: 'continue'; reason: string } }) => void)
-      | undefined;
-    const state = createQueueState({
-      harness: {
-        getFollowUpCount: vi.fn(() => 0),
-        sendSignal,
-      } as any,
-      gradientAnimator: { fadeOut: vi.fn(), start: vi.fn() } as any,
-      goalManager: {
-        isActive: vi.fn(() => true),
-        stopActiveTimer: vi.fn(),
-        getGoal: vi.fn(() => ({
-          id: 'goal-1',
-          status: 'active',
-          judgeModelId: 'openai/gpt-5.5',
-          turnsUsed: 2,
-          maxTurns: 20,
-        })),
-        evaluateAfterTurn: vi.fn(
-          () =>
-            new Promise(resolve => {
-              resolveEvaluation = resolve;
-            }),
-        ),
-      } as any,
-    });
-    const ctx = createQueueContext(state);
-
-    handleAgentEnd(ctx);
-    handleAgentAborted(ctx);
-    resolveEvaluation?.({
-      continuation: 'goal continuation',
-      judgeResult: { decision: 'continue', reason: 'Keep going.' },
-    });
-
-    await vi.waitFor(() => {
-      expect(state.gradientAnimator?.fadeOut).toHaveBeenCalled();
-    });
-    expect(sendSignal).not.toHaveBeenCalled();
-    expect(state.chatContainer.children).toHaveLength(0);
   });
 
   it('waits for harness-level follow-ups to finish before draining the local queue', () => {
@@ -1163,13 +833,18 @@ describe('syncInitialThreadState', () => {
         ]),
         sendMessage: vi.fn(),
       },
-      goalManager: { loadFromThreadMetadata: vi.fn() },
+      goalManager: {
+        loadFromThread: vi.fn().mockResolvedValue(undefined),
+        getGoal: vi.fn(() => null),
+        loadFromThreadMetadata: vi.fn(),
+      },
       currentThreadTitle: undefined,
     } as unknown as TUIState;
 
     await syncInitialThreadState(state);
 
     expect(state.currentThreadTitle).toBe('PR triage');
+    expect(state.goalManager.loadFromThread).toHaveBeenCalledWith(state);
     expect(state.goalManager.loadFromThreadMetadata).toHaveBeenCalledWith({ goal: persistedGoal });
     expect(state.harness.sendMessage).not.toHaveBeenCalled();
   });

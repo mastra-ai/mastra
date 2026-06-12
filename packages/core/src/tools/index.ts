@@ -33,3 +33,18 @@ export type {
   TaskCheckResult,
 } from './builtin/task-tools';
 export { TaskStateProcessor } from './builtin/task-state-processor';
+export { GoalStateProcessor } from './builtin/goal-state-processor';
+export {
+  GOAL_STATE_ID,
+  GOAL_STATE_TYPE,
+  DEFAULT_GOAL_JUDGE_PROMPT,
+  DEFAULT_GOAL_MAX_RUNS,
+  resolveGoalStore,
+  resolveEffectiveGoalSettings,
+  readObjective,
+  writeObjective,
+  clearObjective,
+  getObjectiveFromRequestContext,
+  type EffectiveGoalSettings,
+  type AgentGoalConfigDefaults,
+} from './builtin/goal-tools';
