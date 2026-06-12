@@ -941,6 +941,16 @@ describe('MastraClient', () => {
         weatherTool: { output: { temperature: 70 } },
         paymentTool: { error: { name: 'PaymentError', message: 'declined' } },
         searchTool: { expect: { args: { query: 'mastra' }, calledTimes: 1 } },
+        // Args-conditional mock: cases + onNoMatch must cross the wire
+        // unmodified (the server matches case args by canonicalized equality).
+        geoTool: {
+          cases: [
+            { args: { city: 'Paris' }, output: { region: 'A' } },
+            { args: { city: 'Tokyo' }, error: { name: 'GeoError', message: 'unmapped' } },
+          ],
+          onNoMatch: 'passthrough' as const,
+          expect: { calledTimes: 2 },
+        },
       };
 
       await client.triggerDatasetExperiment({
@@ -958,6 +968,9 @@ describe('MastraClient', () => {
       const body = JSON.parse(init.body);
       expect(body.toolReplay).toEqual({ fromExperimentId: 'prior-exp', onMiss: 'passthrough', matching: 'strict' });
       expect(body.toolMocks).toEqual(toolMocks);
+      // Byte-exact: the cases table is sent verbatim — no key is renamed,
+      // reordered, or dropped between the typed param and the wire.
+      expect(init.body).toContain(JSON.stringify(toolMocks.geoTool));
       expect(body.itemIds).toEqual(['item-2']);
       expect(body.datasetId).toBeUndefined(); // path param never leaks into the body
     });

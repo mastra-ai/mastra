@@ -2616,9 +2616,11 @@ export type {
   ToolReplayMiss,
   ToolReplayArgMismatch,
   ToolReplayExperimentMarker,
+  ToolMockCase,
   ToolMockConfig,
   ToolMockDataConfig,
   ToolMockFunction,
+  ToolMockFunctionMarker,
   ToolMockExpectation,
   ToolMockUsage,
   ToolMockExpectationResult,
@@ -2639,7 +2641,9 @@ export interface DatasetExperiment {
    * - `toolReplay` — marks replay/mock runs. Parse it with the re-exported
    *   `getToolReplayMarker(experiment.metadata)` helper, which returns a
    *   `ToolReplayExperimentMarker` (`fromExperimentId`, `onMiss`, `matching`,
-   *   `mockedTools`) or null for live runs.
+   *   `mockedTools`, and `mockConfigs` — the mock configuration as configured,
+   *   keyed by tool name: data mocks verbatim, function mocks as
+   *   `{ function: true }` placeholders) or null for live runs.
    * - `failureReason` — `{ id, message }` recording why an async-triggered
    *   experiment failed during setup. The trigger route answers `pending`
    *   before setup runs, so this is the only place the reason surfaces over
@@ -2670,7 +2674,9 @@ export interface DatasetExperiment {
  * (persisted in its own column, not merged into `output`), and failed items
  * use the error codes `TOOL_REPLAY_MISS`, `TOOL_REPLAY_NO_RECORDING`,
  * `TOOL_REPLAY_LOAD_FAILED`, `TOOL_REPLAY_UNCONSUMED` (strict matching:
- * recorded calls left unconsumed fail the item), or
+ * recorded calls left unconsumed fail the item),
+ * `TOOL_MOCK_ARGS_MISMATCH` (a cases mock matched nothing under
+ * `onNoMatch: 'error'` — deterministic, never retried), or
  * `TOOL_MOCK_EXPECTATION_FAILED`.
  */
 export interface DatasetExperimentResult {
@@ -2862,26 +2868,38 @@ export interface TriggerDatasetExperimentParams {
   };
   /**
    * Per-tool data mocks, by tool name. Agent targets only. A mock stubs a
-   * static `output`, injects an `error`, and/or asserts how the tool must be
-   * called via `expect` (an unsatisfied expectation fails the item). Function
-   * mocks are code-only and cannot cross the HTTP API — use @mastra/core's
-   * `startExperiment` directly for those.
+   * static `output`, injects an `error`, answers conditionally on the call's
+   * args via `cases`, and/or asserts how the tool must be called via `expect`
+   * (an unsatisfied expectation fails the item). Function mocks are code-only
+   * and cannot cross the HTTP API — use @mastra/core's `startExperiment`
+   * directly for those.
+   *
+   * With `cases`, the first case whose `args` match the call's args
+   * (canonicalized deep equality) answers with its `output` or throws its
+   * `error`. When no case matches, `onNoMatch` decides: `'error'` (default)
+   * fails the item deterministically with `TOOL_MOCK_ARGS_MISMATCH` (never
+   * retried), `'passthrough'` runs the live tool. `expect` combines freely
+   * and counts every call, matched or not.
    *
    * Some combinations compile but are rejected with a 400 at the boundary:
-   * an empty mock (`{}` — at least one of `output`, `error`, or `expect` is
-   * required), `output` and `error` together, a negative or non-integer
-   * `expect.calledTimes`, mock keys that collide after tool-name formatting,
-   * and `toolMocks` on a non-agent target (same for `toolReplay` and
-   * `itemIds: []`). On older servers that predate the collision pre-check,
-   * colliding keys fail the experiment asynchronously instead, with
-   * `metadata.failureReason` (`{ id, message }`) readable via
-   * `getDatasetExperiment`.
+   * an empty mock (`{}` — at least one of `output`, `error`, `cases`, or
+   * `expect` is required), `output` and `error` together, `cases` combined
+   * with a top-level `output`/`error` (a mock is either static or
+   * conditional), an empty `cases` array, a case answering with neither an
+   * output nor an error, a negative or non-integer `expect.calledTimes`,
+   * mock keys that collide after tool-name formatting, and `toolMocks` on a
+   * non-agent target (same for `toolReplay` and `itemIds: []`). On older
+   * servers that predate the collision pre-check, colliding keys fail the
+   * experiment asynchronously instead, with `metadata.failureReason`
+   * (`{ id, message }`) readable via `getDatasetExperiment`.
    */
   toolMocks?: Record<
     string,
     {
       output?: unknown;
       error?: { name?: string; message: string };
+      cases?: Array<{ args?: unknown; output?: unknown; error?: { name?: string; message: string } }>;
+      onNoMatch?: 'error' | 'passthrough';
       expect?: { args?: unknown; calledTimes?: number };
     }
   >;
