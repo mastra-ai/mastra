@@ -380,6 +380,42 @@ Mastra provides utility processors for common tasks:
 **For security and validation processors**, see the [Guardrails](/docs/agents/guardrails) page for input/output guardrails and moderation processors.
 **For memory-specific processors**, see the [Memory Processors](/docs/memory/memory-processors) page for processors that handle message history, semantic recall, and working memory.
 
+### `AdaptiveModelRouter`
+
+**Added in:** `@mastra/core@1.37.0`
+
+:::experimental
+
+This processor is in alpha. Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+Picks one model per request from an ordered list, falls back reactively on errors, and can switch models proactively based on observability signals (error rate, scores, feedback). Configure it as both an input and an error processor.
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { AdaptiveModelRouter } from '@mastra/core/processors'
+
+const router = new AdaptiveModelRouter({
+  models: [
+    { id: 'primary', model: 'openai/gpt-5' },
+    { id: 'fallback', model: 'anthropic/claude-sonnet-4-5' },
+  ],
+  rules: [{ signal: 'error-rate', threshold: 0.3, minRequests: 5, window: '1h', cooldown: '5m' }],
+})
+
+const agent = new Agent({
+  name: 'adaptive-agent',
+  model: 'openai/gpt-5',
+  inputProcessors: [router],
+  errorProcessors: [router],
+})
+```
+
+When you configure an agent with a fallback array (`model: [...]`), the router is wired in automatically with reactive error-based fallback only. Add it explicitly when you need observability-driven routing rules.
+
+See the [`AdaptiveModelRouter` reference](/reference/processors/adaptive-model-router) for rule types, scope, and cooldown options.
+
 ### `TokenLimiter`
 
 Prevents context window overflow by removing older messages when the total token count exceeds a specified limit. Prioritizes recent messages and preserves system messages.

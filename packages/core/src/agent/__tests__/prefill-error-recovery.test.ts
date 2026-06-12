@@ -338,7 +338,10 @@ describe('PrefillErrorHandler Recovery', () => {
 
       expect(result.text).toBe('Recovered on secondary model');
       expect(seenModels).toEqual(['primary', 'secondary', 'secondary']);
-      expect(processAPIError).toHaveBeenCalledTimes(2);
+      // The AdaptiveModelRouter handles the primary→secondary fallback internally,
+      // so user error processors are only invoked when the router cannot find another
+      // eligible model (i.e. when secondary fails and we need a same-model retry).
+      expect(processAPIError).toHaveBeenCalledTimes(1);
     });
 
     it('should NOT retry for non-prefill API errors', async () => {

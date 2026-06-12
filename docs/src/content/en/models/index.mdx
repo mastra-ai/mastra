@@ -335,6 +335,22 @@ const agent = new Agent({
 
 Each field also accepts a function of `requestContext`, matching how dynamic models are resolved.
 
+### Cooldowns
+
+**Added in:** `@mastra/core@1.37.0`
+
+When a model in the fallback chain fails, Mastra records a short cooldown for that model in your configured [server cache](/reference/core/mastra-class). While a model is in cooldown it is skipped for subsequent requests on the same Mastra instance, so a failing provider doesn't get hit on every request before falling through.
+
+Cooldowns work without any extra setup. If you configured a `serverCache` on `Mastra` (for example a Redis-backed cache), cooldown state is shared across every request that hits that cache. Without a custom cache, Mastra uses an in-memory cache scoped to the running process.
+
+Cooldowns are global to the Mastra instance — a model that's failing for one user is treated as unhealthy for all users.
+
+### Advanced: observability-driven routing
+
+**Added in:** `@mastra/core@1.37.0`
+
+Under the hood, fallback arrays are powered by the [`AdaptiveModelRouter`](/reference/processors/adaptive-model-router) processor. Configure it explicitly when you want to switch models proactively based on observability signals — error rate, scorer output, or feedback aggregates — rather than only reactively on errors.
+
 ## Use local models with Mastra
 
 Mastra also supports local models like `gpt-oss`, `Qwen3`, `DeepSeek` and many more that you run on your own hardware. The application running your local model needs to provide an OpenAI-compatible API server for Mastra to connect to. We recommend using [LMStudio](https://lmstudio.ai/) (see [Running the LMStudio server](https://lmstudio.ai/docs/developer/core/server)).

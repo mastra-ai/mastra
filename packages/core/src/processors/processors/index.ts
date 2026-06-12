@@ -83,3 +83,18 @@ export {
   type ResponseCacheKeyInputs,
   type CachedLLMStepResponse,
 } from './response-cache';
+
+export {
+  AdaptiveModelRouter,
+  type AdaptiveModelRouterModel,
+  type AdaptiveModelRouterOptions,
+  type AdaptiveModelRouterRule,
+  type AdaptiveModelRouterTripwireMetadata,
+  type AdaptiveModelRouterViolationDetail,
+  type ErrorRateRule,
+  type FeedbackRule,
+  type MastraMetricName,
+  type RouterScope,
+  type RouterWindow,
+  type ScoreRule,
+} from '../adaptive-model-router';

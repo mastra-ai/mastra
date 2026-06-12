@@ -8,6 +8,7 @@ import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import { SpanType, resolveObservabilityContext } from '../../observability';
 import { executeWithContextSync } from '../../observability/utils';
+import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow } from '../../processors';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
@@ -21,22 +22,32 @@ export class MastraLLMVNext extends MastraBase {
   #mastra?: Mastra;
   #options?: MastraModelOptions;
   #firstModel: ModelManagerModelConfig;
+  #internalInputProcessors: InputProcessorOrWorkflow[];
+  #internalErrorProcessors: ErrorProcessorOrWorkflow[];
+  #registeredInternalProcessors = new WeakSet<object>();
 
   constructor({
     mastra,
     models,
     options,
+    internalInputProcessors = [],
+    internalErrorProcessors = [],
   }: {
     mastra?: Mastra;
     models: ModelManagerModelConfig[];
     options?: MastraModelOptions;
+    internalInputProcessors?: InputProcessorOrWorkflow[];
+    internalErrorProcessors?: ErrorProcessorOrWorkflow[];
   }) {
     super({ name: 'aisdk' });
 
     this.#options = options;
+    this.#internalInputProcessors = internalInputProcessors;
+    this.#internalErrorProcessors = internalErrorProcessors;
 
     if (mastra) {
       this.#mastra = mastra;
+      this.#registerInternalProcessors(mastra);
       if (mastra.getLogger()) {
         this.__setLogger(this.#mastra.getLogger());
       }
@@ -64,6 +75,17 @@ export class MastraLLMVNext extends MastraBase {
 
   __registerMastra(p: Mastra) {
     this.#mastra = p;
+    this.#registerInternalProcessors(p);
+  }
+
+  #registerInternalProcessors(mastra: Mastra) {
+    for (const processor of [...this.#internalInputProcessors, ...this.#internalErrorProcessors]) {
+      if (this.#registeredInternalProcessors.has(processor)) continue;
+      if ('__registerMastra' in processor && typeof processor.__registerMastra === 'function') {
+        processor.__registerMastra(mastra);
+        this.#registeredInternalProcessors.add(processor);
+      }
+    }
   }
 
   getProvider() {
@@ -211,10 +233,10 @@ export class MastraLLMVNext extends MastraBase {
         providerOptions,
         _internal,
         structuredOutput,
-        inputProcessors,
+        inputProcessors: [...this.#internalInputProcessors, ...(inputProcessors ?? [])],
         llmRequestInputProcessors,
         outputProcessors,
-        errorProcessors,
+        errorProcessors: [...this.#internalErrorProcessors, ...(errorProcessors ?? [])],
         returnScorerData,
         modelSpanTracker,
         requireToolApproval,

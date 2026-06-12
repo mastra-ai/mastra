@@ -1,0 +1,458 @@
+---
+title: 'Reference: AdaptiveModelRouter | Processors'
+description: 'API reference for the AdaptiveModelRouter processor in Mastra, which routes between models based on errors and observability signals.'
+packages:
+  - '@mastra/core'
+---
+
+# AdaptiveModelRouter
+
+**Added in:** `@mastra/core@1.37.0`
+
+:::experimental
+
+This processor is in alpha. Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+`AdaptiveModelRouter` is both an **input processor** and an **error processor** that picks one model per request from an ordered list and switches between them based on runtime errors and observability signals.
+
+When you configure an agent with a fallback array (`model: [...]`), the router is wired in automatically with reactive error-based fallback only. To enable observability-driven routing — switching on error rate, score, or feedback aggregates — add the router explicitly as both `inputProcessors` and `errorProcessors`, and pass `rules`.
+
+## Usage example
+
+Reactive fallback only — same behavior as the legacy `model: [...]` array, expressed explicitly:
+
+```typescript title="src/mastra/agents/adaptive-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { AdaptiveModelRouter } from '@mastra/core/processors'
+
+const router = new AdaptiveModelRouter({
+  models: [
+    { id: 'primary', model: 'openai/gpt-5' },
+    { id: 'fallback', model: 'anthropic/claude-sonnet-4-5' },
+  ],
+})
+
+export const agent = new Agent({
+  name: 'adaptive-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'openai/gpt-5',
+  inputProcessors: [router],
+  errorProcessors: [router],
+})
+```
+
+With observability-driven routing:
+
+```typescript title="src/mastra/agents/observability-routed-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { AdaptiveModelRouter } from '@mastra/core/processors'
+
+const router = new AdaptiveModelRouter({
+  models: [
+    { id: 'primary', model: 'openai/gpt-5' },
+    { id: 'cheaper', model: 'openai/gpt-5-mini' },
+    { id: 'stronger', model: 'anthropic/claude-sonnet-4-5' },
+  ],
+  scope: 'resource',
+  rules: [
+    {
+      signal: 'error-rate',
+      threshold: 0.3,
+      minRequests: 5,
+      window: '1h',
+      cooldown: '5m',
+      fallbackOrder: ['cheaper', 'stronger'],
+    },
+    {
+      signal: 'score',
+      scorerId: 'helpfulness',
+      minScore: 0.7,
+      window: '24h',
+      fallbackOrder: ['stronger', 'cheaper'],
+    },
+  ],
+})
+
+export const agent = new Agent({
+  name: 'observability-routed-agent',
+  instructions: 'You are a helpful assistant.',
+  model: 'openai/gpt-5',
+  inputProcessors: [router],
+  errorProcessors: [router],
+})
+```
+
+## How it works
+
+The router runs at two points in the agent loop:
+
+1. **`processInputStep`** (proactive). Before the LLM call, the router evaluates each configured rule against observability storage. The first rule that fires picks a model from the rule's `fallbackOrder` (or the default model order), skipping models that are already in cooldown. Rules are only evaluated when `retryCount === 0`, so processor-triggered retries reuse the active fallback order without re-querying observability.
+1. **`processAPIError`** (reactive). When the model call fails, the router opens a cooldown for the failed model in the [server cache](/reference/core/mastra-class) and selects the next eligible model from the active fallback order. It returns `{ retry: true }` to retry the step, or returns nothing so the original error propagates when no candidates remain.
+
+Fallback is attempted on any model error (matching the legacy `model: [...]` behavior), not only retryable API errors.
+
+### Cooldowns
+
+Cooldowns are stored in `Mastra.getServerCache()` and keyed by `router id + rule signal + model id`. The TTL comes from the rule's `cooldown` field. Cooldowns are global to the Mastra instance — they don't partition by scope, so a model that's failing for one request is treated as unhealthy for all requests.
+
+### Scope and observability queries
+
+The `scope` field controls how the router filters observability queries:
+
+- `'run'` — current trace/run
+- `'resource'` (default) — same `resourceId` as the request
+- `'thread'` — same `threadId` as the request
+
+Rule queries call into `ObservabilityStorage`:
+
+- `error-rate` uses `getMetricBreakdown` on the rule's `metric` (default `mastra_model_duration_ms`) split by model and error status.
+- `score` uses `getScoreAggregate` for the configured `scorerId`.
+- `feedback` uses `getFeedbackAggregate` per candidate model.
+
+If the configured storage backend does not implement a query, the rule fails closed — no proactive switch fires — but reactive `processAPIError` fallback still works.
+
+## Constructor parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'AdaptiveModelRouterOptions',
+    description: 'Router configuration. At least two enabled models are required.',
+    isOptional: false,
+    properties: [
+      {
+        name: 'models',
+        type: 'AdaptiveModelRouterModel[]',
+        description: 'Ordered list of candidate models. The first enabled entry is the default.',
+        isOptional: false,
+      },
+      {
+        name: 'rules',
+        type: 'AdaptiveModelRouterRule[]',
+        description:
+          'Rules evaluated against observability storage at request time. When omitted, a default error-rate rule is created from errorRateThreshold, minRequests, window, and cooldown. Pass [] to disable proactive routing entirely.',
+        isOptional: true,
+      },
+      {
+        name: 'scope',
+        type: "'run' | 'resource' | 'thread'",
+        description: 'How rule queries filter observability data.',
+        isOptional: true,
+        defaultValue: "'resource'",
+      },
+      {
+        name: 'window',
+        type: 'RouterWindow',
+        description: 'Default lookback window used when the default error-rate rule is created.',
+        isOptional: true,
+        defaultValue: "'24h'",
+      },
+      {
+        name: 'cooldown',
+        type: 'RouterWindow | `${number}m` | `${number}h` | `${number}d`',
+        description: 'Default cooldown duration used when the default error-rate rule is created.',
+        isOptional: true,
+        defaultValue: "'2m'",
+      },
+      {
+        name: 'errorRateThreshold',
+        type: 'number',
+        description: 'Threshold for the default error-rate rule, between 0 and 1.',
+        isOptional: true,
+        defaultValue: '0.3',
+      },
+      {
+        name: 'minRequests',
+        type: 'number',
+        description: 'Minimum sample count required before the default error-rate rule can fire.',
+        isOptional: true,
+        defaultValue: '5',
+      },
+    ],
+  },
+]}
+/>
+
+### `AdaptiveModelRouterModel`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Stable identifier for the model entry. Referenced by rule fallbackOrder.',
+    isOptional: false,
+  },
+  {
+    name: 'model',
+    type: 'MastraLanguageModel | MastraModelConfig',
+    description: 'The model to call when this entry is selected.',
+    isOptional: false,
+  },
+  {
+    name: 'maxRetries',
+    type: 'number',
+    description: 'Per-entry retry count passed through to the model call.',
+    isOptional: true,
+  },
+  {
+    name: 'enabled',
+    type: 'boolean',
+    description: 'When false, the entry is skipped during selection.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'modelSettings',
+    type: 'DynamicArgument<ModelFallbackSettings> | ModelFallbackSettings',
+    description: 'Per-entry model settings. Functions receive { requestContext, mastra } and may return a Promise.',
+    isOptional: true,
+  },
+  {
+    name: 'providerOptions',
+    type: 'DynamicArgument<SharedProviderOptions> | SharedProviderOptions',
+    description: 'Per-entry provider options. Functions receive { requestContext, mastra } and may return a Promise.',
+    isOptional: true,
+  },
+  {
+    name: 'headers',
+    type: 'DynamicArgument<Record<string, string>> | Record<string, string>',
+    description:
+      'Per-entry headers merged into modelSettings.headers. Functions receive { requestContext, mastra } and may return a Promise.',
+    isOptional: true,
+  },
+]}
+/>
+
+### `AdaptiveModelRouterRule`
+
+A discriminated union of three rule shapes. Each rule may declare its own `fallbackOrder`; when omitted, the router uses the configured `models` order.
+
+#### `ErrorRateRule`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'signal',
+    type: "'error-rate'",
+    description: 'Discriminator for error-rate rules.',
+    isOptional: false,
+  },
+  {
+    name: 'metric',
+    type: 'MastraMetricName',
+    description:
+      'Metric name to query. Built-in values include mastra_model_duration_ms, mastra_model_total_input_tokens, mastra_model_total_output_tokens, mastra_agent_duration_ms, and mastra_tool_duration_ms. Custom metric names are also accepted.',
+    isOptional: true,
+    defaultValue: "'mastra_model_duration_ms'",
+  },
+  {
+    name: 'threshold',
+    type: 'number',
+    description:
+      'Error rate threshold between 0 and 1. The rule fires when error count divided by total count meets this value.',
+    isOptional: true,
+  },
+  {
+    name: 'minRequests',
+    type: 'number',
+    description: 'Minimum sample count required before the rule can fire.',
+    isOptional: true,
+  },
+  {
+    name: 'window',
+    type: 'RouterWindow',
+    description: 'Lookback window for the metric query.',
+    isOptional: true,
+  },
+  {
+    name: 'cooldown',
+    type: 'RouterWindow | `${number}m` | `${number}h` | `${number}d`',
+    description: 'Duration the failed model is held out of selection after the rule fires.',
+    isOptional: true,
+  },
+  {
+    name: 'fallbackOrder',
+    type: 'string[]',
+    description:
+      'Ordered list of model ids to try when this rule fires. Each id must exist in the configured models array.',
+    isOptional: true,
+  },
+]}
+/>
+
+#### `ScoreRule`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'signal',
+    type: "'score'",
+    description: 'Discriminator for score rules.',
+    isOptional: false,
+  },
+  {
+    name: 'scorerId',
+    type: 'string',
+    description: 'Scorer id to query through getScoreAggregate.',
+    isOptional: false,
+  },
+  {
+    name: 'minScore',
+    type: 'number',
+    description: 'The rule fires when the aggregate score for the active model falls below this value.',
+    isOptional: false,
+  },
+  {
+    name: 'aggregation',
+    type: "'avg' | 'min' | 'max'",
+    description: 'Aggregation strategy used when reading score values.',
+    isOptional: true,
+    defaultValue: "'avg'",
+  },
+  {
+    name: 'window',
+    type: 'RouterWindow',
+    description: 'Lookback window for the score query.',
+    isOptional: true,
+  },
+  {
+    name: 'cooldown',
+    type: 'RouterWindow | `${number}m` | `${number}h` | `${number}d`',
+    description: 'Cooldown duration applied to the failing model after the rule fires.',
+    isOptional: true,
+  },
+  {
+    name: 'fallbackOrder',
+    type: 'string[]',
+    description: 'Ordered list of model ids to try when this rule fires.',
+    isOptional: true,
+  },
+]}
+/>
+
+#### `FeedbackRule`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'signal',
+    type: "'feedback'",
+    description: 'Discriminator for feedback rules.',
+    isOptional: false,
+  },
+  {
+    name: 'feedbackType',
+    type: 'string',
+    description: 'Feedback type to query through getFeedbackAggregate.',
+    isOptional: false,
+  },
+  {
+    name: 'strategy',
+    type: "'best-rated'",
+    description:
+      'Selection strategy. best-rated picks the highest-rated eligible model in the candidate fallback order.',
+    isOptional: true,
+    defaultValue: "'best-rated'",
+  },
+  {
+    name: 'aggregation',
+    type: "'avg' | 'min' | 'max'",
+    description: 'Aggregation strategy used when reading feedback values.',
+    isOptional: true,
+    defaultValue: "'avg'",
+  },
+  {
+    name: 'minSamples',
+    type: 'number',
+    description: 'Minimum sample count required before the rule can fire.',
+    isOptional: true,
+    defaultValue: '10',
+  },
+  {
+    name: 'window',
+    type: 'RouterWindow',
+    description: 'Lookback window for the feedback query.',
+    isOptional: true,
+  },
+  {
+    name: 'cooldown',
+    type: 'RouterWindow | `${number}m` | `${number}h` | `${number}d`',
+    description: 'Cooldown duration applied after the rule fires.',
+    isOptional: true,
+  },
+  {
+    name: 'fallbackOrder',
+    type: 'string[]',
+    description: 'Ordered list of candidate model ids. The router picks the best-rated id from this list.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: "'adaptive-model-router'",
+    description: 'Processor identifier.',
+    isOptional: false,
+  },
+  {
+    name: 'name',
+    type: "'Adaptive Model Router'",
+    description: 'Processor display name.',
+    isOptional: false,
+  },
+  {
+    name: 'rules',
+    type: 'AdaptiveModelRouterRule[]',
+    description: 'The resolved rules, including the default error-rate rule when none were supplied.',
+    isOptional: false,
+  },
+  {
+    name: 'models',
+    type: 'AdaptiveModelRouterModel[]',
+    description: 'The configured model list, in declaration order.',
+    isOptional: false,
+  },
+  {
+    name: 'processInputStep',
+    type: '(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult | void>',
+    description: 'Selects the single model used for the next LLM call.',
+    isOptional: false,
+  },
+  {
+    name: 'processAPIError',
+    type: '(args: ProcessAPIErrorArgs) => Promise<ProcessAPIErrorResult | void>',
+    description: 'Opens a cooldown on the failed model and signals retry when another candidate is available.',
+    isOptional: false,
+  },
+]}
+/>
+
+## Tripwire metadata
+
+When a rule fires and the router switches models, it calls `onViolation` with this detail:
+
+```typescript
+type AdaptiveModelRouterViolationDetail = {
+  rule: AdaptiveModelRouterRule
+  originalModel: string
+  selectedModel: string
+  reason: string
+}
+```
+
+The same shape (plus `processorId: 'adaptive-model-router'`) is available as `AdaptiveModelRouterTripwireMetadata`.
+
+## Related
+
+- [Processors](/docs/agents/processors)
+- [Processor interface](/reference/processors/processor-interface)
+- [StreamErrorRetryProcessor](/reference/processors/stream-error-retry-processor)

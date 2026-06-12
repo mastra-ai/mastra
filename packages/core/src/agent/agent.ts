@@ -64,6 +64,7 @@ import {
   createObservabilityContext,
   resolveObservabilityContext,
 } from '../observability';
+import { AdaptiveModelRouter } from '../processors/adaptive-model-router';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
@@ -2410,10 +2411,17 @@ export class Agent<
             : modelSelection;
 
           llm = this.prepareModels(requestContext, enabledSelection).then(models => {
+            const adaptiveModelRouter =
+              Array.isArray(enabledSelection) && models.length > 1
+                ? new AdaptiveModelRouter({ models, rules: [] })
+                : undefined;
+
             return new MastraLLMVNext({
-              models,
+              models: adaptiveModelRouter ? [models[0]!] : models,
               mastra: this.#mastra,
               options: { tracingPolicy: this.#options?.tracingPolicy },
+              internalInputProcessors: adaptiveModelRouter ? [adaptiveModelRouter] : [],
+              internalErrorProcessors: adaptiveModelRouter ? [adaptiveModelRouter] : [],
             });
           });
         } else {

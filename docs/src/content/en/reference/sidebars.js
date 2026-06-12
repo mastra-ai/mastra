@@ -442,6 +442,7 @@ const sidebars = {
       label: 'Processors',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'processors/adaptive-model-router', label: 'AdaptiveModelRouter' },
         { type: 'doc', id: 'processors/batch-parts-processor', label: 'BatchPartsProcessor' },
         { type: 'doc', id: 'processors/cost-guard-processor', label: 'CostGuardProcessor' },
         { type: 'doc', id: 'processors/language-detector', label: 'LanguageDetector' },

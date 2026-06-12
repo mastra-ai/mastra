@@ -1315,11 +1315,25 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // immediately before execute() ensures the span's startTime excludes
             // input processor / prepareStep / processLLMRequest work, and that
             // availableTools / toolChoice reflect any per-step mutations.
+            const currentStepUsesModelConfig = currentStep.model === modelConfig.model;
+            const stepMaxRetries = (currentStep.modelSettings as { maxRetries?: number } | undefined)?.maxRetries;
+            // Strip maxRetries from span parameters — it's a transport concern (p-retry), not an
+            // inference parameter, and bundling it here changes the tracing surface area.
+            const { maxRetries: _stepMaxRetriesIgnored, ...currentStepModelSettingsForSpan } =
+              (currentStep.modelSettings ?? {}) as { maxRetries?: number } & Record<string, unknown>;
+            const currentStepSpanParameters = {
+              ...currentStepModelSettingsForSpan,
+              ...(currentStepUsesModelConfig ? modelConfig.modelSettings : {}),
+            };
+            const currentStepModelSettings = {
+              ...currentStepSpanParameters,
+              maxRetries: currentStepUsesModelConfig
+                ? (modelConfig.maxRetries ?? stepMaxRetries)
+                : (stepMaxRetries ?? modelConfig.maxRetries),
+            };
+
             modelSpanTracker?.setInferenceContext?.({
-              parameters: {
-                ...currentStep.modelSettings,
-                ...modelConfig.modelSettings,
-              } as Record<string, unknown> | undefined,
+              parameters: currentStepSpanParameters as Record<string, unknown> | undefined,
               providerOptions: currentStep.providerOptions as Record<string, unknown> | undefined,
               availableTools: getStepAvailableToolNames(
                 currentStep.tools as Record<string, unknown> | undefined,
@@ -1344,11 +1358,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   options,
                   // Per-model modelSettings shallow-merge on top of call-time modelSettings.
                   // Per-model maxRetries always wins so p-retry uses the right retry count for this model.
-                  modelSettings: {
-                    ...currentStep.modelSettings,
-                    ...modelConfig.modelSettings,
-                    maxRetries: modelConfig.maxRetries,
-                  },
+                  modelSettings: currentStepModelSettings,
                   includeRawChunks,
                   structuredOutput: currentStep.structuredOutput,
                   // Merge headers: memory context first, then modelConfig headers, then modelSettings overrides
