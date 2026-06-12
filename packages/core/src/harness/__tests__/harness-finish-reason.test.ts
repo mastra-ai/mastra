@@ -164,6 +164,35 @@ describe('Harness: non-success finish reasons', () => {
     expect(messageEnd?.message.errorMessage).toContain('maximum output length');
   });
 
+  it('emits an info notice when a server-side fallback model served the turn', async () => {
+    const harness = await buildHarness('fallback-served', () =>
+      createFinishReasonStream('stop', {
+        anthropic: {
+          iterations: [
+            { type: 'message', model: 'claude-fable-5', inputTokens: 10, outputTokens: 0 },
+            { type: 'fallback_message', model: 'claude-opus-4-8', inputTokens: 10, outputTokens: 50 },
+          ],
+        },
+      }),
+    );
+
+    const events: any[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+
+    await harness.sendMessage({ content: 'do something borderline' });
+
+    // The turn still completes normally — the fallback answered it.
+    expect(events.find(e => e.type === 'agent_end')?.reason).toBe('complete');
+    expect(events.some(e => e.type === 'error')).toBe(false);
+
+    // But the user is told the response did not come from the selected model.
+    const info = events.find(e => e.type === 'info');
+    expect(info).toBeDefined();
+    expect(info.message).toContain('fallback model claude-opus-4-8');
+  });
+
   it('still completes normally on a stop finish reason', async () => {
     const harness = await buildHarness('stop', () => createFinishReasonStream('stop'));
 
