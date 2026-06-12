@@ -2,10 +2,11 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { ToolMockRow } from '../tool-mocks-editor';
+import type { ToolMockCaseRow, ToolMockRow } from '../tool-mocks-editor';
 import {
   areToolMockRowsValid,
   buildToolMocksPayload,
+  createToolMockCaseRow,
   createToolMockRow,
   ToolMocksEditor,
   validateToolMockRows,
@@ -13,6 +14,10 @@ import {
 
 function makeRow(patch: Partial<ToolMockRow>): ToolMockRow {
   return { ...createToolMockRow(), ...patch };
+}
+
+function makeCaseRow(patch: Partial<ToolMockCaseRow>): ToolMockCaseRow {
+  return { ...createToolMockCaseRow(), ...patch };
 }
 
 describe('buildToolMocksPayload', () => {
@@ -103,6 +108,70 @@ describe('buildToolMocksPayload', () => {
       ]),
     ).toEqual({ weatherInfo: { output: 'first' } });
   });
+
+  it('builds conditional cases — first matching case answers with output or error — and omits the default onNoMatch', () => {
+    expect(
+      buildToolMocksPayload([
+        makeRow({
+          toolName: 'weatherInfo',
+          kind: 'cases',
+          caseRows: [
+            makeCaseRow({ argsText: '{"city": "Paris"}', outputText: '{"temp": 20}' }),
+            makeCaseRow({ argsText: '{"city": "Tokyo"}', answerKind: 'error', errorMessage: 'city offline' }),
+          ],
+        }),
+      ]),
+    ).toEqual({
+      weatherInfo: {
+        cases: [
+          { args: { city: 'Paris' }, output: { temp: 20 } },
+          { args: { city: 'Tokyo' }, error: { message: 'city offline' } },
+        ],
+      },
+    });
+  });
+
+  it('sends onNoMatch only for the explicit Run-live choice', () => {
+    const caseRows = [makeCaseRow({ argsText: '{"city": "Paris"}', outputText: '"sunny"' })];
+    // 'error' is the backend default — leaving Fail-the-item selected sends nothing.
+    expect(buildToolMocksPayload([makeRow({ toolName: 'weatherInfo', kind: 'cases', caseRows })])).toEqual({
+      weatherInfo: { cases: [{ args: { city: 'Paris' }, output: 'sunny' }] },
+    });
+    expect(
+      buildToolMocksPayload([makeRow({ toolName: 'weatherInfo', kind: 'cases', caseRows, onNoMatch: 'passthrough' })]),
+    ).toEqual({
+      weatherInfo: { cases: [{ args: { city: 'Paris' }, output: 'sunny' }], onNoMatch: 'passthrough' },
+    });
+  });
+
+  it('attaches expect to a cases row only while the disclosure is open', () => {
+    const base = {
+      toolName: 'weatherInfo',
+      kind: 'cases' as const,
+      caseRows: [makeCaseRow({ argsText: '{"city": "Paris"}', outputText: '"sunny"' })],
+      expectCalledTimesText: '2',
+    };
+    expect(buildToolMocksPayload([makeRow({ ...base, assertCallsOpen: true })])).toEqual({
+      weatherInfo: { cases: [{ args: { city: 'Paris' }, output: 'sunny' }], expect: { calledTimes: 2 } },
+    });
+    expect(buildToolMocksPayload([makeRow({ ...base, assertCallsOpen: false })])).toEqual({
+      weatherInfo: { cases: [{ args: { city: 'Paris' }, output: 'sunny' }] },
+    });
+  });
+
+  it('never ships a cases row without cases, with malformed args, or with an answer-less case', () => {
+    expect(buildToolMocksPayload([makeRow({ toolName: 'a', kind: 'cases' })])).toBeUndefined();
+    expect(
+      buildToolMocksPayload([
+        makeRow({ toolName: 'a', kind: 'cases', caseRows: [makeCaseRow({ argsText: '{oops', outputText: '"x"' })] }),
+      ]),
+    ).toBeUndefined();
+    expect(
+      buildToolMocksPayload([
+        makeRow({ toolName: 'a', kind: 'cases', caseRows: [makeCaseRow({ argsText: '{"q": 1}' })] }),
+      ]),
+    ).toBeUndefined();
+  });
 });
 
 describe('validateToolMockRows', () => {
@@ -156,6 +225,49 @@ describe('validateToolMockRows', () => {
     });
     expect(areToolMockRowsValid([row])).toBe(true);
     expect(areToolMockRowsValid([{ ...row, assertCallsOpen: true }])).toBe(false);
+  });
+
+  it('validates cases rows: at least one case, valid args, and an answer per case', () => {
+    const noCases = makeRow({ toolName: 'a', kind: 'cases' });
+    const emptyArgs = makeRow({ toolName: 'b', kind: 'cases', caseRows: [makeCaseRow({ outputText: '"x"' })] });
+    const badArgs = makeRow({
+      toolName: 'c',
+      kind: 'cases',
+      caseRows: [makeCaseRow({ argsText: '{oops', outputText: '"x"' })],
+    });
+    const noAnswer = makeRow({ toolName: 'd', kind: 'cases', caseRows: [makeCaseRow({ argsText: '{"q": 1}' })] });
+    const noErrorMessage = makeRow({
+      toolName: 'e',
+      kind: 'cases',
+      caseRows: [makeCaseRow({ argsText: '{"q": 1}', answerKind: 'error' })],
+    });
+    const valid = makeRow({
+      toolName: 'f',
+      kind: 'cases',
+      caseRows: [makeCaseRow({ argsText: '{"q": 1}', outputText: 'ok' })],
+    });
+
+    const issues = validateToolMockRows([noCases, emptyArgs, badArgs, noAnswer, noErrorMessage, valid]);
+    expect(issues.get(noCases.id)?.cases).toBe('Add at least one case.');
+    expect(issues.get(emptyArgs.id)?.cases).toBe('Case 1: args are required.');
+    expect(issues.get(badArgs.id)?.cases).toBe('Case 1: args is not valid JSON.');
+    expect(issues.get(noAnswer.id)?.cases).toBe('Case 1: output is required.');
+    expect(issues.get(noErrorMessage.id)?.cases).toBe('Case 1: error message is required.');
+    expect(issues.get(valid.id)).toBeUndefined();
+  });
+
+  it('points the cases message at the first broken case', () => {
+    const row = makeRow({
+      toolName: 'weatherInfo',
+      kind: 'cases',
+      caseRows: [
+        makeCaseRow({ argsText: '{"city": "Paris"}', outputText: '"sunny"' }),
+        makeCaseRow({ argsText: '{"city": "Tokyo"}', outputText: '{broken' }),
+      ],
+    });
+    expect(validateToolMockRows([row]).get(row.id)?.cases).toBe(
+      'Case 2: output is invalid JSON — fix it, or remove the leading {, [ or " for a plain string.',
+    );
   });
 });
 
@@ -229,6 +341,38 @@ describe('ToolMocksEditor', () => {
 
     expect(screen.getByLabelText('Expected args (JSON, optional)')).toBeDefined();
     expect(screen.getByLabelText('Expected call count (calledTimes)')).toBeDefined();
+  });
+
+  it('offers conditional cases with add/remove case rows and the no-match policy', () => {
+    render(<EditorHarness />);
+    fireEvent.click(screen.getByRole('switch', { name: 'Mock tools' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add mock' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Conditional cases' }));
+    expect(screen.getByText('The first case whose args match the call answers it.')).toBeDefined();
+    // No cases yet — the row blocks Run with the inline message.
+    expect(screen.getByText('Add at least one case.')).toBeDefined();
+    // Fail-the-item is the preselected no-match policy (the backend default).
+    const noMatchGroup = screen.getByRole('group', { name: 'If no case matches' });
+    expect(within(noMatchGroup).getByRole('button', { name: 'Fail the item' }).getAttribute('aria-pressed')).toBe(
+      'true',
+    );
+    expect(within(noMatchGroup).getByRole('button', { name: 'Run live' }).getAttribute('aria-pressed')).toBe('false');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add case' }));
+    expect(screen.queryByText('Add at least one case.')).toBeNull();
+    expect(screen.getByLabelText('Case 1 args (JSON)')).toBeDefined();
+    // Output is the default answer; switching to Error swaps the field.
+    expect(screen.getByLabelText('Case 1 output (JSON or plain text)')).toBeDefined();
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Case 1 answer kind' })).getByRole('button', { name: 'Error' }),
+    );
+    expect(screen.queryByLabelText('Case 1 output (JSON or plain text)')).toBeNull();
+    expect(screen.getByLabelText('Case 1 error message')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove case 1' }));
+    expect(screen.queryByLabelText('Case 1 args (JSON)')).toBeNull();
+    expect(screen.getByText('Add at least one case.')).toBeDefined();
   });
 
   it('shows the invalid-JSON hint for a JSON-looking stub output', () => {

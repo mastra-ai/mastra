@@ -4,7 +4,24 @@ import { ChevronDown, ChevronRight, Plus, Trash2 } from 'lucide-react';
 import { useId } from 'react';
 
 /** Kind of mock answer a row configures (function mocks are code-only — never offered here). */
-export type ToolMockKind = 'output' | 'error' | 'expect';
+export type ToolMockKind = 'output' | 'error' | 'cases' | 'expect';
+
+/**
+ * One editable case of a conditional-cases row: the args it answers (JSON,
+ * required) plus its answer — an output value or a thrown error message.
+ */
+export interface ToolMockCaseRow {
+  /** Stable local key for list rendering. */
+  id: string;
+  /** Args this case answers (canonicalized deep equality on the backend). */
+  argsText: string;
+  /** How the case answers a matching call. */
+  answerKind: 'output' | 'error';
+  /** Served output (answerKind: output): JSON or plain text — same parse idiom as the stub field. */
+  outputText: string;
+  /** Thrown error (answerKind: error). */
+  errorMessage: string;
+}
 
 /**
  * One editable mock row. Free-form text fields keep exactly what the user
@@ -21,7 +38,11 @@ export interface ToolMockRow {
   /** Injected error (kind: error). */
   errorMessage: string;
   errorName: string;
-  /** "Also assert calls" disclosure on stub/error rows — expect fields only count while visible. */
+  /** Args-conditional answers (kind: cases) — the first matching case answers. */
+  caseRows: ToolMockCaseRow[];
+  /** What happens when no case matches (kind: cases). 'error' is the backend default. */
+  onNoMatch: 'error' | 'passthrough';
+  /** "Also assert calls" disclosure on stub/error/cases rows — expect fields only count while visible. */
   assertCallsOpen: boolean;
   expectArgsText: string;
   expectCalledTimesText: string;
@@ -38,9 +59,24 @@ export function createToolMockRow(): ToolMockRow {
     outputText: '',
     errorMessage: '',
     errorName: '',
+    caseRows: [],
+    onNoMatch: 'error',
     assertCallsOpen: false,
     expectArgsText: '',
     expectCalledTimesText: '',
+  };
+}
+
+let nextCaseRowId = 0;
+
+export function createToolMockCaseRow(): ToolMockCaseRow {
+  nextCaseRowId += 1;
+  return {
+    id: `tool-mock-case-${nextCaseRowId}`,
+    argsText: '',
+    answerKind: 'output',
+    outputText: '',
+    errorMessage: '',
   };
 }
 
@@ -74,10 +110,45 @@ function expectFieldsActive(row: ToolMockRow): boolean {
   return row.kind === 'expect' || row.assertCallsOpen;
 }
 
+/**
+ * Single-pass parse of a cases list into the payload shape, or the first
+ * problem found. Validation (the inline message) and the payload builder
+ * (the defensive skip) read the same result, so they can never disagree.
+ */
+function parseCaseRows(
+  caseRows: ToolMockCaseRow[],
+): { ok: true; cases: NonNullable<ToolMockPayloadEntry['cases']> } | { ok: false; issue: string } {
+  if (caseRows.length === 0) return { ok: false, issue: 'Add at least one case.' };
+  const cases: NonNullable<ToolMockPayloadEntry['cases']> = [];
+  for (const [index, caseRow] of caseRows.entries()) {
+    const n = index + 1;
+    if (!caseRow.argsText.trim()) return { ok: false, issue: `Case ${n}: args are required.` };
+    const parsedArgs = parseLooseJsonText(caseRow.argsText);
+    if (!parsedArgs.ok) return { ok: false, issue: `Case ${n}: args is not valid JSON.` };
+    if (caseRow.answerKind === 'error') {
+      const message = caseRow.errorMessage.trim();
+      if (!message) return { ok: false, issue: `Case ${n}: error message is required.` };
+      cases.push({ args: parsedArgs.value, error: { message } });
+    } else {
+      if (!caseRow.outputText.trim()) return { ok: false, issue: `Case ${n}: output is required.` };
+      const parsedOutput = parseLooseJsonText(caseRow.outputText);
+      if (!parsedOutput.ok) {
+        return {
+          ok: false,
+          issue: `Case ${n}: output is invalid JSON — fix it, or remove the leading {, [ or " for a plain string.`,
+        };
+      }
+      cases.push({ args: parsedArgs.value, output: parsedOutput.value });
+    }
+  }
+  return { ok: true, cases };
+}
+
 export interface ToolMockRowIssues {
   toolName?: string;
   output?: string;
   error?: string;
+  cases?: string;
   expect?: string;
 }
 
@@ -114,6 +185,11 @@ export function validateToolMockRows(rows: ToolMockRow[]): Map<string, ToolMockR
 
     if (row.kind === 'error' && !row.errorMessage.trim()) {
       addIssue(row.id, { error: 'Error message is required.' });
+    }
+
+    if (row.kind === 'cases') {
+      const parsedCases = parseCaseRows(row.caseRows);
+      if (!parsedCases.ok) addIssue(row.id, { cases: parsedCases.issue });
     }
 
     if (expectFieldsActive(row)) {
@@ -169,6 +245,13 @@ export function buildToolMocksPayload(rows: ToolMockRow[]): Record<string, ToolM
       if (!message) continue;
       const name = row.errorName.trim();
       entry.error = { ...(name ? { name } : {}), message };
+    } else if (row.kind === 'cases') {
+      const parsedCases = parseCaseRows(row.caseRows);
+      if (!parsedCases.ok) continue;
+      entry.cases = parsedCases.cases;
+      // 'error' is the backend default — only the explicit passthrough choice
+      // crosses the wire (mirroring how the fifo matching default is omitted).
+      if (row.onNoMatch === 'passthrough') entry.onNoMatch = 'passthrough';
     }
 
     if (expectFieldsActive(row)) {
@@ -196,7 +279,18 @@ export function buildToolMocksPayload(rows: ToolMockRow[]): Record<string, ToolM
 const KIND_OPTIONS: { value: ToolMockKind; label: string }[] = [
   { value: 'output', label: 'Stub output' },
   { value: 'error', label: 'Inject error' },
+  { value: 'cases', label: 'Conditional cases' },
   { value: 'expect', label: 'Expect only' },
+];
+
+const CASE_ANSWER_OPTIONS: { value: ToolMockCaseRow['answerKind']; label: string }[] = [
+  { value: 'output', label: 'Output' },
+  { value: 'error', label: 'Error' },
+];
+
+const ON_NO_MATCH_OPTIONS: { value: ToolMockRow['onNoMatch']; label: string }[] = [
+  { value: 'error', label: 'Fail the item' },
+  { value: 'passthrough', label: 'Run live' },
 ];
 
 export interface ToolMocksEditorProps {
@@ -212,8 +306,9 @@ export interface ToolMocksEditorProps {
 /**
  * Layout-agnostic editor for per-tool data mocks on experiment runs (agent
  * targets only — callers gate on target type). Rows map 1:1 to the trigger
- * payload's `toolMocks` entries: stub an output, inject an error, or only
- * assert calls. Works standalone (mock-only runs) and alongside tool replay.
+ * payload's `toolMocks` entries: stub an output, inject an error, answer
+ * conditionally on the call's args (cases), or only assert calls. Works
+ * standalone (mock-only runs) and alongside tool replay.
  */
 export function ToolMocksEditor({
   enabled,
@@ -228,6 +323,12 @@ export function ToolMocksEditor({
 
   const updateRow = (rowId: string, patch: Partial<ToolMockRow>) => {
     onRowsChange(rows.map(row => (row.id === rowId ? { ...row, ...patch } : row)));
+  };
+
+  const updateCaseRow = (row: ToolMockRow, caseId: string, patch: Partial<ToolMockCaseRow>) => {
+    updateRow(row.id, {
+      caseRows: row.caseRows.map(caseRow => (caseRow.id === caseId ? { ...caseRow, ...patch } : caseRow)),
+    });
   };
 
   return (
@@ -358,6 +459,121 @@ export function ToolMocksEditor({
                       disabled={disabled}
                     />
                     {rowIssues?.error && <p className="text-ui-sm text-negative1">{rowIssues.error}</p>}
+                  </div>
+                )}
+
+                {row.kind === 'cases' && (
+                  <div className="grid gap-2">
+                    <p className="text-ui-sm text-neutral3">The first case whose args match the call answers it.</p>
+
+                    {row.caseRows.map((caseRow, index) => (
+                      <div
+                        key={caseRow.id}
+                        role="group"
+                        aria-label={`Case ${index + 1}`}
+                        className="grid gap-1 rounded-md border border-border1 p-2"
+                      >
+                        <div className="flex items-start gap-2">
+                          <Textarea
+                            value={caseRow.argsText}
+                            onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) =>
+                              updateCaseRow(row, caseRow.id, { argsText: event.target.value })
+                            }
+                            placeholder='{"city": "Paris"} — args this case answers'
+                            aria-label={`Case ${index + 1} args (JSON)`}
+                            className="flex-1 font-mono text-xs min-h-[60px]"
+                            disabled={disabled}
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              updateRow(row.id, { caseRows: row.caseRows.filter(other => other.id !== caseRow.id) })
+                            }
+                            disabled={disabled}
+                            aria-label={`Remove case ${index + 1}`}
+                            className="text-neutral2 hover:text-negative1"
+                          >
+                            <Icon size="sm">
+                              <Trash2 />
+                            </Icon>
+                          </Button>
+                        </div>
+
+                        <div className="flex flex-wrap gap-1" role="group" aria-label={`Case ${index + 1} answer kind`}>
+                          {CASE_ANSWER_OPTIONS.map(option => (
+                            <Button
+                              key={option.value}
+                              type="button"
+                              variant={caseRow.answerKind === option.value ? 'outline' : 'ghost'}
+                              size="sm"
+                              aria-pressed={caseRow.answerKind === option.value}
+                              onClick={() => updateCaseRow(row, caseRow.id, { answerKind: option.value })}
+                              disabled={disabled}
+                            >
+                              {option.label}
+                            </Button>
+                          ))}
+                        </div>
+
+                        {caseRow.answerKind === 'output' ? (
+                          <Textarea
+                            value={caseRow.outputText}
+                            onChange={(event: React.ChangeEvent<HTMLTextAreaElement>) =>
+                              updateCaseRow(row, caseRow.id, { outputText: event.target.value })
+                            }
+                            placeholder='{"result": "ok"} — or plain text'
+                            aria-label={`Case ${index + 1} output (JSON or plain text)`}
+                            className="font-mono text-xs min-h-[60px]"
+                            disabled={disabled}
+                          />
+                        ) : (
+                          <Input
+                            value={caseRow.errorMessage}
+                            onChange={event => updateCaseRow(row, caseRow.id, { errorMessage: event.target.value })}
+                            placeholder="Error message"
+                            aria-label={`Case ${index + 1} error message`}
+                            disabled={disabled}
+                          />
+                        )}
+                      </div>
+                    ))}
+
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="justify-self-start"
+                      onClick={() => updateRow(row.id, { caseRows: [...row.caseRows, createToolMockCaseRow()] })}
+                      disabled={disabled}
+                    >
+                      <Icon size="sm">
+                        <Plus />
+                      </Icon>
+                      Add case
+                    </Button>
+
+                    {rowIssues?.cases && <p className="text-ui-sm text-negative1">{rowIssues.cases}</p>}
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-ui-sm text-neutral3">If no case matches</span>
+                      <div className="flex gap-1" role="group" aria-label="If no case matches">
+                        {ON_NO_MATCH_OPTIONS.map(option => (
+                          <Button
+                            key={option.value}
+                            type="button"
+                            variant={row.onNoMatch === option.value ? 'outline' : 'ghost'}
+                            size="sm"
+                            aria-pressed={row.onNoMatch === option.value}
+                            onClick={() => updateRow(row.id, { onNoMatch: option.value })}
+                            disabled={disabled}
+                          >
+                            {option.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 )}
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { ExperimentTriggerDialog } from '../experiment-trigger-dialog';
@@ -14,6 +14,10 @@ import {
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
+
+// File-scoped: the first dialog render (target selector + combobox portals)
+// can exceed the 5s default under a parallel full-suite run.
+vi.setConfig({ testTimeout: 15_000 });
 
 beforeAll(() => {
   // Base UI option selection dispatches pointer events jsdom does not implement.
@@ -176,6 +180,104 @@ describe('ExperimentTriggerDialog tool mocks', () => {
 
     await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
     expect('toolMocks' in (capture.mock.calls[0][0] as Record<string, unknown>)).toBe(false);
+  });
+
+  it('sends a cases mock byte-exact — Paris answers, Tokyo throws, default onNoMatch stays off the wire', async () => {
+    const capture = useTriggerHandlers();
+    renderDialog();
+    await selectAgentTarget();
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Mock tools' }));
+    addMockRow();
+    fireEvent.change(screen.getByLabelText('Tool name'), { target: { value: 'weatherInfo' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Conditional cases' }));
+
+    // Case 1: Paris answers with an output.
+    fireEvent.click(screen.getByRole('button', { name: 'Add case' }));
+    fireEvent.change(screen.getByLabelText('Case 1 args (JSON)'), { target: { value: '{"city": "Paris"}' } });
+    fireEvent.change(screen.getByLabelText('Case 1 output (JSON or plain text)'), {
+      target: { value: '{"temp": 20}' },
+    });
+
+    // Case 2: Tokyo throws.
+    fireEvent.click(screen.getByRole('button', { name: 'Add case' }));
+    fireEvent.change(screen.getByLabelText('Case 2 args (JSON)'), { target: { value: '{"city": "Tokyo"}' } });
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'Case 2 answer kind' })).getByRole('button', { name: 'Error' }),
+    );
+    fireEvent.change(screen.getByLabelText('Case 2 error message'), { target: { value: 'city offline' } });
+
+    expect(runButton().disabled).toBe(false);
+    fireEvent.click(runButton());
+
+    await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+    const body = capture.mock.calls[0][0] as Record<string, unknown>;
+    expect(body.toolMocks).toEqual({
+      weatherInfo: {
+        cases: [
+          { args: { city: 'Paris' }, output: { temp: 20 } },
+          { args: { city: 'Tokyo' }, error: { message: 'city offline' } },
+        ],
+      },
+    });
+    expect(body.toolReplay).toBeUndefined();
+  });
+
+  it('sends onNoMatch when Run live is chosen for unmatched calls', async () => {
+    const capture = useTriggerHandlers();
+    renderDialog();
+    await selectAgentTarget();
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Mock tools' }));
+    addMockRow();
+    fireEvent.change(screen.getByLabelText('Tool name'), { target: { value: 'weatherInfo' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Conditional cases' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add case' }));
+    fireEvent.change(screen.getByLabelText('Case 1 args (JSON)'), { target: { value: '{"city": "Paris"}' } });
+    fireEvent.change(screen.getByLabelText('Case 1 output (JSON or plain text)'), { target: { value: 'sunny' } });
+    fireEvent.click(
+      within(screen.getByRole('group', { name: 'If no case matches' })).getByRole('button', { name: 'Run live' }),
+    );
+
+    fireEvent.click(runButton());
+
+    await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
+    expect((capture.mock.calls[0][0] as Record<string, unknown>).toolMocks).toEqual({
+      weatherInfo: { cases: [{ args: { city: 'Paris' }, output: 'sunny' }], onNoMatch: 'passthrough' },
+    });
+  });
+
+  it('disables Run while a cases row is incomplete and re-enables once every case is answerable', async () => {
+    useTriggerHandlers();
+    renderDialog();
+    await selectAgentTarget();
+
+    fireEvent.click(screen.getByRole('switch', { name: 'Mock tools' }));
+    addMockRow();
+    fireEvent.change(screen.getByLabelText('Tool name'), { target: { value: 'weatherInfo' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Conditional cases' }));
+
+    // Empty cases list blocks Run.
+    expect(screen.getByText('Add at least one case.')).toBeDefined();
+    expect(runButton().disabled).toBe(true);
+
+    // A case without args still blocks.
+    fireEvent.click(screen.getByRole('button', { name: 'Add case' }));
+    expect(screen.getByText('Case 1: args are required.')).toBeDefined();
+    expect(runButton().disabled).toBe(true);
+
+    // JSON-looking-but-broken args still block.
+    fireEvent.change(screen.getByLabelText('Case 1 args (JSON)'), { target: { value: '{"city": ' } });
+    expect(screen.getByText('Case 1: args is not valid JSON.')).toBeDefined();
+    expect(runButton().disabled).toBe(true);
+
+    // Valid args but no answer still block.
+    fireEvent.change(screen.getByLabelText('Case 1 args (JSON)'), { target: { value: '{"city": "Paris"}' } });
+    expect(screen.getByText('Case 1: output is required.')).toBeDefined();
+    expect(runButton().disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText('Case 1 output (JSON or plain text)'), { target: { value: '"sunny"' } });
+    expect(runButton().disabled).toBe(false);
   });
 
   it('disables Run with an inline hint while a stub output is JSON-looking but invalid', async () => {
