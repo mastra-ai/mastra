@@ -5642,7 +5642,7 @@ importers:
         specifier: ^2.8.19
         version: 2.8.19
       '@types/express':
-        specifier: ^5.0.5
+        specifier: ^5.0.6
         version: 5.0.6
       '@types/node':
         specifier: 22.19.15
@@ -5657,7 +5657,7 @@ importers:
         specifier: ^10.4.1
         version: 10.4.1(jiti@2.6.1)
       express:
-        specifier: ^5.1.0
+        specifier: ^5.2.1
         version: 5.2.1
       reflect-metadata:
         specifier: ^0.2.2
