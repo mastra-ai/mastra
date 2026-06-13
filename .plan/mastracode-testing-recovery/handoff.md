@@ -2,6 +2,7 @@
 
 ## Current status
 
+- 2026-06-13 stamp: `6168ec4093` — autocomplete wrapping/navigation e2e committed; queued-followups row validated, with 114/114 e2e suite pass.
 - 2026-06-13 verified: `autocomplete-wrapping-navigation` coverage added and break-validated; queued-followups row moved to validated. Final gates passed: build, focused e2e, check, lint, and full TUI e2e 114/114 with `--jobs 4`. Current tracker: 39 validated, 17 needs-follow-up, 114 e2e scenarios.
 - 2026-06-13 stamp: `e2a3b53dee` — Ctrl+F custom slash autocomplete queue coverage committed; queued-followups row remains needs-follow-up for long autocomplete wrapping/reload breadth, with 113/113 e2e suite pass.
 - 2026-06-13 stamp: `e233ef32a5` — Ctrl+F queued-image follow-up coverage committed; queued-followups row remains needs-follow-up for autocomplete wrapping/reload breadth, with 112/112 e2e suite pass.
