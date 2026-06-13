@@ -82,6 +82,7 @@ export type ScenarioName =
   | 'setup-nested-model-selector'
   | 'settings-api-keys-navigation'
   | 'settings-startup-model-restore'
+  | 'skills-command-activation'
   | 'storage-settings'
   | 'stream-error-retry'
   | 'streaming-tool-args'

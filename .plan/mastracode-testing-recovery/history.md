@@ -2,6 +2,24 @@
 
 
 
+### Skills command activation coverage (2026-06-13)
+
+Added `skills-command-activation`, a real PTY scenario for seeded workspace skill discovery and activation. The scenario creates user-invocable, goal-enabled, and hidden skills in the fixture project, verifies `/skills` lists only the invocable skills, runs `/skill/skill-activation-e2e` with arguments, and runs `/goal/goal-review-e2e` so AIMock proves both explicit skill activation and goal-skill alias content reach provider requests.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test skills-command-activation
+```
+
+Break validations:
+
+- Removed `user-invocable` filtering from `/skills`; the scenario failed because the hidden skill appeared and the count changed.
+- Disabled escaping of embedded `</skill>` boundaries; the AIMock request verification failed because the escaped `&lt;/skill&gt;` marker was absent.
+- Stopped registering `goalSkillCommands`; `/goal/goal-review-e2e` no longer activated and the scenario failed before the goal response.
+
+The Skills command row remains `needs-follow-up`: seeded list/activation/goal-alias coverage is now checked in; remaining breadth is reload/staleness and symlink alias de-duplication in the real TUI if needed beyond focused workspace tests.
+
 ### Lifecycle hooks configured status/reload/blocking coverage (2026-06-13)
 
 Added `lifecycle-hooks-configured`, a real PTY scenario for project hook configuration. The scenario boots in a fixture project with a `UserPromptSubmit` hook, verifies `/hooks` renders the configured command and description, rewrites `hooks.json`, runs `/hooks reload`, verifies the reloaded command/description, then submits a normal prompt and proves the reloaded hook blocks it before the agent turn proceeds.
