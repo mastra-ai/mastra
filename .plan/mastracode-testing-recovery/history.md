@@ -1,5 +1,30 @@
 # Mastra Code testing recovery history
 
+### Storage fallback history and OM-scope coverage (2026-06-13)
+
+Added `storage-fallback-history-reload`, a real PTY e2e scenario that seeds persisted `settings.json.storage.backend = "pg"` with no connection info plus local LibSQL thread history. Startup renders the PostgreSQL fallback warning, `/threads` still loads the seeded local history from the effective LibSQL fallback store, and a shell proof confirms persisted settings still say `pg` so runtime fallback remains distinguishable from user intent.
+
+Strengthened `storage-config.test.ts` with `getOmScope()` precedence coverage for env > project database config > global database config > default, including invalid env/config values.
+
+Focused proof:
+
+```sh
+pnpm --filter ./mastracode exec vitest --run src/utils/__tests__/storage-config.test.ts --bail=1 --reporter=dot
+pnpm run build:mastracode
+pnpm --filter ./mastracode run e2e:test storage-fallback-history-reload
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+pnpm --filter ./mastracode run e2e:test -- --jobs 4 # 111/111 passed
+```
+
+Break validations:
+
+1. Removed the `Using LibSQL fallback` warning text from the no-connection PG fallback path: `storage-fallback-history-reload` timed out waiting for the fallback guidance.
+2. Pointed fallback LibSQL storage at the vector DB path instead of the main DB: the app still started, but `/threads` lost the seeded history and the scenario failed.
+3. Made `getOmScope()` ignore `MASTRA_OM_SCOPE=thread`: the focused unit test failed because project config overrode the env value.
+
+The remaining real-PostgreSQL success and LibSQL↔PostgreSQL data-migration contracts are explicitly deferred: they require a live external database/smoke environment or a migration feature Mastra Code does not currently implement. The hermetic recovery row now covers the TUI-visible save, restart, fallback, warning, local-history, and OM-scope precedence contracts.
+
 ### File attachment OM observation coverage (2026-06-13)
 
 Added `om-attachment-observation`, a real PTY e2e scenario that enables Observational Memory, pastes a PNG through the TUI editor, drives a deterministic multi-step model/tool turn, and verifies the OM observer request includes both the `[Image #1]` placeholder text and raw `image/png` attachment data. The scenario keeps LLM traffic AIMock-backed and stubs only OpenAI `responses/input_tokens` in its temporary entrypoint wrapper so attachment thresholding is hermetic.

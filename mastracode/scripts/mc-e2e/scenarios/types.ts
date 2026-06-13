@@ -89,6 +89,7 @@ export type ScenarioName =
   | 'shell-passthrough-env-override'
   | 'shell-passthrough-long-output'
   | 'skills-command-activation'
+  | 'storage-fallback-history-reload'
   | 'storage-settings'
   | 'storage-startup-pg-fallback'
   | 'stream-error-retry'

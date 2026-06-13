@@ -1,4 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import * as os from 'node:os';
+import type * as NodeOs from 'node:os';
+import { join } from 'node:path';
+
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 describe('getStorageConfig', () => {
   const originalEnv = { ...process.env };
@@ -15,6 +20,7 @@ describe('getStorageConfig', () => {
     delete process.env.MASTRA_PG_USER;
     delete process.env.MASTRA_PG_PASSWORD;
     delete process.env.MASTRA_PG_SCHEMA_NAME;
+    delete process.env.MASTRA_OM_SCOPE;
   });
 
   afterEach(() => {
@@ -193,4 +199,84 @@ describe('createStorage', () => {
     // Falls back because can't connect, but at least didn't throw
     expect(result.storage).toBeDefined();
   }, 15000);
+});
+
+describe('getOmScope', () => {
+  const originalEnv = { ...process.env };
+  let tmpRoot: string;
+
+  beforeEach(() => {
+    process.env = { ...originalEnv };
+    delete process.env.MASTRA_OM_SCOPE;
+    tmpRoot = mkdtempSync(join(os.tmpdir(), 'mc-om-scope-'));
+    process.env.HOME = join(tmpRoot, 'home');
+    mkdirSync(process.env.HOME, { recursive: true });
+  });
+
+  afterEach(() => {
+    vi.doUnmock('node:os');
+    vi.resetModules();
+    process.env = { ...originalEnv };
+    rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  async function loadGetOmScope() {
+    const homeDir = process.env.HOME!;
+    vi.resetModules();
+    vi.doMock('node:os', async () => {
+      const actual = await vi.importActual<typeof NodeOs>('node:os');
+      return {
+        ...actual,
+        default: {
+          ...actual,
+          homedir: () => homeDir,
+        },
+        homedir: () => homeDir,
+      };
+    });
+    const mod = await import('../project.js');
+    return mod.getOmScope;
+  }
+
+  function writeDatabaseConfig(root: string, configDir: string, value: unknown) {
+    const dir = join(root, configDir);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'database.json'), `${JSON.stringify(value)}\n`);
+  }
+
+  it('uses env scope before project and global database config', async () => {
+    const configDir = '.mc-test';
+    const projectDir = join(tmpRoot, 'project');
+    mkdirSync(projectDir, { recursive: true });
+    writeDatabaseConfig(process.env.HOME!, configDir, { omScope: 'thread' });
+    writeDatabaseConfig(projectDir, configDir, { omScope: 'resource' });
+    process.env.MASTRA_OM_SCOPE = 'thread';
+
+    const getOmScope = await loadGetOmScope();
+
+    expect(getOmScope(projectDir, configDir)).toBe('thread');
+  });
+
+  it('uses project database config before global config and ignores invalid values', async () => {
+    const configDir = '.mc-test';
+    const projectDir = join(tmpRoot, 'project');
+    mkdirSync(projectDir, { recursive: true });
+    writeDatabaseConfig(process.env.HOME!, configDir, { omScope: 'thread' });
+    writeDatabaseConfig(projectDir, configDir, { omScope: 'resource' });
+    process.env.MASTRA_OM_SCOPE = 'workspace';
+
+    const getOmScope = await loadGetOmScope();
+
+    expect(getOmScope(projectDir, configDir)).toBe('resource');
+  });
+
+  it('falls back from global database config to thread scope by default', async () => {
+    const configDir = '.mc-test';
+    writeDatabaseConfig(process.env.HOME!, configDir, { omScope: 'resource' });
+
+    const getOmScope = await loadGetOmScope();
+
+    expect(getOmScope(undefined, configDir)).toBe('resource');
+    expect(getOmScope(undefined, '.missing-config')).toBe('thread');
+  });
 });
