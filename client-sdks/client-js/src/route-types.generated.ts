@@ -7068,6 +7068,60 @@ export interface PostAgentsAgentIdSendToolApproval_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /agents/:agentId/suspended-runs
+// ============================================================================
+export type GetAgentsAgentIdSuspendedRuns_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type GetAgentsAgentIdSuspendedRuns_QueryParams = {
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  fromDate?: Date | undefined;
+  toDate?: Date | undefined;
+  perPage?: number | undefined;
+  page?: number | undefined;
+};
+
+export type GetAgentsAgentIdSuspendedRuns_Response = {
+  runs: {
+    runId: string;
+    status: 'suspended';
+    threadId?: string | undefined;
+    resourceId?: string | undefined;
+    suspendedAt: Date;
+    toolCalls: {
+      toolCallId?: string | undefined;
+      toolName?: string | undefined;
+      args?: unknown | undefined;
+      requiresApproval: boolean;
+      suspendPayload?: unknown | undefined;
+    }[];
+  }[];
+  total: number;
+};
+
+export type GetAgentsAgentIdSuspendedRuns_Request = Simplify<
+  (GetAgentsAgentIdSuspendedRuns_PathParams extends never ? {} : { params: GetAgentsAgentIdSuspendedRuns_PathParams }) &
+    (GetAgentsAgentIdSuspendedRuns_QueryParams extends never
+      ? {}
+      : {} extends GetAgentsAgentIdSuspendedRuns_QueryParams
+        ? { query?: GetAgentsAgentIdSuspendedRuns_QueryParams }
+        : { query: GetAgentsAgentIdSuspendedRuns_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentsAgentIdSuspendedRuns_RouteContract {
+  pathParams: GetAgentsAgentIdSuspendedRuns_PathParams;
+  queryParams: GetAgentsAgentIdSuspendedRuns_QueryParams;
+  body: never;
+  request: GetAgentsAgentIdSuspendedRuns_Request;
+  response: GetAgentsAgentIdSuspendedRuns_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /agents/:agentId/decline-tool-call
 // ============================================================================
 export type PostAgentsAgentIdDeclineToolCall_PathParams = {
@@ -89478,6 +89532,7 @@ export interface RouteTypes {
   'POST /agents/:agentId/tools/:toolId/execute': PostAgentsAgentIdToolsToolIdExecute_RouteContract;
   'POST /agents/:agentId/approve-tool-call': PostAgentsAgentIdApproveToolCall_RouteContract;
   'POST /agents/:agentId/send-tool-approval': PostAgentsAgentIdSendToolApproval_RouteContract;
+  'GET /agents/:agentId/suspended-runs': GetAgentsAgentIdSuspendedRuns_RouteContract;
   'POST /agents/:agentId/decline-tool-call': PostAgentsAgentIdDeclineToolCall_RouteContract;
   'POST /agents/:agentId/resume-stream': PostAgentsAgentIdResumeStream_RouteContract;
   'POST /agents/:agentId/approve-tool-call-generate': PostAgentsAgentIdApproveToolCallGenerate_RouteContract;
@@ -89984,6 +90039,9 @@ export interface Client {
   };
   '/agents/:agentId/streamVNext': {
     POST: PostAgentsAgentIdStreamVNext_RouteContract;
+  };
+  '/agents/:agentId/suspended-runs': {
+    GET: GetAgentsAgentIdSuspendedRuns_RouteContract;
   };
   '/agents/:agentId/threads/abort': {
     POST: PostAgentsAgentIdThreadsAbort_RouteContract;
