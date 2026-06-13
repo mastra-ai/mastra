@@ -106,7 +106,8 @@
   - Completed: `prompt-queue-interleave` uses simultaneous AIMock `ask_user` and `request_access` tool calls to assert the access prompt is queued behind the active ask_user prompt, activates after the first answer, accepts the default Yes option, and resolves the model turn.
   - Completed: strengthened `clipboard-image-paste` now drives a real bracketed-paste PNG through the TUI, asserts confirmed `[1 image]` history, and verifies the raw provider request contains the `image/png` file part plus base64 payload.
   - Completed: `file-attachment-history-reload` seeds persisted user signal history with projected text-file content, an image file part, and a binary file part, then proves `/threads` loaded history renders `[1 image] [1 file]` plus the text-file body without leaking raw base64.
-  - Completed: `file-attachment-blocked-retry` uses a real `UserPromptSubmit` hook to block the first pasted-image submit, proves the editor restores `prompt [image]`, retries with Enter, and verifies the raw provider request still contains the PNG file payload exactly once. Remaining breadth: OM observation.
+  - Completed: `file-attachment-blocked-retry` uses a real `UserPromptSubmit` hook to block the first pasted-image submit, proves the editor restores `prompt [image]`, retries with Enter, and verifies the raw provider request still contains the PNG file payload exactly once.
+  - Completed: `om-attachment-observation` drives a real pasted PNG through a multi-step TUI turn with OM enabled, hermetically stubs OpenAI attachment token counting, and verifies the OM observer request includes both the `[Image #1]` placeholder and raw `image/png` attachment data.
   - `om-background-recall`: seed sanitized observational memory, drive a prompt that recalls it, assert provenance/rendering.
 - Fixture/data needs: deterministic skill/hook config files, AIMock tool-call fixtures, sanitized OM observations from local Application Support if needed.
 

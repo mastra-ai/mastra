@@ -51,6 +51,7 @@ import { notificationInboxCrudFlowScenario } from './notification-inbox-crud-flo
 import { notificationInboxReloadScenario } from './notification-inbox-reload.js';
 import { notificationInboxToolFlowScenario } from './notification-inbox-tool-flow.js';
 import { notificationSignalRenderingScenario } from './notification-signal-rendering.js';
+import { omAttachmentObservationScenario } from './om-attachment-observation.js';
 import { omGlobalSettingsPersistenceScenario } from './om-global-settings-persistence.js';
 import { omModelOverrideReloadScenario } from './om-model-override-reload.js';
 import { omPackStartupRestoreScenario } from './om-pack-startup-restore.js';
@@ -167,6 +168,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'notification-inbox-reload': notificationInboxReloadScenario,
   'notification-inbox-tool-flow': notificationInboxToolFlowScenario,
   'notification-signal-rendering': notificationSignalRenderingScenario,
+  'om-attachment-observation': omAttachmentObservationScenario,
   'om-global-settings-persistence': omGlobalSettingsPersistenceScenario,
   'om-model-override-reload': omModelOverrideReloadScenario,
   'om-pack-startup-restore': omPackStartupRestoreScenario,

@@ -66,6 +66,7 @@ export type ScenarioName =
   | 'notification-inbox-tool-flow'
   | 'notification-signal-rendering'
   | 'om-settings'
+  | 'om-attachment-observation'
   | 'om-global-settings-persistence'
   | 'om-model-override-reload'
   | 'om-pack-startup-restore'

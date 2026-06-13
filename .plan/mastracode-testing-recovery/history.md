@@ -1,5 +1,27 @@
 # Mastra Code testing recovery history
 
+### File attachment OM observation coverage (2026-06-13)
+
+Added `om-attachment-observation`, a real PTY e2e scenario that enables Observational Memory, pastes a PNG through the TUI editor, drives a deterministic multi-step model/tool turn, and verifies the OM observer request includes both the `[Image #1]` placeholder text and raw `image/png` attachment data. The scenario keeps LLM traffic AIMock-backed and stubs only OpenAI `responses/input_tokens` in its temporary entrypoint wrapper so attachment thresholding is hermetic.
+
+Verification:
+
+```sh
+pnpm run build:mastracode
+pnpm --filter ./mastracode run e2e:test om-attachment-observation
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+pnpm --filter ./mastracode run e2e:test -- --jobs 4 # 110/110 passed
+```
+
+Break validations:
+
+1. Set `omObserveAttachments` to `false`: OM still observed text, but the observer request omitted the pasted PNG payload and failed verification.
+2. Dropped pasted-image file parts from `createUserSignalContent()`: the TUI still reached the model/tool turn, but OM observer input no longer contained the PNG attachment.
+3. Raised the OM observation threshold out of reach: the chat/tool flow still passed, but no OM observer request was emitted and request verification failed.
+
+All breaks were reverted and the focused scenario passed cleanly. The File attachments row is now `validated` with checked-in TUI coverage for provider payloads, loaded history, blocked-prompt retry preservation, and OM observation.
+
 ### File attachment blocked-retry coverage (2026-06-13)
 
 Fixed the pasted-image idle submit path so pending images are cleared only after `UserPromptSubmit` allows the prompt. If the hook blocks, Mastra Code now removes the optimistic message, restores the editor text, keeps the `[image]` placeholder backed by the original pending image, and lets the user press Enter again to retry.

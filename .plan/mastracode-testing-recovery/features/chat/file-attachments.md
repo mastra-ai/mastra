@@ -76,19 +76,20 @@
 - `mastracode/scripts/mc-e2e/scenarios/clipboard-image-paste.ts` — real PTY coverage proving a pasted PNG path becomes a submitted image attachment rendered as `[1 image]` in confirmed TUI history, reaches AIMock-backed chat, and appears in the raw provider request body as an `image/png` file part with base64 data.
 - `mastracode/scripts/mc-e2e/scenarios/file-attachment-history-reload.ts` — seeds persisted user signal history with projected text attachment content, an image file part, and a binary file part, then proves `/threads` loaded history renders `[1 image] [1 file]` plus the text-file body without leaking raw attachment base64.
 - `mastracode/scripts/mc-e2e/scenarios/file-attachment-blocked-retry.ts` — uses a real `UserPromptSubmit` hook to block the first pasted-image submission, proves the editor restores `prompt [image]`, retries with Enter, and verifies the raw provider request still contains the PNG file payload exactly once.
+- `mastracode/scripts/mc-e2e/scenarios/om-attachment-observation.ts` — drives a real pasted PNG through a multi-step TUI turn with OM enabled, stubs only OpenAI token counting for hermetic thresholding, and verifies the OM observer request includes both the `[Image #1]` placeholder and raw `image/png` attachment data.
 
 ## Missing tests
 
 - [x] TUI pasted-image submit test proving a pending image reaches confirmed TUI history and provider-bound image payload: covered by strengthened `clipboard-image-paste`.
 - [x] TUI attachment submit test proving pending images/files are cleared only after successful send: covered by `file-attachment-blocked-retry` for pasted-image hook-block retry semantics.
-- End-to-end test from real paste through Harness persistence and OM observation beyond provider-bound payload verification.
+- [x] End-to-end test from real paste through Harness persistence and OM observation beyond provider-bound payload verification: covered by `om-attachment-observation`.
 - [x] Loaded-history display test for user messages with attached text/binary files/images: covered by `file-attachment-history-reload`.
 
 ## Known risks / regressions
 
 - Text-file handling intentionally injects file content into model-visible text; large files or backtick-heavy content can affect prompt size and formatting.
 - Attachment data shape crosses several compatibility layers (`mediaType` vs `mimeType`, v4 `experimental_attachments`, v5 file parts, observer `image`/`file` parts), so one adapter can regress while another still passes.
-- Full TUI-to-provider pasted-image payload, loaded-history rendering, and hook-block retry preservation are covered; remaining risk is OM observation breadth for submitted attachment parts.
+- Full TUI-to-provider pasted-image payload, loaded-history rendering, hook-block retry preservation, and OM observation for submitted image attachments are covered.
 
 ## Verification checklist
 
