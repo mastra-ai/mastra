@@ -1,5 +1,29 @@
 # Mastra Code testing recovery history
 
+### Ctrl+F queued custom slash autocomplete coverage (2026-06-13)
+
+Added `ctrlf-queued-custom-slash`, a real PTY e2e scenario that starts a slow AIMock-backed active run, seeds a project custom command, types `/queue-au` to open the real custom slash-command autocomplete, presses Ctrl+F, verifies the pending message is the completed `//queue-auto` command and the footer shows `1 queued`, then waits for FIFO slash-command drain. AIMock verification proves the drained request contains the processed custom-command payload.
+
+Verification:
+
+```sh
+pnpm run build:mastracode
+pnpm --filter ./mastracode run e2e:test ctrlf-queued-custom-slash
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+pnpm --filter ./mastracode run e2e:test -- --jobs 4 # 113/113 passed
+```
+
+The first full-suite attempt reached 111/113 with known worker-timeout flakes in `provider-history-rejection-retry` and `prompt-context-instructions`; both passed focused retries after cache cleanup, and the clean rerun passed 113/113.
+
+Break validations:
+
+1. Removed Ctrl+F autocomplete completion in `CustomEditor`: `/queue-au` queued as an unknown command instead of resolving to `//queue-auto`, and the scenario failed before the queued payload appeared.
+2. Disabled the active-run Ctrl+F enqueue callback: the scenario timed out waiting for `1 queued`, and AIMock only saw the initial request.
+3. Skipped queued slash-command dispatch during FIFO drain: `//queue-auto pending…` stayed transient and the queued AIMock request never ran.
+
+All breaks were reverted and the focused scenario passed cleanly. The queued-followups row remains partial for long autocomplete wrapping and transient-queue reload breadth.
+
 ### Ctrl+F queued image follow-up coverage (2026-06-13)
 
 Added `ctrlf-queued-image-followup`, a real PTY e2e scenario that starts a slow AIMock-backed active run, pastes a PNG-backed follow-up while the run is streaming, presses Ctrl+F, verifies the footer shows `1 queued`, then waits for the queued action to drain after the initial `agent_end`. The scenario verifies the drained user message renders `[1 image] Queued Ctrl F image follow-up` and captures the raw OpenAI request body to prove the queued provider request contains the `image/png` file payload/base64 data with no `[image]` editor placeholder.

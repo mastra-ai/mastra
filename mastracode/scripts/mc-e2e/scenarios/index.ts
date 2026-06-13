@@ -15,6 +15,7 @@ import { browserWizardExportScenario } from './browser-wizard-export.js';
 import { browserbaseStartupRestoreScenario } from './browserbase-startup-restore.js';
 import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
 import { commitAttributionPromptScenario } from './commit-attribution-prompt.js';
+import { ctrlfQueuedCustomSlashScenario } from './ctrlf-queued-custom-slash.js';
 import { ctrlfQueuedImageFollowupScenario } from './ctrlf-queued-image-followup.js';
 import { customConfigDirScenario } from './custom-config-dir.js';
 import { customPackImportOverwriteScenario } from './custom-pack-import-overwrite.js';
@@ -141,6 +142,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'custom-provider-edit-share-import': customProviderEditShareImportScenario,
   'custom-provider-management': customProviderManagementScenario,
   'custom-slash-command': customSlashCommandScenario,
+  'ctrlf-queued-custom-slash': ctrlfQueuedCustomSlashScenario,
   'ctrlf-queued-image-followup': ctrlfQueuedImageFollowupScenario,
   'debug-logging': debugLoggingScenario,
   'file-attachment-blocked-retry': fileAttachmentBlockedRetryScenario,

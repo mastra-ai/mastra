@@ -25,6 +25,7 @@ export type ScenarioName =
   | 'custom-provider-edit-share-import'
   | 'custom-provider-management'
   | 'custom-slash-command'
+  | 'ctrlf-queued-custom-slash'
   | 'ctrlf-queued-image-followup'
   | 'debug-logging'
   | 'file-attachment-blocked-retry'

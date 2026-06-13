@@ -82,13 +82,14 @@
 
 ## Missing tests
 
-- Real terminal/TUI integration test for Enter with an actual autocomplete provider and long slash/custom/skill descriptions wrapping at real terminal widths. Ctrl+F active-run queueing with image paste state is now covered by `ctrlf-queued-image-followup`.
+- Real terminal/TUI integration test for Enter with long slash/custom/skill descriptions wrapping at real terminal widths. Ctrl+F active-run queueing with image paste state is covered by `ctrlf-queued-image-followup`, and Ctrl+F custom slash-command autocomplete selection/drain is covered by `ctrlf-queued-custom-slash`.
 - Reload behavior proving transient queues do not resurrect from history.
 
 ## E2E coverage
 
 - `custom-slash-command` seeds checked-in project custom commands, submits `//deploy prod blue` and `//review src/index.ts src/main.ts` through the real TUI, waits for AIMock responses, and verifies captured model requests contain the processed command text (`ARGUMENTS: prod blue` and full `$1+` range args) without duplicate raw-arg append. Break checks proved failures when raw-arg append was disabled, `$1+` consumed only the first arg, and local custom-command loading was skipped.
-- `ctrlf-queued-image-followup` starts a slow active run, pastes a PNG-backed queued follow-up, presses Ctrl+F, asserts the footer shows `1 queued`, waits for FIFO drain after the initial `agent_end`, and verifies the raw provider request contains the queued text plus `image/png` base64 payload with no `[image]` placeholder. Break checks disabled Ctrl+F enqueue, disabled queued-action drain, and stripped queued images; each failed the scenario and was reverted. This row remains partial for autocomplete wrapping/reload breadth.
+- `ctrlf-queued-image-followup` starts a slow active run, pastes a PNG-backed queued follow-up, presses Ctrl+F, asserts the footer shows `1 queued`, waits for FIFO drain after the initial `agent_end`, and verifies the raw provider request contains the queued text plus `image/png` base64 payload with no `[image]` placeholder. Break checks disabled Ctrl+F enqueue, disabled queued-action drain, and stripped queued images; each failed the scenario and was reverted.
+- `ctrlf-queued-custom-slash` starts a slow active run, opens the real custom slash-command autocomplete from `/queue-au`, presses Ctrl+F, verifies the selected command becomes a queued `//queue-auto` pending message, drains through FIFO slash-command dispatch, and verifies AIMock receives the processed custom-command payload. Break checks removed Ctrl+F autocomplete completion, disabled the Ctrl+F queue callback, and skipped queued slash-command dispatch; each failed the scenario and was reverted. This row remains partial for long autocomplete wrapping and transient-queue reload breadth.
 
 ## Known risks / regressions
 
