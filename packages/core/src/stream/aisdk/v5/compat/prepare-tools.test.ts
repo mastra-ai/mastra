@@ -1,7 +1,10 @@
 import { jsonSchema } from '@internal/ai-sdk-v5';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod/v4';
+import { MODEL_TOKENS } from '../../../../../../../docs/src/plugins/remark-model-tokens/models';
+import { RequestContext } from '../../../../request-context';
 import { createTool } from '../../../../tools/tool';
+import { CoreToolBuilder } from '../../../../tools/tool-builder/builder';
 import { prepareToolsAndToolChoice } from './prepare-tools';
 
 describe('prepareToolsAndToolChoice', () => {
@@ -443,6 +446,30 @@ describe('prepareToolsAndToolChoice', () => {
   });
 
   describe('agent-as-tools schema serialization (#13324)', () => {
+    function expectRequiredKeysHaveProperties(schema: any) {
+      if (!schema || typeof schema !== 'object') return;
+
+      if (schema.properties && Array.isArray(schema.required)) {
+        const propertyKeys = new Set(Object.keys(schema.properties));
+        for (const requiredKey of schema.required) {
+          expect(
+            propertyKeys.has(requiredKey),
+            `Required key '${requiredKey}' must be present in properties. Got: ${JSON.stringify(schema)}`,
+          ).toBe(true);
+        }
+      }
+
+      for (const value of Object.values(schema)) {
+        if (Array.isArray(value)) {
+          for (const item of value) {
+            expectRequiredKeysHaveProperties(item);
+          }
+        } else {
+          expectRequiredKeysHaveProperties(value);
+        }
+      }
+    }
+
     it('should produce valid JSON Schema with type keys for all properties including resumeData: z.any()', () => {
       // Simulate what CoreToolBuilder does: inject resumeData and suspendedToolRunId
       // into agent tool schemas. The resumeData field uses z.any() which serializes
@@ -467,6 +494,11 @@ describe('prepareToolsAndToolChoice', () => {
         toolChoice: undefined,
         activeTools: undefined,
         targetVersion: 'v2',
+        model: {
+          modelId: MODEL_TOKENS.__GATEWAY_GOOGLE_MODEL__,
+          provider: 'openrouter',
+          supportsStructuredOutputs: false,
+        },
       });
 
       expect(result.tools).toBeDefined();
@@ -531,6 +563,59 @@ describe('prepareToolsAndToolChoice', () => {
       expect(Array.isArray(resumeDataSchema.type)).toBe(true);
       expect(resumeDataSchema.type).not.toContain('array');
       expect(resumeDataSchema.items).toBeUndefined();
+    });
+
+    it('should not emit orphaned required keys for OpenRouter Gemini agent tools', () => {
+      const agentTool = createTool({
+        id: 'agent-subAgent',
+        description: 'A sub-agent tool',
+        inputSchema: z.object({
+          prompt: z.string().describe('The prompt to send to the agent'),
+          threadId: z.string().nullish().describe('Thread ID for conversation continuity for memory messages'),
+          resourceId: z.string().nullish().describe('Resource/user identifier for memory messages'),
+          instructions: z.string().nullish().describe('Additional instructions to append to the agent instructions.'),
+          maxSteps: z.number().min(3).nullish().describe('Maximum number of execution steps for the sub-agent'),
+        }),
+        execute: async () => 'result',
+      });
+
+      const builtTool = new CoreToolBuilder({
+        originalTool: agentTool,
+        options: {
+          name: 'agent-subAgent',
+          logger: console as any,
+          description: 'A sub-agent tool',
+          requestContext: new RequestContext(),
+          tracingContext: {},
+          model: {
+            modelId: MODEL_TOKENS.__GATEWAY_GOOGLE_MODEL__,
+            provider: 'openrouter',
+            specificationVersion: 'v2',
+            supportsStructuredOutputs: false,
+          } as any,
+        },
+      }).buildV5();
+
+      const result = prepareToolsAndToolChoice({
+        tools: { 'agent-subAgent': builtTool as any },
+        toolChoice: undefined,
+        activeTools: undefined,
+        targetVersion: 'v2',
+        model: {
+          modelId: MODEL_TOKENS.__GATEWAY_GOOGLE_MODEL__,
+          provider: 'openrouter',
+          supportsStructuredOutputs: false,
+        },
+      });
+
+      const toolDef = result.tools![0] as { type: string; inputSchema: Record<string, any> };
+      expectRequiredKeysHaveProperties(toolDef.inputSchema);
+      expect(toolDef.inputSchema.$schema).toBeUndefined();
+      expect(toolDef.inputSchema.additionalProperties).toBeUndefined();
+      expect(toolDef.inputSchema.properties.threadId).toMatchObject({
+        type: 'string',
+        nullable: true,
+      });
     });
   });
 

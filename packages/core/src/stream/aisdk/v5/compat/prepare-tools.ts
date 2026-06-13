@@ -10,6 +10,7 @@ import type {
 } from '@ai-sdk/provider-v6';
 import { asSchema, tool as toolFn } from '@internal/ai-sdk-v5';
 import type { Tool, ToolChoice } from '@internal/ai-sdk-v5';
+import { GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '../../../../schema';
 import { isProviderDefinedTool } from '../../../../tools/toolchecks';
 
@@ -24,6 +25,12 @@ type PreparedTool =
   | LanguageModelV3ProviderTool;
 
 type PreparedToolChoice = LanguageModelV2ToolChoice | LanguageModelV3ToolChoice;
+
+type ToolPrepModelInfo = {
+  provider: string;
+  modelId: string;
+  supportsStructuredOutputs?: boolean;
+};
 
 /**
  * Recursively fixes JSON Schema properties that lack a 'type' key.
@@ -69,17 +76,99 @@ function fixTypelessProperties(schema: Record<string, unknown>): Record<string, 
 
   return result;
 }
+
+function applyGoogleSchemaCompat(schema: Record<string, unknown>, model?: ToolPrepModelInfo): Record<string, unknown> {
+  if (!model) return schema;
+
+  const layer = new GoogleSchemaCompatLayer({
+    provider: model.provider,
+    modelId: model.modelId,
+    supportsStructuredOutputs: model.supportsStructuredOutputs ?? false,
+  });
+
+  if (!layer.shouldApply()) return schema;
+
+  return stripGeminiUnsupportedJsonSchemaKeywords(
+    fixTypelessProperties(layer.processToJSONSchema(schema, 'input') as Record<string, unknown>),
+  );
+}
+
+function stripGeminiUnsupportedJsonSchemaKeywords(schema: Record<string, unknown>): Record<string, unknown> {
+  if (typeof schema !== 'object' || schema === null) return schema;
+
+  const result = { ...schema };
+  delete result.$schema;
+  delete result.additionalProperties;
+  delete result.propertyNames;
+
+  if (result.properties && typeof result.properties === 'object' && !Array.isArray(result.properties)) {
+    const properties = result.properties as Record<string, unknown>;
+    result.properties = Object.fromEntries(
+      Object.entries(properties).map(([key, value]) => [
+        key,
+        typeof value === 'object' && value !== null && !Array.isArray(value)
+          ? stripGeminiUnsupportedJsonSchemaKeywords(value as Record<string, unknown>)
+          : value,
+      ]),
+    );
+
+    if (Array.isArray(result.required)) {
+      const propertyKeys = new Set(Object.keys(result.properties as Record<string, unknown>));
+      result.required = result.required.filter(key => typeof key === 'string' && propertyKeys.has(key));
+    }
+  }
+
+  if (result.items) {
+    if (Array.isArray(result.items)) {
+      result.items = result.items.map(item =>
+        typeof item === 'object' && item !== null && !Array.isArray(item)
+          ? stripGeminiUnsupportedJsonSchemaKeywords(item as Record<string, unknown>)
+          : item,
+      );
+    } else if (typeof result.items === 'object') {
+      result.items = stripGeminiUnsupportedJsonSchemaKeywords(result.items as Record<string, unknown>);
+    }
+  }
+
+  for (const key of ['anyOf', 'oneOf', 'allOf'] as const) {
+    if (Array.isArray(result[key])) {
+      result[key] = result[key].map(item =>
+        typeof item === 'object' && item !== null && !Array.isArray(item)
+          ? stripGeminiUnsupportedJsonSchemaKeywords(item as Record<string, unknown>)
+          : item,
+      );
+    }
+  }
+
+  if (Array.isArray(result.anyOf)) {
+    const variants = result.anyOf as Record<string, unknown>[];
+    const nullVariant = variants.find(variant => variant && typeof variant === 'object' && variant.type === 'null');
+    const nonNullVariants = variants.filter(
+      variant => !(variant && typeof variant === 'object' && variant.type === 'null'),
+    );
+
+    if (nullVariant && nonNullVariants.length === 1) {
+      delete result.anyOf;
+      Object.assign(result, nonNullVariants[0], { nullable: true });
+    }
+  }
+
+  return result;
+}
+
 export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
   tools,
   toolChoice,
   activeTools,
   targetVersion = 'v2',
+  model,
 }: {
   tools: TOOLS | undefined;
   toolChoice: ToolChoice<TOOLS> | undefined;
   activeTools: Array<keyof TOOLS> | undefined;
   /** Target model version: 'v2' for AI SDK v5, 'v3' for AI SDK v6. Defaults to 'v2'. */
   targetVersion?: ModelSpecVersion;
+  model?: ToolPrepModelInfo;
 }): {
   tools: PreparedTool[] | undefined;
   toolChoice: PreparedToolChoice | undefined;
@@ -196,7 +285,10 @@ export function prepareToolsAndToolChoice<TOOLS extends Record<string, Tool>>({
                 type: 'function' as const,
                 name,
                 description: sdkTool.description,
-                inputSchema: fixTypelessProperties(parameters as Record<string, unknown>),
+                inputSchema: applyGoogleSchemaCompat(
+                  fixTypelessProperties(parameters as Record<string, unknown>),
+                  model,
+                ),
                 // Preserve strict through v2 preparation because the model router may
                 // still forward these tools to an AI SDK v6 / V3 model later. Actual
                 // V2 model calls strip this field at the AISDKV5LanguageModel boundary.
