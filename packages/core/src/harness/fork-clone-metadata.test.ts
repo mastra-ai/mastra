@@ -64,6 +64,7 @@ describe('Harness fork clone metadata wiring', () => {
           id: 'default',
           name: 'Default',
           default: true,
+          defaultModelId: 'openai/gpt-4o',
           agent: new Agent({
             name: 'parent',
             instructions: 'parent',
@@ -100,6 +101,57 @@ describe('Harness fork clone metadata wiring', () => {
     });
   });
 
+  it('creates the subagent tool with gateway-backed model resolution when no legacy resolver is configured', async () => {
+    const subagents: HarnessSubagent[] = [
+      {
+        id: 'explore',
+        name: 'Explore',
+        description: 'Explore',
+        instructions: 'Be exploratory.',
+      },
+    ];
+    const gateway = {
+      id: 'test-gateway',
+      name: 'Test Gateway',
+      fetchProviders: vi.fn(async () => ({})),
+      buildUrl: vi.fn((modelId: string) => modelId),
+      getApiKey: vi.fn(async () => ''),
+      resolveLanguageModel: vi.fn(),
+    };
+
+    const harness = new Harness({
+      id: 'test',
+      resourceId: 'parent-resource',
+      subagents,
+      gateways: [gateway],
+      modes: [
+        {
+          id: 'default',
+          name: 'Default',
+          default: true,
+          defaultModelId: 'openai/gpt-4o',
+          agent: new Agent({
+            name: 'parent',
+            instructions: 'parent',
+            model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+          }),
+        },
+      ],
+    });
+
+    await (harness as unknown as { buildToolsets(ctx: RequestContext): Promise<unknown> }).buildToolsets(
+      new RequestContext(),
+    );
+
+    expect(capturedOpts).toHaveLength(1);
+    const resolveModel = capturedOpts[0]!.resolveModel as (modelId: string) => unknown;
+    expect(resolveModel('test-gateway/acme/sonic-fast')).toMatchObject({
+      gatewayId: 'test-gateway',
+      provider: 'acme',
+      modelId: 'sonic-fast',
+    });
+  });
+
   it('wires getParentToolsets so forks can inherit parent toolsets', async () => {
     const memoryFactory = vi.fn().mockResolvedValue({ cloneThread: vi.fn() });
 
@@ -123,6 +175,7 @@ describe('Harness fork clone metadata wiring', () => {
           id: 'default',
           name: 'Default',
           default: true,
+          defaultModelId: 'openai/gpt-4o',
           agent: new Agent({
             name: 'parent',
             instructions: 'parent',
