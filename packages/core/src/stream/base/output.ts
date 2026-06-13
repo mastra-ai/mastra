@@ -16,6 +16,7 @@ import { ProcessorState, ProcessorRunner } from '../../processors/runner';
 import type { WorkflowRunStatus } from '../../workflows';
 import { DelayedPromise, consumeStream } from '../aisdk/v5/compat';
 import type { ConsumeStreamOptions } from '../aisdk/v5/compat';
+import { sanitizeToolCallInput, tryRepairJson } from '../aisdk/v5/transform';
 import type {
   ChunkType,
   LanguageModelUsage,
@@ -512,11 +513,29 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               const deltaParts = self.#toolCallArgsDeltas[toolCallId];
               let args: Record<string, unknown> = {};
               if (deltaParts?.length) {
-                try {
-                  const merged = deltaParts.join('');
-                  args = typeof merged === 'string' && merged.length > 0 ? JSON.parse(merged) : {};
-                } catch {
-                  args = {};
+                // Mirror the recovery flow used on the consolidated tool-call
+                // path in `aisdk/v5/transform.ts` (PR #13400): sanitize LLM
+                // tokens before JSON.parse, then attempt JSON repair on
+                // parse failure before falling through to empty args.
+                // Without this, providers that emit args as multiple
+                // delta chunks (Vercel AI Gateway → DeepSeek, OpenRouter,
+                // some OpenAI-compatible passthroughs) silently lose
+                // recoverable args on JSON.parse failure, leading to a
+                // synthetic tool-call with `args: {}` that downstream
+                // schema validation can only treat as a no-arg call.
+                const merged = deltaParts.join('');
+                const sanitized = sanitizeToolCallInput(merged);
+                if (sanitized) {
+                  try {
+                    args = JSON.parse(sanitized);
+                  } catch {
+                    const repaired = tryRepairJson(sanitized);
+                    if (repaired) {
+                      args = repaired;
+                    } else {
+                      console.error('Error converting streamed tool-call args to JSON', { input: merged });
+                    }
+                  }
                 }
               }
               delete self.#toolCallStreamingMeta[toolCallId];
