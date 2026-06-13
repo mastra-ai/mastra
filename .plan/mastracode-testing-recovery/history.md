@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Settings API-key submenu navigation coverage (2026-06-13)
+
+Added `settings-api-keys-navigation`, a real PTY scenario for the Settings → API Keys handoff. The scenario opens `/settings`, selects the `API Keys` row through keyboard navigation, and verifies the API-key management overlay appears with provider status details.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test settings-api-keys-navigation
+```
+
+Break validations:
+
+- Removed the API Keys row from `SettingsComponent`; the scenario failed waiting for the visible settings entry.
+- Dropped the `handleApiKeysCommand(ctx)` handoff from the Settings command callback; the scenario returned to the prompt instead of opening API-key management.
+- Renamed the visible Settings row to `Provider Keys`; the scenario failed waiting for the expected API Keys label.
+
+The Settings row remains `needs-follow-up`: `/settings` API-key navigation is now covered; remaining depth is `/models` custom-pack completion/navigation and browser active-vs-pending projection/startup variants.
+
+
 ### Login dialog masked input coverage (2026-06-13)
 
 Added `login-dialog-masked-input`, a real PTY `/login` scenario for provider login prompts. The scenario patches Anthropic OAuth to request an authorization code through the real login dialog, verifies typed code text renders as asterisks instead of leaking the secret, and proves the raw code still reaches persisted OAuth credentials.

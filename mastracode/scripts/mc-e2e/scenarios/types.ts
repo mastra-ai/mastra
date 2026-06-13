@@ -77,6 +77,7 @@ export type ScenarioName =
   | 'setup-custom-pack-completion'
   | 'setup-login-refresh'
   | 'setup-nested-model-selector'
+  | 'settings-api-keys-navigation'
   | 'settings-startup-model-restore'
   | 'storage-settings'
   | 'stream-error-retry'

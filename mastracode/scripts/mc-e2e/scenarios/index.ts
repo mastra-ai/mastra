@@ -66,6 +66,7 @@ import { quietSettingsScenario } from './quiet-settings.js';
 import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
+import { settingsApiKeysNavigationScenario } from './settings-api-keys-navigation.js';
 import { settingsStartupModelRestoreScenario } from './settings-startup-model-restore.js';
 import { setupCompletionPersistenceScenario } from './setup-completion-persistence.js';
 import { setupCustomPackCompletionScenario } from './setup-custom-pack-completion.js';
@@ -179,6 +180,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'setup-custom-pack-completion': setupCustomPackCompletionScenario,
   'setup-login-refresh': setupLoginRefreshScenario,
   'setup-nested-model-selector': setupNestedModelSelectorScenario,
+  'settings-api-keys-navigation': settingsApiKeysNavigationScenario,
   'settings-startup-model-restore': settingsStartupModelRestoreScenario,
   'storage-settings': storageSettingsScenario,
   'stream-error-retry': streamErrorRetryScenario,
