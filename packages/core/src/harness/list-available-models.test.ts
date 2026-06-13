@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../agent';
+import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { InMemoryStore } from '../storage/mock';
 import { Harness } from './harness';
 
@@ -83,5 +84,82 @@ describe('Harness.listAvailableModels', () => {
       useCount: 11,
     });
     expect(refreshedModels.find(model => model.id === 'acme/sonic-fast')).toBeUndefined();
+  });
+
+  it('includes gateway-discovered models and resolves their auth through the gateway', async () => {
+    const gateway: MastraModelGatewayInterface = {
+      id: 'test-gateway',
+      name: 'Test Gateway',
+      fetchProviders: vi.fn(async () => ({
+        acme: {
+          name: 'Acme',
+          url: 'https://gateway.example.com/acme',
+          apiKeyHeader: 'Authorization',
+          apiKeyEnvVar: 'ACME_API_KEY',
+          models: ['sonic-fast'],
+          gateway: 'test-gateway',
+        },
+      })),
+      buildUrl: vi.fn(modelId => modelId),
+      getApiKey: vi.fn(async () => ''),
+      resolveLanguageModel: vi.fn(),
+      resolveAuth: vi.fn(async ({ gatewayId, providerId, modelId, routerId }) => {
+        if (
+          gatewayId === 'test-gateway' &&
+          providerId === 'acme' &&
+          modelId === 'sonic-fast' &&
+          routerId === 'test-gateway/acme/sonic-fast'
+        ) {
+          return { apiKey: 'test-key', source: 'gateway' as const };
+        }
+        return undefined;
+      }),
+    };
+
+    const agent = new Agent({
+      name: 'test-agent',
+      instructions: 'You are a test agent.',
+      model: { provider: 'openai', name: 'gpt-4o', toolChoice: 'auto' },
+    });
+    const harness = new Harness({
+      id: 'test-harness',
+      storage: new InMemoryStore(),
+      modes: [
+        {
+          id: 'default',
+          name: 'Default',
+          default: true,
+          agent,
+          defaultModelId: 'test-gateway/acme/sonic-fast',
+        },
+      ],
+      gateways: [gateway],
+      omConfig: {
+        defaultObserverModelId: 'test-gateway/acme/sonic-fast',
+      },
+    });
+
+    const observerModel = harness.getResolvedObserverModel() as { gatewayId?: string; provider?: string; modelId?: string };
+    expect(observerModel).toMatchObject({
+      gatewayId: 'test-gateway',
+      provider: 'acme',
+      modelId: 'sonic-fast',
+    });
+
+    const models = await harness.listAvailableModels();
+    expect(models.find(model => model.id === 'test-gateway/acme/sonic-fast')).toMatchObject({
+      provider: 'test-gateway/acme',
+      modelName: 'sonic-fast',
+      hasApiKey: true,
+      apiKeyEnvVar: 'ACME_API_KEY',
+    });
+    expect(gateway.resolveAuth).toHaveBeenCalledWith({
+      gatewayId: 'test-gateway',
+      providerId: 'acme',
+      modelId: 'sonic-fast',
+      routerId: 'test-gateway/acme/sonic-fast',
+    });
+
+    await expect(harness.getCurrentModelAuthStatus()).resolves.toEqual({ hasAuth: true });
   });
 });

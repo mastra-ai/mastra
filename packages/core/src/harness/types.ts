@@ -1,6 +1,7 @@
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
 import type { PubSub } from '../events/pubsub';
+import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import type { MastraLanguageModel } from '../llm/model/shared.types';
 import type { LoopOptions } from '../loop/types';
 import type { MastraMemory } from '../memory/memory';
@@ -276,8 +277,16 @@ export interface HarnessConfig<TState = {}> {
   subagents?: HarnessSubagent[];
 
   /**
+   * Model gateways used for model resolution, auth lookup, and provider discovery.
+   * When `resolveModel` is omitted, model IDs resolve through `ModelRouterLanguageModel`
+   * with these gateways.
+   */
+  gateways?: MastraModelGatewayInterface[];
+
+  /**
+   * Legacy model resolver for apps that need custom back-compat behavior.
    * Converts a model ID string (e.g., "anthropic/claude-sonnet-4-20250514") to a
-   * language model instance. Used by subagents and OM model resolution.
+   * language model instance. When provided, this takes precedence over gateways.
    */
   resolveModel?: (modelId: string) => MastraLanguageModel;
 
