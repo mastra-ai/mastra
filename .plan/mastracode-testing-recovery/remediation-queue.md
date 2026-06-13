@@ -3,7 +3,7 @@
 ## Current state
 
 - Checked-in TUI e2e coverage is no longer missing for any tracker row.
-- 21 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
+- 20 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
 - Keep the user-realism rule: drive behavior through terminal input, slash commands, AIMock fixtures, deterministic pre-launch config/DB seeds, or approved external signal APIs for notification/state-signal origins. Do not emit Harness internals or mutate runtime display state directly.
 
 ## Priority queue
@@ -84,6 +84,7 @@
   - Completed: `update-startup-prompt` boots with hermetic latest-version/changelog env overrides, asserts the automatic startup inline prompt/changelog, selects `No`, and proves `settings.updateDismissedVersion` persistence. Remaining breadth: dismissed-version startup suppression, passive recheck banner, and safe `Yes`/install success path.
   - Completed: `quiet-tool-history-parity` enables Quiet mode in settings, drives AIMock-backed live `view` + `task_write`, asserts compact tool/task rendering, then reloads a seeded tool-history thread and asserts loaded quiet compact rendering.
   - Completed: `storage-startup-pg-fallback` seeds persisted PostgreSQL backend settings before startup, verifies the missing-connection LibSQL fallback warning renders, and proves `settings.json.storage.backend=pg` remains persisted while the TUI stays usable. Remaining `settings-reload-persistence` breadth is cross-feature relaunch composition, not a distinct uncovered storage startup path; active custom model-pack startup restore is covered by `settings-startup-model-restore`, and `/om` threshold, built-in OM pack, plus role-model startup restore/global/thread persistence is covered by `om-threshold-persistence`, `om-pack-startup-restore`, and `om-model-override-reload`.
+  - Completed: Settings umbrella validation now maps onboarding/global settings residual breadth to dedicated checked-in scenarios: setup/login/API-key/model-pack/custom-provider/OM/browser/storage/shell/subagent/Memory Gateway coverage lives in the narrower feature rows and scenario files, so no unique settings-umbrella gap remains.
   - Completed: `om-threshold-persistence` seeds global OM observation/reflection thresholds, verifies `/om` restores them on startup, updates both threshold submenus through the real TUI, and proves global settings plus active-thread metadata persist the new values.
   - Completed: `om-model-override-reload` seeds role-specific OM observer/reflector overrides, verifies `/om` restores them on startup, updates both model selectors through the real TUI, and proves global settings plus active-thread metadata persist the new role model IDs.
   - Completed: `subagent-model-startup-restore` seeds an active custom model pack before launch, delegates to the Explore subagent, verifies the subagent footer uses the restored fast model rather than the parent/build default, and proves persisted settings remain intact.

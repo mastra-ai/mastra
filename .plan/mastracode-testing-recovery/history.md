@@ -1,5 +1,20 @@
 # Mastra Code testing recovery history
 
+### Onboarding/global settings umbrella validation (2026-06-13)
+
+Validated the High-risk `Settings: Onboarding and global settings` umbrella row by mapping its residual contracts to existing checked-in focused shields and real PTY scenarios. The row now points to dedicated coverage for first-run/setup completion, login refresh, API-key add/delete/env precedence, Settings API Keys handoff, custom model-pack activation/import/rename/share/edit flows, custom provider edit/delete persistence, model-selection missing-key/cancel/env precedence, OM global/thread/threshold/model-pack/role-override reload, storage backend startup fallback, browser quick settings/wizard/Browserbase/profile-mismatch/startup/active-pending projection, shell passthrough settings/env, subagent model startup restore, and Memory Gateway startup hydration.
+
+No new product test was added in this pass because the feature card's remaining items are now either already covered or tracked on narrower feature rows where additional breadth belongs. Verification evidence comes from the immediately preceding full suite and focused checks:
+
+```sh
+pnpm run build:mastracode
+pnpm --filter ./mastracode run e2e:test -- --jobs 4 # 107/107 passed
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+```
+
+The global settings umbrella row is now `validated`; remaining work continues on narrower `needs-follow-up` rows such as storage backend, browser automation, custom providers, shell passthrough, and observational memory.
+
 ### Clipboard image provider-payload coverage (2026-06-13)
 
 Strengthened `clipboard-image-paste`, the real PTY pasted-image scenario, so it now verifies the full TUI-to-provider path: bracketed paste adds the image marker, submit renders confirmed `[1 image]` history, AIMock receives the chat turn, and a temporary entrypoint wrapper captures the raw OpenAI request body to assert the `image/png` file part plus base64 PNG payload reaches the provider boundary.
