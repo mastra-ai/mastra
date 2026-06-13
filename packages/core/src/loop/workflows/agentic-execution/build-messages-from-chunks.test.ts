@@ -124,6 +124,22 @@ describe('buildMessagesFromChunks', () => {
     });
   });
 
+  it('should preserve Anthropic signed reasoning text in the primary reasoning field', () => {
+    const result = parts([
+      { type: 'reasoning-start', payload: { id: 'r1' } },
+      { type: 'reasoning-delta', payload: { id: 'r1', text: 'Signed ' } },
+      { type: 'reasoning-delta', payload: { id: 'r1', text: 'thinking.' } },
+      { type: 'reasoning-end', payload: { id: 'r1', providerMetadata: { anthropic: { signature: 'sig' } } } },
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      type: 'reasoning',
+      reasoning: 'Signed thinking.',
+      details: [{ type: 'text', text: 'Signed thinking.' }],
+      providerMetadata: { anthropic: { signature: 'sig' } },
+    });
+  });
+
   it('should emit empty reasoning parts (needed for OpenAI item_reference)', () => {
     const result = parts([
       { type: 'reasoning-start', payload: { id: 'r1' } },

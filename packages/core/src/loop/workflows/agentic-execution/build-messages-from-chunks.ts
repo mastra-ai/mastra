@@ -20,6 +20,14 @@ import { findProviderToolByName, inferProviderExecuted } from '../../../tools/pr
  */
 export type CollectedChunk = { type: string; payload: any; metadata?: Record<string, any> };
 
+function hasAnthropicSignature(providerMetadata?: Record<string, any>): boolean {
+  return typeof providerMetadata?.anthropic?.signature === 'string' && providerMetadata.anthropic.signature.length > 0;
+}
+
+function getReasoningDetailText(part: { details: any[] }): string {
+  return part.details.reduce((text, detail) => (detail?.type === 'text' ? text + (detail.text ?? '') : text), '');
+}
+
 /**
  * Build MastraDBMessage entries from the full sequence of stream chunks.
  *
@@ -173,6 +181,9 @@ export function buildMessagesFromChunks({
         if (ref) {
           if (p.providerMetadata) {
             ref.providerMetadata = p.providerMetadata;
+          }
+          if (hasAnthropicSignature(ref.providerMetadata)) {
+            ref.reasoning = getReasoningDetailText(ref);
           }
         } else {
           // No deltas arrived — emit empty reasoning part.
