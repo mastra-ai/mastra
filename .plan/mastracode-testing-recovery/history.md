@@ -1,6 +1,6 @@
 # Mastra Code testing recovery history
 
-### Stream error retry processor deterministic validation (2026-06-13, pending)
+### Stream error retry processor deterministic validation (2026-06-13, 210bb1e349)
 
 Validated the stream error retry processor row from existing checked-in deterministic coverage: `packages/core/src/processors/stream-error-retry-processor.test.ts` proves retryable provider metadata, cause-chain traversal, OpenAI Responses stream `error`/`response.failed` matching, custom matcher extensibility, non-retryable rejection, and `maxRetries`; `mastracode/src/__tests__/index.test.ts` proves Mastra Code wires `StreamErrorRetryProcessor` before `PrefillErrorHandler` and `ProviderHistoryCompat`; `stream-error-retry` drives a real PTY TUI run that injects a retryable stream-event failure and completes through AIMock with the recovered response.
 
