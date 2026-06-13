@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Browser wizard/export coverage (2026-06-12)
+
+Added `browser-wizard-export`, a real PTY e2e scenario for the interactive `/browser` wizard and AgentBrowser storage-state export path. The scenario uses a deterministic entrypoint patch for `AgentBrowser.exportStorageState`, selects AgentBrowser through the wizard, chooses CDP launch mode, verifies the enabled status projection, runs `/browser export storageState`, and proves both `settings.json` and the exported file contents through shell passthrough.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test browser-wizard-export
+```
+
+Break validations:
+
+- Remapped the AgentBrowser provider selection branch to Stagehand; the scenario failed in the wizard because the Stagehand environment prompt appeared instead of the AgentBrowser headless prompt.
+- Skipped `saveSettings()` after wizard success; the scenario failed because `/browser status` showed active-vs-pending drift instead of the normal enabled status.
+- Skipped `browserInstance.exportStorageState()` while still showing the success message; the scenario failed because the requested storage-state file was missing.
+
+The browser/settings rows remain `needs-follow-up`: AgentBrowser/CDP wizard save and export are now covered, while Browserbase/profile-mismatch/clear-all variants and deeper active projection breadth remain follow-up work.
+
+
 ### Memory Gateway startup env coverage (2026-06-12)
 
 Added focused `mastracode/src/__tests__/index.test.ts` coverage for the headless-relevant Memory Gateway startup bridge. The test seeds stored gateway auth plus a persisted gateway base URL, boots `createMastraCode()`, and proves startup hydrates `MASTRA_GATEWAY_API_KEY` and `MASTRA_GATEWAY_URL`, loads stored API keys under the gateway provider env var, and lets `modelAuthChecker` authorize providers served by the Mastra gateway.
