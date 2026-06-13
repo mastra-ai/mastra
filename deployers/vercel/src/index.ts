@@ -105,6 +105,7 @@ export const HEAD = handle(app);
       hideCloudCta: `'true'`,
       templates: `'false'`,
       cloudApiEndpoint: `''`,
+      platformProjectId: `''`,
       experimentalFeatures: `'false'`,
       telemetryDisabled: `''`,
       requestContextPresets: `''`,

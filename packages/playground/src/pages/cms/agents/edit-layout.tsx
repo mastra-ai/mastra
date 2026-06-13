@@ -12,6 +12,7 @@ import { useStoredAgent } from '@/domains/agents/hooks/use-stored-agents';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import { useEditorSource } from '@/domains/configuration/hooks/use-editor-source';
+import { useEditorSourceCapabilities } from '@/domains/configuration/hooks/use-editor-source-capabilities';
 import { useLinkComponent } from '@/lib/framework';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 import { RouteHeaderActions } from '@/lib/route-header';
@@ -236,11 +237,19 @@ function EditLayoutWrapper() {
   const isReady = !isLoading && !!agentId && (!!agent || !!codeAgent);
   const isCodeAgentEditable = !isCodeAgentOverride || codeAgent?.editor !== false;
   const editorSource = useEditorSource();
+  const editorSourceCapabilities = useEditorSourceCapabilities();
   const showCodeModeActions = isCodeAgentOverride && editorSource === 'code';
-  const canOpenPr = isCodeAgentEditable && isMastraPlatform && !!mastraPlatformApiEndpoint && !!mastraPlatformProjectId;
+  const canOpenSourceChangeRequest =
+    editorSourceCapabilities?.source === 'code' ? editorSourceCapabilities.canOpenChangeRequest : true;
+  const canOpenPr =
+    isCodeAgentEditable &&
+    canOpenSourceChangeRequest &&
+    isMastraPlatform &&
+    !!mastraPlatformApiEndpoint &&
+    !!mastraPlatformProjectId;
   const openPrTitle = canOpenPr
-    ? 'Open a pull request with this agent override JSON'
-    : 'Open PR is available on Mastra-hosted projects with GitHub App support';
+    ? 'Open this agent override JSON as a source change pull request'
+    : 'Source change pull requests are available on Mastra-hosted projects with source provider support';
 
   return (
     <MainContentLayout>

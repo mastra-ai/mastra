@@ -39,7 +39,9 @@ function AgentEvaluate() {
 
   const editorSource = useEditorSource();
   const isCodeAgentOverride = codeAgent?.source === 'code';
-  const isCodeSourceAgent = isCodeAgentOverride && editorSource === 'code';
+  // Code-source UI follows the editor's global source so storage-only agents
+  // under a code-source editor are treated as code-mode too.
+  const isCodeSourceAgent = editorSource === 'code';
   const isLoading = isLoadingCodeAgent || (hasVersions && isLoadingStoredAgent);
 
   const dataSource = useMemo<AgentDataSource>(() => {

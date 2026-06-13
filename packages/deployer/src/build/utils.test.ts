@@ -590,12 +590,13 @@ describe('injectStudioHtmlConfig', () => {
       basePath: '',
       hideCloudCta: "'false'",
       cloudApiEndpoint: "''",
+      platformProjectId: "''",
       experimentalFeatures: "'false'",
       templates: "'false'",
       telemetryDisabled: "''",
       requestContextPresets: "''",
       experimentalUI: "'true'",
-      agentSignals: "'true'",
+      agentSignals: "'false'",
       autoDetectUrl: "'false'",
     });
 
