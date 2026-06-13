@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+
+### Lifecycle hooks configured status/reload/blocking coverage (2026-06-13)
+
+Added `lifecycle-hooks-configured`, a real PTY scenario for project hook configuration. The scenario boots in a fixture project with a `UserPromptSubmit` hook, verifies `/hooks` renders the configured command and description, rewrites `hooks.json`, runs `/hooks reload`, verifies the reloaded command/description, then submits a normal prompt and proves the reloaded hook blocks it before the agent turn proceeds.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test lifecycle-hooks-configured
+```
+
+Break validations:
+
+- Removed the `hm.reload()` call from `/hooks reload`; the scenario failed because status stayed on `hook-before.cjs` instead of the reloaded hook.
+- Changed exit-code-2 handling so blocking hooks were treated as non-blocking; the scenario failed because the user prompt reached the model instead of showing the hook's block reason.
+- Removed hook descriptions from `/hooks` status rendering; the scenario failed waiting for the configured description.
+
+The Lifecycle hooks row remains `needs-follow-up`: configured status/reload/blocking now has user-perspective coverage; remaining breadth is direct executor edge cases, headless lifecycle-hook decision, and broader live lifecycle events like `Stop`/session/warnings.
+
 ### Browserbase startup restore coverage (2026-06-13)
 
 Added `browserbase-startup-restore`, a real PTY `/browser status` scenario for persisted Stagehand Browserbase settings restored at startup. The scenario boots with Browserbase enabled, verifies status shows the restored Browserbase environment, then saves a pending CDP URL without `/browser on` and proves status renders `Browser (active)`, `Pending changes (not yet applied)`, the pending CDP endpoint, and apply guidance.

@@ -68,12 +68,13 @@
 - `mastracode/src/hooks/config.test.ts` — verifies hook config loading, invalid config handling, global-before-project merge order, custom `configDir`, and `Notification` hook loading.
 - `mastracode/src/tui/commands/__tests__/hooks.test.ts` — verifies `/hooks` no-manager/no-config guidance, reload, configured paths, and `Notification` status rendering.
 - `mastracode/scripts/mc-e2e/scenarios/workspace-commands.ts` — real PTY/TUI e2e partial coverage proving `/hooks` reaches visible hooks fallback/status output in the transcript.
+- `mastracode/scripts/mc-e2e/scenarios/lifecycle-hooks-configured.ts` — real PTY/TUI e2e coverage for configured `/hooks` status, `/hooks reload`, and `UserPromptSubmit` exit-code-2 blocking after reload.
 
 ## Missing tests
 
-- Remaining e2e configured-hooks coverage for `/hooks` status/reload and hook blocking behavior. Baseline `/hooks` fallback/status transcript is covered by `workspace-commands`.
-- Direct hook executor tests for JSON stdout parsing, timeouts, and exit-code-2 blocking.
+- Direct hook executor tests for JSON stdout parsing, timeouts, and edge-case blocking/warning behavior.
 - Headless behavior decision test: either prove TUI-only lifecycle hooks are intentional or add parity.
+- Additional live lifecycle breadth can still cover `Stop`, `SessionStart`/`SessionEnd`, and hook warning display through real TUI runs.
 
 ## Known risks / regressions
 
