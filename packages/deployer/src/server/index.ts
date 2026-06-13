@@ -450,8 +450,8 @@ export async function createHonoServer(
       // Inject the server configuration into index.html placeholders
       const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
       const hideCloudCta = process.env.MASTRA_HIDE_CLOUD_CTA === 'true';
-      const bindHost = serverOptions?.host ?? process.env.MASTRA_HOST;
-      const host = bindHost ?? 'localhost';
+      const bindHost = serverOptions?.host ?? process.env.MASTRA_HOST ?? 'localhost';
+      const host = bindHost;
       const key =
         serverOptions?.https?.key ??
         (process.env.MASTRA_HTTPS_KEY ? Buffer.from(process.env.MASTRA_HTTPS_KEY, 'base64') : undefined);
@@ -550,8 +550,12 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
     (process.env.MASTRA_HTTPS_CERT ? Buffer.from(process.env.MASTRA_HTTPS_CERT, 'base64') : undefined);
   const isHttpsEnabled = Boolean(key && cert);
 
-  const bindHost = serverOptions?.host ?? process.env.MASTRA_HOST;
-  const host = bindHost ?? 'localhost';
+  // Default to `localhost` so the bind matches what the log message reports
+  // and so the dev server doesn't silently expose to every network interface
+  // reachable by the host. Set `serverOptions.host` (or MASTRA_HOST=0.0.0.0)
+  // when the server needs to be reachable beyond the loopback adapter.
+  const bindHost = serverOptions?.host ?? process.env.MASTRA_HOST ?? 'localhost';
+  const host = bindHost;
   const port = serverOptions?.port ?? (Number(process.env.PORT) || 4111);
   const protocol = isHttpsEnabled ? 'https' : 'http';
   const studioHost = serverOptions?.studioHost ?? host;

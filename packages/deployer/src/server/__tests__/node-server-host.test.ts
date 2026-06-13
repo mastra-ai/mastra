@@ -102,13 +102,16 @@ describe('createNodeServer host binding', () => {
     delete process.env.MASTRA_HTTPS_CERT;
   });
 
-  it('leaves hostname undefined when no host is configured', async () => {
+  it('defaults hostname to localhost when no host is configured (closes #17906)', async () => {
     await createNodeServer(mockMastra, { tools: {} });
 
     expect(serveMock).toHaveBeenCalledOnce();
+    // Previously the bind was left undefined, which Node interprets as the
+    // unspecified address (binds to every interface) while the log claimed
+    // localhost. Default explicitly so the bind matches what we log.
     expect(serveMock.mock.calls[0]?.[0]).toMatchObject({
       port: 4111,
-      hostname: undefined,
+      hostname: 'localhost',
     });
     expect(logger.info).toHaveBeenCalledWith('Mastra API running', { url: 'http://localhost:4111/api' });
   });
