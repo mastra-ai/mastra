@@ -1,6 +1,6 @@
 # Mastra Code testing recovery history
 
-### Process suspend shortcut validation (2026-06-13, pending)
+### Process suspend shortcut validation (2026-06-13, 78e75cd0bd)
 
 Validated the process suspend shortcut row from existing deterministic coverage. `process-shortcuts` exercises the real PTY visible surface by opening `/help`, asserting the Ctrl+Z suspend and Alt+Z undo shortcut copy, clearing a draft with Ctrl+C, and restoring it with Alt+Z. Unit coverage in `custom-editor.test.ts` proves Ctrl+Z and Alt+Z route to separate editor actions without falling through. Unit coverage in `setup-keyboard-shortcuts.test.ts` proves the suspend handler stops the UI, registers a `SIGCONT` listener, sends `SIGTSTP`, restarts rendering on continue, guards Windows, recovers when `process.kill()` throws, and owns Alt+Z restore semantics.
 
