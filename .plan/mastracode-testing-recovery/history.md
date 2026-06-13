@@ -1,6 +1,6 @@
 # Mastra Code testing recovery history
 
-### MCP server configuration deterministic validation (2026-06-13)
+### MCP server configuration deterministic validation (2026-06-13, `17f941e1e9`)
 
 Validated the MCP server configuration row from existing checked-in deterministic coverage: config parsing/validation including OAuth redirect and scopes, `createMastraCode({ mcpServers })` startup wiring, manager HTTP URL/header/OAuth provider construction, durable OAuth token storage and refresh replacement, programmatic/file precedence, PTY stdio config failure display, header-protected HTTP tool execution, project config reload, selector reconnect/reload-all, skipped validation display, delayed long-running MCP tools, and headless HTTP MCP availability.
 
