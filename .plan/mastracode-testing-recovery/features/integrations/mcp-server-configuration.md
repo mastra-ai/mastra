@@ -85,7 +85,7 @@
 
 ## Missing tests
 
-- Full protected HTTP MCP OAuth flow/failure-display test against a real authorization server remains uncovered; package-level OAuth tests cover provider token/refresh mechanics, and Mastra Code manager tests now cover durable file-backed token persistence/refresh replacement wiring.
+- None for deterministic MCP server configuration contracts. Full protected HTTP MCP OAuth authorization/failure-display against a real authorization server remains explicitly deferred as non-hermetic integration breadth; package-level OAuth tests cover provider token/refresh mechanics, and Mastra Code manager tests cover durable file-backed token persistence/refresh replacement wiring.
 
 ## Known risks / regressions
 
@@ -93,7 +93,7 @@
 - Programmatic configs have highest priority; a typo or duplicate server name can intentionally shadow a working file-based server.
 - Invalid entries are skipped silently except via `/mcp` status/selector; users may not notice configuration typos until they inspect MCP status.
 - OAuth token storage is keyed by project/server/url/redirect/client/scopes; changing any field creates a new token file.
-- Most lower-level tests mock `@mastra/mcp`; real PTY coverage now covers Streamable HTTP tool calls, selector reconnect/reload status refresh, skipped validation display, a delayed long-running MCP result, and headless HTTP MCP tool availability. Durable Mastra Code OAuth token storage is covered, but a full protected-server OAuth authorization/failure-display flow remains unproven.
+- Most lower-level tests mock `@mastra/mcp`; real PTY coverage now covers Streamable HTTP tool calls, selector reconnect/reload status refresh, skipped validation display, a delayed long-running MCP result, and headless HTTP MCP tool availability. Durable Mastra Code OAuth token storage is covered; full protected-server OAuth authorization/failure-display remains deferred to a future protected-server integration fixture.
 
 ## Verification checklist
 

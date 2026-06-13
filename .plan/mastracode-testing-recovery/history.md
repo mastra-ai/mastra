@@ -1,5 +1,17 @@
 # Mastra Code testing recovery history
 
+### MCP server configuration deterministic validation (2026-06-13)
+
+Validated the MCP server configuration row from existing checked-in deterministic coverage: config parsing/validation including OAuth redirect and scopes, `createMastraCode({ mcpServers })` startup wiring, manager HTTP URL/header/OAuth provider construction, durable OAuth token storage and refresh replacement, programmatic/file precedence, PTY stdio config failure display, header-protected HTTP tool execution, project config reload, selector reconnect/reload-all, skipped validation display, delayed long-running MCP tools, and headless HTTP MCP availability.
+
+No new code or tests were added in this chunk. The only remaining card item is a full protected HTTP OAuth authorization/failure-display flow against a real authorization server. That requires a future deterministic protected-server integration fixture and is explicitly deferred as non-hermetic breadth rather than blocking deterministic recovery validation.
+
+Verification:
+
+```sh
+git status --short --branch
+# branch was clean/synced before docs-only validation
+```
 ### MCP selector focused coverage (2026-06-13, `9e3fe22871`)
 
 Added `mastracode/src/tui/components/__tests__/mcp-selector.test.ts`, a focused component shield for the residual MCP status/reload row breadth: connected server tool/log detail views, failed-server error detail, connecting-status polling until settled, and stale reconnect result suppression while reload-all is in progress. Existing PTY e2e already covers `/mcp status`, HTTP manager/tool availability, `/mcp reload`, selector reconnect/reload-all, skipped validation, delayed MCP tool completion, and headless MCP availability.

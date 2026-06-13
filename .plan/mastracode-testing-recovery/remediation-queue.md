@@ -3,7 +3,7 @@
 ## Current state
 
 - Checked-in TUI e2e coverage is no longer missing for any tracker row.
-- 15 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
+- 14 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
 - Keep the user-realism rule: drive behavior through terminal input, slash commands, AIMock fixtures, deterministic pre-launch config/DB seeds, or approved external signal APIs for notification/state-signal origins. Do not emit Harness internals or mutate runtime display state directly.
 
 ## Priority queue
@@ -56,6 +56,7 @@
   - Completed: `headless-mcp-tool-availability` launches a delayed header-protected HTTP MCP server through global config, runs headless mode, and proves headless waits for MCP init so the namespaced tool result reaches the follow-up AIMock request.
   - Completed: focused `manager.test.ts` coverage proves MCP OAuth token storage uses a stable file-backed path across manager instances and preserves refreshed token replacements.
   - Completed: focused `mcp-selector.test.ts` coverage proves selector detail views, connecting-status polling, and stale reconnect result suppression while reload-all is in progress.
+  - Completed: MCP server configuration row validated from existing deterministic stdio/HTTP/header/reload/selector/skipped/headless/OAuth-storage coverage; full protected OAuth authorization-server flow is deferred as future non-hermetic integration breadth.
   - Completed: `browser-wizard-export` drives the interactive `/browser` wizard through AgentBrowser/CDP selection, verifies saved settings and active status projection, then proves `/browser export storageState` writes deterministic storage-state contents.
   - Completed: `browser-wizard-browserbase` drives the interactive `/browser` wizard through Stagehand Browserbase selection, verifies Browserbase credential guidance, proves local launch/profile prompts are skipped, and catches stale CDP/profile/executable settings being cleared before persistence.
   - Completed: `browser-profile-provider-mismatch` drives the interactive `/browser` wizard through a Stagehand-marked profile reused by AgentBrowser, proves the mismatch confirmation gates persistence on `No`, and proves `Yes` rewrites the profile marker.
