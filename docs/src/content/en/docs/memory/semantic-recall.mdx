@@ -6,6 +6,7 @@ packages:
   - "@mastra/fastembed"
   - "@mastra/libsql"
   - "@mastra/memory"
+  - "@mastra/oracledb"
   - "@mastra/pg"
 ---
 
@@ -127,6 +128,7 @@ Each vector store page below includes installation instructions, configuration p
 - [libSQL](/reference/vectors/libsql)
 - [MongoDB](/reference/vectors/mongodb)
 - [OpenSearch](/reference/vectors/opensearch)
+- [OracleDB](/reference/vectors/oracledb)
 - [Pinecone](/reference/vectors/pinecone)
 - [PostgreSQL](/reference/vectors/pg)
 - [Qdrant](/reference/vectors/qdrant)
@@ -160,7 +162,7 @@ const agent = new Agent({
 
 :::note
 
-`scope: 'resource'` is supported by the LibSQL, PostgreSQL, and Upstash storage adapters.
+`scope: 'resource'` is supported by the LibSQL, OracleDB, PostgreSQL, and Upstash storage adapters.
 
 :::
 
