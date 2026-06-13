@@ -62,7 +62,7 @@
 
 ## Existing tests
 
-- `mastracode/src/utils/__tests__/update-check.test.ts` — changelog parsing and live changelog fetch behavior, including dependency-entry filtering, markdown/PR reference stripping, full-entry preservation, and known published-version fetches.
+- `mastracode/src/utils/__tests__/update-check.test.ts` — package-manager detection from env/path signals, install command generation for npm/pnpm/yarn/bun, ESM-safe source `getCurrentVersion()` fallback, semver comparison, changelog parsing and live changelog fetch behavior, including dependency-entry filtering, markdown/PR reference stripping, full-entry preservation, and known published-version fetches.
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — `/update` command dispatch is mocked/registered.
 - `mastracode/src/tui/commands/__tests__/update.test.ts` — direct `/update` coverage for registry failure, already-latest path, changelog prompt text, clearing previous dismissed versions, No dismissed-version persistence, and failed-update manual install guidance.
 - Settings tests include `updateDismissedVersion` defaults/loading in the global settings object.
@@ -71,11 +71,9 @@
 
 ## Missing tests
 
-- Dismissed-version startup suppression and passive 45-minute recheck banner remain; automatic startup update prompt rendering, startup changelog insertion, and `No` dismissal persistence are covered by `update-startup-prompt`.
-- Dedicated `/update` command test for Yes update success without exiting the test process.
-- Package-manager detection tests across npm/pnpm/yarn/bun install contexts.
-- `getCurrentVersion()` tests for build-time define, ESM-safe source fallback, and packaged-build behavior without `package.json`.
-- Auto-update execution failure/success tests that do not actually mutate the developer's global install.
+- Covered: startup prompt rendering, startup changelog insertion, and `No` dismissal persistence via `update-startup-prompt`; manual `/update` prompt/changelog/No flow via `update-command-prompt`; package-manager detection, install command generation, semver comparison, and source-run current-version fallback via `update-check.test.ts`; failed-update manual guidance via `update.test.ts`.
+- Deferred: successful `/update` install that exits/restarts and passive 45-minute recheck banners. Both require mutating process/global-install lifecycle or waiting on timer behavior and are not deterministic row blockers.
+- Deferred: packaged-build behavior without `package.json`; source fallback is covered and build-time define injection is covered by package metadata/build tests.
 
 ## Known risks / regressions
 

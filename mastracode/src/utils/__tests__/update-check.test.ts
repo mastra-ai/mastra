@@ -1,6 +1,58 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
-import { fetchChangelog, parseChangelog } from '../update-check.js';
+import { detectPackageManager, fetchChangelog, getCurrentVersion, getInstallCommand, isNewerVersion, parseChangelog } from '../update-check.js';
+
+const testProcess = (globalThis as any).process as { env: Record<string, string | undefined> };
+const ORIGINAL_ENV = { ...testProcess.env };
+
+afterEach(() => {
+  testProcess.env = { ...ORIGINAL_ENV };
+});
+
+describe('update-check helpers', () => {
+  it.each([
+    ['pnpm/10.0.0 npm/? node/?', 'pnpm'],
+    ['yarn/1.22.22 npm/? node/?', 'yarn'],
+    ['bun/1.2.0 npm/? node/?', 'bun'],
+    ['npm/11.0.0 node/?', 'npm'],
+  ] as const)('detects package manager from npm_config_user_agent=%s', async (userAgent, expected) => {
+    testProcess.env.npm_config_user_agent = userAgent;
+    delete testProcess.env.npm_execpath;
+    delete testProcess.env.NODE_PATH;
+
+    await expect(detectPackageManager()).resolves.toBe(expected);
+  });
+
+  it('falls back through npm_execpath and NODE_PATH before the default shell-out tier', async () => {
+    delete testProcess.env.npm_config_user_agent;
+    testProcess.env.npm_execpath = '/opt/homebrew/bin/yarn';
+    delete testProcess.env.NODE_PATH;
+    await expect(detectPackageManager()).resolves.toBe('yarn');
+
+    delete testProcess.env.npm_execpath;
+    testProcess.env.NODE_PATH = '/Users/test/.pnpm/global/5/node_modules';
+    await expect(detectPackageManager()).resolves.toBe('pnpm');
+  });
+
+  it('builds install commands for each supported package manager', () => {
+    expect(getInstallCommand('npm', '1.2.3')).toBe('npm install -g mastracode@1.2.3');
+    expect(getInstallCommand('pnpm', '1.2.3')).toBe('pnpm add -g mastracode@1.2.3');
+    expect(getInstallCommand('yarn', '1.2.3')).toBe('yarn global add mastracode@1.2.3');
+    expect(getInstallCommand('bun', '1.2.3')).toBe('bun add -g mastracode@1.2.3');
+  });
+
+  it('resolves the source-run current version through the ESM-safe package metadata fallback', () => {
+    expect(getCurrentVersion()).toMatch(/^\d+\.\d+\.\d+/);
+  });
+
+  it('compares newer versions while ignoring prerelease suffixes', () => {
+    expect(isNewerVersion('1.2.3', '1.2.4')).toBe(true);
+    expect(isNewerVersion('1.2.3', '1.3.0')).toBe(true);
+    expect(isNewerVersion('1.2.3', '2.0.0')).toBe(true);
+    expect(isNewerVersion('1.2.3-alpha.0', '1.2.3-beta.0')).toBe(false);
+    expect(isNewerVersion('1.2.3', '1.2.3')).toBe(false);
+  });
+});
 
 describe('parseChangelog', () => {
   const SAMPLE_CHANGELOG = [

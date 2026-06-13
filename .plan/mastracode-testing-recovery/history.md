@@ -1,5 +1,28 @@
 # Mastra Code testing recovery history
 
+### Auto-update helper coverage (2026-06-13, pending)
+
+Extended `update-check.test.ts` with deterministic helper coverage for package-manager detection from `npm_config_user_agent`, `npm_execpath`, and `NODE_PATH`; install command generation for npm/pnpm/yarn/bun; ESM-safe source-run `getCurrentVersion()` fallback to package metadata; and semver comparison behavior. Existing `update-command-prompt` and `update-startup-prompt` PTY scenarios already cover the manual and automatic inline prompt surfaces with hermetic latest-version/changelog data and dismissal persistence. Existing command tests cover registry failures, already-latest behavior, previous-dismissal clearing, changelog prompt text, `No` persistence, and failed-update manual install guidance.
+
+Break validations:
+
+1. Returned `npm` for pnpm user-agent detection; focused helper test failed.
+2. Changed the pnpm install command from `pnpm add -g` to `pnpm install -g`; focused helper test failed.
+3. Broke the ESM source package metadata fallback path; focused helper test failed with missing package metadata.
+
+All breaks were reverted and the focused update tests passed. Successful global install/restart and passive timer banners remain deferred as non-hermetic lifecycle breadth.
+
+Verification:
+
+```sh
+pnpm --filter ./mastracode test --run src/utils/__tests__/update-check.test.ts src/tui/commands/__tests__/update.test.ts --reporter=dot --bail 1
+pnpm run build:mastracode
+pnpm --filter ./mastracode run e2e:test update-startup-prompt
+pnpm --filter ./mastracode run e2e:test update-command-prompt
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+```
+
 ### Shell passthrough non-persistence coverage (2026-06-13, fb00caf44a)
 
 Added `shell-passthrough-nonpersistent`, a real PTY e2e scenario that runs a local shell sentinel through `!printf`, then runs a local `sqlite3` query against the isolated Mastra DB to prove the sentinel is absent from `mastra_messages`. The scenario then sends a normal AIMock-backed prompt and verifies the provider request does not contain the shell sentinel, proving passthrough output remains local-only and is not model-bound.
