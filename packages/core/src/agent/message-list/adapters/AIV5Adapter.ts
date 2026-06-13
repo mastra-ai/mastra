@@ -376,6 +376,23 @@ export class AIV5Adapter {
             continue;
           }
 
+          // OpenAI Files API file IDs (e.g. "file-abc123") must reach @ai-sdk/openai
+          // as the raw string so the provider sends { file_id: "..." } instead of
+          // wrapping it as a base64 data URI. categorizeFileData() treats these as
+          // "raw" strings because new URL("file-abc123") throws (no scheme), and
+          // createDataUri() would then produce "data:…;base64,file-abc123" which
+          // fails at fetch time with "failed to fetch the data URL".
+          if (typeof part.data === 'string' && part.data.startsWith('file-')) {
+            const v5UIPart: AIV5Type.FileUIPart = {
+              type: 'file' as const,
+              url: part.data,
+              mediaType: part.mimeType || 'application/octet-stream',
+            };
+            v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
+            parts.push(v5UIPart);
+            continue;
+          }
+
           const categorized =
             typeof part.data === 'string'
               ? categorizeFileData(part.data, part.mimeType)
