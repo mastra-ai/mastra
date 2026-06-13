@@ -1,5 +1,27 @@
 # Mastra Code testing recovery history
 
+### Debug logging startup wiring coverage (2026-06-13, pending)
+
+Extended `mastracode/src/utils/__tests__/debug-log.test.ts` with startup-wiring assertions that both production entrypoints, `src/main.ts` and `src/headless.ts`, import and call `setupDebugLogging()` exactly once. Existing debug-log unit coverage already protects env gating, warning/error redirection, stack formatting, startup truncation, append behavior, and repeated setup behavior. Existing `debug-logging` PTY e2e verifies an opt-in `MASTRA_DEBUG=1` run captures a sentinel warning into isolated app-data `debug.log` without leaking it into the terminal UI.
+
+Break validations:
+
+1. Removed the `setupDebugLogging()` call from `main.ts`; the focused test failed for `src/main.ts`.
+2. Removed the `setupDebugLogging()` call from `headless.ts`; the focused test failed for `src/headless.ts`.
+3. Duplicated the `setupDebugLogging()` call in `main.ts`; the focused test failed because the call count was 2 instead of 1.
+
+All breaks were reverted and the focused test passed cleanly. Long-session log growth beyond the startup cap remains documented behavior rather than a deterministic recovery blocker.
+
+Verification:
+
+```sh
+pnpm --filter ./mastracode test --run src/utils/__tests__/debug-log.test.ts --reporter=dot --bail 1
+pnpm run build:mastracode
+pnpm --filter ./mastracode run e2e:test debug-logging
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+```
+
 ### Lifecycle hook executor coverage (2026-06-13, 9acae8d4bd)
 
 Added `mastracode/src/hooks/executor.test.ts`, a focused shield for the remaining lifecycle hook executor protocol breadth: command hooks receive JSON stdin plus `MASTRA_HOOK_EVENT`, JSON stdout is parsed into additional context, hung hooks are killed and reported as timeout warnings, blocking events stop on exit code 2 with the parsed reason, non-blocking events convert exit code 2 into warnings, and accumulated additional context is preserved. Existing PTY e2e already covers configured `/hooks` status, `/hooks reload`, and `UserPromptSubmit` blocking through the real terminal. Existing TUI hook unit tests cover Stop reasons, SessionEnd on `stop()`, and caffeinate cleanup.

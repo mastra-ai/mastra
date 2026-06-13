@@ -2,6 +2,7 @@
 
 ## Current status
 
+- 2026-06-13 stamp: pending — debug logging row moved to validated after adding startup-wiring assertions for `main.ts` and `headless.ts`; existing `debug-logging` PTY e2e still covers opt-in warning capture without terminal leakage. Current tracker: 47 validated, 9 needs-follow-up, 117 e2e scenarios.
 - 2026-06-13 stamp: 9acae8d4bd — lifecycle hooks row moved to validated after adding `executor.test.ts` for hook JSON protocol, timeout, blocking/non-blocking warning, and additional-context behavior; existing PTY e2e covers `/hooks` status/reload and `UserPromptSubmit` blocking. Current tracker: 46 validated, 10 needs-follow-up, 117 e2e scenarios.
 - 2026-06-13 stamp: 210bb1e349 — stream error retry processor row moved to validated from deterministic core processor tests, Mastra Code processor-order wiring tests, and existing `stream-error-retry` PTY recovery coverage; real live OpenAI proof and visible retry indicator are explicitly deferred as non-hermetic/unimplemented breadth. Current tracker: 45 validated, 11 needs-follow-up, 117 e2e scenarios.
 - 2026-06-13 stamp: `2061fdd9ef` — browser status projection coverage added and break-validated; browser automation row moved to validated from existing PTY e2e plus focused profile/executable/storage-state drift coverage. Current tracker: 44 validated, 12 needs-follow-up, 116 e2e scenarios.

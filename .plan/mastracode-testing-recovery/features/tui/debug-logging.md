@@ -50,7 +50,7 @@
 ## Key files
 
 - `mastracode/src/utils/debug-log.ts` — debug enablement, file truncation, stack-aware formatting, console override.
-- `mastracode/src/utils/__tests__/debug-log.test.ts` — unit coverage for size cap, env gating, and stack logging.
+- `mastracode/src/utils/__tests__/debug-log.test.ts` — unit coverage for size cap, env gating, stack logging, repeated setup append/truncation behavior, and startup wiring in both `main.ts` and `headless.ts`.
 - `mastracode/src/main.ts` — TUI startup calls `setupDebugLogging()`.
 - `mastracode/src/headless.ts` — headless startup calls `setupDebugLogging()`.
 - `mastracode/src/tui/components/assistant-message.ts` — assistant-message component trace logging behind `MASTRA_TUI_DEBUG`.
@@ -62,12 +62,13 @@
 
 ## Existing tests
 
-- `mastracode/src/utils/__tests__/debug-log.test.ts` — covers no-op below cap, truncation above cap, newline-boundary truncation, missing file handling, default/`false` suppression, `true`/`1` file logging, Error stack formatting, and repeated debug sessions appending after truncation without partial lines.
+- `mastracode/src/utils/__tests__/debug-log.test.ts` — covers no-op below cap, truncation above cap, newline-boundary truncation, missing file handling, default/`false` suppression, `true`/`1` file logging, Error stack formatting, repeated debug sessions appending after truncation without partial lines, and source-level startup wiring for `main.ts` and `headless.ts`.
+- `mastracode/scripts/mc-e2e/scenarios/debug-logging.ts` — real TUI e2e coverage: launches a TUI with `MASTRA_DEBUG=1`, emits a sentinel `console.warn`, verifies the sentinel does not leak into the terminal UI, and asserts isolated app-data `debug.log` contains `[WARN]` plus the sentinel.
 
 ## Missing tests
 
-- Partial e2e coverage exists: `debug-logging` launches a real TUI via a custom entrypoint with `MASTRA_DEBUG=1`, calls `setupDebugLogging()`, emits a sentinel `console.warn`, verifies the sentinel does not leak into the terminal UI, and asserts the isolated app-data `debug.log` contains `[WARN]` plus the sentinel.
-- Startup integration test proving `main.ts` and `headless.ts` both call `setupDebugLogging()` exactly once in representative production runs; the e2e scenario covers the helper behavior through a TUI launch but uses a custom entrypoint seam for deterministic sentinel emission.
+- Covered: startup wiring for `main.ts` and `headless.ts` via focused source-level assertions that both entrypoints import and call `setupDebugLogging()` exactly once.
+- Deferred: a single long-running session can grow beyond the startup cap before the next launch; this is documented product behavior rather than a deterministic recovery blocker.
 
 ## Known risks / regressions
 

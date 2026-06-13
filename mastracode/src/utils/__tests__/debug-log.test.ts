@@ -64,6 +64,15 @@ describe('truncateLogFile', () => {
   });
 });
 
+describe('debug logging startup wiring', () => {
+  it.each(['src/main.ts', 'src/headless.ts'])('%s calls setupDebugLogging exactly once', file => {
+    const source = fs.readFileSync(path.join(process.cwd(), file), 'utf8');
+
+    expect(source).toContain("import { setupDebugLogging } from './utils/debug-log.js';");
+    expect(source.match(/setupDebugLogging\(\);/g)).toHaveLength(1);
+  });
+});
+
 describe('setupDebugLogging', () => {
   let tmpDir: string;
   const originalError = console.error;
