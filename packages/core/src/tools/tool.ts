@@ -1,3 +1,5 @@
+import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
+import type { ZodType as ZodTypeV4 } from 'zod/v4';
 import type { Mastra } from '../mastra';
 import { RequestContext } from '../request-context';
 import { toStandardSchema } from '../schema';
@@ -554,6 +556,80 @@ type CreateToolOpts<
   suspendSchema?: TSuspendSchema;
   resumeSchema?: TResumeSchema;
 };
+
+// Overload opts for Zod v4 schemas: TInput/TOutput bound directly, bypassing deferred conditional types
+type CreateToolOptsZodV4<
+  TId extends string,
+  TInput,
+  TOutput,
+  TSuspend,
+  TResume,
+  TRequestContext,
+  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext>,
+> = Omit<
+  ToolAction<TInput, TOutput, TSuspend, TResume, TContext, TId, TRequestContext>,
+  'inputSchema' | 'outputSchema' | 'suspendSchema' | 'resumeSchema'
+> & {
+  inputSchema: ZodTypeV4<TInput, any>;
+  outputSchema?: ZodTypeV4<TOutput, any>;
+  suspendSchema?: ZodTypeV4<TSuspend, any>;
+  resumeSchema?: ZodTypeV4<TResume, any>;
+};
+
+// Overload opts for Zod v3 schemas: TInput/TOutput bound directly, bypassing deferred conditional types
+type CreateToolOptsZodV3<
+  TId extends string,
+  TInput,
+  TOutput,
+  TSuspend,
+  TResume,
+  TRequestContext,
+  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext>,
+> = Omit<
+  ToolAction<TInput, TOutput, TSuspend, TResume, TContext, TId, TRequestContext>,
+  'inputSchema' | 'outputSchema' | 'suspendSchema' | 'resumeSchema'
+> & {
+  inputSchema: ZodSchemaV3<TInput, any, any>;
+  outputSchema?: ZodSchemaV3<TOutput, any, any>;
+  suspendSchema?: ZodSchemaV3<TSuspend, any, any>;
+  resumeSchema?: ZodSchemaV3<TResume, any, any>;
+};
+
+// Overload 1: Zod v4 inputSchema — TInput inferred directly without conditional type deferral
+export function createTool<
+  TId extends string = string,
+  TInput = unknown,
+  TOutput = unknown,
+  TSuspend = unknown,
+  TResume = unknown,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext> = ToolExecutionContext<
+    TSuspend,
+    TResume,
+    TRequestContext
+  >,
+>(
+  opts: CreateToolOptsZodV4<TId, TInput, TOutput, TSuspend, TResume, TRequestContext, TContext>,
+): Tool<TInput, TOutput, TSuspend, TResume, TContext, TId, TRequestContext>;
+
+// Overload 2: Zod v3 inputSchema — TInput inferred directly without conditional type deferral
+export function createTool<
+  TId extends string = string,
+  TInput = unknown,
+  TOutput = unknown,
+  TSuspend = unknown,
+  TResume = unknown,
+  TRequestContext extends Record<string, any> | unknown = unknown,
+  TContext extends ToolExecutionContext<TSuspend, TResume, TRequestContext> = ToolExecutionContext<
+    TSuspend,
+    TResume,
+    TRequestContext
+  >,
+>(
+  opts: CreateToolOptsZodV3<TId, TInput, TOutput, TSuspend, TResume, TRequestContext, TContext>,
+): Tool<TInput, TOutput, TSuspend, TResume, TContext, TId, TRequestContext>;
+
+// Overload 3: generic fallback for all other schema types (JSONSchema7, AI SDK Schema, etc.)
 export function createTool<
   TId extends string = string,
   TInputSchema extends SchemaLike = undefined,
@@ -573,6 +649,9 @@ export function createTool<
   TContext,
   TId,
   TRequestContext
-> {
+>;
+
+// Implementation — compatible with all overloads above
+export function createTool(opts: any): any {
   return new Tool(opts);
 }
