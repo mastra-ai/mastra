@@ -1,5 +1,24 @@
 # Mastra Code testing recovery history
 
+### Installation and launch packed CLI smoke (2026-06-13, installation-launch-packed-smoke TBD)
+
+Extended `package-metadata.test.ts` with a hermetic built-CLI smoke that resolves the package `bin` entrypoint from `mastracode/package.json`, runs `node dist/cli.js --help`, and verifies the headless `--prompt` validation path reports a missing `--settings` file without entering the interactive TUI. Existing `first-run-onboarding` PTY coverage still validates clean-config launch and onboarding Skip through real terminal input.
+
+Break validations:
+
+1. Changed the headless help usage line; the built-CLI smoke failed waiting for `Usage: mastracode --prompt <text>`.
+2. Changed the headless missing-settings error text; the built-CLI smoke failed on stderr.
+3. Changed the package `bin` path; package metadata coverage failed before a bad packaged entrypoint could ship.
+
+All breaks were reverted and the focused package metadata test passed cleanly after rebuilding. True global/npx install and live terminal-close behavior remain deferred as non-hermetic lifecycle breadth.
+
+Verification:
+
+```sh
+pnpm run build:mastracode
+pnpm --filter ./mastracode exec vitest --run src/__tests__/package-metadata.test.ts --reporter=dot --bail 1
+```
+
 ### Auto-update helper coverage (2026-06-13, a23e41a473)
 
 Extended `update-check.test.ts` with deterministic helper coverage for package-manager detection from `npm_config_user_agent`, `npm_execpath`, and `NODE_PATH`; install command generation for npm/pnpm/yarn/bun; ESM-safe source-run `getCurrentVersion()` fallback to package metadata; and semver comparison behavior. Existing `update-command-prompt` and `update-startup-prompt` PTY scenarios already cover the manual and automatic inline prompt surfaces with hermetic latest-version/changelog data and dismissal persistence. Existing command tests cover registry failures, already-latest behavior, previous-dismissal clearing, changelog prompt text, `No` persistence, and failed-update manual install guidance.

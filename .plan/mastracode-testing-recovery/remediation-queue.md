@@ -3,7 +3,7 @@
 ## Current state
 
 - Checked-in TUI e2e coverage is no longer missing for any tracker row.
-- 6 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
+- 5 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
 - Keep the user-realism rule: drive behavior through terminal input, slash commands, AIMock fixtures, deterministic pre-launch config/DB seeds, or approved external signal APIs for notification/state-signal origins. Do not emit Harness internals or mutate runtime display state directly.
 
 ## Priority queue
@@ -142,3 +142,5 @@
 - ✅ `mastracode/src/tui/commands/__tests__/browser.test.ts` — covered richer `/browser status` active/pending projection for profile/executable/storage-state fields and storage-state-only drift detection. Breaks proved active storage rendering, pending executable rendering, and storage-state drift key participation.
 
 - ✅ `custom-provider-modal-validation` — covers `/custom-providers` create-provider success, duplicate-name rejection, invalid URL rejection, and remove-model persistence through real PTY modal input; custom-provider row is validated with live external provider smoke deferred as non-hermetic breadth.
+- ✅ `package-metadata.test.ts` — covers the built Mastra Code package `bin` entrypoint by running `--help` and the headless `--prompt` missing-settings validation path from `dist/cli.js`; installation/launch is validated with true global/npx install deferred as non-hermetic lifecycle breadth.
+
