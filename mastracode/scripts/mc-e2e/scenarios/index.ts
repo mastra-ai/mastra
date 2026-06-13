@@ -5,6 +5,7 @@ import { apiKeyPromptScenario } from './api-key-prompt.js';
 import { askUserAdvancedPromptsScenario } from './ask-user-advanced-prompts.js';
 import { automatedChatScenario } from './automated-chat.js';
 import { branchContextLongNameScenario } from './branch-context-long-name.js';
+import { browserActivePendingStatusScenario } from './browser-active-pending-status.js';
 import { browserProfileProviderMismatchScenario } from './browser-profile-provider-mismatch.js';
 import { browserSettingsPersistenceScenario } from './browser-settings-persistence.js';
 import { browserStartupRestoreScenario } from './browser-startup-restore.js';
@@ -110,6 +111,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'api-key-prompt': apiKeyPromptScenario,
   'ask-user-advanced-prompts': askUserAdvancedPromptsScenario,
   'automated-chat': automatedChatScenario,
+  'browser-active-pending-status': browserActivePendingStatusScenario,
   'browser-profile-provider-mismatch': browserProfileProviderMismatchScenario,
   'browser-settings-persistence': browserSettingsPersistenceScenario,
   'browser-startup-restore': browserStartupRestoreScenario,

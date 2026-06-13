@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Browser active-vs-pending status coverage (2026-06-13)
+
+Added `browser-active-pending-status`, a real PTY `/browser status` scenario for config drift between the active runtime browser and saved file settings. The scenario starts with enabled AgentBrowser/CDP settings, changes the saved CDP URL without running `/browser on`, then proves status renders `Browser (active)`, `Pending changes (not yet applied)`, both active and pending CDP endpoints, and explicit `/browser on` apply guidance.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test browser-active-pending-status
+```
+
+Break validations:
+
+- Disabled config-drift detection; the scenario failed because status collapsed to the pending config and never rendered `Browser (active)`.
+- Renamed the pending-settings section; the scenario failed waiting for `Pending changes (not yet applied):`.
+- Replaced the `/browser on` apply guidance; the scenario failed waiting for the expected apply/reconfigure/restart copy.
+
+The settings/browser rows remain `needs-follow-up`: active-vs-pending status is now covered; remaining browser breadth is startup variants and richer external-provider/reload depth.
+
+
 ### Settings API-key submenu navigation coverage (2026-06-13)
 
 Added `settings-api-keys-navigation`, a real PTY scenario for the Settings → API Keys handoff. The scenario opens `/settings`, selects the `API Keys` row through keyboard navigation, and verifies the API-key management overlay appears with provider status details.

@@ -7,6 +7,7 @@ export type ScenarioName =
   | 'api-key-prompt'
   | 'ask-user-advanced-prompts'
   | 'automated-chat'
+  | 'browser-active-pending-status'
   | 'browser-profile-provider-mismatch'
   | 'browser-settings-persistence'
   | 'browser-startup-restore'

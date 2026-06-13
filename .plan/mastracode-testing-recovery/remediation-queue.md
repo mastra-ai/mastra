@@ -52,6 +52,7 @@
   - Completed: `browser-wizard-browserbase` drives the interactive `/browser` wizard through Stagehand Browserbase selection, verifies Browserbase credential guidance, proves local launch/profile prompts are skipped, and catches stale CDP/profile/executable settings being cleared before persistence.
   - Completed: `browser-profile-provider-mismatch` drives the interactive `/browser` wizard through a Stagehand-marked profile reused by AgentBrowser, proves the mismatch confirmation gates persistence on `No`, and proves `Yes` rewrites the profile marker.
   - Completed: `browser-startup-restore` seeds enabled AgentBrowser/CDP settings before launch, verifies `/browser status` restores provider/headless/CDP projection without `/browser on`, and proves the first AIMock turn receives browser context plus browser tools.
+  - Completed: `browser-active-pending-status` seeds enabled AgentBrowser/CDP settings, changes saved CDP settings without `/browser on`, and proves `/browser status` renders active runtime settings separately from pending file settings plus apply guidance.
   - Completed: `browser-toggle-attach` seeds AgentBrowser CDP settings, drives `/browser on`, verifies enabled `/browser status` with the CDP endpoint, proves settings persisted, and uses AIMock request verification to confirm browser tools reached the next model turn.
 - Fixture/data needs: local mock MCP server fixture; remaining OAuth breadth would need a deterministic protected-server/authorization fixture for failure-display coverage; no live browser credentials.
 
