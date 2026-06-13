@@ -25,6 +25,7 @@ export type ScenarioName =
   | 'custom-provider-delete'
   | 'custom-provider-edit-share-import'
   | 'custom-provider-management'
+  | 'custom-provider-model-selector'
   | 'custom-slash-command'
   | 'ctrlf-queued-custom-slash'
   | 'ctrlf-queued-image-followup'

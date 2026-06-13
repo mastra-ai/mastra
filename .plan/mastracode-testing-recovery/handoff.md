@@ -2,6 +2,7 @@
 
 ## Current status
 
+- 2026-06-13 verified: `custom-provider-model-selector` coverage added and break-validated; custom-provider row remains needs-follow-up for provider create/remove-model validation, invalid URL/duplicate-name branches, and live request routing. Final gates passed: build, focused e2e, check, lint, and full TUI e2e 116/116 with `--jobs 4`. Current tracker: 40 validated, 16 needs-follow-up, 116 e2e scenarios.
 - 2026-06-13 stamp: `01e0a377ce` — `github-signals-notification-reload` coverage added and break-validated; GitHub signal subscriptions row moved to validated. Final gates passed: build, focused e2e, check, lint, and full TUI e2e 115/115 with `--jobs 4`. Current tracker: 40 validated, 16 needs-follow-up, 115 e2e scenarios.
 - 2026-06-13 stamp: `6168ec4093` — autocomplete wrapping/navigation e2e committed; queued-followups row validated, with 114/114 e2e suite pass.
 - 2026-06-13 verified: `autocomplete-wrapping-navigation` coverage added and break-validated; queued-followups row moved to validated. Final gates passed: build, focused e2e, check, lint, and full TUI e2e 114/114 with `--jobs 4`. Current tracker: 39 validated, 17 needs-follow-up, 114 e2e scenarios before GitHub notification reload.

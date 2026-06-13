@@ -75,13 +75,15 @@
 - `mastracode/scripts/mc-e2e/scenarios/custom-provider-management.ts` — partial TUI e2e coverage for a configured provider appearing in `/custom-providers`, provider management selection, add-model modal entry, and reopened persisted model count.
 - `mastracode/scripts/mc-e2e/scenarios/custom-provider-delete.ts` — partial TUI e2e coverage for deleting a configured provider through the destructive confirmation modal and proving persisted removal while unrelated custom packs remain.
 - `mastracode/scripts/mc-e2e/scenarios/custom-provider-edit-share-import.ts` — partial TUI e2e coverage for editing a provider name/URL/API key through default-valued modals and proving persisted settings update.
+- `mastracode/scripts/mc-e2e/scenarios/custom-provider-model-selector.ts` — TUI e2e coverage for `/models` creating a custom pack by selecting configured custom-provider catalog entries, rejecting free-form `Use:` fallback, and proving active defaults plus saved pack models persist.
+- `mastracode/scripts/mc-e2e/scenarios/om-model-override-reload.ts` — TUI e2e coverage for `/om` restoring and persisting custom-provider observer/reflector model overrides across startup/global/thread settings.
 
 ## Missing tests
 
-- Full modal flow test for add/remove model, invalid URLs, and duplicate names remains. Add-model persistence is covered by `custom-provider-management`; provider edit persistence is covered by `custom-provider-edit-share-import`; provider deletion persistence is covered by `custom-provider-delete`.
+- Full modal flow test for provider creation/remove-model, invalid URLs, and duplicate names remains. Add-model persistence is covered by `custom-provider-management`; provider edit persistence is covered by `custom-provider-edit-share-import`; provider deletion persistence is covered by `custom-provider-delete`; invalid URL and duplicate-name branches remain lower-level unit shields without a user-perspective e2e.
 - Covered: Harness `listAvailableModels()` custom catalog merge, cache invalidation, use-count merge, and duplicate model IDs (`packages/core/src/harness/list-available-models.test.ts`).
-- `/models` UI test proving custom provider models appear and can be selected/persisted.
-- `/om` selector test proving observer/reflector custom provider choices persist across restart.
+- Covered: `/models` custom-provider catalog selection/persistence via `custom-provider-model-selector`.
+- Covered: `/om` selector custom-provider observer/reflector persistence across restart via `om-model-override-reload`.
 
 ## Known risks / regressions
 

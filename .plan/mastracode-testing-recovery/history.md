@@ -1,5 +1,29 @@
 # Mastra Code testing recovery history
 
+### Custom provider model selector coverage (2026-06-13)
+
+Added `custom-provider-model-selector`, a real PTY e2e scenario that seeds an OpenAI-compatible custom provider, opens `/models`, chooses the Custom pack flow, selects `selector-e2e/...` catalog entries for plan/build/fast, asserts those selections are not the free-form `Use:` fallback, and proves `settings.json` persists the active custom pack, mode defaults, saved pack models, and subagent-default cleanup.
+
+Break validations:
+
+1. Removed custom-provider entries from `customModelCatalogProvider`; the scenario failed because the selector only offered the free-form `Use:` entry.
+2. Changed `ModelSelectorComponent` to show `Use:` even for exact catalog matches; the scenario failed before selection.
+3. Stopped persisting activated custom-pack mode defaults; the shell assertions saw `undefined` defaults while the saved pack still existed.
+
+All breaks were reverted and the focused scenario passed cleanly. The custom-provider row remains partial for provider creation/remove-model validation and live custom-provider request routing breadth.
+
+Verification:
+
+```sh
+pnpm run build:mastracode
+pnpm --filter ./mastracode run e2e:test custom-provider-model-selector
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+pnpm --filter ./mastracode run e2e:test -- --jobs 4 # 116/116 passed
+```
+
+The first full-suite attempt reached 114/116 with known worker-timeout flakes in `provider-history-rejection-retry` and `prompt-context-instructions`; both passed focused retries after cache cleanup, and the clean rerun passed 116/116.
+
 ### GitHub notification reload coverage (2026-06-13)
 
 Added `github-signals-notification-reload`, a real PTY e2e scenario that seeds a persisted GitHub notification signal plus subscribed-thread metadata, opens it through `/threads`, and asserts the loaded-history card renders `notification from github`, `high · pull-request-ci-recovered · seen`, the PR summary text, the original user prompt, and the status-line `PR#17641` projection. This closes the deterministic GitHub notification history reload parity gap; real live gitcrawl/gh integration and multi-process polling remain non-hermetic follow-up breadth.
