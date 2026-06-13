@@ -1,6 +1,6 @@
 # Mastra Code testing recovery history
 
-### Shell passthrough non-persistence coverage (2026-06-13, pending)
+### Shell passthrough non-persistence coverage (2026-06-13, fb00caf44a)
 
 Added `shell-passthrough-nonpersistent`, a real PTY e2e scenario that runs a local shell sentinel through `!printf`, then runs a local `sqlite3` query against the isolated Mastra DB to prove the sentinel is absent from `mastra_messages`. The scenario then sends a normal AIMock-backed prompt and verifies the provider request does not contain the shell sentinel, proving passthrough output remains local-only and is not model-bound.
 

@@ -2,7 +2,7 @@
 
 ## Current status
 
-- 2026-06-13 stamp: pending — shell passthrough row moved to validated after adding `shell-passthrough-nonpersistent`, which proves local shell output is absent from persisted messages and the next model request. Current tracker: 49 validated, 7 needs-follow-up, 118 e2e scenarios.
+- 2026-06-13 stamp: fb00caf44a — shell passthrough row moved to validated after adding `shell-passthrough-nonpersistent`, which proves local shell output is absent from persisted messages and the next model request. Current tracker: 49 validated, 7 needs-follow-up, 118 e2e scenarios.
 - 2026-06-13 stamp: 78e75cd0bd — process suspend shortcut row moved to validated from existing unit `SIGTSTP`/`SIGCONT` lifecycle coverage plus `process-shortcuts` PTY coverage for visible Ctrl+Z/Alt+Z shortcut behavior. Full shell `fg` resume remains deferred until the runner has a safe job-control primitive. Current tracker: 48 validated, 8 needs-follow-up, 117 e2e scenarios.
 - 2026-06-13 stamp: 078a091149 — debug logging row moved to validated after adding startup-wiring assertions for `main.ts` and `headless.ts`; existing `debug-logging` PTY e2e still covers opt-in warning capture without terminal leakage. Current tracker: 47 validated, 9 needs-follow-up, 117 e2e scenarios.
 - 2026-06-13 stamp: 9acae8d4bd — lifecycle hooks row moved to validated after adding `executor.test.ts` for hook JSON protocol, timeout, blocking/non-blocking warning, and additional-context behavior; existing PTY e2e covers `/hooks` status/reload and `UserPromptSubmit` blocking. Current tracker: 46 validated, 10 needs-follow-up, 117 e2e scenarios.
