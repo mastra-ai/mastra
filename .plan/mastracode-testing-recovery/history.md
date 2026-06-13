@@ -5883,3 +5883,12 @@ Verification: `pnpm build:core`; `pnpm --filter ./mastracode run e2e:test notifi
 - Break validation 2: removed pending executable rendering from `browser.ts`; focused browser command test failed waiting for the pending executable line. Reverted.
 - Break validation 3: removed storage-state from `getBrowserConfigKey`; focused browser command test failed because storage-only changes rendered normal `Browser: enabled` status instead of active/pending drift. Reverted.
 - Verification: `pnpm run build:mastracode` passed (24/24 cached); focused `pnpm --filter ./mastracode exec vitest run src/tui/commands/__tests__/browser.test.ts --reporter=dot --bail 1` passed (3/3); `pnpm --filter ./mastracode check` clean; `pnpm --filter ./mastracode lint` clean.
+
+
+### Custom provider modal validation — 2026-06-13
+
+- Added `custom-provider-modal-validation` TUI e2e for duplicate-provider rejection, invalid URL rejection, create-provider success, and remove-model persistence through `/custom-providers`.
+- Break validation 1: disabled the duplicate-provider guard in `createProviderFlow`; scenario failed waiting for `Provider already exists` and advanced to the Base URL prompt. Reverted.
+- Break validation 2: made `isValidUrl()` accept every value; scenario failed waiting for the invalid URL error and advanced to API-key input. Reverted.
+- Break validation 3: changed remove-model persistence to keep the selected model; scenario failed with `Unable to remove model from provider` instead of the removed-model success message. Reverted.
+- Verification: `pnpm run build:mastracode` passed (24/24 cached); focused `pnpm --filter ./mastracode run e2e:test custom-provider-modal-validation` passed; `pnpm --filter ./mastracode check` clean; `pnpm --filter ./mastracode lint` clean; full TUI e2e `pnpm --filter ./mastracode run e2e:test -- --jobs 4` passed 117/117.

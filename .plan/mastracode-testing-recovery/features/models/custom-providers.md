@@ -72,15 +72,16 @@
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — `/custom-providers` dispatch and analytics tracking.
 - `mastracode/src/tui/commands/__tests__/models-pack.test.ts` — custom provider model availability interactions through model pack flows.
 - `packages/core/src/harness/list-available-models.test.ts` — Harness custom model catalog merge, custom-over-built-in duplicate precedence, use-count merge, and cache invalidation after provider edits.
-- `mastracode/scripts/mc-e2e/scenarios/custom-provider-management.ts` — partial TUI e2e coverage for a configured provider appearing in `/custom-providers`, provider management selection, add-model modal entry, and reopened persisted model count.
-- `mastracode/scripts/mc-e2e/scenarios/custom-provider-delete.ts` — partial TUI e2e coverage for deleting a configured provider through the destructive confirmation modal and proving persisted removal while unrelated custom packs remain.
-- `mastracode/scripts/mc-e2e/scenarios/custom-provider-edit-share-import.ts` — partial TUI e2e coverage for editing a provider name/URL/API key through default-valued modals and proving persisted settings update.
+- `mastracode/scripts/mc-e2e/scenarios/custom-provider-management.ts` — TUI e2e coverage for a configured provider appearing in `/custom-providers`, provider management selection, add-model modal entry, and reopened persisted model count.
+- `mastracode/scripts/mc-e2e/scenarios/custom-provider-delete.ts` — TUI e2e coverage for deleting a configured provider through the destructive confirmation modal and proving persisted removal while unrelated custom packs remain.
+- `mastracode/scripts/mc-e2e/scenarios/custom-provider-edit-share-import.ts` — TUI e2e coverage for editing a provider name/URL/API key through default-valued modals and proving persisted settings update.
 - `mastracode/scripts/mc-e2e/scenarios/custom-provider-model-selector.ts` — TUI e2e coverage for `/models` creating a custom pack by selecting configured custom-provider catalog entries, rejecting free-form `Use:` fallback, and proving active defaults plus saved pack models persist.
+- `mastracode/scripts/mc-e2e/scenarios/custom-provider-modal-validation.ts` — TUI e2e coverage for provider creation, duplicate-name rejection, invalid URL rejection, and remove-model persistence through real modal input.
 - `mastracode/scripts/mc-e2e/scenarios/om-model-override-reload.ts` — TUI e2e coverage for `/om` restoring and persisting custom-provider observer/reflector model overrides across startup/global/thread settings.
 
 ## Missing tests
 
-- Full modal flow test for provider creation/remove-model, invalid URLs, and duplicate names remains. Add-model persistence is covered by `custom-provider-management`; provider edit persistence is covered by `custom-provider-edit-share-import`; provider deletion persistence is covered by `custom-provider-delete`; invalid URL and duplicate-name branches remain lower-level unit shields without a user-perspective e2e.
+- Covered: provider creation, duplicate-name rejection, invalid URL rejection, and remove-model persistence via `custom-provider-modal-validation`; add-model persistence via `custom-provider-management`; edit persistence via `custom-provider-edit-share-import`; provider deletion persistence via `custom-provider-delete`.
 - Covered: Harness `listAvailableModels()` custom catalog merge, cache invalidation, use-count merge, and duplicate model IDs (`packages/core/src/harness/list-available-models.test.ts`).
 - Covered: `/models` custom-provider catalog selection/persistence via `custom-provider-model-selector`.
 - Covered: `/om` selector custom-provider observer/reflector persistence across restart via `om-model-override-reload`.

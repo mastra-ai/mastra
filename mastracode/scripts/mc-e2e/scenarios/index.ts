@@ -25,6 +25,7 @@ import { customPackRenameActiveScenario } from './custom-pack-rename-active.js';
 import { customProviderDeleteScenario } from './custom-provider-delete.js';
 import { customProviderEditShareImportScenario } from './custom-provider-edit-share-import.js';
 import { customProviderManagementScenario } from './custom-provider-management.js';
+import { customProviderModalValidationScenario } from './custom-provider-modal-validation.js';
 import { customProviderModelSelectorScenario } from './custom-provider-model-selector.js';
 import { customSlashCommandScenario } from './custom-slash-command.js';
 import { debugLoggingScenario } from './debug-logging.js';
@@ -145,6 +146,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'custom-provider-delete': customProviderDeleteScenario,
   'custom-provider-edit-share-import': customProviderEditShareImportScenario,
   'custom-provider-management': customProviderManagementScenario,
+  'custom-provider-modal-validation': customProviderModalValidationScenario,
   'custom-provider-model-selector': customProviderModelSelectorScenario,
   'custom-slash-command': customSlashCommandScenario,
   'ctrlf-queued-custom-slash': ctrlfQueuedCustomSlashScenario,
