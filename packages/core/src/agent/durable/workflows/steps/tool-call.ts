@@ -681,7 +681,6 @@ export function createDurableToolCallStep() {
         };
       } catch (error) {
         toolSpan?.error({ error: error instanceof Error ? error : new Error(String(error)) });
-        toolSpan?.end({});
         const toolError = serializeError(error);
 
         // Emit tool-error chunk (non-fatal — error result is returned regardless)

@@ -81,6 +81,7 @@ const durableLLMOutputSchema = z.object({
       args: z.record(z.string(), z.any()),
       providerMetadata: z.record(z.string(), z.any()).optional(),
       activeTools: z.array(z.string()).nullable().optional(),
+      stepSpanData: z.any().optional(),
     }),
   ),
   stepResult: z.object({
