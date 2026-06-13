@@ -385,6 +385,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const baseStream = outputStream._getBaseStream();
             const trackedStream = modelSpanTracker?.wrapStream(baseStream) ?? baseStream;
 
+            let pendingProviderMetadata: Record<string, unknown> | undefined = undefined;
+
             try {
               for await (const chunk of trackedStream) {
                 if (!chunk) continue;
@@ -415,6 +417,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   } as any);
                 }
 
+                const chunkPayloadMeta = (chunk as { payload?: { providerMetadata?: Record<string, unknown> } })
+                  ?.payload?.providerMetadata;
+                if (chunkPayloadMeta !== undefined) {
+                  pendingProviderMetadata = chunkPayloadMeta;
+                }
+
                 // Process different chunk types
                 switch (chunk.type) {
                   case 'text-delta': {
@@ -429,7 +437,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       toolCallId: payload.toolCallId,
                       toolName: payload.toolName,
                       args: payload.args || {},
-                      providerMetadata: payload.providerMetadata as Record<string, unknown> | undefined,
+                      providerMetadata:
+                        (payload.providerMetadata as Record<string, unknown> | undefined) ?? pendingProviderMetadata,
                       providerExecuted: payload.providerExecuted,
                       output: payload.output,
                       activeTools: currentActiveTools ?? null,
@@ -518,6 +527,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     toolName: tc.toolName,
                     args: tc.args,
                   },
+                  ...(tc.providerMetadata !== undefined ? { providerMetadata: tc.providerMetadata } : {}),
+                  ...(tc.providerExecuted !== undefined ? { providerExecuted: tc.providerExecuted } : {}),
                 });
               }
 
