@@ -76,12 +76,13 @@
 - `mastracode/scripts/mc-e2e/scenarios/browser-toggle-attach.ts` — real PTY/TUI e2e coverage for `/browser on` with an AgentBrowser CDP configuration, `/browser status` enabled projection, saved settings persistence, and provider-visible browser tool injection in a subsequent AIMock turn.
 - `mastracode/scripts/mc-e2e/scenarios/browser-startup-restore.ts` — real PTY/TUI e2e coverage for enabled AgentBrowser/CDP settings restored during startup without `/browser on`, including `/browser status` projection and model-visible browser context/tool injection in the first AIMock turn.
 - `mastracode/scripts/mc-e2e/scenarios/browser-wizard-export.ts` — real PTY/TUI e2e coverage for the full interactive `/browser` wizard AgentBrowser/CDP path plus `/browser export storageState`, proving saved settings, active status projection, and exported storage-state file contents.
+- `mastracode/scripts/mc-e2e/scenarios/browser-profile-provider-mismatch.ts` — real PTY/TUI e2e coverage for profile provider mismatch confirmation: a Stagehand-marked profile reused with AgentBrowser shows the confirmation gate, `No` cancels without persisting, and `Yes` proceeds while rewriting the `.mastra-provider` marker.
 
 ## Missing tests
 
-- Interactive `/browser` wizard provider selection, AgentBrowser/CDP saved settings, and storage-state export are covered by `browser-wizard-export`; quick-command clear-all reset is covered by `browser-settings-persistence`; remaining direct command/wizard breadth is Browserbase requirements and profile provider mismatch warnings.
+- Interactive `/browser` wizard provider selection, AgentBrowser/CDP saved settings, and storage-state export are covered by `browser-wizard-export`; quick-command clear-all reset is covered by `browser-settings-persistence`; remaining direct command/wizard breadth is Browserbase requirements.
 - Startup restore for enabled AgentBrowser/CDP settings is covered by `browser-startup-restore`; quick-setting profile/executable persistence and clear-all reset are covered by `browser-settings-persistence`; wizard AgentBrowser/CDP save/export is covered by `browser-wizard-export`. Follow-up breadth remains for Stagehand/Browserbase startup variants and full active-state projection of profile/executable/storage-state fields.
-- Remaining e2e status/config-drift tests for profile provider mismatch warnings and active-vs-pending settings; baseline `/browser status` disabled/enabled transcript is covered by `integration-commands`.
+- Profile provider mismatch warnings/cancel/proceed are covered by `browser-profile-provider-mismatch`; remaining e2e status/config-drift breadth is active-vs-pending settings. Baseline `/browser status` disabled/enabled transcript is covered by `integration-commands`.
 - Mastra Code TUI/browser integration proving browser reload/history parity and optional live external-provider smoke beyond deterministic CDP attach/tool injection.
 
 ## Known risks / regressions

@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Browser profile/provider mismatch coverage (2026-06-13)
+
+Added `browser-profile-provider-mismatch`, a real PTY `/browser` wizard scenario for reusing a browser profile previously marked by Stagehand with AgentBrowser. The scenario proves the mismatch confirmation prompt appears before persistence, `No` cancels while leaving `settings.json` and `.mastra-provider` unchanged, and `Yes` proceeds with AgentBrowser settings while rewriting the marker to `agent-browser`.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test browser-profile-provider-mismatch
+```
+
+Break validations:
+
+- Bypassed `checkProfileProviderMismatch()` in the confirmation helper; the scenario failed waiting for `Continue anyway?`.
+- Treated the `No` answer as approval; the scenario failed waiting for `Browser setup cancelled.` because the browser was enabled.
+- Skipped `setProfileProvider()` after successful browser creation; the scenario failed because `.mastra-provider` stayed `stagehand` after proceeding.
+
+The settings/browser rows remain `needs-follow-up`: profile mismatch is now covered; remaining browser breadth is Browserbase variants, active-state projection, and optional reload/history smoke.
+
+
 ### Browser clear-all settings coverage (2026-06-12)
 
 Strengthened `browser-settings-persistence` to cover `/browser clear` without an argument. The scenario now starts from a non-default AgentBrowser settings block, exercises existing CDP/profile/executable quick-setting flows, then runs clear-all and proves `settings.json` resets to the disabled Stagehand defaults while removing CDP/profile/executable/agentBrowser settings.
