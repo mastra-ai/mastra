@@ -1,5 +1,30 @@
 # Mastra Code testing recovery history
 
+### Process suspend shortcut validation (2026-06-13, pending)
+
+Validated the process suspend shortcut row from existing deterministic coverage. `process-shortcuts` exercises the real PTY visible surface by opening `/help`, asserting the Ctrl+Z suspend and Alt+Z undo shortcut copy, clearing a draft with Ctrl+C, and restoring it with Alt+Z. Unit coverage in `custom-editor.test.ts` proves Ctrl+Z and Alt+Z route to separate editor actions without falling through. Unit coverage in `setup-keyboard-shortcuts.test.ts` proves the suspend handler stops the UI, registers a `SIGCONT` listener, sends `SIGTSTP`, restarts rendering on continue, guards Windows, recovers when `process.kill()` throws, and owns Alt+Z restore semantics.
+
+No new test was added: the remaining shell-level `fg` resume flow is intentionally deferred until the TUI test runner exposes a safe job-control primitive. Driving a real `SIGTSTP` inside the worker is non-hermetic and can strand the terminal/process.
+
+Existing break evidence:
+
+1. Routing Ctrl+Z to `undo` made focused editor routing tests fail.
+2. Removing `SIGCONT` registration made focused keyboard shortcut tests fail.
+3. Removing the Windows guard made focused keyboard shortcut tests fail.
+4. Changing the Ctrl+Z help description made `process-shortcuts` fail waiting for `Suspend process (fg to resume)`.
+5. Remapping undo from Alt+Z to Alt+X made `process-shortcuts` fail waiting for the restored draft.
+6. Stopping Ctrl+C from saving `lastClearedText` made Alt+Z fail to restore the cleared draft.
+
+Verification to rerun for this row:
+
+```sh
+pnpm --filter ./mastracode exec vitest --run src/tui/__tests__/setup-keyboard-shortcuts.test.ts src/tui/components/__tests__/custom-editor.test.ts --bail=1 --reporter=dot
+pnpm --filter ./mastracode run e2e:test process-shortcuts
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+pnpm run build:mastracode
+```
+
 ### Debug logging startup wiring coverage (2026-06-13, 078a091149)
 
 Extended `mastracode/src/utils/__tests__/debug-log.test.ts` with startup-wiring assertions that both production entrypoints, `src/main.ts` and `src/headless.ts`, import and call `setupDebugLogging()` exactly once. Existing debug-log unit coverage already protects env gating, warning/error redirection, stack formatting, startup truncation, append behavior, and repeated setup behavior. Existing `debug-logging` PTY e2e verifies an opt-in `MASTRA_DEBUG=1` run captures a sentinel warning into isolated app-data `debug.log` without leaking it into the terminal UI.

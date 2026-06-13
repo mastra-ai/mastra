@@ -66,7 +66,7 @@
 
 ## Missing tests
 
-- Full OS-level suspend/resume e2e proving Ctrl+Z actually stops the process, shell `fg`/`SIGCONT` resumes it, and active streamed output resumes cleanly after foregrounding. This remains intentionally untested in the PTY suite until the runner exposes a safe job-control/resume primitive.
+- Deferred: full OS-level suspend/resume e2e proving Ctrl+Z actually stops the process, shell `fg`/`SIGCONT` resumes it, and active streamed output resumes cleanly after foregrounding. This remains intentionally outside the PTY suite until the runner exposes a safe job-control/resume primitive; the hermetic tests cover the signal wiring and user-visible shortcut surfaces without suspending the worker process.
 
 ## E2E recovery evidence
 
@@ -76,7 +76,7 @@
   2. Remapping undo from Alt+Z to Alt+X made the scenario fail waiting for the restored draft.
   3. Stopping Ctrl+C from saving `lastClearedText` made Alt+Z fail to restore the cleared draft.
 - Verification: `pnpm --filter ./mastracode run e2e:test process-shortcuts`.
-- Status remains partial because actual Unix job-control suspend/resume (`SIGTSTP` + shell `fg`/`SIGCONT`) still needs a safe runner-level primitive.
+- Status validated for deterministic recovery: unit coverage proves the `SIGTSTP`/`SIGCONT` lifecycle, Windows guard, and failure recovery; e2e coverage proves visible shortcut copy plus Alt+Z behavior. Actual shell job-control (`fg`) remains a non-hermetic runner-capability follow-up, not a row blocker.
 
 ## Known risks / regressions
 
