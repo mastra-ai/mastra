@@ -1,6 +1,6 @@
 # Mastra Code testing recovery history
 
-### Installation and launch packed CLI smoke (2026-06-13, installation-launch-packed-smoke TBD)
+### Installation and launch packed CLI smoke (2026-06-13, 5269959c34)
 
 Extended `package-metadata.test.ts` with a hermetic built-CLI smoke that resolves the package `bin` entrypoint from `mastracode/package.json`, runs `node dist/cli.js --help`, and verifies the headless `--prompt` validation path reports a missing `--settings` file without entering the interactive TUI. Existing `first-run-onboarding` PTY coverage still validates clean-config launch and onboarding Skip through real terminal input.
 
