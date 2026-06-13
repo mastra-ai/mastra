@@ -75,6 +75,8 @@ import { setupCompletionPersistenceScenario } from './setup-completion-persisten
 import { setupCustomPackCompletionScenario } from './setup-custom-pack-completion.js';
 import { setupLoginRefreshScenario } from './setup-login-refresh.js';
 import { setupNestedModelSelectorScenario } from './setup-nested-model-selector.js';
+import { shellPassthroughConfiguredSettingsScenario } from './shell-passthrough-configured-settings.js';
+import { shellPassthroughEnvOverrideScenario } from './shell-passthrough-env-override.js';
 import { shellPassthroughLongOutputScenario } from './shell-passthrough-long-output.js';
 import { skillsCommandActivationScenario } from './skills-command-activation.js';
 import { startupScenario } from './startup.js';
@@ -190,6 +192,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'setup-nested-model-selector': setupNestedModelSelectorScenario,
   'settings-api-keys-navigation': settingsApiKeysNavigationScenario,
   'settings-startup-model-restore': settingsStartupModelRestoreScenario,
+  'shell-passthrough-configured-settings': shellPassthroughConfiguredSettingsScenario,
+  'shell-passthrough-env-override': shellPassthroughEnvOverrideScenario,
   'shell-passthrough-long-output': shellPassthroughLongOutputScenario,
   'skills-command-activation': skillsCommandActivationScenario,
   'storage-settings': storageSettingsScenario,

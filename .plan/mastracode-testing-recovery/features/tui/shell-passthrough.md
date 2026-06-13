@@ -75,10 +75,11 @@
 - `mastracode/src/tui/components/__tests__/shell-output.test.ts` — covers `ShellStreamComponent` incremental output rendering, trailing partial flush on finish, failure footer/exit code, 20-line collapsed view, 200-line cap, expanded view, and terminal-width truncation.
 - `mastracode/scripts/mc-e2e/scenarios/modal-and-shell.ts` — partial real PTY coverage: submits a default-shell `!printf` passthrough command, asserts bordered stdout is rendered as shell output, and asserts the success footer appears after completion.
 - `mastracode/scripts/mc-e2e/scenarios/shell-passthrough-long-output.ts` — real PTY coverage for a slow long-running `!` command: asserts early stdout while the subprocess is still running, collapsed latest-20-line rendering with the hidden leading lines, success footer, and Ctrl+E expansion for tracked shell components.
+- `mastracode/scripts/mc-e2e/scenarios/shell-passthrough-configured-settings.ts` — real PTY coverage for persisted `settings.json.shellPassthrough`: seeds a wrapper executable and proves the visible `!` command path invokes it in `path`/POSIX mode before executing the user command.
+- `mastracode/scripts/mc-e2e/scenarios/shell-passthrough-env-override.ts` — real PTY coverage for `MASTRACODE_SHELL`/`MASTRACODE_SHELL_MODE`: seeds conflicting persisted shell settings and proves env overrides win by rendering the env wrapper marker while the persisted wrapper never runs.
 
 ## Missing tests
 
-- End-to-end PTY test proving configured `MASTRACODE_SHELL`/settings modes run the same visible `!` command path as default shell mode.
 - Loaded-history assertion that local passthrough output is not reconstructed as persisted agent/tool history.
 
 ## Known risks / regressions

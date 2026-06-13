@@ -3,6 +3,29 @@
 
 
 
+
+### Configured shell passthrough settings/env coverage (2026-06-13)
+
+Added two real PTY scenarios for configured local `!` shell passthrough:
+
+- `shell-passthrough-configured-settings` seeds `settings.json.shellPassthrough` with a POSIX wrapper executable and proves the visible `!` path invokes that wrapper before running the submitted command.
+- `shell-passthrough-env-override` seeds a conflicting persisted wrapper, sets `MASTRACODE_SHELL`/`MASTRACODE_SHELL_MODE`, and proves the env wrapper runs while the persisted wrapper does not.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test shell-passthrough-configured-settings
+pnpm --filter ./mastracode run e2e:test shell-passthrough-env-override
+```
+
+Break validations:
+
+- Forced `handleShellPassthrough()` to pass default shell settings instead of `loadSettings().shellPassthrough`; `shell-passthrough-configured-settings` failed waiting for the settings wrapper marker.
+- Disabled `MASTRACODE_SHELL` executable precedence in `resolveShellPassthroughInvocation()`; `shell-passthrough-env-override` failed waiting for the env wrapper marker.
+- Bypassed explicit-shell execution in `createShellPassthroughSubprocess()` by falling back to `shell: true`; the configured-settings scenario failed because the wrapper marker never rendered.
+
+The Settings row now has direct shell passthrough settings/env coverage. The Shell passthrough row remains `needs-follow-up` only for local-output loaded-history absence semantics.
+
 ### Shell passthrough long-output coverage (2026-06-13)
 
 Added `shell-passthrough-long-output`, a real PTY scenario for the local `!` shell command path. The scenario runs a slow Node subprocess, verifies early stdout appears while the footer still shows the running state, waits for final collapsed latest-20-line output with the hidden-line hint and success footer, then sends Ctrl+E and verifies the tracked shell component expands to reveal the leading lines.
