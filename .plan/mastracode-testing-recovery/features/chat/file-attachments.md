@@ -73,20 +73,20 @@
 - `mastracode/src/tui/__tests__/mastra-tui-images.test.ts` and image cases in `mastra-tui-queueing.test.ts` — pending pasted-image placeholder behavior.
 - `packages/memory/src/processors/observational-memory/__tests__/observational-memory.test.ts` and `token-counter.test.ts` — observer attachment formatting, tool-result attachment hoisting, image-heavy threshold checks, and attachment token estimates.
 - Existing base64/image tests cover `experimental_attachments` compatibility.
-- `mastracode/scripts/mc-e2e/scenarios/clipboard-image-paste.ts` — partial real PTY coverage proving a pasted PNG path becomes a submitted image attachment rendered as `[1 image]` in confirmed TUI history and sent through AIMock-backed chat.
+- `mastracode/scripts/mc-e2e/scenarios/clipboard-image-paste.ts` — real PTY coverage proving a pasted PNG path becomes a submitted image attachment rendered as `[1 image]` in confirmed TUI history, reaches AIMock-backed chat, and appears in the raw provider request body as an `image/png` file part with base64 data.
 
 ## Missing tests
 
-- [x] TUI pasted-image submit test proving a pending image reaches confirmed TUI history: partially covered by `clipboard-image-paste`.
+- [x] TUI pasted-image submit test proving a pending image reaches confirmed TUI history and provider-bound image payload: covered by strengthened `clipboard-image-paste`.
 - TUI attachment submit test proving pending images/files are cleared only after successful send and are preserved across reload/history.
-- End-to-end test from real paste through Harness persistence and OM observation.
+- End-to-end test from real paste through Harness persistence and OM observation beyond provider-bound payload verification.
 - Loaded-history display test for user messages with attached text/binary files/images.
 
 ## Known risks / regressions
 
 - Text-file handling intentionally injects file content into model-visible text; large files or backtick-heavy content can affect prompt size and formatting.
 - Attachment data shape crosses several compatibility layers (`mediaType` vs `mimeType`, v4 `experimental_attachments`, v5 file parts, observer `image`/`file` parts), so one adapter can regress while another still passes.
-- Current coverage is stronger in signal/adapter/OM layers than in full TUI-to-Harness submission.
+- Full TUI-to-provider pasted-image payload is covered; remaining risk is broader text/binary file history, clear-after-send, and OM observation breadth.
 
 ## Verification checklist
 

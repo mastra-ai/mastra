@@ -1,5 +1,27 @@
 # Mastra Code testing recovery history
 
+### Clipboard image provider-payload coverage (2026-06-13)
+
+Strengthened `clipboard-image-paste`, the real PTY pasted-image scenario, so it now verifies the full TUI-to-provider path: bracketed paste adds the image marker, submit renders confirmed `[1 image]` history, AIMock receives the chat turn, and a temporary entrypoint wrapper captures the raw OpenAI request body to assert the `image/png` file part plus base64 PNG payload reaches the provider boundary.
+
+Added focused core coverage in `agent-signal-ui-conversion.test.ts` proving multimodal user signals keep file parts when `MessageList` builds the v5 LLM prompt.
+
+Focused verification:
+
+```sh
+pnpm --filter ./packages/core test -- --run src/agent/message-list/adapters/agent-signal-ui-conversion.test.ts --bail=1 --reporter=dot
+pnpm build:core
+pnpm --filter ./mastracode run e2e:test clipboard-image-paste
+```
+
+Break validations:
+
+- Dropped file parts from `createUserSignalContent()` while leaving optimistic history intact; the scenario still rendered `[1 image]` but failed raw provider-payload verification.
+- Removed media-type restoration from `storagePartsToSignalParts()`; the core regression failed with `application/octet-stream` instead of `image/png`.
+- Filtered file parts out of `MessageList` v5 LLM prompt conversion; the core regression failed because the provider-bound user message became text-only.
+
+The File attachments row remains `needs-follow-up` for text/binary file history, clear-after-send/preserve semantics, and OM observation breadth; pasted-image provider payload is now covered.
+
 ### Storage startup PostgreSQL fallback coverage (2026-06-13)
 
 Added `storage-startup-pg-fallback`, a real PTY scenario for persisted storage backend reload. The scenario seeds `settings.json.storage.backend = "pg"` with no connection details before startup, verifies the visible PostgreSQL missing-connection warning plus LibSQL fallback guidance, then uses a local `!` shell proof to confirm the persisted backend remains `pg` while the TUI stays usable.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { signalToMastraDBMessage } from '../../signals';
+import { createSignal, signalToMastraDBMessage } from '../../signals';
 import { MessageList } from '../message-list';
 import { AIV4Adapter } from './AIV4Adapter';
 import { AIV5Adapter } from './AIV5Adapter';
@@ -139,6 +139,35 @@ describe('agent signal UI conversion', () => {
           m.parts.some(p => p.type === 'text' && 'text' in p && p.text === 'Follow up from user signal'),
       ),
     ).toBe(true);
+  });
+
+  it('preserves multimodal user signal file parts in model prompts', async () => {
+    const list = new MessageList();
+    list.add(
+      createSignal({
+        id: 'signal-user-image-1',
+        type: 'user',
+        tagName: 'user',
+        contents: [
+          { type: 'text', text: 'Please inspect this image' },
+          { type: 'file', data: 'data:image/png;base64,aGVsbG8=', mediaType: 'image/png' },
+        ],
+        attributes: { delivery: 'message' },
+        createdAt: new Date('2024-01-01T00:00:02.000Z'),
+      }),
+      'input',
+    );
+
+    const prompt = await list.get.all.aiV5.llmPrompt();
+    const userMessage = prompt.find(message => message.role === 'user');
+
+    expect(userMessage).toBeDefined();
+    expect(userMessage!.content).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'text', text: '<user delivery="message">Please inspect this image</user>' }),
+        expect.objectContaining({ type: 'file', data: 'aGVsbG8=', mediaType: 'image/png' }),
+      ]),
+    );
   });
 
   it('converts signal to assistant in-place when no immediate neighbor is assistant', () => {
