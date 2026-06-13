@@ -445,6 +445,7 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     .join('\n');
 
   const imageCount = message.content.filter(c => c.type === 'image').length;
+  const fileCount = message.content.filter(c => c.type === 'file').length;
 
   // Strip [image] markers from text since we show count separately
   const displayText = imageCount > 0 ? textContent.replace(/\[image\]\s*/g, '').trim() : textContent.trim();
@@ -547,7 +548,11 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
     return;
   }
 
-  const prefix = imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}] ` : '';
+  const attachmentLabels = [
+    imageCount > 0 ? `[${imageCount} image${imageCount > 1 ? 's' : ''}]` : '',
+    fileCount > 0 ? `[${fileCount} file${fileCount > 1 ? 's' : ''}]` : '',
+  ].filter(Boolean);
+  const prefix = attachmentLabels.length > 0 ? `${attachmentLabels.join(' ')} ` : '';
   if (displayText || prefix) {
     const label = getUserMessageLabel(message, options?.label);
     const userComponent = new UserMessageComponent(prefix + displayText, getMarkdownTheme(), {

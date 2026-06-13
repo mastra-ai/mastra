@@ -1,5 +1,24 @@
 # Mastra Code testing recovery history
 
+### File attachment loaded-history coverage (2026-06-13)
+
+Added `file-attachment-history-reload`, a real PTY e2e scenario that seeds persisted user signal history containing projected text-file content, an image file part, and a binary file part. The scenario opens the saved thread through `/threads` and verifies loaded history renders `[1 image] [1 file]`, the `[File: notes.md]` label, and the text attachment body, while asserting raw base64 payloads do not leak into the terminal.
+
+A small rendering fix now includes non-image file counts in loaded user-message attachment prefixes. Focused proof:
+
+```sh
+pnpm build:core
+pnpm --filter ./mastracode run e2e:test file-attachment-history-reload
+```
+
+Break validations:
+
+1. Removed loaded file-count rendering: the scenario timed out because history showed `[1 image]` without `[1 file]`.
+2. Disabled core image media-type reconstruction: after `pnpm build:core`, the scenario timed out because history showed `[2 files]` instead of `[1 image] [1 file]`.
+3. Dropped persisted media types during signal rehydration: after `pnpm build:core`, the scenario again timed out with `[2 files]`.
+
+All breaks were reverted and the focused scenario passed cleanly.
+
 ### Onboarding/global settings umbrella validation (2026-06-13)
 
 Validated the High-risk `Settings: Onboarding and global settings` umbrella row by mapping its residual contracts to existing checked-in focused shields and real PTY scenarios. The row now points to dedicated coverage for first-run/setup completion, login refresh, API-key add/delete/env precedence, Settings API Keys handoff, custom model-pack activation/import/rename/share/edit flows, custom provider edit/delete persistence, model-selection missing-key/cancel/env precedence, OM global/thread/threshold/model-pack/role-override reload, storage backend startup fallback, browser quick settings/wizard/Browserbase/profile-mismatch/startup/active-pending projection, shell passthrough settings/env, subagent model startup restore, and Memory Gateway startup hydration.

@@ -24,6 +24,7 @@ import { customProviderEditShareImportScenario } from './custom-provider-edit-sh
 import { customProviderManagementScenario } from './custom-provider-management.js';
 import { customSlashCommandScenario } from './custom-slash-command.js';
 import { debugLoggingScenario } from './debug-logging.js';
+import { fileAttachmentHistoryReloadScenario } from './file-attachment-history-reload.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
 import { firstRunOnboardingScenario } from './first-run-onboarding.js';
 import { githubSignalsCommandScenario } from './github-signals-command.js';
@@ -137,6 +138,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'custom-provider-management': customProviderManagementScenario,
   'custom-slash-command': customSlashCommandScenario,
   'debug-logging': debugLoggingScenario,
+  'file-attachment-history-reload': fileAttachmentHistoryReloadScenario,
   'file-autocomplete': fileAutocompleteScenario,
   'first-run-onboarding': firstRunOnboardingScenario,
   'github-signals-command': githubSignalsCommandScenario,

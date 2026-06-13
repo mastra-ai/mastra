@@ -74,13 +74,14 @@
 - `packages/memory/src/processors/observational-memory/__tests__/observational-memory.test.ts` and `token-counter.test.ts` — observer attachment formatting, tool-result attachment hoisting, image-heavy threshold checks, and attachment token estimates.
 - Existing base64/image tests cover `experimental_attachments` compatibility.
 - `mastracode/scripts/mc-e2e/scenarios/clipboard-image-paste.ts` — real PTY coverage proving a pasted PNG path becomes a submitted image attachment rendered as `[1 image]` in confirmed TUI history, reaches AIMock-backed chat, and appears in the raw provider request body as an `image/png` file part with base64 data.
+- `mastracode/scripts/mc-e2e/scenarios/file-attachment-history-reload.ts` — seeds persisted user signal history with projected text attachment content, an image file part, and a binary file part, then proves `/threads` loaded history renders `[1 image] [1 file]` plus the text-file body without leaking raw attachment base64.
 
 ## Missing tests
 
 - [x] TUI pasted-image submit test proving a pending image reaches confirmed TUI history and provider-bound image payload: covered by strengthened `clipboard-image-paste`.
-- TUI attachment submit test proving pending images/files are cleared only after successful send and are preserved across reload/history.
+- TUI attachment submit test proving pending images/files are cleared only after successful send.
 - End-to-end test from real paste through Harness persistence and OM observation beyond provider-bound payload verification.
-- Loaded-history display test for user messages with attached text/binary files/images.
+- [x] Loaded-history display test for user messages with attached text/binary files/images: covered by `file-attachment-history-reload`.
 
 ## Known risks / regressions
 

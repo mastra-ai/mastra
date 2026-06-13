@@ -26,6 +26,7 @@ export type ScenarioName =
   | 'custom-provider-management'
   | 'custom-slash-command'
   | 'debug-logging'
+  | 'file-attachment-history-reload'
   | 'file-autocomplete'
   | 'first-run-onboarding'
   | 'github-signals-command'
