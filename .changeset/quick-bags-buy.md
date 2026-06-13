@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Add AGENT_RUN root span to DurableAgent.stream() and propagate tracingContext into workflow execution so durable agent runs produce observability traces
+Durable agents now produce observability traces. Previously, createDurableAgent runs were invisible to trace exporters because no root span was created. Traces now appear for durable agent runs just like regular agent runs.

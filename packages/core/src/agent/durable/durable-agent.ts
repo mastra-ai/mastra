@@ -392,7 +392,9 @@ export class DurableAgent<
     const workflow = this.getWorkflow();
     const registryEntry = globalRunRegistry.get(runId);
     const requestContext = registryEntry?.requestContext;
-    const spanTracingContext = (registryEntry?.agentSpan as any)?.getTracingContext?.();
+    const spanTracingContext = registryEntry?.agentSpan
+      ? { currentSpan: registryEntry.agentSpan }
+      : undefined;
     const run = await workflow.createRun({ runId, pubsub: this.pubsub });
     const result = await run.start({ inputData: workflowInput, requestContext, tracingContext: spanTracingContext });
 

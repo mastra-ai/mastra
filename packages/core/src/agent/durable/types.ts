@@ -17,6 +17,8 @@ import type { MemoryConfig } from '../../memory/types';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
+import type { Span } from '../../observability';
+import { SpanType } from '../../observability';
 import type { ChunkType } from '../../stream/types';
 import type { CoreTool } from '../../tools/types';
 import type { Workspace } from '../../workspace';
@@ -436,7 +438,7 @@ export interface RunRegistryEntry {
   /** Agent background tasks configuration */
   backgroundTasksConfig?: AgentBackgroundConfig;
   /** AGENT_RUN span for trace propagation into workflow steps (non-serializable) */
-  agentSpan?: any;
+  agentSpan?: Span<SpanType.AGENT_RUN>;
 }
 
 /**
