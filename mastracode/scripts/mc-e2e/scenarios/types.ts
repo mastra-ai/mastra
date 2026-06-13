@@ -35,6 +35,7 @@ export type ScenarioName =
   | 'first-run-onboarding'
   | 'github-signals-command'
   | 'github-signals-incremental'
+  | 'github-signals-notification-reload'
   | 'github-signals-polling-inbox'
   | 'github-signals-unsubscribe-reload'
   | 'harness-api-config'

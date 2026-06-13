@@ -3,7 +3,7 @@
 ## Current state
 
 - Checked-in TUI e2e coverage is no longer missing for any tracker row.
-- 17 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
+- 16 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
 - Keep the user-realism rule: drive behavior through terminal input, slash commands, AIMock fixtures, deterministic pre-launch config/DB seeds, or approved external signal APIs for notification/state-signal origins. Do not emit Harness internals or mutate runtime display state directly.
 
 ## Priority queue
@@ -35,7 +35,8 @@
 - Completed: `github-signals-incremental` seeds a persisted subscribed thread whose cursor last observed failing CI, points `MASTRACODE_GITCRAWL_BIN` at a deterministic recovered gitcrawl sqlite snapshot, runs `/github sync`, and asserts the `pull-request-ci-recovered` notification plus `/github debug` `ci=success` cursor update.
 - Completed: `github-signals-unsubscribe-reload` opens a persisted subscribed thread, verifies `/github debug` shows the active subscription, runs `/github unsubscribe`, verifies debug state changes to no subscribed PRs, then reopens the thread through `/threads` to prove the empty subscription state reloads.
 - Completed: `github-signals-polling-inbox` opens a persisted subscribed thread, triggers startup polling against a deterministic recovered-CI gitcrawl fixture, renders the delivered GitHub notification card, uses AIMock to call `notification_inbox read`, proves the DB status moves from `delivered` to `seen`, and verifies the subscribed thread appears after `/new` → `/threads` reload.
-- Fixture/data needs: sanitized sqlite fixture derived from `~/.config/gitcrawl/gitcrawl.db`; mock gitcrawl binary for remaining multi-process polling breadth and branch auto-subscribe lifecycle coverage.
+- Completed: `github-signals-notification-reload` seeds a persisted GitHub notification signal and subscribed-thread metadata, reloads through `/threads`, and asserts the loaded card source/kind/status/body plus status-line `PR#17641` projection.
+- Fixture/data needs: sanitized sqlite fixture derived from `~/.config/gitcrawl/gitcrawl.db`; mock gitcrawl binary remains useful for non-hermetic multi-process polling breadth and branch auto-subscribe lifecycle coverage if those product surfaces are added.
 
 ### 3.5. Storage backend fallback/history parity
 

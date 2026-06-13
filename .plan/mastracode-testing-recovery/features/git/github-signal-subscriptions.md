@@ -74,13 +74,13 @@
 - `mastracode/scripts/mc-e2e/scenarios/github-signals-incremental.ts` — TUI e2e coverage for a persisted subscribed thread whose cursor last observed failing CI, `/github sync` against a recovered sanitized gitcrawl snapshot, the `pull-request-ci-recovered` notification card, and `/github debug` showing the persisted `ci=success` cursor.
 - `mastracode/scripts/mc-e2e/scenarios/github-signals-unsubscribe-reload.ts` — TUI e2e coverage for a persisted subscribed thread, `/github unsubscribe mastra-ai/mastra#17639`, `/github debug` showing no subscribed PRs, and reopening the thread through `/threads` to prove the empty subscription state reloads.
 - `mastracode/scripts/mc-e2e/scenarios/github-signals-polling-inbox.ts` — TUI e2e coverage for startup polling on a persisted subscribed thread, deterministic gitcrawl recovered-CI data, notification-card delivery, model-driven `notification_inbox read` from `delivered` to `seen`, and `/threads` reload listing of the subscribed thread.
+- `mastracode/scripts/mc-e2e/scenarios/github-signals-notification-reload.ts` — TUI e2e coverage for reloading a persisted GitHub notification signal from history, including `notification from github`, `high · pull-request-ci-recovered · seen`, PR summary text, and the status-line `PR#17641` projection from thread metadata.
 
 ## Missing tests
 
 - Full local integration with the real gitcrawl binary, real GitHub CLI/git remote configuration, and non-sanitized live GitHub state remains outside CI.
 - Multi-thread/process polling handoff regression for more than one open Mastra Code process.
 - Direct branch auto-subscribe lifecycle coverage proving auto-subscribe runs once per thread and does not run on abort/error cleanup paths unless intentionally added.
-- Notification history reload parity for previously delivered/read GitHub notification records remains broader reload coverage; polling delivery and inbox read status transitions are now covered.
 
 ## Known risks / regressions
 

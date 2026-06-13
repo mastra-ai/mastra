@@ -1,5 +1,27 @@
 # Mastra Code testing recovery history
 
+### GitHub notification reload coverage (2026-06-13)
+
+Added `github-signals-notification-reload`, a real PTY e2e scenario that seeds a persisted GitHub notification signal plus subscribed-thread metadata, opens it through `/threads`, and asserts the loaded-history card renders `notification from github`, `high · pull-request-ci-recovered · seen`, the PR summary text, the original user prompt, and the status-line `PR#17641` projection. This closes the deterministic GitHub notification history reload parity gap; real live gitcrawl/gh integration and multi-process polling remain non-hermetic follow-up breadth.
+
+Break validations:
+
+1. Removed notification source rendering in `NotificationComponent`; the scenario timed out waiting for `notification from github`.
+2. Dropped notification status from the details line; the scenario timed out waiting for `high · pull-request-ci-recovered · seen`.
+3. Ignored GitHub subscription metadata on thread switch; the notification card still rendered, but the scenario timed out waiting for the `PR#17641` status-line projection.
+
+All breaks were reverted and the focused scenario passed cleanly.
+
+Verification:
+
+```sh
+pnpm run build:mastracode
+pnpm --filter ./mastracode run e2e:test github-signals-notification-reload
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+pnpm --filter ./mastracode run e2e:test -- --jobs 4 # 115/115 passed
+```
+
 ### Autocomplete wrapping navigation coverage (2026-06-13)
 
 Added `autocomplete-wrapping-navigation`, a real PTY e2e scenario that seeds two project custom slash commands, opens autocomplete at `/wrap-`, proves a long custom-command description wraps far enough to render `navigation-sentinel-wrap-tail`, presses one Down arrow, and verifies AIMock receives the second command template instead of the wrapped first command. This closes the queued-followups residual wrapping/navigation gap. The row is now validated together with prior Ctrl+F image queueing, Ctrl+F custom slash queueing, and focused process-local queue cleanup/drain shields.
