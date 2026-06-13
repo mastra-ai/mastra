@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import type { Agent } from '../../agent';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { MastraMemory } from '../../memory';
 import { MastraCompositeStore } from '../../storage';
@@ -43,6 +44,13 @@ const createMessage = (id: string, threadId = 'thread-1'): MastraDBMessage => ({
   content: { format: 2, parts: [{ type: 'text', text: `message ${id}` }] },
 });
 
+const createAgent = (overrides: Partial<Agent> = {}) =>
+  ({
+    generate: vi.fn().mockResolvedValue({ text: 'ok', steps: [] }),
+    stream: vi.fn().mockResolvedValue({ textStream: (async function* () {})() }),
+    ...overrides,
+  }) as unknown as Agent;
+
 const createMemory = () => {
   const clonedThread = {
     id: 'thread-2',
@@ -69,11 +77,17 @@ const createMemory = () => {
   } as unknown as MastraMemory;
 };
 
-const createHarness = (memory: MastraMemory, storage = new RecordingHarnessStorage(), ownerId?: string) => ({
+const createHarness = (
+  memory: MastraMemory,
+  storage = new RecordingHarnessStorage(),
+  ownerId?: string,
+  agent = createAgent(),
+) => ({
   storage,
   memory,
+  agent,
   harness: new Harness({
-    agents: {},
+    agents: { default: agent },
     ownerId,
     storage,
     memory,
@@ -147,7 +161,7 @@ describe('Harness.session()', () => {
   it('uses top-level storage', async () => {
     const storage = new RecordingHarnessStorage();
     const harness = new Harness({
-      agents: {},
+      agents: { default: createAgent() },
       storage,
       memory: createMemory(),
       modes: [{ id: 'build', agentId: 'default', defaultModelId: 'test-build-model' }],
@@ -444,6 +458,132 @@ describe('Harness.session()', () => {
     expect(storage.records.get(session.id)).toMatchObject({
       modeId: 'build',
     });
+  });
+});
+
+describe('Session.sendMessage() and queueMessage()', () => {
+  it('calls agent.generate with session memory, mode defaults, and emits lifecycle events', async () => {
+    const generate = vi.fn().mockResolvedValue({ text: 'generated', steps: [] });
+    const agent = createAgent({ generate } as Partial<Agent>);
+    const { harness } = createHarness(createMemory(), new RecordingHarnessStorage(), undefined, agent);
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+    const session = await harness.session({
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      modeId: 'plan',
+      modelId: 'model-1',
+    });
+    session.setMode({
+      id: 'plan',
+      agentId: 'default',
+      defaultModelId: 'zai-coding-plan/glm-5-turbo',
+      instructions: 'Use plan mode.',
+      additionalTools: { planTool: { description: 'Plan tool', execute: vi.fn() } } as never,
+    });
+    events.length = 0;
+
+    const result = await session.sendMessage({
+      content: 'hello',
+      additionalTools: { localTool: { description: 'Local tool', execute: vi.fn() } } as never,
+      maxSteps: 2,
+    });
+
+    expect(result).toEqual({ text: 'generated', steps: [] });
+    expect(generate).toHaveBeenCalledWith(
+      'hello',
+      expect.objectContaining({
+        memory: { thread: 'thread-1', resource: 'resource-1' },
+        model: 'model-1',
+        instructions: 'Use plan mode.',
+        maxSteps: 2,
+        toolsets: expect.objectContaining({
+          'mode:plan:add': expect.any(Object),
+          'call:additional': expect.any(Object),
+        }),
+        requestContext: expect.any(Object),
+      }),
+    );
+    expect(events.map(event => event.type)).toEqual(['agent_start', 'agent_end']);
+    expect(events[0]).toMatchObject({ type: 'agent_start', sessionId: session.id });
+    expect(events[1]).toMatchObject({ type: 'agent_end', sessionId: session.id, reason: 'complete' });
+  });
+
+  it('calls agent.stream when stream is true', async () => {
+    const streamResult = { textStream: (async function* () {})() };
+    const stream = vi.fn().mockResolvedValue(streamResult);
+    const agent = createAgent({ stream } as Partial<Agent>);
+    const { harness } = createHarness(createMemory(), new RecordingHarnessStorage(), undefined, agent);
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+
+    const result = await session.sendMessage({ content: 'stream me', stream: true });
+
+    expect(result).toBe(streamResult);
+    expect(stream).toHaveBeenCalledWith(
+      'stream me',
+      expect.objectContaining({ memory: { thread: 'thread-1', resource: 'resource-1' } }),
+    );
+  });
+
+  it('emits an error lifecycle event when generation fails', async () => {
+    const generate = vi.fn().mockRejectedValue(new Error('nope'));
+    const agent = createAgent({ generate } as Partial<Agent>);
+    const { harness } = createHarness(createMemory(), new RecordingHarnessStorage(), undefined, agent);
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+    events.length = 0;
+
+    await expect(session.sendMessage({ content: 'fail' })).rejects.toThrow('nope');
+
+    expect(events).toEqual([
+      expect.objectContaining({ type: 'agent_start', sessionId: session.id }),
+      expect.objectContaining({ type: 'agent_end', sessionId: session.id, reason: 'error', error: 'nope' }),
+    ]);
+  });
+
+  it('drains queued messages sequentially and continues after failures', async () => {
+    const calls: string[] = [];
+    const generate = vi.fn().mockImplementation(async (content: string) => {
+      calls.push(content);
+      if (content === 'two') throw new Error('second failed');
+      return { text: content, steps: [] };
+    });
+    const agent = createAgent({ generate } as Partial<Agent>);
+    const { harness } = createHarness(createMemory(), new RecordingHarnessStorage(), undefined, agent);
+    const events: HarnessEvent[] = [];
+    harness.subscribe(event => {
+      events.push(event);
+    });
+    const session = await harness.session({ threadId: 'thread-1', resourceId: 'resource-1' });
+    events.length = 0;
+
+    const first = session.queueMessage({ content: 'one' });
+    const second = session.queueMessage({ content: 'two' });
+    const third = session.queueMessage({ content: 'three' });
+
+    await expect(first).resolves.toMatchObject({ text: 'one' });
+    await expect(second).rejects.toThrow('second failed');
+    await expect(third).resolves.toMatchObject({ text: 'three' });
+
+    expect(calls).toEqual(['one', 'two', 'three']);
+    expect(events.map(event => event.type)).toEqual([
+      'agent_start',
+      'agent_end',
+      'agent_start',
+      'agent_end',
+      'agent_start',
+      'agent_end',
+    ]);
+    expect(
+      events
+        .filter(event => event.type === 'agent_end')
+        .map(event => (event as Extract<HarnessEvent, { type: 'agent_end' }>).reason),
+    ).toEqual(['complete', 'error', 'complete']);
   });
 });
 
