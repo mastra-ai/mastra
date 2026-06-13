@@ -1,5 +1,27 @@
 # Mastra Code testing recovery history
 
+### Ctrl+F queued image follow-up coverage (2026-06-13)
+
+Added `ctrlf-queued-image-followup`, a real PTY e2e scenario that starts a slow AIMock-backed active run, pastes a PNG-backed follow-up while the run is streaming, presses Ctrl+F, verifies the footer shows `1 queued`, then waits for the queued action to drain after the initial `agent_end`. The scenario verifies the drained user message renders `[1 image] Queued Ctrl F image follow-up` and captures the raw OpenAI request body to prove the queued provider request contains the `image/png` file payload/base64 data with no `[image]` editor placeholder.
+
+Verification:
+
+```sh
+pnpm run build:mastracode
+pnpm --filter ./mastracode run e2e:test ctrlf-queued-image-followup
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+pnpm --filter ./mastracode run e2e:test -- --jobs 4 # 112/112 passed
+```
+
+Break validations:
+
+1. Replaced the Ctrl+F enqueue callback with a render-only no-op: the scenario timed out waiting for `1 queued` and AIMock saw only the initial request.
+2. Disabled `drainQueuedAction()` after `agent_end`: the footer stayed at `1 queued` and the queued provider request never ran.
+3. Stripped image metadata from queued follow-up messages: the queued text drained, but the TUI rendered no `[1 image]` prefix and provider attachment verification failed.
+
+All breaks were reverted and the focused scenario passed cleanly. The queued-followups row remains partial for autocomplete wrapping and transient-queue reload breadth, but active-run Ctrl+F queueing/drain with image state is now covered.
+
 ### Storage fallback history and OM-scope coverage (2026-06-13)
 
 Added `storage-fallback-history-reload`, a real PTY e2e scenario that seeds persisted `settings.json.storage.backend = "pg"` with no connection info plus local LibSQL thread history. Startup renders the PostgreSQL fallback warning, `/threads` still loads the seeded local history from the effective LibSQL fallback store, and a shell proof confirms persisted settings still say `pg` so runtime fallback remains distinguishable from user intent.
