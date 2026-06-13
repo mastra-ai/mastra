@@ -1,6 +1,6 @@
 # Mastra Code testing recovery history
 
-### MCP selector focused coverage (2026-06-13)
+### MCP selector focused coverage (2026-06-13, `9e3fe22871`)
 
 Added `mastracode/src/tui/components/__tests__/mcp-selector.test.ts`, a focused component shield for the residual MCP status/reload row breadth: connected server tool/log detail views, failed-server error detail, connecting-status polling until settled, and stale reconnect result suppression while reload-all is in progress. Existing PTY e2e already covers `/mcp status`, HTTP manager/tool availability, `/mcp reload`, selector reconnect/reload-all, skipped validation, delayed MCP tool completion, and headless MCP availability.
 
