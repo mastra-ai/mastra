@@ -94,6 +94,7 @@ export type ScenarioName =
   | 'shell-passthrough-configured-settings'
   | 'shell-passthrough-env-override'
   | 'shell-passthrough-long-output'
+  | 'shell-passthrough-nonpersistent'
   | 'skills-command-activation'
   | 'storage-fallback-history-reload'
   | 'storage-settings'

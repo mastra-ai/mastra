@@ -87,6 +87,7 @@ import { setupNestedModelSelectorScenario } from './setup-nested-model-selector.
 import { shellPassthroughConfiguredSettingsScenario } from './shell-passthrough-configured-settings.js';
 import { shellPassthroughEnvOverrideScenario } from './shell-passthrough-env-override.js';
 import { shellPassthroughLongOutputScenario } from './shell-passthrough-long-output.js';
+import { shellPassthroughNonpersistentScenario } from './shell-passthrough-nonpersistent.js';
 import { skillsCommandActivationScenario } from './skills-command-activation.js';
 import { startupScenario } from './startup.js';
 import { stateCommandsScenario } from './state-commands.js';
@@ -215,6 +216,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'shell-passthrough-configured-settings': shellPassthroughConfiguredSettingsScenario,
   'shell-passthrough-env-override': shellPassthroughEnvOverrideScenario,
   'shell-passthrough-long-output': shellPassthroughLongOutputScenario,
+  'shell-passthrough-nonpersistent': shellPassthroughNonpersistentScenario,
   'skills-command-activation': skillsCommandActivationScenario,
   'storage-fallback-history-reload': storageFallbackHistoryReloadScenario,
   'storage-settings': storageSettingsScenario,

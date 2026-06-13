@@ -77,10 +77,11 @@
 - `mastracode/scripts/mc-e2e/scenarios/shell-passthrough-long-output.ts` — real PTY coverage for a slow long-running `!` command: asserts early stdout while the subprocess is still running, collapsed latest-20-line rendering with the hidden leading lines, success footer, and Ctrl+E expansion for tracked shell components.
 - `mastracode/scripts/mc-e2e/scenarios/shell-passthrough-configured-settings.ts` — real PTY coverage for persisted `settings.json.shellPassthrough`: seeds a wrapper executable and proves the visible `!` command path invokes it in `path`/POSIX mode before executing the user command.
 - `mastracode/scripts/mc-e2e/scenarios/shell-passthrough-env-override.ts` — real PTY coverage for `MASTRACODE_SHELL`/`MASTRACODE_SHELL_MODE`: seeds conflicting persisted shell settings and proves env overrides win by rendering the env wrapper marker while the persisted wrapper never runs.
+- `mastracode/scripts/mc-e2e/scenarios/shell-passthrough-nonpersistent.ts` — real PTY coverage that runs a local shell sentinel, queries the isolated SQLite message store to prove the sentinel is not persisted as conversation history, then submits a normal AIMock-backed prompt to prove shell output was not model-bound.
 
 ## Missing tests
 
-- Loaded-history assertion that local passthrough output is not reconstructed as persisted agent/tool history.
+- Covered: local passthrough output is not reconstructed as persisted agent/tool history; `shell-passthrough-nonpersistent` verifies the sentinel shell output is absent from `mastra_messages` and absent from the subsequent model request.
 
 ## Known risks / regressions
 

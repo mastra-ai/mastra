@@ -1,5 +1,27 @@
 # Mastra Code testing recovery history
 
+### Shell passthrough non-persistence coverage (2026-06-13, pending)
+
+Added `shell-passthrough-nonpersistent`, a real PTY e2e scenario that runs a local shell sentinel through `!printf`, then runs a local `sqlite3` query against the isolated Mastra DB to prove the sentinel is absent from `mastra_messages`. The scenario then sends a normal AIMock-backed prompt and verifies the provider request does not contain the shell sentinel, proving passthrough output remains local-only and is not model-bound.
+
+Break validations:
+
+1. Removed the `continue` after `handleShellPassthrough()` in the main TUI loop; the `!printf` command fell through into chat, created a user message, and failed AIMock matching.
+2. Sent streamed stdout chunks through `state.harness.sendMessage()` inside `handleShellPassthrough()`; the sentinel became model-bound/persisted and the scenario failed.
+3. Removed `component.finish(completion.exitCode)`; the scenario timed out waiting for the completed shell footer.
+
+All breaks were reverted and the focused scenario passed cleanly with one AIMock request.
+
+Verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test shell-passthrough-nonpersistent
+pnpm run build:mastracode
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+pnpm --filter ./mastracode run e2e:test -- --jobs 4  # 118/118 passed
+```
+
 ### Process suspend shortcut validation (2026-06-13, 78e75cd0bd)
 
 Validated the process suspend shortcut row from existing deterministic coverage. `process-shortcuts` exercises the real PTY visible surface by opening `/help`, asserting the Ctrl+Z suspend and Alt+Z undo shortcut copy, clearing a draft with Ctrl+C, and restoring it with Alt+Z. Unit coverage in `custom-editor.test.ts` proves Ctrl+Z and Alt+Z route to separate editor actions without falling through. Unit coverage in `setup-keyboard-shortcuts.test.ts` proves the suspend handler stops the UI, registers a `SIGCONT` listener, sends `SIGTSTP`, restarts rendering on continue, guards Windows, recovers when `process.kill()` throws, and owns Alt+Z restore semantics.
