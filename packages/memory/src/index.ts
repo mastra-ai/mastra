@@ -43,6 +43,7 @@ import type { VectorFilter } from '@mastra/core/vector';
 import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/schema-compat/schema';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
+import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
 import { recallTool } from './tools/om-tools';
@@ -970,20 +971,22 @@ ${workingMemory}`;
 
   private hasher = xxhash();
 
-  // embedding is computationally expensive so cache content -> embeddings/chunks
-  private embeddingCache = new Map<
-    number,
+  // embedding is computationally expensive so cache content -> embeddings/chunks.
+  // Bounded via LRU so a long-running process can't accumulate every distinct
+  // message it ever embedded. h64 keeps collision probability negligible at
+  // the cache's max size.
+  private embeddingCache = new LRUCache<
+    string,
     {
       chunks: string[];
       embeddings: Awaited<ReturnType<typeof embedMany>>['embeddings'];
       usage?: { tokens: number };
       dimension: number | undefined;
     }
-  >();
+  >({ max: 1000 });
   private firstEmbed: Promise<any> | undefined;
   protected async embedMessageContent(content: string) {
-    // use fast xxhash for lower memory usage. if we cache by content string we will store all messages in memory for the life of the process
-    const key = (await this.hasher).h32(content);
+    const key = (await this.hasher).h64ToString(content);
     const cached = this.embeddingCache.get(key);
     if (cached) {
       this.logger.debug('Embedding cache hit', { contentHash: key, chunks: cached.chunks.length });
