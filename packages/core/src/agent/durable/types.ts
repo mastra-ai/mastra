@@ -268,6 +268,8 @@ export interface DurableToolCallInput {
   output?: unknown;
   /** Tool names enabled for the step that produced this call, or null if a processor cleared the restriction */
   activeTools?: string[] | null;
+  /** Exported model_step span data for parenting tool call spans under model_step */
+  stepSpanData?: unknown;
 }
 
 /**

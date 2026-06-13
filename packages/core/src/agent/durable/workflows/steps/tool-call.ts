@@ -7,6 +7,8 @@ import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
 import { ChunkFrom } from '../../../../stream/types';
+import { SpanType } from '../../../../observability';
+import type { ExportedSpan } from '../../../../observability';
 import { createStep } from '../../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
@@ -31,6 +33,7 @@ const durableToolCallInputSchema = z.object({
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
   activeTools: z.array(z.string()).nullable().optional(),
+  stepSpanData: z.any().optional(),
 });
 
 /**
@@ -640,8 +643,23 @@ export function createDurableToolCallStep() {
         }
       }
 
+      // Rebuild model_step span so the tool call spans nest under it
+      const observability = (mastra as any)?.observability?.getSelectedInstance({ requestContext });
+      const stepSpanData = (typedInput as any).stepSpanData as ExportedSpan<SpanType.MODEL_STEP> | undefined;
+      const stepSpan = stepSpanData && observability
+        ? observability.rebuildSpan(stepSpanData)
+        : undefined;
+      const toolSpan = stepSpan?.createChildSpan({
+        name: `tool: '${toolName}'`,
+        type: SpanType.TOOL_CALL,
+        input: { args: cleanedArgs },
+        metadata: { runId, toolCallId },
+        requestContext,
+      }) ?? undefined;
+
       try {
         const result = await tool.execute(cleanedArgs, toolOptions);
+        toolSpan?.end({ output: { result } });
 
         // Emit tool-result chunk (non-fatal — result is returned regardless)
         if (pubsub) {
@@ -662,6 +680,8 @@ export function createDurableToolCallStep() {
           result,
         };
       } catch (error) {
+        toolSpan?.error({ error: error instanceof Error ? error : new Error(String(error)) });
+        toolSpan?.end({});
         const toolError = serializeError(error);
 
         // Emit tool-error chunk (non-fatal — error result is returned regardless)
