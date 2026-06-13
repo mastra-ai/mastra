@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Browserbase startup restore coverage (2026-06-13)
+
+Added `browserbase-startup-restore`, a real PTY `/browser status` scenario for persisted Stagehand Browserbase settings restored at startup. The scenario boots with Browserbase enabled, verifies status shows the restored Browserbase environment, then saves a pending CDP URL without `/browser on` and proves status renders `Browser (active)`, `Pending changes (not yet applied)`, the pending CDP endpoint, and apply guidance.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test browserbase-startup-restore
+```
+
+Break validations:
+
+- Removed startup `activeBrowserSettings` projection; the scenario failed because status collapsed to saved settings and never rendered `Browser (active)`.
+- Forced Browserbase settings parsing to fall back to `LOCAL`; the scenario failed because `/browser status` showed `Environment: LOCAL` and local headless fields.
+- Disabled `/browser set cdpUrl` persistence; the scenario failed because no pending CDP drift rendered.
+
+The settings/browser rows remain `needs-follow-up`: Browserbase startup is now covered; remaining browser breadth is deeper reload variants and richer external-provider smoke.
+
+
 ### Browser active-vs-pending status coverage (2026-06-13)
 
 Added `browser-active-pending-status`, a real PTY `/browser status` scenario for config drift between the active runtime browser and saved file settings. The scenario starts with enabled AgentBrowser/CDP settings, changes the saved CDP URL without running `/browser on`, then proves status renders `Browser (active)`, `Pending changes (not yet applied)`, both active and pending CDP endpoints, and explicit `/browser on` apply guidance.
