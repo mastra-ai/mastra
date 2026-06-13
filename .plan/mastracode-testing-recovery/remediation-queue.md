@@ -3,7 +3,7 @@
 ## Current state
 
 - Checked-in TUI e2e coverage is no longer missing for any tracker row.
-- 11 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
+- 10 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
 - Keep the user-realism rule: drive behavior through terminal input, slash commands, AIMock fixtures, deterministic pre-launch config/DB seeds, or approved external signal APIs for notification/state-signal origins. Do not emit Harness internals or mutate runtime display state directly.
 
 ## Priority queue
@@ -109,6 +109,7 @@
 
 - Rows: `Skills command and workspace resolution`, `Lifecycle hooks`, `Shell passthrough streaming`, `Process suspend shortcut`, `File attachments in chat input`, `Observational memory`.
 - Proposed scenarios:
+  - Completed: lifecycle hooks row validated with existing `lifecycle-hooks-configured` PTY coverage for `/hooks` status/reload and `UserPromptSubmit` blocking plus focused `executor.test.ts` coverage for hook JSON protocol, timeout warning, blocking/non-blocking exit-code semantics, and context aggregation. Headless parity for TUI lifecycle-only hooks is deferred; supported headless tool hooks are covered by agent/tool tests.
   - Completed: `skills-command-activation` seeds deterministic workspace skills, asserts `/skills` lists only user-invocable skills, activates `/skill/<name>` with arguments and escaped embedded skill boundaries, and proves `/goal/<skill>` alias activation reaches AIMock.
   - Completed: `lifecycle-hooks-configured` starts from project hook config, verifies configured `/hooks` status, rewrites the config from disk, runs `/hooks reload`, then proves the reloaded `UserPromptSubmit` hook blocks a normal prompt before it reaches the agent.
   - Completed: `shell-passthrough-long-output` runs a slow multi-line `!` command, verifies output appears before process exit, asserts collapsed long-output rendering, then uses Ctrl+E to expand the tracked shell component.

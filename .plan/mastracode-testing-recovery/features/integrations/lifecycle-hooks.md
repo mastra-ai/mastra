@@ -63,7 +63,8 @@
 
 ## Existing tests
 
-- `mastracode/src/tui/__tests__/mastra-tui-hooks.test.ts` — verifies `UserPromptSubmit` allow/block behavior, `Stop` reasons, and caffeinate cleanup interactions.
+- `mastracode/src/tui/__tests__/mastra-tui-hooks.test.ts` — verifies `UserPromptSubmit` allow/block behavior, `Stop` reasons, `SessionEnd` on stop, and caffeinate cleanup interactions.
+- `mastracode/src/hooks/executor.test.ts` — verifies hook command JSON stdin/stdout protocol, timeout warnings, blocking exit-code-2 handling, non-blocking exit-code warnings, and accumulated additional context.
 - `mastracode/src/agents/tools.test.ts` — verifies `PreToolUse` / `PostToolUse` wrapping, block behavior, and post-hook execution on tool errors.
 - `mastracode/src/hooks/config.test.ts` — verifies hook config loading, invalid config handling, global-before-project merge order, custom `configDir`, and `Notification` hook loading.
 - `mastracode/src/tui/commands/__tests__/hooks.test.ts` — verifies `/hooks` no-manager/no-config guidance, reload, configured paths, and `Notification` status rendering.
@@ -72,9 +73,9 @@
 
 ## Missing tests
 
-- Direct hook executor tests for JSON stdout parsing, timeouts, and edge-case blocking/warning behavior.
-- Headless behavior decision test: either prove TUI-only lifecycle hooks are intentional or add parity.
-- Additional live lifecycle breadth can still cover `Stop`, `SessionStart`/`SessionEnd`, and hook warning display through real TUI runs.
+- Covered: direct hook executor JSON stdout parsing, timeout, blocking, non-blocking warning, and additional-context behavior via `mastracode/src/hooks/executor.test.ts`.
+- Covered: configured `/hooks` status/reload and `UserPromptSubmit` blocking via `lifecycle-hooks-configured`; `Stop`, `SessionEnd`, and caffeinate cleanup remain covered by focused TUI hook wiring tests.
+- Deferred: headless parity for TUI lifecycle-only hooks is an intentional product-surface decision; current supported headless hook behavior is tool-hook wrapping, which is covered below the TUI by agent/tool tests.
 
 ## Known risks / regressions
 

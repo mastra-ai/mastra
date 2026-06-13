@@ -1,5 +1,27 @@
 # Mastra Code testing recovery history
 
+### Lifecycle hook executor coverage (2026-06-13, pending)
+
+Added `mastracode/src/hooks/executor.test.ts`, a focused shield for the remaining lifecycle hook executor protocol breadth: command hooks receive JSON stdin plus `MASTRA_HOOK_EVENT`, JSON stdout is parsed into additional context, hung hooks are killed and reported as timeout warnings, blocking events stop on exit code 2 with the parsed reason, non-blocking events convert exit code 2 into warnings, and accumulated additional context is preserved. Existing PTY e2e already covers configured `/hooks` status, `/hooks reload`, and `UserPromptSubmit` blocking through the real terminal. Existing TUI hook unit tests cover Stop reasons, SessionEnd on `stop()`, and caffeinate cleanup.
+
+Break validations:
+
+1. Disabled JSON stdout parsing in `executeHook`; the focused test failed because parsed `additionalContext` was missing.
+2. Disabled timeout marking before killing a hung hook; the focused test failed because the result was not marked timed out and no timeout warning was produced.
+3. Ignored blocking exit-code-2 handling; the focused test failed because a blocking `UserPromptSubmit` hook was allowed.
+
+All breaks were reverted and the focused test passed cleanly. Headless parity for TUI lifecycle-only hooks remains explicitly deferred as a product-surface decision; headless-supported tool hooks are covered by agent/tool tests.
+
+Verification:
+
+```sh
+pnpm --filter ./mastracode test --run src/hooks/executor.test.ts --reporter=dot --bail 1
+pnpm run build:mastracode
+pnpm --filter ./mastracode run e2e:test lifecycle-hooks-configured
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+```
+
 ### Stream error retry processor deterministic validation (2026-06-13, 210bb1e349)
 
 Validated the stream error retry processor row from existing checked-in deterministic coverage: `packages/core/src/processors/stream-error-retry-processor.test.ts` proves retryable provider metadata, cause-chain traversal, OpenAI Responses stream `error`/`response.failed` matching, custom matcher extensibility, non-retryable rejection, and `maxRetries`; `mastracode/src/__tests__/index.test.ts` proves Mastra Code wires `StreamErrorRetryProcessor` before `PrefillErrorHandler` and `ProviderHistoryCompat`; `stream-error-retry` drives a real PTY TUI run that injects a retryable stream-event failure and completes through AIMock with the recovered response.
