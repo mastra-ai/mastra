@@ -1,6 +1,6 @@
 # Mastra Code testing recovery history
 
-### Auto-update helper coverage (2026-06-13, pending)
+### Auto-update helper coverage (2026-06-13, a23e41a473)
 
 Extended `update-check.test.ts` with deterministic helper coverage for package-manager detection from `npm_config_user_agent`, `npm_execpath`, and `NODE_PATH`; install command generation for npm/pnpm/yarn/bun; ESM-safe source-run `getCurrentVersion()` fallback to package metadata; and semver comparison behavior. Existing `update-command-prompt` and `update-startup-prompt` PTY scenarios already cover the manual and automatic inline prompt surfaces with hermetic latest-version/changelog data and dismissal persistence. Existing command tests cover registry failures, already-latest behavior, previous-dismissal clearing, changelog prompt text, `No` persistence, and failed-update manual install guidance.
 
