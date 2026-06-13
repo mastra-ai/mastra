@@ -1,11 +1,14 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "33.0.0-alpha.3",
+  "version": "33.0.0",
   "description": "Mastra Playground components",
   "main": "dist/index.umd.js",
   "module": "dist/index.es.js",
   "types": "dist/index.d.ts",
+  "sideEffects": [
+    "**/*.css"
+  ],
   "files": [
     "dist",
     "theme.css",
@@ -40,6 +43,12 @@
         "default": "./dist/utils.cjs.js"
       }
     },
+    "./components/*": {
+      "import": {
+        "types": "./dist/components/*.d.ts",
+        "default": "./dist/components/*.es.js"
+      }
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -61,7 +70,6 @@
   "author": "Mastra",
   "license": "Apache-2.0",
   "dependencies": {
-    "@assistant-ui/react-ui": "^0.2.1",
     "@base-ui/react": "^1.5.0",
     "@codemirror/autocomplete": "^6.20.1",
     "@codemirror/lang-javascript": "^6.2.5",

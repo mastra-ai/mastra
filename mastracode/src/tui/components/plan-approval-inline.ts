@@ -22,7 +22,7 @@ import { BOX_INDENT, theme, getSelectListTheme, getMarkdownTheme, mastra } from 
 import type { ChatSpacingKind } from './chat-spacing.js';
 
 export interface PlanApprovalInlineOptions {
-  planId: string;
+  toolCallId: string;
   title: string;
   plan: string;
   onApprove: () => void;
@@ -97,7 +97,7 @@ export class PlanApprovalInlineComponent extends Container implements Focusable 
   static createStreaming(ui: TUI): PlanApprovalInlineComponent {
     const component = new PlanApprovalInlineComponent(
       {
-        planId: '',
+        toolCallId: '',
         title: 'Untitled plan',
         plan: '',
         onApprove: () => {},

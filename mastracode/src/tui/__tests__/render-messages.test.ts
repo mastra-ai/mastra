@@ -82,6 +82,50 @@ describe('addUserMessage', () => {
     expect(state.messageComponentsById.get('state-signal-1')).toBeInstanceOf(StateSignalComponent);
   });
 
+  it('does not render the tasks state signal inline (the pinned task UI shows it)', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'tasks-state-signal-1',
+      role: 'user',
+      content: [
+        {
+          type: 'state_signal',
+          stateId: 'tasks',
+          mode: 'snapshot',
+          version: 1,
+          message: '<current-task-list>\n  ○ [pending] {id: alpha} Alpha\n</current-task-list>',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
+    expect(state.messageComponentsById.has('tasks-state-signal-1')).toBe(false);
+  });
+
+  it('does not render the goal state signal inline (the goal/judge UI shows it)', () => {
+    const state = createState();
+
+    addUserMessage(state, {
+      id: 'goal-state-signal-1',
+      role: 'user',
+      content: [
+        {
+          type: 'state_signal',
+          stateId: 'goal',
+          mode: 'snapshot',
+          version: 1,
+          message: '<current-objective>\n  Ship the goal feature\n</current-objective>',
+        },
+      ],
+      createdAt: new Date('2026-05-04T00:00:00.000Z'),
+    } as unknown as HarnessMessage);
+
+    expect(state.chatContainer.children.some(child => child instanceof StateSignalComponent)).toBe(false);
+    expect(state.messageComponentsById.has('goal-state-signal-1')).toBe(false);
+  });
+
   it('renders generic reactive signals as inline signal components', () => {
     const state = createState();
 
@@ -474,6 +518,37 @@ describe('addUserMessage', () => {
 
     expect(state.chatContainer.children).toEqual([rendered]);
     expect(state.messageComponentsById.get('signal-idle-1')).toBe(rendered);
+  });
+});
+
+describe('renderExistingMessages signals', () => {
+  it('reconstructs persisted active signal messages without resurrecting pending previews', async () => {
+    const state = createState();
+    addPendingUserMessage(state, 'stale-signal', 'stale preview', undefined, { isInterjection: true });
+
+    state.harness = {
+      listMessages: vi
+        .fn()
+        .mockResolvedValue([
+          createUserMessage('continue from history', 'signal-history-1', { delivery: 'while-active' }),
+        ]),
+      getDisplayState: () => ({ isRunning: false }),
+    } as unknown as TUIState['harness'];
+
+    await renderExistingMessages(state);
+
+    expect(state.pendingSignalMessageComponentsById.size).toBe(0);
+    expect(state.chatContainer.children).toHaveLength(1);
+    expect(state.chatContainer.children[0]).toBeInstanceOf(UserMessageComponent);
+    expect(state.messageComponentsById.get('signal-history-1')).toBe(state.chatContainer.children[0]);
+
+    const rendered = (state.chatContainer.children[0] as UserMessageComponent)
+      .render(80)
+      .join('\n')
+      .replace(/\x1b\[[0-9;]*m/g, '');
+    expect(rendered).toContain('╭ steer ');
+    expect(rendered).toContain('continue from history');
+    expect(rendered).not.toContain('stale preview');
   });
 });
 

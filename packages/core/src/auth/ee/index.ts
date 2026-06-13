@@ -17,11 +17,13 @@ export * from './capabilities';
 // License
 export {
   validateLicense,
+  startLicenseValidation,
   isLicenseValid,
   isEELicenseValid,
   isFeatureEnabled,
   isDevEnvironment,
   isEEEnabled,
+  warnIfDevEENeedsLicense,
   clearLicenseCache,
   type LicenseInfo,
 } from './license';
@@ -38,6 +40,7 @@ export {
   getMCPToolFGAResourceId,
   type CheckFGAOptions,
   type RequireFGAOptions,
+  type ActorSignal,
 } from './fga-check';
 
 // Default implementations

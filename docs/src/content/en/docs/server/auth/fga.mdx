@@ -64,7 +64,7 @@ When using `MastraFGAWorkos`, set `fetchMemberships: true` on `MastraAuthWorkos`
 
 Use `thread` as the resource-mapping key for memory authorization. `MastraFGAWorkos` still accepts the legacy alias `memory`, but new configs should prefer `thread`.
 
-When `server.fga` is configured, Mastra enforces FGA on protected actions. If a protected action has no authenticated user, Mastra denies it. If `server.fga` is not configured, these FGA checks are skipped and Mastra keeps the previous behavior.
+When `server.fga` is configured, Mastra enforces FGA on protected actions. If a protected action has no authenticated user, Mastra denies it. If `server.fga` isn't configured, these FGA checks are skipped and Mastra keeps the previous behavior.
 
 ### Resource mapping
 
@@ -111,7 +111,7 @@ Use `validatePermissions()` to validate the full set of permissions Mastra may e
 
 ### Stored resource scoping
 
-FGA authorizes access to a resource. It does not automatically filter stored records that live in shared storage. Enable stored resource scoping when the built-in stored resource APIs are used in a multi-tenant app.
+FGA authorizes access to a resource. It doesn't automatically filter stored records that live in shared storage. Enable stored resource scoping when the built-in stored resource APIs are used in a multi-tenant app.
 
 ```typescript prettier: false
 const mastra = new Mastra({
@@ -147,7 +147,7 @@ If `requireScope` is `true` or omitted, scoped stored resource routes fail when 
 
 Mastra includes route-level FGA metadata for built-in resource routes, including agents, workflows, tools, MCP tools, memory threads, responses, conversations, and stored resources. Stored resource route coverage includes `/stored/agents`, `/stored/mcp-clients`, `/stored/prompt-blocks`, `/stored/scorers`, `/stored/skills`, and `/stored/workspaces`. A route is checked when it has route-level `fga` metadata, when Mastra can derive built-in metadata for that route, or when the provider supplies metadata with `resolveRouteFGA()`.
 
-To deny protected routes that do not resolve FGA metadata, configure route policy coverage on the FGA provider:
+To deny protected routes that don't resolve FGA metadata, configure route policy coverage on the FGA provider:
 
 ```typescript prettier: false
 const fga = new MastraFGAWorkos({
@@ -219,14 +219,14 @@ When an FGA provider is configured, Mastra automatically checks authorization at
 | Built-in workflow HTTP execution routes and `Workflow.execute()` | `workflows:execute` | `workflow` | `workflowId` |
 | Standalone tool execution | `tools:execute` | `tool` | `toolName` |
 | Agent tool execution | `tools:execute` | `tool` | `${agentId}:${toolName}` |
-| MCP tool execution | `tools:execute` | `tool` | `JSON.stringify([serverName, toolName])` |
+| MCP tool execution | `tools:execute` | `tool` by default, or the server-level `fga.resourceMapping` override | `JSON.stringify([serverName, toolName])` by default, or the server-level derived ID |
 | Thread and memory access | `memory:read`, `memory:write`, `memory:delete` | `thread` | `threadId` |
 | Stored resource routes | Stored resource permission for the route action | Stored resource type | Route record ID, or the stored-resource scope for collection routes |
 | HTTP resource routes | Configured per route | Configured per route | Configured per route |
 
-For OAuth-protected MCP servers, HTTP MCP transports pass authenticated data as `extra.authInfo`. If an `MCPServer` is registered on an FGA-enabled Mastra instance, configure `mapAuthInfoToUser` so Mastra can set `requestContext.get('user')` before checking `tools/list` and `tools/call`. See [MCPServer authentication context](/reference/tools/mcp-server#map-auth-data-for-fga).
+For OAuth-protected MCP servers, HTTP MCP transports pass authenticated data as `extra.authInfo`. If an `MCPServer` is registered on an FGA-enabled Mastra instance, configure `mapAuthInfoToUser` so Mastra can set `requestContext.get('user')` before checking `tools/list` and `tools/call`. Use the server-level `fga` option when MCP tool checks need different resource or permission mapping than internal agent and workflow tool checks. See [MCPServer authentication context](/reference/tools/mcp-server#map-auth-data-for-fga).
 
-Direct SDK calls to `createRun().start()`, `resume()`, or `restart()` are not independently checked by core FGA in this release. Make those calls from a protected route or guard them in application code. Pass a `requestContext` with an authenticated user when invoking protected entry points directly.
+Direct SDK calls to `createRun().start()`, `resume()`, or `restart()` aren't independently checked by core FGA in this release. Make those calls from a protected route or guard them in application code. Pass a `requestContext` with an authenticated user when invoking protected entry points directly.
 
 Core agent, internal workflow, tool, and memory checks also pass `requestContext` and action metadata to the FGA provider. Route checks pass `requestContext`. Thread checks pass the owning `resourceId` when available.
 

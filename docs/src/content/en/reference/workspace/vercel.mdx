@@ -17,7 +17,7 @@ For interface details, see [WorkspaceSandbox interface](/reference/workspace/san
 
 :::warning
 
-VercelSandbox is stateless. There is no persistent filesystem, no interactive shell, and no support for long-running or background processes. Only `/tmp` is writable and is ephemeral between invocations.
+VercelSandbox is stateless. No persistent filesystem, no interactive shell, and no support for long-running or background processes exist. Only `/tmp` is writable and is ephemeral between invocations.
 
 :::
 
@@ -174,7 +174,7 @@ VercelSandbox uses serverless functions under the hood, which means:
 - **No persistent filesystem**: Files written to `/tmp` are ephemeral and cleared between invocations.
 - **No interactive shell**: Commands run via `/bin/sh -c` with no stdin streaming.
 - **No background processes**: No process manager, PIDs, or long-running tasks.
-- **No mounting**: Cloud storage mounting (S3, GCS) is not supported.
+- **No mounting**: Cloud storage mounting (S3, GCS) isn't supported.
 - **Timeout limits**: Maximum execution time is bounded by `maxDuration` (default 60s).
 
 ## Related

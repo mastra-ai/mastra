@@ -27,7 +27,9 @@ import {
 } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
+import { TaskSignalProvider } from '@mastra/core/signals';
 import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
+import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
 import { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
@@ -40,7 +42,7 @@ import {
 
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
-import { getDynamicModel, resolveModel } from './agents/model.js';
+import { getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
 import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-instructions.js';
 import { executeSubagent } from './agents/subagents/execute.js';
 import { exploreSubagent } from './agents/subagents/explore.js';
@@ -105,11 +107,11 @@ function legacyModeToV1(mode: HarnessMode<MastraCodeState>, fallbackAgent: Agent
   const agent = typeof mode.agent === 'function' ? mode.agent({} as MastraCodeState) : mode.agent;
   return {
     id: mode.id,
-    agentId: (agent ?? fallbackAgent).id,
     defaultModelId: mode.defaultModelId ?? 'openai/gpt-5.5',
     description: mode.name,
     ...(mode.id === 'plan' ? { transitionsTo: 'build' } : {}),
     metadata: {
+      agentId: (agent ?? fallbackAgent).id,
       color: mode.color,
       default: mode.default,
       name: mode.name,
@@ -429,8 +431,6 @@ export async function createMastraCode(config?: MastraCodeConfig) {
             resourceId,
             modeId: harness.getCurrentModeId(),
             workspace: harness.getWorkspace(),
-            registerQuestion: params => harness.registerQuestion(params),
-            registerPlanApproval: params => harness.registerPlanApproval(params),
             getSubagentModelId: params => harness.getSubagentModelId(params),
           };
           requestContext.set('harness', harnessContext);
@@ -463,7 +463,26 @@ export async function createMastraCode(config?: MastraCodeConfig) {
         sampling: { type: 'ratio', rate: 0.3 },
       },
     },
-    signals: githubSignals ? [githubSignals] : [],
+    // TaskSignalProvider bundles the task tools + TaskStateProcessor: it merges
+    // the tools into the toolset and registers the task state-signal processor,
+    // so the task list persists across turns and survives OM truncation.
+    signals: [new TaskSignalProvider(), ...(githubSignals ? [githubSignals] : [])],
+    // Native goal mechanism: the in-loop goal step judges the thread's active
+    // objective each qualifying iteration. The judge model is required for any
+    // gating to occur; when unset the goal step is a complete no-op. A6 auto-wires
+    // the GoalStateProcessor so the `<current-objective>` signal persists across
+    // turns. Per-thread overrides live in the ThreadState `goal` record and win
+    // over these defaults.
+    goal: {
+      // Resolve the judge model through mastracode's gateway (a model-resolver
+      // function) so provider credentials are injected; returns undefined when no
+      // judge model is configured, keeping the goal step a no-op. Bind the same
+      // `settingsPath` used above so the judge model and `maxRuns` come from one
+      // config (a custom settings file would otherwise diverge).
+      judge: ctx => getGoalJudgeModel(ctx, config?.settingsPath),
+      maxRuns: globalSettings.models.goalMaxTurns ?? 50,
+      prompt: DEFAULT_GOAL_JUDGE_PROMPT,
+    },
     inputProcessors: [
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
@@ -485,30 +504,30 @@ export async function createMastraCode(config?: MastraCodeConfig) {
   const defaultModesV1: HarnessModeV1[] = [
     {
       id: 'build',
-      agentId: CODE_AGENT_ID,
       description: 'Build',
       defaultModelId: 'anthropic/claude-opus-4-7',
       metadata: {
+        agentId: CODE_AGENT_ID,
         color: mastra.green,
         default: true,
       },
     },
     {
       id: 'plan',
-      agentId: CODE_AGENT_ID,
       description: 'Plan',
       transitionsTo: 'build',
       defaultModelId: 'openai/gpt-5.5',
       metadata: {
+        agentId: CODE_AGENT_ID,
         color: mastra.purple,
       },
     },
     {
       id: 'fast',
-      agentId: CODE_AGENT_ID,
       description: 'Fast',
       defaultModelId: 'cerebras/zai-glm-4.7',
       metadata: {
+        agentId: CODE_AGENT_ID,
         color: mastra.orange,
       },
     },

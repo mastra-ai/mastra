@@ -56,7 +56,7 @@ Mastra storage-backed observability currently depends on an OLAP-capable backend
 - ClickHouse: Recommended for production observability.
 - Mastra platform: Use `MastraPlatformExporter` if you want hosted observability without managing the backend yourself.
 
-Primary application stores such as LibSQL or PostgreSQL should not be used as the observability store. Route the `observability` domain separately with composite storage when you use `MastraStorageExporter`.
+Primary application stores such as LibSQL or PostgreSQL shouldn't be used as the observability store. Route the `observability` domain separately with composite storage when you use `MastraStorageExporter`.
 
 ## Local development
 
@@ -74,7 +74,7 @@ Observability traffic is usually more write-heavy than the rest of the applicati
 
 - Use `MastraStorageExporter` with ClickHouse for the `observability` domain when you keep observability in your own storage.
 - Use `MastraPlatformExporter` if you want hosted Mastra platform observability instead of managing the backend yourself.
-- Do not route observability to your primary application store.
+- Don't route observability to your primary application store.
 
 For backend compatibility details and exporter batching behavior, see [Mastra Storage exporter](/docs/observability/integrations/exporters/mastra-storage).
 

@@ -1,9 +1,4 @@
 import { fail } from 'node:assert';
-import {
-  convertArrayToReadableStream,
-  convertAsyncIterableToArray,
-  convertReadableStreamToArray,
-} from '@ai-sdk/provider-utils-v5/test';
 import type { LanguageModelV2CallWarning, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { jsonSchema, NoObjectGeneratedError, pipeTextStreamToResponse } from '@internal/ai-sdk-v5';
 import type { FinishReason, LanguageModelResponseMetadata, LanguageModelUsage } from '@internal/ai-sdk-v5';
@@ -12,6 +7,7 @@ import { assert, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import type { loop } from '../loop';
 import { createMockServerResponse } from './mock-server-response';
+import { convertArrayToReadableStream, convertAsyncIterableToArray } from './stream-helpers';
 import { createMessageListWithUserMessage, mockDate, stripMastraCreatedAt, testUsage } from './utils';
 
 function createTestModels({
@@ -429,8 +425,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
               "inputTokens": 3,
               "outputTokens": 10,
               "raw": {
+                "cachedInputTokens": undefined,
                 "inputTokens": 3,
                 "outputTokens": 10,
+                "reasoningTokens": undefined,
                 "totalTokens": 13,
               },
               "totalTokens": 13,
@@ -518,9 +516,9 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           const response = stripMastraCreatedAt(await result.response);
 
           expect(response.id).toBe('id-0');
-          // The response crosses the evented engine's pubsub boundary (JSON.stringify),
-          // so Dates are serialized to ISO strings on the user-observable shape.
-          expect(response.timestamp).toEqual(new Date(0).toISOString());
+          // With direct execution (default), timestamps remain as Date objects.
+          // With evented execution they would be serialized to ISO strings via JSON.stringify.
+          expect(response.timestamp).toEqual(new Date(0));
           expect(response).toMatchObject({
             modelId: 'mock-model-id',
             modelMetadata: {
@@ -902,6 +900,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "role": "assistant",
                   },
                 ],
+                "headers": undefined,
                 "id": "id-0",
                 "messages": [
                   {
@@ -925,7 +924,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "modelProvider": "mock-provider",
                   "modelVersion": "v2",
                 },
-                "timestamp": "1970-01-01T00:00:00.000Z",
+                "timestamp": 1970-01-01T00:00:00.000Z,
                 "uiMessages": [
                   {
                     "id": "1234",
@@ -1006,6 +1005,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "role": "assistant",
                       },
                     ],
+                    "headers": undefined,
                     "id": "id-0",
                     "messages": [
                       {
@@ -1029,7 +1029,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       "modelProvider": "mock-provider",
                       "modelVersion": "v2",
                     },
-                    "timestamp": "1970-01-01T00:00:00.000Z",
+                    "timestamp": 1970-01-01T00:00:00.000Z,
                     "uiMessages": [
                       {
                         "id": "1234",
@@ -1068,8 +1068,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "inputTokens": 3,
                     "outputTokens": 10,
                     "raw": {
+                      "cachedInputTokens": undefined,
                       "inputTokens": 3,
                       "outputTokens": 10,
+                      "reasoningTokens": undefined,
                       "totalTokens": 13,
                     },
                     "totalTokens": 13,
@@ -1086,8 +1088,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "inputTokens": 3,
                 "outputTokens": 10,
                 "raw": {
+                  "cachedInputTokens": undefined,
                   "inputTokens": 3,
                   "outputTokens": 10,
+                  "reasoningTokens": undefined,
                   "totalTokens": 13,
                 },
                 "reasoningTokens": undefined,
@@ -1097,8 +1101,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "inputTokens": 3,
                 "outputTokens": 10,
                 "raw": {
+                  "cachedInputTokens": undefined,
                   "inputTokens": 3,
                   "outputTokens": 10,
+                  "reasoningTokens": undefined,
                   "totalTokens": 13,
                 },
                 "totalTokens": 13,
@@ -1215,6 +1221,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "role": "assistant",
                   },
                 ],
+                "headers": undefined,
                 "id": "id-0",
                 "messages": [
                   {
@@ -1238,7 +1245,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "modelProvider": "mock-provider",
                   "modelVersion": "v2",
                 },
-                "timestamp": "1970-01-01T00:00:00.000Z",
+                "timestamp": 1970-01-01T00:00:00.000Z,
                 "uiMessages": [
                   {
                     "id": "1234",
@@ -1309,6 +1316,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "role": "assistant",
                       },
                     ],
+                    "headers": undefined,
                     "id": "id-0",
                     "messages": [
                       {
@@ -1332,7 +1340,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       "modelProvider": "mock-provider",
                       "modelVersion": "v2",
                     },
-                    "timestamp": "1970-01-01T00:00:00.000Z",
+                    "timestamp": 1970-01-01T00:00:00.000Z,
                     "uiMessages": [
                       {
                         "id": "1234",
@@ -1368,8 +1376,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "inputTokens": 3,
                     "outputTokens": 10,
                     "raw": {
+                      "cachedInputTokens": undefined,
                       "inputTokens": 3,
                       "outputTokens": 10,
+                      "reasoningTokens": undefined,
                       "totalTokens": 13,
                     },
                     "totalTokens": 13,
@@ -1386,8 +1396,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "inputTokens": 3,
                 "outputTokens": 10,
                 "raw": {
+                  "cachedInputTokens": undefined,
                   "inputTokens": 3,
                   "outputTokens": 10,
+                  "reasoningTokens": undefined,
                   "totalTokens": 13,
                 },
                 "reasoningTokens": undefined,
@@ -1397,8 +1409,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "inputTokens": 3,
                 "outputTokens": 10,
                 "raw": {
+                  "cachedInputTokens": undefined,
                   "inputTokens": 3,
                   "outputTokens": 10,
+                  "reasoningTokens": undefined,
                   "totalTokens": 13,
                 },
                 "totalTokens": 13,
@@ -1515,6 +1529,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "role": "assistant",
                   },
                 ],
+                "headers": undefined,
                 "id": "id-0",
                 "messages": [
                   {
@@ -1538,7 +1553,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                   "modelProvider": "mock-provider",
                   "modelVersion": "v2",
                 },
-                "timestamp": "1970-01-01T00:00:00.000Z",
+                "timestamp": 1970-01-01T00:00:00.000Z,
                 "uiMessages": [
                   {
                     "id": "1234",
@@ -1609,6 +1624,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                         "role": "assistant",
                       },
                     ],
+                    "headers": undefined,
                     "id": "id-0",
                     "messages": [
                       {
@@ -1632,7 +1648,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                       "modelProvider": "mock-provider",
                       "modelVersion": "v2",
                     },
-                    "timestamp": "1970-01-01T00:00:00.000Z",
+                    "timestamp": 1970-01-01T00:00:00.000Z,
                     "uiMessages": [
                       {
                         "id": "1234",
@@ -1668,8 +1684,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                     "inputTokens": 3,
                     "outputTokens": 10,
                     "raw": {
+                      "cachedInputTokens": undefined,
                       "inputTokens": 3,
                       "outputTokens": 10,
+                      "reasoningTokens": undefined,
                       "totalTokens": 13,
                     },
                     "totalTokens": 13,
@@ -1686,8 +1704,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "inputTokens": 3,
                 "outputTokens": 10,
                 "raw": {
+                  "cachedInputTokens": undefined,
                   "inputTokens": 3,
                   "outputTokens": 10,
+                  "reasoningTokens": undefined,
                   "totalTokens": 13,
                 },
                 "reasoningTokens": undefined,
@@ -1697,8 +1717,10 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 "inputTokens": 3,
                 "outputTokens": 10,
                 "raw": {
+                  "cachedInputTokens": undefined,
                   "inputTokens": 3,
                   "outputTokens": 10,
+                  "reasoningTokens": undefined,
                   "totalTokens": 13,
                 },
                 "totalTokens": 13,
