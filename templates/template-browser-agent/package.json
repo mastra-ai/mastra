@@ -1,0 +1,37 @@
+{
+  "name": "template-browser-agent",
+  "version": "1.0.0",
+  "description": "A browser-using agent built on @mastra/agent-browser (Playwright). Uses Mastra Gateway for LLM calls, web search as a fallback, and persists state to Turso (libSQL).",
+  "main": "index.js",
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "type": "module",
+  "packageManager": "npm@11.12.1",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "^3.0.34",
+    "@mastra/agent-browser": "latest",
+    "@mastra/core": "latest",
+    "@mastra/editor": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/loggers": "latest",
+    "@mastra/memory": "latest",
+    "@mastra/observability": "latest",
+    "playwright": "^1.60.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.9",
+    "dotenv": "^17.3.1",
+    "mastra": "latest",
+    "typescript": "^5.9.3"
+  }
+}
