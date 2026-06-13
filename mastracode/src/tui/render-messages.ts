@@ -7,7 +7,7 @@ import { Container, Spacer, Text } from '@mariozechner/pi-tui';
 import type { Component } from '@mariozechner/pi-tui';
 import type { HarnessMessage, HarnessMessageContent, TaskItemInput, TaskItemSnapshot } from '@mastra/core/harness';
 import { assignTaskIds, parseSubagentMeta } from '@mastra/core/harness';
-import { GOAL_STATE_ID, TASKS_STATE_ID } from '@mastra/core/tools';
+import { TASKS_STATE_ID } from '@mastra/core/tools';
 import chalk from 'chalk';
 import {
   insertChatComponentWithBoundarySpacing,
@@ -40,6 +40,7 @@ const WHILE_ACTIVE_USER_MESSAGE_LABEL = 'steer';
 // These are internal control-plane signals handled by GithubSignals. The user-visible
 // result is rendered by github-sync-status, so showing these would duplicate the UI.
 const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
+const GOAL_STATE_SIGNAL_ID = 'goal';
 
 function shouldRenderReactiveSignal(tagName: string): boolean {
   return !HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName);
@@ -59,7 +60,7 @@ function getPendingUserMessageLabel(isInterjection?: boolean): string | undefine
 }
 
 function getCurrentModeColor(state: TUIState): string | undefined {
-  return state.harness.getCurrentMode?.()?.color;
+  return state.harness.getCurrentMode?.()?.metadata?.color as string;
 }
 
 // =============================================================================
@@ -326,7 +327,10 @@ export function addUserMessage(state: TUIState, message: HarnessMessage, options
   // from task tool history), so skip its raw <current-task-list> snapshot here.
   // The `goal` state signal is surfaced by the goal/judge UI, so likewise skip
   // its raw <current-objective> snapshot.
-  if (stateSignalPart && (stateSignalPart.stateId === TASKS_STATE_ID || stateSignalPart.stateId === GOAL_STATE_ID)) {
+  if (
+    stateSignalPart &&
+    (stateSignalPart.stateId === TASKS_STATE_ID || stateSignalPart.stateId === GOAL_STATE_SIGNAL_ID)
+  ) {
     return;
   }
 
