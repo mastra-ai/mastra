@@ -2,6 +2,7 @@
 
 ## Current status
 
+- 2026-06-13 stamp: `e2a3b53dee` — Ctrl+F custom slash autocomplete queue coverage committed; queued-followups row remains needs-follow-up for long autocomplete wrapping/reload breadth, with 113/113 e2e suite pass.
 - 2026-06-13 stamp: `e233ef32a5` — Ctrl+F queued-image follow-up coverage committed; queued-followups row remains needs-follow-up for autocomplete wrapping/reload breadth, with 112/112 e2e suite pass.
 - 2026-06-13 stamp: `d84ed78e51` — storage backend fallback-history coverage committed; storage row validated with 111/111 e2e suite pass.
 - 2026-06-13 stamp: `40564307b4` — OM attachment observation coverage committed; file-attachments row validated with 110/110 e2e suite pass.
