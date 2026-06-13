@@ -5,6 +5,7 @@ import type { OuterLLMRun } from '../../types';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
 import { createBackgroundTaskCheckStep } from './background-task-check-step';
+import { createGoalStep } from './goal-step';
 import { createIsTaskCompleteStep } from './is-task-complete-step';
 import { createLLMExecutionStep } from './llm-execution-step';
 import { createLLMMappingStep } from './llm-mapping-step';
@@ -72,6 +73,12 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     ...rest,
   });
 
+  const goalStep = createGoalStep({
+    models,
+    _internal,
+    ...rest,
+  });
+
   const createWorkflow = process.env.MASTRA_EVENTED_EXECUTION === 'true' ? createEventedWorkflow : createDirectWorkflow;
 
   return createWorkflow({
@@ -111,5 +118,6 @@ export function createAgenticExecutionWorkflow<Tools extends ToolSet = ToolSet, 
     .then(backgroundTaskCheckStep)
     .then(signalDrainStep)
     .then(isTaskCompleteStep)
+    .then(goalStep)
     .commit();
 }

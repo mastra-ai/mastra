@@ -3317,6 +3317,43 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /stored/agents/:storedAgentId/change-request": {
+    "method": "POST",
+    "path": "/stored/agents/:storedAgentId/change-request",
+    "pathParams": [
+      "storedAgentId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "agents",
+      "browser",
+      "changeMessage",
+      "defaultOptions",
+      "description",
+      "inputProcessors",
+      "inspectOnly",
+      "instructions",
+      "integrationTools",
+      "mcpClients",
+      "memory",
+      "model",
+      "name",
+      "outputProcessors",
+      "requestContextSchema",
+      "scorers",
+      "skills",
+      "toolProviders",
+      "tools",
+      "userName",
+      "workflows",
+      "workspace"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /stored/agents/:storedAgentId": {
     "method": "GET",
     "path": "/stored/agents/:storedAgentId",

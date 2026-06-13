@@ -5,7 +5,7 @@
  * Also includes pure helper functions for content partitioning.
  */
 import type { HarnessMessage, HarnessMessageContent } from '@mastra/core/harness';
-import { TASKS_STATE_ID } from '@mastra/core/tools';
+import { GOAL_STATE_ID, TASKS_STATE_ID } from '@mastra/core/tools';
 
 import {
   insertChatComponentWithBoundarySpacing,
@@ -376,9 +376,11 @@ export function handleMessageUpdate(ctx: EventHandlerContext, message: HarnessMe
   for (const stateSignal of stateSignalParts) {
     // The `tasks` state signal is already rendered by the pinned task list UI
     // (driven by the `task_updated` display event), so don't also echo its raw
-    // <current-task-list> snapshot into the transcript. Other state-signal
+    // <current-task-list> snapshot into the transcript. The `goal` state signal
+    // is surfaced by the goal/judge UI (driven by the `goal` chunk), so likewise
+    // don't echo its raw <current-objective> snapshot. Other state-signal
     // categories still render inline.
-    if (stateSignal.stateId === TASKS_STATE_ID) continue;
+    if (stateSignal.stateId === TASKS_STATE_ID || stateSignal.stateId === GOAL_STATE_ID) continue;
     const stateSignalKey = `state:${message.id}:${stateSignal.cacheKey ?? ''}:${stateSignal.stateId}:${stateSignal.mode}:${stateSignal.version ?? ''}:${stateSignal.message ?? ''}`;
     if (!state.currentRunSystemReminderKeys.has(stateSignalKey)) {
       state.currentRunSystemReminderKeys.add(stateSignalKey);
