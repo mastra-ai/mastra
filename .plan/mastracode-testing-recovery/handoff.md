@@ -447,7 +447,7 @@ No tracker rows were deferred. The next step is user final approval for the comp
 - Existing PTY e2e scenarios continue to cover browser settings persistence, AgentBrowser CDP enable/attach, startup restore, Browserbase startup/wizard paths, active/pending CDP drift, storage-state export, and profile-provider mismatch. Optional live external-provider smoke and browser history replay remain explicit non-blocking breadth.
 
 
-### 2026-06-13 — Custom provider modal validation
+### 2026-06-13 — Custom provider modal validation (`7db99ddd54`)
 
 - Added `custom-provider-modal-validation` TUI e2e for provider create success, duplicate-name rejection, invalid URL rejection, and remove-model persistence through real `/custom-providers` modal input.
 - Break validations: disabled duplicate-provider guard, disabled URL validation, and broke remove-model persistence; each failed the focused scenario and was reverted.
