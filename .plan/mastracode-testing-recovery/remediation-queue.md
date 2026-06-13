@@ -3,7 +3,7 @@
 ## Current state
 
 - Checked-in TUI e2e coverage is no longer missing for any tracker row.
-- 12 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
+- 11 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
 - Keep the user-realism rule: drive behavior through terminal input, slash commands, AIMock fixtures, deterministic pre-launch config/DB seeds, or approved external signal APIs for notification/state-signal origins. Do not emit Harness internals or mutate runtime display state directly.
 
 ## Priority queue
@@ -99,8 +99,10 @@
   - Completed: `subagent-model-startup-restore` seeds an active custom model pack before launch, delegates to the Explore subagent, verifies the subagent footer uses the restored fast model rather than the parent/build default, and proves persisted settings remain intact.
   - Completed: `custom-provider-edit-share-import` edits a provider name/URL/API key through `/custom-providers`, shares a saved custom pack to clipboard, cancels a colliding shared-pack import through `/models`, and proves settings only persist the completed provider edit.
   - Completed: `custom-pack-import-rename` imports a shared `mastra-pack:` string through `/models`, selects Rename on a colliding saved pack, and proves the original pack remains while the renamed imported pack becomes active. Remaining breadth: custom-pack completion, invalid provider URL/duplicate-name branches, remove-model, and selector persistence.
-  - Completed: `custom-provider-model-selector` seeds a configured OpenAI-compatible provider, creates a `/models` custom pack from real catalog entries instead of the free-form `Use:` fallback, and proves active defaults plus saved pack models persist. Remaining custom-provider breadth: provider creation/remove-model validation, invalid URL/duplicate-name modal branches, and live custom-provider request routing.
+  - Completed: `custom-provider-model-selector` seeds a configured OpenAI-compatible provider, creates a `/models` custom pack from real catalog entries instead of the free-form `Use:` fallback, and proves active defaults plus saved pack models persist.
+  - Completed: `custom-provider-modal-validation` creates a custom provider through `/custom-providers`, proves duplicate-name and invalid-URL modal validation, removes a provider model, and verifies persistence. Remaining live custom-provider request routing is covered below the TUI by provider routing tests rather than an additional row blocker.
   - Completed: `provider-history-rejection-retry` seeds invalid stored tool-call history, injects a one-shot provider 400, then proves `ProviderHistoryCompat` retries with a sanitized tool-call ID before the recovered AIMock response renders.
+  - Completed: stream error retry processor row validated from `stream-error-retry` PTY recovery coverage plus focused core retry-decision tests and Mastra Code processor-order wiring tests; a real live OpenAI stream failure that distinguishes Mastra's processor from provider SDK retry remains deferred as non-hermetic provider behavior.
 - Fixture/data needs: settings.json seeds, AIMock custom provider fixtures, one-shot local HTTP provider mock for rejection/retry cases.
 
 ### 6. Workspace, skills, hooks, and shell surfaces

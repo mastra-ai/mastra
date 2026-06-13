@@ -1,5 +1,22 @@
 # Mastra Code testing recovery history
 
+### Stream error retry processor deterministic validation (2026-06-13, pending)
+
+Validated the stream error retry processor row from existing checked-in deterministic coverage: `packages/core/src/processors/stream-error-retry-processor.test.ts` proves retryable provider metadata, cause-chain traversal, OpenAI Responses stream `error`/`response.failed` matching, custom matcher extensibility, non-retryable rejection, and `maxRetries`; `mastracode/src/__tests__/index.test.ts` proves Mastra Code wires `StreamErrorRetryProcessor` before `PrefillErrorHandler` and `ProviderHistoryCompat`; `stream-error-retry` drives a real PTY TUI run that injects a retryable stream-event failure and completes through AIMock with the recovered response.
+
+No new runtime code or tests were added in this chunk. The remaining card items are explicitly deferred: a real OpenAI Responses stream failure that proves Mastra's processor, rather than provider SDK retry behavior, performed the retry is non-hermetic; a TUI/headless visible retry indicator is not currently a product surface.
+
+Verification:
+
+```sh
+pnpm run build:mastracode
+pnpm --filter ./packages/core exec vitest run src/processors/stream-error-retry-processor.test.ts --reporter=dot --bail 1
+pnpm --filter ./mastracode exec vitest run src/__tests__/index.test.ts --reporter=dot --bail 1
+pnpm --filter ./mastracode run e2e:test stream-error-retry
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+```
+
 ### MCP server configuration deterministic validation (2026-06-13, `17f941e1e9`)
 
 Validated the MCP server configuration row from existing checked-in deterministic coverage: config parsing/validation including OAuth redirect and scopes, `createMastraCode({ mcpServers })` startup wiring, manager HTTP URL/header/OAuth provider construction, durable OAuth token storage and refresh replacement, programmatic/file precedence, PTY stdio config failure display, header-protected HTTP tool execution, project config reload, selector reconnect/reload-all, skipped validation display, delayed long-running MCP tools, and headless HTTP MCP availability.

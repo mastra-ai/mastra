@@ -2,6 +2,7 @@
 
 ## Current status
 
+- 2026-06-13 stamp: pending — stream error retry processor row moved to validated from deterministic core processor tests, Mastra Code processor-order wiring tests, and existing `stream-error-retry` PTY recovery coverage; real live OpenAI proof and visible retry indicator are explicitly deferred as non-hermetic/unimplemented breadth. Current tracker: 45 validated, 11 needs-follow-up, 117 e2e scenarios.
 - 2026-06-13 stamp: `2061fdd9ef` — browser status projection coverage added and break-validated; browser automation row moved to validated from existing PTY e2e plus focused profile/executable/storage-state drift coverage. Current tracker: 44 validated, 12 needs-follow-up, 116 e2e scenarios.
 - 2026-06-13 stamp: `17f941e1e9` — MCP server configuration row moved to validated from existing deterministic coverage; protected OAuth authorization-server flow explicitly deferred as non-hermetic integration breadth. No runtime changes. Current tracker: 42 validated, 14 needs-follow-up, 116 e2e scenarios.
 - 2026-06-13 stamp: `9e3fe22871` — `mcp-selector.test.ts` coverage added and break-validated; MCP status/reload row moved to validated. Final gates passed: build, focused component test, check, and lint. Full PTY e2e not rerun because this chunk only adds focused component coverage and docs. Current tracker: 41 validated, 15 needs-follow-up, 116 e2e scenarios.
