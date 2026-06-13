@@ -24,13 +24,16 @@ import type {
 } from './public-types';
 
 /**
- * Scans a v6 UIMessage array for an 'approval-responded' tool part in the
- * last trailing assistant message only. When found, splits the composite
- * approvalId ("${runId}::${toolCallId}") to recover the runId needed for
- * resumeStream.
+ * Scans a v6 UIMessage array for the most recent 'approval-responded' tool
+ * part in the last trailing assistant message only. When found, splits the
+ * composite approvalId ("${runId}::${toolCallId}") to recover the runId
+ * needed for resumeStream.
  *
  * Only the last trailing assistant message is inspected so that approval
- * responses from earlier turns are never re-processed.
+ * responses from earlier turns are never re-processed. Within that message,
+ * parts are scanned in reverse so the decision the user just acted on wins
+ * over any earlier 'approval-responded' parts that have not yet transitioned
+ * to 'output-available'.
  *
  * Returns null when no approval response is present (normal chat turn).
  */
@@ -43,7 +46,9 @@ export function extractV6NativeApproval(
   const lastAssistantMsg = messages.at(-1);
   if (!lastAssistantMsg || lastAssistantMsg.role !== 'assistant') return null;
 
-  for (const part of lastAssistantMsg.parts ?? []) {
+  const parts = lastAssistantMsg.parts ?? [];
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const part = parts[i];
     if (!isToolUIPart(part) || part.state !== 'approval-responded') continue;
 
     const lastSep = part.approval.id.lastIndexOf(APPROVAL_ID_SEPARATOR);
