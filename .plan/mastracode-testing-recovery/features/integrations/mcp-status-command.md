@@ -73,16 +73,17 @@
 - `mastracode/scripts/mc-e2e/scenarios/mcp-selector-reconnect.ts` — real PTY/TUI e2e coverage for the interactive `/mcp` selector reconnect submenu and `r` reload-all shortcut updating visible server/tool rows from the live manager.
 - `mastracode/scripts/mc-e2e/scenarios/mcp-skipped-validation.ts` — real PTY/TUI e2e coverage proving `/mcp status` and the interactive selector both display skipped MCP validation reasons for invalid config entries.
 - `mastracode/scripts/mc-e2e/scenarios/mcp-long-running-tool.ts` — real PTY/TUI + AIMock e2e coverage proving a delayed HTTP MCP tool result completes and reaches the model follow-up instead of timing out under a short result budget.
+- `mastracode/src/tui/components/__tests__/mcp-selector.test.ts` — focused component coverage for selector detail views, connecting-status polling, and stale reconnect result suppression while reload-all is in progress.
 
 ## Missing tests
 
-- Focused `McpSelectorComponent` tests for detail views, polling, and stale reconnect results during reload.
+- None for deterministic status/reload/selector contracts. Remaining OAuth authorization-display breadth would need a protected-server fixture and is tracked as non-blocking integration breadth.
 
 ## Known risks / regressions
 
 - Command status can drift from actual tool availability if TUI context and `createDynamicTools()` receive different manager instances.
 - Closure-state refactors must preserve background init, reload/reconnect lifecycle, config, tools, statuses, skipped servers, stderr logs, and the long MCP client timeout.
-- Selector state now has PTY coverage for reconnect and reload-all, but focused component coverage for detail/polling/stale async races is still thin.
+- Selector state now has PTY coverage for reconnect and reload-all plus focused component coverage for detail/polling/stale async races.
 
 ## Verification checklist
 

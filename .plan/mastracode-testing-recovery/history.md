@@ -1,5 +1,27 @@
 # Mastra Code testing recovery history
 
+### MCP selector focused coverage (2026-06-13)
+
+Added `mastracode/src/tui/components/__tests__/mcp-selector.test.ts`, a focused component shield for the residual MCP status/reload row breadth: connected server tool/log detail views, failed-server error detail, connecting-status polling until settled, and stale reconnect result suppression while reload-all is in progress. Existing PTY e2e already covers `/mcp status`, HTTP manager/tool availability, `/mcp reload`, selector reconnect/reload-all, skipped validation, delayed MCP tool completion, and headless MCP availability.
+
+Break validations:
+
+1. Removed tool names from the selector detail view; the focused test failed waiting for `alpha_search`/`alpha_write`.
+2. Disabled polling status refresh; the focused test failed because the server stayed `connecting...` instead of rendering the connected tool row.
+3. Removed stale reconnect suppression during reload-all; the focused test failed because the stale reconnect failure leaked into `showInfo`.
+
+All breaks were reverted and the focused test passed cleanly. The MCP status/reload row moved to validated; protected OAuth authorization-display breadth remains non-blocking integration follow-up.
+
+Verification:
+
+```sh
+pnpm run build:mastracode
+pnpm --filter ./mastracode exec vitest run src/tui/components/__tests__/mcp-selector.test.ts --reporter=dot --bail 1
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+```
+
+Full PTY e2e was not rerun for this chunk because no runtime/e2e code changed; the row is validated by existing checked-in PTY e2e coverage plus this focused component shield.
 ### Custom provider model selector coverage (2026-06-13)
 
 Added `custom-provider-model-selector`, a real PTY e2e scenario that seeds an OpenAI-compatible custom provider, opens `/models`, chooses the Custom pack flow, selects `selector-e2e/...` catalog entries for plan/build/fast, asserts those selections are not the free-form `Use:` fallback, and proves `settings.json` persists the active custom pack, mode defaults, saved pack models, and subagent-default cleanup.
