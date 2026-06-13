@@ -3,7 +3,7 @@
 ## Current state
 
 - Checked-in TUI e2e coverage is no longer missing for any tracker row.
-- 18 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
+- 17 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
 - Keep the user-realism rule: drive behavior through terminal input, slash commands, AIMock fixtures, deterministic pre-launch config/DB seeds, or approved external signal APIs for notification/state-signal origins. Do not emit Harness internals or mutate runtime display state directly.
 
 ## Priority queue
@@ -112,6 +112,7 @@
   - Completed: `prompt-queue-interleave` uses simultaneous AIMock `ask_user` and `request_access` tool calls to assert the access prompt is queued behind the active ask_user prompt, activates after the first answer, accepts the default Yes option, and resolves the model turn.
   - Completed: `ctrlf-queued-image-followup` drives a real active run, pastes an image while the model is streaming, uses Ctrl+F to enqueue it, verifies `1 queued` status, waits for FIFO drain, and asserts the queued raw provider request contains the pasted PNG payload.
   - Completed: `ctrlf-queued-custom-slash` starts a slow active run, uses the real custom slash-command autocomplete to resolve `/queue-au` before Ctrl+F, verifies `//queue-auto` queues, and proves FIFO slash-command drain sends the processed custom-command payload to AIMock.
+  - Completed: `autocomplete-wrapping-navigation` opens the real custom slash-command autocomplete with a long description, proves the wrapped continuation tail is visible at PTY width, presses one Down arrow, and verifies the selected second command reaches AIMock; focused queueing tests cover transient process-local queue cleanup/abort semantics, so queued-followups is validated.
   - Completed: strengthened `clipboard-image-paste` now drives a real bracketed-paste PNG through the TUI, asserts confirmed `[1 image]` history, and verifies the raw provider request contains the `image/png` file part plus base64 payload.
   - Completed: `file-attachment-history-reload` seeds persisted user signal history with projected text-file content, an image file part, and a binary file part, then proves `/threads` loaded history renders `[1 image] [1 file]` plus the text-file body without leaking raw base64.
   - Completed: `file-attachment-blocked-retry` uses a real `UserPromptSubmit` hook to block the first pasted-image submit, proves the editor restores `prompt [image]`, retries with Enter, and verifies the raw provider request still contains the PNG file payload exactly once.

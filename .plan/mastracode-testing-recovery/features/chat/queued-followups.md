@@ -73,8 +73,10 @@
 
 - `mastracode/src/tui/components/__tests__/custom-editor.test.ts` — Ctrl+F resolves slash autocomplete and preserves `/`, Enter submits selected slash commands, non-slash autocomplete does not submit, and first visible slash-command match is highlighted.
 - `mastracode/src/tui/components/__tests__/wrapping-autocomplete-list.test.ts` — long description wrapping, continuation indentation, visible-width bounds, narrow-width fallback, scroll indicator, and item-based navigation.
-- `mastracode/src/tui/__tests__/mastra-tui-queueing.test.ts` — active-run Enter signal path, active-run slash-command immediate path, FIFO drain across messages/slash commands, queued image metadata, pending slash removal, queued actions before goal continuation, and signal/echo dedupe.
+- `mastracode/src/tui/__tests__/mastra-tui-queueing.test.ts` — active-run Enter signal path, active-run slash-command immediate path, FIFO drain across messages/slash commands, queued image metadata, pending slash removal, queued actions before goal continuation, harness-follow-up drain deferral, abort cleanup of local queue arrays, and signal/echo dedupe.
 - `mastracode/scripts/mc-e2e/scenarios/ctrlf-queued-image-followup.ts` — real PTY Ctrl+F queueing during an active AIMock-backed run, queued-count status rendering, FIFO drain after `agent_end`, and queued pasted-image payload preservation in the raw provider request.
+- `mastracode/scripts/mc-e2e/scenarios/ctrlf-queued-custom-slash.ts` — real PTY custom slash autocomplete completion before Ctrl+F queueing during an active run plus FIFO slash-command drain.
+- `mastracode/scripts/mc-e2e/scenarios/autocomplete-wrapping-navigation.ts` — real PTY long custom slash autocomplete description wrapping and item-based Down-arrow navigation.
 - `mastracode/src/tui/__tests__/status-line.test.ts` — queued-count status label from TUI queue + Harness follow-up count.
 - `mastracode/src/utils/__tests__/slash-command-loader.test.ts` — custom slash-command discovery, namespace/name parsing, source priority, and duplicate-name override behavior.
 - `mastracode/src/tui/__tests__/command-dispatch.test.ts` — `//deploy` active-thread custom command routing, built-in `/new` precedence over a custom collision, and `//new` custom-command override behavior.
@@ -82,14 +84,14 @@
 
 ## Missing tests
 
-- Real terminal/TUI integration test for Enter with long slash/custom/skill descriptions wrapping at real terminal widths. Ctrl+F active-run queueing with image paste state is covered by `ctrlf-queued-image-followup`, and Ctrl+F custom slash-command autocomplete selection/drain is covered by `ctrlf-queued-custom-slash`.
-- Reload behavior proving transient queues do not resurrect from history.
+- None currently blocking validation. Transient queue state is intentionally process-local TUI state; focused queueing tests cover FIFO drain, harness-follow-up deferral, and abort cleanup, while e2e coverage now covers the visible enqueue/drain and wrapping/navigation surfaces. A multi-process crash/restart smoke could add future defense-in-depth, but no persisted queue storage surface exists to reconstruct in loaded history.
 
 ## E2E coverage
 
 - `custom-slash-command` seeds checked-in project custom commands, submits `//deploy prod blue` and `//review src/index.ts src/main.ts` through the real TUI, waits for AIMock responses, and verifies captured model requests contain the processed command text (`ARGUMENTS: prod blue` and full `$1+` range args) without duplicate raw-arg append. Break checks proved failures when raw-arg append was disabled, `$1+` consumed only the first arg, and local custom-command loading was skipped.
 - `ctrlf-queued-image-followup` starts a slow active run, pastes a PNG-backed queued follow-up, presses Ctrl+F, asserts the footer shows `1 queued`, waits for FIFO drain after the initial `agent_end`, and verifies the raw provider request contains the queued text plus `image/png` base64 payload with no `[image]` placeholder. Break checks disabled Ctrl+F enqueue, disabled queued-action drain, and stripped queued images; each failed the scenario and was reverted.
-- `ctrlf-queued-custom-slash` starts a slow active run, opens the real custom slash-command autocomplete from `/queue-au`, presses Ctrl+F, verifies the selected command becomes a queued `//queue-auto` pending message, drains through FIFO slash-command dispatch, and verifies AIMock receives the processed custom-command payload. Break checks removed Ctrl+F autocomplete completion, disabled the Ctrl+F queue callback, and skipped queued slash-command dispatch; each failed the scenario and was reverted. This row remains partial for long autocomplete wrapping and transient-queue reload breadth.
+- `ctrlf-queued-custom-slash` starts a slow active run, opens the real custom slash-command autocomplete from `/queue-au`, presses Ctrl+F, verifies the selected command becomes a queued `//queue-auto` pending message, drains through FIFO slash-command dispatch, and verifies AIMock receives the processed custom-command payload. Break checks removed Ctrl+F autocomplete completion, disabled the Ctrl+F queue callback, and skipped queued slash-command dispatch; each failed the scenario and was reverted.
+- `autocomplete-wrapping-navigation` seeds two project custom slash commands where the first has a long description, opens the real autocomplete at terminal width, asserts the wrapped tail sentinel is visible on a continuation row, presses one Down arrow, and verifies AIMock receives the second command template. Break checks truncated descriptions, broke Down-arrow item navigation, and hid custom-command descriptions; each failed the scenario and was reverted.
 
 ## Known risks / regressions
 

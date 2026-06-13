@@ -1,5 +1,29 @@
 # Mastra Code testing recovery history
 
+### Autocomplete wrapping navigation coverage (2026-06-13)
+
+Added `autocomplete-wrapping-navigation`, a real PTY e2e scenario that seeds two project custom slash commands, opens autocomplete at `/wrap-`, proves a long custom-command description wraps far enough to render `navigation-sentinel-wrap-tail`, presses one Down arrow, and verifies AIMock receives the second command template instead of the wrapped first command. This closes the queued-followups residual wrapping/navigation gap. The row is now validated together with prior Ctrl+F image queueing, Ctrl+F custom slash queueing, and focused process-local queue cleanup/drain shields.
+
+Break validations:
+
+1. Replaced wrapping with one-line truncation in `WrappingAutocompleteList`; the scenario timed out waiting for `navigation-sentinel-wrap-tail`.
+2. Broke Down-arrow item navigation so selection stayed on the wrapped first command; the scenario sent `Alpha should not run` and failed before the Bravo response.
+3. Removed custom-command descriptions from the autocomplete provider; the scenario timed out waiting for the long description.
+
+All breaks were reverted and the focused scenario passed cleanly.
+
+Verification:
+
+```sh
+pnpm run build:mastracode
+pnpm --filter ./mastracode run e2e:test autocomplete-wrapping-navigation
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+pnpm --filter ./mastracode run e2e:test -- --jobs 4 # 114/114 passed
+```
+
+The first full-suite attempt reached 112/114 with known worker-timeout flakes in `provider-history-rejection-retry` and `prompt-context-instructions`; both passed focused retries after cache cleanup, and the clean rerun passed 114/114.
+
 ### Ctrl+F queued custom slash autocomplete coverage (2026-06-13)
 
 Added `ctrlf-queued-custom-slash`, a real PTY e2e scenario that starts a slow AIMock-backed active run, seeds a project custom command, types `/queue-au` to open the real custom slash-command autocomplete, presses Ctrl+F, verifies the pending message is the completed `//queue-auto` command and the footer shows `1 queued`, then waits for FIFO slash-command drain. AIMock verification proves the drained request contains the processed custom-command payload.

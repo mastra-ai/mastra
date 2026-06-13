@@ -2,6 +2,7 @@ export type ScenarioName =
   | 'startup'
   | 'branch-context-long-name'
   | 'active-signal-followup'
+  | 'autocomplete-wrapping-navigation'
   | 'api-key-delete-env'
   | 'api-key-multi-provider-delete'
   | 'api-key-prompt'
