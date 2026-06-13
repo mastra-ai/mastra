@@ -317,15 +317,17 @@ export class MastraTUI {
         }
 
         const { content, images } = consumePendingImages(userInput, this.state.pendingImages);
-        this.state.pendingImages = [];
 
         const optimisticMessageId = this.renderOptimisticUserMessage(content, images);
         const allowed = await this.runUserPromptHook(userInput);
         if (!allowed) {
           this.removeOptimisticUserMessage(optimisticMessageId);
+          this.state.editor.setText(userInput);
+          this.state.ui.requestRender();
           continue;
         }
 
+        this.state.pendingImages = [];
         this.sendOptimisticSignal(content, images, optimisticMessageId, pendingNewThread);
       } catch (error) {
         showError(this.state, error instanceof Error ? error.message : 'Unknown error');

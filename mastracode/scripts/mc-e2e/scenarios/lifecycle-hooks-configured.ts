@@ -109,6 +109,7 @@ console.log('HOOK_BLOCK_LOG=after:UserPromptSubmit:true');
     terminal.submit(blockedPrompt);
     await runtime.waitForScreenText(/blocked after reload e2e/i, terminal);
     runtime.printScreen('after blocked prompt', terminal);
+    terminal.write('\x15');
 
     terminal.submit('!node .mastracode/assert-hook-log.cjs');
     await runtime.waitForScreenText(/HOOK_BLOCK_LOG=after:UserPromptSubmit:true/i, terminal);

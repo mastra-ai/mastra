@@ -24,6 +24,7 @@ import { customProviderEditShareImportScenario } from './custom-provider-edit-sh
 import { customProviderManagementScenario } from './custom-provider-management.js';
 import { customSlashCommandScenario } from './custom-slash-command.js';
 import { debugLoggingScenario } from './debug-logging.js';
+import { fileAttachmentBlockedRetryScenario } from './file-attachment-blocked-retry.js';
 import { fileAttachmentHistoryReloadScenario } from './file-attachment-history-reload.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
 import { firstRunOnboardingScenario } from './first-run-onboarding.js';
@@ -138,6 +139,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'custom-provider-management': customProviderManagementScenario,
   'custom-slash-command': customSlashCommandScenario,
   'debug-logging': debugLoggingScenario,
+  'file-attachment-blocked-retry': fileAttachmentBlockedRetryScenario,
   'file-attachment-history-reload': fileAttachmentHistoryReloadScenario,
   'file-autocomplete': fileAutocompleteScenario,
   'first-run-onboarding': firstRunOnboardingScenario,

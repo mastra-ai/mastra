@@ -1,5 +1,25 @@
 # Mastra Code testing recovery history
 
+### File attachment blocked-retry coverage (2026-06-13)
+
+Fixed the pasted-image idle submit path so pending images are cleared only after `UserPromptSubmit` allows the prompt. If the hook blocks, Mastra Code now removes the optimistic message, restores the editor text, keeps the `[image]` placeholder backed by the original pending image, and lets the user press Enter again to retry.
+
+Added `file-attachment-blocked-retry`, a real PTY e2e scenario with a project `UserPromptSubmit` hook that blocks the first pasted-image submission and allows the retry. The scenario verifies the blocked state renders the hook error plus retryable `prompt [image]`, then asserts the retry creates exactly one AIMock request whose raw OpenAI request body contains the PNG file part and no `[image]` placeholder.
+
+Focused proof:
+
+```sh
+pnpm --filter ./mastracode run e2e:test file-attachment-blocked-retry
+```
+
+Break validations:
+
+1. Restored the old behavior that cleared `pendingImages` before the hook decision: retry reached AIMock but rendered text-only history, so `[1 image]` never appeared.
+2. Removed editor restoration on hook block: the scenario timed out waiting for retryable `prompt [image]` input after the hook error.
+3. Dropped file parts from `createUserSignalContent()`: the visible TUI flow passed, but raw provider-request verification failed because the PNG file payload was missing.
+
+All breaks were reverted and the focused scenario passed cleanly.
+
 ### File attachment loaded-history coverage (2026-06-13)
 
 Added `file-attachment-history-reload`, a real PTY e2e scenario that seeds persisted user signal history containing projected text-file content, an image file part, and a binary file part. The scenario opens the saved thread through `/threads` and verifies loaded history renders `[1 image] [1 file]`, the `[File: notes.md]` label, and the text attachment body, while asserting raw base64 payloads do not leak into the terminal.
