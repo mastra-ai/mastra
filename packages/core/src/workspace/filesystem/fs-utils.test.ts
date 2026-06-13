@@ -206,6 +206,17 @@ describe('isTextFile', () => {
   it('returns false for a file with no extension', () => expect(isTextFile('Makefile')).toBe(false));
 
   it('is case-insensitive', () => expect(isTextFile('README.MD')).toBe(true));
+
+  // Extensions added in this PR
+  it('returns true for .mdx', () => expect(isTextFile('page.mdx')).toBe(true));
+  it('returns true for .scss', () => expect(isTextFile('styles.scss')).toBe(true));
+  it('returns true for .sass', () => expect(isTextFile('styles.sass')).toBe(true));
+  it('returns true for .less', () => expect(isTextFile('styles.less')).toBe(true));
+  it('returns true for .svelte', () => expect(isTextFile('App.svelte')).toBe(true));
+  it('returns true for .php', () => expect(isTextFile('index.php')).toBe(true));
+  it('returns true for .kt', () => expect(isTextFile('Main.kt')).toBe(true));
+  it('returns true for .tf', () => expect(isTextFile('main.tf')).toBe(true));
+  it('returns true for .dart', () => expect(isTextFile('main.dart')).toBe(true));
 });
 
 // ---------------------------------------------------------------------------
