@@ -12,6 +12,10 @@ import type {
   ToolsetsInput,
 } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
+import { ModelRouterLanguageModel } from '../llm/model';
+import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { GatewayAuthResult, MastraModelGatewayInterface, ProviderConfig } from '../llm/model/gateways';
+import { getGatewayId } from '../llm/model/gateways';
 import { getServerSideFallbackInfo } from '../llm/model/server-side-fallback';
 import { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -580,6 +584,7 @@ export class Harness<TState = {}> {
         storage: this.config.storage,
         ...(this.config.pubsub ? { pubsub: this.config.pubsub } : {}),
         ...(this.config.observability ? { observability: this.config.observability } : {}),
+        ...(this.getGatewayRecord() ? { gateways: this.getGatewayRecord() } : {}),
       });
       await this.#internalMastra.getStorage()!.init();
     }
@@ -983,7 +988,7 @@ export class Harness<TState = {}> {
       // Ignore catalog lookup errors and fall through to provider-based checks.
     }
 
-    const provider = modelId.split('/')[0];
+    const provider = this.getProviderKeyForRouterId(modelId);
     if (!provider) return { hasAuth: true };
 
     if (this.config.modelAuthChecker) {
@@ -995,12 +1000,13 @@ export class Harness<TState = {}> {
       }
     }
 
+    const gatewayAuth = await this.resolveProviderAuth(modelId);
+    if (gatewayAuth) return { hasAuth: true };
+
     try {
-      const { PROVIDER_REGISTRY } = await import('../llm/model/provider-registry.js');
-      const registry = PROVIDER_REGISTRY as Record<string, { apiKeyEnvVar?: string | string[] }>;
-      const providerConfig = registry[provider];
-      const envVars = providerConfig?.apiKeyEnvVar;
-      const apiKeyEnvVar = Array.isArray(envVars) ? envVars[0] : envVars;
+      const providers = await this.getProviderConfigs();
+      const providerConfig = providers[provider];
+      const apiKeyEnvVar = this.getApiKeyEnvVar(providerConfig);
       if (apiKeyEnvVar && process.env[apiKeyEnvVar]) {
         return { hasAuth: true };
       }
@@ -1022,14 +1028,7 @@ export class Harness<TState = {}> {
     }
 
     try {
-      const { PROVIDER_REGISTRY } = await import('../llm/model/provider-registry.js');
-
-      if (!PROVIDER_REGISTRY) return [];
-
-      const registry = PROVIDER_REGISTRY as Record<
-        string,
-        { models?: string[]; name?: string; apiKeyEnvVar?: string | string[] }
-      >;
+      const registry = await this.getProviderConfigs();
       const providers = Object.keys(registry);
       const useCounts = this.config.modelUseCountProvider?.() ?? {};
       const modelsById = new Map<string, AvailableModel>();
@@ -1044,20 +1043,26 @@ export class Harness<TState = {}> {
 
       for (const provider of providers) {
         const providerConfig = registry[provider];
-        const envVars = providerConfig?.apiKeyEnvVar;
-        const apiKeyEnvVar = Array.isArray(envVars) ? envVars[0] : envVars;
+        const apiKeyEnvVar = this.getApiKeyEnvVar(providerConfig);
         const hasEnvKey = apiKeyEnvVar ? !!process.env[apiKeyEnvVar] : false;
 
-        let hasApiKey = hasEnvKey;
-        if (!hasApiKey && this.config.modelAuthChecker) {
+        let hasProviderAuth = hasEnvKey;
+        if (!hasProviderAuth && this.config.modelAuthChecker) {
           const customAuth = this.config.modelAuthChecker(provider);
-          if (customAuth === true) hasApiKey = true;
+          if (customAuth === true) hasProviderAuth = true;
         }
 
-        if (providerConfig?.models && Array.isArray(providerConfig.models)) {
-          for (const modelName of providerConfig.models) {
+        const modelNames = providerConfig?.models;
+        if (modelNames && Array.isArray(modelNames)) {
+          for (const modelName of modelNames) {
+            const id = `${provider}/${modelName}`;
+            let hasApiKey = hasProviderAuth;
+            if (!hasApiKey) {
+              hasApiKey = Boolean(await this.resolveProviderAuth(id));
+            }
+
             upsertModel({
-              id: `${provider}/${modelName}`,
+              id,
               provider,
               modelName,
               hasApiKey,
@@ -1099,12 +1104,143 @@ export class Harness<TState = {}> {
     this.availableModelsCacheTime = 0;
   }
 
+  private getGateways(): MastraModelGatewayInterface[] {
+    const gatewaysById = new Map<string, MastraModelGatewayInterface>();
+
+    const addGateway = (gateway: MastraModelGatewayInterface | undefined) => {
+      if (!gateway) return;
+      const gatewayId = getGatewayId(gateway);
+      if (!gatewaysById.has(gatewayId)) {
+        gatewaysById.set(gatewayId, gateway);
+      }
+    };
+
+    for (const gateway of this.config.gateways ?? []) {
+      addGateway(gateway);
+    }
+
+    const mastraGateways = this.#internalMastra?.listGateways?.();
+    for (const gateway of Object.values(mastraGateways ?? {})) {
+      addGateway(gateway);
+    }
+
+    return [...gatewaysById.values()];
+  }
+
+  private getGatewayRecord(): Record<string, MastraModelGatewayInterface> | undefined {
+    if (!this.config.gateways?.length) return undefined;
+
+    return Object.fromEntries(this.config.gateways.map(gateway => [getGatewayId(gateway), gateway]));
+  }
+
+  private resolveModel(modelId: string): MastraLanguageModel {
+    if (this.config.resolveModel) {
+      return this.config.resolveModel(modelId);
+    }
+
+    return new ModelRouterLanguageModel(modelId as never, this.getGateways()) as MastraLanguageModel;
+  }
+
+  private parseModelRouterId(routerId: string, gateway?: MastraModelGatewayInterface): {
+    gatewayId?: string;
+    providerId: string;
+    modelId: string;
+  } {
+    const [firstPart = '', secondPart = '', ...restParts] = routerId.split('/');
+    const gatewayId = gateway ? getGatewayId(gateway) : undefined;
+
+    if (gatewayId && firstPart === gatewayId && secondPart) {
+      return {
+        gatewayId,
+        providerId: secondPart,
+        modelId: restParts.join('/'),
+      };
+    }
+
+    return {
+      gatewayId,
+      providerId: firstPart,
+      modelId: [secondPart, ...restParts].filter(Boolean).join('/'),
+    };
+  }
+
+  private hasResolvedAuth(auth: GatewayAuthResult | undefined): boolean {
+    if (!auth) return false;
+    if (auth.apiKey || auth.bearerToken) return true;
+    return auth.headers ? Object.keys(auth.headers).length > 0 : false;
+  }
+
+  private async resolveProviderAuth(routerId: string): Promise<GatewayAuthResult | undefined> {
+    for (const gateway of this.getGateways()) {
+      if (!gateway.resolveAuth) continue;
+
+      const gatewayId = getGatewayId(gateway);
+      const parsed = this.parseModelRouterId(routerId, gateway);
+
+      try {
+        const result = await gateway.resolveAuth({
+          gatewayId,
+          providerId: parsed.providerId,
+          modelId: parsed.modelId,
+          routerId,
+        });
+        if (this.hasResolvedAuth(result)) {
+          return result;
+        }
+      } catch {
+        // Auth lookup should be best-effort; fall back to the registry/env checks.
+      }
+    }
+
+    return undefined;
+  }
+
+  private getGatewayProviderKey(gatewayId: string, providerId: string): string {
+    if (gatewayId === 'models.dev') return providerId;
+    return providerId === gatewayId ? gatewayId : `${gatewayId}/${providerId}`;
+  }
+
+  private getProviderKeyForRouterId(routerId: string): string {
+    const [firstPart = '', secondPart = ''] = routerId.split('/');
+    const matchingGateway = this.getGateways().find(gateway => getGatewayId(gateway) === firstPart);
+    if (matchingGateway && getGatewayId(matchingGateway) !== 'models.dev' && secondPart) {
+      return this.getGatewayProviderKey(firstPart, secondPart);
+    }
+    return firstPart;
+  }
+
+  private async getProviderConfigs(): Promise<Record<string, ProviderConfig>> {
+    const { PROVIDER_REGISTRY } = await import('../llm/model/provider-registry.js');
+    const providers: Record<string, ProviderConfig> = { ...(PROVIDER_REGISTRY as Record<string, ProviderConfig>) };
+
+    for (const gateway of this.getGateways()) {
+      const gatewayId = getGatewayId(gateway);
+      try {
+        const gatewayProviders = await gateway.fetchProviders();
+        for (const [providerId, config] of Object.entries(gatewayProviders)) {
+          const providerKey = this.getGatewayProviderKey(gatewayId, providerId);
+          providers[providerKey] = {
+            ...config,
+            gateway: gatewayId,
+          };
+        }
+      } catch (error) {
+        console.warn(`Failed to load providers from gateway ${gatewayId}:`, error);
+      }
+    }
+
+    return providers;
+  }
+
+  private getApiKeyEnvVar(providerConfig: Pick<ProviderConfig, 'apiKeyEnvVar'> | undefined): string | undefined {
+    const envVars = providerConfig?.apiKeyEnvVar;
+    return Array.isArray(envVars) ? envVars[0] : envVars;
+  }
+
   private async getProviderApiKeyEnvVar(provider: string): Promise<string | undefined> {
     try {
-      const { PROVIDER_REGISTRY } = await import('../llm/model/provider-registry.js');
-      const registry = PROVIDER_REGISTRY as Record<string, { apiKeyEnvVar?: string | string[] }>;
-      const envVars = registry[provider]?.apiKeyEnvVar;
-      return Array.isArray(envVars) ? envVars[0] : envVars;
+      const providers = await this.getProviderConfigs();
+      return this.getApiKeyEnvVar(providers[provider]);
     } catch {
       return undefined;
     }
@@ -1728,21 +1864,21 @@ export class Harness<TState = {}> {
   }
 
   /**
-   * Resolves the observer model ID to a language model instance via `resolveModel`.
+   * Resolves the observer model ID to a language model instance via the configured resolver or gateways.
    */
   getResolvedObserverModel() {
     const modelId = this.getObserverModelId();
-    if (!modelId || !this.config.resolveModel) return undefined;
-    return this.config.resolveModel(modelId);
+    if (!modelId || (!this.config.resolveModel && !this.config.gateways?.length)) return undefined;
+    return this.resolveModel(modelId);
   }
 
   /**
-   * Resolves the reflector model ID to a language model instance via `resolveModel`.
+   * Resolves the reflector model ID to a language model instance via the configured resolver or gateways.
    */
   getResolvedReflectorModel() {
     const modelId = this.getReflectorModelId();
-    if (!modelId || !this.config.resolveModel) return undefined;
-    return this.config.resolveModel(modelId);
+    if (!modelId || (!this.config.resolveModel && !this.config.gateways?.length)) return undefined;
+    return this.resolveModel(modelId);
   }
 
   /**
@@ -4247,12 +4383,12 @@ export class Harness<TState = {}> {
     }
 
     // Auto-create subagent tool if subagent definitions are configured
-    if (this.config.subagents?.length && this.config.resolveModel) {
+    if (this.config.subagents?.length && (this.config.resolveModel || this.config.gateways?.length)) {
       const currentMode = this.getCurrentMode();
       const hasMemory = Boolean(this.config.memory);
       builtInTools.subagent = createSubagentTool({
         subagents: this.config.subagents,
-        resolveModel: this.config.resolveModel,
+        resolveModel: modelId => this.resolveModel(modelId),
         harnessTools: resolvedHarnessTools,
         fallbackModelId: currentMode?.defaultModelId,
         getParentModelId: () => this.getCurrentModelId(),

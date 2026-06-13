@@ -8,6 +8,7 @@ import type {
   GatewayAuthResult,
   GatewayLanguageModel,
   MastraModelGatewayInterface,
+  ProviderConfig,
 } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { wrapLanguageModel } from 'ai';
@@ -19,7 +20,7 @@ import {
   opencodeClaudeMaxProvider,
   promptCacheMiddleware,
 } from '../providers/claude-max.js';
-import { githubCopilotProvider } from '../providers/github-copilot.js';
+import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/github-copilot.js';
 import {
   buildOpenAICodexOAuthFetch,
   createCodexMiddleware,
@@ -153,8 +154,12 @@ function openaiApiKeyProvider(modelId: string, apiKey: string, headers?: ModelRe
   });
 }
 
+function getAuthProviderId(providerId: string): string {
+  return providerId === 'openai' ? 'openai-codex' : providerId;
+}
+
 function getProviderAuthKey(providerId: string): string | undefined {
-  const authProviderId = providerId === 'openai' ? 'openai-codex' : providerId;
+  const authProviderId = getAuthProviderId(providerId);
   const storedCred = authStorage.get(authProviderId);
   if (storedCred?.type === 'api_key' && storedCred.key.trim().length > 0) {
     return storedCred.key.trim();
@@ -167,30 +172,67 @@ export function resolveAuth(request: GatewayAuthRequest, memoryGatewayApiKey?: s
     return { apiKey: memoryGatewayApiKey, source: 'gateway' };
   }
 
+  const storedCred = authStorage.get(getAuthProviderId(request.providerId));
+  if (storedCred?.type === 'oauth') {
+    return { bearerToken: 'oauth', source: 'gateway' };
+  }
+
   const apiKey = getProviderAuthKey(request.providerId);
   return apiKey ? { apiKey, source: 'gateway' } : undefined;
 }
 
-function createMastraCodeGateway({
+type MastraCodeCustomProvider = { name: string; url: string; apiKey?: string; models?: string[] };
+
+export function createMastraCodeGateway({
   mastraGatewayBaseUrl,
   mastraGatewayApiKey,
   routeThroughMastraGateway,
   thinkingLevel,
   customProviders,
+  settingsPath,
 }: {
   mastraGatewayBaseUrl: string;
   mastraGatewayApiKey?: string;
   routeThroughMastraGateway: boolean;
   thinkingLevel?: ThinkingLevel;
-  customProviders: Array<{ name: string; url: string; apiKey?: string }>;
+  customProviders?: MastraCodeCustomProvider[];
+  settingsPath?: string;
 }): MastraModelGatewayInterface {
   const mastraGateway = new MastraGateway({ baseUrl: mastraGatewayBaseUrl });
+  const getCustomProviders = (): MastraCodeCustomProvider[] => customProviders ?? loadSettings(settingsPath).customProviders;
 
   return {
     id: MASTRACODE_GATEWAY_ID,
     name: 'MastraCode Gateway',
     async fetchProviders() {
-      return {};
+      const providers: Record<string, ProviderConfig> = {};
+      for (const provider of getCustomProviders()) {
+        const models = provider.models ?? [];
+        if (!models.length) continue;
+        providers[getCustomProviderId(provider.name)] = {
+          name: provider.name,
+          url: provider.url,
+          apiKeyEnvVar: '',
+          apiKeyHeader: 'Authorization',
+          gateway: MASTRACODE_GATEWAY_ID,
+          models,
+        };
+      }
+
+      try {
+        const copilotModels = await getCopilotModelCatalog({ authStorage });
+        providers['github-copilot'] = {
+          name: 'GitHub Copilot',
+          apiKeyEnvVar: '',
+          apiKeyHeader: 'Authorization',
+          gateway: MASTRACODE_GATEWAY_ID,
+          models: copilotModels.map(model => model.id),
+        };
+      } catch (error) {
+        console.warn('Failed to load GitHub Copilot model catalog:', error);
+      }
+
+      return providers;
     },
     buildUrl(modelId: string) {
       return routeThroughMastraGateway ? mastraGateway.buildUrl(modelId) : modelId;
@@ -205,9 +247,7 @@ function createMastraCodeGateway({
         return { apiKey: mastraGatewayApiKey, source: 'gateway' };
       }
 
-      const customProvider = customProviders.find(
-        provider => request.providerId === getCustomProviderId(provider.name),
-      );
+      const customProvider = getCustomProviders().find(provider => request.providerId === getCustomProviderId(provider.name));
       if (customProvider?.apiKey) {
         return { apiKey: customProvider.apiKey, source: 'gateway' };
       }
@@ -215,7 +255,7 @@ function createMastraCodeGateway({
       return resolveAuth(request);
     },
     resolveLanguageModel(args: GatewayResolveLanguageModelArgs) {
-      const customProvider = customProviders.find(provider => args.providerId === getCustomProviderId(provider.name));
+      const customProvider = getCustomProviders().find(provider => args.providerId === getCustomProviderId(provider.name));
       if (customProvider) {
         const provider = createOpenAICompatible({
           name: args.providerId,

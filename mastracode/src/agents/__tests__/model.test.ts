@@ -46,8 +46,10 @@ vi.mock('../../providers/openai-codex.js', () => ({
   },
 }));
 
+const mockGetCopilotModelCatalog = vi.hoisted(() => vi.fn(async () => []));
 vi.mock('../../providers/github-copilot.js', () => ({
   githubCopilotProvider: vi.fn(() => ({ __provider: 'github-copilot' })),
+  getCopilotModelCatalog: mockGetCopilotModelCatalog,
 }));
 
 // Mock @ai-sdk/anthropic
@@ -163,7 +165,14 @@ import { wrapLanguageModel } from 'ai';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { opencodeClaudeMaxProvider, buildAnthropicOAuthFetch } from '../../providers/claude-max.js';
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
-import { resolveModel, getDynamicModel, getAnthropicApiKey, getOpenAIApiKey, resolveAuth } from '../model.js';
+import {
+  createMastraCodeGateway,
+  resolveModel,
+  getDynamicModel,
+  getAnthropicApiKey,
+  getOpenAIApiKey,
+  resolveAuth,
+} from '../model.js';
 
 function makeRequestContext({ threadId, resourceId }: { threadId?: string; resourceId?: string } = {}) {
   const values = new Map<string, unknown>();
@@ -196,6 +205,41 @@ describe('resolveModel', () => {
 
   afterEach(() => {
     process.env = { ...originalEnv };
+  });
+
+  it('discovers custom and Copilot providers through the MastraCode gateway', async () => {
+    mockLoadSettings.mockReturnValue({
+      customProviders: [
+        {
+          name: 'Acme Models',
+          url: 'https://llm.acme.dev/v1',
+          apiKey: 'acme-secret',
+          models: ['reasoner-v1'],
+        } as any,
+      ],
+      memoryGateway: {},
+    });
+    mockGetCopilotModelCatalog.mockResolvedValueOnce([{ id: 'gpt-4.1' }] as any);
+
+    const gateway = createMastraCodeGateway({
+      mastraGatewayBaseUrl: 'https://gateway-api.mastra.ai',
+      routeThroughMastraGateway: false,
+    });
+
+    await expect(gateway.fetchProviders()).resolves.toMatchObject({
+      'acme-models': {
+        name: 'Acme Models',
+        url: 'https://llm.acme.dev/v1',
+        gateway: 'mastracode',
+        models: ['reasoner-v1'],
+      },
+      'github-copilot': {
+        name: 'GitHub Copilot',
+        gateway: 'mastracode',
+        models: ['gpt-4.1'],
+      },
+    });
+    expect(mockGetCopilotModelCatalog).toHaveBeenCalled();
   });
 
   describe('anthropic/* models', () => {
