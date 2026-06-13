@@ -6,7 +6,10 @@ import type {
   DynamicToolCall,
   DynamicToolResult,
 } from '@internal/ai-sdk-v5';
+import { WORKFLOW_SNAPSHOT_SERIALIZER } from '../../../workflows/snapshot-serialization';
 import type { StepTripwireData } from '../../types';
+
+export { WORKFLOW_SNAPSHOT_SERIALIZER };
 
 // ContentPart is not exported from ai, so we derive it from StepResult
 type ContentPart<TOOLS extends ToolSet> = StepResult<TOOLS>['content'][number];
@@ -18,6 +21,7 @@ export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOL
   readonly request: StepResult<TOOLS>['request'];
   readonly response: StepResult<TOOLS>['response'];
   readonly providerMetadata: StepResult<TOOLS>['providerMetadata'];
+  readonly #serializedResponseMessages?: StepResult<TOOLS>['response']['messages'];
   /** Tripwire data if this step was rejected by a processor */
   readonly tripwire?: StepTripwireData;
 
@@ -29,6 +33,7 @@ export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOL
     request,
     response,
     providerMetadata,
+    serializedResponseMessages,
     tripwire,
   }: {
     content: StepResult<TOOLS>['content'];
@@ -38,6 +43,7 @@ export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOL
     request: StepResult<TOOLS>['request'];
     response: StepResult<TOOLS>['response'];
     providerMetadata: StepResult<TOOLS>['providerMetadata'];
+    serializedResponseMessages?: StepResult<TOOLS>['response']['messages'];
     tripwire?: StepTripwireData;
   }) {
     this.content = content;
@@ -47,7 +53,30 @@ export class DefaultStepResult<TOOLS extends ToolSet> implements StepResult<TOOL
     this.request = request;
     this.response = response;
     this.providerMetadata = providerMetadata;
+    this.#serializedResponseMessages = serializedResponseMessages;
     this.tripwire = tripwire;
+  }
+
+  /**
+   * Workflow snapshot persistence hook: persist only the response messages this
+   * step added (when known) instead of the cumulative history, so long agentic
+   * runs don't store the conversation once per step. Runtime consumers keep
+   * reading the cumulative `this.response.messages`.
+   */
+  [WORKFLOW_SNAPSHOT_SERIALIZER]() {
+    return {
+      content: this.content,
+      finishReason: this.finishReason,
+      usage: this.usage,
+      warnings: this.warnings,
+      request: this.request,
+      response: {
+        ...this.response,
+        ...(this.#serializedResponseMessages ? { messages: this.#serializedResponseMessages } : {}),
+      },
+      providerMetadata: this.providerMetadata,
+      tripwire: this.tripwire,
+    };
   }
 
   get text() {

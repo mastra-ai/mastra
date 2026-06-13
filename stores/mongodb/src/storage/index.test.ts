@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import {
   createTestSuite,
   createClientAcceptanceTests,
@@ -179,6 +180,284 @@ createDomainDirectTests({
       uri: TEST_CONFIG.uri!,
       dbName: TEST_CONFIG.dbName!,
     }),
+});
+
+describe('WorkflowsStorageMongoDB workflow snapshot merge operations', () => {
+  it('atomically merges forEach partial step result arrays', async () => {
+    const workflowDomain = new WorkflowsStorageMongoDB(TEST_CONFIG);
+    const workflowName = `workflow-merge-${randomUUID()}`;
+    const runId = `run-${randomUUID()}`;
+
+    try {
+      await workflowDomain.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          context: {
+            foreach: {
+              status: 'success',
+              output: [1, 2],
+              payload: ['a', 'b', 'c'],
+            },
+          },
+        } as any,
+      });
+
+      const context = await workflowDomain.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'foreach',
+        result: {
+          __mastra_foreach__: true,
+          status: 'success',
+          output: [null, null, 3],
+          payload: ['a', 'b', 'c'],
+        } as any,
+        requestContext: { incoming: true },
+      });
+
+      expect(context.foreach?.output).toEqual([1, 2, 3]);
+
+      const snapshot = await workflowDomain.loadWorkflowSnapshot({ namespace: 'workflows', workflowName, runId });
+      expect(snapshot?.context.foreach?.output).toEqual([1, 2, 3]);
+      expect(snapshot?.requestContext).toEqual({ incoming: true });
+    } finally {
+      await workflowDomain.deleteWorkflowRunById({ workflowName, runId });
+    }
+  });
+
+  it('does not treat user outputs shaped like suspended results as partial foreach markers', async () => {
+    const workflowDomain = new WorkflowsStorageMongoDB(TEST_CONFIG);
+    const workflowName = `workflow-user-status-${randomUUID()}`;
+    const runId = `run-${randomUUID()}`;
+
+    try {
+      await workflowDomain.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          context: {
+            foreach: {
+              status: 'success',
+              output: [{ status: 'suspended', suspendedAt: 1, suspendPayload: { reason: 'user-domain-status' } }, 2],
+              payload: ['a', 'b'],
+            },
+          },
+        } as any,
+      });
+
+      const context = await workflowDomain.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'foreach',
+        result: {
+          __mastra_foreach__: true,
+          status: 'success',
+          output: [{ status: 'suspended', suspendedAt: 2, suspendPayload: { reason: 'new-user-domain-status' } }],
+          payload: ['a', 'b'],
+        } as any,
+        requestContext: {},
+      });
+
+      expect(context.foreach?.output).toEqual([
+        { status: 'suspended', suspendedAt: 2, suspendPayload: { reason: 'new-user-domain-status' } },
+      ]);
+    } finally {
+      await workflowDomain.deleteWorkflowRunById({ workflowName, runId });
+    }
+  });
+
+  it('does not clear completed foreach values from stale pending-marker writes', async () => {
+    const workflowDomain = new WorkflowsStorageMongoDB(TEST_CONFIG);
+    const workflowName = `workflow-pending-marker-${randomUUID()}`;
+    const runId = `run-${randomUUID()}`;
+
+    try {
+      await workflowDomain.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          context: {
+            foreach: {
+              status: 'success',
+              output: [{ value: 'done' }, { status: 'suspended', suspendedAt: 1, suspendPayload: {} }],
+              payload: ['a', 'b'],
+            },
+          },
+        } as any,
+      });
+
+      const context = await workflowDomain.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'foreach',
+        result: {
+          __mastra_foreach__: true,
+          status: 'success',
+          output: [{ __mastra_pending__: true }, { __mastra_pending__: true }],
+          payload: ['a', 'b'],
+        } as any,
+        requestContext: {},
+      });
+
+      expect(context.foreach?.output).toEqual([
+        { value: 'done' },
+        { status: 'suspended', suspendedAt: 1, suspendPayload: {} },
+      ]);
+      expect(context.foreach?.payload).toEqual(['a', 'b']);
+    } finally {
+      await workflowDomain.deleteWorkflowRunById({ workflowName, runId });
+    }
+  });
+
+  it('replaces normal array outputs for object-payload steps', async () => {
+    const workflowDomain = new WorkflowsStorageMongoDB(TEST_CONFIG);
+    const workflowName = `workflow-object-payload-${randomUUID()}`;
+    const runId = `run-${randomUUID()}`;
+
+    try {
+      await workflowDomain.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          context: {
+            'array-step': {
+              status: 'success',
+              output: [1, 2, 3],
+              payload: { input: true },
+            },
+          },
+        } as any,
+      });
+
+      const context = await workflowDomain.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'array-step',
+        result: {
+          status: 'success',
+          output: [null],
+          payload: { input: false },
+        } as any,
+        requestContext: {},
+      });
+
+      expect(context['array-step']?.output).toEqual([null]);
+      expect(context['array-step']?.payload).toEqual({ input: false });
+    } finally {
+      await workflowDomain.deleteWorkflowRunById({ workflowName, runId });
+    }
+  });
+
+  it('replaces normal array outputs for array-payload steps', async () => {
+    const workflowDomain = new WorkflowsStorageMongoDB(TEST_CONFIG);
+    const workflowName = `workflow-array-payload-${randomUUID()}`;
+    const runId = `run-${randomUUID()}`;
+
+    try {
+      await workflowDomain.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          context: {
+            'array-step': {
+              status: 'success',
+              output: [1, 2, 3],
+              payload: ['input-a', 'input-b'],
+            },
+          },
+        } as any,
+      });
+
+      const context = await workflowDomain.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'array-step',
+        result: {
+          status: 'success',
+          output: [null],
+          payload: ['input-a', 'input-b'],
+        } as any,
+        requestContext: {},
+      });
+
+      expect(context['array-step']?.output).toEqual([null]);
+      expect(context['array-step']?.payload).toEqual(['input-a', 'input-b']);
+    } finally {
+      await workflowDomain.deleteWorkflowRunById({ workflowName, runId });
+    }
+  });
+
+  it('stores null as a completed foreach iteration output', async () => {
+    const workflowDomain = new WorkflowsStorageMongoDB(TEST_CONFIG);
+    const workflowName = `workflow-null-foreach-output-${randomUUID()}`;
+    const runId = `run-${randomUUID()}`;
+
+    try {
+      await workflowDomain.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        snapshot: {
+          runId,
+          status: 'running',
+          context: {
+            foreach: {
+              status: 'success',
+              output: ['old-value', null],
+              payload: ['a', 'b'],
+            },
+          },
+        } as any,
+      });
+
+      const context = await workflowDomain.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'foreach',
+        result: {
+          __mastra_foreach__: true,
+          __mastra_foreach_completed_indexes__: [0],
+          status: 'success',
+          output: [null, null],
+          payload: ['a', 'b'],
+        } as any,
+        requestContext: {},
+      });
+
+      expect(context.foreach?.output).toEqual([null, null]);
+      expect(context.foreach).not.toHaveProperty('__mastra_foreach__');
+      expect(context.foreach?.__mastra_foreach_completed_indexes__).toEqual([0]);
+
+      const staleSiblingContext = await workflowDomain.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'foreach',
+        result: {
+          __mastra_foreach__: true,
+          __mastra_foreach_completed_indexes__: [1],
+          status: 'success',
+          output: ['stale-old-value', 'done'],
+          payload: ['a', 'b'],
+        } as any,
+        requestContext: {},
+      });
+
+      expect(staleSiblingContext.foreach?.output).toEqual([null, 'done']);
+      expect(staleSiblingContext.foreach?.__mastra_foreach_completed_indexes__).toEqual([0, 1]);
+    } finally {
+      await workflowDomain.deleteWorkflowRunById({ workflowName, runId });
+    }
+  });
 });
 
 // MongoDB-specific: connectorHandler with real operations

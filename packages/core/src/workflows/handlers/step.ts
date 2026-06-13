@@ -120,15 +120,19 @@ export async function executeStep(
     });
 
   let resumeDataToUse: unknown;
-  if (timeTravelResumeData && !timeTravelResumeValidationError) {
+  let isResumingStep = false;
+  const hasTimeTravelResumeData = timeTravelResumeData !== undefined;
+  if (hasTimeTravelResumeData && !timeTravelResumeValidationError) {
     resumeDataToUse = timeTravelResumeData;
-  } else if (timeTravelResumeData && timeTravelResumeValidationError) {
+    isResumingStep = true;
+  } else if (hasTimeTravelResumeData && timeTravelResumeValidationError) {
     engine.getLogger().warn('Time travel resume data validation failed', {
       stepId: step.id,
       error: timeTravelResumeValidationError.message,
     });
   } else if (resume?.steps[0] === step.id) {
     resumeDataToUse = resume?.resumePayload;
+    isResumingStep = true;
   }
 
   // Extract suspend data if this step was previously suspended
@@ -141,12 +145,12 @@ export async function executeStep(
     suspendDataToUse = userSuspendData;
   }
 
-  const startTime = resumeDataToUse ? undefined : Date.now();
-  const resumeTime = resumeDataToUse ? Date.now() : undefined;
+  const startTime = isResumingStep ? undefined : Date.now();
+  const resumeTime = isResumingStep ? Date.now() : undefined;
 
   const stepInfo = {
-    ...stepResults[step.id],
-    ...(resumeDataToUse ? { resumePayload: resumeDataToUse } : { payload: inputData }),
+    ...(isResumingStep ? stepResults[step.id] : {}),
+    ...(isResumingStep ? { resumePayload: resumeDataToUse } : { payload: inputData }),
     ...(startTime ? { startedAt: startTime } : {}),
     ...(resumeTime ? { resumedAt: resumeTime } : {}),
     status: 'running',

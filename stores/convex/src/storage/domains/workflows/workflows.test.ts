@@ -185,6 +185,55 @@ describe('WorkflowsConvex atomic workflow updates', () => {
     ]);
   });
 
+  it('serializes workflow snapshot-only values before sending step result updates', async () => {
+    const requests: StorageRequest[] = [];
+    const callStorage = vi.fn(async (request: StorageRequest) => {
+      requests.push(request);
+      if (request.op === 'mergeWorkflowStepResult') {
+        return JSON.stringify({
+          [request.stepId]: JSON.parse(request.result),
+        });
+      }
+      return undefined;
+    });
+
+    const client = new ConvexAdminClient({
+      deploymentUrl: 'https://example.convex.cloud',
+      adminAuthToken: 'test-token',
+    });
+    (client as unknown as { callStorage: typeof callStorage }).callStorage = callStorage;
+    const workflows = new WorkflowsConvex({ client });
+
+    const liveStep = {
+      response: { messages: ['first', 'second'] },
+      [Symbol.for('mastra.workflowSnapshotSerializer')]() {
+        return { response: { messages: ['second'] } };
+      },
+    };
+
+    // Runtime callers get the raw (cumulative) view back for non-foreach results…
+    await expect(
+      workflows.updateWorkflowResults({
+        workflowName: 'workflow-a',
+        runId: 'run-1',
+        stepId: 'step-1',
+        result: { status: 'success', output: { steps: [liveStep] } } as any,
+        requestContext: {},
+      }),
+    ).resolves.toEqual({
+      'step-1': { status: 'success', output: { steps: [{ response: { messages: ['first', 'second'] } }] } },
+    });
+
+    // …while the payload sent to Convex (what gets persisted) is the serialized delta.
+    expect(requests[0]).toMatchObject({
+      op: 'mergeWorkflowStepResult',
+      result: JSON.stringify({
+        status: 'success',
+        output: { steps: [{ response: { messages: ['second'] } }] },
+      }),
+    });
+  });
+
   it('delegates workflow state updates to the Convex storage merge op', async () => {
     const requests: StorageRequest[] = [];
     const callStorage = vi.fn(async (request: StorageRequest) => {

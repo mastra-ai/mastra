@@ -9,6 +9,7 @@ import { createWorkflow as createDirectWorkflow, createEventedWorkflow } from '.
 import type { OutputWriter } from '../../../workflows/types';
 import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
+import { restoreCumulativeStepResponseMessages } from '../agentic-execution/llm-execution-step';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
 
@@ -82,6 +83,15 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
     .dowhile(agenticExecutionWorkflow, async ({ inputData }) => {
       const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
       let hasFinishedSteps = false;
+
+      // On the evented engine the loop body's output round-trips through workflow
+      // snapshot persistence between iterations, which stores per-step response
+      // message deltas. Rebuild the cumulative per-step view before this data is
+      // read here or emitted to the stream (step-finish/finish chunk payloads).
+      restoreCumulativeStepResponseMessages(
+        (typedInputData.output?.steps as any[]) ?? [],
+        typedInputData.messages?.nonUser ?? [],
+      );
 
       const pendingSignals = _internal.drainPendingSignals?.(runId) ?? [];
       if (pendingSignals.length > 0) {

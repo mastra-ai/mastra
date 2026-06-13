@@ -1,11 +1,12 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
-  mergeWorkflowStepResult,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
   WorkflowsStorage,
   createStorageErrorId,
+  mergeWorkflowState,
+  mergeWorkflowStepResult,
 } from '@mastra/core/storage';
 import type {
   UpdateWorkflowStateOptions,
@@ -215,7 +216,7 @@ export class WorkflowsPG extends WorkflowsStorage {
 
         // Merge the new step result using element-wise array merging
         // (critical for concurrent foreach iteration results)
-        mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
+        const context = mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
 
         // Upsert the snapshot within the same transaction
         const now = new Date();
@@ -228,7 +229,7 @@ export class WorkflowsPG extends WorkflowsStorage {
           [workflowName, runId, sanitizedSnapshot, now, now],
         );
 
-        return snapshot.context;
+        return context;
       });
     } catch (error) {
       throw new MastraError(
@@ -280,7 +281,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         }
 
         // Merge the new options with the existing snapshot
-        const updatedSnapshot = { ...snapshot, ...opts };
+        const updatedSnapshot = mergeWorkflowState({ snapshot, opts });
 
         // Update the snapshot within the same transaction
         const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(updatedSnapshot));

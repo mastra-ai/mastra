@@ -1,13 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
-import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from './workflow-snapshot';
+import { DefaultStepResult } from '../stream/aisdk/v5/output-helpers';
+import {
+  createEmptyWorkflowSnapshot,
+  mergeWorkflowState,
+  mergeWorkflowStepResult,
+  withRuntimeStepResult,
+} from './workflow-snapshot';
 
 describe('mergeWorkflowStepResult', () => {
   it('merges forEach array outputs without clobbering completed iterations', () => {
     const snapshot = createEmptyWorkflowSnapshot('run-1');
     snapshot.context.foreach = {
       status: 'success',
-      output: ['done', null, 'tail'],
+      output: [
+        'done',
+        { status: 'suspended', suspendedAt: 1, suspendPayload: { __workflow_meta: { path: ['foreach'] } } },
+        'tail',
+      ],
       payload: ['a', 'b', 'c'],
       startedAt: 1,
     } as any;
@@ -17,6 +27,7 @@ describe('mergeWorkflowStepResult', () => {
       snapshot,
       stepId: 'foreach',
       result: {
+        __mastra_foreach__: true,
         status: 'success',
         output: [null, 'resumed', null],
         payload: ['a', 'b', 'c'],
@@ -41,6 +52,7 @@ describe('mergeWorkflowStepResult', () => {
     snapshot.context.foreach = {
       status: 'success',
       output: [1, 2],
+      payload: ['a', 'b', 'c'],
     } as any;
     const output = Array(3);
     output[1] = 3;
@@ -49,14 +61,78 @@ describe('mergeWorkflowStepResult', () => {
       snapshot,
       stepId: 'foreach',
       result: {
+        __mastra_foreach__: true,
         status: 'success',
         output,
+        payload: ['a', 'b', 'c'],
       } as any,
       requestContext: {},
     });
 
     expect(snapshot.context.foreach?.output).toEqual([1, 3, null]);
     expect(2 in (snapshot.context.foreach?.output as unknown[])).toBe(true);
+  });
+
+  it('replaces plain array outputs instead of treating them as partial forEach updates', () => {
+    const snapshot = createEmptyWorkflowSnapshot('run-1');
+
+    mergeWorkflowStepResult({
+      snapshot,
+      stepId: 'array-step',
+      result: { status: 'success', output: [1, 2, 3] } as any,
+      requestContext: {},
+    });
+
+    mergeWorkflowStepResult({
+      snapshot,
+      stepId: 'array-step',
+      result: { status: 'success', output: [4] } as any,
+      requestContext: {},
+    });
+
+    expect(snapshot.context['array-step']?.output).toEqual([4]);
+  });
+
+  it('replaces plain array outputs that contain null values', () => {
+    const snapshot = createEmptyWorkflowSnapshot('run-1');
+
+    mergeWorkflowStepResult({
+      snapshot,
+      stepId: 'array-step',
+      result: { status: 'success', output: [1, 2, 3] } as any,
+      requestContext: {},
+    });
+
+    mergeWorkflowStepResult({
+      snapshot,
+      stepId: 'array-step',
+      result: { status: 'success', output: [null] } as any,
+      requestContext: {},
+    });
+
+    expect(snapshot.context['array-step']?.output).toEqual([null]);
+  });
+
+  it('replaces normal array outputs even when the step input payload is an array', () => {
+    const snapshot = createEmptyWorkflowSnapshot('run-1');
+    snapshot.context['array-input-step'] = {
+      status: 'success',
+      output: [1, 2, 3],
+      payload: ['input-a', 'input-b'],
+    } as any;
+
+    mergeWorkflowStepResult({
+      snapshot,
+      stepId: 'array-input-step',
+      result: {
+        status: 'success',
+        output: [null],
+        payload: ['input-a', 'input-b'],
+      } as any,
+      requestContext: {},
+    });
+
+    expect(snapshot.context['array-input-step']?.output).toEqual([null]);
   });
 
   it('applies pending marker resets without trusting stale sibling values or status', () => {
@@ -91,6 +167,7 @@ describe('mergeWorkflowStepResult', () => {
       snapshot,
       stepId: 'foreach',
       result: {
+        __mastra_foreach__: true,
         status: 'running',
         startedAt: 3,
         output: [
@@ -117,8 +194,8 @@ describe('mergeWorkflowStepResult', () => {
       output: [
         null,
         null,
-        null,
-        null,
+        { status: 'suspended', suspendPayload: { token: 'tok' }, suspendedAt: 4 },
+        { status: 'suspended', startedAt: 5, suspendedAt: 6 },
         { status: 'success', output: 'done-4' },
         { status: 'failed', error: 'failed-5' },
         { status: 'waiting' },
@@ -145,6 +222,7 @@ describe('mergeWorkflowStepResult', () => {
       snapshot,
       stepId: 'foreach',
       result: {
+        __mastra_foreach__: true,
         status: 'running',
         startedAt: 3,
         output: [{ __mastra_pending__: true }, { status: 'success', output: 'stale-new-value' }],
@@ -178,5 +256,220 @@ describe('mergeWorkflowStepResult', () => {
     });
 
     expect(context.foreach.output).toEqual([{ __mastra_pending__: true, value: 'user-data' }]);
+  });
+
+  it('does not treat user outputs shaped like suspended results as partial forEach markers', () => {
+    const snapshot = createEmptyWorkflowSnapshot('run-1');
+    snapshot.context.foreach = {
+      status: 'success',
+      output: [{ status: 'suspended', suspendedAt: 1, suspendPayload: { reason: 'user-domain-status' } }, 2],
+      payload: ['a', 'b'],
+    } as any;
+
+    mergeWorkflowStepResult({
+      snapshot,
+      stepId: 'foreach',
+      result: {
+        __mastra_foreach__: true,
+        status: 'success',
+        output: [{ status: 'suspended', suspendedAt: 2, suspendPayload: { reason: 'new-user-domain-status' } }],
+        payload: ['a', 'b'],
+      } as any,
+      requestContext: {},
+    });
+
+    expect(snapshot.context.foreach?.output).toEqual([
+      { status: 'suspended', suspendedAt: 2, suspendPayload: { reason: 'new-user-domain-status' } },
+    ]);
+  });
+
+  it('allows a completed forEach iteration to overwrite an older value with null output', () => {
+    const snapshot = createEmptyWorkflowSnapshot('run-1');
+    snapshot.context.foreach = {
+      status: 'success',
+      output: ['old-value', null],
+      payload: ['a', 'b'],
+    } as any;
+
+    mergeWorkflowStepResult({
+      snapshot,
+      stepId: 'foreach',
+      result: {
+        __mastra_foreach__: true,
+        __mastra_foreach_completed_indexes__: [0],
+        status: 'success',
+        output: [null, null],
+        payload: ['a', 'b'],
+      } as any,
+      requestContext: {},
+    });
+
+    expect(snapshot.context.foreach?.output).toEqual([null, null]);
+    expect(snapshot.context.foreach).not.toHaveProperty('__mastra_foreach__');
+    expect(snapshot.context.foreach?.__mastra_foreach_completed_indexes__).toEqual([0]);
+
+    mergeWorkflowStepResult({
+      snapshot,
+      stepId: 'foreach',
+      result: {
+        __mastra_foreach__: true,
+        __mastra_foreach_completed_indexes__: [1],
+        status: 'success',
+        output: ['stale-old-value', 'done'],
+        payload: ['a', 'b'],
+      } as any,
+      requestContext: {},
+    });
+
+    expect(snapshot.context.foreach?.output).toEqual([null, 'done']);
+    expect(snapshot.context.foreach?.__mastra_foreach_completed_indexes__).toEqual([0, 1]);
+  });
+
+  it('persists the serialized step result but returns the raw runtime view', () => {
+    const snapshot = createEmptyWorkflowSnapshot('run-1');
+    const messages = [
+      { role: 'assistant', content: [{ type: 'text', text: 'first' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'second' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'third' }] },
+    ];
+    const liveStep = new DefaultStepResult({
+      content: [{ type: 'text', text: 'third' }] as any,
+      finishReason: 'stop' as any,
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } as any,
+      warnings: [],
+      request: {},
+      response: {
+        id: 'response-1',
+        timestamp: new Date(0),
+        modelId: 'model',
+        messages,
+      } as any,
+      providerMetadata: undefined,
+      serializedResponseMessages: [messages[2]] as any,
+    });
+
+    const context = mergeWorkflowStepResult({
+      snapshot,
+      stepId: 'agent-step',
+      result: {
+        status: 'success',
+        output: { steps: [liveStep] },
+      } as any,
+      requestContext: {},
+    });
+
+    // The snapshot (what storage adapters persist) holds the serialized delta…
+    expect((snapshot.context['agent-step'] as any).output.steps[0].response.messages).toEqual([messages[2]]);
+    // …while the returned context (engine runtime state) keeps the cumulative view.
+    expect((context['agent-step'] as any).output.steps[0].response.messages).toEqual(messages);
+  });
+
+  it('merges into legacy foreach snapshots written before completed-index tracking', () => {
+    const snapshot = createEmptyWorkflowSnapshot('run-1');
+    const engineSuspended = {
+      status: 'suspended',
+      suspendedAt: 123,
+      suspendPayload: { __workflow_meta: { path: [0, 1] } },
+    };
+    const userShapedSuspended = { status: 'suspended', suspendPayload: { custom: true } };
+    // Written by an older version: no completed-index bookkeeping recorded.
+    snapshot.context.foreach = {
+      status: 'suspended',
+      output: ['done-0', engineSuspended, userShapedSuspended],
+      payload: ['a', 'b', 'c'],
+    } as any;
+
+    // Pending-marker resets only clear engine-produced suspended entries; the
+    // user output that merely looks suspended is left untouched.
+    mergeWorkflowStepResult({
+      snapshot,
+      stepId: 'foreach',
+      result: {
+        __mastra_foreach__: true,
+        status: 'suspended',
+        output: [null, { __mastra_pending__: true }, { __mastra_pending__: true }],
+        payload: ['a', 'b', 'c'],
+      } as any,
+      requestContext: {},
+    });
+    expect(snapshot.context.foreach?.output).toEqual(['done-0', null, userShapedSuspended]);
+
+    // New-style completion writes still merge correctly into the legacy entry.
+    mergeWorkflowStepResult({
+      snapshot,
+      stepId: 'foreach',
+      result: {
+        __mastra_foreach__: true,
+        __mastra_foreach_completed_indexes__: [1],
+        status: 'running',
+        output: [null, 'done-1'],
+        payload: ['a', 'b', 'c'],
+      } as any,
+      requestContext: {},
+    });
+    expect(snapshot.context.foreach?.output).toEqual(['done-0', 'done-1', userShapedSuspended]);
+    expect(snapshot.context.foreach?.__mastra_foreach_completed_indexes__).toEqual([1]);
+  });
+});
+
+describe('withRuntimeStepResult', () => {
+  it('overrides non-foreach entries with the raw result and leaves foreach entries to the stored merge', () => {
+    const serializedContext = {
+      'agent-step': { status: 'success', output: { messages: ['delta-only'] } },
+      'foreach-step': { status: 'running', output: ['merged-0', 'merged-1'] },
+    } as any;
+
+    const runtimeContext = withRuntimeStepResult(serializedContext, 'agent-step', {
+      status: 'success',
+      output: { messages: ['first', 'second'] },
+    } as any);
+    expect((runtimeContext['agent-step'] as any).output.messages).toEqual(['first', 'second']);
+
+    const foreachContext = withRuntimeStepResult(serializedContext, 'foreach-step', {
+      __mastra_foreach__: true,
+      status: 'running',
+      output: [null, 'local-1'],
+    } as any);
+    // Foreach results keep the server-merged stored view (authoritative across
+    // concurrent iteration writers).
+    expect((foreachContext['foreach-step'] as any).output).toEqual(['merged-0', 'merged-1']);
+  });
+});
+
+describe('mergeWorkflowState', () => {
+  it('serializes snapshot result fields through workflow snapshot serialization', () => {
+    const snapshot = createEmptyWorkflowSnapshot('run-1');
+    const messages = [
+      { role: 'assistant', content: [{ type: 'text', text: 'first' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'second' }] },
+    ];
+    const result = {
+      status: 'success',
+      output: {
+        steps: [
+          new DefaultStepResult({
+            content: [{ type: 'text', text: 'second' }] as any,
+            finishReason: 'stop' as any,
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } as any,
+            warnings: [],
+            request: {},
+            response: {
+              id: 'response-1',
+              timestamp: new Date(0),
+              modelId: 'model',
+              messages,
+            } as any,
+            providerMetadata: undefined,
+            serializedResponseMessages: [messages[1]] as any,
+          }),
+        ],
+      },
+    };
+
+    expect(JSON.parse(JSON.stringify(result)).output.steps[0].response.messages).toHaveLength(2);
+
+    const merged = mergeWorkflowState({ snapshot, opts: { status: 'success', result: result as any } });
+
+    expect((merged.result as any).output.steps[0].response.messages).toEqual([messages[1]]);
   });
 });

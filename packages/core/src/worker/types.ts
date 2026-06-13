@@ -16,6 +16,7 @@ export interface StepExecutionParams {
   requestContext: Record<string, unknown>;
   input?: unknown;
   resumeData?: unknown;
+  isResuming?: boolean;
   retryCount?: number;
   foreachIdx?: number;
   format?: 'legacy' | 'vnext';

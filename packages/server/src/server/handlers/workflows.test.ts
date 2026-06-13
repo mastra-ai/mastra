@@ -24,6 +24,7 @@ import {
   CANCEL_WORKFLOW_RUN_ROUTE,
   LIST_WORKFLOW_RUNS_ROUTE,
   STREAM_WORKFLOW_ROUTE,
+  EXECUTE_WORKFLOW_STEP_ROUTE,
 } from './workflows';
 
 function createMockWorkflow(name: string) {
@@ -830,6 +831,70 @@ describe('vNext Workflow Handlers', () => {
       } as any);
 
       expect(result.total).toEqual(1);
+    });
+  });
+
+  describe('EXECUTE_WORKFLOW_STEP_ROUTE', () => {
+    it.each([
+      ['false', false],
+      ['0', 0],
+      ['null', null],
+      ['empty string', ''],
+    ] as const)('passes %s resumeData through the remote step route when isResuming is true', async (_, resumeData) => {
+      const approvalStep = createStep({
+        id: 'approval-step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ approved: z.any() }),
+        resumeSchema: z.union([z.literal(false), z.literal(0), z.null(), z.literal('')]),
+        execute: async ({ resumeData }) => ({ approved: resumeData }),
+      });
+      const workflow = createWorkflow({
+        id: `remote-step-resume-${String(resumeData)}`,
+        inputSchema: z.object({}),
+        outputSchema: z.object({ approved: z.any() }),
+        steps: [approvalStep],
+      })
+        .then(approvalStep)
+        .commit();
+      const mastra = new Mastra({
+        logger: false,
+        workflows: { [workflow.id]: workflow },
+        storage: new MockStore(),
+      });
+      const startedAt = Date.now() - 1000;
+
+      const result = await EXECUTE_WORKFLOW_STEP_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        workflowId: workflow.id,
+        runId: `${workflow.id}-run`,
+        stepId: 'approval-step',
+        executionPath: [0],
+        stepResults: {
+          'approval-step': {
+            status: 'suspended',
+            startedAt,
+            payload: {},
+            suspendPayload: { reason: 'Need approval', __workflow_meta: { runId: `${workflow.id}-run` } },
+            suspendedAt: startedAt + 500,
+          },
+        },
+        state: {},
+        requestContext: {},
+        input: {},
+        resumeData,
+        isResuming: true,
+        validateInputs: true,
+      } as any);
+
+      expect(result).toMatchObject({
+        status: 'success',
+        startedAt,
+        resumePayload: resumeData,
+        output: { approved: resumeData },
+      });
+      expect(JSON.stringify({ output: result.output, resumePayload: result.resumePayload })).not.toContain(
+        '__workflow_meta',
+      );
     });
   });
 

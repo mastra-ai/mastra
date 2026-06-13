@@ -1,6 +1,9 @@
 // NOTE: This mirrors packages/core/src/storage/workflow-snapshot.ts. The Convex
-// server runtime can't import @mastra/core, so keep both copies in sync.
+// server runtime can't import @mastra/core, so keep both copies in sync. Convex
+// receives JSON-parsed payloads from the adapter, so serialization happens first.
 const PENDING_MARKER_KEY = '__mastra_pending__';
+const FOREACH_STEP_RESULT_KEY = '__mastra_foreach__';
+const FOREACH_COMPLETED_INDEXES_KEY = '__mastra_foreach_completed_indexes__';
 
 function isPendingMarker(val: unknown): boolean {
   return (
@@ -12,19 +15,19 @@ function isPendingMarker(val: unknown): boolean {
   );
 }
 
-// Suspended forEach iteration results may come from multiple engines. Treat
-// StepResult-shaped suspended entries as resettable without relying only on
-// evented __workflow_meta, but avoid matching plain user outputs with only
-// status/payload fields.
 function isSuspendedStepResult(val: unknown): boolean {
   const result = val as Record<string, unknown> | null;
+  const suspendPayload = result?.suspendPayload;
 
   return (
     val !== null &&
     typeof val === 'object' &&
     'status' in val &&
     result?.status === 'suspended' &&
-    ('suspendPayload' in val || 'suspendedAt' in val)
+    typeof result.suspendedAt === 'number' &&
+    suspendPayload !== null &&
+    typeof suspendPayload === 'object' &&
+    '__workflow_meta' in suspendPayload
   );
 }
 
@@ -34,6 +37,42 @@ function canResetWithPendingMarker(val: unknown): boolean {
   }
 
   return isSuspendedStepResult(val);
+}
+
+function hasPartialForeachValue(output: unknown[]): boolean {
+  for (let i = 0; i < output.length; i++) {
+    if (!(i in output)) return true;
+    const value = output[i];
+    if (value === null || value === undefined || isPendingMarker(value) || isSuspendedStepResult(value)) return true;
+  }
+  return false;
+}
+
+function hasForeachStepResultMarker(result: unknown): boolean {
+  return (result as Record<string, unknown> | null)?.[FOREACH_STEP_RESULT_KEY] === true;
+}
+
+function getForeachCompletedIndexes(result: unknown): Set<number> {
+  const indexes = (result as Record<string, unknown> | null)?.[FOREACH_COMPLETED_INDEXES_KEY];
+  if (!Array.isArray(indexes)) {
+    return new Set();
+  }
+
+  return new Set(indexes.filter(index => Number.isInteger(index) && index >= 0));
+}
+
+function stripForeachStepResultMarker<T>(result: T): T {
+  if (!hasForeachStepResultMarker(result)) {
+    return result;
+  }
+
+  const { [FOREACH_STEP_RESULT_KEY]: _marker, ...rest } = result as Record<string, unknown>;
+  return rest as T;
+}
+
+function mergeForeachCompletedIndexes(existingResult: unknown, incomingIndexes: Set<number>): number[] | undefined {
+  const indexes = new Set([...getForeachCompletedIndexes(existingResult), ...incomingIndexes]);
+  return indexes.size > 0 ? [...indexes].sort((a, b) => a - b) : undefined;
 }
 
 export function createEmptyWorkflowSnapshot(runId: string): Record<string, any> {
@@ -68,19 +107,34 @@ export function mergeWorkflowStepResult({
   }
 
   const existingResult = snapshot.context[stepId];
+  const hasForeachMarker = hasForeachStepResultMarker(result);
+  const completedIndexes = getForeachCompletedIndexes(result);
+  const resultToStore = stripForeachStepResultMarker(result);
+  const existingCompletedIndexes = getForeachCompletedIndexes(existingResult);
+  const mergedCompletedIndexes = mergeForeachCompletedIndexes(existingResult, completedIndexes);
+  const completedIndexesToStore =
+    mergedCompletedIndexes && hasForeachMarker
+      ? { [FOREACH_COMPLETED_INDEXES_KEY]: mergedCompletedIndexes }
+      : undefined;
+  const existingOutput =
+    existingResult && 'output' in existingResult && Array.isArray(existingResult.output)
+      ? (existingResult.output as unknown[])
+      : undefined;
+  const newOutput =
+    result && typeof result === 'object' && 'output' in result && Array.isArray(result.output)
+      ? (result.output as unknown[])
+      : undefined;
+  const hasPendingMarker = newOutput?.some(isPendingMarker) ?? false;
   if (
     existingResult &&
-    'output' in existingResult &&
-    Array.isArray(existingResult.output) &&
+    existingOutput &&
     result &&
     typeof result === 'object' &&
-    'output' in result &&
-    Array.isArray(result.output)
+    newOutput &&
+    hasForeachMarker &&
+    (hasPendingMarker || hasPartialForeachValue(existingOutput) || hasPartialForeachValue(newOutput))
   ) {
-    const existingOutput = existingResult.output as unknown[];
-    const newOutput = result.output as unknown[];
     const mergedOutput = [...existingOutput];
-    const hasPendingMarker = newOutput.some(isPendingMarker);
     for (let i = 0; i < Math.max(existingOutput.length, newOutput.length); i++) {
       if (i < newOutput.length) {
         const newVal = newOutput[i];
@@ -88,6 +142,10 @@ export function mergeWorkflowStepResult({
           if (i >= existingOutput.length || canResetWithPendingMarker(existingOutput[i])) {
             mergedOutput[i] = null;
           }
+        } else if (completedIndexes.has(i) && !hasPendingMarker) {
+          mergedOutput[i] = newVal;
+        } else if (existingCompletedIndexes.has(i) && !hasPendingMarker) {
+          continue;
         } else if (newVal !== null && newVal !== undefined && !hasPendingMarker) {
           mergedOutput[i] = newVal;
         } else if (i >= existingOutput.length) {
@@ -99,11 +157,12 @@ export function mergeWorkflowStepResult({
       ...existingResult,
       // Pending-marker writes are reset commands built from an earlier snapshot,
       // so keep existing step-level fields and ignore sibling values they carry.
-      ...(hasPendingMarker ? {} : result),
+      ...(hasPendingMarker ? {} : resultToStore),
+      ...(hasPendingMarker ? {} : completedIndexesToStore),
       output: mergedOutput,
     };
   } else {
-    snapshot.context[stepId] = result;
+    snapshot.context[stepId] = resultToStore;
   }
 
   snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };

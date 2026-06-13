@@ -5,6 +5,8 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
   normalizePerPage,
+  mergeWorkflowState,
+  mergeWorkflowStepResult,
 } from '@mastra/core/storage';
 import type {
   StorageListWorkflowRunsInput,
@@ -167,9 +169,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
       }
 
-      // Merge the new step result and request context
-      snapshot.context[stepId] = result;
-      snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+      const context = mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
 
       // Upsert within the same transaction to handle both insert and update
       const upsertReq = new sql.Request(transaction);
@@ -189,7 +189,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       );
 
       await transaction.commit();
-      return snapshot.context;
+      return context;
     } catch (error) {
       try {
         await transaction.rollback();
@@ -262,7 +262,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       }
 
       // Merge the new options with the existing snapshot
-      const updatedSnapshot = { ...snapshot, ...opts };
+      const updatedSnapshot = mergeWorkflowState({ snapshot, opts });
 
       // Update the snapshot within the same transaction
       const updateRequest = new sql.Request(transaction);

@@ -4,8 +4,28 @@ import type { PubSub } from '../../../events';
 import type { Mastra } from '../../../mastra';
 import { resolveCurrentState } from '../helpers';
 import type { StepExecutor } from '../step-executor';
-import { createPendingMarker } from '../types';
+import {
+  createPendingMarker,
+  getForeachCompletedIndexes,
+  isSuspendedStepResult,
+  markForeachStepResult,
+  stripForeachCompletedIndexes,
+} from '../types';
 import type { ProcessorArgs } from '.';
+
+function isForeachIterationPending(result: { output?: unknown[] } | undefined, index: number): boolean {
+  const output = result?.output;
+  if (!Array.isArray(output) || !(index in output)) {
+    return true;
+  }
+
+  const value = output[index] as any;
+  return (value === null && !getForeachCompletedIndexes(result).has(index)) || isSuspendedStepResult(value);
+}
+
+function isForeachIterationComplete(result: { output?: unknown[] } | undefined, index: number): boolean {
+  return !isForeachIterationPending(result, index);
+}
 
 export async function processWorkflowLoop(
   {
@@ -180,7 +200,10 @@ export async function processWorkflowForEach(
 
     // Check if the target iteration is suspended
     const iterationResult = currentResult?.output?.[forEachIndex];
-    if (iterationResult?.status === 'suspended' || iterationResult === null) {
+    if (
+      isSuspendedStepResult(iterationResult) ||
+      (iterationResult === null && isForeachIterationPending(currentResult, forEachIndex))
+    ) {
       // Only pass resumeData to the targeted iteration
       const isNestedWorkflow = (step.step as any).component === 'WORKFLOW';
       const targetArray = (prevResult as any)?.output;
@@ -216,7 +239,9 @@ export async function processWorkflowForEach(
     // If forEachIndex was provided but the iteration is already complete,
     // check if there are still pending (null or suspended) iterations.
     // If so, re-suspend the workflow to wait for those to be resumed.
-    const pendingIterations = currentResult.output.filter((r: any) => r === null || r?.status === 'suspended');
+    const pendingIterations = currentResult.output.filter((_: unknown, index: number) =>
+      isForeachIterationPending(currentResult, index),
+    );
     if (pendingIterations.length > 0) {
       // Collect resumeLabels from all suspended iterations and capture the first
       // suspended iteration's full suspendPayload so non-__workflow_meta keys
@@ -225,7 +250,7 @@ export async function processWorkflowForEach(
       let firstSuspendedIterationPayload: Record<string, unknown> | undefined;
       for (let i = 0; i < currentResult.output.length; i++) {
         const iterResult = currentResult.output[i];
-        if (iterResult?.status === 'suspended') {
+        if (isSuspendedStepResult(iterResult)) {
           if (iterResult.suspendPayload?.__workflow_meta?.resumeLabels) {
             Object.assign(collectedResumeLabels, iterResult.suspendPayload.__workflow_meta.resumeLabels);
           }
@@ -300,7 +325,7 @@ export async function processWorkflowForEach(
     const suspendedIndices: number[] = [];
     for (let i = 0; i < currentResult.output.length; i++) {
       const iterResult = currentResult.output[i];
-      if (iterResult && typeof iterResult === 'object' && iterResult.status === 'suspended') {
+      if (isSuspendedStepResult(iterResult)) {
         suspendedIndices.push(i);
       }
     }
@@ -322,33 +347,31 @@ export async function processWorkflowForEach(
       // "force this to null, don't preserve the existing suspended result."
       // See inmemory.ts updateWorkflowResults for the merge logic.
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
-      const updatedOutput = [...currentResult.output];
-      for (const suspIdx of indicesToResume) {
-        updatedOutput[suspIdx] = createPendingMarker() as any;
-      }
-
-      await workflowsStore?.updateWorkflowResults({
-        workflowName: workflowId,
-        runId,
-        stepId: step.step.id,
-        result: {
-          ...currentResult,
-          output: updatedOutput,
-        } as any,
-        requestContext,
-      });
 
       // Check if inner step is a nested workflow
       const isNestedWorkflow = (step.step as any).component === 'WORKFLOW';
 
       // Resume iterations up to concurrency limit
-      // Wrap in try-catch to prevent partial state issues if some publishes fail
       for (const suspIdx of indicesToResume) {
         const targetArray = (prevResult as any)?.output;
         const iterationPrevResult =
           isNestedWorkflow && prevResult.status === 'success' && Array.isArray(targetArray)
             ? { status: 'success' as const, output: targetArray[suspIdx] }
             : prevResult;
+
+        const pendingOutput = Array(suspIdx + 1).fill(null);
+        pendingOutput[suspIdx] = createPendingMarker() as any;
+
+        await workflowsStore?.updateWorkflowResults({
+          workflowName: workflowId,
+          runId,
+          stepId: step.step.id,
+          result: markForeachStepResult({
+            ...currentResult,
+            output: pendingOutput,
+          } as any),
+          requestContext,
+        });
 
         try {
           await pubsub.publish('workflows', {
@@ -372,9 +395,20 @@ export async function processWorkflowForEach(
               outputOptions,
             },
           });
-        } catch {
-          // Log error but continue - the iteration will be picked up on next resume
-          // State was already updated, so no data loss
+        } catch (error) {
+          const restoredOutput = Array(suspIdx + 1).fill(null);
+          restoredOutput[suspIdx] = currentResult.output[suspIdx];
+          await workflowsStore?.updateWorkflowResults({
+            workflowName: workflowId,
+            runId,
+            stepId: step.step.id,
+            result: markForeachStepResult({
+              ...currentResult,
+              output: restoredOutput,
+            } as any),
+            requestContext,
+          });
+          throw error;
         }
       }
       return;
@@ -384,12 +418,15 @@ export async function processWorkflowForEach(
   const workflowsStore = await mastra.getStorage()?.getStore('workflows');
 
   if (
-    (idx >= targetLen && currentResult?.output?.filter((r: any) => r !== null)?.length >= targetLen) ||
+    (idx >= targetLen &&
+      Array.from({ length: targetLen }, (_, index) => isForeachIterationComplete(currentResult, index)).every(
+        Boolean,
+      )) ||
     (prevResult as any)?.output?.length === 0
   ) {
     // Foreach completed all iterations or the previous result is an empty array - advance to next step
     // If the previous result is an empty array, we need to create a new result with an empty array output, save to stroage and stepResults
-    let result = currentResult;
+    let result = currentResult ? stripForeachCompletedIndexes(currentResult) : currentResult;
     if ((prevResult as any)?.output?.length === 0) {
       result = {
         status: 'success',
@@ -402,7 +439,16 @@ export async function processWorkflowForEach(
         workflowName: workflowId,
         runId,
         stepId: step.step.id,
-        result,
+        result: markForeachStepResult(result as any),
+        requestContext,
+      });
+      stepResults[step.step.id] = result as any;
+    } else if (result !== currentResult) {
+      await workflowsStore?.updateWorkflowResults({
+        workflowName: workflowId,
+        runId,
+        stepId: step.step.id,
+        result: result as any,
         requestContext,
       });
       stepResults[step.step.id] = result as any;
@@ -445,12 +491,12 @@ export async function processWorkflowForEach(
       workflowName: workflowId,
       runId,
       stepId: step.step.id,
-      result: {
+      result: markForeachStepResult({
         status: 'success',
         output: dummyResult as any,
         startedAt: Date.now(),
         payload: (prevResult as any)?.output,
-      } as any,
+      } as any),
       requestContext,
     });
 
@@ -474,7 +520,7 @@ export async function processWorkflowForEach(
           workflowId,
           runId,
           executionPath: [executionPath[0]!, i],
-          resumeSteps,
+          resumeSteps: [],
           stepResults,
           timeTravel,
           restart,
@@ -497,12 +543,12 @@ export async function processWorkflowForEach(
     workflowName: workflowId,
     runId,
     stepId: step.step.id,
-    result: {
+    result: markForeachStepResult({
       status: 'success',
       output: (currentResult as any).output,
       startedAt: Date.now(),
       payload: (prevResult as any)?.output,
-    } as any,
+    } as any),
     requestContext,
   });
 
@@ -523,7 +569,7 @@ export async function processWorkflowForEach(
       workflowId,
       runId,
       executionPath: [executionPath[0]!, idx],
-      resumeSteps,
+      resumeSteps: [],
       timeTravel,
       restart,
       stepResults,

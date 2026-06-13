@@ -1386,7 +1386,9 @@ describe('MastraEditor with LibSQL Integration', () => {
   });
 
   describe('Agent with Memory', () => {
-    it('should create and retrieve an agent with static memory configuration', async () => {
+    // Full editor + libsql + memory round trip; sits just under the 5s default
+    // on loaded CI runners, so give it headroom.
+    it('should create and retrieve an agent with static memory configuration', { timeout: 15_000 }, async () => {
       const agentsStore = await storage.getStore('agents');
 
       // Create an agent with static memory configuration

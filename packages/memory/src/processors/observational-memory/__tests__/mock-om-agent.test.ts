@@ -16,8 +16,12 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { Agent } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
+
+// Every test here drives full agent loops with OM processing; they sit close to
+// vitest's 5s default on loaded CI runners, so give the whole file headroom.
+vi.setConfig({ testTimeout: 15_000 });
 
 import { Memory } from '../../../index';
 

@@ -8,6 +8,7 @@ import type {
 } from '@mastra/core/storage';
 import {
   createStorageErrorId,
+  mergeWorkflowState,
   mergeWorkflowStepResult,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
@@ -162,7 +163,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
 
             // Merge the new step result using element-wise array merging
             // (critical for concurrent foreach iteration results)
-            mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
+            const context = mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
 
             // Upsert the snapshot within the same transaction
             const now = new Date().toISOString();
@@ -175,7 +176,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
             });
 
             await tx.commit();
-            return snapshot.context;
+            return context;
           } catch (error) {
             if (!tx.closed) {
               await tx.rollback();
@@ -225,7 +226,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
             }
 
             // Merge the new options with the existing snapshot
-            const updatedSnapshot = { ...snapshot, ...opts };
+            const updatedSnapshot = mergeWorkflowState({ snapshot, opts });
 
             // Update the snapshot within the same transaction
             await tx.execute({

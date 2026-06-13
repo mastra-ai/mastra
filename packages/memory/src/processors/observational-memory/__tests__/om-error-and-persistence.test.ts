@@ -11,10 +11,14 @@ import { ProcessorStepSchema } from '@mastra/core/processors';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { createWorkflow } from '@mastra/core/workflows';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Memory } from '../../../index';
+
+// These tests drive full agent loops with OM + workflow processors; they sit
+// close to vitest's 5s default on loaded CI runners, so give the file headroom.
+vi.setConfig({ testTimeout: 15_000 });
 
 // =============================================================================
 // Mock Models
@@ -548,51 +552,57 @@ describe('OM Persistence', () => {
     expect(hasOmParts).toBe(true);
   });
 
-  it('should persist OM messages when a workflow processor runs before memory processors', async () => {
-    const threadId = 'test-workflow-processor-thread';
-    const resourceId = 'test-resource';
-    const workflowProcessor = createPassthroughProcessorWorkflow('pre-om-workflow');
+  // Runs a full agent loop with OM + workflow processors; sits just under the 5s
+  // default on loaded CI runners (flaked there repeatedly), so give it headroom.
+  it(
+    'should persist OM messages when a workflow processor runs before memory processors',
+    { timeout: 15_000 },
+    async () => {
+      const threadId = 'test-workflow-processor-thread';
+      const resourceId = 'test-resource';
+      const workflowProcessor = createPassthroughProcessorWorkflow('pre-om-workflow');
 
-    const agentWithWorkflowProcessor = new Agent({
-      id: 'test-persist-agent-with-workflow-processor',
-      name: 'Test Persist Agent With Workflow Processor',
-      instructions: 'You are a helpful assistant. Always use the test tool first.',
-      model: createMockOmModel(longResponseText) as any,
-      tools: { test: omTriggerTool },
-      memory,
-      inputProcessors: [workflowProcessor],
-    });
+      const agentWithWorkflowProcessor = new Agent({
+        id: 'test-persist-agent-with-workflow-processor',
+        name: 'Test Persist Agent With Workflow Processor',
+        instructions: 'You are a helpful assistant. Always use the test tool first.',
+        model: createMockOmModel(longResponseText) as any,
+        tools: { test: omTriggerTool },
+        memory,
+        inputProcessors: [workflowProcessor],
+      });
 
-    const response = await agentWithWorkflowProcessor.stream('Hello, I need help with something important.', {
-      memory: {
-        thread: threadId,
-        resource: resourceId,
-      },
-    });
+      const response = await agentWithWorkflowProcessor.stream('Hello, I need help with something important.', {
+        memory: {
+          thread: threadId,
+          resource: resourceId,
+        },
+      });
 
-    const reader = response.fullStream.getReader();
-    try {
-      while (true) {
-        const { done } = await reader.read();
-        if (done) break;
+      const reader = response.fullStream.getReader();
+      try {
+        while (true) {
+          const { done } = await reader.read();
+          if (done) break;
+        }
+      } finally {
+        reader.releaseLock();
       }
-    } finally {
-      reader.releaseLock();
-    }
 
-    const memoryStore = await store.getStore('memory');
-    const result = await memoryStore!.listMessages({ threadId });
+      const memoryStore = await store.getStore('memory');
+      const result = await memoryStore!.listMessages({ threadId });
 
-    const assistantMessages = result.messages.filter((message: any) => message.role === 'assistant');
-    expect(assistantMessages.length).toBeGreaterThan(0);
+      const assistantMessages = result.messages.filter((message: any) => message.role === 'assistant');
+      expect(assistantMessages.length).toBeGreaterThan(0);
 
-    const hasOmParts = assistantMessages.some((message: any) => {
-      const parts = message.content?.parts || [];
-      return parts.some((part: any) => typeof part.type === 'string' && part.type.startsWith('data-om-'));
-    });
+      const hasOmParts = assistantMessages.some((message: any) => {
+        const parts = message.content?.parts || [];
+        return parts.some((part: any) => typeof part.type === 'string' && part.type.startsWith('data-om-'));
+      });
 
-    expect(hasOmParts).toBe(true);
-  });
+      expect(hasOmParts).toBe(true);
+    },
+  );
 
   it('should preserve data-om-* parts when loading messages from storage', async () => {
     const threadId = 'test-reload-thread';

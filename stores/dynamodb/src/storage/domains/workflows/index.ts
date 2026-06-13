@@ -4,6 +4,8 @@ import {
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   WorkflowsStorage,
+  mergeWorkflowState,
+  mergeWorkflowStepResult,
 } from '@mastra/core/storage';
 import type {
   WorkflowRun,
@@ -153,9 +155,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
           previousUpdatedAt = existingRecord.data.updatedAt;
         }
 
-        // Merge the new step result and request context
-        snapshot.context[stepId] = result;
-        snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+        const context = mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
 
         const data: WorkflowSnapshotEntityData = {
           entity: 'workflow_snapshot',
@@ -181,7 +181,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
             .go();
         }
 
-        return snapshot.context;
+        return context;
       } catch (error) {
         if (this.isConditionalCheckFailed(error)) {
           // Conflict detected, retry with backoff
@@ -253,7 +253,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
         const previousUpdatedAt = existingRecord.data.updatedAt;
 
         // Merge the new options with the existing snapshot
-        const updatedSnapshot = { ...existingSnapshot, ...opts };
+        const updatedSnapshot = mergeWorkflowState({ snapshot: existingSnapshot, opts });
 
         const now = new Date();
         const data: WorkflowSnapshotEntityData = {

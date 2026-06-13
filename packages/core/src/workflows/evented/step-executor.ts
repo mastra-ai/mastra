@@ -65,6 +65,7 @@ export class StepExecutor extends MastraBase {
     runId: string;
     input?: any;
     resumeData?: any;
+    isResuming?: boolean;
     stepResults: Record<string, StepResult<any, any, any, any>>;
     state: Record<string, any>;
     requestContext: RequestContext;
@@ -87,6 +88,7 @@ export class StepExecutor extends MastraBase {
     let suspended: { payload: any } | undefined;
     let bailed: { payload: any } | undefined;
     const startedAt = Date.now();
+    const isResumingStep = params.isResuming ?? params.resumeData !== undefined;
     const { inputData, validationError } = await validateStepInput({
       prevOutput: typeof params.foreachIdx === 'number' ? params.input?.[params.foreachIdx] : params.input,
       step,
@@ -100,13 +102,15 @@ export class StepExecutor extends MastraBase {
       resumedAt?: number;
       [key: string]: any;
     } = {
-      ...stepResults[step.id],
-      startedAt,
-      payload: (typeof params.foreachIdx === 'number' ? params.input : inputData) ?? {},
+      ...(isResumingStep ? stepResults[step.id] : {}),
+      startedAt: isResumingStep ? (stepResults[step.id]?.startedAt ?? startedAt) : startedAt,
+      payload: isResumingStep
+        ? (stepResults[step.id]?.payload ?? {})
+        : ((typeof params.foreachIdx === 'number' ? params.input : inputData) ?? {}),
+      ...(isResumingStep ? { resumePayload: params.resumeData } : {}),
     };
 
-    if (params.resumeData) {
-      stepInfo.resumePayload = params.resumeData;
+    if (isResumingStep) {
       stepInfo.resumedAt = Date.now();
       // Strip __workflow_meta from suspendPayload when step is resumed
       // This metadata is only needed during suspend, not in the final completed result

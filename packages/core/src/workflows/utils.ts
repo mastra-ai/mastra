@@ -83,7 +83,7 @@ export async function validateStepInput({
 }
 
 export async function validateStepResumeData({ resumeData, step }: { resumeData?: any; step: Step<string, any, any> }) {
-  if (!resumeData) {
+  if (resumeData === undefined) {
     return { resumeData: undefined, validationError: undefined };
   }
 
@@ -292,7 +292,7 @@ export const createTimeTravelExecutionParams = (params: {
   for (const [index, entry] of graph.steps.entries()) {
     const currentExecPathLength = executionPath.length;
     //if there is resumeData, steps down the graph until the suspended step will have stepResult info to use
-    if (currentExecPathLength > 0 && !resumeData) {
+    if (currentExecPathLength > 0 && resumeData === undefined) {
       break;
     }
     const stepIds = getStepIds(entry);

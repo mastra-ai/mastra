@@ -5,6 +5,8 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   WorkflowsStorage,
   ensureDate,
+  serializeWorkflowSnapshotValue,
+  withRuntimeStepResult,
 } from '@mastra/core/storage';
 import type {
   StorageListWorkflowRunsInput,
@@ -134,9 +136,198 @@ export class WorkflowsUpstash extends WorkflowsStorage {
           snapshot.context = {}
         end
 
+        local pendingMarkerKey = '__mastra_pending__'
+        local foreachStepResultKey = '__mastra_foreach__'
+        local foreachCompletedIndexesKey = '__mastra_foreach_completed_indexes__'
+
+        local function is_array(value)
+          if type(value) ~= 'table' then
+            return false
+          end
+
+          local count = 0
+          local maxIndex = 0
+          for key, _ in pairs(value) do
+            if type(key) ~= 'number' or key < 1 or key % 1 ~= 0 then
+              return false
+            end
+            count = count + 1
+            if key > maxIndex then
+              maxIndex = key
+            end
+          end
+
+          return count > 0 and maxIndex == count
+        end
+
+        local function is_pending_marker(value)
+          if type(value) ~= 'table' or value[pendingMarkerKey] ~= true then
+            return false
+          end
+
+          local count = 0
+          for _ in pairs(value) do
+            count = count + 1
+          end
+
+          return count == 1
+        end
+
+        local function is_suspended_step_result(value)
+          return type(value) == 'table'
+            and value.status == 'suspended'
+            and type(value.suspendedAt) == 'number'
+            and type(value.suspendPayload) == 'table'
+            and type(value.suspendPayload.__workflow_meta) == 'table'
+        end
+
+        local function can_reset_with_pending_marker(value)
+          return value == nil
+            or value == cjson.null
+            or is_pending_marker(value)
+            or is_suspended_step_result(value)
+        end
+
+        local function has_partial_foreach_value(output)
+          if type(output) ~= 'table' then
+            return false
+          end
+
+          for _, value in ipairs(output) do
+            if value == cjson.null or is_pending_marker(value) or is_suspended_step_result(value) then
+              return true
+            end
+          end
+
+          return false
+        end
+
+        local function has_pending_marker(output)
+          if type(output) ~= 'table' then
+            return false
+          end
+
+          for _, value in ipairs(output) do
+            if is_pending_marker(value) then
+              return true
+            end
+          end
+
+          return false
+        end
+
+        local function has_completed_index(indexes, zeroBasedIndex)
+          if type(indexes) ~= 'table' then
+            return false
+          end
+
+          for _, value in ipairs(indexes) do
+            if value == zeroBasedIndex then
+              return true
+            end
+          end
+
+          return false
+        end
+
+        local function merge_completed_indexes(existingIndexes, incomingIndexes)
+          local seen = {}
+          local merged = {}
+
+          local function add_indexes(indexes)
+            if type(indexes) ~= 'table' then
+              return
+            end
+
+            for _, value in ipairs(indexes) do
+              if type(value) == 'number' and value >= 0 and not seen[value] then
+                seen[value] = true
+                table.insert(merged, value)
+              end
+            end
+          end
+
+          add_indexes(existingIndexes)
+          add_indexes(incomingIndexes)
+          table.sort(merged)
+
+          return merged
+        end
+
+        local function copy_array(values)
+          local copy = {}
+          if type(values) ~= 'table' then
+            return copy
+          end
+
+          for i = 1, #values do
+            copy[i] = values[i]
+          end
+
+          return copy
+        end
+
         -- Merge the new step result
         local stepResult = cjson.decode(resultJson)
-        snapshot.context[stepId] = stepResult
+        local existingStepResult = snapshot.context[stepId]
+        local hasForeachMarker = type(stepResult) == 'table' and stepResult[foreachStepResultKey] == true
+        local completedIndexes = type(stepResult) == 'table' and stepResult[foreachCompletedIndexesKey] or nil
+        if type(stepResult) == 'table' then
+          stepResult[foreachStepResultKey] = nil
+        end
+
+        if type(existingStepResult) == 'table'
+          and (is_array(existingStepResult.output) or (hasForeachMarker and type(existingStepResult.output) == 'table'))
+          and type(stepResult) == 'table'
+          and (is_array(stepResult.output) or (hasForeachMarker and type(stepResult.output) == 'table'))
+        then
+          local existingOutput = existingStepResult.output
+          local newOutput = stepResult.output
+          local existingCompletedIndexes = existingStepResult[foreachCompletedIndexesKey]
+          local mergedCompletedIndexes = merge_completed_indexes(existingStepResult[foreachCompletedIndexesKey], completedIndexes)
+          local hasPendingMarker = has_pending_marker(newOutput)
+          local shouldMerge = hasForeachMarker
+            and (hasPendingMarker or has_partial_foreach_value(existingOutput) or has_partial_foreach_value(newOutput))
+
+          if shouldMerge then
+            local mergedOutput = copy_array(existingOutput)
+            local maxLength = math.max(#existingOutput, #newOutput)
+
+            for i = 1, maxLength do
+              if i <= #newOutput then
+                local newValue = newOutput[i]
+                if is_pending_marker(newValue) then
+                  if i > #existingOutput or can_reset_with_pending_marker(existingOutput[i]) then
+                    mergedOutput[i] = cjson.null
+                  end
+                elseif has_completed_index(completedIndexes, i - 1) and not hasPendingMarker then
+                  mergedOutput[i] = newValue
+                elseif has_completed_index(existingCompletedIndexes, i - 1) and not hasPendingMarker then
+                  -- Keep already completed slots authoritative against stale sibling writes.
+                elseif newValue ~= nil and newValue ~= cjson.null and not hasPendingMarker then
+                  mergedOutput[i] = newValue
+                elseif i > #existingOutput then
+                  mergedOutput[i] = cjson.null
+                end
+              end
+            end
+
+            if not hasPendingMarker then
+              for k, v in pairs(stepResult) do
+                existingStepResult[k] = v
+              end
+              if #mergedCompletedIndexes > 0 then
+                existingStepResult[foreachCompletedIndexesKey] = mergedCompletedIndexes
+              end
+            end
+            existingStepResult.output = mergedOutput
+            snapshot.context[stepId] = existingStepResult
+          else
+            snapshot.context[stepId] = stepResult
+          end
+        else
+          snapshot.context[stepId] = stepResult
+        end
 
         -- Merge request context
         local newRequestContext = cjson.decode(requestContextJson)
@@ -163,7 +354,7 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         [key],
         [
           stepId,
-          JSON.stringify(result),
+          JSON.stringify(serializeWorkflowSnapshotValue(result)),
           JSON.stringify(requestContext),
           now,
           'workflows',
@@ -182,7 +373,9 @@ export class WorkflowsUpstash extends WorkflowsStorage {
       }
 
       const snapshot = typeof data.snapshot === 'string' ? JSON.parse(data.snapshot) : data.snapshot;
-      return snapshot.context;
+      // The stored context holds the serialized view; hand runtime callers the
+      // raw step result for non-foreach entries, matching core merge semantics.
+      return withRuntimeStepResult(snapshot.context, stepId, result);
     } catch (error) {
       if (error instanceof MastraError) throw error;
       throw new MastraError(
@@ -257,7 +450,11 @@ export class WorkflowsUpstash extends WorkflowsStorage {
         return cjson.encode(data)
       `;
 
-      const resultJson = await this.client.eval(luaScript, [key], [JSON.stringify(opts), now]);
+      const resultJson = await this.client.eval(
+        luaScript,
+        [key],
+        [JSON.stringify(serializeWorkflowSnapshotValue(opts)), now],
+      );
 
       if (!resultJson) {
         return undefined;

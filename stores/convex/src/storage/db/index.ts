@@ -3,6 +3,8 @@ import crypto from 'node:crypto';
 import { MastraBase } from '@mastra/core/base';
 import type { StorageThreadType } from '@mastra/core/memory';
 import {
+  serializeWorkflowSnapshotValue,
+  withRuntimeStepResult,
   TABLE_RESOURCES,
   TABLE_SCHEDULES,
   TABLE_SCHEDULE_TRIGGERS,
@@ -265,13 +267,15 @@ export class ConvexDB extends MastraBase {
       workflowName,
       runId,
       stepId,
-      result: JSON.stringify(result),
+      result: JSON.stringify(serializeWorkflowSnapshotValue(result)),
       requestContext: JSON.stringify(requestContext),
     });
     if (!context) {
       throw new Error(`Convex workflow step merge returned no context for runId ${runId}`);
     }
-    return JSON.parse(context);
+    // The stored context holds the serialized view; hand runtime callers the
+    // raw step result for non-foreach entries, matching core merge semantics.
+    return withRuntimeStepResult(JSON.parse(context), stepId, result);
   }
 
   public async mergeWorkflowState({
@@ -288,7 +292,7 @@ export class ConvexDB extends MastraBase {
       tableName: TABLE_WORKFLOW_SNAPSHOT,
       workflowName,
       runId,
-      opts: JSON.stringify(opts),
+      opts: JSON.stringify(serializeWorkflowSnapshotValue(opts)),
     });
     if (!snapshot) {
       throw new Error(`Convex workflow state merge returned no snapshot for runId ${runId}`);

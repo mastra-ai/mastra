@@ -24,7 +24,7 @@ import { PrepareStepProcessor } from '../../../processors/processors/prepare-ste
 import { ProcessorRunner } from '../../../processors/runner';
 import { RequestContext } from '../../../request-context';
 import { execute } from '../../../stream/aisdk/v5/execute';
-import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
+import { DefaultStepResult, WORKFLOW_SNAPSHOT_SERIALIZER } from '../../../stream/aisdk/v5/output-helpers';
 import { safeEnqueue } from '../../../stream/base';
 import { MastraModelOutput } from '../../../stream/base/output';
 import type {
@@ -95,6 +95,144 @@ function getRequestInputProcessors({
   return additionalInputProcessors.length
     ? [...llmRequestInputProcessors, ...additionalInputProcessors]
     : llmRequestInputProcessors;
+}
+
+function normalizeComparableMessageValue(value: unknown, seen = new WeakSet<object>()): unknown {
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+
+  if (seen.has(value)) {
+    return '[Circular]';
+  }
+  seen.add(value);
+
+  const toJSON = (value as { toJSON?: unknown }).toJSON;
+  if (typeof toJSON === 'function') {
+    const jsonValue = toJSON.call(value);
+    if (jsonValue !== value) {
+      const normalized = normalizeComparableMessageValue(jsonValue, seen);
+      seen.delete(value);
+      return normalized;
+    }
+  }
+
+  if (Array.isArray(value)) {
+    const normalized = value.map(item => normalizeComparableMessageValue(item, seen));
+    seen.delete(value);
+    return normalized;
+  }
+
+  const normalized = Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map(key => [key, normalizeComparableMessageValue((value as Record<string, unknown>)[key], seen)]),
+  );
+  seen.delete(value);
+  return normalized;
+}
+
+export function getComparableMessageKey(message: unknown): string | undefined {
+  try {
+    return JSON.stringify(normalizeComparableMessageValue(message));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Rebuilds the cumulative `response.messages` view on step results that were
+ * round-tripped through workflow snapshot persistence (where only per-step
+ * message deltas are stored), and re-attaches the snapshot serializer hook so
+ * the next persist stays delta-only. Live `DefaultStepResult` instances and
+ * already-restored steps are left untouched, so this is safe to call on every
+ * iteration with a mix of live and rehydrated steps.
+ */
+export function restoreCumulativeStepResponseMessages(steps: any[], responseMessages: any[]): void {
+  // Key computation stringifies every message; skip it entirely when no step
+  // needs restoring (live DefaultStepResults or already-restored steps).
+  const needsRestore = steps.some(
+    step => Array.isArray(step?.response?.messages) && typeof step?.[WORKFLOW_SNAPSHOT_SERIALIZER] !== 'function',
+  );
+  if (!needsRestore) {
+    return;
+  }
+
+  const responseMessageKeys = responseMessages.map(getComparableMessageKey);
+  let lastMatchedIndex = -1;
+  let lastStoredMessageCount = 0;
+
+  for (const [stepIndex, step] of steps.entries()) {
+    const messages = step?.response?.messages;
+    if (!Array.isArray(messages)) {
+      continue;
+    }
+
+    const lastMessage = messages.at(-1);
+    const lastMessageKey = getComparableMessageKey(lastMessage);
+    const matchedIndex =
+      lastMessageKey === undefined
+        ? -1
+        : responseMessageKeys.findIndex((key, index) => index > lastMatchedIndex && key === lastMessageKey);
+
+    let snapshotMessages: any[];
+    let liveMessages: any[];
+
+    if (matchedIndex === -1) {
+      // The step's last message isn't in the rehydrated history (processor-mutated
+      // messages or trimmed history). Recovery is conservative: treat the step's own
+      // array as both views, with everything past the previously-consumed count as
+      // its delta. The cursor advance below is a best-effort guess (a step-local
+      // length used as a global index — only exact for the first step); later steps
+      // re-anchor by key search, so an imprecise cursor only narrows their search.
+      if (messages.length <= lastStoredMessageCount) {
+        continue;
+      }
+      snapshotMessages = messages.slice(lastStoredMessageCount);
+      liveMessages = messages;
+      lastStoredMessageCount = messages.length;
+      lastMatchedIndex = Math.max(lastMatchedIndex, Math.min(messages.length - 1, responseMessages.length - 1));
+    } else {
+      const previousMatchedIndex = lastMatchedIndex;
+      lastMatchedIndex = matchedIndex;
+      lastStoredMessageCount = Math.max(lastStoredMessageCount, messages.length);
+      if (messages.length === matchedIndex + 1) {
+        // The step's own array already spans the full cumulative prefix (legacy
+        // cumulative snapshots, or a first-step delta that equals it). Keep the
+        // step's own message objects — swapping in live message-list objects
+        // can change message part shapes — and only re-derive the delta.
+        snapshotMessages = messages.slice(previousMatchedIndex + 1);
+        liveMessages = messages;
+      } else {
+        snapshotMessages = responseMessages.slice(previousMatchedIndex + 1, matchedIndex + 1);
+        liveMessages = responseMessages.slice(0, matchedIndex + 1);
+      }
+    }
+
+    const workflowSnapshotSerializer = step?.[WORKFLOW_SNAPSHOT_SERIALIZER];
+    if (typeof workflowSnapshotSerializer === 'function') {
+      continue;
+    }
+
+    const restoredStep = {
+      ...step,
+      response: {
+        ...step.response,
+        messages: liveMessages,
+      },
+    };
+    Object.defineProperty(restoredStep, WORKFLOW_SNAPSHOT_SERIALIZER, {
+      value: () => ({
+        ...restoredStep,
+        response: {
+          ...restoredStep.response,
+          messages: snapshotMessages,
+        },
+      }),
+      configurable: true,
+    });
+    steps[stepIndex] = restoredStep;
+  }
 }
 
 type ProcessOutputStreamResult = {
@@ -876,6 +1014,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let rawResponse: any;
       let activeFallbackModelIndex = inputData.fallbackModelIndex || 0;
       let executedStepModel: string | undefined;
+      // Initial boundary; re-synced below after request processors/fallbacks mutate messages.
+      let responseMessageStartCount = inputData.messages?.nonUser?.length || 0;
+      const steps = inputData.output?.steps || [];
       const maxErrorProcessorRetries = maxProcessorRetries ?? (errorProcessors?.length ? 10 : undefined);
       const { outputStream, callBail, runState, stepTools, stepWorkspace, processAPIErrorRetry } =
         await executeStreamWithFallbackModels<{
@@ -936,6 +1077,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               safeEnqueue(controller, signalForTranscript.toDataPart());
             }
           }
+
+          restoreCumulativeStepResponseMessages(
+            steps,
+            inputData.messages?.nonUser ?? messageList.get.response.aiV5.model(),
+          );
 
           const currentStep: {
             messageId: string;
@@ -1281,6 +1427,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             logger?.error('Error in processLLMRequest processors:', error);
             throw error;
           }
+
+          // Capture the final pre-model boundary for this attempt, after processors or prior fallbacks.
+          responseMessageStartCount = messageList.get.response.aiV5.model().length;
 
           if (cachedResponse) {
             // Short-circuit: replay cached chunks instead of calling the model.
@@ -1949,15 +2098,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }
       }
 
-      const steps = inputData.output?.steps || [];
+      const allResponseMessages = messageList.get.response.aiV5.model();
 
       // Only include content from this iteration, not all accumulated content
-      // Get the number of existing response messages to know where this iteration starts
-      const existingResponseCount = inputData.messages?.nonUser?.length || 0;
+      // Snapshot serialization can be slimmer than the live result object, but
+      // the boundary has to account for prepareStep/input processors mutating
+      // the message list before the model request.
       const allResponseContent = messageList.get.response.aiV5.modelContent(steps.length);
+      const currentStepResponseMessages = allResponseMessages.slice(responseMessageStartCount);
 
       // Extract only the content added in this iteration
-      const currentIterationContent = allResponseContent.slice(existingResponseCount);
+      const responseContentStartCount = inputData.messages?.nonUser?.length || 0;
+      const currentIterationContent = allResponseContent.slice(responseContentStartCount);
 
       // Build tripwire data if this step is being rejected
       // This includes both retry scenarios and max retries exceeded
@@ -1979,7 +2131,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           providerMetadata: runState.state.providerOptions,
           finishReason: runState.state.stepResult?.reason,
           content: currentIterationContent,
-          response: { ...responseMetadata, ...rawResponse, messages: messageList.get.response.aiV5.model() },
+          response: { ...responseMetadata, ...rawResponse, messages: allResponseMessages },
+          serializedResponseMessages: currentStepResponseMessages,
           request: request,
           usage: outputStream._getImmediateUsage() as LanguageModelV2Usage,
           tripwire: stepTripwireData,

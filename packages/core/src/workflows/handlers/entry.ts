@@ -5,6 +5,7 @@ import type { PubSub } from '../../events/pubsub';
 import { resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
 import type { DefaultExecutionEngine } from '../default';
+import { serializeWorkflowSnapshotValue } from '../snapshot-serialization';
 import type {
   EntryExecutionResult,
   ExecutionContext,
@@ -170,7 +171,7 @@ export async function persistStepUpdate(
         runId,
         status: workflowStatus,
         value: executionContext.state,
-        context: stepResults as any,
+        context: serializeWorkflowSnapshotValue(stepResults) as any,
         activePaths: executionContext.executionPath,
         stepExecutionPath: executionContext.stepExecutionPath,
         activeStepsPath: executionContext.activeStepsPath,
@@ -178,7 +179,7 @@ export async function persistStepUpdate(
         suspendedPaths: executionContext.suspendedPaths,
         waitingPaths: {},
         resumeLabels: executionContext.resumeLabels,
-        result,
+        result: serializeWorkflowSnapshotValue(result) as any,
         error,
         requestContext: requestContextObj,
         timestamp: Date.now(),

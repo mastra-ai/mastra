@@ -315,6 +315,308 @@ describe('Workflow (Evented Engine Specific)', () => {
     await workflowsStore?.dangerouslyClearAll();
   });
 
+  it('keeps a concurrent foreach failure terminal after another iteration completes', async () => {
+    const foreachStep = createStep({
+      id: 'foreach-concurrent-failure-step',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+      execute: async ({ inputData }) => {
+        if (inputData.value === 0) {
+          throw new Error('foreach iteration failed');
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return { value: inputData.value };
+      },
+    });
+
+    const workflow = createWorkflow({
+      id: 'evented-foreach-concurrent-failure',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.array(z.object({ value: z.number() })),
+      steps: [foreachStep],
+      options: { validateInputs: false },
+    })
+      .foreach(foreachStep, { concurrency: 2 })
+      .commit();
+
+    const mastra = new Mastra({
+      workflows: { 'evented-foreach-concurrent-failure': workflow },
+      logger: false,
+      storage: testStorage,
+      pubsub: new EventEmitterPubSub(),
+    });
+
+    try {
+      await mastra.startWorkers();
+
+      const run = await workflow.createRun({ runId: 'evented-foreach-concurrent-failure-run' });
+      const result = await run.start({ inputData: [{ value: 0 }, { value: 1 }] });
+
+      expect(result.status).toBe('failed');
+
+      const workflowsStore = await testStorage.getStore('workflows');
+      let snapshot;
+      const startedAt = Date.now();
+      do {
+        snapshot = await workflowsStore?.loadWorkflowSnapshot({
+          workflowName: 'evented-foreach-concurrent-failure',
+          runId: 'evented-foreach-concurrent-failure-run',
+        });
+        if (
+          snapshot?.status === 'failed' &&
+          snapshot?.context?.['foreach-concurrent-failure-step']?.output?.[1] !== null
+        ) {
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 10));
+      } while (Date.now() - startedAt < 1_000);
+
+      const foreachResult = snapshot?.context?.['foreach-concurrent-failure-step'];
+
+      expect(snapshot?.status).toBe('failed');
+      expect(foreachResult?.status).toBe('failed');
+      expect(foreachResult?.output?.[0]?.status).toBe('failed');
+      expect(foreachResult?.output?.[1]).toEqual({ value: 1 });
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('drops late suspended iterations after a concurrent foreach failure', async () => {
+    const foreachStep = createStep({
+      id: 'foreach-late-suspend-step',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ value: z.number() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({ inputData, suspend }) => {
+        if (inputData.value === 0) {
+          throw new Error('foreach iteration failed');
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await suspend({ reason: 'needs approval' });
+        return { value: inputData.value };
+      },
+    });
+
+    const workflow = createWorkflow({
+      id: 'evented-foreach-late-suspend',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.array(z.object({ value: z.number() })),
+      steps: [foreachStep],
+      options: { validateInputs: false },
+    })
+      .foreach(foreachStep, { concurrency: 2 })
+      .commit();
+
+    const mastra = new Mastra({
+      workflows: { 'evented-foreach-late-suspend': workflow },
+      logger: false,
+      storage: testStorage,
+      pubsub: new EventEmitterPubSub(),
+    });
+
+    try {
+      await mastra.startWorkers();
+
+      const run = await workflow.createRun({ runId: 'evented-foreach-late-suspend-run' });
+      const result = await run.start({ inputData: [{ value: 0 }, { value: 1 }] });
+
+      expect(result.status).toBe('failed');
+
+      // Give the slow iteration time to suspend after the workflow already failed,
+      // then make sure the late suspend neither resurrected the run nor landed in
+      // the persisted foreach output.
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      const workflowsStore = await testStorage.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: 'evented-foreach-late-suspend',
+        runId: 'evented-foreach-late-suspend-run',
+      });
+      const foreachResult = snapshot?.context?.['foreach-late-suspend-step'] as any;
+
+      expect(snapshot?.status).toBe('failed');
+      expect(foreachResult?.status).toBe('failed');
+      expect(foreachResult?.output?.[1] ?? null).toBeNull();
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('treats null foreach iteration outputs as completed values', async () => {
+    const foreachStep = createStep({
+      id: 'foreach-null-output-step',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.null(),
+      execute: async () => null,
+    });
+
+    const workflow = createWorkflow({
+      id: 'evented-foreach-null-output',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.array(z.null()),
+      steps: [foreachStep],
+      options: { validateInputs: false },
+    })
+      .foreach(foreachStep, { concurrency: 2 })
+      .commit();
+
+    const mastra = new Mastra({
+      workflows: { 'evented-foreach-null-output': workflow },
+      logger: false,
+      storage: testStorage,
+      pubsub: new EventEmitterPubSub(),
+    });
+
+    try {
+      await mastra.startWorkers();
+
+      const run = await workflow.createRun({ runId: 'evented-foreach-null-output-run' });
+      const result = await run.start({ inputData: [{ value: 0 }, { value: 1 }] });
+
+      expect(result).toMatchObject({
+        status: 'success',
+        result: [null, null],
+      });
+
+      const workflowsStore = await testStorage.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        workflowName: 'evented-foreach-null-output',
+        runId: 'evented-foreach-null-output-run',
+      });
+
+      expect(snapshot?.context?.['foreach-null-output-step']?.output).toEqual([null, null]);
+      expect(snapshot?.context?.['foreach-null-output-step']).not.toHaveProperty(
+        '__mastra_foreach_completed_indexes__',
+      );
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('does not treat successful foreach output with failed status text as a step failure', async () => {
+    const foreachStep = createStep({
+      id: 'foreach-domain-status-step',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({
+        status: z.string(),
+        value: z.number(),
+        error: z.object({ message: z.string() }),
+        endedAt: z.number(),
+      }),
+      execute: async ({ inputData }) => ({
+        status: 'failed',
+        value: inputData.value,
+        error: { message: 'domain-level failure state' },
+        endedAt: inputData.value,
+      }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'evented-foreach-domain-status',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.array(
+        z.object({
+          status: z.string(),
+          value: z.number(),
+          error: z.object({ message: z.string() }),
+          endedAt: z.number(),
+        }),
+      ),
+      steps: [foreachStep],
+      options: { validateInputs: false },
+    })
+      .foreach(foreachStep, { concurrency: 2 })
+      .commit();
+
+    const mastra = new Mastra({
+      workflows: { 'evented-foreach-domain-status': workflow },
+      logger: false,
+      storage: testStorage,
+      pubsub: new EventEmitterPubSub(),
+    });
+
+    try {
+      await mastra.startWorkers();
+
+      const run = await workflow.createRun({ runId: 'evented-foreach-domain-status-run' });
+      const result = await run.start({ inputData: [{ value: 0 }, { value: 1 }] });
+
+      expect(result).toMatchObject({
+        status: 'success',
+        result: [
+          { status: 'failed', value: 0, error: { message: 'domain-level failure state' }, endedAt: 0 },
+          { status: 'failed', value: 1, error: { message: 'domain-level failure state' }, endedAt: 1 },
+        ],
+      });
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('does not treat successful foreach output with suspended status text as a step suspension', async () => {
+    const foreachStep = createStep({
+      id: 'foreach-domain-suspended-status-step',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({
+        status: z.string(),
+        value: z.number(),
+        suspendedAt: z.number(),
+        suspendPayload: z.object({ reason: z.string() }),
+      }),
+      execute: async ({ inputData }) => ({
+        status: 'suspended',
+        value: inputData.value,
+        suspendedAt: inputData.value,
+        suspendPayload: { reason: 'domain-level state' },
+      }),
+    });
+
+    const workflow = createWorkflow({
+      id: 'evented-foreach-domain-suspended-status',
+      inputSchema: z.array(z.object({ value: z.number() })),
+      outputSchema: z.array(
+        z.object({
+          status: z.string(),
+          value: z.number(),
+          suspendedAt: z.number(),
+          suspendPayload: z.object({ reason: z.string() }),
+        }),
+      ),
+      steps: [foreachStep],
+      options: { validateInputs: false },
+    })
+      .foreach(foreachStep, { concurrency: 2 })
+      .commit();
+
+    const mastra = new Mastra({
+      workflows: { 'evented-foreach-domain-suspended-status': workflow },
+      logger: false,
+      storage: testStorage,
+      pubsub: new EventEmitterPubSub(),
+    });
+
+    try {
+      await mastra.startWorkers();
+
+      const run = await workflow.createRun({ runId: 'evented-foreach-domain-suspended-status-run' });
+      const result = await run.start({ inputData: [{ value: 0 }, { value: 1 }] });
+
+      expect(result).toMatchObject({
+        status: 'success',
+        result: [
+          { status: 'suspended', value: 0, suspendedAt: 0, suspendPayload: { reason: 'domain-level state' } },
+          { status: 'suspended', value: 1, suspendedAt: 1, suspendPayload: { reason: 'domain-level state' } },
+        ],
+      });
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
   it('should create a processor step for state signal only processors', () => {
     const processor: Processor = {
       id: 'state-only-processor',

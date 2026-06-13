@@ -7,7 +7,7 @@ import type {
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
 } from '../../types';
-import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from '../../workflow-snapshot';
+import { createEmptyWorkflowSnapshot, mergeWorkflowState, mergeWorkflowStepResult } from '../../workflow-snapshot';
 import type { InMemoryDB } from '../inmemory-db';
 import { WorkflowsStorage } from './base';
 
@@ -265,7 +265,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       throw new Error(`Snapshot not found for runId ${runId}`);
     }
 
-    snapshot = { ...snapshot, ...opts };
+    snapshot = mergeWorkflowState({ snapshot, opts });
     this.db.workflows.set(key, {
       ...run,
       snapshot: snapshot,

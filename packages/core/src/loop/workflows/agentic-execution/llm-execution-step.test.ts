@@ -11,10 +11,11 @@ import { RequestContext } from '../../../request-context';
 import { ToolStream } from '../../../tools/stream';
 import { createTool } from '../../../tools/tool';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../../../workflows/constants';
+import { serializeWorkflowSnapshotValue } from '../../../workflows/snapshot-serialization';
 import type { ExecuteFunctionParams } from '../../../workflows/step';
 import { testUsage } from '../../test-utils/utils';
 import type { OuterLLMRun } from '../../types';
-import { createLLMExecutionStep } from './llm-execution-step';
+import { createLLMExecutionStep, getComparableMessageKey } from './llm-execution-step';
 import { createToolCallStep } from './tool-call-step';
 
 type IterationData = {
@@ -106,6 +107,297 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     messageList.add({ role: 'user', content: 'Find the latest AI agent news' }, 'input');
 
     bail = vi.fn(data => data);
+  });
+
+  it('compares response messages independently of object key order', () => {
+    expect(
+      getComparableMessageKey({
+        role: 'assistant',
+        content: [{ type: 'text', text: 'hello' }],
+        providerMetadata: { model: 'test-model' },
+      }),
+    ).toBe(
+      getComparableMessageKey({
+        providerMetadata: { model: 'test-model' },
+        content: [{ text: 'hello', type: 'text' }],
+        role: 'assistant',
+      }),
+    );
+  });
+
+  it('keeps toJSON-backed response message values distinct during comparison', () => {
+    expect(getComparableMessageKey({ source: new URL('https://a.example/source') })).not.toBe(
+      getComparableMessageKey({ source: new URL('https://b.example/source') }),
+    );
+    expect(getComparableMessageKey({ createdAt: new Date('2026-01-01T00:00:00.000Z') })).not.toBe(
+      getComparableMessageKey({ createdAt: new Date('2026-01-02T00:00:00.000Z') }),
+    );
+  });
+
+  it('serializes only current iteration response messages on each internal step result', async () => {
+    let streamCallCount = 0;
+    const doStream = vi.fn(async () => {
+      streamCallCount++;
+
+      return {
+        stream: convertArrayToReadableStream([
+          {
+            type: 'response-metadata',
+            id: `resp-${streamCallCount}`,
+            modelId: 'mock-model-id',
+            timestamp: new Date(0),
+          },
+          {
+            type: 'text-start',
+            id: `text-${streamCallCount}`,
+          },
+          {
+            type: 'text-delta',
+            id: `text-${streamCallCount}`,
+            delta: `response ${streamCallCount}`,
+          },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: testUsage,
+          },
+        ]),
+        request: {},
+        response: { headers: undefined },
+        warnings: [],
+      };
+    });
+
+    const requestStepMessageLengths: number[][] = [];
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      inputProcessors: [
+        {
+          id: 'capture-request-steps',
+          processLLMRequest: async ({ prompt, steps }) => {
+            requestStepMessageLengths.push(steps.map(step => step.response.messages.length));
+            return { prompt };
+          },
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const firstResult = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+    const secondResult = await llmExecutionStep.execute(createExecuteParams(firstResult));
+
+    const serializedSteps = serializeWorkflowSnapshotValue(secondResult.output.steps);
+
+    expect(secondResult.messages.nonUser).toHaveLength(2);
+    expect(secondResult.output.steps).toHaveLength(2);
+    expect(secondResult.output.steps[0].response.messages).toHaveLength(1);
+    expect(secondResult.output.steps[1].response.messages).toHaveLength(2);
+    expect(serializedSteps[0].response.messages).toHaveLength(1);
+    expect(serializedSteps[1].response.messages).toEqual([secondResult.messages.nonUser[1]]);
+
+    const thirdLiveResult = await llmExecutionStep.execute(createExecuteParams(secondResult));
+    const thirdLiveSerializedSteps = serializeWorkflowSnapshotValue(thirdLiveResult.output.steps);
+
+    expect(thirdLiveResult.messages.nonUser).toHaveLength(3);
+    expect(thirdLiveResult.output.steps).toHaveLength(3);
+    expect(thirdLiveResult.output.steps[1].response.messages).toHaveLength(2);
+    expect(thirdLiveResult.output.steps[2].response.messages).toHaveLength(3);
+    expect(Array.isArray(thirdLiveResult.output.steps[0].toolCalls)).toBe(true);
+    expect(Array.isArray(thirdLiveResult.output.steps[1].toolCalls)).toBe(true);
+    expect(Array.isArray(thirdLiveResult.output.steps[2].toolCalls)).toBe(true);
+    expect(thirdLiveSerializedSteps[0].response.messages).toEqual([thirdLiveResult.messages.nonUser[0]]);
+    expect(thirdLiveSerializedSteps[1].response.messages).toEqual([thirdLiveResult.messages.nonUser[1]]);
+    expect(thirdLiveSerializedSteps[2].response.messages).toEqual([thirdLiveResult.messages.nonUser[2]]);
+    const thirdJsonSteps = JSON.parse(JSON.stringify(thirdLiveResult.output.steps));
+    expect(thirdJsonSteps[1].response.messages).toHaveLength(2);
+    expect(thirdJsonSteps[2].response.messages).toHaveLength(3);
+
+    const oldCumulativeSnapshotSteps = thirdLiveResult.output.steps.map(step => ({
+      content: step.content,
+      finishReason: step.finishReason,
+      usage: step.usage,
+      warnings: step.warnings,
+      request: step.request,
+      response: {
+        ...step.response,
+        messages: [...step.response.messages],
+      },
+      providerMetadata: step.providerMetadata,
+      tripwire: step.tripwire,
+    }));
+    expect(oldCumulativeSnapshotSteps[0].response.messages).toHaveLength(1);
+    expect(oldCumulativeSnapshotSteps[1].response.messages).toHaveLength(2);
+    expect(oldCumulativeSnapshotSteps[2].response.messages).toHaveLength(3);
+    oldCumulativeSnapshotSteps[1].response.messages[1] = {
+      ...oldCumulativeSnapshotSteps[1].response.messages[1],
+      providerMetadata: { storedSnapshotOnly: true },
+    };
+    const oldSecondStepSnapshotMessage = oldCumulativeSnapshotSteps[1].response.messages[1];
+
+    const resumedInput = {
+      ...thirdLiveResult,
+      output: {
+        ...thirdLiveResult.output,
+        steps: oldCumulativeSnapshotSteps,
+      },
+    };
+    const fourthResult = await llmExecutionStep.execute(createExecuteParams(resumedInput));
+    const fourthSerializedSteps = serializeWorkflowSnapshotValue(fourthResult.output.steps);
+
+    expect(fourthResult.messages.nonUser).toHaveLength(4);
+    expect(fourthResult.output.steps).toHaveLength(4);
+    expect(fourthResult.output.steps[2].response.messages).toHaveLength(3);
+    expect(fourthResult.output.steps[3].response.messages).toHaveLength(4);
+    expect(fourthSerializedSteps[0].response.messages).toEqual([fourthResult.messages.nonUser[0]]);
+    expect(fourthSerializedSteps[1].response.messages).toEqual([oldSecondStepSnapshotMessage]);
+    expect(fourthSerializedSteps[2].response.messages).toEqual([fourthResult.messages.nonUser[2]]);
+    expect(fourthSerializedSteps[3].response.messages).toEqual([fourthResult.messages.nonUser[3]]);
+    const fourthJsonSteps = JSON.parse(JSON.stringify(fourthResult.output.steps));
+    expect(fourthJsonSteps[2].response.messages).toHaveLength(3);
+    expect(fourthJsonSteps[3].response.messages).toHaveLength(4);
+    expect(requestStepMessageLengths).toEqual([[], [1], [1, 2], [1, 2, 3]]);
+  });
+
+  it('restores cumulative response messages when resuming from delta-format snapshot steps', async () => {
+    let streamCallCount = 0;
+    const doStream = vi.fn(async () => {
+      streamCallCount++;
+
+      return {
+        stream: convertArrayToReadableStream([
+          {
+            type: 'response-metadata',
+            id: `resp-${streamCallCount}`,
+            modelId: 'mock-model-id',
+            timestamp: new Date(0),
+          },
+          {
+            type: 'text-start',
+            id: `text-${streamCallCount}`,
+          },
+          {
+            type: 'text-delta',
+            id: `text-${streamCallCount}`,
+            delta: `response ${streamCallCount}`,
+          },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: testUsage,
+          },
+        ]),
+        request: {},
+        response: { headers: undefined },
+        warnings: [],
+      };
+    });
+
+    const requestStepMessageLengths: number[][] = [];
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      inputProcessors: [
+        {
+          id: 'capture-request-steps',
+          processLLMRequest: async ({ prompt, steps }) => {
+            requestStepMessageLengths.push(steps.map(step => step.response.messages.length));
+            return { prompt };
+          },
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const firstResult = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+    const secondResult = await llmExecutionStep.execute(createExecuteParams(firstResult));
+
+    // Simulate the persistence + transport round trip a resumed evented run sees:
+    // steps are stored as per-step deltas and lose class identity.
+    const rehydratedInput = JSON.parse(JSON.stringify(serializeWorkflowSnapshotValue(secondResult)));
+    expect(rehydratedInput.output.steps[0].response.messages).toHaveLength(1);
+    expect(rehydratedInput.output.steps[1].response.messages).toHaveLength(1);
+
+    const thirdResult = await llmExecutionStep.execute(createExecuteParams(rehydratedInput));
+
+    // The request processor saw the restored cumulative views, not the deltas.
+    expect(requestStepMessageLengths).toEqual([[], [1], [1, 2]]);
+
+    // Runtime steps expose cumulative messages again…
+    const runtimeSteps = JSON.parse(JSON.stringify(thirdResult.output.steps));
+    expect(runtimeSteps[0].response.messages).toHaveLength(1);
+    expect(runtimeSteps[1].response.messages).toHaveLength(2);
+    expect(runtimeSteps[2].response.messages).toHaveLength(3);
+
+    // …while snapshot serialization stays delta-only for every step.
+    const serializedSteps = serializeWorkflowSnapshotValue(thirdResult.output.steps);
+    expect(serializedSteps[0].response.messages).toEqual([thirdResult.messages.nonUser[0]]);
+    expect(serializedSteps[1].response.messages).toHaveLength(1);
+    expect(serializedSteps[2].response.messages).toHaveLength(1);
   });
 
   it('should infer providerExecuted for gateway tools and not merge streamed results onto toolCalls', async () => {
