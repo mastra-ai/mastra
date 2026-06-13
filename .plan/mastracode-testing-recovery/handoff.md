@@ -2,6 +2,7 @@
 
 ## Current status
 
+- 2026-06-13 verified: browser status projection coverage added and break-validated; browser automation row moved to validated from existing PTY e2e plus focused profile/executable/storage-state drift coverage. Current tracker: 43 validated, 13 needs-follow-up, 116 e2e scenarios.
 - 2026-06-13 stamp: `17f941e1e9` — MCP server configuration row moved to validated from existing deterministic coverage; protected OAuth authorization-server flow explicitly deferred as non-hermetic integration breadth. No runtime changes. Current tracker: 42 validated, 14 needs-follow-up, 116 e2e scenarios.
 - 2026-06-13 stamp: `9e3fe22871` — `mcp-selector.test.ts` coverage added and break-validated; MCP status/reload row moved to validated. Final gates passed: build, focused component test, check, and lint. Full PTY e2e not rerun because this chunk only adds focused component coverage and docs. Current tracker: 41 validated, 15 needs-follow-up, 116 e2e scenarios.
 - 2026-06-13 stamp: `1f0da28e4b` — `custom-provider-model-selector` coverage added and break-validated; custom-provider row remains needs-follow-up for provider create/remove-model validation, invalid URL/duplicate-name branches, and live request routing. Final gates passed: build, focused e2e, check, lint, and full TUI e2e 116/116 with `--jobs 4`. Current tracker: 40 validated, 16 needs-follow-up, 116 e2e scenarios.
@@ -437,3 +438,10 @@ Final checks passed:
 - `env -u OPENAI_API_KEY -u OPENAI_BASE_URL -u ANTHROPIC_API_KEY -u ANTHROPIC_BASE_URL -u TAVILY_API_KEY pnpm --filter ./mastracode exec vitest --run --bail=1 --reporter=dot` — 128 files / 1300 tests passed.
 
 No tracker rows were deferred. The next step is user final approval for the completed recovery queue.
+
+
+### 2026-06-13 — Browser status projection coverage
+
+- Added focused `/browser status` coverage in `mastracode/src/tui/commands/__tests__/browser.test.ts` for active-vs-pending profile/executable/storage-state projection and storage-state-only config drift.
+- Break validations: removed active storage-state rendering, removed pending executable rendering, and removed storage-state from `getBrowserConfigKey`; each failed the focused browser command test and was reverted.
+- Existing PTY e2e scenarios continue to cover browser settings persistence, AgentBrowser CDP enable/attach, startup restore, Browserbase startup/wizard paths, active/pending CDP drift, storage-state export, and profile-provider mismatch. Optional live external-provider smoke and browser history replay remain explicit non-blocking breadth.

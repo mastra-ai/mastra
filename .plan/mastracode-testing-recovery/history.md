@@ -5874,3 +5874,12 @@ Break validations:
 - Mapped `archive` back to `pending`; the scenario timed out waiting for the archived canary search result.
 
 Verification: `pnpm build:core`; `pnpm --filter ./mastracode run e2e:test notification-inbox-crud-flow`; `pnpm --filter ./mastracode check`; `pnpm --filter ./mastracode lint`.
+
+
+### Browser status projection — 2026-06-13
+
+- Added focused `browser.test.ts` coverage for active-vs-pending `/browser status` rendering of profile, executable, and AgentBrowser storage-state fields, plus storage-state-only drift detection.
+- Break validation 1: removed active storage-state rendering from `browser.ts`; focused browser command test failed waiting for the active storage-state line. Reverted.
+- Break validation 2: removed pending executable rendering from `browser.ts`; focused browser command test failed waiting for the pending executable line. Reverted.
+- Break validation 3: removed storage-state from `getBrowserConfigKey`; focused browser command test failed because storage-only changes rendered normal `Browser: enabled` status instead of active/pending drift. Reverted.
+- Verification: `pnpm run build:mastracode` passed (24/24 cached); focused `pnpm --filter ./mastracode exec vitest run src/tui/commands/__tests__/browser.test.ts --reporter=dot --bail 1` passed (3/3); `pnpm --filter ./mastracode check` clean; `pnpm --filter ./mastracode lint` clean.

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { BrowserSettings } from '../../../onboarding/settings.js';
 import { handleBrowserCommand } from '../browser.js';
 import type { SlashCommandContext } from '../types.js';
 
@@ -30,15 +31,16 @@ function createContext() {
   const dynamicAgent = { setBrowser: vi.fn() };
   const harnessState = { mode: 'review' };
   const setState = vi.fn();
+  const browserSettings: BrowserSettings = {
+    enabled: false,
+    provider: 'stagehand',
+    headless: true,
+    viewport: { width: 1280, height: 720 },
+    profile: '/tmp/mastracode-browser-profile',
+    stagehand: { env: 'LOCAL' },
+  };
   const settings = {
-    browser: {
-      enabled: false,
-      provider: 'stagehand' as const,
-      headless: true,
-      viewport: { width: 1280, height: 720 },
-      profile: '/tmp/mastracode-browser-profile',
-      stagehand: { env: 'LOCAL' as const },
-    },
+    browser: browserSettings,
   };
   const ctx = {
     state: {
@@ -48,6 +50,7 @@ function createContext() {
       ui: {},
     },
     harness: {
+      getState: vi.fn(() => harnessState),
       listModes: vi.fn(() => [
         { id: 'build', agent: staticAgent },
         { id: 'review', agent: vi.fn(() => dynamicAgent) },
@@ -95,5 +98,78 @@ describe('handleBrowserCommand', () => {
     expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
     expect(settings.browser.enabled).toBe(true);
     expect(ctx.showInfo).toHaveBeenCalledWith('Browser enabled (Stagehand).');
+  });
+
+  it('shows active and pending browser status with profile, executable, and storage state drift', async () => {
+    const { ctx, settings, harnessState } = createContext();
+    settings.browser = {
+      enabled: true,
+      provider: 'agent-browser',
+      headless: false,
+      viewport: { width: 1280, height: 720 },
+      executablePath: '/Applications/Pending Browser.app/Contents/MacOS/Pending Browser',
+      profile: '/tmp/pending-browser-profile',
+      agentBrowser: { storageState: '/tmp/pending-storage-state.json' },
+    };
+    Object.assign(harnessState, {
+      activeBrowserSettings: {
+        enabled: true,
+        provider: 'agent-browser',
+        headless: true,
+        viewport: { width: 1280, height: 720 },
+        executablePath: '/Applications/Active Browser.app/Contents/MacOS/Active Browser',
+        profile: '/tmp/active-browser-profile',
+        agentBrowser: { storageState: '/tmp/active-storage-state.json' },
+      },
+    });
+    browserMocks.loadSettings.mockReturnValue(settings);
+
+    await handleBrowserCommand(ctx, ['status']);
+
+    expect(ctx.showInfo).toHaveBeenCalledWith(
+      [
+        'Browser (active):',
+        '  Provider: AgentBrowser (deterministic)',
+        '  Headless: yes',
+        '  Executable: /Applications/Active Browser.app/Contents/MacOS/Active Browser',
+        '  Profile: /tmp/active-browser-profile',
+        '  Storage State: /tmp/active-storage-state.json',
+        '',
+        'Pending changes (not yet applied):',
+        '  Provider: AgentBrowser (deterministic)',
+        '  Headless: no',
+        '  Executable: /Applications/Pending Browser.app/Contents/MacOS/Pending Browser',
+        '  Profile: /tmp/pending-browser-profile',
+        '  Storage State: /tmp/pending-storage-state.json',
+        '',
+        '⚠️  /browser on to apply, /browser to reconfigure, or restart.',
+      ].join('\n'),
+    );
+  });
+
+  it('treats storage state changes as browser config drift', async () => {
+    const { ctx, settings, harnessState } = createContext();
+    const activeBrowserSettings: BrowserSettings = {
+      enabled: true,
+      provider: 'agent-browser',
+      headless: false,
+      viewport: { width: 1280, height: 720 },
+      profile: '/tmp/shared-browser-profile',
+      agentBrowser: { storageState: '/tmp/active-storage-state.json' },
+    };
+    settings.browser = {
+      ...activeBrowserSettings,
+      agentBrowser: { storageState: '/tmp/pending-storage-state.json' },
+    };
+    Object.assign(harnessState, { activeBrowserSettings });
+    browserMocks.loadSettings.mockReturnValue(settings);
+
+    await handleBrowserCommand(ctx, ['status']);
+
+    const status = (ctx.showInfo as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+    expect(status).toContain('Browser (active):');
+    expect(status).toContain('  Storage State: /tmp/active-storage-state.json');
+    expect(status).toContain('Pending changes (not yet applied):');
+    expect(status).toContain('  Storage State: /tmp/pending-storage-state.json');
   });
 });

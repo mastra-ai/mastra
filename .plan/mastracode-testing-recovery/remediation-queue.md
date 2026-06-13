@@ -3,7 +3,7 @@
 ## Current state
 
 - Checked-in TUI e2e coverage is no longer missing for any tracker row.
-- 14 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
+- 13 remaining partial rows are unfinished `needs-follow-up` tracker rows. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
 - Keep the user-realism rule: drive behavior through terminal input, slash commands, AIMock fixtures, deterministic pre-launch config/DB seeds, or approved external signal APIs for notification/state-signal origins. Do not emit Harness internals or mutate runtime display state directly.
 
 ## Priority queue
@@ -131,3 +131,5 @@
 3. Notification/state signal state transitions, because public signal APIs are already allowed but CRUD/reload parity is missing.
 4. GitHub incremental mock-gitcrawl, because the binary override and sanitized sqlite fixture already exist.
 5. MCP/settings/workspace breadth as smaller focused batches.
+
+- ✅ `mastracode/src/tui/commands/__tests__/browser.test.ts` — covered richer `/browser status` active/pending projection for profile/executable/storage-state fields and storage-state-only drift detection. Breaks proved active storage rendering, pending executable rendering, and storage-state drift key participation.
