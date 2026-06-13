@@ -2,6 +2,25 @@
 
 
 
+
+### Shell passthrough long-output coverage (2026-06-13)
+
+Added `shell-passthrough-long-output`, a real PTY scenario for the local `!` shell command path. The scenario runs a slow Node subprocess, verifies early stdout appears while the footer still shows the running state, waits for final collapsed latest-20-line output with the hidden-line hint and success footer, then sends Ctrl+E and verifies the tracked shell component expands to reveal the leading lines.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test shell-passthrough-long-output
+```
+
+Break validations:
+
+- Changed `!` input routing to another prefix; the scenario failed because the command fell into the agent/tool path instead of local shell passthrough.
+- Disabled stdout append into `ShellStreamComponent`; the scenario failed before any streamed output appeared.
+- Removed `allShellComponents` tracking; the scenario reached collapsed output but failed after Ctrl+E because the shell block did not expand.
+
+The Shell passthrough row remains `needs-follow-up`: long-running streaming and collapse/expand are now covered; remaining breadth is configured shell mode/env override e2e and loaded-history absence if needed.
+
 ### Skills command activation coverage (2026-06-13)
 
 Added `skills-command-activation`, a real PTY scenario for seeded workspace skill discovery and activation. The scenario creates user-invocable, goal-enabled, and hidden skills in the fixture project, verifies `/skills` lists only the invocable skills, runs `/skill/skill-activation-e2e` with arguments, and runs `/goal/goal-review-e2e` so AIMock proves both explicit skill activation and goal-skill alias content reach provider requests.

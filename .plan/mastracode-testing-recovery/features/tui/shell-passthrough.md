@@ -74,11 +74,11 @@
 - `mastracode/src/tui/components/__tests__/ansi.test.ts` — covers ANSI/OSC truncation plus a pathological no-terminator ReDoS regression case.
 - `mastracode/src/tui/components/__tests__/shell-output.test.ts` — covers `ShellStreamComponent` incremental output rendering, trailing partial flush on finish, failure footer/exit code, 20-line collapsed view, 200-line cap, expanded view, and terminal-width truncation.
 - `mastracode/scripts/mc-e2e/scenarios/modal-and-shell.ts` — partial real PTY coverage: submits a default-shell `!printf` passthrough command, asserts bordered stdout is rendered as shell output, and asserts the success footer appears after completion.
+- `mastracode/scripts/mc-e2e/scenarios/shell-passthrough-long-output.ts` — real PTY coverage for a slow long-running `!` command: asserts early stdout while the subprocess is still running, collapsed latest-20-line rendering with the hidden leading lines, success footer, and Ctrl+E expansion for tracked shell components.
 
 ## Missing tests
 
 - End-to-end PTY test proving configured `MASTRACODE_SHELL`/settings modes run the same visible `!` command path as default shell mode.
-- End-to-end TUI test proving long-running `!` commands stream before process exit; the current PTY scenario covers completed stdout rendering and footer state only.
 - Loaded-history assertion that local passthrough output is not reconstructed as persisted agent/tool history.
 
 ## Known risks / regressions

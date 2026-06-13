@@ -98,7 +98,7 @@
 - Proposed scenarios:
   - Completed: `skills-command-activation` seeds deterministic workspace skills, asserts `/skills` lists only user-invocable skills, activates `/skill/<name>` with arguments and escaped embedded skill boundaries, and proves `/goal/<skill>` alias activation reaches AIMock.
   - Completed: `lifecycle-hooks-configured` starts from project hook config, verifies configured `/hooks` status, rewrites the config from disk, runs `/hooks reload`, then proves the reloaded `UserPromptSubmit` hook blocks a normal prompt before it reaches the agent.
-  - `shell-streaming-long-output`: run shell command with multi-line/streamed output and verify bordered stdout/stderr truncation.
+  - Completed: `shell-passthrough-long-output` runs a slow multi-line `!` command, verifies output appears before process exit, asserts collapsed long-output rendering, then uses Ctrl+E to expand the tracked shell component.
   - Completed: `request-access-modal` uses an AIMock `request_access` tool call to an inaccessible path, asserts the real approval prompt, approves via Enter, renders the granted result, and reads a deterministic external file through `view` after the path is allowed.
   - Completed: `ask-user-advanced-prompts` uses AIMock `ask_user` calls to assert multiline free-text input, single-select `Custom response...` switching to typed input, and fixed-option multi-select toggling through the real PTY TUI.
   - Completed: `prompt-queue-interleave` uses simultaneous AIMock `ask_user` and `request_access` tool calls to assert the access prompt is queued behind the active ask_user prompt, activates after the first answer, accepts the default Yes option, and resolves the model turn.
