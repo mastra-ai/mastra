@@ -22,7 +22,7 @@ export const browserSettingsPersistenceScenario = {
     };
     settings.browser = {
       enabled: false,
-      provider: 'stagehand',
+      provider: 'agent-browser',
       headless: false,
       viewport: { width: 1280, height: 720 },
       stagehand: { env: 'LOCAL' },
@@ -61,6 +61,14 @@ export const browserSettingsPersistenceScenario = {
     await runtime.waitForScreenText(/BROWSER_EXEC=\/tmp\/mastracode-browser-e2e-chrome/i, terminal, 8_000);
     await runtime.waitForScreenText(/BROWSER_STAGEHAND_ENV=LOCAL/i, terminal, 8_000);
     await runtime.waitForScreenText(/BROWSER_PRESERVE=false/i, terminal, 8_000);
+
+    terminal.submit('/browser clear');
+    await runtime.waitForScreenText(/Browser settings reset to defaults\./i, terminal, 8_000);
+
+    terminal.submit(
+      `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); const b=s.browser||{}; console.log("BROWSER_CLEAR_DEFAULTS="+[b.enabled,b.provider,b.headless,b.viewport&&b.viewport.width,b.viewport&&b.viewport.height,b.cdpUrl||"missing",b.profile||"missing",b.executablePath||"missing",b.agentBrowser?"kept":"missing"].join(":"));'`,
+    );
+    await runtime.waitForScreenText(/BROWSER_CLEAR_DEFAULTS=false:stagehand:false:1280:720:missing:missing:missing:missing/i, terminal, 8_000);
 
     terminal.keyCtrlC();
     await runtime.sleep(300);

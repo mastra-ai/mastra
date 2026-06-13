@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Browser clear-all settings coverage (2026-06-12)
+
+Strengthened `browser-settings-persistence` to cover `/browser clear` without an argument. The scenario now starts from a non-default AgentBrowser settings block, exercises existing CDP/profile/executable quick-setting flows, then runs clear-all and proves `settings.json` resets to the disabled Stagehand defaults while removing CDP/profile/executable/agentBrowser settings.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test browser-settings-persistence
+```
+
+Break validations:
+
+- Changed clear-all default provider from Stagehand to AgentBrowser; the shell proof failed on the persisted provider.
+- Preserved `executablePath` in the clear-all reset object; the shell proof failed because the executable path survived reset.
+- Skipped `saveSettings()` in the clear-all branch; the shell proof failed because old provider/executable settings remained in `settings.json`.
+
+The browser/settings rows remain `needs-follow-up`: clear-all reset is now covered; remaining browser breadth is Browserbase/profile-mismatch variants and richer active-state projection.
+
+
 ### Browser wizard/export coverage (2026-06-12)
 
 Added `browser-wizard-export`, a real PTY e2e scenario for the interactive `/browser` wizard and AgentBrowser storage-state export path. The scenario uses a deterministic entrypoint patch for `AgentBrowser.exportStorageState`, selects AgentBrowser through the wizard, chooses CDP launch mode, verifies the enabled status projection, runs `/browser export storageState`, and proves both `settings.json` and the exported file contents through shell passthrough.
