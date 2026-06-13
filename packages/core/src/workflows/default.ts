@@ -48,6 +48,21 @@ import type {
 // Re-export ExecutionContext for backwards compatibility
 export type { ExecutionContext } from './types';
 
+function abortableTimeout(ms: number, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return Promise.resolve();
+  return new Promise<void>(resolve => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 /**
  * Default implementation of the ExecutionEngine
  */
@@ -105,9 +120,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @param duration - The duration to sleep in milliseconds
    * @param _sleepId - Unique identifier for this sleep operation
    * @param _workflowId - The workflow ID (for constructing platform-specific IDs)
+   * @param signal - Abort signal; when fired, clears the timer and resolves immediately
    */
-  async executeSleepDuration(duration: number, _sleepId: string, _workflowId: string): Promise<void> {
-    await new Promise(resolve => setTimeout(resolve, duration < 0 ? 0 : duration));
+  async executeSleepDuration(
+    duration: number,
+    _sleepId: string,
+    _workflowId: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
+    await abortableTimeout(duration < 0 ? 0 : duration, signal);
   }
 
   /**
@@ -116,10 +137,16 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * @param date - The date to sleep until
    * @param _sleepUntilId - Unique identifier for this sleep operation
    * @param _workflowId - The workflow ID (for constructing platform-specific IDs)
+   * @param signal - Abort signal; when fired, clears the timer and resolves immediately
    */
-  async executeSleepUntilDate(date: Date, _sleepUntilId: string, _workflowId: string): Promise<void> {
+  async executeSleepUntilDate(
+    date: Date,
+    _sleepUntilId: string,
+    _workflowId: string,
+    signal?: AbortSignal,
+  ): Promise<void> {
     const time = date.getTime() - Date.now();
-    await new Promise(resolve => setTimeout(resolve, time < 0 ? 0 : time));
+    await abortableTimeout(time < 0 ? 0 : time, signal);
   }
 
   /**

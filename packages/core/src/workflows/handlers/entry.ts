@@ -575,54 +575,65 @@ export async function executeEntry(
 
     delete executionContext.activeStepsPath[entry.id];
 
-    await engine.persistStepUpdate({
-      workflowId,
-      runId,
-      resourceId,
-      serializedStepGraph,
-      stepResults,
-      executionContext,
-      workflowStatus: 'running',
-      requestContext,
-    });
-
-    const endedAt = Date.now();
-    const stepInfo = {
-      payload: prevOutput,
-      startedAt,
-      endedAt,
-    };
-
-    execResults = { ...stepInfo, status: 'success', output: prevOutput };
-    stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
-    const sleepResultOperationId = `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.result_ev`;
-    await engine.wrapDurableOperation(sleepResultOperationId, async () => {
-      await pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
+    // If the run was canceled while we were sleeping, do not flip status back to
+    // 'running' or publish a sleep-step success — that would overwrite the
+    // 'canceled' status that cancel() persisted (#17908). The final block of
+    // this function still persists the canceled status and publishes the
+    // workflow-canceled event.
+    if (abortController?.signal?.aborted) {
+      const endedAt = Date.now();
+      execResults = { payload: prevOutput, startedAt, endedAt, status: 'canceled' };
+      stepResults[entry.id] = execResults;
+    } else {
+      await engine.persistStepUpdate({
+        workflowId,
         runId,
-        data: {
-          type: 'workflow-step-result',
-          payload: {
-            id: entry.id,
-            endedAt,
-            status: 'success',
-            output: prevOutput,
-          },
-        },
+        resourceId,
+        serializedStepGraph,
+        stepResults,
+        executionContext,
+        workflowStatus: 'running',
+        requestContext,
       });
 
-      await pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
-        runId,
-        data: {
-          type: 'workflow-step-finish',
-          payload: {
-            id: entry.id,
-            metadata: {},
+      const endedAt = Date.now();
+      const stepInfo = {
+        payload: prevOutput,
+        startedAt,
+        endedAt,
+      };
+
+      execResults = { ...stepInfo, status: 'success', output: prevOutput };
+      stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
+      const sleepResultOperationId = `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.result_ev`;
+      await engine.wrapDurableOperation(sleepResultOperationId, async () => {
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: {
+            type: 'workflow-step-result',
+            payload: {
+              id: entry.id,
+              endedAt,
+              status: 'success',
+              output: prevOutput,
+            },
           },
-        },
+        });
+
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: {
+            type: 'workflow-step-finish',
+            payload: {
+              id: entry.id,
+              metadata: {},
+            },
+          },
+        });
       });
-    });
+    }
   } else if (entry.type === 'sleepUntil') {
     executionContext.stepExecutionPath?.push(entry.id);
     const startedAt = Date.now();
@@ -680,55 +691,63 @@ export async function executeEntry(
 
     delete executionContext.activeStepsPath[entry.id];
 
-    await engine.persistStepUpdate({
-      workflowId,
-      runId,
-      resourceId,
-      serializedStepGraph,
-      stepResults,
-      executionContext,
-      workflowStatus: 'running',
-      requestContext,
-    });
-
-    const endedAt = Date.now();
-    const stepInfo = {
-      payload: prevOutput,
-      startedAt,
-      endedAt,
-    };
-
-    execResults = { ...stepInfo, status: 'success', output: prevOutput };
-    stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
-
-    const sleepUntilResultOperationId = `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.result_ev`;
-    await engine.wrapDurableOperation(sleepUntilResultOperationId, async () => {
-      await pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
+    // If cancel() fired during the sleepUntil, skip the 'running' status flip
+    // and the sleep-step success event for the same reason as plain sleep (#17908).
+    if (abortController?.signal?.aborted) {
+      const endedAt = Date.now();
+      execResults = { payload: prevOutput, startedAt, endedAt, status: 'canceled' };
+      stepResults[entry.id] = execResults;
+    } else {
+      await engine.persistStepUpdate({
+        workflowId,
         runId,
-        data: {
-          type: 'workflow-step-result',
-          payload: {
-            id: entry.id,
-            endedAt,
-            status: 'success',
-            output: prevOutput,
-          },
-        },
+        resourceId,
+        serializedStepGraph,
+        stepResults,
+        executionContext,
+        workflowStatus: 'running',
+        requestContext,
       });
 
-      await pubsub.publish(`workflow.events.v2.${runId}`, {
-        type: 'watch',
-        runId,
-        data: {
-          type: 'workflow-step-finish',
-          payload: {
-            id: entry.id,
-            metadata: {},
+      const endedAt = Date.now();
+      const stepInfo = {
+        payload: prevOutput,
+        startedAt,
+        endedAt,
+      };
+
+      execResults = { ...stepInfo, status: 'success', output: prevOutput };
+      stepResults[entry.id] = { ...stepInfo, status: 'success', output: prevOutput };
+
+      const sleepUntilResultOperationId = `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.result_ev`;
+      await engine.wrapDurableOperation(sleepUntilResultOperationId, async () => {
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: {
+            type: 'workflow-step-result',
+            payload: {
+              id: entry.id,
+              endedAt,
+              status: 'success',
+              output: prevOutput,
+            },
           },
-        },
+        });
+
+        await pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: {
+            type: 'workflow-step-finish',
+            payload: {
+              id: entry.id,
+              metadata: {},
+            },
+          },
+        });
       });
-    });
+    }
   }
 
   if (entry.type === 'step' || entry.type === 'loop' || entry.type === 'foreach') {
