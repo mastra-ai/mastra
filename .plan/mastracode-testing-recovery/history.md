@@ -1,6 +1,6 @@
 # Mastra Code testing recovery history
 
-### Debug logging startup wiring coverage (2026-06-13, pending)
+### Debug logging startup wiring coverage (2026-06-13, 078a091149)
 
 Extended `mastracode/src/utils/__tests__/debug-log.test.ts` with startup-wiring assertions that both production entrypoints, `src/main.ts` and `src/headless.ts`, import and call `setupDebugLogging()` exactly once. Existing debug-log unit coverage already protects env gating, warning/error redirection, stack formatting, startup truncation, append behavior, and repeated setup behavior. Existing `debug-logging` PTY e2e verifies an opt-in `MASTRA_DEBUG=1` run captures a sentinel warning into isolated app-data `debug.log` without leaking it into the terminal UI.
 
