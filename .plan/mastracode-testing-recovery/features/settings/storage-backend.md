@@ -72,12 +72,13 @@
 - `mastracode/src/onboarding/__tests__/settings.test.ts` — settings schema/default parsing includes storage defaults.
 - `mastracode/src/tui/components/__tests__/settings.test.ts` — storage backend submenu saves PostgreSQL connections, preserves default-local LibSQL semantics for empty input, and cancels raw Escape without saving.
 - `mastracode/scripts/mc-e2e/scenarios/storage-settings.ts` — partial real PTY coverage for `/settings` → Storage backend → PostgreSQL connection input, masked connection-string rendering, raw connection-string persistence in `settings.json`, and restart-required notice after save.
+- `mastracode/scripts/mc-e2e/scenarios/storage-startup-pg-fallback.ts` — seeds persisted PostgreSQL backend settings before startup and verifies the TUI emits the missing-connection fallback warning while continuing on LibSQL, proving saved backend selection is reloaded.
 - `stores/libsql/src/storage/local-performance.test.ts` — local PRAGMAs, message indexes, cached/coalesced init, and in-memory reinit behavior.
 - `stores/libsql/src/storage/db/migration-columns.test.ts` — table-column cache keeps migration column inspection bounded.
 
 ## Missing tests
 
-- Full `/settings` command restart flow after saving storage changes, including selected-backend reload; restart notice and raw connection-string persistence are covered by `storage-settings`.
+- Full same-session `/settings` command restart handoff after saving storage changes; restart notice/raw connection-string persistence are covered by `storage-settings`, and selected-backend startup reload/fallback warning is covered by `storage-startup-pg-fallback`.
 - Restart after switching backend: selected backend, footer/runtime warning, and history visibility.
 - Successful PostgreSQL integration against a real test database, including `PgVector` usage and schema/index flags.
 - Data migration story when switching LibSQL ↔ PostgreSQL.

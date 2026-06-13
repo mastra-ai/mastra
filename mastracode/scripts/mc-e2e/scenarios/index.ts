@@ -85,6 +85,7 @@ import { stateSignalBrowserProcessorScenario } from './state-signal-browser-proc
 import { stateSignalReloadScenario } from './state-signal-reload.js';
 import { stateSignalRenderingScenario } from './state-signal-rendering.js';
 import { storageSettingsScenario } from './storage-settings.js';
+import { storageStartupPgFallbackScenario } from './storage-startup-pg-fallback.js';
 import { streamErrorRetryScenario } from './stream-error-retry.js';
 import { streamingToolArgsScenario } from './streaming-tool-args.js';
 import { subagentDelegationScenario } from './subagent-delegation.js';
@@ -197,6 +198,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'shell-passthrough-long-output': shellPassthroughLongOutputScenario,
   'skills-command-activation': skillsCommandActivationScenario,
   'storage-settings': storageSettingsScenario,
+  'storage-startup-pg-fallback': storageStartupPgFallbackScenario,
   'stream-error-retry': streamErrorRetryScenario,
   'streaming-tool-args': streamingToolArgsScenario,
   'subagent-delegation': subagentDelegationScenario,

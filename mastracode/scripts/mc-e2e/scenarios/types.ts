@@ -87,6 +87,7 @@ export type ScenarioName =
   | 'shell-passthrough-long-output'
   | 'skills-command-activation'
   | 'storage-settings'
+  | 'storage-startup-pg-fallback'
   | 'stream-error-retry'
   | 'streaming-tool-args'
   | 'subagent-delegation'

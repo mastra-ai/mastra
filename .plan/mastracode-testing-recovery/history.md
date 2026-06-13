@@ -1,5 +1,23 @@
 # Mastra Code testing recovery history
 
+### Storage startup PostgreSQL fallback coverage (2026-06-13)
+
+Added `storage-startup-pg-fallback`, a real PTY scenario for persisted storage backend reload. The scenario seeds `settings.json.storage.backend = "pg"` with no connection details before startup, verifies the visible PostgreSQL missing-connection warning plus LibSQL fallback guidance, then uses a local `!` shell proof to confirm the persisted backend remains `pg` while the TUI stays usable.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test storage-startup-pg-fallback
+```
+
+Break validations:
+
+- Ignored `settings.storage.backend === "pg"` in `getStorageConfig()`; the scenario failed waiting for the startup fallback warning.
+- Dropped the no-connection PostgreSQL fallback warning from `createStorage()`; the scenario failed waiting for the visible warning.
+- Suppressed `result.storageWarning` rendering in `tuiMain()`; the scenario failed because the TUI started without surfacing the warning.
+
+The Storage backend row remains `needs-follow-up` for real PostgreSQL integration/data-migration breadth; persisted backend startup reload and fallback warning are now covered without external services.
+
 
 
 
