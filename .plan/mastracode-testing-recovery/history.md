@@ -1,6 +1,25 @@
 # Mastra Code testing recovery history
 
 
+### Login dialog masked input coverage (2026-06-13)
+
+Added `login-dialog-masked-input`, a real PTY `/login` scenario for provider login prompts. The scenario patches Anthropic OAuth to request an authorization code through the real login dialog, verifies typed code text renders as asterisks instead of leaking the secret, and proves the raw code still reaches persisted OAuth credentials.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test login-dialog-masked-input
+```
+
+Break validations:
+
+- Removed `MaskedInput` render masking; the scenario failed because the raw authorization code appeared in the terminal.
+- Changed `LoginDialogComponent` to resolve a placeholder instead of `input.getValue()`; the scenario failed because persisted OAuth credentials did not contain the raw submitted code.
+- Bypassed `dialog.showPrompt()` in the `/login` command's `onPrompt` callback; the scenario failed because the login dialog prompt never appeared.
+
+The Settings row remains `needs-follow-up`: login-specific MaskedInput breadth is now covered; remaining depth is `/models` custom-pack completion/navigation, browser active-vs-pending projection, and `/api-keys` settings-submenu navigation.
+
+
 ### Browserbase wizard coverage and stale-option fix (2026-06-13)
 
 Added `browser-wizard-browserbase`, a real PTY `/browser` wizard scenario for the Stagehand Browserbase path. The scenario starts from stale local browser settings, selects Stagehand → Browserbase, verifies the credential guidance, proves the local headless/launch/profile prompts are skipped, and confirms `settings.json` persists Browserbase-only settings without writing Browserbase credentials.

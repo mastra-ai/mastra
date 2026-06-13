@@ -45,6 +45,7 @@ export type ScenarioName =
   | 'prompt-queue-interleave'
   | 'visible-commands'
   | 'integration-commands'
+  | 'login-dialog-masked-input'
   | 'modal-and-shell'
   | 'mcp-http-tool-call'
   | 'mcp-long-running-tool'

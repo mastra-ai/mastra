@@ -31,6 +31,7 @@ import { githubSignalsUnsubscribeReloadScenario } from './github-signals-unsubsc
 import { harnessApiConfigScenario } from './harness-api-config.js';
 import { headlessMcpToolAvailabilityScenario } from './headless-mcp-tool-availability.js';
 import { integrationCommandsScenario } from './integration-commands.js';
+import { loginDialogMaskedInputScenario } from './login-dialog-masked-input.js';
 import { mcpHttpToolCallScenario } from './mcp-http-tool-call.js';
 import { mcpLongRunningToolScenario } from './mcp-long-running-tool.js';
 import { mcpReloadConfigScenario } from './mcp-reload-config.js';
@@ -135,6 +136,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'headless-mcp-tool-availability': headlessMcpToolAvailabilityScenario,
   'visible-commands': visibleCommandsScenario,
   'integration-commands': integrationCommandsScenario,
+  'login-dialog-masked-input': loginDialogMaskedInputScenario,
   'modal-and-shell': modalAndShellScenario,
   'mcp-http-tool-call': mcpHttpToolCallScenario,
   'mcp-long-running-tool': mcpLongRunningToolScenario,
