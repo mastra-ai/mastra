@@ -80,6 +80,29 @@ type HarnessStreamState = {
   terminalError?: string;
 };
 
+function validateModes(modes: HarnessMode[]): void {
+  const modeIds = new Set<string>();
+
+  for (const mode of modes) {
+    if (modeIds.has(mode.id)) {
+      throw new Error(`Duplicate mode id "${mode.id}" found when creating the Harness`);
+    }
+
+    modeIds.add(mode.id);
+
+    const modeRecord = mode as unknown as { id: string; tools?: unknown; additionalTools?: unknown };
+    if (modeRecord.tools && modeRecord.additionalTools) {
+      throw new Error(`Mode "${modeRecord.id}" cannot set both "tools" and "additionalTools" - choose replace OR augment`);
+    }
+  }
+
+  for (const mode of modes) {
+    if (mode.transitionsTo && !modeIds.has(mode.transitionsTo)) {
+      throw new Error(`Mode "${mode.id}" transitionsTo references unknown mode "${mode.transitionsTo}"`);
+    }
+  }
+}
+
 type HarnessSendNotificationSignalOptions = {
   ifActive?: SendAgentNotificationSignalOptions['ifActive'];
   ifIdle?: SendAgentNotificationSignalOptions['ifIdle'];
@@ -460,6 +483,8 @@ export class Harness<TState = {}> {
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
 
   constructor(config: HarnessConfig<TState>) {
+    validateModes(config.modes);
+
     this.id = config.id;
     this.config = config;
     this.resourceId = config.resourceId ?? config.id;

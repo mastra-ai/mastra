@@ -42,7 +42,7 @@ export interface HeartbeatHandler {
  * Configuration for a single agent mode within the harness.
  * Each mode represents a different "personality" or capability set.
  */
-export interface HarnessMode {
+interface HarnessModeBase {
   /** Unique within `HarnessConfig.modes`. Validated at construction. */
   id: string;
 
@@ -68,20 +68,6 @@ export interface HarnessMode {
   default?: boolean;
 
   /**
-   * The tool set this mode runs with. **Replaces** the backing agent's
-   * tools — the agent's own tools are hidden for the duration of the
-   * mode. Mutually exclusive with `additionalTools` (validated at
-   * construction).
-   */
-  tools?: ToolsInput;
-
-  /**
-   * Tools layered on top of the backing agent's tools. The agent's tools
-   * stay; these are added. Mutually exclusive with `tools`.
-   */
-  additionalTools?: ToolsInput;
-
-  /**
    * Optional plan→build target. When `submit_plan` runs in this mode, the
    * registered `PendingResume` freezes this value as `transitionModeId`.
    * On approval, the session flips to this mode
@@ -100,6 +86,27 @@ export interface HarnessMode {
    */
   metadata?: Record<string, unknown>;
 }
+
+type HarnessModeToolOverrides =
+  | {
+      /**
+       * The tool set this mode runs with. **Replaces** the backing agent's
+       * tools — the agent's own tools are hidden for the duration of the
+       * mode. Mutually exclusive with `additionalTools`.
+       */
+      tools?: ToolsInput;
+      additionalTools?: never;
+    }
+  | {
+      tools?: never;
+      /**
+       * Tools layered on top of the backing agent's tools. The agent's tools
+       * stay; these are added. Mutually exclusive with `tools`.
+       */
+      additionalTools?: ToolsInput;
+    };
+
+export type HarnessMode = HarnessModeBase & HarnessModeToolOverrides;
 
 // =============================================================================
 // Subagents
