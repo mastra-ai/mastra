@@ -666,6 +666,10 @@ export class StoreMemoryLance extends MemoryStorage {
         hasMore: offset + perPage < total,
       };
     } catch (error: any) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('LANCE', 'LIST_THREADS', 'FAILED'),
