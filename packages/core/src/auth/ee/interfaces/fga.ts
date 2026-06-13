@@ -228,6 +228,69 @@ export interface FGAListResourcesOptions {
   after?: string;
 }
 
+/**
+ * Information about a resource type discovered from the FGA provider.
+ * Derived from observed state (roles and resource instances), not schema.
+ */
+export interface FGAResourceTypeInfo {
+  /** Resource type slug (e.g., 'agent', 'team', 'workflow') */
+  slug: string;
+  /** All role slugs defined for this type (e.g., ['viewer', 'editor', 'admin']) */
+  relations: string[];
+  /** Org-specific custom roles (subset of relations) */
+  customRelations: string[];
+  /** Parent resource type slugs derived from instances */
+  parentResourceTypeSlugs: string[];
+  /** Whether any instances of this type exist */
+  hasInstances: boolean;
+}
+
+// ──────────────────────────────────────────────────────────────
+// Authorship Types
+// ──────────────────────────────────────────────────────────────
+
+/**
+ * Parameters for registering a resource with ownership support.
+ */
+export interface FGARegisterResourceParams<TUser = unknown> {
+  /** The user creating the resource */
+  user: TUser;
+  /** Mastra resource type (agent, workflow, thread) */
+  resourceType: string;
+  /** Resource ID (externalId in WorkOS) */
+  resourceId: string;
+  /** Human-readable name */
+  name: string;
+  /** Optional parent resource for hierarchy */
+  parentResource?: { type: string; id: string };
+  /** Override: skip owner role assignment */
+  skipOwnership?: boolean;
+}
+
+/**
+ * Result of registering a resource with ownership.
+ */
+export interface FGARegistrationResult {
+  /** The created FGA resource (null if type doesn't exist in WorkOS) */
+  resource: FGAResource | null;
+  /** The owner role assignment (null if ownership disabled or no owner role) */
+  ownerAssignment: FGARoleAssignment | null;
+  /** Warnings (e.g., "resource type not found", "owner role not found") */
+  warnings: string[];
+}
+
+/**
+ * Ownership configuration for FGA provider.
+ */
+export interface FGAOwnershipConfig {
+  /** Enable automatic owner role assignment on resource creation */
+  enabled: boolean;
+  /** Role to assign to creator (default: 'owner', fallbacks: 'admin', 'editor') */
+  ownerRole?: string;
+  /** Fallback roles to try if ownerRole not found */
+  fallbackRoles?: string[];
+}
+
 // ──────────────────────────────────────────────────────────────
 // Provider Interface (read-only checks)
 // ──────────────────────────────────────────────────────────────
@@ -385,4 +448,46 @@ export interface IFGAManager<TUser = unknown> extends IFGAProvider<TUser> {
    * List role assignments for an organization membership.
    */
   listRoleAssignments(options: FGAListRoleAssignmentsOptions): Promise<FGARoleAssignment[]>;
+
+  /**
+   * Discover resource types from the FGA provider.
+   *
+   * Returns observed state: types that have roles defined or instances created.
+   * Types with no roles AND no instances won't appear (WorkOS API limitation).
+   *
+   * Use this for:
+   * - Dynamically populating resource type dropdowns in UI
+   * - Validating config against actual WorkOS state
+   * - Understanding hierarchy for FGA enforcement
+   *
+   * @param organizationId - The organization to query
+   * @returns Array of resource type info with relations and hierarchy
+   */
+  describeResourceTypes?(organizationId: string): Promise<FGAResourceTypeInfo[]>;
+
+  /**
+   * Register a Mastra resource in FGA with optional ownership support.
+   *
+   * This is the main entry point for integrating FGA with resource creation.
+   * When ownership is enabled, automatically assigns the owner role to the creator.
+   *
+   * Behavior:
+   * - If resource type doesn't exist in WorkOS, returns null resource with warning
+   * - If ownership enabled, assigns owner role (or fallback) to creator
+   * - If parent specified, creates hierarchical relationship
+   *
+   * @param params - Registration parameters including user, resource type, ID, name
+   * @returns Registration result with resource, owner assignment, and warnings
+   */
+  registerResource?(params: FGARegisterResourceParams<TUser>): Promise<FGARegistrationResult>;
+
+  /**
+   * Check if a resource type exists in the FGA schema.
+   * Uses cached describeResourceTypes() result for efficiency.
+   *
+   * @param organizationId - The organization to query
+   * @param resourceTypeSlug - The resource type to check
+   * @returns True if the type exists (has roles or instances)
+   */
+  hasResourceType?(organizationId: string, resourceTypeSlug: string): Promise<boolean>;
 }
