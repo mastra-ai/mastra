@@ -1,6 +1,6 @@
 # Mastra Code testing recovery history
 
-### Lifecycle hook executor coverage (2026-06-13, pending)
+### Lifecycle hook executor coverage (2026-06-13, 9acae8d4bd)
 
 Added `mastracode/src/hooks/executor.test.ts`, a focused shield for the remaining lifecycle hook executor protocol breadth: command hooks receive JSON stdin plus `MASTRA_HOOK_EVENT`, JSON stdout is parsed into additional context, hung hooks are killed and reported as timeout warnings, blocking events stop on exit code 2 with the parsed reason, non-blocking events convert exit code 2 into warnings, and accumulated additional context is preserved. Existing PTY e2e already covers configured `/hooks` status, `/hooks reload`, and `UserPromptSubmit` blocking through the real terminal. Existing TUI hook unit tests cover Stop reasons, SessionEnd on `stop()`, and caffeinate cleanup.
 
