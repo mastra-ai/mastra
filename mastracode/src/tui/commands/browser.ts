@@ -555,6 +555,13 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
   let storageState = browser.agentBrowser?.storageState;
   let cdpUrl = browser.cdpUrl;
 
+  if (isBrowserbase) {
+    cdpUrl = undefined;
+    profile = undefined;
+    executablePath = undefined;
+    storageState = undefined;
+  }
+
   // Only show launch mode options for local browsers (not Browserbase)
   if (!isBrowserbase) {
     const launchMode = await askInline(ctx, 'How do you want to launch the browser?', [

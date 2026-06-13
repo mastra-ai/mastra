@@ -1,6 +1,27 @@
 # Mastra Code testing recovery history
 
 
+### Browserbase wizard coverage and stale-option fix (2026-06-13)
+
+Added `browser-wizard-browserbase`, a real PTY `/browser` wizard scenario for the Stagehand Browserbase path. The scenario starts from stale local browser settings, selects Stagehand → Browserbase, verifies the credential guidance, proves the local headless/launch/profile prompts are skipped, and confirms `settings.json` persists Browserbase-only settings without writing Browserbase credentials.
+
+This surfaced and fixed a real bug: Browserbase skipped local launch prompts but still inherited old CDP/profile/executable values, causing browser creation to fail. The wizard now clears local launch/profile/storage-state options when Browserbase is selected.
+
+Focused verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test browser-wizard-browserbase
+```
+
+Break validations:
+
+- Removed the Browserbase local-option cleanup; the scenario failed because stale CDP/profile/executable settings made browser creation fail.
+- Forced persisted Stagehand env back to `LOCAL`; the scenario failed on the Browserbase summary/status assertion.
+- Replaced the Browserbase credential guidance with generic copy; the scenario failed waiting for the required `BROWSERBASE_API_KEY`/`BROWSERBASE_PROJECT_ID` guidance.
+
+The settings/browser rows remain `needs-follow-up`: Browserbase wizard persistence is now covered; remaining browser breadth is startup variants, active-vs-pending projection, and optional reload/history smoke.
+
+
 ### Browser profile/provider mismatch coverage (2026-06-13)
 
 Added `browser-profile-provider-mismatch`, a real PTY `/browser` wizard scenario for reusing a browser profile previously marked by Stagehand with AgentBrowser. The scenario proves the mismatch confirmation prompt appears before persistence, `No` cancels while leaving `settings.json` and `.mastra-provider` unchanged, and `Yes` proceeds with AgentBrowser settings while rewriting the marker to `agent-browser`.

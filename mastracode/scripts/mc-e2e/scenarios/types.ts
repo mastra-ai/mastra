@@ -11,6 +11,7 @@ export type ScenarioName =
   | 'browser-settings-persistence'
   | 'browser-startup-restore'
   | 'browser-toggle-attach'
+  | 'browser-wizard-browserbase'
   | 'browser-wizard-export'
   | 'clipboard-image-paste'
   | 'commit-attribution-prompt'

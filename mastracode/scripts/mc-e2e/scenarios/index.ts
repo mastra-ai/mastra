@@ -9,6 +9,7 @@ import { browserProfileProviderMismatchScenario } from './browser-profile-provid
 import { browserSettingsPersistenceScenario } from './browser-settings-persistence.js';
 import { browserStartupRestoreScenario } from './browser-startup-restore.js';
 import { browserToggleAttachScenario } from './browser-toggle-attach.js';
+import { browserWizardBrowserbaseScenario } from './browser-wizard-browserbase.js';
 import { browserWizardExportScenario } from './browser-wizard-export.js';
 import { clipboardImagePasteScenario } from './clipboard-image-paste.js';
 import { commitAttributionPromptScenario } from './commit-attribution-prompt.js';
@@ -111,6 +112,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'browser-settings-persistence': browserSettingsPersistenceScenario,
   'browser-startup-restore': browserStartupRestoreScenario,
   'browser-toggle-attach': browserToggleAttachScenario,
+  'browser-wizard-browserbase': browserWizardBrowserbaseScenario,
   'browser-wizard-export': browserWizardExportScenario,
   'clipboard-image-paste': clipboardImagePasteScenario,
   'commit-attribution-prompt': commitAttributionPromptScenario,
