@@ -5,7 +5,6 @@ test-outputs/
 .vitest-reports/
 .DS_Store
 .mastra-om-repro/
-
 # IDE
 .vscode/
 .idea/
@@ -47,6 +46,7 @@ memory.db-*
 packages/core/test-outputs/
 voice/**/test-outputs/
 voice/**/test-data/
+
 
 serviceAccount.json
 tsup.config.bundled_*
