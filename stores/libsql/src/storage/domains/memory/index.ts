@@ -441,6 +441,10 @@ export class MemoryLibSQL extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'FAILED'),
@@ -455,13 +459,7 @@ export class MemoryLibSQL extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -473,7 +471,7 @@ export class MemoryLibSQL extends MemoryStorage {
     if (!resourceId || typeof resourceId !== 'string' || resourceId.trim().length === 0) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'INVALID_QUERY'),
+          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES_BY_RESOURCE_ID', 'INVALID_QUERY'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { resourceId: resourceId ?? '' },
@@ -485,7 +483,7 @@ export class MemoryLibSQL extends MemoryStorage {
     if (page < 0) {
       throw new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'INVALID_PAGE'),
+          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES_BY_RESOURCE_ID', 'INVALID_PAGE'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: { page },
@@ -605,9 +603,13 @@ export class MemoryLibSQL extends MemoryStorage {
         hasMore,
       };
     } catch (error) {
+      // Re-throw USER errors (validation errors) directly so callers get proper 400 responses
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+        throw error;
+      }
       const mastraError = new MastraError(
         {
-          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES', 'FAILED'),
+          id: createStorageErrorId('LIBSQL', 'LIST_MESSAGES_BY_RESOURCE_ID', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
           details: { resourceId },
@@ -616,13 +618,7 @@ export class MemoryLibSQL extends MemoryStorage {
       );
       this.logger?.error?.(mastraError.toString());
       this.logger?.trackException?.(mastraError);
-      return {
-        messages: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
@@ -1165,13 +1161,7 @@ export class MemoryLibSQL extends MemoryStorage {
       );
       this.logger?.trackException?.(mastraError);
       this.logger?.error?.(mastraError.toString());
-      return {
-        threads: [],
-        total: 0,
-        page,
-        perPage: perPageForResponse,
-        hasMore: false,
-      };
+      throw mastraError;
     }
   }
 
