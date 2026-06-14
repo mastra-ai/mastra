@@ -273,7 +273,11 @@ export function createDurableToolCallStep() {
         if (!(resumeData as { approved: boolean }).approved) {
           return {
             ...typedInput,
-            result: 'Tool call was not approved by the user',
+            approval: {
+              id: typedInput.toolCallId,
+              approved: false,
+              reason: 'Tool call was not approved by the user',
+            },
           };
         }
       }
@@ -660,6 +664,9 @@ export function createDurableToolCallStep() {
         return {
           ...typedInput,
           result,
+          ...(requiresApproval && resumeData && typeof resumeData === 'object' && (resumeData as any).approved === true
+            ? { approval: { id: toolCallId, approved: true as const } }
+            : {}),
         };
       } catch (error) {
         const toolError = serializeError(error);

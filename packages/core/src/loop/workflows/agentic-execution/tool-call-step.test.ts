@@ -427,8 +427,12 @@ describe('createToolCallStep tool approval workflow', () => {
     const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData }));
 
     expect(result).toEqual({
-      result: 'Tool call was not approved by the user',
       ...inputData,
+      approval: {
+        id: inputData.toolCallId,
+        approved: false,
+        reason: 'Tool call was not approved by the user',
+      },
     });
     expectNoToolExecution();
   });
@@ -468,6 +472,10 @@ describe('createToolCallStep tool approval workflow', () => {
     expect(result).toEqual({
       result: toolResult,
       ...inputData,
+      approval: {
+        id: inputData.toolCallId,
+        approved: true,
+      },
     });
   });
 });
