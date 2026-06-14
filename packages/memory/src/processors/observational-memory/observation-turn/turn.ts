@@ -158,6 +158,22 @@ export class ObservationTurn {
     return this._context;
   }
 
+  /** Replace the cached turn record with a specific instance. */
+  setRecord(record: ObservationalMemoryRecord): void {
+    this._record = record;
+  }
+
+  /** Patch the cached turn record with merged fields. */
+  patchRecord(patch: Partial<ObservationalMemoryRecord>): void {
+    if (!this._record) {
+      throw new Error('Turn not started — call start() before patching the record');
+    }
+    this._record = {
+      ...this._record,
+      ...patch,
+    };
+  }
+
   /**
    * Create a step handle. If a previous step exists, it is finalized
    * (its output messages will be saved at the start of the new step's prepare()).
