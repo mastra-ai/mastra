@@ -60,11 +60,12 @@
 - `mastracode/src/agents/__tests__/prompts.test.ts` — covers model-specific prompt sections, base prompt content, and both commit attribution footer formats: selected model ID and model-less fallback.
 - `mastracode/src/agents/__tests__/instructions.test.ts` — covers `getDynamicInstructions()` building commit attribution guidance from restored/current harness `currentModelId` state.
 - `mastracode/src/HarnessCompat.test.ts` — covers `currentModelId` moving through harness/session state.
+- `mastracode/scripts/mc-e2e/scenarios/commit-attribution-prompt.ts` — real PTY/TUI e2e coverage proving a prompt reaches OpenAI AIMock with the model-specific commit attribution guidance and without the model-less fallback, then drives an AIMock-authored `execute_command` git commit and verifies `git log -1 --format=%B` contains the selected-model `Co-Authored-By` footer.
 
 ## Missing tests
 
-- Partial e2e covered by `commit-attribution-prompt`: a real PTY prompt reaches OpenAI AIMock and verifies the outbound model request contains `Co-Authored-By: Mastra Code (openai/gpt-5.4-mini) <noreply@mastra.ai>` rather than the model-less fallback.
-- End-to-end commit-message test proving the agent-generated `git commit` body follows the prompt guidance. Deferred for now because this behavior is model-output guidance rather than runtime enforcement; the prompt contract is now shielded directly.
+- Covered: prompt-time selected-model guidance and deterministic model-authored commit-history footer are both checked in the real TUI.
+- Deferred: runtime enforcement that arbitrary model output must include the footer. This is not currently a product surface; attribution remains prompt guidance plus test-shielded fixture behavior.
 
 ## Known risks / regressions
 

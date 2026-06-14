@@ -1,5 +1,23 @@
 # Mastra Code testing recovery history
 
+### Git commit attribution history coverage (2026-06-13, pending)
+
+Extended `commit-attribution-prompt` from prompt-only verification to a deterministic model-authored commit flow. The scenario now submits a real TUI prompt, AIMock returns an `execute_command` tool call that writes a file and runs `git commit -m ... -m 'Co-Authored-By: Mastra Code (openai/gpt-5.4-mini) <noreply@mastra.ai>'`, then the TUI runs `!git log -1 --format=%B` and asserts the selected-model footer is present in committed history.
+
+Break validations:
+
+1. Removed model ID interpolation from the base prompt footer; AIMock request verification failed because the fallback footer appeared instead of the model-specific footer.
+2. Changed the AIMock-authored git commit footer to the model-less fallback; the e2e failed waiting for the selected-model footer in `git log` output.
+3. Dropped `state.currentModelId` from dynamic instructions; AIMock request verification failed because the fallback footer appeared.
+
+All breaks were reverted and the focused scenario passed cleanly.
+
+Verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test commit-attribution-prompt
+```
+
 ### Skills command symlink coverage (2026-06-13, 8500d1b317)
 
 Added `skills-symlink-dedupe`, a real PTY e2e scenario that creates visible and hidden skills in an external skill store, exposes them only through Agent Skills spec `.agents/skills` symlinks, runs `/skills`, and asserts the TUI lists exactly one visible skill with its description while keeping the hidden symlinked skill out of the catalog.
