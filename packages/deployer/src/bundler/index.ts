@@ -26,6 +26,135 @@ export type { BundlerPlatform } from '../build/utils';
 
 export const IS_DEFAULT = Symbol('IS_DEFAULT');
 
+const EMPTY_RECORD: Record<string, unknown> = {};
+
+type SourceDependencyMetadata = {
+  dependencyVersions: Record<string, string>;
+  overrides: Record<string, unknown>;
+  resolutions: Record<string, unknown>;
+  pnpmOverrides: Record<string, unknown>;
+};
+
+const isStringRecord = (value: unknown): value is Record<string, string> =>
+  !!value &&
+  typeof value === 'object' &&
+  !Array.isArray(value) &&
+  Object.values(value).every(v => typeof v === 'string');
+
+const asUnknownRecord = (value: unknown): Record<string, unknown> =>
+  !!value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : EMPTY_RECORD;
+
+const asStringRecord = (value: unknown): Record<string, string> => {
+  if (isStringRecord(value)) {
+    return value;
+  }
+
+  return EMPTY_RECORD as Record<string, string>;
+};
+
+const getWorkspaceMetadata = (value: unknown): Record<string, unknown> => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return EMPTY_RECORD;
+  }
+
+  const packageManagerOverrides = (value as { overrides: unknown }).overrides;
+  return asUnknownRecord(packageManagerOverrides);
+};
+
+const getMetadataFromPackageJson = (packageJson: unknown): SourceDependencyMetadata => {
+  const packageInfo = asUnknownRecord(packageJson);
+
+  return {
+    dependencyVersions: asStringRecord(packageInfo.dependencies),
+    overrides: asUnknownRecord(packageInfo.overrides),
+    resolutions: asUnknownRecord(packageInfo.resolutions),
+    pnpmOverrides: getWorkspaceMetadata(packageInfo.pnpm),
+  };
+};
+
+export const normalizePackageName = (dependencyName: string): string => {
+  if (!dependencyName || !dependencyName.startsWith('@')) {
+    return dependencyName.split('/')[0]!;
+  }
+
+  const chunks = dependencyName.split('/');
+  return `${chunks[0]}/${chunks[1]}`;
+};
+
+export const getDependencyVersionFromSourceManifest = (
+  dependencyName: string,
+  actualPackageName: string | undefined,
+  sourceDependencyVersions: Record<string, string>,
+): string | undefined => {
+  const candidates = new Set<string>();
+
+  candidates.add(dependencyName);
+  candidates.add(normalizePackageName(dependencyName));
+
+  if (actualPackageName) {
+    candidates.add(actualPackageName);
+    candidates.add(normalizePackageName(actualPackageName));
+  }
+
+  for (const candidate of candidates) {
+    const version = sourceDependencyVersions[candidate];
+    if (version) {
+      return version;
+    }
+  }
+
+  return undefined;
+};
+
+export const getDependencySpecForOutput = ({
+  dependencyName,
+  actualPackageName,
+  dependencyVersion,
+}: {
+  dependencyName: string;
+  actualPackageName?: string;
+  dependencyVersion: string;
+}): string => {
+  const isAlias = actualPackageName && dependencyName !== actualPackageName;
+  if (!isAlias || dependencyVersion.startsWith('npm:')) {
+    return dependencyVersion;
+  }
+
+  return `npm:${actualPackageName}@${dependencyVersion}`;
+};
+
+export const getSourceDependencyMetadata = async ({
+  projectRoot,
+  mastraEntryFile,
+}: {
+  projectRoot: string;
+  mastraEntryFile: string;
+}): Promise<SourceDependencyMetadata> => {
+  const candidates = [pkg.up({ cwd: dirname(mastraEntryFile) }), pkg.up({ cwd: projectRoot })].filter(
+    (entry, index, entries) => entries.indexOf(entry) === index,
+  );
+
+  for (const sourcePackageJsonPath of candidates) {
+    if (!sourcePackageJsonPath) {
+      continue;
+    }
+
+    try {
+      const packageJson = await readJSON(sourcePackageJsonPath);
+      return getMetadataFromPackageJson(packageJson);
+    } catch {
+      // Keep scanning until a valid package manifest can be read.
+    }
+  }
+
+  return {
+    dependencyVersions: {},
+    overrides: EMPTY_RECORD,
+    resolutions: EMPTY_RECORD,
+    pnpmOverrides: EMPTY_RECORD,
+  };
+};
+
 export abstract class Bundler extends MastraBundler {
   protected analyzeOutputDir = '.build';
   protected outputDir = 'output';
@@ -46,12 +175,23 @@ export abstract class Bundler extends MastraBundler {
   async writePackageJson(
     outputDirectory: string,
     dependencies: Map<string, string>,
-    resolutions?: Record<string, string>,
+    resolutions: Record<string, string> = {},
+    sourceDependencyMetadata: SourceDependencyMetadata = {
+      dependencyVersions: {},
+      overrides: EMPTY_RECORD,
+      resolutions: EMPTY_RECORD,
+      pnpmOverrides: EMPTY_RECORD,
+    },
   ) {
     this.logger.debug("Writing project's package.json");
 
     await ensureDir(outputDirectory);
     const pkgPath = join(outputDirectory, 'package.json');
+    const mergedSourceResolutions = {
+      ...sourceDependencyMetadata.resolutions,
+      ...resolutions,
+    };
+    const pnpmWorkspaceOverrides = sourceDependencyMetadata.pnpmOverrides;
 
     const dependenciesMap = new Map();
     for (const [key, value] of dependencies.entries()) {
@@ -79,7 +219,13 @@ export abstract class Bundler extends MastraBundler {
             start: 'node ./index.mjs',
           },
           dependencies: Object.fromEntries(dependenciesMap.entries()),
-          ...(Object.keys(resolutions ?? {}).length > 0 && { resolutions }),
+          ...(Object.keys(sourceDependencyMetadata.overrides).length > 0 && {
+            overrides: sourceDependencyMetadata.overrides,
+          }),
+          ...(Object.keys(pnpmWorkspaceOverrides).length > 0 && {
+            pnpm: { overrides: pnpmWorkspaceOverrides },
+          }),
+          ...(Object.keys(mergedSourceResolutions).length > 0 && { resolutions: mergedSourceResolutions }),
         },
         null,
         2,
@@ -360,13 +506,14 @@ export abstract class Bundler extends MastraBundler {
     }
 
     const dependenciesToInstall = new Map<string, string>();
+    const sourceDependencyMetadata = await getSourceDependencyMetadata({ projectRoot, mastraEntryFile });
     for (const [dep, depInfo] of analyzedBundleInfo.externalDependencies) {
       if (analyzedBundleInfo.workspaceMap.has(dep) || !isBareModuleSpecifier(dep)) {
         continue;
       }
 
-      let version = depInfo.version;
       let actualPackageName: string | undefined;
+      let version = depInfo.version;
 
       // Read package.json to get actual package name (for alias detection) and version if not pre-resolved
       try {
@@ -394,21 +541,35 @@ export abstract class Bundler extends MastraBundler {
       // Default to 'latest' if still no version
       version = version || 'latest';
 
+      const sourceVersion = getDependencyVersionFromSourceManifest(
+        dep,
+        actualPackageName,
+        sourceDependencyMetadata.dependencyVersions,
+      );
+      if (sourceVersion) {
+        version = sourceVersion;
+      }
+
       // Check if this is an npm alias (import name differs from actual package name)
       // e.g., importing "ai-v5" which resolves to package "ai"
       // or importing "@ai-sdk/openai-v5" which resolves to "@ai-sdk/openai"
       // In this case, write npm alias syntax: "ai-v5": "npm:ai@5.0.93"
       const isAlias = actualPackageName && dep !== actualPackageName;
 
-      if (isAlias) {
-        dependenciesToInstall.set(dep, `npm:${actualPackageName}@${version}`);
-      } else {
-        dependenciesToInstall.set(dep, version);
-      }
+      const depVersion = version || 'latest';
+      dependenciesToInstall.set(
+        dep,
+        getDependencySpecForOutput({ dependencyName: dep, actualPackageName, dependencyVersion: depVersion }),
+      );
     }
 
     try {
-      await this.writePackageJson(join(outputDirectory, this.outputDir), dependenciesToInstall);
+      await this.writePackageJson(
+        join(outputDirectory, this.outputDir),
+        dependenciesToInstall,
+        {},
+        sourceDependencyMetadata,
+      );
 
       this.logger.info('Bundling Mastra application');
 
