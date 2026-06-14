@@ -1,4 +1,4 @@
-import type { MessageList } from '@mastra/core/agent';
+import type { MastraDBMessage, MastraMessagePart, MessageList } from '@mastra/core/agent';
 import type { ObservabilityContext } from '@mastra/core/observability';
 import type { ProcessorContext, ProcessorStreamWriter } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -12,6 +12,103 @@ import type { ObservationModelContext } from '../types';
 import { loadMemoryContextMessages } from './load-memory-context';
 import { ObservationStep } from './step';
 import type { ObservationTurnHooks, TurnContext, TurnResult } from './types';
+
+function getToolCallId(part: MastraMessagePart): string | undefined {
+  return part.type === 'tool-invocation' ? part.toolInvocation?.toolCallId : undefined;
+}
+
+function partMatches(left: MastraMessagePart, right: MastraMessagePart): boolean {
+  const leftToolCallId = getToolCallId(left);
+  const rightToolCallId = getToolCallId(right);
+  if (leftToolCallId || rightToolCallId) {
+    return leftToolCallId === rightToolCallId;
+  }
+
+  if (left.type === 'text' && right.type === 'text') {
+    return left.text === right.text;
+  }
+
+  return partsAreEqual([left], [right]);
+}
+
+function incomingExtendsPrevious(previousParts: MastraMessagePart[], incomingParts: MastraMessagePart[]): boolean {
+  if (incomingParts.length < previousParts.length) return false;
+
+  return previousParts.every((part, index) => {
+    const incomingPart = incomingParts[index];
+    return incomingPart ? partMatches(part, incomingPart) : false;
+  });
+}
+
+function mergeAssistantParts(
+  previousParts: MastraMessagePart[],
+  incomingParts: MastraMessagePart[],
+): MastraMessagePart[] {
+  if (previousParts.length === 0) return [...incomingParts];
+  if (incomingParts.length === 0) return [...previousParts];
+  if (incomingExtendsPrevious(previousParts, incomingParts)) return [...incomingParts];
+
+  const merged = [...previousParts];
+  for (const part of incomingParts) {
+    const toolCallId = getToolCallId(part);
+    if (toolCallId) {
+      const existingToolIndex = merged.findIndex(existing => getToolCallId(existing) === toolCallId);
+      if (existingToolIndex === -1) {
+        merged.push(part);
+      } else {
+        merged[existingToolIndex] = part;
+      }
+      continue;
+    }
+
+    if (part.type === 'text') {
+      const existingTextIndex = merged.findIndex(existing => existing.type === 'text' && existing.text === part.text);
+      if (existingTextIndex === -1) {
+        merged.push(part);
+      } else {
+        merged[existingTextIndex] = part;
+      }
+      continue;
+    }
+
+    merged.push(part);
+  }
+
+  return merged;
+}
+
+function mergeContentMetadata(
+  previous?: MastraDBMessage['content']['metadata'],
+  incoming?: MastraDBMessage['content']['metadata'],
+): MastraDBMessage['content']['metadata'] | undefined {
+  if (!previous && !incoming) return undefined;
+
+  const previousMastra = previous?.mastra as Record<string, unknown> | undefined;
+  const incomingMastra = incoming?.mastra as Record<string, unknown> | undefined;
+  const metadata = {
+    ...(previous ?? {}),
+    ...(incoming ?? {}),
+  };
+
+  if (previousMastra || incomingMastra) {
+    metadata.mastra = {
+      ...(previousMastra ?? {}),
+      ...(incomingMastra ?? {}),
+    };
+  }
+
+  return metadata;
+}
+
+function partsAreEqual(left: MastraMessagePart[], right: MastraMessagePart[]): boolean {
+  if (left.length !== right.length) return false;
+
+  try {
+    return JSON.stringify(left) === JSON.stringify(right);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Represents a single turn in the agent conversation — one user message → agent response cycle.
@@ -45,6 +142,10 @@ export class ObservationTurn {
 
   /** Generation count at turn start — used to detect if reflection happened during the turn. */
   private _generationCountAtStart = -1;
+
+  private _persistedAssistantIds = new Set<string>();
+  private _assistantPartsAccumulator = new Map<string, MastraMessagePart[]>();
+  private _assistantMessageTemplates = new Map<string, MastraDBMessage>();
 
   /** Memory context provider — set via start(). Used by steps for beforeBuffer persistence. */
   memory?: MemoryContextProvider;
@@ -185,7 +286,7 @@ export class ObservationTurn {
     // Save any unsaved messages from the last step
     const unsavedInput = this.messageList.get.input.db();
     const unsavedOutput = this.messageList.get.response.db();
-    const unsavedMessages = [...unsavedInput, ...unsavedOutput];
+    const unsavedMessages = this.prepareMessagesForTurnEndPersist(unsavedInput, unsavedOutput);
     if (unsavedMessages.length > 0) {
       await this.om.persistMessages(unsavedMessages, this.threadId, this.resourceId);
     }
@@ -243,5 +344,107 @@ export class ObservationTurn {
       return otherThreadsContext;
     }
     return this._context?.otherThreadsContext;
+  }
+
+  /**
+   * Merge same-id assistant snapshots before step-boundary persistence.
+   * @internal
+   */
+  prepareMessagesForStepBoundaryPersist(messages: MastraDBMessage[]): MastraDBMessage[] {
+    const preparedMessages: MastraDBMessage[] = [];
+    const assistantMessageIndexes = new Map<string, number>();
+
+    for (const message of messages) {
+      if (message.role !== 'assistant') {
+        preparedMessages.push(message);
+        continue;
+      }
+
+      const mergedMessage = this.mergeAssistantMessageSnapshot(message);
+      this._persistedAssistantIds.add(message.id);
+
+      const existingIndex = assistantMessageIndexes.get(message.id);
+      if (existingIndex === undefined) {
+        assistantMessageIndexes.set(message.id, preparedMessages.length);
+        preparedMessages.push(mergedMessage);
+      } else {
+        preparedMessages[existingIndex] = mergedMessage;
+      }
+    }
+
+    return preparedMessages;
+  }
+
+  private prepareMessagesForTurnEndPersist(
+    unsavedInput: MastraDBMessage[],
+    unsavedOutput: MastraDBMessage[],
+  ): MastraDBMessage[] {
+    if (this._persistedAssistantIds.size === 0) {
+      return [...unsavedInput, ...unsavedOutput];
+    }
+
+    const passthroughOutput: MastraDBMessage[] = [];
+
+    for (const message of unsavedOutput) {
+      if (message.role === 'assistant' && this._persistedAssistantIds.has(message.id)) {
+        this.mergeAssistantMessageSnapshot(message);
+      } else {
+        passthroughOutput.push(message);
+      }
+    }
+
+    for (const message of this.messageList.get.all.db()) {
+      if (message.role === 'assistant' && this._persistedAssistantIds.has(message.id)) {
+        const previousParts = this._assistantPartsAccumulator.get(message.id) ?? [];
+        const incomingParts = message.content.parts ?? [];
+
+        if (!partsAreEqual(previousParts, incomingParts)) {
+          this.mergeAssistantMessageSnapshot(message);
+        } else if (!this._assistantMessageTemplates.has(message.id)) {
+          this._assistantMessageTemplates.set(message.id, message);
+        }
+      }
+    }
+
+    const mergedAssistantMessages: MastraDBMessage[] = [];
+    for (const id of this._persistedAssistantIds) {
+      const template = this._assistantMessageTemplates.get(id);
+      const parts = this._assistantPartsAccumulator.get(id);
+      if (!template || !parts) continue;
+
+      mergedAssistantMessages.push({
+        ...template,
+        content: {
+          ...template.content,
+          parts,
+        },
+      });
+    }
+
+    return [...unsavedInput, ...passthroughOutput, ...mergedAssistantMessages];
+  }
+
+  private mergeAssistantMessageSnapshot(message: MastraDBMessage): MastraDBMessage {
+    const previousTemplate = this._assistantMessageTemplates.get(message.id);
+    const previousParts = this._assistantPartsAccumulator.get(message.id) ?? [];
+    const parts = mergeAssistantParts(previousParts, message.content.parts ?? []);
+    const contentMetadata = mergeContentMetadata(previousTemplate?.content.metadata, message.content.metadata);
+
+    const mergedMessage = {
+      ...(previousTemplate ?? message),
+      ...message,
+      createdAt: previousTemplate?.createdAt ?? message.createdAt,
+      content: {
+        ...(previousTemplate?.content ?? message.content),
+        ...message.content,
+        ...(contentMetadata ? { metadata: contentMetadata } : {}),
+        parts,
+      },
+    };
+
+    this._assistantPartsAccumulator.set(message.id, parts);
+    this._assistantMessageTemplates.set(message.id, mergedMessage);
+
+    return mergedMessage;
   }
 }

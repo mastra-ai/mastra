@@ -189,9 +189,17 @@ export class ObservationStep {
       // Save messages from previous step
       const newInput = messageList.clear.input.db();
       const newOutput = messageList.clear.response.db();
-      const messagesToSave = [...newInput, ...newOutput];
+      const messagesToSave = this.turn.prepareMessagesForStepBoundaryPersist([...newInput, ...newOutput]);
       if (messagesToSave.length > 0) {
         await om.persistMessages(messagesToSave, threadId, resourceId);
+
+        const assistantIds = messagesToSave
+          .filter((message): message is typeof message & { role: 'assistant' } => message.role === 'assistant')
+          .map(message => message.id);
+        if (assistantIds.length > 0) {
+          messageList.removeByIds(assistantIds);
+        }
+
         for (const msg of messagesToSave) {
           messageList.add(msg, 'memory');
         }
