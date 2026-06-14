@@ -1,5 +1,24 @@
 # Mastra Code testing recovery history
 
+### Sleep cleanup benchmark proof (2026-06-14, 456e0dd224)
+
+After removing fixed `runtime.sleep(...)` calls from the e2e scenarios, benchmarked the cleanup commit against its parent to prove the change improved runtime instead of only reducing static wait budget.
+
+Benchmark method:
+
+- Ran from a clean worktree with `pnpm run build:mastracode` before each commit's timing run.
+- Used the same serial high-sleep scenario subset on parent `648c682760` and cleanup commit `456e0dd224`.
+- Excluded scenarios that failed on the parent under the same benchmark conditions but passed on the cleanup commit (`om-attachment-observation`, `startup`, `github-signals-unsubscribe-reload`), because they are reliability wins rather than fair timing points.
+
+Stable timing result:
+
+| scenario set | commit | elapsed |
+| --- | --- | ---: |
+| stable 12 high-sleep scenarios | `648c682760` | 115.235s |
+| stable 12 high-sleep scenarios | `456e0dd224` | 102.896s |
+
+Measured improvement: 12.339s faster, a 10.7% reduction on the stable high-sleep subset. The cleanup also keeps zero `runtime.sleep(...)` calls in checked-in scenarios; only the three intentional behavioral `setTimeout` cases remain.
+
 ### Observational memory TUI output coverage (2026-06-13, 7b1f669c1d)
 
 Strengthened `om-attachment-observation` so the memory-enabled PTY path proves more than raw observer traffic. The scenario now asserts that a pasted image reaches OM observer input, that the observer's visible observation text renders in the TUI, that `<current-task>` and `<suggested-response>` continuation metadata render, and that an observer-generated thread title emits the `thread title updated: Attachment observation` marker.
