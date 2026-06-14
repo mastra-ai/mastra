@@ -829,6 +829,7 @@
     "xxhash-wasm": "^1.1.0"
   },
   "peerDependencies": {
+    "hono": "^4.12.8",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
