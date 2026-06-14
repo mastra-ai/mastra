@@ -5,6 +5,7 @@ import type { McE2eScenario } from './types.js';
 
 export const stateSignalRenderingScenario: McE2eScenario = {
   name: 'state-signal-rendering',
+  projectFixture: 'long-branch',
   description: 'Emit a real processor-style state signal into an active TUI thread and verify inline rendering.',
   testName: 'renders a live state signal emitted into the active TUI thread',
   useOpenAIModel: true,

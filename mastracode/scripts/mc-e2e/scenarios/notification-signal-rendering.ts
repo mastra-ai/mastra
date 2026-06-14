@@ -5,6 +5,7 @@ import type { McE2eScenario } from './types.js';
 
 export const notificationSignalRenderingScenario: McE2eScenario = {
   name: 'notification-signal-rendering',
+  projectFixture: 'long-branch',
   description: 'Emit a real notification signal into an active TUI thread and verify inline notification rendering.',
   testName: 'renders a live notification signal emitted into the active TUI thread',
   useOpenAIModel: true,

@@ -66,34 +66,38 @@ async function waitForScreenTextAbsent(pattern: RegExp, terminal: { serialize():
   throw new Error('Timed out waiting for ' + pattern + ' to disappear\n\n' + terminal.serialize().view);
 }
 
-for (const runConfig of runConfigs) {
-  const scenario = getScenario(runConfig.scenarioName);
-  const runtime: McE2eScenarioRuntime = {
-    printScreen: (label, terminal) => printScreen(runConfig.liveOutput, label, terminal),
-    sleep,
-    startLiveOutput: terminal => startLiveOutput(runConfig.liveOutput, terminal),
-    waitForScreenText,
-    waitForScreenTextAbsent,
-  };
+export function defineScenarioTests(shardIndex: number, shardCount: number) {
+  for (let index = 0; index < runConfigs.length; index += 1) {
+    if (index % shardCount !== shardIndex) continue;
+    const runConfig = runConfigs[index]!;
+    const scenario = getScenario(runConfig.scenarioName);
+    const runtime: McE2eScenarioRuntime = {
+      printScreen: (label, terminal) => printScreen(runConfig.liveOutput, label, terminal),
+      sleep,
+      startLiveOutput: terminal => startLiveOutput(runConfig.liveOutput, terminal),
+      waitForScreenText,
+      waitForScreenTextAbsent,
+    };
 
-  test.describe(scenario.name, () => {
-    test.use({
-      rows: runConfig.rows,
-      columns: runConfig.columns,
-      env: {
-        ...process.env,
-        ...Object.fromEntries(
-          Object.entries(runConfig.env).map(([key, value]) => [key, value === null ? undefined : value]),
-        ),
-      },
-      program: {
-        file: runConfig.programFile,
-        args: runConfig.programArgs,
-      },
-    });
+    test.describe(scenario.name, () => {
+      test.use({
+        rows: runConfig.rows,
+        columns: runConfig.columns,
+        env: {
+          ...process.env,
+          ...Object.fromEntries(
+            Object.entries(runConfig.env).map(([key, value]) => [key, value === null ? undefined : value]),
+          ),
+        },
+        program: {
+          file: runConfig.programFile,
+          args: runConfig.programArgs,
+        },
+      });
 
-    test(scenario.testName, async ({ terminal }) => {
-      await scenario.run({ terminal, runtime });
+      test(scenario.testName, async ({ terminal }) => {
+        await scenario.run({ terminal, runtime });
+      });
     });
-  });
+  }
 }

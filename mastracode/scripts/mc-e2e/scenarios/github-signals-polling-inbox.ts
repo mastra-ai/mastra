@@ -78,6 +78,7 @@ process.exit(2);
 
 export const githubSignalsPollingInboxScenario = {
   name: 'github-signals-polling-inbox',
+  projectFixture: 'long-branch',
   description: 'delivers a GitHub polling notification, reads it with notification_inbox, and reloads the thread history',
   testName: 'renders a polling-delivered GitHub notification through inbox read and thread reload',
   useOpenAIModel: true,
@@ -226,7 +227,7 @@ void tui.run().catch(error => {
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
 
-    await runtime.waitForScreenText(/Project: mastra/i, terminal);
+    await runtime.waitForScreenText(/Project: (mastra|project)/i, terminal);
 
     terminal.submit('/threads');
     await runtime.waitForScreenText(/E2E GitHub polling inbox fixture/i, terminal, 8_000);

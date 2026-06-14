@@ -3,6 +3,7 @@ import type { McE2eScenario } from './types.js';
 
 export const activeSignalFollowupScenario: McE2eScenario = {
   name: 'active-signal-followup',
+  projectFixture: 'long-branch',
   description: 'Send a real TUI follow-up while an AIMock-backed run is active and verify signal delivery.',
   testName: 'accepts a while-active follow-up as an agent signal in the real TUI',
   useOpenAIModel: true,
@@ -14,8 +15,10 @@ export const activeSignalFollowupScenario: McE2eScenario = {
     await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();
     runtime.printScreen('after startup', terminal);
 
-    terminal.submit('Start a slow active signal run.');
+    terminal.write('Start a slow active signal run.');
     await runtime.waitForScreenText(/Start a slow active signal run\./i, terminal);
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Created thread:/i, terminal, 8_000);
 
     terminal.submit('Steer while active.');
     await runtime.waitForScreenText(/↳ Steer while active\. pending/i, terminal);

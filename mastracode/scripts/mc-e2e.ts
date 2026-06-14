@@ -339,7 +339,6 @@ const tmpDir = join(tmpRootDir, `${Date.now()}-${process.pid}`);
 const tuiTestBin = join(mastracodeDir, 'node_modules', '.bin', 'tui-test');
 const tsxBin = join(mastracodeDir, 'node_modules', '.bin', 'tsx');
 const mainFile = join(mastracodeDir, 'src/main.ts');
-const testFile = join(scriptDir, 'mc-e2e', 'tui.test.ts');
 
 mkdirSync(tmpRootDir, { recursive: true });
 rmSync(tmpDir, { recursive: true, force: true });
@@ -374,7 +373,7 @@ for (const run of runs) {
 if (options.recordAiPath)
   process.stdout.write(`[mc-e2e] recording AIMock fixtures to: ${resolve(options.recordAiPath)}\n`);
 
-const testProcess = spawn(tuiTestBin, [testFile], {
+const testProcess = spawn(tuiTestBin, [], {
   cwd: mastracodeDir,
   stdio: 'inherit',
   env: {
@@ -407,6 +406,7 @@ for (const aimock of aimocks) {
   await aimock.stop();
 }
 
+if (status === 0) rmSync(tmpRootDir, { recursive: true, force: true });
 if (missingRequest) {
   process.stderr.write('[mc-e2e] expected at least one AIMock request for each OpenAI-backed scenario but saw none.\n');
   process.exit(1);

@@ -1,5 +1,41 @@
 # Mastra Code testing recovery history
 
+### Full-suite shard parallelization proof (2026-06-14)
+
+Root cause for the `--jobs 4` suite still taking ~14 minutes was structural: `@microsoft/tui-test` parallelizes by test file, and the Mastra Code e2e wrapper put all 120 scenarios in one `tui.test.ts` file. That meant tests inside the file still ran effectively serially.
+
+Changed the wrapper into a shared definition module plus eight static shard files:
+
+- `tui-shared.ts` owns the existing wrapper/runtime logic.
+- `tui-shard-0.test.ts` through `tui-shard-7.test.ts` each call `defineScenarioTests(shardIndex, 8)`.
+- `tui-test.config.js` matches `tui-shard-*.test.ts`, letting `@microsoft/tui-test --jobs 4` distribute files across workers.
+- The runner no longer passes a single test-file path, so config discovery controls the shard set.
+- Successful runs remove `.tmp-mc-e2e` to avoid repeated full-suite benchmarks filling disk.
+
+Measured full-suite result:
+
+| runner shape | result | elapsed |
+| --- | --- | ---: |
+| single wrapper file after sleep cleanup | 120/120 passed | 831s (13m51s) |
+| 8 static shard files, `--jobs 4` | 120/120 passed | 236s (3m56s) |
+
+Net improvement from sharding: 595s faster, a 71.6% wall-clock reduction from the clean post-sleep baseline. Signal scenarios that had hidden startup-noise races were moved to the hermetic `long-branch` fixture and hardened with visible prompt readiness waits so AIMock request verification remains stable under true parallelism.
+
+Verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test active-signal-followup
+pnpm --filter ./mastracode run e2e:test state-signal-rendering
+pnpm --filter ./mastracode run e2e:test notification-signal-rendering
+pnpm --filter ./mastracode run e2e:test github-signals-polling-inbox
+pnpm --filter ./mastracode run e2e:test -- --jobs 4
+pnpm run build:mastracode
+pnpm --filter ./mastracode check
+pnpm --filter ./mastracode lint
+```
+
+Final full-suite proof: 120/120 passed in 236s, all AIMock request counts valid, and `.tmp-mc-e2e` temp dirs stayed `0 → 0` after success cleanup.
+
 ### Sleep cleanup benchmark proof (2026-06-14, 456e0dd224)
 
 After removing fixed `runtime.sleep(...)` calls from the e2e scenarios, benchmarked the cleanup commit against its parent to prove the change improved runtime instead of only reducing static wait budget.
