@@ -58,6 +58,9 @@ export class ObservationStep {
     // ── Step 0: Activate buffered chunks ──────────────────────
     if (this.stepNumber === 0) {
       const step0Record = this.turn.record;
+      // Step 0 still needs activation when prior buffered chunks exist, when a
+      // previous async buffer is still settling, or when a stale DB boundary
+      // must be reset before the next turn can buffer again.
       if (
         step0Record.isBufferingObservation ||
         getBufferedChunks(step0Record).length > 0 ||

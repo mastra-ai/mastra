@@ -2893,7 +2893,8 @@ ${formattedMessages}
     pendingTokens?: number;
     /** Pre-loaded record to skip the initial getOrCreateRecord() fetch.
      *  When called fire-and-forget, passing the record avoids an async gap
-     *  before lastBufferedBoundary is set. */
+     *  before lastBufferedBoundary is set. The provided record is also patched
+     *  in place with buffering-flag changes so same-loop callers can reuse it. */
     record?: ObservationalMemoryRecord;
     writer?: ProcessorStreamWriter;
     sendSignal?: ProcessorContext['sendSignal'];
