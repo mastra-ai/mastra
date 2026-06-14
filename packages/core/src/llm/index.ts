@@ -75,7 +75,12 @@ export type {
   StreamObjectResult,
   StreamTextResult,
 } from './model/base.types';
-export type { TripwireProperties, MastraModelConfig, OpenAICompatibleConfig } from './model/shared.types';
+export type {
+  TripwireProperties,
+  MastraModelConfig,
+  OpenAICompatibleConfig,
+  TanStackTextAdapterConfig,
+} from './model/shared.types';
 export { ModelRouterLanguageModel, defaultGateways } from './model/router';
 export {
   GatewayRegistry,

@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { RequestContext } from '../../request-context';
 import { AISDKV4LegacyLanguageModel } from './aisdk/v4/model';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
-import { resolveModelConfig } from './resolve-model';
+import { resolveModelConfig, isTanStackTextAdapter } from './resolve-model';
 import { ModelRouterLanguageModel } from './router';
 
 describe('resolveModelConfig', () => {
@@ -243,6 +243,85 @@ describe('resolveModelConfig', () => {
         expect(result.modelId).toBe('context-model');
         expect(result.provider).toBe('context-provider');
       });
+    });
+  });
+
+  describe('TanStack AI TextAdapter support', () => {
+    function createFakeTanStackAdapter(name: string, model: string) {
+      return {
+        kind: 'text' as const,
+        name,
+        model,
+        chatStream: async function* () {
+          /* noop */
+        },
+        structuredOutput: async () => ({ data: {}, rawText: '' }),
+      };
+    }
+
+    it('should resolve a TanStack AI TextAdapter to ModelRouterLanguageModel', async () => {
+      const adapter = createFakeTanStackAdapter('openai', 'gpt-4o');
+      const result = await resolveModelConfig(adapter as any);
+      expect(result).toBeInstanceOf(ModelRouterLanguageModel);
+      expect(result.modelId).toBe('gpt-4o');
+      expect(result.provider).toBe('openai');
+    });
+
+    it('should resolve a TanStack Anthropic adapter', async () => {
+      const adapter = createFakeTanStackAdapter('anthropic', 'claude-sonnet-4-20250514');
+      const result = await resolveModelConfig(adapter as any);
+      expect(result).toBeInstanceOf(ModelRouterLanguageModel);
+      expect(result.modelId).toBe('claude-sonnet-4-20250514');
+      expect(result.provider).toBe('anthropic');
+    });
+
+    it('should resolve a dynamic function returning a TanStack adapter', async () => {
+      const adapter = createFakeTanStackAdapter('openai', 'gpt-4o');
+      const dynamicFn = () => adapter;
+      const result = await resolveModelConfig(dynamicFn as any);
+      expect(result).toBeInstanceOf(ModelRouterLanguageModel);
+      expect(result.modelId).toBe('gpt-4o');
+      expect(result.provider).toBe('openai');
+    });
+  });
+
+  describe('isTanStackTextAdapter', () => {
+    it('should detect a valid TanStack adapter shape', () => {
+      const adapter = {
+        kind: 'text',
+        name: 'openai',
+        model: 'gpt-4o',
+        chatStream: async function* () {},
+      };
+      expect(isTanStackTextAdapter(adapter)).toBe(true);
+    });
+
+    it('should reject null and primitives', () => {
+      expect(isTanStackTextAdapter(null)).toBe(false);
+      expect(isTanStackTextAdapter(undefined)).toBe(false);
+      expect(isTanStackTextAdapter('openai/gpt-4o')).toBe(false);
+      expect(isTanStackTextAdapter(42)).toBe(false);
+    });
+
+    it('should reject objects without kind=text', () => {
+      expect(isTanStackTextAdapter({ kind: 'image', name: 'openai', model: 'dall-e-3', chatStream: () => {} })).toBe(
+        false,
+      );
+    });
+
+    it('should reject objects missing chatStream', () => {
+      expect(isTanStackTextAdapter({ kind: 'text', name: 'openai', model: 'gpt-4o' })).toBe(false);
+    });
+
+    it('should reject AI SDK LanguageModel objects (which have specificationVersion)', () => {
+      const aiSdkModel = {
+        kind: 'text',
+        name: 'openai',
+        model: 'gpt-4o',
+        chatStream: () => {},
+        specificationVersion: 'v2',
+      };
+      expect(isTanStackTextAdapter(aiSdkModel)).toBe(false);
     });
   });
 });
