@@ -1,5 +1,23 @@
 # Mastra Code testing recovery history
 
+### Subagent Plan/Execute coverage (2026-06-13, pending)
+
+Added `subagent-plan-execute-tools`, a real PTY e2e scenario that uses AIMock tool calls to delegate Plan and Execute subagents from a parent TUI turn. The scenario asserts visible `subagent plan openai/gpt-5.4-mini ✓` and `subagent execute openai/gpt-5.4-mini ✓` footers, verifies provider-visible Plan/Execute tool boundaries (`write_file` omitted from Plan and present for Execute), has Execute write `subagent-execute-output.txt`, and verifies the written file from the isolated project shell with a shell-only `SUBAGENT_EXECUTE_CAT=` prefix.
+
+Break validations:
+
+1. Restricted Execute to read-only workspace tools; AIMock request verification failed because Execute no longer exposed `write_file`.
+2. Routed the Execute delegation as Plan; the TUI failed waiting for the `subagent execute ... ✓` footer and showed a second Plan footer instead.
+3. Corrupted the Execute-written file content; the shell-only `cat` assertion failed after showing the wrong file contents.
+
+All breaks were reverted and the focused scenario passed cleanly.
+
+Verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test subagent-plan-execute-tools
+```
+
 ### Git commit attribution history coverage (2026-06-13, 81bbd497f1)
 
 Extended `commit-attribution-prompt` from prompt-only verification to a deterministic model-authored commit flow. The scenario now submits a real TUI prompt, AIMock returns an `execute_command` tool call that writes a file and runs `git commit -m ... -m 'Co-Authored-By: Mastra Code (openai/gpt-5.4-mini) <noreply@mastra.ai>'`, then the TUI runs `!git log -1 --format=%B` and asserts the selected-model footer is present in committed history.

@@ -86,10 +86,10 @@
 
 ## Missing tests
 
-- Partial e2e coverage exists: `subagent-delegation` drives a real parent TUI chat turn through AIMock `response.toolCalls`, invokes the `subagent` tool with the built-in Explore subagent, renders the delegated task and completed `subagent explore openai/gpt-5.4-mini ✓` footer in the real TUI, and verifies the subagent result is returned. `subagent-model-startup-restore` seeds an active custom model pack before launch and verifies delegated Explore subagents use the restored fast model (`openai/gpt-5.5`) instead of the parent/build default.
-- End-to-end parent run spawning each built-in subagent with expected tool allowlist and inherited sandbox access; `subagent-delegation` currently covers only Explore and does not prove nested workspace-tool activity.
-- `/subagents` thread/global model override persists across restart and thread switch, especially for configured subagent IDs not in the built-in set; model-pack-backed Explore startup defaults are covered by `subagent-model-startup-restore`.
-- Prompt test that subagent guidance consistently includes the audit-tests single-use exception everywhere it is shown.
+- Covered: `subagent-delegation` drives a real parent TUI chat turn through AIMock `response.toolCalls`, invokes the `subagent` tool with the built-in Explore subagent, renders the delegated task and completed `subagent explore openai/gpt-5.4-mini ✓` footer in the real TUI, and verifies the subagent result is returned. `subagent-model-startup-restore` seeds an active custom model pack before launch and verifies delegated Explore subagents use the restored fast model (`openai/gpt-5.5`) instead of the parent/build default.
+- Covered: `subagent-plan-execute-tools` drives a real parent TUI turn that delegates Plan and Execute subagents in parallel, verifies visible `subagent plan ... ✓` and `subagent execute ... ✓` footers, proves Plan omits `write_file` while Execute exposes it in provider-visible tool schemas, and verifies the Execute subagent writes a file visible from the isolated project shell.
+- Deferred: `/subagents` thread/global model override persistence across restart and thread switch for configured subagent IDs not in the built-in set; model-pack-backed Explore startup defaults are covered by `subagent-model-startup-restore`.
+- Deferred: prompt test that subagent guidance consistently includes the audit-tests single-use exception everywhere it is shown.
 
 ## Known risks / regressions
 

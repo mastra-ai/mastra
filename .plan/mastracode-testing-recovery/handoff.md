@@ -2,6 +2,7 @@
 
 ## Current status
 
+- 2026-06-13 pending stamp: Subagents delegation row moved to validated after adding `subagent-plan-execute-tools`, which delegates Plan and Execute through the real TUI, verifies completed footers, checks provider-visible tool boundaries, and confirms Execute writes a project file visible from shell. Current tracker: 55 validated, 1 needs-follow-up, 120 e2e scenarios.
 - 2026-06-13 stamp: 81bbd497f1 — Git commit attribution row moved to validated after extending `commit-attribution-prompt` to drive an AIMock-authored `execute_command` git commit and verify `git log -1 --format=%B` contains the selected-model `Co-Authored-By` footer. Current tracker: 54 validated, 2 needs-follow-up, 119 e2e scenarios.
 - 2026-06-13 stamp: 8500d1b317 — Skills command and workspace resolution row moved to validated after adding `skills-symlink-dedupe`, which seeds Agent Skills spec `.agents/skills` symlinked visible and hidden skills, then proves `/skills` shows one visible symlinked skill with description and hides the non-invocable symlink. Current tracker: 53 validated, 3 needs-follow-up, 119 e2e scenarios.
 - 2026-06-13 stamp: 7a24ff836b — Core Harness API and reference docs row moved to validated after adding `harness-public-api.test.ts`, which compiles the live Harness reference MDX TypeScript example through `@mastra/core/harness` and appends representative object-parameter calls for message/mode/model/thread/question/plan/tool APIs. Current tracker: 52 validated, 4 needs-follow-up, 118 e2e scenarios.
