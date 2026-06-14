@@ -246,6 +246,33 @@ describe('createLLMMappingStep HITL behavior', () => {
     expect(result.stepResult.isContinued).toBe(true);
   });
 
+  it('should persist tool execution errors as output-error history parts', async () => {
+    const inputData: ToolCallOutput[] = [
+      {
+        toolCallId: 'call-1',
+        toolName: 'brokenTool',
+        args: { param: 'test' },
+        result: undefined,
+        error: new Error('Tool execution failed'),
+      },
+    ];
+
+    await llmMappingStep.execute(createExecuteParams(inputData));
+
+    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'output-error',
+          toolCallId: 'call-1',
+          toolName: 'brokenTool',
+          args: { param: 'test' },
+          errorText: 'Tool execution failed',
+        },
+      }),
+    );
+  });
+
   it('should continue the agentic loop (not bail) when all errors are tool-not-found', async () => {
     // Arrange: Tool call with ToolNotFoundError (set by tool-call-step when tool name is hallucinated)
     const { ToolNotFoundError } = await import('../errors');

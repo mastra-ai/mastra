@@ -86,16 +86,55 @@ function mergeTextPartsWithDuplicateItemIds<T extends { type: string }>(parts: T
  * Removes messages with empty parts arrays after sanitization.
  */
 export function sanitizeAIV4UIMessages(messages: UIMessageV4[]): UIMessageV4[] {
+  type AIV4ToolInvocation = NonNullable<UIMessageV4['toolInvocations']>[number];
+  type AIV4ToolInvocationWithMastraState = Omit<AIV4ToolInvocation, 'state'> & {
+    state: string;
+    errorText?: string;
+  };
+
+  const getToolInvocationState = (toolInvocation: AIV4ToolInvocation): string => {
+    return (toolInvocation as unknown as AIV4ToolInvocationWithMastraState).state;
+  };
+
+  const toAIV4CompatibleToolInvocation = (toolInvocation: AIV4ToolInvocation): AIV4ToolInvocation => {
+    const invocation = toolInvocation as unknown as AIV4ToolInvocationWithMastraState;
+    if (invocation.state !== 'output-error') {
+      return toolInvocation;
+    }
+
+    const rest = { ...(toolInvocation as unknown as Record<string, unknown>) };
+    const { errorText } = invocation;
+    delete rest.errorText;
+
+    return {
+      ...rest,
+      state: 'result',
+      result: typeof errorText === 'string' && errorText.length > 0 ? errorText : 'Tool execution failed',
+    } as unknown as AIV4ToolInvocation;
+  };
+
   const msgs = messages
     .map(m => {
       if (m.parts.length === 0) return false;
-      const safeParts = m.parts.filter(
-        p =>
-          p.type !== `tool-invocation` ||
-          // calls and partial-calls should be updated to be results at this point
-          // if they haven't we can't send them back to the llm and need to remove them.
-          (p.toolInvocation.state !== `call` && p.toolInvocation.state !== `partial-call`),
-      );
+      const safeParts = m.parts.reduce<UIMessageV4['parts']>((parts, p) => {
+        if (p.type !== 'tool-invocation') {
+          parts.push(p);
+          return parts;
+        }
+
+        const state = getToolInvocationState(p.toolInvocation);
+        // calls and partial-calls should be updated to be results at this point
+        // if they haven't we can't send them back to the llm and need to remove them.
+        if (state === 'call' || state === 'partial-call') {
+          return parts;
+        }
+
+        parts.push({
+          ...p,
+          toolInvocation: toAIV4CompatibleToolInvocation(p.toolInvocation),
+        });
+        return parts;
+      }, []);
 
       // fully remove this message if it has an empty parts array after stripping out incomplete tool calls.
       if (!safeParts.length) return false;
@@ -107,7 +146,9 @@ export function sanitizeAIV4UIMessages(messages: UIMessageV4[]): UIMessageV4[] {
 
       // ensure toolInvocations are also updated to only show results
       if (`toolInvocations` in m && m.toolInvocations) {
-        sanitized.toolInvocations = m.toolInvocations.filter(t => t.state === `result`);
+        sanitized.toolInvocations = m.toolInvocations
+          .filter(t => t.state === `result` || getToolInvocationState(t) === 'output-error')
+          .map(toAIV4CompatibleToolInvocation);
       }
 
       return sanitized;
