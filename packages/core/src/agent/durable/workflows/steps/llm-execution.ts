@@ -5,12 +5,13 @@ import type { PubSub } from '../../../../events/pubsub';
 import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import type { Mastra } from '../../../../mastra';
-import type { SpanType, AIModelGenerationSpan, ExportedSpan, IModelSpanTracker } from '../../../../observability';
+import { SpanType } from '../../../../observability';
+import type { AIModelGenerationSpan, ExportedSpan, IModelSpanTracker } from '../../../../observability';
 import { getStepAvailableToolNames } from '../../../../observability/utils';
 import { ProcessorRunner } from '../../../../processors/runner';
 import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
-import type { TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
+import type { ChunkType, TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
 import { createStep } from '../../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { MessageList } from '../../../message-list';
@@ -80,6 +81,7 @@ const durableLLMOutputSchema = z.object({
       args: z.record(z.string(), z.any()),
       providerMetadata: z.record(z.string(), z.any()).optional(),
       activeTools: z.array(z.string()).nullable().optional(),
+      stepSpanData: z.any().optional(),
     }),
   ),
   stepResult: z.object({
@@ -204,18 +206,27 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               modelEntry.config.providerOptions,
             ) as SharedProviderOptions | undefined;
 
-            // 6. Rebuild MODEL_GENERATION span from passed data
-            // For durable execution, ONE model_generation span is created BEFORE the workflow starts
-            // and passed through each iteration. This ensures all steps are children of the same span.
+            // 6. Rebuild or create MODEL_GENERATION span.
+            // If modelSpanData was passed from a prior iteration (tool-calling path), rebuild it.
+            // Otherwise create a fresh child span under the AGENT_RUN root so the first
+            // iteration also gets a model_generation span.
             const observability = mastra?.observability?.getSelectedInstance({ requestContext });
-
-            // modelSpanData is passed through from the workflow input (created in create-inngest-agent.ts)
             const inputModelSpanData = (inputData as any).modelSpanData as
               | ExportedSpan<SpanType.MODEL_GENERATION>
               | undefined;
             const modelSpan = inputModelSpanData
               ? (observability?.rebuildSpan(inputModelSpanData) as AIModelGenerationSpan | undefined)
-              : undefined;
+              : (tracingContext?.currentSpan?.createChildSpan({
+                  name: `llm: '${currentModel.modelId}'`,
+                  type: SpanType.MODEL_GENERATION,
+                  attributes: {
+                    model: currentModel.modelId,
+                    provider: currentModel.provider,
+                    streaming: true,
+                  },
+                  metadata: { runId },
+                  requestContext,
+                }) as AIModelGenerationSpan | undefined);
 
             // Create model span tracker for MODEL_STEP and MODEL_CHUNK spans
             const modelSpanTracker: IModelSpanTracker | undefined = modelSpan?.createTracker();
@@ -383,8 +394,25 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // 11. Process the stream and emit chunks via pubsub
             // Wrap the base stream with ModelSpanTracker to create MODEL_STEP and MODEL_CHUNK spans
             const baseStream = outputStream._getBaseStream();
-            const trackedStream = modelSpanTracker?.wrapStream(baseStream) ?? baseStream;
-
+            // Convert finish → step-finish before wrapStream so the ModelSpanTracker
+            // sees step-finish and correctly closes MODEL_STEP/MODEL_INFERENCE spans.
+            // The durable LLM stream emits finish but never step-finish; wrapStream
+            // only closes spans on step-finish, so without this transform the spans
+            // are never ended and never exported.
+            const stepFinishStream = modelSpanTracker
+              ? (baseStream as any).pipeThrough(
+                  new TransformStream<any, any>({
+                    transform(chunk, controller) {
+                      if ((chunk as any).type === 'finish') {
+                        controller.enqueue({ ...(chunk as any), type: 'step-finish' } as ChunkType<undefined>);
+                      } else {
+                        controller.enqueue(chunk);
+                      }
+                    },
+                  }),
+                )
+              : baseStream;
+            const trackedStream = modelSpanTracker?.wrapStream(stepFinishStream) ?? stepFinishStream;
             try {
               for await (const chunk of trackedStream) {
                 if (!chunk) continue;
@@ -408,11 +436,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 //   sees the same shape it would in the non-durable path.
                 if (pubsub && chunk.type !== 'finish') {
                   await emitChunkEvent(pubsub, runId, chunk);
-                } else if (pubsub && chunk.type === 'finish') {
-                  await emitChunkEvent(pubsub, runId, {
-                    ...chunk,
-                    type: 'step-finish',
-                  } as any);
                 }
 
                 // Process different chunk types
@@ -437,11 +460,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     break;
                   }
 
+                  case 'step-finish':
                   case 'finish': {
                     const payload = chunk.payload as any;
-                    // The finish chunk from MastraModelOutput has finishReason in stepResult.reason
                     finishReason = payload.stepResult?.reason || payload.finishReason || 'stop';
-                    // Usage can be in output.usage or directly in payload.usage
                     usage = payload.output?.usage || payload.usage || usage;
                     break;
                   }
@@ -547,7 +569,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const output: DurableLLMStepOutput = {
               messageListState: messageList.serialize(),
               text: textDeltas.join(''),
-              toolCalls,
+              toolCalls: toolCalls.map(tc => ({ ...tc, stepSpanData })),
               stepResult: {
                 reason: finishReason as any,
                 warnings,
@@ -579,7 +601,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               // Close the step span with usage/finish info
               const pendingPayload = modelSpanTracker?.getPendingStepFinishPayload() as any;
               if (pendingPayload) {
-                // End step span using the pending payload
                 const stepSpan = modelSpanTracker?.exportCurrentStep();
                 if (stepSpan && observability) {
                   const rebuiltStepSpan = observability.rebuildSpan(stepSpan);
@@ -596,6 +617,18 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   });
                 }
               }
+              // End model_generation span — no tool calls means this is the final iteration
+              modelSpan?.end({
+                output: { text: textDeltas.join('') },
+                attributes: { usage },
+              });
+            } else {
+              // Has tool calls — end model_generation now so this iteration's span exports.
+              // The next iteration will create a fresh model_generation span.
+              modelSpan?.end({
+                output: { toolCalls: toolCalls.map(tc => tc.toolName) },
+                attributes: { usage },
+              });
             }
 
             // Success - return the output

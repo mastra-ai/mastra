@@ -17,6 +17,8 @@ import type { MemoryConfig } from '../../memory/types';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
+import type { Span } from '../../observability';
+import { SpanType } from '../../observability';
 import type { ChunkType } from '../../stream/types';
 import type { CoreTool } from '../../tools/types';
 import type { Workspace } from '../../workspace';
@@ -266,6 +268,8 @@ export interface DurableToolCallInput {
   output?: unknown;
   /** Tool names enabled for the step that produced this call, or null if a processor cleared the restriction */
   activeTools?: string[] | null;
+  /** Exported model_step span data for parenting tool call spans under model_step */
+  stepSpanData?: unknown;
 }
 
 /**
@@ -435,6 +439,8 @@ export interface RunRegistryEntry {
   backgroundTaskManager?: BackgroundTaskManager;
   /** Agent background tasks configuration */
   backgroundTasksConfig?: AgentBackgroundConfig;
+  /** AGENT_RUN span for trace propagation into workflow steps (non-serializable) */
+  agentSpan?: Span<SpanType.AGENT_RUN>;
 }
 
 /**

@@ -7,6 +7,8 @@ import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
 import { ChunkFrom } from '../../../../stream/types';
+import { SpanType } from '../../../../observability';
+import type { ExportedSpan } from '../../../../observability';
 import { createStep } from '../../../../workflows';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
@@ -31,6 +33,7 @@ const durableToolCallInputSchema = z.object({
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
   activeTools: z.array(z.string()).nullable().optional(),
+  stepSpanData: z.any().optional(),
 });
 
 /**
@@ -304,13 +307,22 @@ export function createDurableToolCallStep() {
         };
       }
 
+      // Build tracingContext from stepSpanData so builder's TOOL_CALL span
+      // nests under model_step instead of floating at AGENT_RUN root.
+      const observability = (mastra as any)?.observability?.getSelectedInstance({ requestContext });
+      const stepSpanData = typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP> | undefined;
+      const stepSpan = stepSpanData && observability
+        ? observability.rebuildSpan(stepSpanData)
+        : undefined;
+      const toolTracingContext = stepSpan ? { currentSpan: stepSpan } : undefined;
+
       const toolOptions = {
         toolCallId,
         messages: [],
         workspace,
         requestContext,
         resumeData: isResumingFromSuspension ? resumeData : undefined,
-
+        tracingContext: toolTracingContext,
         // In-execution suspend callback — allows tools to suspend mid-execution
         suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
           if (suspendOptions?.requireToolApproval) {
