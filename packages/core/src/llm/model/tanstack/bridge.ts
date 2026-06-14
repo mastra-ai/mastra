@@ -9,7 +9,7 @@
  *
  * No hard dependency on @tanstack/ai — all types are structural.
  */
-import type { LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2, LanguageModelV2CallOptions, LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import type { MastraLanguageModelV2 } from '../shared.types';
 
 // ---------------------------------------------------------------------------
@@ -389,7 +389,7 @@ function mapFinishReason(reason: string | undefined | null): 'stop' | 'length' |
 // Bridge class
 // ---------------------------------------------------------------------------
 
-type DoStreamResult = Awaited<ReturnType<import('@ai-sdk/provider-v5').LanguageModelV2['doStream']>>;
+type DoStreamResult = Awaited<ReturnType<LanguageModelV2['doStream']>>;
 
 /**
  * Wraps a TanStack AI TextAdapter as a MastraLanguageModelV2.
