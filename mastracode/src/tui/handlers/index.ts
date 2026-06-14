@@ -1,5 +1,11 @@
 export type { EventHandlerContext } from './types.js';
-export { handleAgentStart, handleAgentEnd, handleAgentAborted, handleAgentError } from './agent-lifecycle.js';
+export {
+  handleAgentStart,
+  handleAgentEnd,
+  handleAgentAborted,
+  handleAgentError,
+  handleGoalEvaluation,
+} from './agent-lifecycle.js';
 export { handleMessageStart, handleMessageUpdate, handleMessageEnd } from './message.js';
 export {
   handleOMObservationStart,

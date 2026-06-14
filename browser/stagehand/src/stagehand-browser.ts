@@ -9,7 +9,12 @@
 
 import { existsSync, mkdirSync } from 'node:fs';
 import { Stagehand } from '@browserbasehq/stagehand';
-import { MastraBrowser, ScreencastStreamImpl, DEFAULT_THREAD_ID } from '@mastra/core/browser';
+import {
+  MastraBrowser,
+  ScreencastStreamImpl,
+  DEFAULT_THREAD_ID,
+  createBrowserRecordingTools,
+} from '@mastra/core/browser';
 import type {
   BrowserState,
   BrowserTabState,
@@ -486,6 +491,10 @@ export class StagehandBrowser extends MastraBrowser {
 
   override getTools(): Record<string, Tool<any, any>> {
     const tools = createStagehandTools(this);
+    if (this.stagehandConfig.recording) {
+      Object.assign(tools, createBrowserRecordingTools(this, this.stagehandConfig.recording));
+    }
+
     const exclude = this.stagehandConfig.excludeTools;
     if (exclude?.length) {
       for (const name of exclude) {
@@ -1169,6 +1178,22 @@ export class StagehandBrowser extends MastraBrowser {
         stream.emitUrl(params.frame.url);
         // Update session state on navigation
         this.updateSessionBrowserState(threadId);
+
+        // Same-tab navigations (e.g. clicking a link that loads a new origin
+        // in the current tab) can silently stop Chromium's screencast on the
+        // existing target. Reconnect so frames keep flowing. Reuses the
+        // per-thread debounce timer to coalesce rapid sub-navigations.
+        const existingTimer = this.tabChangeDebounceTimers.get(streamKey);
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+        }
+        this.tabChangeDebounceTimers.set(
+          streamKey,
+          setTimeout(() => {
+            this.tabChangeDebounceTimers.delete(streamKey);
+            void this.reconnectScreencastForThread(threadId, 'same-tab navigation');
+          }, 300),
+        );
       }
     };
 
