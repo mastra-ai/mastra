@@ -6,6 +6,7 @@ import type {
   UsageStats,
 } from '@mastra/core/observability';
 import { describe, it, expect } from 'vitest';
+import { MODEL_TOKENS } from '../../../docs/src/plugins/remark-model-tokens/models';
 import { getAttributes, formatUsageMetrics } from './gen-ai-semantics';
 
 function createModelGenerationSpan(attributes: ModelGenerationAttributes): AnyExportedSpan {
@@ -92,7 +93,7 @@ describe('getAttributes - token usage', () => {
 
   it('should extract model, provider, usage, and RAG metadata for embedding spans', () => {
     const span = createRagEmbeddingSpan({
-      model: 'text-embedding-3-small',
+      model: MODEL_TOKENS.__AI_SDK_OPENAI_EMBEDDING_MODEL__,
       provider: 'OpenAI',
       mode: 'ingest',
       dimensions: 1536,
@@ -102,7 +103,7 @@ describe('getAttributes - token usage', () => {
     const attrs = getAttributes(span);
 
     expect(attrs['gen_ai.operation.name']).toBe('embeddings');
-    expect(attrs['gen_ai.request.model']).toBe('text-embedding-3-small');
+    expect(attrs['gen_ai.request.model']).toBe(MODEL_TOKENS.__AI_SDK_OPENAI_EMBEDDING_MODEL__);
     expect(attrs['gen_ai.provider.name']).toBe('openai');
     expect(attrs['gen_ai.usage.input_tokens']).toBe(120);
     expect(attrs['gen_ai.embeddings.dimension.count']).toBe(1536);

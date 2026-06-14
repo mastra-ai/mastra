@@ -16,6 +16,7 @@ import type {
 import { SpanKind } from '@opentelemetry/api';
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { MODEL_TOKENS } from '../../../docs/src/plugins/remark-model-tokens/models';
 import { SpanConverter } from './span-converter.js';
 
 // Mock the Resource class
@@ -83,7 +84,7 @@ describe('SpanConverter', () => {
         isEvent: false,
         isRootSpan: false,
         attributes: {
-          model: 'text-embedding-3-small',
+          model: MODEL_TOKENS.__AI_SDK_OPENAI_EMBEDDING_MODEL__,
           provider: 'openai',
           mode: 'query',
           inputCount: 1,
@@ -91,7 +92,7 @@ describe('SpanConverter', () => {
       };
 
       const result = await converter.convertSpan(span);
-      expect(result.name).toBe('embeddings text-embedding-3-small');
+      expect(result.name).toBe(`embeddings ${MODEL_TOKENS.__AI_SDK_OPENAI_EMBEDDING_MODEL__}`);
     });
 
     it('should fall back to sanitized span name for RAG embedding spans without a model', async () => {
@@ -250,7 +251,7 @@ describe('SpanConverter', () => {
         isEvent: false,
         isRootSpan: false,
         attributes: {
-          model: 'text-embedding-3-small',
+          model: MODEL_TOKENS.__AI_SDK_OPENAI_EMBEDDING_MODEL__,
           provider: 'openai',
         } as RagEmbeddingAttributes,
       };
@@ -372,7 +373,7 @@ describe('SpanConverter', () => {
         isEvent: false,
         isRootSpan: false,
         attributes: {
-          model: 'text-embedding-3-small',
+          model: MODEL_TOKENS.__AI_SDK_OPENAI_EMBEDDING_MODEL__,
           provider: 'OpenAI',
           mode: 'query',
           dimensions: 1536,
@@ -388,7 +389,7 @@ describe('SpanConverter', () => {
       const attrs = result.attributes;
 
       expect(attrs['gen_ai.operation.name']).toBe('embeddings');
-      expect(attrs['gen_ai.request.model']).toBe('text-embedding-3-small');
+      expect(attrs['gen_ai.request.model']).toBe(MODEL_TOKENS.__AI_SDK_OPENAI_EMBEDDING_MODEL__);
       expect(attrs['gen_ai.provider.name']).toBe('openai');
       expect(attrs['gen_ai.usage.input_tokens']).toBe(12);
       expect(attrs['gen_ai.usage.cache_read.input_tokens']).toBe(4);
