@@ -781,11 +781,37 @@ export class AgentThreadStreamRuntime {
     return queue;
   }
 
+  /**
+   * Agent IDs used internally by Observational Memory (OM).
+   *
+   * These agents are invoked synchronously *within* the main agent's input-processing
+   * step and therefore always run inside an already-active thread run.  If they were
+   * allowed to enter the cross-agent wait loop they would deadlock:
+   *
+   *   main run waits for OM observation to finish
+   *     → OM observer calls agent.stream()
+   *       → waitForCrossAgentThreadRun sees the main run as "active" on this thread
+   *         → waits for the main run to finish
+   *           → circular wait, hangs forever
+   *
+   * Skipping the wait for these agents is safe because they are designed to execute
+   * *inside* the owning thread run, not as independent concurrent runs.
+   */
+  static readonly #OM_INTERNAL_AGENT_IDS = new Set([
+    'observational-memory-observer',
+    'multi-thread-observer',
+    'observational-memory-reflector',
+  ]);
+
   async waitForCrossAgentThreadRun(
     agent: Agent<any, any, any, any>,
     options: { memory?: AgentExecutionOptions<any>['memory']; requestContext?: RequestContext },
     pubsub?: PubSub,
   ) {
+    // OM internal agents run synchronously inside the parent run; waiting here
+    // would create a circular dependency.  See the comment on #OM_INTERNAL_AGENT_IDS.
+    if (AgentThreadStreamRuntime.#OM_INTERNAL_AGENT_IDS.has(agent.id)) return;
+
     const { threadId, resourceId } = this.#getThreadTarget(options);
     if (!threadId) return;
 
