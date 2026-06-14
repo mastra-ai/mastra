@@ -85,9 +85,13 @@ void tui.run().catch(error => {
     runtime.printScreen('spawned', terminal);
 
     await (expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })) as any).toBeVisible();
+    terminal.keyCtrlC();
+    await runtime.waitForScreenTextAbsent(/\[WorkspaceSkills\].*Expected string/i, terminal, 8_000);
     runtime.printScreen('after startup', terminal);
 
-    terminal.submit('Start state signal host run.');
+    terminal.write('Start state signal host run.');
+    await runtime.waitForScreenText(/Start state signal host run\./i, terminal, 8_000);
+    terminal.write('\r');
     await runtime.waitForScreenText(/State snapshot: browser/i, terminal, 10_000);
     await runtime.waitForScreenText(/Browser state e2e snapshot/i, terminal, 10_000);
     runtime.printScreen('after state signal', terminal);
