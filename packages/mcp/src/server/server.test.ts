@@ -1469,16 +1469,18 @@ describe('MCPServer', () => {
 
       const client = new Client({ name: 'serverless-json-client', version: '1.0.0' });
       const transport = new StreamableHTTPClientTransport(new URL(`http://localhost:${currentTestPort}/http`));
-      await client.connect(transport);
+      try {
+        await client.connect(transport);
 
-      const result = await client.callTool({ name: 'echoTool', arguments: { message: 'hello' } });
+        const result = await client.callTool({ name: 'echoTool', arguments: { message: 'hello' } });
 
-      // Final tool result is still delivered in JSON response mode
-      const content = result.content as Array<{ type: string; text: string }>;
-      expect(JSON.parse(content[0].text)).toEqual({ echoed: 'hello' });
-
-      await client.close();
-      await transport.close();
+        // Final tool result is still delivered in JSON response mode
+        const content = result.content as Array<{ type: string; text: string }>;
+        expect(JSON.parse(content[0].text)).toEqual({ echoed: 'hello' });
+      } finally {
+        await client.close();
+        await transport.close();
+      }
     });
 
     it('should deliver notifications/progress to an MCP client onprogress handler in serverless streaming mode', async () => {
@@ -1524,26 +1526,28 @@ describe('MCPServer', () => {
 
       const client = new Client({ name: 'serverless-streaming-client', version: '1.0.0' });
       const transport = new StreamableHTTPClientTransport(new URL(`http://localhost:${currentTestPort}/http`));
-      await client.connect(transport);
+      try {
+        await client.connect(transport);
 
-      const progressUpdates: Array<{ progress: number; total?: number }> = [];
-      const result = await client.callTool({ name: 'progressTool', arguments: {} }, undefined, {
-        onprogress: notification =>
-          progressUpdates.push({ progress: notification.progress, total: notification.total }),
-      });
+        const progressUpdates: Array<{ progress: number; total?: number }> = [];
+        const result = await client.callTool({ name: 'progressTool', arguments: {} }, undefined, {
+          onprogress: notification =>
+            progressUpdates.push({ progress: notification.progress, total: notification.total }),
+        });
 
-      // The client received the request-scoped progress notifications
-      expect(progressUpdates).toEqual([
-        { progress: 1, total: 2 },
-        { progress: 2, total: 2 },
-      ]);
+        // The client received the request-scoped progress notifications
+        expect(progressUpdates).toEqual([
+          { progress: 1, total: 2 },
+          { progress: 2, total: 2 },
+        ]);
 
-      // The final tool result is still delivered after the stream completes
-      const content = result.content as Array<{ type: string; text: string }>;
-      expect(JSON.parse(content[0].text)).toEqual({ result: 'done' });
-
-      await client.close();
-      await transport.close();
+        // The final tool result is still delivered after the stream completes
+        const content = result.content as Array<{ type: string; text: string }>;
+        expect(JSON.parse(content[0].text)).toEqual({ result: 'done' });
+      } finally {
+        await client.close();
+        await transport.close();
+      }
     });
 
     it('should not require or persist an mcp-session-id in serverless streaming mode', async () => {
@@ -1568,17 +1572,19 @@ describe('MCPServer', () => {
 
       const client = new Client({ name: 'serverless-no-session-client', version: '1.0.0' });
       const transport = new StreamableHTTPClientTransport(new URL(`http://localhost:${currentTestPort}/http`));
-      await client.connect(transport);
+      try {
+        await client.connect(transport);
 
-      // Stateless mode: the server assigns no session, so the client transport has no session ID
-      expect(transport.sessionId).toBeUndefined();
+        // Stateless mode: the server assigns no session, so the client transport has no session ID
+        expect(transport.sessionId).toBeUndefined();
 
-      // Subsequent requests still work without an mcp-session-id
-      const tools = await client.listTools();
-      expect(tools.tools.length).toBeGreaterThan(0);
-
-      await client.close();
-      await transport.close();
+        // Subsequent requests still work without an mcp-session-id
+        const tools = await client.listTools();
+        expect(tools.tools.length).toBeGreaterThan(0);
+      } finally {
+        await client.close();
+        await transport.close();
+      }
     });
   });
 });
