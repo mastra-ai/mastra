@@ -1,6 +1,6 @@
 # Mastra Code testing recovery history
 
-### Subagent Plan/Execute coverage (2026-06-13, pending)
+### Subagent Plan/Execute coverage (2026-06-13, de2cf94056)
 
 Added `subagent-plan-execute-tools`, a real PTY e2e scenario that uses AIMock tool calls to delegate Plan and Execute subagents from a parent TUI turn. The scenario asserts visible `subagent plan openai/gpt-5.4-mini ✓` and `subagent execute openai/gpt-5.4-mini ✓` footers, verifies provider-visible Plan/Execute tool boundaries (`write_file` omitted from Plan and present for Execute), has Execute write `subagent-execute-output.txt`, and verifies the written file from the isolated project shell with a shell-only `SUBAGENT_EXECUTE_CAT=` prefix.
 
