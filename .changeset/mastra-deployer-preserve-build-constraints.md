@@ -1,4 +1,4 @@
 ---
 "@mastra/deployer": patch
 ---
-Preserve source dependency constraints and overrides in generated Mastra build output.
+Fixed generated Mastra build output to preserve source dependency constraints and overrides, preventing dependency drift during isolated install.
