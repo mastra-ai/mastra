@@ -1,6 +1,6 @@
 # Mastra Code testing recovery history
 
-### Skills command symlink coverage (2026-06-13, pending)
+### Skills command symlink coverage (2026-06-13, 8500d1b317)
 
 Added `skills-symlink-dedupe`, a real PTY e2e scenario that creates visible and hidden skills in an external skill store, exposes them only through Agent Skills spec `.agents/skills` symlinks, runs `/skills`, and asserts the TUI lists exactly one visible skill with its description while keeping the hidden symlinked skill out of the catalog.
 
