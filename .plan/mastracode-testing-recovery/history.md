@@ -1,5 +1,23 @@
 # Mastra Code testing recovery history
 
+### Skills command symlink coverage (2026-06-13, pending)
+
+Added `skills-symlink-dedupe`, a real PTY e2e scenario that creates visible and hidden skills in an external skill store, exposes them only through Agent Skills spec `.agents/skills` symlinks, runs `/skills`, and asserts the TUI lists exactly one visible skill with its description while keeping the hidden symlinked skill out of the catalog.
+
+Break validations:
+
+1. Removed `.agents/skills` from `buildSkillPaths()`; the scenario failed with "No user-invokable skills found" instead of listing the symlinked skill.
+2. Disabled `/skills` `user-invocable` filtering; the scenario failed because the hidden symlinked skill appeared and the count changed to `Skills (2)`.
+3. Hid `/skills` descriptions; the scenario failed waiting for the visible symlinked skill description.
+
+All breaks were reverted and the focused scenario passed cleanly.
+
+Verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test skills-symlink-dedupe
+```
+
 ### Core Harness API reference compile smoke (2026-06-13, 7a24ff836b)
 
 Added `packages/core/src/harness/harness-public-api.test.ts`, a public API smoke that extracts the first TypeScript code block from `docs/src/content/en/reference/harness/harness-class.mdx`, compiles it through the package export `@mastra/core/harness`, then appends representative object-parameter calls for `sendMessage`, `switchMode`, `switchModel`, `createThread`, `switchThread`, `respondToQuestion`, `respondToPlanApproval`, and `respondToToolApproval`. Updated the Harness reference usage example to current Agent config and model config shapes while keeping the snippet self-contained.

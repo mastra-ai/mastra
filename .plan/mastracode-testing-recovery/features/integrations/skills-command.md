@@ -80,12 +80,14 @@
 - `packages/core/src/workspace/skills/skill-versioning.test.ts` — covers versioned and composite skill-source path normalization/routing.
 - `mastracode/scripts/mc-e2e/scenarios/workspace-commands.ts` — real PTY/TUI e2e partial coverage proving `/skills` renders a visible skills/no-skills surface before any message resolves workspace.
 - `mastracode/scripts/mc-e2e/scenarios/skills-command-activation.ts` — real PTY/TUI e2e coverage for seeded user-invocable skill listing, hidden skill filtering, explicit `/skill/<name>` activation with escaped embedded `</skill>` text and arguments, and `/goal/<skill>` alias activation through AIMock requests.
+- `mastracode/scripts/mc-e2e/scenarios/skills-symlink-dedupe.ts` — real PTY/TUI e2e coverage for Agent Skills spec `.agents/skills` symlinked skill discovery, hidden symlink filtering, and visible `/skills` count/description rendering.
 - `packages/core/src/workspace/filesystem/local-filesystem.test.ts`, `workspace.test.ts`, `tools.test.ts`, and `processors/processors/skills.test.ts` — cover symlink allowed roots, workspace skill discovery, tool activation, and prompt-processor de-duping around symlink aliases.
 
 ## Missing tests
 
-- Headless/non-TUI skill activation parity if expected.
-- Remaining breadth: skill reload/staleness after workspace config changes and deeper symlink alias de-duplication in real TUI, if required beyond focused core/workspace tests.
+- Covered: checked-in TUI e2e now covers normal `/skills` listing, explicit `/skill/<name>` activation, `/goal/<skill>` alias activation, hidden-skill filtering, escaped embedded boundaries, arguments, and Agent Skills spec `.agents/skills` symlinked discovery.
+- Deferred: headless/non-TUI skill activation parity if expected.
+- Deferred: explicit skill reload/staleness after workspace config changes if a product reload path is added.
 
 ## Known risks / regressions
 

@@ -89,6 +89,7 @@ import { shellPassthroughEnvOverrideScenario } from './shell-passthrough-env-ove
 import { shellPassthroughLongOutputScenario } from './shell-passthrough-long-output.js';
 import { shellPassthroughNonpersistentScenario } from './shell-passthrough-nonpersistent.js';
 import { skillsCommandActivationScenario } from './skills-command-activation.js';
+import { skillsSymlinkDedupeScenario } from './skills-symlink-dedupe.js';
 import { startupScenario } from './startup.js';
 import { stateCommandsScenario } from './state-commands.js';
 import { stateSignalBrowserProcessorScenario } from './state-signal-browser-processor.js';
@@ -218,6 +219,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'shell-passthrough-long-output': shellPassthroughLongOutputScenario,
   'shell-passthrough-nonpersistent': shellPassthroughNonpersistentScenario,
   'skills-command-activation': skillsCommandActivationScenario,
+  'skills-symlink-dedupe': skillsSymlinkDedupeScenario,
   'storage-fallback-history-reload': storageFallbackHistoryReloadScenario,
   'storage-settings': storageSettingsScenario,
   'storage-startup-pg-fallback': storageStartupPgFallbackScenario,

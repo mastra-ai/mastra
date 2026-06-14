@@ -96,6 +96,7 @@ export type ScenarioName =
   | 'shell-passthrough-long-output'
   | 'shell-passthrough-nonpersistent'
   | 'skills-command-activation'
+  | 'skills-symlink-dedupe'
   | 'storage-fallback-history-reload'
   | 'storage-settings'
   | 'storage-startup-pg-fallback'
