@@ -70,18 +70,32 @@ export type MastraLanguageModel = MastraLanguageModelV2 | MastraLanguageModelV3;
 
 export type SharedProviderOptions = SharedV2ProviderOptions | SharedV3ProviderOptions;
 
+/**
+ * Structural shape of a TanStack AI TextAdapter.
+ * Detected via duck-typing at runtime so @mastra/core has no hard dependency on @tanstack/ai.
+ * @see https://tanstack.com/ai
+ */
+export interface TanStackTextAdapterConfig {
+  readonly kind: 'text';
+  readonly name: string;
+  readonly model: string;
+  chatStream: (...args: Array<any>) => AsyncIterable<unknown>;
+}
+
 // Support for:
 // - "openai/gpt-4o" (magic string with autocomplete)
 // - { id: "openai/gpt-4o", apiKey: "..." } (config object)
 // - { id: "custom", url: "...", apiKey: "..." } (custom endpoint)
 // - LanguageModelV1/V2/V3 (existing AI SDK models)
+// - TanStack AI TextAdapter (e.g. openaiText('gpt-4o'))
 export type MastraModelConfig =
   | LanguageModelV1
   | LanguageModelV2
   | LanguageModelV3
   | ModelRouterModelId
   | OpenAICompatibleConfig
-  | MastraLanguageModel;
+  | MastraLanguageModel
+  | TanStackTextAdapterConfig;
 
 export type MastraModelOptions = {
   tracingPolicy?: TracingPolicy;

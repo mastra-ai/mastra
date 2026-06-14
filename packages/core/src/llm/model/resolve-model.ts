@@ -13,6 +13,7 @@ import type {
   MastraLanguageModel,
   MastraLegacyLanguageModel,
 } from './shared.types';
+import { TanStackLanguageModel, isTanStackTextAdapter } from './tanstack/bridge';
 
 /**
  * Type guard to check if a model config is an OpenAICompatibleConfig object
@@ -46,6 +47,7 @@ export function isOpenAICompatibleObjectConfig(
  * - Magic strings like "openai/gpt-4o"
  * - Config objects like { id: "openai/gpt-4o", apiKey: "..." }
  * - Direct LanguageModel instances
+ * - TanStack AI TextAdapters (e.g. openaiText('gpt-4o') from @tanstack/ai-openai)
  * - Dynamic functions that return any of the above
  *
  * @param modelConfig The model configuration
@@ -123,6 +125,11 @@ export async function resolveModelConfig(
 
   const gatewayRecord = mastra?.listGateways();
   const customGateways = gatewayRecord ? Object.values(gatewayRecord) : undefined;
+
+  // TanStack AI TextAdapter: wrap with protocol bridge that calls the adapter's chatStream()
+  if (isTanStackTextAdapter(modelConfig)) {
+    return new TanStackLanguageModel(modelConfig);
+  }
 
   // If it's a string (magic string like "openai/gpt-4o") or OpenAICompatibleConfig, create ModelRouterLanguageModel
   if (typeof modelConfig === 'string' || isOpenAICompatibleObjectConfig(modelConfig)) {

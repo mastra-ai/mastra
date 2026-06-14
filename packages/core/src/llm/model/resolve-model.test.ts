@@ -5,6 +5,7 @@ import { AISDKV4LegacyLanguageModel } from './aisdk/v4/model';
 import { AISDKV5LanguageModel } from './aisdk/v5/model';
 import { resolveModelConfig } from './resolve-model';
 import { ModelRouterLanguageModel } from './router';
+import { TanStackLanguageModel, isTanStackTextAdapter } from './tanstack/bridge';
 
 describe('resolveModelConfig', () => {
   it('should resolve a magic string to ModelRouterLanguageModel', async () => {
@@ -243,6 +244,244 @@ describe('resolveModelConfig', () => {
         expect(result.modelId).toBe('context-model');
         expect(result.provider).toBe('context-provider');
       });
+    });
+  });
+
+  describe('TanStack AI TextAdapter support', () => {
+    function createFakeTanStackAdapter(
+      name: string,
+      model: string,
+      events?: Array<Record<string, unknown>>,
+    ) {
+      return {
+        kind: 'text' as const,
+        name,
+        model,
+        chatStream: async function* () {
+          if (events) {
+            for (const e of events) yield e;
+          }
+        },
+        structuredOutput: async () => ({ data: {}, rawText: '' }),
+      };
+    }
+
+    it('should resolve a TanStack AI TextAdapter to TanStackLanguageModel', async () => {
+      const adapter = createFakeTanStackAdapter('openai', 'gpt-4o');
+      const result = await resolveModelConfig(adapter as any);
+      expect(result).toBeInstanceOf(TanStackLanguageModel);
+      expect(result.modelId).toBe('gpt-4o');
+      expect(result.provider).toBe('openai');
+      expect(result.specificationVersion).toBe('v2');
+    });
+
+    it('should resolve a TanStack Anthropic adapter', async () => {
+      const adapter = createFakeTanStackAdapter('anthropic', 'claude-sonnet-4-20250514');
+      const result = await resolveModelConfig(adapter as any);
+      expect(result).toBeInstanceOf(TanStackLanguageModel);
+      expect(result.modelId).toBe('claude-sonnet-4-20250514');
+      expect(result.provider).toBe('anthropic');
+    });
+
+    it('should resolve a dynamic function returning a TanStack adapter', async () => {
+      const adapter = createFakeTanStackAdapter('openai', 'gpt-4o');
+      const dynamicFn = () => adapter;
+      const result = await resolveModelConfig(dynamicFn as any);
+      expect(result).toBeInstanceOf(TanStackLanguageModel);
+      expect(result.modelId).toBe('gpt-4o');
+      expect(result.provider).toBe('openai');
+    });
+
+    it('should stream text through the bridge', async () => {
+      const adapter = createFakeTanStackAdapter('openai', 'gpt-4o', [
+        { type: 'RUN_STARTED', threadId: 't1', runId: 'r1' },
+        { type: 'TEXT_MESSAGE_START', messageId: 'msg-1' },
+        { type: 'TEXT_MESSAGE_CONTENT', messageId: 'msg-1', delta: 'Hello' },
+        { type: 'TEXT_MESSAGE_CONTENT', messageId: 'msg-1', delta: ' world' },
+        { type: 'TEXT_MESSAGE_END', messageId: 'msg-1' },
+        { type: 'RUN_FINISHED', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+      ]);
+
+      const model = new TanStackLanguageModel(adapter as any);
+      const { stream } = await model.doStream({
+        prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hi' }] }],
+      } as any);
+
+      const parts: Array<Record<string, unknown>> = [];
+      const reader = stream.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        parts.push(value as Record<string, unknown>);
+      }
+
+      expect(parts[0]).toEqual({ type: 'stream-start', warnings: [] });
+      expect(parts.find(p => p.type === 'text-start')).toBeDefined();
+      const textDeltas = parts.filter(p => p.type === 'text-delta');
+      expect(textDeltas).toHaveLength(2);
+      expect(textDeltas[0]!.delta).toBe('Hello');
+      expect(textDeltas[1]!.delta).toBe(' world');
+      expect(parts.find(p => p.type === 'text-end')).toBeDefined();
+      const finish = parts.find(p => p.type === 'finish');
+      expect(finish).toBeDefined();
+      expect(finish!.finishReason).toBe('stop');
+      expect((finish as any).usage.inputTokens).toBe(10);
+      expect((finish as any).usage.outputTokens).toBe(5);
+    });
+
+    it('should translate tool calls through the bridge', async () => {
+      const adapter = createFakeTanStackAdapter('openai', 'gpt-4o', [
+        { type: 'RUN_STARTED', threadId: 't1', runId: 'r1' },
+        { type: 'TOOL_CALL_START', toolCallId: 'tc-1', toolCallName: 'get_weather' },
+        { type: 'TOOL_CALL_ARGS', toolCallId: 'tc-1', delta: '{"city":"SF"}' },
+        { type: 'TOOL_CALL_END', toolCallId: 'tc-1' },
+        {
+          type: 'RUN_FINISHED',
+          finishReason: 'tool_calls',
+          usage: { inputTokens: 20, outputTokens: 10, totalTokens: 30 },
+        },
+      ]);
+
+      const model = new TanStackLanguageModel(adapter as any);
+      const { stream } = await model.doStream({
+        prompt: [{ role: 'user', content: [{ type: 'text', text: 'weather in SF?' }] }],
+      } as any);
+
+      const parts: Array<Record<string, unknown>> = [];
+      const reader = stream.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        parts.push(value as Record<string, unknown>);
+      }
+
+      expect(parts.find(p => p.type === 'tool-input-start')).toMatchObject({
+        type: 'tool-input-start',
+        id: 'tc-1',
+        toolName: 'get_weather',
+      });
+      expect(parts.find(p => p.type === 'tool-input-delta')).toMatchObject({
+        type: 'tool-input-delta',
+        id: 'tc-1',
+        delta: '{"city":"SF"}',
+      });
+      const toolCall = parts.find(p => p.type === 'tool-call');
+      expect(toolCall).toMatchObject({
+        type: 'tool-call',
+        toolCallId: 'tc-1',
+        toolName: 'get_weather',
+        input: '{"city":"SF"}',
+      });
+      const finish = parts.find(p => p.type === 'finish');
+      expect(finish!.finishReason).toBe('tool-calls');
+    });
+
+    it('should translate errors through the bridge', async () => {
+      const adapter = createFakeTanStackAdapter('openai', 'gpt-4o', [
+        { type: 'RUN_STARTED', threadId: 't1', runId: 'r1' },
+        { type: 'RUN_ERROR', message: 'Rate limit exceeded' },
+      ]);
+
+      const model = new TanStackLanguageModel(adapter as any);
+      const { stream } = await model.doStream({
+        prompt: [{ role: 'user', content: [{ type: 'text', text: 'Hi' }] }],
+      } as any);
+
+      const parts: Array<Record<string, unknown>> = [];
+      const reader = stream.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        parts.push(value as Record<string, unknown>);
+      }
+
+      const errorPart = parts.find(p => p.type === 'error');
+      expect(errorPart).toBeDefined();
+      expect((errorPart!.error as Error).message).toBe('Rate limit exceeded');
+    });
+
+    it('should pass system messages and tools to the adapter', async () => {
+      let capturedOptions: Record<string, unknown> | undefined;
+      const adapter = {
+        kind: 'text' as const,
+        name: 'openai',
+        model: 'gpt-4o',
+        chatStream: async function* (opts: Record<string, unknown>) {
+          capturedOptions = opts;
+          yield { type: 'RUN_STARTED', threadId: 't1', runId: 'r1' };
+          yield { type: 'TEXT_MESSAGE_START', messageId: 'msg-1' };
+          yield { type: 'TEXT_MESSAGE_CONTENT', messageId: 'msg-1', delta: 'ok' };
+          yield { type: 'TEXT_MESSAGE_END', messageId: 'msg-1' };
+          yield { type: 'RUN_FINISHED', finishReason: 'stop', usage: {} };
+        },
+      };
+
+      const model = new TanStackLanguageModel(adapter as any);
+      const { stream } = await model.doStream({
+        prompt: [
+          { role: 'system', content: 'You are a weather bot' },
+          { role: 'user', content: [{ type: 'text', text: 'Hi' }] },
+        ],
+        tools: [
+          {
+            type: 'function',
+            name: 'get_weather',
+            description: 'Get weather for a city',
+            inputSchema: { type: 'object', properties: { city: { type: 'string' } } },
+          },
+        ],
+      } as any);
+
+      // Consume the stream
+      const reader = stream.getReader();
+      while (!(await reader.read()).done) {}
+
+      expect(capturedOptions).toBeDefined();
+      expect((capturedOptions as any).systemPrompts).toEqual(['You are a weather bot']);
+      expect((capturedOptions as any).messages).toHaveLength(1);
+      expect((capturedOptions as any).messages[0].role).toBe('user');
+      expect((capturedOptions as any).tools).toHaveLength(1);
+      expect((capturedOptions as any).tools[0].name).toBe('get_weather');
+    });
+  });
+
+  describe('isTanStackTextAdapter', () => {
+    it('should detect a valid TanStack adapter shape', () => {
+      const adapter = {
+        kind: 'text',
+        name: 'openai',
+        model: 'gpt-4o',
+        chatStream: async function* () {},
+      };
+      expect(isTanStackTextAdapter(adapter)).toBe(true);
+    });
+
+    it('should reject null and primitives', () => {
+      expect(isTanStackTextAdapter(null)).toBe(false);
+      expect(isTanStackTextAdapter(undefined)).toBe(false);
+      expect(isTanStackTextAdapter('openai/gpt-4o')).toBe(false);
+      expect(isTanStackTextAdapter(42)).toBe(false);
+    });
+
+    it('should reject objects without kind=text', () => {
+      expect(isTanStackTextAdapter({ kind: 'image', name: 'openai', model: 'dall-e-3', chatStream: () => {} })).toBe(
+        false,
+      );
+    });
+
+    it('should reject objects missing chatStream', () => {
+      expect(isTanStackTextAdapter({ kind: 'text', name: 'openai', model: 'gpt-4o' })).toBe(false);
+    });
+
+    it('should reject AI SDK LanguageModel objects (which have specificationVersion)', () => {
+      const aiSdkModel = {
+        kind: 'text',
+        name: 'openai',
+        model: 'gpt-4o',
+        chatStream: () => {},
+        specificationVersion: 'v2',
+      };
+      expect(isTanStackTextAdapter(aiSdkModel)).toBe(false);
     });
   });
 });
