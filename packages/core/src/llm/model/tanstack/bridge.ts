@@ -101,9 +101,10 @@ export function isTanStackTextAdapter(value: unknown): value is TanStackTextAdap
 // Prompt translation: AI SDK V2 → TanStack ModelMessage[]
 // ---------------------------------------------------------------------------
 
-function translatePrompt(
-  prompt: LanguageModelV2CallOptions['prompt'],
-): { systemPrompts: Array<string>; messages: Array<TanStackModelMessage> } {
+function translatePrompt(prompt: LanguageModelV2CallOptions['prompt']): {
+  systemPrompts: Array<string>;
+  messages: Array<TanStackModelMessage>;
+} {
   const systemPrompts: Array<string> = [];
   const messages: Array<TanStackModelMessage> = [];
 
@@ -186,13 +187,13 @@ function translatePrompt(
 // Tool translation: AI SDK V2 FunctionTool → TanStack tool def
 // ---------------------------------------------------------------------------
 
-function translateTools(
-  tools: LanguageModelV2CallOptions['tools'],
-): Array<TanStackToolDef> | undefined {
+function translateTools(tools: LanguageModelV2CallOptions['tools']): Array<TanStackToolDef> | undefined {
   if (!tools?.length) return undefined;
 
   return tools
-    .filter((t): t is { type: 'function'; name: string; description?: string; inputSchema: unknown } => t.type === 'function')
+    .filter(
+      (t): t is { type: 'function'; name: string; description?: string; inputSchema: unknown } => t.type === 'function',
+    )
     .map(t => ({
       name: t.name,
       description: t.description,
@@ -204,9 +205,7 @@ function translateTools(
 // Stream translation: AG-UI events → AI SDK V2 stream parts
 // ---------------------------------------------------------------------------
 
-function createAGUIToAISDKStream(
-  asyncIterable: AsyncIterable<AGUIEvent>,
-): ReadableStream<LanguageModelV2StreamPart> {
+function createAGUIToAISDKStream(asyncIterable: AsyncIterable<AGUIEvent>): ReadableStream<LanguageModelV2StreamPart> {
   // Track state for accumulating tool call args
   const toolCallArgs = new Map<string, { name: string; args: string }>();
   let textMessageId = '';
@@ -252,8 +251,8 @@ function createAGUIToAISDKStream(
 
             case 'TOOL_CALL_START': {
               const toolCallId = (event as { toolCallId?: string }).toolCallId || `tc-${Date.now()}`;
-              const toolCallName = (event as { toolCallName?: string }).toolCallName ||
-                (event as { toolName?: string }).toolName || '';
+              const toolCallName =
+                (event as { toolCallName?: string }).toolCallName || (event as { toolName?: string }).toolName || '';
               toolCallArgs.set(toolCallId, { name: toolCallName, args: '' });
               controller.enqueue({
                 type: 'tool-input-start',
@@ -374,14 +373,22 @@ function createAGUIToAISDKStream(
   });
 }
 
-function mapFinishReason(reason: string | undefined | null): 'stop' | 'length' | 'content-filter' | 'tool-calls' | 'error' | 'other' | 'unknown' {
+function mapFinishReason(
+  reason: string | undefined | null,
+): 'stop' | 'length' | 'content-filter' | 'tool-calls' | 'error' | 'other' | 'unknown' {
   switch (reason) {
-    case 'stop': return 'stop';
-    case 'length': return 'length';
-    case 'content_filter': return 'content-filter';
-    case 'tool_calls': return 'tool-calls';
-    case 'error': return 'error';
-    default: return 'unknown';
+    case 'stop':
+      return 'stop';
+    case 'length':
+      return 'length';
+    case 'content_filter':
+      return 'content-filter';
+    case 'tool_calls':
+      return 'tool-calls';
+    case 'error':
+      return 'error';
+    default:
+      return 'unknown';
   }
 }
 

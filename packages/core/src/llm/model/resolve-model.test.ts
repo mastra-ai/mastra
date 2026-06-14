@@ -248,11 +248,7 @@ describe('resolveModelConfig', () => {
   });
 
   describe('TanStack AI TextAdapter support', () => {
-    function createFakeTanStackAdapter(
-      name: string,
-      model: string,
-      events?: Array<Record<string, unknown>>,
-    ) {
+    function createFakeTanStackAdapter(name: string, model: string, events?: Array<Record<string, unknown>>) {
       return {
         kind: 'text' as const,
         name,
