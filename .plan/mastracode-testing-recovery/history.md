@@ -1,5 +1,23 @@
 # Mastra Code testing recovery history
 
+### Core Harness API reference compile smoke (2026-06-13, pending)
+
+Added `packages/core/src/harness/harness-public-api.test.ts`, a public API smoke that extracts the first TypeScript code block from `docs/src/content/en/reference/harness/harness-class.mdx`, compiles it through the package export `@mastra/core/harness`, then appends representative object-parameter calls for `sendMessage`, `switchMode`, `switchModel`, `createThread`, `switchThread`, `respondToQuestion`, `respondToPlanApproval`, and `respondToToolApproval`. Updated the Harness reference usage example to current Agent config and model config shapes while keeping the snippet self-contained.
+
+Break validations:
+
+1. Removed `id` from the documented `Agent` config; the compile smoke failed on the required public Agent config shape.
+2. Changed the docs example back to positional `sendMessage('Hello!')`; the compile smoke failed on the object-parameter `sendMessage({ content })` signature.
+3. Changed the documented Harness import to a missing subpath; the compile smoke failed on public export resolution.
+
+All breaks were reverted and the focused smoke passed cleanly. Docs redirects and an explicit legacy positional-negative matrix remain deferred breadth.
+
+Verification:
+
+```sh
+pnpm --filter ./packages/core exec vitest --run src/harness/harness-public-api.test.ts --reporter=dot --bail 1
+```
+
 ### Installation and launch packed CLI smoke (2026-06-13, 5269959c34)
 
 Extended `package-metadata.test.ts` with a hermetic built-CLI smoke that resolves the package `bin` entrypoint from `mastracode/package.json`, runs `node dist/cli.js --help`, and verifies the headless `--prompt` validation path reports a missing `--settings` file without entering the interactive TUI. Existing `first-run-onboarding` PTY coverage still validates clean-config launch and onboarding Skip through real terminal input.

@@ -22,13 +22,26 @@ The `Harness` class orchestrates multiple agent modes, shared state, memory, and
 ## Usage example
 
 ```typescript
+import { Agent } from '@mastra/core/agent'
 import { Harness } from '@mastra/core/harness'
-import { LibSQLStore } from '@mastra/libsql'
 import { z } from 'zod'
+
+const planAgent = new Agent({
+  id: 'plan-agent',
+  name: 'Plan',
+  instructions: 'Plan changes safely.',
+  model: { id: '__GATEWAY_OPENAI_MODEL__' },
+})
+
+const buildAgent = new Agent({
+  id: 'build-agent',
+  name: 'Build',
+  instructions: 'Implement changes safely.',
+  model: { id: '__GATEWAY_OPENAI_MODEL__' },
+})
 
 const harness = new Harness({
   id: 'my-coding-agent',
-  storage: new LibSQLStore({ url: 'file:./data.db' }),
   stateSchema: z.object({
     currentModelId: z.string().optional(),
   }),
@@ -37,6 +50,10 @@ const harness = new Harness({
     { id: 'build', name: 'Build', agent: buildAgent },
   ],
 })
+
+function renderMessage(message: unknown) {
+  void message
+}
 
 harness.subscribe(event => {
   if (event.type === 'message_update') {

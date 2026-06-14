@@ -103,6 +103,7 @@
 - `packages/core/src/agent/__tests__/tool-approval-standalone-repro.test.ts` and `mastracode/src/__tests__/tool-approval-libsql.test.ts` — verify approval resume with stored workflow snapshots and standalone/storage-backed agents.
 - `packages/core/src/workflows/default.test.ts` — verifies `serializeRequestContext()` skips functions, circular objects, and RPC-like proxies before persistence.
 - `packages/core/src/harness/v1/mode.test.ts`, `session.test.ts`, and `packages/core/src/storage/domains/harness/inmemory.test.ts` — verify current `listModes()` behavior, owner ID propagation, deterministic session records, composed state validation/events, clone/load behavior, and in-memory record cloning in the v1 Harness surface.
+- `packages/core/src/harness/harness-public-api.test.ts` — compiles the Harness reference page's first TypeScript usage example through the published `@mastra/core/harness` export, then appends representative object-parameter calls for mode/model/thread/question/plan/tool APIs.
 - `packages/core/src/loop/workflows/agentic-execution/llm-execution-step.test.ts` — verifies model header merge order and automatic `x-thread-id`/`x-resource-id` request headers.
 - `packages/core/src/agent/__tests__/browser.test.ts` — verifies browser propagation into Agent execution context and thread-aware browser sessions.
 - `mastracode/src/HarnessCompat.test.ts` — verifies composed state, session/model/mode delegation, clone/list thread metadata, and legacy `switchMode()` fallback.
@@ -114,16 +115,15 @@
 
 ## Missing tests
 
-- Partial e2e coverage exists: `harness-api-config` covers caller `createMastraCode()` `configDir`/`initialState` state reaching the real TUI, with break validations for ignored `configDir`, `initialState.configDir` override ordering, and dropped `initialState` passthrough.
-- API compatibility/type smoke that imports `@mastra/core/harness` and exercises the documented object-param examples.
-- Docs example compile check for `docs/src/content/en/reference/harness/harness-class.mdx` snippets.
-- Redirect smoke test for removed Mastra Code docs paths, if the docs site does not already cover `docs/vercel.json` redirects.
-- Negative test proving old positional call shapes are intentionally unsupported, if that break is expected.
+- Covered: `harness-api-config` covers caller `createMastraCode()` `configDir`/`initialState` state reaching the real TUI, with break validations for ignored `configDir`, `initialState.configDir` override ordering, and dropped `initialState` passthrough.
+- Covered: `harness-public-api.test.ts` compiles the live Harness reference docs snippet and representative object-parameter API calls through the public package export.
+- Deferred: redirect smoke test for removed Mastra Code docs paths, if the docs site does not already cover `docs/vercel.json` redirects.
+- Deferred: negative test proving old positional call shapes are intentionally unsupported, if that break is expected.
 
 ## Known risks / regressions
 
 - Old positional consumer code will fail if not migrated; no compatibility shim was verified.
-- Docs and implementation can drift because reference examples are not clearly compiled as tests.
+- Docs and implementation can drift if future reference examples are added without extending the compile smoke.
 - Standalone Harness users can regress approval/suspend resume if agents lose internal Mastra registration or request context serialization reintroduces live runtime objects.
 - TUI/headless behavior can regress if future refactors update one set of object-param call sites but not the other.
 - Harness v1 state composition can regress by splitting mode/model/session state from legacy prompt/tool state again; keep `HarnessCompat.getState()` and `setState()` tests focused.
