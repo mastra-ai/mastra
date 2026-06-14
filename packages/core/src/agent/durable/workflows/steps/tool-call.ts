@@ -310,7 +310,7 @@ export function createDurableToolCallStep() {
       // Build tracingContext from stepSpanData so builder's TOOL_CALL span
       // nests under model_step instead of floating at AGENT_RUN root.
       const observability = (mastra as any)?.observability?.getSelectedInstance({ requestContext });
-      const stepSpanData = (typedInput as any).stepSpanData as ExportedSpan<SpanType.MODEL_STEP> | undefined;
+      const stepSpanData = typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP> | undefined;
       const stepSpan = stepSpanData && observability
         ? observability.rebuildSpan(stepSpanData)
         : undefined;

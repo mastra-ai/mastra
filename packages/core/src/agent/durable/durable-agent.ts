@@ -595,6 +595,19 @@ export class DurableAgent<
     };
 
     const globalEntry = globalRunRegistry.get(runId);
+    // Create a new AGENT_RUN span for the resumed run.
+    // The original span is gone (globalRunRegistry is in-memory and doesn't
+    // survive suspensions), so we open a fresh root span marked as a resume.
+    const resumeAgentSpan = getOrCreateSpan({
+      type: SpanType.AGENT_RUN,
+      name: `agent run: '${this.#wrappedAgent.id}' (resumed)`,
+      entityType: EntityType.AGENT,
+      entityId: this.#wrappedAgent.id,
+      entityName: this.#wrappedAgent.name,
+      metadata: { runId, resumed: true },
+      requestContext: globalEntry?.requestContext,
+      mastra: this.#mastra,
+    });
     const resumeModel = globalEntry?.model as any;
 
     const {
@@ -616,10 +629,13 @@ export class DurableAgent<
       onStepFinish: options?.onStepFinish,
       onFinish: async result => {
         await options?.onFinish?.(result);
+        resumeAgentSpan?.end?.({ output: result.output });
         scheduleAutoCleanup();
       },
       onError: async error => {
         await options?.onError?.(error);
+        resumeAgentSpan?.error?.({ error });
+        resumeAgentSpan?.end?.({});
         scheduleAutoCleanup();
       },
       onSuspended: options?.onSuspended,
@@ -631,7 +647,10 @@ export class DurableAgent<
     ready
       .then(async () => {
         const run = await workflow.createRun({ runId, pubsub: this.pubsub });
-        const result = await run.resume({ resumeData, requestContext });
+        const spanTracingContext = resumeAgentSpan
+          ? { currentSpan: resumeAgentSpan }
+          : undefined;
+        const result = await run.resume({ resumeData, requestContext, tracingContext: spanTracingContext });
         if (result?.status === 'failed') {
           const error = new Error((result as any).error?.message || 'Workflow resume failed');
           void this.emitError(runId, error);
