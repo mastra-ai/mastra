@@ -161,6 +161,9 @@ export class ObservationTurn {
   /** Replace the cached turn record with a specific instance. */
   setRecord(record: ObservationalMemoryRecord): void {
     this._record = record;
+    if (this._context) {
+      this._context.record = record;
+    }
   }
 
   /** Patch the cached turn record with merged fields. */
@@ -172,6 +175,9 @@ export class ObservationTurn {
       ...this._record,
       ...patch,
     };
+    if (this._context) {
+      this._context.record = this._record;
+    }
   }
 
   /**
