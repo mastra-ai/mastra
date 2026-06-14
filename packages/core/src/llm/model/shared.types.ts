@@ -82,12 +82,36 @@ export interface TanStackTextAdapterConfig {
   chatStream: (...args: Array<any>) => AsyncIterable<unknown>;
 }
 
+/**
+ * Structural shape of a TanStack AI SummarizeAdapter.
+ * @see https://tanstack.com/ai
+ */
+export interface TanStackSummarizeAdapterConfig {
+  readonly kind: 'summarize';
+  readonly name: string;
+  readonly model: string;
+  summarize: (...args: Array<any>) => Promise<unknown>;
+  summarizeStream?: (...args: Array<any>) => AsyncIterable<unknown>;
+}
+
+/**
+ * Structural shape of a TanStack AI ImageAdapter.
+ * @see https://tanstack.com/ai
+ */
+export interface TanStackImageAdapterConfig {
+  readonly kind: 'image';
+  readonly name: string;
+  readonly model: string;
+  generateImages: (...args: Array<any>) => Promise<unknown>;
+}
+
 // Support for:
 // - "openai/gpt-4o" (magic string with autocomplete)
 // - { id: "openai/gpt-4o", apiKey: "..." } (config object)
 // - { id: "custom", url: "...", apiKey: "..." } (custom endpoint)
 // - LanguageModelV1/V2/V3 (existing AI SDK models)
 // - TanStack AI TextAdapter (e.g. openaiText('gpt-4o'))
+// - TanStack AI SummarizeAdapter (e.g. openaiSummarize('gpt-4o'))
 export type MastraModelConfig =
   | LanguageModelV1
   | LanguageModelV2
@@ -95,7 +119,8 @@ export type MastraModelConfig =
   | ModelRouterModelId
   | OpenAICompatibleConfig
   | MastraLanguageModel
-  | TanStackTextAdapterConfig;
+  | TanStackTextAdapterConfig
+  | TanStackSummarizeAdapterConfig;
 
 export type MastraModelOptions = {
   tracingPolicy?: TracingPolicy;

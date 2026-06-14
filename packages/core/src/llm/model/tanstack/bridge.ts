@@ -81,20 +81,67 @@ export interface TanStackTextAdapterLike {
   structuredOutput?: (options: unknown) => Promise<unknown>;
 }
 
+/** Structural shape of a TanStack AI SummarizeAdapter. */
+export interface TanStackSummarizeAdapterLike {
+  readonly kind: 'summarize';
+  readonly name: string;
+  readonly model: string;
+  summarizeStream?: (options: unknown) => AsyncIterable<AGUIEvent>;
+  summarize: (options: unknown) => Promise<unknown>;
+}
+
+/** Structural shape of a TanStack AI ImageAdapter. */
+export interface TanStackImageAdapterLike {
+  readonly kind: 'image';
+  readonly name: string;
+  readonly model: string;
+  generateImages: (options: unknown) => Promise<unknown>;
+}
+
+/** Union of all recognized TanStack adapter shapes. */
+export type TanStackAdapterLike = TanStackTextAdapterLike | TanStackSummarizeAdapterLike | TanStackImageAdapterLike;
+
 // ---------------------------------------------------------------------------
-// Type guard
+// Type guards
 // ---------------------------------------------------------------------------
 
-export function isTanStackTextAdapter(value: unknown): value is TanStackTextAdapterLike {
+function hasTanStackAdapterShape(value: unknown): value is { kind: string; name: string; model: string } {
   return (
     typeof value === 'object' &&
     value !== null &&
-    (value as Record<string, unknown>).kind === 'text' &&
+    typeof (value as Record<string, unknown>).kind === 'string' &&
     typeof (value as Record<string, unknown>).name === 'string' &&
     typeof (value as Record<string, unknown>).model === 'string' &&
-    typeof (value as Record<string, unknown>).chatStream === 'function' &&
     !('specificationVersion' in value)
   );
+}
+
+export function isTanStackTextAdapter(value: unknown): value is TanStackTextAdapterLike {
+  return (
+    hasTanStackAdapterShape(value) &&
+    (value as Record<string, unknown>).kind === 'text' &&
+    typeof (value as Record<string, unknown>).chatStream === 'function'
+  );
+}
+
+export function isTanStackSummarizeAdapter(value: unknown): value is TanStackSummarizeAdapterLike {
+  return (
+    hasTanStackAdapterShape(value) &&
+    (value as Record<string, unknown>).kind === 'summarize' &&
+    typeof (value as Record<string, unknown>).summarize === 'function'
+  );
+}
+
+export function isTanStackImageAdapter(value: unknown): value is TanStackImageAdapterLike {
+  return (
+    hasTanStackAdapterShape(value) &&
+    (value as Record<string, unknown>).kind === 'image' &&
+    typeof (value as Record<string, unknown>).generateImages === 'function'
+  );
+}
+
+export function isTanStackAdapter(value: unknown): value is TanStackAdapterLike {
+  return isTanStackTextAdapter(value) || isTanStackSummarizeAdapter(value) || isTanStackImageAdapter(value);
 }
 
 // ---------------------------------------------------------------------------
@@ -446,6 +493,95 @@ export class TanStackLanguageModel implements MastraLanguageModelV2 {
     const agStream = this.#adapter.chatStream(textOptions);
     const stream = createAGUIToAISDKStream(agStream);
 
+    return { stream };
+  }
+
+  serializeForSpan(): { specificationVersion: 'v2'; modelId: string; provider: string } {
+    return {
+      specificationVersion: this.specificationVersion,
+      modelId: this.modelId,
+      provider: this.provider,
+    };
+  }
+}
+
+/**
+ * Wraps a TanStack AI SummarizeAdapter as a MastraLanguageModelV2.
+ *
+ * If the adapter has `summarizeStream()`, we call it and translate the AG-UI
+ * events to AI SDK V2 stream parts (same as text). Otherwise we fall back to
+ * calling `summarize()` and emitting the result as a single text chunk.
+ */
+export class TanStackSummarizeLanguageModel implements MastraLanguageModelV2 {
+  readonly specificationVersion: 'v2' = 'v2';
+  readonly provider: string;
+  readonly modelId: string;
+  supportedUrls: Record<string, RegExp[]> = {};
+
+  #adapter: TanStackSummarizeAdapterLike;
+
+  constructor(adapter: TanStackSummarizeAdapterLike) {
+    this.#adapter = adapter;
+    this.provider = adapter.name;
+    this.modelId = adapter.model;
+  }
+
+  async doGenerate(options: LanguageModelV2CallOptions): Promise<DoStreamResult> {
+    return this.doStream(options);
+  }
+
+  async doStream(options: LanguageModelV2CallOptions): Promise<DoStreamResult> {
+    const { systemPrompts, messages } = translatePrompt(options.prompt);
+
+    // Build the text to summarize from user messages
+    const text = messages
+      .filter(m => m.role === 'user')
+      .map(m => (typeof m.content === 'string' ? m.content : ''))
+      .join('\n');
+
+    const summarizeOptions = {
+      model: this.#adapter.model,
+      text,
+      systemPrompt: systemPrompts.length > 0 ? systemPrompts.join('\n') : undefined,
+      logger: { request: () => {}, provider: () => {}, errors: () => {} },
+    };
+
+    // Prefer streaming if available
+    if (typeof this.#adapter.summarizeStream === 'function') {
+      const agStream = this.#adapter.summarizeStream(summarizeOptions);
+      const stream = createAGUIToAISDKStream(agStream as AsyncIterable<AGUIEvent>);
+      return { stream };
+    }
+
+    // Fall back to non-streaming: wrap result as a simple stream
+    const result = (await this.#adapter.summarize(summarizeOptions)) as {
+      summary?: string;
+      id?: string;
+      usage?: { promptTokens?: number; completionTokens?: number };
+    };
+    const summary = result.summary || '';
+    const stream = new ReadableStream<LanguageModelV2StreamPart>({
+      start(controller) {
+        controller.enqueue({ type: 'stream-start', warnings: [] });
+        const msgId = result.id || `summarize-${Date.now()}`;
+        controller.enqueue({ type: 'text-start', id: msgId });
+        controller.enqueue({ type: 'text-delta', id: msgId, delta: summary });
+        controller.enqueue({ type: 'text-end', id: msgId });
+        const inputTokens = result.usage?.promptTokens ?? undefined;
+        const outputTokens = result.usage?.completionTokens ?? undefined;
+        controller.enqueue({
+          type: 'finish',
+          finishReason: 'stop',
+          usage: {
+            inputTokens,
+            outputTokens,
+            totalTokens:
+              inputTokens !== undefined && outputTokens !== undefined ? inputTokens + outputTokens : undefined,
+          },
+        });
+        controller.close();
+      },
+    });
     return { stream };
   }
 

@@ -13,7 +13,13 @@ import type {
   MastraLanguageModel,
   MastraLegacyLanguageModel,
 } from './shared.types';
-import { TanStackLanguageModel, isTanStackTextAdapter } from './tanstack/bridge';
+import {
+  TanStackLanguageModel,
+  TanStackSummarizeLanguageModel,
+  isTanStackTextAdapter,
+  isTanStackSummarizeAdapter,
+  isTanStackImageAdapter,
+} from './tanstack/bridge';
 
 /**
  * Type guard to check if a model config is an OpenAICompatibleConfig object
@@ -129,6 +135,19 @@ export async function resolveModelConfig(
   // TanStack AI TextAdapter: wrap with protocol bridge that calls the adapter's chatStream()
   if (isTanStackTextAdapter(modelConfig)) {
     return new TanStackLanguageModel(modelConfig);
+  }
+
+  // TanStack AI SummarizeAdapter: wrap with bridge that calls summarize/summarizeStream
+  if (isTanStackSummarizeAdapter(modelConfig)) {
+    return new TanStackSummarizeLanguageModel(modelConfig);
+  }
+
+  // TanStack AI ImageAdapter: not yet supported as a language model
+  if (isTanStackImageAdapter(modelConfig)) {
+    throw new Error(
+      `TanStack AI ImageAdapter ("${(modelConfig as { name: string; model: string }).name}/${(modelConfig as { name: string; model: string }).model}") cannot be used as a language model. ` +
+        'Image adapters produce images, not text. Use them directly via their generateImages() method.',
+    );
   }
 
   // If it's a string (magic string like "openai/gpt-4o") or OpenAICompatibleConfig, create ModelRouterLanguageModel

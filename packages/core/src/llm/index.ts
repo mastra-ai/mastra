@@ -80,6 +80,8 @@ export type {
   MastraModelConfig,
   OpenAICompatibleConfig,
   TanStackTextAdapterConfig,
+  TanStackSummarizeAdapterConfig,
+  TanStackImageAdapterConfig,
 } from './model/shared.types';
 export { ModelRouterLanguageModel, defaultGateways } from './model/router';
 export {
@@ -96,7 +98,14 @@ export type {
   AttachmentCapabilities,
 } from './model/provider-registry.js';
 export { resolveModelConfig } from './model/resolve-model';
-export { TanStackLanguageModel, isTanStackTextAdapter } from './model/tanstack/bridge';
+export {
+  TanStackLanguageModel,
+  TanStackSummarizeLanguageModel,
+  isTanStackTextAdapter,
+  isTanStackSummarizeAdapter,
+  isTanStackImageAdapter,
+  isTanStackAdapter,
+} from './model/tanstack/bridge';
 
 export type OutputType = StructuredOutput | StandardSchemaWithJSON | undefined;
 
