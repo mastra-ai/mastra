@@ -618,10 +618,12 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
       }
 
+      const body = typeof params.body === 'object' && params.body !== null ? params.body : {};
       const handlerParams = {
         ...params.urlParams,
         ...params.queryParams,
-        ...(typeof params.body === 'object' ? params.body : {}),
+        ...body,
+        bodyRequestContext: 'requestContext' in body ? body.requestContext : undefined,
         requestContext: request.requestContext,
         mastra: this.mastra,
         registeredTools: request.registeredTools,

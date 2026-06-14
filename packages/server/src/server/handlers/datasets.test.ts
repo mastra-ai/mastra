@@ -1,7 +1,8 @@
 import { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
-import { describe, it, expect, beforeEach } from 'vitest';
-import { LIST_DATASETS_ROUTE } from './datasets';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { LIST_DATASETS_ROUTE, TRIGGER_EXPERIMENT_ROUTE } from './datasets';
 import { createTestServerContext } from './test-utils';
 
 describe('Datasets Handlers', () => {
@@ -75,6 +76,73 @@ describe('Datasets Handlers', () => {
 
       expect(page2.datasets).toHaveLength(5);
       expect(page2.pagination.hasMore).toBe(false);
+    });
+  });
+
+  describe('TRIGGER_EXPERIMENT_ROUTE', () => {
+    it('should forward adapter-injected auth request context to workflow experiments', async () => {
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1', email: 'user@example.com' });
+
+      const startExperimentAsync = vi.fn().mockResolvedValue({
+        experimentId: 'experiment-1',
+        status: 'pending',
+        totalItems: 1,
+      });
+      vi.spyOn(mastra.datasets, 'get').mockResolvedValue({ startExperimentAsync } as any);
+
+      await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        requestContext,
+        datasetId: 'dataset-1',
+        targetType: 'workflow',
+        targetId: 'workflow-1',
+      } as any);
+
+      expect(startExperimentAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          targetType: 'workflow',
+          targetId: 'workflow-1',
+          requestContext: {
+            user: { id: 'user-1', email: 'user@example.com' },
+          },
+        }),
+      );
+    });
+
+    it('should merge body request context over adapter-injected request context', async () => {
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'auth-user' });
+      requestContext.set('tenantId', 'auth-tenant');
+
+      const startExperimentAsync = vi.fn().mockResolvedValue({
+        experimentId: 'experiment-1',
+        status: 'pending',
+        totalItems: 1,
+      });
+      vi.spyOn(mastra.datasets, 'get').mockResolvedValue({ startExperimentAsync } as any);
+
+      await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        requestContext,
+        datasetId: 'dataset-1',
+        targetType: 'workflow',
+        targetId: 'workflow-1',
+        bodyRequestContext: {
+          tenantId: 'body-tenant',
+          traceId: 'trace-1',
+        },
+      } as any);
+
+      expect(startExperimentAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          requestContext: {
+            user: { id: 'auth-user' },
+            tenantId: 'body-tenant',
+            traceId: 'trace-1',
+          },
+        }),
+      );
     });
   });
 });

@@ -211,10 +211,12 @@ export class RouteHandlerService {
       request: params.request,
     };
 
+    const body = typeof validatedBody === 'object' && validatedBody !== null ? validatedBody : {};
     const handlerParams = {
       ...this.omitReservedKeys(validatedPathParams),
       ...this.omitReservedKeys(validatedQueryParams),
-      ...(typeof validatedBody === 'object' && validatedBody !== null ? this.omitReservedKeys(validatedBody) : {}),
+      ...this.omitReservedKeys(body),
+      bodyRequestContext: 'requestContext' in body ? body.requestContext : undefined,
       ...context,
     };
 
