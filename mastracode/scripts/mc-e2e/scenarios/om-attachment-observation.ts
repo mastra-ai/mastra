@@ -88,7 +88,11 @@ export const omAttachmentObservationScenario = {
 
     terminal.submit('');
     await runtime.waitForScreenText(/OM_ATTACHMENT_STEP_DONE/i, terminal, 12_000);
-    await runtime.waitForScreenText(/MC OM attachment chat response/i, terminal, 16_000);
+    await runtime.waitForScreenText(/User submitted an image attachment for OM observation/i, terminal, 45_000);
+    await runtime.waitForScreenText(/Current task:\s+OM attachment observation e2e complete/i, terminal, 45_000);
+    await runtime.waitForScreenText(/Suggested response:\s+Continue the recovery loop/i, terminal, 45_000);
+    await runtime.waitForScreenText(/thread title updated:\s+Attachment observation/i, terminal, 45_000);
+    await runtime.waitForScreenText(/MC OM attachment chat response/i, terminal, 45_000);
 
     await runtime.sleep(2_000);
     terminal.keyCtrlC();

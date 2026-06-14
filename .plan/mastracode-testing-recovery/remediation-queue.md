@@ -3,7 +3,7 @@
 ## Current state
 
 - Checked-in TUI e2e coverage is no longer missing for any tracker row.
-- 1 remaining partial row is an unfinished `needs-follow-up` tracker row. This queue prioritizes residual contracts that still need deterministic coverage: broader user flows, integration-specific fixture depth, and remaining reload/history parity gaps.
+- 0 remaining partial rows are unfinished `needs-follow-up` tracker rows. All recovery rows now have deterministic validation or explicit non-hermetic deferrals.
 - Keep the user-realism rule: drive behavior through terminal input, slash commands, AIMock fixtures, deterministic pre-launch config/DB seeds, or approved external signal APIs for notification/state-signal origins. Do not emit Harness internals or mutate runtime display state directly.
 
 ## Priority queue
@@ -147,4 +147,5 @@
 - ✅ `skills-symlink-dedupe` — seeds visible and hidden Agent Skills spec `.agents/skills` symlinks, then proves `/skills` lists exactly one visible symlinked skill with description and keeps the non-invocable symlink hidden; skills-command row is validated with reload/staleness deferred until a product reload path exists.
 - ✅ `commit-attribution-prompt` extension — drives a deterministic AIMock-authored `execute_command` git commit and verifies `git log -1 --format=%B` contains the selected-model `Co-Authored-By` footer; commit-attribution row is validated with arbitrary-model-output enforcement deferred as no current product surface.
 - ✅ `subagent-plan-execute-tools` — delegates Plan and Execute through the real TUI, verifies completed footers, checks provider-visible tool boundaries, and confirms Execute writes project-visible file content; subagents row is validated with configured-ID restart override and audit-tests guidance breadth deferred.
+- ✅ `om-attachment-observation` enhancement — memory-enabled PTY scenario now proves submitted image attachment observation, visible observer output, current-task/suggested-response continuation metadata, and generated thread-title marker rendering; observational-memory row is validated with live storage/vector/server/gateway matrix coverage deferred.
 

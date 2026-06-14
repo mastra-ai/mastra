@@ -1,5 +1,23 @@
 # Mastra Code testing recovery history
 
+### Observational memory TUI output coverage (2026-06-13, pending)
+
+Strengthened `om-attachment-observation` so the memory-enabled PTY path proves more than raw observer traffic. The scenario now asserts that a pasted image reaches OM observer input, that the observer's visible observation text renders in the TUI, that `<current-task>` and `<suggested-response>` continuation metadata render, and that an observer-generated thread title emits the `thread title updated: Attachment observation` marker.
+
+Break validations:
+
+1. Dropped observer output text in `handleOMObservationEnd`; the scenario timed out waiting for `User submitted an image attachment for OM observation`.
+2. Dropped current-task/suggested-response propagation; the scenario failed waiting for the continuation metadata lines.
+3. Hid the OM thread-title marker; the scenario failed waiting for `thread title updated: Attachment observation`.
+
+All breaks were reverted and the focused scenario passed cleanly.
+
+Verification:
+
+```sh
+pnpm --filter ./mastracode run e2e:test om-attachment-observation
+```
+
 ### Subagent Plan/Execute coverage (2026-06-13, de2cf94056)
 
 Added `subagent-plan-execute-tools`, a real PTY e2e scenario that uses AIMock tool calls to delegate Plan and Execute subagents from a parent TUI turn. The scenario asserts visible `subagent plan openai/gpt-5.4-mini ✓` and `subagent execute openai/gpt-5.4-mini ✓` footers, verifies provider-visible Plan/Execute tool boundaries (`write_file` omitted from Plan and present for Execute), has Execute write `subagent-execute-output.txt`, and verifies the written file from the isolated project shell with a shell-only `SUBAGENT_EXECUTE_CAT=` prefix.

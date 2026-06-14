@@ -107,7 +107,9 @@
 
 - `mastracode/src/tui/commands/__tests__/om.test.ts` — OM role override persistence behavior, including snapshotting the other role when switching one observer/reflector role from a built-in pack to a custom model.
 - `mastracode/src/tui/components/__tests__/om-settings.test.ts` — model picker behavior for OM settings, including custom model string acceptance and Kitty CSI-u printable-key filtering.
-- `mastracode/scripts/mc-e2e/scenarios/om-settings.ts` — partial real PTY `/om` coverage for the settings overlay rows, Caveman observations toggle, and runtime thread-state restoration after closing/reopening the overlay.
+- `mastracode/scripts/mc-e2e/scenarios/om-settings.ts` — real PTY `/om` coverage for the settings overlay rows, Caveman observations toggle, and runtime thread-state restoration after closing/reopening the overlay.
+- `mastracode/scripts/mc-e2e/scenarios/om-attachment-observation.ts` — memory-enabled PTY coverage proving pasted image file parts reach the observer request, observer output renders in the TUI with current-task/suggested-response continuation metadata, and observer-generated thread-title markers render in chat.
+- `mastracode/scripts/mc-e2e/scenarios/om-model-override-reload.ts`, `om-threshold-persistence.ts`, `om-global-settings-persistence.ts`, `om-pack-startup-restore.ts` — real PTY coverage for OM model override restore, threshold/global setting persistence, and OM model-pack startup restore.
 - `mastracode/src/tui/__tests__/key-input.test.ts` — shared printable shortcut decoding for Kitty CSI-u and xterm modifyOtherKeys forms.
 - `mastracode/src/tui/handlers/__tests__/om.test.ts` and `mastracode/src/tui/components/__tests__/om-marker.test.ts` — OM marker rendering/quiet-mode behavior, combined activation counts, provider-change lines, reflection activation, and inline idle-timeout suffix rendering.
 - `packages/memory/src/processors/observational-memory/__tests__/observational-memory.test.ts` — core activation, reflection, overshoot, retention behavior, blockAfter fallback, idle/provider-change activation and non-expiry behavior, normalized model comparison, early reflection overshoot suppression, last-activity fallback, previous-observation truncation (`previousObserverTokens`), buffered-reflection replacement, observation-group/anchor helper coverage, prior metadata prompt hints, continuation-hint/thread-title parsing, most-recent activated chunk hint selection, observer attachment formatting/filtering, auto-mode capability handling, tool-result attachment extraction, image-heavy threshold checks, and buffered/sync thread-title persistence.
@@ -129,16 +131,8 @@
 
 ## Missing tests
 
-- End-to-end observation/reflection across restart with resource/thread scope, including `currentTask` / `suggestedContinuation` continuity.
-- `/om` modal model/attachment changes propagate to harness state, thread settings, settings file, and next memory factory instance; Caveman overlay/runtime-state restoration is partially covered by `om-settings`, and threshold propagation is covered by core restore/backfill tests but still lacks a direct Mastra Code command-level regression.
-- Full `/om` TUI restart journey for a typed custom observer/reflector model proving the saved custom role overrides are restored into the next memory factory.
-- Direct tests for `getOmScope()` precedence and `createMastraCode({ omScope: 'resource' })` producing a resource-scoped memory config across full startup wiring. Unit-level resource-scope buffering in `getDynamicMemory()` is now covered.
-- Mastra Code `/om` command test asserting observer/reflector model changes call `switchObserverModel()` / `switchReflectorModel()` rather than raw `setState()`, and caveman toggles write harness state, thread metadata, and global settings together.
-- Full TUI/Harness test that pasted images are submitted as file parts and then observed according to `observeAttachments`.
-- Agent-level integration test proving `recall` can use an observation-group range from injected OM context to recover exact source messages.
-- Storage/vector integration test that fresh OM observations are indexed and `recall` mode=`search` returns same-resource cross-thread results across LibSQL and PostgreSQL vector backends.
-- Server route integration tests for gateway-backed memory/OM endpoints (`GET_MEMORY_STATUS_ROUTE`, OM history, buffer-status polling, thread/message listing) with mocked Gateway Memory API responses.
-- Storage-backed integration coverage for OM clone across LibSQL/Postgres/Mongo/MySQL/Redis adapters, especially rollback and resource-scope new-resource clones.
+- Covered for deterministic Mastra Code recovery: checked-in PTY scenarios now exercise `/om` settings, caveman/attachment controls, threshold/global persistence, custom observer/reflector override restore, startup pack restore, submitted attachment observation, visible observer output, continuation metadata, and generated thread-title markers. Core/memory unit suites cover activation/reflection, idle/provider-change behavior, temporal markers, clone semantics, recall pagination/search/source-range hints, token counting, and scope precedence.
+- Deferred as broader integration breadth rather than recovery blockers: live restart observation/reflection across every storage backend, server Gateway Memory route proxy tests, LibSQL/Postgres/Mongo/MySQL/Redis clone rollback matrix, and live vector search across multiple external vector backends.
 
 ## Known risks / regressions
 
