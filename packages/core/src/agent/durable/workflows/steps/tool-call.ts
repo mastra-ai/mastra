@@ -307,13 +307,22 @@ export function createDurableToolCallStep() {
         };
       }
 
+      // Build tracingContext from stepSpanData so builder's TOOL_CALL span
+      // nests under model_step instead of floating at AGENT_RUN root.
+      const observability = (mastra as any)?.observability?.getSelectedInstance({ requestContext });
+      const stepSpanData = (typedInput as any).stepSpanData as ExportedSpan<SpanType.MODEL_STEP> | undefined;
+      const stepSpan = stepSpanData && observability
+        ? observability.rebuildSpan(stepSpanData)
+        : undefined;
+      const toolTracingContext = stepSpan ? { currentSpan: stepSpan } : undefined;
+
       const toolOptions = {
         toolCallId,
         messages: [],
         workspace,
         requestContext,
         resumeData: isResumingFromSuspension ? resumeData : undefined,
-
+        tracingContext: toolTracingContext,
         // In-execution suspend callback — allows tools to suspend mid-execution
         suspend: async (suspendPayload: any, suspendOptions?: SuspendOptions) => {
           if (suspendOptions?.requireToolApproval) {
@@ -643,23 +652,8 @@ export function createDurableToolCallStep() {
         }
       }
 
-      // Rebuild model_step span so the tool call spans nest under it
-      const observability = (mastra as any)?.observability?.getSelectedInstance({ requestContext });
-      const stepSpanData = (typedInput as any).stepSpanData as ExportedSpan<SpanType.MODEL_STEP> | undefined;
-      const stepSpan = stepSpanData && observability
-        ? observability.rebuildSpan(stepSpanData)
-        : undefined;
-      const toolSpan = stepSpan?.createChildSpan({
-        name: `tool: '${toolName}'`,
-        type: SpanType.TOOL_CALL,
-        input: { args: cleanedArgs },
-        metadata: { runId, toolCallId },
-        requestContext,
-      }) ?? undefined;
-
       try {
         const result = await tool.execute(cleanedArgs, toolOptions);
-        toolSpan?.end({ output: { result } });
 
         // Emit tool-result chunk (non-fatal — result is returned regardless)
         if (pubsub) {
@@ -680,7 +674,6 @@ export function createDurableToolCallStep() {
           result,
         };
       } catch (error) {
-        toolSpan?.error({ error: error instanceof Error ? error : new Error(String(error)) });
         const toolError = serializeError(error);
 
         // Emit tool-error chunk (non-fatal — error result is returned regardless)
