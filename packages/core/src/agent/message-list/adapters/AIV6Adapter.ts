@@ -225,6 +225,45 @@ function findApprovalRequest(
   return undefined;
 }
 
+function rehydratePendingToolApprovals(parts: AIV6Type.UIMessage['parts'], metadata: Record<string, unknown>) {
+  const pendingToolApprovals = metadata.pendingToolApprovals;
+  if (!pendingToolApprovals || typeof pendingToolApprovals !== 'object') {
+    return;
+  }
+
+  for (const pendingToolApproval of Object.values(pendingToolApprovals)) {
+    if (!pendingToolApproval || typeof pendingToolApproval !== 'object') {
+      continue;
+    }
+
+    const toolCallId = 'toolCallId' in pendingToolApproval ? pendingToolApproval.toolCallId : undefined;
+    if (typeof toolCallId !== 'string') {
+      continue;
+    }
+
+    const runId = 'runId' in pendingToolApproval ? pendingToolApproval.runId : undefined;
+    const approvalId = typeof runId === 'string' ? `${runId}::${toolCallId}` : toolCallId;
+
+    const toolPartIndex = parts.findIndex(
+      part => AIV6.isToolUIPart(part) && part.toolCallId === toolCallId && part.state === 'input-available',
+    );
+    if (toolPartIndex === -1) {
+      continue;
+    }
+
+    const toolPart = parts[toolPartIndex];
+    if (!toolPart || !AIV6.isToolUIPart(toolPart) || toolPart.state !== 'input-available') {
+      continue;
+    }
+
+    parts[toolPartIndex] = {
+      ...toolPart,
+      state: 'approval-requested',
+      approval: { id: approvalId },
+    } as AIV6Type.UIMessage['parts'][number];
+  }
+}
+
 function createLegacyToolInvocations(
   parts: MastraMessagePart[],
 ): MastraDBMessage['content']['toolInvocations'] | undefined {
@@ -315,6 +354,8 @@ export class AIV6Adapter {
         }
       }
     }
+
+    rehydratePendingToolApprovals(parts, metadata);
 
     return {
       id: dbMsg.id,
