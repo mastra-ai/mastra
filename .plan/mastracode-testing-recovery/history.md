@@ -1,6 +1,6 @@
 # Mastra Code testing recovery history
 
-### Observational memory TUI output coverage (2026-06-13, pending)
+### Observational memory TUI output coverage (2026-06-13, 7b1f669c1d)
 
 Strengthened `om-attachment-observation` so the memory-enabled PTY path proves more than raw observer traffic. The scenario now asserts that a pasted image reaches OM observer input, that the observer's visible observation text renders in the TUI, that `<current-task>` and `<suggested-response>` continuation metadata render, and that an observer-generated thread title emits the `thread title updated: Attachment observation` marker.
 
