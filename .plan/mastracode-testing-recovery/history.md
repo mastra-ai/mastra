@@ -1,6 +1,6 @@
 # Mastra Code testing recovery history
 
-### Git commit attribution history coverage (2026-06-13, pending)
+### Git commit attribution history coverage (2026-06-13, 81bbd497f1)
 
 Extended `commit-attribution-prompt` from prompt-only verification to a deterministic model-authored commit flow. The scenario now submits a real TUI prompt, AIMock returns an `execute_command` tool call that writes a file and runs `git commit -m ... -m 'Co-Authored-By: Mastra Code (openai/gpt-5.4-mini) <noreply@mastra.ai>'`, then the TUI runs `!git log -1 --format=%B` and asserts the selected-model footer is present in committed history.
 
