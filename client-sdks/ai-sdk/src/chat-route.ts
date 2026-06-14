@@ -43,7 +43,9 @@ export function extractV6NativeApproval(
   const lastAssistantMsg = messages.at(-1);
   if (!lastAssistantMsg || lastAssistantMsg.role !== 'assistant') return null;
 
-  for (const part of lastAssistantMsg.parts ?? []) {
+  const parts = lastAssistantMsg.parts ?? [];
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const part = parts[i];
     if (!isToolUIPart(part) || part.state !== 'approval-responded') continue;
 
     const lastSep = part.approval.id.lastIndexOf(APPROVAL_ID_SEPARATOR);

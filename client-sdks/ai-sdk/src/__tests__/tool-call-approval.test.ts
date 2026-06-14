@@ -291,6 +291,38 @@ describe('extractV6NativeApproval', () => {
     expect(result?.resumeData.approved).toBe(false);
   });
 
+  it('uses the most recent approval-responded part in the trailing assistant message', () => {
+    const messages = [
+      {
+        role: 'assistant' as const,
+        id: 'msg-1',
+        parts: [
+          {
+            type: 'tool-myTool',
+            toolCallId: 'old-call',
+            state: 'approval-responded' as const,
+            input: {},
+            approval: { id: `old-run${APPROVAL_ID_SEPARATOR}old-call`, approved: true },
+          },
+          {
+            type: 'tool-myTool',
+            toolCallId: 'new-call',
+            state: 'approval-responded' as const,
+            input: {},
+            approval: { id: `new-run${APPROVAL_ID_SEPARATOR}new-call`, approved: false, reason: 'Denied' },
+          },
+        ],
+      },
+    ];
+
+    const result = extractV6NativeApproval(messages as any);
+
+    expect(result).toEqual({
+      resumeData: { approved: false, reason: 'Denied' },
+      runId: 'new-run',
+    });
+  });
+
   it('ignores earlier approval responses once a later user follow-up exists', () => {
     const messages = [
       {
